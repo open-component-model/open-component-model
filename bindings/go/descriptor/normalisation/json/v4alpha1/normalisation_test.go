@@ -72,7 +72,7 @@ func TestNormalization(t *testing.T) {
 	// YAML input representing a component descriptor.
 	inputYAML := `
 component:
-  componentReferences: []
+  componentReferences: null
   name: github.com/vasu1124/introspect
   provider: internal
   repositoryContexts:

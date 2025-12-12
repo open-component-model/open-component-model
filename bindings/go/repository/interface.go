@@ -34,6 +34,9 @@ type ComponentVersionRepositoryProvider interface {
 	// - Setting up the repository with appropriate credentials
 	// - Configuring caching and other repository options
 	GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (ComponentVersionRepository, error)
+
+	// GetJSONSchemaForRepositorySpecification returns the JSON schema for a given repository specification type.
+	GetJSONSchemaForRepositorySpecification(typ runtime.Type) ([]byte, error)
 }
 
 // ComponentVersionRepository defines the interface for storing and retrieving OCM component versions
@@ -114,13 +117,6 @@ type SourceRepository interface {
 
 	// DownloadSource downloads a [descriptor.Source] from the repository.
 	DownloadSource(ctx context.Context, res *descriptor.Source) (content blob.ReadOnlyBlob, err error)
-}
-
-// CredentialProvider defines the interface for resolving credentials based on
-// a given identity.
-type CredentialProvider interface {
-	// Resolve attempts to resolve credentials for the given identity.
-	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
 }
 
 // ResourceDigestProcessor defines the interface for processing resource digests.

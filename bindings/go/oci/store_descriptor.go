@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
@@ -18,9 +20,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	componentConfig "ocm.software/open-component-model/bindings/go/oci/spec/config/component"
-	descriptor2 "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
+	ocidescriptor "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
-	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -31,6 +32,7 @@ type AddDescriptorOptions struct {
 	AdditionalDescriptorManifests []ociImageSpecV1.Descriptor
 	AdditionalLayers              []ociImageSpecV1.Descriptor
 	ReferrerTrackingPolicy        ReferrerTrackingPolicy
+	DescriptorEncodingMediaType   string
 }
 
 // AddDescriptorToStore uploads a component descriptor to any given Store.
@@ -52,14 +54,22 @@ func AddDescriptorToStore(ctx context.Context, store spec.Store, descriptor *des
 		})
 	}
 
+	descriptorMediaType := opts.DescriptorEncodingMediaType
+	if descriptorMediaType == "" {
+		// Default to JSON if no media type is provided, as this is the defacto canonical standard format
+		// used when integrating with OCI usually.
+		descriptorMediaType = ocidescriptor.MediaTypeComponentDescriptorJSON
+	}
+
 	// Encode and upload the descriptor
-	descriptorEncoding, descriptorBuffer, err := tar.SingleFileTAREncodeV2Descriptor(opts.Scheme, descriptor)
+	descriptorBuffer, err := ocidescriptor.SingleFileEncodeDescriptor(opts.Scheme, descriptor, descriptorMediaType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode descriptor: %w", err)
 	}
+
 	descriptorBytes := descriptorBuffer.Bytes()
 	descriptorOCIDescriptor := ociImageSpecV1.Descriptor{
-		MediaType: descriptor2.MediaTypeComponentDescriptorV2 + descriptorEncoding,
+		MediaType: descriptorMediaType,
 		Digest:    digest.FromBytes(descriptorBytes),
 		Size:      int64(len(descriptorBytes)),
 	}
@@ -95,17 +105,17 @@ func AddDescriptorToStore(ctx context.Context, store spec.Store, descriptor *des
 		Versioned: specs.Versioned{
 			SchemaVersion: 2,
 		},
-		ArtifactType: descriptor2.MediaTypeComponentDescriptorV2,
+		ArtifactType: ocidescriptor.MediaTypeComponentDescriptorV2,
 		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
 		Config:       componentConfigDescriptor,
 		Annotations: map[string]string{
 			annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation(component, version),
 			annotations.OCMCreator:          opts.Author,
 			ociImageSpecV1.AnnotationTitle:  fmt.Sprintf("OCM Component Descriptor OCI Artifact Manifest for %s in version %s", component, version),
-			ociImageSpecV1.AnnotationDescription: fmt.Sprintf(`
+			ociImageSpecV1.AnnotationDescription: strings.TrimSpace(fmt.Sprintf(`
 This is an OCM OCI Artifact Manifest that contains the component descriptor for the component %[1]s.
 It is used to store the component descriptor in an OCI registry and can be referrenced by the official OCM Binding Library.
-`, component),
+`, component)),
 			ociImageSpecV1.AnnotationAuthors:       opts.Author,
 			ociImageSpecV1.AnnotationURL:           "https://ocm.software",
 			ociImageSpecV1.AnnotationDocumentation: "https://ocm.software",
@@ -153,10 +163,10 @@ It is used to store the component descriptor in an OCI registry and can be refer
 			annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation(component, version),
 			annotations.OCMCreator:          opts.Author,
 			ociImageSpecV1.AnnotationTitle:  fmt.Sprintf("OCM Component Descriptor OCI Artifact Manifest Index for %s in version %s", component, version),
-			ociImageSpecV1.AnnotationDescription: fmt.Sprintf(`
+			ociImageSpecV1.AnnotationDescription: strings.TrimSpace(fmt.Sprintf(`
 This is an OCM OCI Artifact Manifest Index that contains the component descriptor manifest for the component %[1]s.
 It is used to store the component descriptor manifest and other related blob manifests in an OCI registry and can be referrenced by the official OCM Binding Library.
-`, component),
+`, component)),
 			ociImageSpecV1.AnnotationAuthors:       opts.Author,
 			ociImageSpecV1.AnnotationURL:           "https://ocm.software",
 			ociImageSpecV1.AnnotationDocumentation: "https://ocm.software",
@@ -187,7 +197,7 @@ It is used to store the component descriptor manifest and other related blob man
 }
 
 // getDescriptorFromStore retrieves a component descriptor from a given Store using the provided reference.
-func getDescriptorFromStore(ctx context.Context, store spec.Store, reference string) (*descriptor.Descriptor, *ociImageSpecV1.Manifest, *ociImageSpecV1.Index, error) {
+func getDescriptorFromStore(ctx context.Context, store spec.Store, reference string) (desc *descriptor.Descriptor, manifestRef *ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
 	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, reference)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get manifest: %w", err)
@@ -197,12 +207,13 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get component config: %w", err)
 	}
-	defer func() {
-		_ = componentConfigRaw.Close()
-	}()
 	cfg := componentConfig.Config{}
 	if err := json.NewDecoder(componentConfigRaw).Decode(&cfg); err != nil {
 		return nil, nil, nil, err
+	}
+
+	if closeErr := componentConfigRaw.Close(); closeErr != nil {
+		return nil, nil, nil, fmt.Errorf("failed to close component config reader: %w", closeErr)
 	}
 
 	// Read component descriptor
@@ -211,10 +222,10 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 		return nil, nil, nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
 	}
 	defer func() {
-		_ = descriptorRaw.Close()
+		err = errors.Join(err, descriptorRaw.Close())
 	}()
 
-	desc, err := tar.SingleFileTARDecodeV2Descriptor(descriptorRaw)
+	desc, err = ocidescriptor.SingleFileDecodeDescriptor(descriptorRaw, cfg.ComponentDescriptorLayer.MediaType)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to decode descriptor: %w", err)
 	}

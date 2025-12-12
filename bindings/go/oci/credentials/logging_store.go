@@ -26,9 +26,9 @@ func (l *loggingStore) Get(ctx context.Context, serverAddress string) (auth.Cred
 	case err != nil:
 		logger.ErrorContext(ctx, "failed to get credential", "error", err)
 	case credential != auth.EmptyCredential:
-		logger.InfoContext(ctx, "got credential", "username", credential.Username, "serverAddress", serverAddress)
+		logger.DebugContext(ctx, "got credential", "username", credential.Username, "serverAddress", serverAddress)
 	default:
-		logger.InfoContext(ctx, "got no credential")
+		logger.DebugContext(ctx, "got no credential")
 	}
 
 	return credential, err

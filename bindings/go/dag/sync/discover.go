@@ -5,15 +5,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
-	"runtime"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
+
+	"ocm.software/open-component-model/bindings/go/dag"
 )
 
-// DiscoveryState is an attribute set during Discover()
-// on each vertex to indicate its discovery state
+// DiscoveryState represents the lifecycle stage of a vertex during discovery.
+// This allows consumers to track progress, completion, and errors per vertex.
 type DiscoveryState int
 
 func (s DiscoveryState) String() string {
@@ -31,164 +31,160 @@ func (s DiscoveryState) String() string {
 	}
 }
 
+// Attribute keys stored on each vertex.
 const (
-	AttributeDiscoveryState = "dag/discovery-state"
-	AttributeOrderIndex     = "dag/order-index"
+	AttributeValue          = "dag/value"           // resolved value for the vertex
+	AttributeDiscoveryState = "dag/discovery-state" // discovery state
+	AttributeOrderIndex     = "dag/order-index"     // order of neighbor edge
+)
 
-	// DiscoveryStateDiscovering indicates the vertex has been added to the graph, but it
-	// has not yet been processed by DiscoverNeighbors (direct neighbors are not
-	// known yet).
-	DiscoveryStateDiscovering DiscoveryState = iota
-	// DiscoveryStateDiscovered indicates the vertex has been processed by the
-	// DiscoverNeighbors, but its neighbors or transitive neighbors have not all
-	// been processed by DiscoverNeighbors yet.
+// Discovery states describe how far processing has gone for each vertex.
+const (
+	// DiscoveryStateUnknown means the vertex has not been processed yet or is in an unknown state.
+	DiscoveryStateUnknown DiscoveryState = iota
+	// DiscoveryStateDiscovering means the vertex is being resolved.
+	DiscoveryStateDiscovering
+	// DiscoveryStateDiscovered means the vertex was resolved but neighbors were not yet fully explored.
 	DiscoveryStateDiscovered
-	// DiscoveryStateCompleted indicates the vertex and all its neighbors have been
-	// processed by the DiscoverNeighbors (sub-graph up to this vertex is fully
-	// completed).
+	// DiscoveryStateCompleted means the vertex and all its reachable neighbors successfully discovered.
 	DiscoveryStateCompleted
-	// DiscoveryStateError indicates DiscoverNeighbors returned an error for this vertex
-	// or a neighbor.
+	// DiscoveryStateError means discovery failed for this vertex or one of its neighbors.
 	DiscoveryStateError
 )
 
-// TODO(fabianburth): Add a recursion depth limit
-type DiscoverOptions[T cmp.Ordered] struct {
-	// Roots to start the discovery from
-	Roots          []T
-	GoRoutineLimit int
-}
-
-type DiscoverOption[T cmp.Ordered] func(*DiscoverOptions[T])
-
-func WithDiscoveryGoRoutineLimit[T cmp.Ordered](numGoRoutines int) DiscoverOption[T] {
-	return func(options *DiscoverOptions[T]) {
-		options.GoRoutineLimit = numGoRoutines
+// NewGraphDiscoverer constructs a discoverer instance with its own
+// concurrency-safe DAG and per-vertex "done" channels.
+func NewGraphDiscoverer[K cmp.Ordered, V any](opts *GraphDiscovererOptions[K, V]) *GraphDiscoverer[K, V] {
+	return &GraphDiscoverer[K, V]{
+		graph:   NewSyncedDirectedAcyclicGraph[K](),
+		doneMap: &sync.Map{},
+		opts:    opts,
 	}
 }
 
-func WithRoots[T cmp.Ordered](root ...T) DiscoverOption[T] {
-	return func(options *DiscoverOptions[T]) {
-		options.Roots = root
-	}
+// GraphDiscoverer orchestrates concurrent graph discovery.
+// - graph: the shared DAG being built
+// - doneMap: ensures each vertex is processed exactly once
+// - opts: external resolver and neighbor discoverer
+type GraphDiscoverer[K cmp.Ordered, V any] struct {
+	opts    *GraphDiscovererOptions[K, V]
+	graph   *SyncedDirectedAcyclicGraph[K]
+	doneMap *sync.Map
 }
 
-// NeighborDiscoverer is an interface for a function that discovers neighbor
-// vertices for a given vertex.
-// It MUST treat v as read-only and returns its neighbors id
-// or an error.
-type NeighborDiscoverer[T cmp.Ordered] interface {
-	// DiscoverNeighbors is not allowed to set attributes on the neighbor
-	// vertices as this would lead to data races. Those data races would occur
-	// when multiple vertices have the same neighbor.
-	//    A
-	//   / \
-	//  B   C
-	//   \ /
-	//    D
-	// In this case, B and C could overwrite each others attributes on D.
-	DiscoverNeighbors(ctx context.Context, v T) (neighbors []T, err error)
+func (d *GraphDiscoverer[K, V]) Graph() *SyncedDirectedAcyclicGraph[K] {
+	return d.graph
 }
 
-// DiscoverNeighborsFunc is a function type that implements the NeighborDiscoverer
-// interface. It is used to discover neighbors for a given vertex.
-type DiscoverNeighborsFunc[T cmp.Ordered] func(ctx context.Context, v T) (neighbors []T, err error)
-
-func (f DiscoverNeighborsFunc[T]) DiscoverNeighbors(ctx context.Context, v T) (neighbors []T, err error) {
-	return f(ctx, v)
+// CurrentEdges returns the ordered neighbors of a vertex from the DAG snapshot.
+func (d *GraphDiscoverer[K, V]) CurrentEdges(key K) []K {
+	var edges []K
+	_ = d.graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[K]) error {
+		v, ok := d.Vertices[key]
+		if !ok {
+			return nil
+		}
+		edges = make([]K, len(v.Edges))
+		for k, edge := range v.Edges {
+			// Order edges by index if present.
+			// If not, we append them in the order they are returned from the iterator (not stable).
+			if idx, ok := edge[AttributeOrderIndex]; ok {
+				edges[idx.(int)] = k
+			} else {
+				panic("edges without order index should never exist")
+			}
+		}
+		return nil
+	})
+	return edges
 }
 
-// Discover performs a concurrent depth-first discovery from the given root vertex.
-// For each vertex v, it calls discoverer.DiscoverNeighbors(v), which
-// return its neighbors in order or an error.
-// DiscoverNeighbors is guaranteed to be called at most once for each vertex. If
-// there is an error, the discovery stops - before having processed all vertices
-// - and the error is returned.
-//
-// Discover tracks each vertex’s DiscoveryState attribute and halts on error.
-// See DiscoveryState for more details.
-func (d *DirectedAcyclicGraph[T]) Discover(
-	ctx context.Context,
-	discoverer NeighborDiscoverer[T],
-	opts ...DiscoverOption[T],
-) (retErr error) {
+// CurrentValue returns the resolved value of a vertex, or zero if absent.
+func (d *GraphDiscoverer[K, V]) CurrentValue(key K) V {
+	var value V
+	_ = d.graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[K]) error {
+		v, ok := d.Vertices[key]
+		if !ok {
+			return nil
+		}
+		value, _ = v.Attributes[AttributeValue].(V)
+		return nil
+	})
+	return value
+}
+
+// CurrentState returns the discovery state of a vertex.
+func (d *GraphDiscoverer[K, V]) CurrentState(key K) DiscoveryState {
+	state := DiscoveryStateUnknown
+	_ = d.graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[K]) error {
+		v, ok := d.Vertices[key]
+		if !ok {
+			// if the vertex does not exist, we consider its state unknown
+			// this may mean that it simply has not been discovered yet.
+			state = DiscoveryStateUnknown
+			return nil
+		}
+		s, ok := v.Attributes[AttributeDiscoveryState]
+		if !ok {
+			panic("vertex without discovery state should never exist")
+		}
+		state = s.(DiscoveryState)
+		return nil
+	})
+
+	return state
+}
+
+// Discover performs concurrent recursive discovery starting from the given roots.
+// Guarantees:
+// - Each vertex is resolved at most once.
+// - If any error occurs, discovery halts and propagates the error.
+// - States are updated consistently on success or failure.
+func (d *GraphDiscoverer[K, V]) Discover(ctx context.Context) (retErr error) {
+	// Ensure panic safety even with concurrency in place.
 	defer func() {
 		if r := recover(); r != nil {
 			retErr = errors.Join(retErr, fmt.Errorf("discovery panicked: %v", r))
 		}
 	}()
 
-	options := &DiscoverOptions[T]{}
-	for _, opt := range opts {
-		opt(options)
+	if len(d.opts.Roots) == 0 {
+		return fmt.Errorf("no roots provided and no roots found in the dag, cannot discover")
 	}
 
-	if options.GoRoutineLimit <= 0 {
-		options.GoRoutineLimit = runtime.NumCPU()
-	}
-
-	if len(options.Roots) == 0 {
-		slog.DebugContext(ctx, "no roots provided for discovery, using dag roots")
-		if options.Roots = d.Roots(); len(options.Roots) == 0 {
-			return fmt.Errorf("no roots provided and no roots found in the dag, cannot discover")
-		}
-	}
-
-	for _, root := range options.Roots {
-		if err := d.AddVertex(root); err != nil && !errors.Is(err, ErrAlreadyExists) {
-			return fmt.Errorf("failed to add vertex for rootID %v: %w", root, err)
-		}
-	}
-
-	doneMap := &sync.Map{}
 	errGroup, errgroupCtx := errgroup.WithContext(ctx)
-	errGroup.SetLimit(options.GoRoutineLimit)
-
-	for _, root := range options.Roots {
-		// We ensured that the rootID vertex exists in the graph
-		v := d.MustGetVertex(root)
-		v.Attributes.Store(AttributeDiscoveryState, DiscoveryStateDiscovering)
-		// Discover the graph from each rootID vertex concurrently.
-		// This is fine as:
-		// - the doneMap ensures that each vertex is only processed once.
+	for _, root := range d.opts.Roots {
 		errGroup.Go(func() error {
-			return d.discover(errgroupCtx, root, discoverer, doneMap, options)
+			return d.discover(errgroupCtx, root)
 		})
 	}
+
 	if err := errGroup.Wait(); err != nil {
 		return fmt.Errorf("failed to discover graph: %w", err)
 	}
 	return nil
 }
 
-func (d *DirectedAcyclicGraph[T]) discover(
+// discover resolves one vertex and recursively explores its neighbors.
+func (d *GraphDiscoverer[K, V]) discover(
 	ctx context.Context,
-	id T,
-	discoverer NeighborDiscoverer[T],
-	doneMap *sync.Map,
-	opts *DiscoverOptions[T],
+	id K,
 ) error {
-	// Check if the context is done before proceeding the discovery.
-	// Without this check, there is no way to cancel the recursive discovery.
+	// Early abort if context is cancelled.
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
 	}
 
-	// If there exists a done channel for the vertex, the vertex has already
-	// been processed (done channel closed) or is currently being processed
-	// (done channel open) by another goroutine.
-	// Then, loaded is true.
+	// Setup done channel for this vertex.
 	ch := make(chan struct{})
-	// If we opened the done channel, we are also responsible for closing it.
 	defer close(ch)
 
-	doneCh, loaded := doneMap.LoadOrStore(id, ch)
+	// If already in progress, wait until it finishes.
+	doneCh, loaded := d.doneMap.LoadOrStore(id, ch)
 	done := doneCh.(chan struct{})
 	if loaded {
-		// If the node is already being discovered, wait until its discovery is done.
-		// Alternatively, if the context is cancelled early, abort.
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -197,71 +193,70 @@ func (d *DirectedAcyclicGraph[T]) discover(
 		}
 	}
 
-	vertex, ok := d.GetVertex(id)
-	if !ok {
-		return fmt.Errorf("vertex %v not found in the graph", id)
-	}
-
-	// Discover neighbors is not allowed to set attributes on the neighbor
-	// vertices as this would lead to data races. Those data races would occur
-	// when multiple vertices have the same neighbor.
-	//    A
-	//   / \
-	//  B   C
-	//   \ /
-	//    D
-	// In this case, B and C could overwrite each others attributes on D.
-	//
-	// Instead, DiscoverNeighbors is only allowed to return the IDs of the
-	// If needed, we could introduce a capability to set attributes to the edges
-	// map[neighborId]edgeAttributes in the future.
-	neighbors, err := discoverer.DiscoverNeighbors(ctx, vertex.ID)
-	if err != nil {
-		vertex.Attributes.Store(AttributeDiscoveryState, DiscoveryStateError)
-		return fmt.Errorf("failed to discover id %v: %w", id, err)
-	}
-	vertex.Attributes.Store(AttributeDiscoveryState, DiscoveryStateDiscovered)
-
-	errGroup, egctx := errgroup.WithContext(ctx)
-	// TODO(fabianburth): Implement a worker pool approach.
-	// This is already useful to enforce a sequential discovery
-	// by setting the limit to 1. But in reality, this does not actually
-	// limit the number of goroutines, as the discovery is recursive.
-	errGroup.SetLimit(opts.GoRoutineLimit)
-
-	for index, neighborID := range neighbors {
-		// Add the discovered neighbors as a vertex to the graph. As multiple
-		// vertices might have the same neighbor, ErrAlreadyExists is ignored.
-		// 	    A
-		//	   / \
-		//	  B   C
-		//	   \ /
-		//	    D
-		err := d.AddVertex(neighborID, map[string]any{
+	// Add vertex in "discovering" state.
+	if err := d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
+		return d.AddVertex(id, map[string]any{
 			AttributeDiscoveryState: DiscoveryStateDiscovering,
 		})
-		if err != nil && !errors.Is(err, ErrAlreadyExists) {
-			vertex.Attributes.Store(AttributeDiscoveryState, DiscoveryStateError)
-			return fmt.Errorf("failed to add vertex for reference %v: %w", neighborID, err)
-		}
-		if err := d.AddEdge(id, neighborID, map[string]any{AttributeOrderIndex: index}); err != nil {
-			vertex.Attributes.Store(AttributeDiscoveryState, DiscoveryStateError)
-			return fmt.Errorf("failed to add edge from %v to %v: %w", id, neighborID, err)
-		}
-		if errors.Is(err, ErrAlreadyExists) {
-			continue
-		}
-		errGroup.Go(func() error {
-			if err := d.discover(egctx, neighborID, discoverer, doneMap, opts); err != nil {
-				return fmt.Errorf("failed to discover reference %v: %w", neighborID, err)
-			}
-			return nil
-		})
-	}
-	if err = errGroup.Wait(); err != nil {
-		vertex.Attributes.Store(AttributeDiscoveryState, DiscoveryStateError)
+	}); err != nil {
 		return err
 	}
-	vertex.Attributes.Store(AttributeDiscoveryState, DiscoveryStateCompleted)
-	return nil
+
+	// Resolve the vertex value.
+	value, err := d.opts.Resolver.Resolve(ctx, id)
+
+	// Update state after resolution.
+	if err := d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
+		if err != nil {
+			d.Vertices[id].Attributes[AttributeDiscoveryState] = DiscoveryStateError
+		} else {
+			d.Vertices[id].Attributes[AttributeDiscoveryState] = DiscoveryStateDiscovered
+			d.Vertices[id].Attributes[AttributeValue] = value
+		}
+		return err
+	}); err != nil {
+		return err
+	}
+
+	// Discover neighbors.
+	neighbors, err := d.opts.Discoverer.Discover(ctx, value)
+
+	// Update state after neighbor discovery.
+	if err := d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
+		if err != nil {
+			d.Vertices[id].Attributes[AttributeDiscoveryState] = DiscoveryStateError
+		} else {
+			d.Vertices[id].Attributes[AttributeValue] = value
+		}
+		return err
+	}); err != nil {
+		return err
+	}
+
+	// Explore neighbors concurrently.
+	errGroup, egctx := errgroup.WithContext(ctx)
+	for index, neighbor := range neighbors {
+		errGroup.Go(func() error {
+			if err := d.discover(egctx, neighbor); err != nil {
+				return fmt.Errorf("failed to discover reference %v: %w", neighbor, err)
+			}
+			// Add edge from current vertex to neighbor.
+			return d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
+				return d.AddEdge(id, neighbor, map[string]any{
+					AttributeOrderIndex: index,
+				})
+			})
+		})
+	}
+	err = errGroup.Wait()
+
+	// Finalize state.
+	return d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
+		if err != nil {
+			d.Vertices[id].Attributes[AttributeDiscoveryState] = DiscoveryStateError
+		} else {
+			d.Vertices[id].Attributes[AttributeDiscoveryState] = DiscoveryStateCompleted
+		}
+		return err
+	})
 }

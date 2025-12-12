@@ -1,130 +1,172 @@
 package integration_test
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	"ocm.software/open-component-model/bindings/go/credentials"
-	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/runtime"
-	plugincmd "ocm.software/open-component-model/cli/cmd/download/plugin"
-	ocmctx "ocm.software/open-component-model/cli/internal/context"
-	"ocm.software/open-component-model/cli/internal/flags/log"
-	"ocm.software/open-component-model/cli/internal/plugin/builtin"
+	"ocm.software/open-component-model/cli/cmd"
 )
-
-// setupTestCommand creates a properly configured cobra command for testing
-func setupTestCommand(t *testing.T, resourceName, resourceVersion, output string, extraIdentity []string, skipValidation bool) (*cobra.Command, context.Context) {
-	t.Helper()
-	cmd := &cobra.Command{
-		Use: "test-download-plugin",
-	}
-
-	// Add required flags for plugin download
-	cmd.Flags().String("resource-name", resourceName, "resource name")
-	cmd.Flags().String("resource-version", resourceVersion, "resource version")
-	cmd.Flags().String("output", output, "output path")
-	cmd.Flags().StringSlice("extra-identity", extraIdentity, "extra identity")
-	cmd.Flags().Bool("skip-validation", skipValidation, "skip validation")
-
-	// Add logging flags using the correct enum flags
-	log.RegisterLoggingFlags(cmd.Flags())
-
-	// Set default values for logging flags
-	_ = cmd.Flags().Set("loglevel", "warn")
-	_ = cmd.Flags().Set("logformat", "text")
-	_ = cmd.Flags().Set("logoutput", "stdout")
-
-	// Set up context with plugin manager and credential graph
-	ctx := context.Background()
-
-	// Create plugin manager
-	pluginManager := manager.NewPluginManager(ctx)
-
-	// Create filesystem config for built-in plugins
-	filesystemConfig := &filesystemv1alpha1.Config{}
-
-	// Register built-in plugins
-	if err := builtin.Register(pluginManager, filesystemConfig, slog.Default()); err != nil {
-		panic("failed to register builtin plugins: " + err.Error())
-	}
-
-	// Create credential graph using proper initialization like in setup.go
-	opts := credentials.Options{
-		RepositoryPluginProvider: pluginManager.CredentialRepositoryRegistry,
-		CredentialPluginProvider: credentials.GetCredentialPluginFn(
-			func(ctx context.Context, typed runtime.Typed) (credentials.CredentialPlugin, error) {
-				return nil, fmt.Errorf("no credential plugin found for type %s", typed)
-			},
-		),
-		CredentialRepositoryTypeScheme: pluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
-	}
-
-	user, password := getUserAndPasswordForTest(t)
-	credCfg := &credentialsRuntime.Config{
-		Repositories: []credentialsRuntime.RepositoryConfigEntry{
-			{
-				Repository: &runtime.Raw{
-					Type: runtime.Type{
-						Name:    "DockerConfig",
-						Version: "v1",
-					},
-					Data: []byte(fmt.Sprintf(`{
-							"auths": {
-								"ghcr.io": {
-									"username": "%s",
-									"password": "%s"
-								}
-							}
-						}`, user, password)),
-				},
-			},
-		},
-	}
-
-	credentialGraph, err := credentials.ToGraph(ctx, credCfg, opts)
-	if err != nil {
-		panic("failed to create credential graph: " + err.Error())
-	}
-
-	// Set up context
-	ctx = ocmctx.WithPluginManager(ctx, pluginManager)
-	ctx = ocmctx.WithCredentialGraph(ctx, credentialGraph)
-	ctx = ocmctx.WithFilesystemConfig(ctx, filesystemConfig)
-	cmd.SetContext(ctx)
-
-	return cmd, ctx
-}
 
 func TestDownloadPluginIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	user, password := getUserAndPasswordForTest(t)
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRepository
+      hostname: ghcr.io
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[1]q
+        password: %[2]q
+`, user, password)
+
+	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
 	tempDir := t.TempDir()
 	outputPath := filepath.Join(tempDir, "ecrplugin")
 
-	cmd, _ := setupTestCommand(t, "demo", "", outputPath, []string{"os=linux", "architecture=amd64"}, true)
-	args := []string{"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0"}
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"plugin",
+		"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0",
+		"--extra-identity", "os=linux",
+		"--extra-identity", "architecture=amd64",
+		"--output", outputPath,
+		"--skip-validation",
+		"--config", cfgPath,
+	})
+	require.NoError(t, downloadCMD.ExecuteContext(t.Context()), "DownloadPlugin should succeed")
+	pluginLocation := filepath.Join(outputPath, "ecrplugin")
+	assert.FileExists(t, pluginLocation, "binary should be downloaded")
 
-	err := plugincmd.DownloadPlugin(cmd, args)
-	require.NoError(t, err, "DownloadPlugin should succeed")
-	assert.FileExists(t, outputPath, "binary should be downloaded")
+	info, err := os.Stat(pluginLocation)
+	require.NoError(t, err, "should be able to stat the downloaded file")
+	assert.True(t, info.Mode().IsRegular(), "downloaded file should be a regular file")
+	assert.Greater(t, info.Size(), int64(0), "downloaded file should not be empty")
+}
 
-	info, err := os.Stat(outputPath)
+func TestDownloadPluginIntegrationWithResolvers(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	user, password := getUserAndPasswordForTest(t)
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: resolvers.config.ocm.software
+  resolvers:
+  - repository:
+      type: OCIRepository
+      hostname: ghcr.io
+    componentNamePattern: ghcr.io
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRepository
+      hostname: ghcr.io
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[1]q
+        password: %[2]q
+`, user, password)
+
+	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir)
+
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"plugin",
+		"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0",
+		"--extra-identity", "os=linux",
+		"--extra-identity", "architecture=amd64",
+		"--output", outputPath,
+		"--skip-validation",
+		"--config", cfgPath,
+	})
+
+	pluginLocation := filepath.Join(outputPath, "ecrplugin")
+	require.NoError(t, downloadCMD.ExecuteContext(t.Context()), "DownloadPlugin should succeed")
+	assert.FileExists(t, pluginLocation, "binary should be downloaded")
+
+	info, err := os.Stat(pluginLocation)
+	require.NoError(t, err, "should be able to stat the downloaded file")
+	assert.True(t, info.Mode().IsRegular(), "downloaded file should be a regular file")
+	assert.Greater(t, info.Size(), int64(0), "downloaded file should not be empty")
+}
+
+func TestDownloadPluginIntegrationWithFallback(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	user, password := getUserAndPasswordForTest(t)
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: ocm.config.ocm.software
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      hostname: ghcr.io
+- type: credentials.config.ocm.software
+  consdumers:
+  - identity:
+      type: OCIRepository
+      hostname: ghcr.io
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[1]q
+        password: %[2]q
+`, user, password)
+
+	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir)
+
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"plugin",
+		"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0",
+		"--extra-identity", "os=linux",
+		"--extra-identity", "architecture=amd64",
+		"--output", outputPath,
+		"--skip-validation",
+		"--config", cfgPath,
+	})
+	require.NoError(t, downloadCMD.ExecuteContext(t.Context()), "DownloadPlugin should succeed")
+
+	pluginLocation := filepath.Join(outputPath, "ecrplugin")
+	assert.FileExists(t, pluginLocation, "binary should be downloaded")
+
+	info, err := os.Stat(pluginLocation)
 	require.NoError(t, err, "should be able to stat the downloaded file")
 	assert.True(t, info.Mode().IsRegular(), "downloaded file should be a regular file")
 	assert.Greater(t, info.Size(), int64(0), "downloaded file should not be empty")
@@ -135,14 +177,45 @@ func TestDownloadPluginMissingResourceIntegration(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	user, password := getUserAndPasswordForTest(t)
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRepository
+      hostname: ghcr.io
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[1]q
+        password: %[2]q
+`, user, password)
+
+	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
 	tempDir := t.TempDir()
-	outputPath := filepath.Join(tempDir, "nonexistent")
-	cmd, _ := setupTestCommand(t, "nonexistent-resource", "", outputPath, []string{"os=linux", "architecture=amd64"}, true)
-	args := []string{"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0"}
-	err := plugincmd.DownloadPlugin(cmd, args)
+	outputPath := filepath.Join(tempDir)
+
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"plugin",
+		"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0",
+		"--extra-identity", "os=does-not-exist",
+		"--extra-identity", "architecture=amd64",
+		"--output", outputPath,
+		"--skip-validation",
+		"--config", cfgPath,
+	})
+	err := downloadCMD.ExecuteContext(t.Context())
 	require.Error(t, err, "DownloadPlugin should fail for non-existent resource")
 	assert.Contains(t, err.Error(), "no resource found matching identity", "error should mention missing resource")
-	assert.NoFileExists(t, outputPath, "plugin binary should not be downloaded for non-existent resource")
+
+	pluginLocation := filepath.Join(outputPath, "ecrplugin")
+	assert.NoFileExists(t, pluginLocation, "plugin binary should not be downloaded for non-existent resource")
 }
 
 func TestDownloadPluginInvalidComponentReferenceIntegration(t *testing.T) {
@@ -150,13 +223,42 @@ func TestDownloadPluginInvalidComponentReferenceIntegration(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	user, password := getUserAndPasswordForTest(t)
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRepository
+      hostname: ghcr.io
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[1]q
+        password: %[2]q
+`, user, password)
+
+	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
 	tempDir := t.TempDir()
 	outputPath := filepath.Join(tempDir, "plugin")
-	cmd, _ := setupTestCommand(t, "demo", "", outputPath, []string{}, true)
-	args := []string{"invalid-component-reference"}
-	err := plugincmd.DownloadPlugin(cmd, args)
+
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"plugin",
+		"invalid-component-reference",
+		"--output", outputPath,
+		"--skip-validation",
+		"--config", cfgPath,
+	})
+	err := downloadCMD.ExecuteContext(t.Context())
 	require.Error(t, err, "DownloadPlugin should fail for invalid component reference")
-	assert.NoFileExists(t, outputPath, "plugin binary should not be downloaded for invalid component reference")
+
+	pluginLocation := filepath.Join(outputPath, "ecrplugin")
+	assert.NoFileExists(t, pluginLocation, "plugin binary should not be downloaded for invalid component reference")
 }
 
 func TestDownloadPluginWithValidationFailureIntegration(t *testing.T) {
@@ -164,21 +266,47 @@ func TestDownloadPluginWithValidationFailureIntegration(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	user, password := getUserAndPasswordForTest(t)
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRepository
+      hostname: ghcr.io
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[1]q
+        password: %[2]q
+`, user, password)
+
+	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
 	tempDir := t.TempDir()
 	outputPath := filepath.Join(tempDir, "ecrplugin")
 
-	// Use the same ecrplugin sample but with validation enabled (skipValidation = false)
-	cmd, _ := setupTestCommand(t, "demo", "", outputPath, []string{"os=linux", "architecture=amd64"}, false)
-	args := []string{"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0"}
-
-	err := plugincmd.DownloadPlugin(cmd, args)
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"plugin",
+		"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0",
+		"--extra-identity", "os=linux",
+		"--extra-identity", "architecture=amd64",
+		"--output", outputPath,
+		"--config", cfgPath,
+	})
+	err := downloadCMD.ExecuteContext(t.Context())
 
 	// This should fail because ecrplugin is not a valid OCM plugin
 	require.Error(t, err, "DownloadPlugin should fail when validation is enabled for ecrplugin")
 	assert.Contains(t, err.Error(), "downloaded binary is not a valid plugin", "error should mention plugin validation failure")
 
 	// The binary should be cleaned up after validation failure
-	assert.NoFileExists(t, outputPath, "plugin binary should be removed after validation failure")
+	pluginLocation := filepath.Join(outputPath, "ecrplugin")
+	assert.NoFileExists(t, pluginLocation, "plugin binary should be removed after validation failure")
 }
 
 // getUserAndPasswordForTest safely gets GitHub credentials for testing

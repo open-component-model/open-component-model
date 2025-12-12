@@ -5,17 +5,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
-	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -41,7 +45,7 @@ func New() *cobra.Command {
 		Aliases:    []string{"cv", "component-versions", "cvs", "componentversion", "componentversions", "component", "components", "comp", "comps", "c"},
 		SuggestFor: []string{"version", "versions"},
 		Short:      "Get component version(s) from an OCM repository",
-		Args:       cobra.MatchAll(cobra.ExactArgs(1), ComponentReferenceAsFirstPositional),
+		Args:       cobra.MatchAll(cobra.ExactArgs(1), componentOrRepositoryReferenceAsFirstPositional),
 		Long: fmt.Sprintf(`Get component version(s) from an OCM repository.
 
 The format of a component reference is:
@@ -85,7 +89,8 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
   static: print the output once the complete component graph is discovered
   live (experimental): continuously updates the output to represent the current discovery state of the component graph`)
 	cmd.Flags().String(FlagSemverConstraint, "> 0.0.0-0", "semantic version constraint restricting which versions to output")
-	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
+	// TODO(fabianburth): add concurrency limit to the dag discovery (https://github.com/open-component-model/ocm-project/issues/705)
+	// cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
 	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))")
 	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
@@ -93,14 +98,18 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 	return cmd
 }
 
-func ComponentReferenceAsFirstPositional(_ *cobra.Command, args []string) error {
+func componentOrRepositoryReferenceAsFirstPositional(_ *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("missing component reference as first positional argument")
 	}
-	if _, err := compref.Parse(args[0]); err != nil {
-		return fmt.Errorf("parsing component reference from first position argument %q failed: %w", args[0], err)
+	var compErr, repoErr error
+	if _, compErr = compref.Parse(args[0]); compErr == nil {
+		return nil
 	}
-	return nil
+	if _, repoErr = compref.ParseRepository(args[0]); repoErr == nil {
+		return nil
+	}
+	return fmt.Errorf("first position argument %q must be either a component reference or repository reference: %w", args[0], errors.Join(compErr, repoErr))
 }
 
 func GetComponentVersion(cmd *cobra.Command, args []string) error {
@@ -126,10 +135,11 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting semver-constraint flag failed: %w", err)
 	}
-	concurrencyLimit, err := cmd.Flags().GetInt(FlagConcurrencyLimit)
-	if err != nil {
-		return fmt.Errorf("getting concurrency-limit flag failed: %w", err)
-	}
+	// TODO(fabianburth): add concurrency limit to the dag discovery (https://github.com/open-component-model/ocm-project/issues/705)
+	// concurrencyLimit, err := cmd.Flags().GetInt(FlagConcurrencyLimit)
+	// if err != nil {
+	//	 return fmt.Errorf("getting concurrency-limit flag failed: %w", err)
+	// }
 	latestOnly, err := cmd.Flags().GetBool(FlagLatest)
 	if err != nil {
 		return fmt.Errorf("getting latest flag failed: %w", err)
@@ -139,63 +149,107 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting recursive flag failed: %w", err)
 	}
 
-	reference := args[0]
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
-	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-	var resolvers []*resolverruntime.Resolver
-	if config != nil {
-		resolvers, err = ocm.ResolversFromConfig(config)
-		if err != nil {
-			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
-		}
-	}
-	repo, err := ocm.NewFromRefWithFallbackRepo(cmd.Context(), pluginManager, credentialGraph, resolvers, reference)
-	if err != nil {
-		return fmt.Errorf("could not initialize ocm repository: %w", err)
+	params := Params{
+		output:      output,
+		displayMode: displayMode,
+		constraint:  constraint,
+		latestOnly:  latestOnly,
+		recursive:   recursive,
 	}
 
-	descs, err := repo.GetComponentVersions(cmd.Context(), ocm.GetComponentVersionsOptions{
+	reference := args[0]
+
+	// We want to allow non-semver compatible versions to be used in component references.
+	// Therefore, we ignore semver compatibility errors during parsing here.
+	ref, compErr := compref.Parse(reference, []compref.Option{
+		compref.IgnoreSemverCompatibility(),
+	}...)
+	if compErr != nil {
+		// If not a component reference, check if it is a repository reference.
+		repository, repoErr := compref.ParseRepository(args[0])
+		if repoErr != nil {
+			return fmt.Errorf("first position argument %q must be either a component reference or repository reference: %w", reference, errors.Join(compErr, repoErr))
+		}
+		slog.DebugContext(cmd.Context(), "parsed repository reference", "reference", reference, "parsed", repository)
+
+		return processRepositoryReference(cmd, pluginManager, credentialGraph, config, params, repository)
+	}
+	slog.DebugContext(cmd.Context(), "parsed component reference", "reference", reference, "parsed", ref)
+
+	return processComponentReference(cmd, pluginManager, credentialGraph, config, params, ref)
+}
+
+func processComponentReference(cmd *cobra.Command,
+	pluginManager *manager.PluginManager,
+	credentialGraph credentials.Resolver,
+	config *genericv1.Config,
+	params Params,
+	ref *compref.Ref,
+) error {
+	constraint := params.constraint
+	latestOnly := params.latestOnly
+	recursive := params.recursive
+	output := params.output
+	displayMode := params.displayMode
+	ctx := cmd.Context()
+
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(ctx, pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, ref)
+	if err != nil {
+		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
+	}
+
+	repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, ref.Component, ref.Version)
+	if err != nil {
+		return fmt.Errorf("could not access ocm repository: %w", err)
+	}
+
+	descs, err := ocm.GetComponentVersions(ctx, ocm.GetComponentVersionsOptions{
 		VersionOptions: ocm.VersionOptions{
 			SemverConstraint: constraint,
 			LatestOnly:       latestOnly,
 		},
-		ConcurrencyLimit: concurrencyLimit,
-	})
+	}, ref.Component, ref.Version, repo)
 	if err != nil {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
-
-	if err := renderComponents(cmd, repo, descs, output, displayMode, recursive); err != nil {
-		return fmt.Errorf("failed to render components recursively: %w", err)
+	roots := make([]string, 0, len(descs))
+	for _, desc := range descs {
+		identity := runtime.Identity{
+			descruntime.IdentityAttributeName:    desc.Component.Name,
+			descruntime.IdentityAttributeVersion: desc.Component.Version,
+		}.String()
+		roots = append(roots, identity)
 	}
+
+	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+		return fmt.Errorf("failed to render components: %w", err)
+	}
+
 	return nil
 }
 
-func renderComponents(cmd *cobra.Command, repo *ocm.ComponentRepository, descs []*descruntime.Descriptor, format string, mode string, recursive int) error {
-	dag := syncdag.NewDirectedAcyclicGraph[string]()
-
-	roots := make([]string, len(descs))
-	for index, desc := range descs {
-		root := desc.Component.ToIdentity().String()
-		if err := dag.AddVertex(root, map[string]any{
-			descriptorAttribute: desc,
-		}); err != nil {
-			return fmt.Errorf("adding root vertex %q failed: %w", root, err)
-		}
-		roots[index] = root
+func renderComponents(cmd *cobra.Command, repoProvider ocm.ComponentVersionRepositoryForComponentProvider, roots []string, format string, mode string, recursive int) error {
+	resAndDis := resolverAndDiscoverer{
+		repositoryProvider: repoProvider,
+		recursive:          recursive,
 	}
-	renderer, err := buildRenderer(cmd.Context(), dag, roots, format)
+	discoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *descruntime.Descriptor]{
+		Roots:      roots,
+		Resolver:   &resAndDis,
+		Discoverer: &resAndDis,
+	})
+	renderer, err := buildRenderer(cmd.Context(), discoverer.Graph(), roots, format)
 	if err != nil {
 		return fmt.Errorf("building renderer failed: %w", err)
 	}
-	neighbourDiscoverer := buildNeighbourDiscoverer(dag, repo, recursive)
 
 	switch mode {
 	case render.StaticRenderMode:
 		// Start traversing the graph from the root vertices (the initially resolved
 		// component versions).
-		err := dag.Discover(cmd.Context(), neighbourDiscoverer, syncdag.WithRoots(roots...))
+		err := discoverer.Discover(cmd.Context())
 		if err != nil {
 			return fmt.Errorf("traversing component version graph failed: %w", err)
 		}
@@ -210,7 +264,7 @@ func renderComponents(cmd *cobra.Command, repo *ocm.ComponentRepository, descs [
 		// component versions).
 		// The render loop is running concurrently and regularly displays the current
 		// state of the graph.
-		err := dag.Discover(cmd.Context(), neighbourDiscoverer, syncdag.WithRoots(roots...))
+		err := discoverer.Discover(cmd.Context())
 		cancel()
 		if err != nil {
 			return fmt.Errorf("traversing component version graph failed: %w", err)
@@ -223,110 +277,243 @@ func renderComponents(cmd *cobra.Command, repo *ocm.ComponentRepository, descs [
 	return nil
 }
 
-const (
-	descriptorAttribute = "descriptor"
-)
-
-func buildRenderer(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], roots []string, format string) (render.Renderer, error) {
+func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[string], roots []string, format string) (render.Renderer, error) {
 	// Initialize renderer based on the requested output format.
 	switch format {
-	case render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatYAML.String():
-		serializer := buildMachineFormatSerializer(format)
+	case render.OutputFormatJSON.String():
+		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatJSON))
+		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
+	case render.OutputFormatNDJSON.String():
+		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatNDJSON))
+		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
+	case render.OutputFormatYAML.String():
+		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatYAML))
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	case render.OutputFormatTree.String():
-		serializer := buildTreeFormatSerializer()
-		return tree.New(ctx, dag, tree.WithVertexSerializer(serializer), tree.WithRoots(roots...)), nil
+		return tree.New(ctx, dag, tree.WithRoots(roots...)), nil
 	case render.OutputFormatTable.String():
-		serializer := buildTableFormatSerializer()
+		serializer := list.ListSerializerFunc[string](serializeVerticesToTable)
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	default:
 		return nil, fmt.Errorf("invalid output format %q", format)
 	}
 }
 
-func buildMachineFormatSerializer(format string) list.ListSerializer[string] {
-	vertexSerializer := list.VertexSerializerFunc[string](func(vertex *syncdag.Vertex[string]) (any, error) {
-		descriptor, _ := vertex.MustGetAttribute(descriptorAttribute).(*descruntime.Descriptor)
-		descriptorV2, err := descruntime.ConvertToV2(descriptorv2.Scheme, descriptor)
-		if err != nil {
-			return nil, fmt.Errorf("converting descriptor to v2 failed: %w", err)
-		}
-		return descriptorV2, nil
-	})
-
-	switch format {
-	case render.OutputFormatJSON.String():
-		return list.NewSerializer(list.WithVertexSerializer(vertexSerializer), list.WithOutputFormat[string](render.OutputFormatJSON))
-	case render.OutputFormatYAML.String():
-		return list.NewSerializer(list.WithVertexSerializer(vertexSerializer), list.WithOutputFormat[string](render.OutputFormatYAML))
-	case render.OutputFormatNDJSON.String():
-		return list.NewSerializer(list.WithVertexSerializer(vertexSerializer), list.WithOutputFormat[string](render.OutputFormatNDJSON))
-	default:
-		panic(fmt.Errorf("invalid machine output format %q", format)) // should not happen as checked before
+func serializeVertexToDescriptor(vertex *dag.Vertex[string]) (any, error) {
+	untypedDescriptor, ok := vertex.Attributes[syncdag.AttributeValue]
+	if !ok {
+		return nil, fmt.Errorf("vertex %s has no %s attribute", vertex.ID, syncdag.AttributeValue)
 	}
+	descriptor, ok := untypedDescriptor.(*descruntime.Descriptor)
+	if !ok {
+		return nil, fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &descruntime.Descriptor{}, untypedDescriptor)
+	}
+	descriptorV2, err := descruntime.ConvertToV2(descriptorv2.Scheme, descriptor)
+	if err != nil {
+		return nil, fmt.Errorf("converting descriptor to v2 failed: %w", err)
+	}
+	return descriptorV2, nil
 }
 
-func buildTreeFormatSerializer() tree.VertexSerializer[string] {
-	return tree.VertexSerializerFunc[string](func(vertex *syncdag.Vertex[string]) (string, error) {
-		id, _ := runtime.ParseIdentity(vertex.ID)
-		return fmt.Sprintf("%s:%s", id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion]), nil
-	})
-}
-
-func buildTableFormatSerializer() list.ListSerializer[string] {
-	return list.ListSerializerFunc[string](func(writer io.Writer, vertices []*syncdag.Vertex[string]) error {
-		t := table.NewWriter()
-		t.SetOutputMirror(writer)
-		t.AppendHeader(table.Row{"Component", "Version", "Provider"})
-		for _, vertex := range vertices {
-			descriptor, _ := vertex.MustGetAttribute(descriptorAttribute).(*descruntime.Descriptor)
-			t.AppendRow(table.Row{descriptor.Component.Name, descriptor.Component.Version, descriptor.Component.Provider.Name})
+func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) error {
+	t := table.NewWriter()
+	t.SetOutputMirror(writer)
+	t.AppendHeader(table.Row{"Component", "Version", "Provider"})
+	for _, vertex := range vertices {
+		untypedDescriptor, ok := vertex.Attributes[syncdag.AttributeValue]
+		if !ok {
+			return fmt.Errorf("vertex %s has no %s attribute", vertex.ID, syncdag.AttributeValue)
 		}
-		t.SetColumnConfigs([]table.ColumnConfig{
-			{Number: 1, AutoMerge: true},
-			{Number: 3, AutoMerge: true},
-		})
-		style := table.StyleLight
-		style.Options.DrawBorder = false
-		t.SetStyle(style)
-		t.Render()
+		descriptor, ok := untypedDescriptor.(*descruntime.Descriptor)
+		if !ok {
+			return fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &descruntime.Descriptor{}, descriptor)
+		}
+
+		t.AppendRow(table.Row{descriptor.Component.Name, descriptor.Component.Version, descriptor.Component.Provider.Name})
+	}
+	t.SetColumnConfigs([]table.ColumnConfig{
+		{Number: 1, AutoMerge: true},
+		{Number: 3, AutoMerge: true},
+	})
+	style := table.StyleLight
+	style.Options.DrawBorder = false
+	t.SetStyle(style)
+	t.Render()
+	return nil
+}
+
+type resolverAndDiscoverer struct {
+	repositoryProvider ocm.ComponentVersionRepositoryForComponentProvider
+	recursive          int
+}
+
+var (
+	_ syncdag.Resolver[string, *descruntime.Descriptor]   = (*resolverAndDiscoverer)(nil)
+	_ syncdag.Discoverer[string, *descruntime.Descriptor] = (*resolverAndDiscoverer)(nil)
+)
+
+func (r *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*descruntime.Descriptor, error) {
+	id, err := runtime.ParseIdentity(key)
+	if err != nil {
+		return nil, fmt.Errorf("parsing identity %q failed: %w", key, err)
+	}
+	component, version := id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion]
+	repo, err := r.repositoryProvider.GetComponentVersionRepositoryForComponent(ctx, component, version)
+	if err != nil {
+		return nil, fmt.Errorf("getting component version repository for identity %q failed: %w", id, err)
+	}
+	desc, err := repo.GetComponentVersion(ctx, component, version)
+	if err != nil {
+		return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
+	}
+	return desc, nil
+}
+
+func (r *resolverAndDiscoverer) Discover(ctx context.Context, parent *descruntime.Descriptor) ([]string, error) {
+	// TODO(fabianburth): Recursion depth has to be implemented as option for
+	//  the dag discovery. Once that's implemented, we can pass the recursion
+	//  depth to the discovery and remove this check here (https://github.com/open-component-model/ocm-project/issues/706).
+	switch {
+	case r.recursive < -1:
+		return nil, fmt.Errorf("invalid recursion depth %d: must be -1 (unlimited) or >= 0", r.recursive)
+	case r.recursive == 0:
+		slog.DebugContext(ctx, "not discovering children, recursion depth 0", "component", parent.Component.ToIdentity().String())
+		return nil, nil
+	case r.recursive == -1:
+		// unlimited recursion
+		children := make([]string, len(parent.Component.References))
+		for index, reference := range parent.Component.References {
+			children[index] = reference.ToComponentIdentity().String()
+		}
+		slog.DebugContext(ctx, "discovering children", "component", parent.Component.ToIdentity().String(), "children", children)
+		return children, nil
+	case r.recursive > 0:
+		return nil, fmt.Errorf("recursion depth > 0 not implemented yet")
+	}
+	return nil, fmt.Errorf("invalid recursion depth %d", r.recursive)
+}
+
+// Params holds the values of the flags for the `get cv` command.
+type Params struct {
+	output      string
+	displayMode string
+	constraint  string
+	latestOnly  bool
+	recursive   int
+}
+
+// processRepositoryReference implements the logic for the `get cv <ref>` command, where <ref> is a repository reference.
+func processRepositoryReference(cmd *cobra.Command,
+	pluginManager *manager.PluginManager,
+	credentialGraph credentials.Resolver,
+	config *genericv1.Config,
+	params Params,
+	repository runtime.Typed,
+) error {
+	recursive := params.recursive
+	output := params.output
+	displayMode := params.displayMode
+	ctx := cmd.Context()
+
+	componentNames, err := listComponentsFromRepository(ctx, pluginManager, repository, credentialGraph)
+	if err != nil {
+		return fmt.Errorf("could not list components in repository %v: %w", repository, err)
+	}
+	slog.DebugContext(ctx, "listed components from repository", "repository", repository, "components", componentNames)
+
+	// We found no components in the repository; this means that no roots will be found in the later calls.
+	// without this check the wildcard matches make no sense and also are potentially duplicated because there will be
+	// no roots, and we default add wildcard matches. User defined wildcard matches are still valid.
+	if len(componentNames) == 0 {
+		return fmt.Errorf("no components found in repository %v", repository)
+	}
+
+	roots, err := getIDsForComponentsFromRepository(ctx, pluginManager, repository, componentNames, params, credentialGraph)
+	if err != nil {
+		return fmt.Errorf("failed to get identities for components %v in repository %v: %w", componentNames, repository, err)
+	}
+	slog.DebugContext(ctx, "components versions", "roots", roots)
+
+	// Create a component reference wrapper for the repository to use the standard provider function
+	repoProvider, err := ocm.NewComponentRepositoryProvider(ctx,
+		pluginManager.ComponentVersionRepositoryRegistry,
+		credentialGraph,
+		ocm.WithConfig(config),
+		ocm.WithRepository(repository),
+		ocm.WithComponentPatterns(componentNames))
+	if err != nil {
+		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
+	}
+
+	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+		return fmt.Errorf("failed to render components recursively: %w", err)
+	}
+
+	return nil
+}
+
+// listComponentsFromRepository lists component names from a given repository using the component lister interface.
+// Currently only CTF repositories are supported.
+func listComponentsFromRepository(ctx context.Context,
+	pluginManager *manager.PluginManager,
+	repository runtime.Typed,
+	_ credentials.Resolver,
+) ([]string, error) {
+	// TODO(ikhandamirov): git rid of this type check. Use credentials in case of OCI.
+	_, ok := repository.(*ctfv1.Repository)
+	if !ok {
+		return nil, fmt.Errorf("component listing in repositories of type %T not supported", repository)
+	}
+
+	lister, err := pluginManager.ComponentListerRegistry.GetComponentLister(ctx, repository, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not get component lister for repository %+v: %w", repository, err)
+	}
+
+	var componentNames []string
+	err = lister.ListComponents(ctx, "", func(names []string) error {
+		componentNames = append(componentNames, names...)
 		return nil
 	})
+	if err != nil {
+		return nil, fmt.Errorf("could not list components in repository %+v: %w", repository, err)
+	}
+
+	return componentNames, nil
 }
 
-func buildNeighbourDiscoverer(dag *syncdag.DirectedAcyclicGraph[string], repo *ocm.ComponentRepository, recursive int) syncdag.DiscoverNeighborsFunc[string] {
-	switch {
-	case recursive != 0:
-		return func(ctx context.Context, v string) ([]string, error) {
-			var desc *descruntime.Descriptor
-			var err error
+// getIDsForComponentsFromRepository gets versions for given component names and returns a list of component
+// identities. All components are located in the same repository.
+func getIDsForComponentsFromRepository(ctx context.Context,
+	pluginManager *manager.PluginManager,
+	repository runtime.Typed,
+	componentNames []string,
+	params Params,
+	_ credentials.Resolver,
+) ([]string, error) {
+	constraint := params.constraint
+	latestOnly := params.latestOnly
 
-			vertex := dag.MustGetVertex(v)
-			id, _ := runtime.ParseIdentity(v)
-			// root descriptors are already known
-			if untypedDesc, ok := vertex.GetAttribute(descriptorAttribute); !ok {
-				desc, err = repo.ComponentVersionRepository().GetComponentVersion(ctx, id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion])
-				if err != nil {
-					return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
-				}
-				vertex.Attributes.Store(descriptorAttribute, desc)
-			} else {
-				desc, _ = untypedDesc.(*descruntime.Descriptor)
-			}
-			// Store the component version descriptor with the vertex.
-			// It will be used by the serializers to generate the output.
-			neighbors := make([]string, len(desc.Component.References))
-			for index, reference := range desc.Component.References {
-				refID := make(runtime.Identity, 2)
-				refID[descruntime.IdentityAttributeName] = reference.Component
-				refID[descruntime.IdentityAttributeVersion] = reference.Version
-				neighbors[index] = refID.String()
-			}
-			return neighbors, nil
-		}
-	default:
-		return func(ctx context.Context, v string) (neighbors []string, err error) {
-			return nil, nil
-		}
+	// TODO(ikhandamirov): call with credentials in case of OCI.
+	repo, err := pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, repository, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not get component version repository for reference %+v", repository)
 	}
+
+	descriptors, err := ocm.ListComponentVersions(ctx, repo,
+		ocm.WithComponentNames(componentNames),
+		ocm.WithSemverConstraint(constraint),
+		ocm.WithLatestOnly(latestOnly),
+		ocm.WithSort(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("listing component versions failed: %w", err)
+	}
+
+	identities := make([]string, 0, len(descriptors))
+	for _, desc := range descriptors {
+		identities = append(identities, desc.Component.ToIdentity().String())
+	}
+
+	return identities, nil
 }

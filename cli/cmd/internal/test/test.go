@@ -87,6 +87,14 @@ func OCM(tb testing.TB, opts ...Option) (*cobra.Command, error) {
 		return nil, fmt.Errorf("failed to set format: %w", err)
 	}
 
+	// ensure verbose logs during tests for better diagnostics
+	lf := instance.PersistentFlags().Lookup(log.LevelFlagName)
+	if lf != nil {
+		if err := lf.Value.Set(log.LevelDebug); err != nil {
+			return nil, fmt.Errorf("failed to set log level: %w", err)
+		}
+	}
+
 	instance.SetArgs(opt.args)
 	return instance.ExecuteContextC(tb.Context())
 }

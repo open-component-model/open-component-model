@@ -2,30 +2,26 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
-	. "github.com/mandelsoft/goutils/testutils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	. "ocm.software/ocm/api/helper/builder"
-	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/mandelsoft/vfs/pkg/osfs"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"ocm.software/ocm/api/ocm/extensions/repositories/ctf"
-	"ocm.software/ocm/api/ocm/extensions/repositories/ocireg"
-	"ocm.software/ocm/api/utils/accessio"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	environment "ocm.software/ocm/api/helper/env"
 
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 )
 
 const (
@@ -37,13 +33,9 @@ var _ = Describe("Repository Controller", func() {
 	var (
 		namespace *corev1.Namespace
 		ocmRepo   *v1alpha1.Repository
-		env       *Builder
 	)
 
 	BeforeEach(func(ctx SpecContext) {
-		env = NewBuilder(environment.FileSystem(osfs.OsFs))
-		DeferCleanup(env.Cleanup)
-
 		if namespace == nil {
 			namespace = &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -61,13 +53,19 @@ var _ = Describe("Repository Controller", func() {
 	Describe("Reconciling with different RepositorySpec specifications", func() {
 
 		Context("When correct RepositorySpec is provided", func() {
-			It("Repository can be reconciled", func(ctx SpecContext) {
-
-				By("creating a OCI repository with existing host")
-				spec := ocireg.NewRepositorySpec("ghcr.io/open-component-model")
-				specdata := Must(spec.MarshalJSON())
+			It("Repository can be reconciled with CTF", func(ctx SpecContext) {
+				By("creating a CTF repository")
+				ctfPath := GinkgoT().TempDir()
+				spec := &ctf.Repository{
+					Type:       runtime.NewVersionedType(ctf.Type, "v1"),
+					FilePath:   ctfPath,
+					AccessMode: ctf.AccessModeReadOnly,
+				}
+				specdata, err := json.Marshal(spec)
+				Expect(err).NotTo(HaveOccurred())
 				repoName := TestRepositoryObj + "-passing"
 				ocmRepo = newTestRepository(TestNamespaceOCMRepo, repoName, &specdata)
+
 				Expect(k8sClient.Create(ctx, ocmRepo)).To(Succeed())
 
 				By("check that repository status has been updated successfully")
@@ -82,10 +80,15 @@ var _ = Describe("Repository Controller", func() {
 		Context("When incorrect RepositorySpec is provided", func() {
 			It("Validation must fail", func(ctx SpecContext) {
 
-				By("creating a OCI repository with non-existing host")
-				spec := ocireg.NewRepositorySpec("https://doesnotexist")
-				specdata := Must(spec.MarshalJSON())
-				repoName := TestRepositoryObj + "-no-host"
+				By("creating a CTF repository with non-existent path")
+				spec := &ctf.Repository{
+					Type:       runtime.NewVersionedType(ctf.Type, "v1"),
+					FilePath:   "/nonexistent/path/that/does/not/exist",
+					AccessMode: ctf.AccessModeReadOnly,
+				}
+				specdata, err := json.Marshal(spec)
+				Expect(err).NotTo(HaveOccurred())
+				repoName := TestRepositoryObj + "-no-path"
 				ocmRepo = newTestRepository(TestNamespaceOCMRepo, repoName, &specdata)
 				Expect(k8sClient.Create(ctx, ocmRepo)).To(Succeed())
 
@@ -136,9 +139,15 @@ var _ = Describe("Repository Controller", func() {
 				By("creating secret and config objects")
 				configs, secrets := createTestConfigsAndSecrets(ctx)
 
-				By("creating a OCI repository")
-				spec := ocireg.NewRepositorySpec("ghcr.io/open-component-model")
-				specdata := Must(spec.MarshalJSON())
+				By("creating a CTF repository")
+				ctfPath := GinkgoT().TempDir()
+				spec := &ctf.Repository{
+					Type:       runtime.NewVersionedType(ctf.Type, "v1"),
+					FilePath:   ctfPath,
+					AccessMode: ctf.AccessModeReadOnly,
+				}
+				specdata, err := json.Marshal(spec)
+				Expect(err).NotTo(HaveOccurred())
 				repoName := TestRepositoryObj + "-all-fields"
 				ocmRepo = newTestRepository(TestNamespaceOCMRepo, repoName, &specdata)
 
@@ -270,14 +279,14 @@ var _ = Describe("Repository Controller", func() {
 				By("creating a repository object")
 				ctfpath := GinkgoT().TempDir()
 				componentName := "ocm.software/test-component"
-				componentVersion := "v1.0.0"
-				env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-					env.Component(componentName, func() {
-						env.Version(componentVersion)
-					})
-				})
-				spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
-				specdata := Must(spec.MarshalJSON())
+
+				spec := &ctf.Repository{
+					Type:       runtime.NewVersionedType(ctf.Type, "v1"),
+					FilePath:   ctfpath,
+					AccessMode: ctf.AccessModeReadOnly,
+				}
+				specdata, err := json.Marshal(spec)
+				Expect(err).NotTo(HaveOccurred())
 				ocmRepoName := TestRepositoryObj + "-deleted"
 				ocmRepo = newTestRepository(TestNamespaceOCMRepo, ocmRepoName, &specdata)
 

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "test/ArrayRefOneOf.schema.json",
+  "title": "ArrayRefOneOf",
+  "type": "array",
+  "items": {
+    "oneOf": [
+      { "$ref": "#/$defs/EntryA" },
+      { "const": "literal" }
+    ]
+  },
+  "$defs": {
+    "EntryA": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string" },
+        "value": { "type": "number" }
+      }
+    }
+  }
+}

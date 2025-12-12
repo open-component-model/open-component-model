@@ -17,6 +17,16 @@ type ComponentConstructor struct {
 }
 
 func (c *ComponentConstructor) UnmarshalJSON(data []byte) error {
+	if err := ValidateRawJSON(data); err != nil {
+		return fmt.Errorf("component constructor validation failed: %w", err)
+	}
+
+	return c.UnmarshalJSONUnsafe(data)
+}
+
+// UnmarshalJSONUnsafe is a variant of UnmarshalJSON that does not perform schema validation.
+// It is intended for use cases where partial or potentially invalid data needs to be processed.
+func (c *ComponentConstructor) UnmarshalJSONUnsafe(data []byte) error {
 	// Try to unmarshal as a struct with "components" field (array form)
 	type Alias ComponentConstructor
 	var alias Alias // use an alias because that won't cause recursion into UnmarshalJSON
@@ -109,6 +119,7 @@ type Resource struct {
 	ConstructorAttributes `json:",inline"`
 }
 
+// ConstructorAttributes defines additional attributes used in a component constructor context.
 // +k8s:deepcopy-gen=true
 type ConstructorAttributes struct {
 	CopyPolicy `json:"copyPolicy,omitempty"`

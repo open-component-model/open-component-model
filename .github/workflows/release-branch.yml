@@ -1,0 +1,94 @@
+name: Create OCM Release Branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Branch to cut to, must match regex releases/v0.[0-9]+'
+        required: true
+      source_branch:
+        description: 'Branch to cut from (default main)'
+        required: false
+        default: 'main'
+
+jobs:
+  create-release-branch:
+    environment:
+      name: ocm-release
+    name: Create Release Branch from ${{ github.event.inputs.source_branch }} to ${{ github.event.inputs.target_branch }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@67018539274d69449ef7c02e8e71183d1719ab42 # v2.1.4
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          permission-contents: write
+
+      - name: Create release branch
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          TARGET_BRANCH: ${{ github.event.inputs.target_branch }}
+          SOURCE_BRANCH: ${{ github.event.inputs.source_branch }}
+        with:
+          github-token: ${{ steps.get_token.outputs.token || secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const target = process.env.TARGET_BRANCH.trim();
+            let source = process.env.SOURCE_BRANCH.trim();
+
+            const regex = /^releases\/v0\.[0-9]+$/;
+            if (!regex.test(target)) {
+              core.setFailed(`Invalid branch name '${target}'. Must match regex '${regex.toString()}'`);
+              return;
+            }
+
+            // Remove possible refs/heads/ prefix if present
+            source = source.replace(/^refs\/heads\//, '');
+
+            core.info(`Source branch: ${source}`);
+            core.info(`Target branch: ${target}`);
+
+            // Check if target branch exists
+            try {
+              await github.rest.repos.getBranch({ owner, repo, branch: target });
+              core.info(`Branch '${target}' already exists. Skipping creation.`);
+              return;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+            // Get source branch SHA
+            const { data: ref } = await github.rest.git.getRef({
+              owner,
+              repo,
+              ref: `heads/${source}`,
+            });
+            const sha = ref.object.sha;
+
+            // Create new branch
+            await github.rest.git.createRef({
+              owner,
+              repo,
+              ref: `refs/heads/${target}`,
+              sha,
+            });
+
+            core.summary.addHeading('Release Branch Created');
+            core.summary.addTable([
+              ['Source Branch', source],
+              ['Target Branch', target],
+              ['Commit SHA', sha],
+            ]);
+            await core.summary.write();
+
+            core.info(`✅ Created '${target}' from '${source}' at commit ${sha}.`);

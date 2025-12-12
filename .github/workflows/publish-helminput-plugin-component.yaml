@@ -1,0 +1,248 @@
+name: Publish Helm Input Plugin Component
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'bindings/go/helm/**'
+      - '.github/workflows/publish-helminput-plugin-component.yaml'
+    tags:
+      - 'bindings/go/helm/v*'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'bindings/go/helm/**'
+      - '.github/workflows/publish-helminput-plugin-component.yaml'
+  workflow_call:
+    inputs:
+      ref:
+        description: "The ref to build on (branch or tag). Defaults to the current ref."
+        type: string
+        required: false
+
+env:
+  # Repository selection for checkout:
+  # - pull_request: Use head repository (fork) for PR changes
+  # - other events: Use current repository
+  CHECKOUT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+
+  # REF determination:
+  # - inputs.ref: Explicit override for workflow_call
+  # - pull_request: Use github.head_ref (PR source branch from fork)
+  # - push/tag: Use github.ref_name (branch or tag name)
+  REF: ${{ inputs.ref || (github.event_name == 'pull_request' && github.head_ref) || github.ref_name }}
+
+jobs:
+  build:
+    name: Build Plugin Component
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.calculate_version.outputs.version }}
+      should_push_oci_image: ${{ steps.branch-check.outputs.should_push_oci_image }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ env.REF }}
+          repository: ${{ env.CHECKOUT_REPO }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute VERSION
+        id: calculate_version
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          TAG_PREFIX: "bindings/go/helm/v"
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/compute-version.js');
+            await script.default({ core });
+
+      - name: Setup Go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
+        with:
+          go-version-file: bindings/go/helm/go.mod
+          cache-dependency-path: bindings/go/helm/go.sum
+
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: 3.x
+
+      - name: Build multi-arch binaries and generate component constructor
+        working-directory: bindings/go/helm
+        env:
+          VERSION: ${{ steps.calculate_version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Generating component constructor with version: $VERSION"
+          task generate/component-constructor
+          test -f "./tmp/component-constructor.yaml" || (echo "component-constructor.yaml not found" && exit 1)
+
+      - name: Attest binaries
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          subject-path: "bindings/go/helm/tmp/bin/*"
+
+      # Determine if this branch is eligible for publishing, but only if we're not on a PR
+      - name: Determine if this is a push-eligible branch
+        if: ${{ github.event_name != 'pull_request' }}
+        id: branch-check
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            core.setOutput(
+              "should_push_oci_image",
+              process.env.GITHUB_REF_NAME === context.payload.repository.default_branch ||
+              /^releases\/v0\./.test(process.env.GITHUB_REF_NAME) ||
+              /^bindings\/go\/helm\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(process.env.GITHUB_REF_NAME)
+            )
+
+      - name: Upload build artifacts
+        if: ${{ steps.branch-check.outputs.should_push_oci_image == 'true' }}
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 #v5
+        with:
+          name: helm-plugin-build-artifacts
+          path: bindings/go/helm/tmp/
+          retention-days: 1
+
+  publish:
+    name: Publish Component
+    needs: build
+    if: ${{ needs.build.outputs.should_push_oci_image == 'true' }}  # Skip unless we should push
+    runs-on: ubuntu-latest
+    concurrency:
+      group: helm-plugin-publish-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      # contents write is required to trigger the plugin registry root component update on successful publishing
+      contents: write
+      packages: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 #v6
+        with:
+          name: helm-plugin-build-artifacts
+          path: bindings/go/helm/tmp/
+
+      - name: Verify artifacts
+        run: |
+          echo "✅ Verifying build artifacts..."
+          ls -la bindings/go/helm/tmp/
+          test -f bindings/go/helm/tmp/component-constructor.yaml || (echo "❌ component-constructor.yaml missing" && exit 1)
+          test -d bindings/go/helm/tmp/bin || (echo "❌ bin directory missing" && exit 1)
+          echo "✅ All required artifacts present"
+
+      - name: Login to GHCR
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef #v3
+        with:
+          registry-auth: |
+            - registry: ghcr.io
+              username: ${{ github.actor }}
+              password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Generate OCM config that can be used in the container
+      - name: Generate OCM config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > ${HOME}/.ocmconfig <<EOF
+          type: generic.config.ocm.software/v1
+          configurations:
+            - type: credentials.config.ocm.software
+              repositories:
+                - repository:
+                    type: DockerConfig/v1
+                    dockerConfigFile: /.docker/config.json
+                    propagateConsumerIdentity: true
+          EOF
+
+          echo "Created ${HOME}/.ocmconfig:"
+          cat ${HOME}/.ocmconfig
+
+      - name: Repository Owner
+        run: |
+          echo "REPOSITORY_OWNER=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
+      # Publish component version using CLI image
+      # TODO: replace with github action workflow call so it runs in a container.
+      - name: Publish OCM Component Version
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          OCM_REPOSITORY: ${{ env.REPOSITORY_OWNER }}
+          CLI_IMAGE: ghcr.io/open-component-model/cli:main
+          WORKDIR: ${{ github.workspace }}/bindings/go/helm/tmp
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker run --rm \
+            -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
+            -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
+            -v /etc/ssl/certs/:/etc/ssl/certs/:ro \
+            -v "${WORKDIR}:${WORKDIR}" \
+            -w "${WORKDIR}" \
+            "$CLI_IMAGE" \
+              add component-version \
+              --component-version-conflict-policy replace \
+              --config "/.ocmconfig" \
+              --repository "${OCM_REPOSITORY}" \
+              --constructor "./component-constructor.yaml"
+
+      # Verify that the plugin exists.
+      - name: Verify uploaded plugin.
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          OCM_REPOSITORY: ${{ env.REPOSITORY_OWNER }}
+          CLI_IMAGE: ghcr.io/open-component-model/cli:main
+          WORKDIR: ${{ github.workspace }}/bindings/go/helm/tmp
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker run --rm \
+            -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
+            -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
+            -v /etc/ssl/certs/:/etc/ssl/certs/:ro \
+            -v "${WORKDIR}:${WORKDIR}" \
+            -w "${WORKDIR}" \
+            "$CLI_IMAGE" \
+              download plugin \
+              ${OCM_REPOSITORY}//ocm.software/plugins/helminput:${VERSION} \
+              --output /tmp/plugin \
+              --config "/.ocmconfig"
+
+      - name: Trigger plugin registry update
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: plugin-published
+          client-payload: |
+            {
+              "plugin_name": "helminput",
+              "plugin_version": "${{ needs.build.outputs.version }}",
+              "plugin_component": "ocm.software/plugins/helminput"
+            }
+
+      - name: Summary
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          OCM_REPOSITORY: ${{ env.REPOSITORY_OWNER }}
+        shell: bash
+        run: |
+          echo "## Published Helm input plugin component version" >> "$GITHUB_STEP_SUMMARY"
+          echo "- OCM Repository: ${OCM_REPOSITORY}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Component Name: ocm.software/plugins/helminput" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Component Version: ${VERSION}" >> "$GITHUB_STEP_SUMMARY"

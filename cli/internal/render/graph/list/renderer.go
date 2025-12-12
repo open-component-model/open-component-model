@@ -9,8 +9,9 @@ import (
 	"log/slog"
 	"slices"
 
+	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	"ocm.software/open-component-model/cli/internal/render/graph"
+	graphutils "ocm.software/open-component-model/cli/internal/render/graph"
 )
 
 // Renderer renders a tree from a DirectedAcyclicGraph as a flat last in a
@@ -35,7 +36,7 @@ import (
 // representation of the vertex is defined by the ListSerializer.
 type Renderer[T cmp.Ordered] struct {
 	// The vertices is a slice of vertices that will be rendered.
-	vertices []*syncdag.Vertex[T]
+	vertices []*dag.Vertex[T]
 	// The ListSerializer converts a vertex to an object that is added to vertices.
 	// The returned object is expected to be a serializable type (e.g., a struct
 	// or map). The ListSerializer MUST perform READ-ONLY access to the vertex and its
@@ -50,34 +51,34 @@ type Renderer[T cmp.Ordered] struct {
 	// The roots are optional. If not provided, the Renderer will
 	// dynamically determine the roots from the DirectedAcyclicGraph.
 	roots []T
-	// The dag from which the tree is rendered.
-	dag *syncdag.DirectedAcyclicGraph[T]
+	// The graph from which the tree is rendered.
+	graph *syncdag.SyncedDirectedAcyclicGraph[T]
 }
 
 // ListSerializer is an interface that defines a method to create a
 // serializable object from a vertex.
 type ListSerializer[T cmp.Ordered] interface {
-	Serialize(writer io.Writer, vertices []*syncdag.Vertex[T]) error
+	Serialize(writer io.Writer, vertices []*dag.Vertex[T]) error
 }
 
 // ListSerializerFunc is a function type that implements the ListSerializer
 // interface.
-type ListSerializerFunc[T cmp.Ordered] func(writer io.Writer, vertices []*syncdag.Vertex[T]) error
+type ListSerializerFunc[T cmp.Ordered] func(writer io.Writer, vertices []*dag.Vertex[T]) error
 
 // Serialize implements the ListSerializer interface for ListSerializerFunc.
-func (f ListSerializerFunc[T]) Serialize(writer io.Writer, vertices []*syncdag.Vertex[T]) error {
+func (f ListSerializerFunc[T]) Serialize(writer io.Writer, vertices []*dag.Vertex[T]) error {
 	return f(writer, vertices)
 }
 
 // New creates a new Renderer for the given DirectedAcyclicGraph.
-func New[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T], opts ...RendererOption[T]) *Renderer[T] {
+func New[T cmp.Ordered](ctx context.Context, graph *syncdag.SyncedDirectedAcyclicGraph[T], opts ...RendererOption[T]) *Renderer[T] {
 	options := &RendererOptions[T]{}
 	for _, opt := range opts {
 		opt(options)
 	}
 
 	if options.ListSerializer == nil {
-		options.ListSerializer = ListSerializerFunc[T](func(writer io.Writer, vertices []*syncdag.Vertex[T]) error {
+		options.ListSerializer = ListSerializerFunc[T](func(writer io.Writer, vertices []*dag.Vertex[T]) error {
 			// Default marshaller just returns the vertex ID.
 			// This is supposed to be overridden by the user to provide a
 			// meaningful representation.
@@ -98,14 +99,14 @@ func New[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T
 	}
 
 	if len(options.Roots) == 0 {
-		slog.DebugContext(ctx, "no roots provided, dynamically determining roots from dag")
+		slog.DebugContext(ctx, "no roots provided, dynamically determining roots from graph")
 	}
 
 	return &Renderer[T]{
-		vertices:       make([]*syncdag.Vertex[T], 0),
+		vertices:       make([]*dag.Vertex[T], 0),
 		listSerializer: options.ListSerializer,
 		roots:          options.Roots,
-		dag:            dag,
+		graph:          graph,
 	}
 }
 
@@ -118,46 +119,71 @@ func (r *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 
 	roots := r.roots
 	if len(roots) == 0 {
-		roots = r.dag.Roots()
+		if err := r.graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[T]) error {
+			roots = d.Roots()
+			return nil
+		}); err != nil {
+			return fmt.Errorf("failed to auto-detect roots from graph: %w", err)
+		}
 		// We only do this for auto-detected roots. If the roots are provided,
 		// we want to preserve the order.
 		slices.Sort(roots)
 	} else {
-		for index, root := range roots {
-			if _, exists := r.dag.GetVertex(root); !exists {
-				// If root does not exist in the dag yet, we exclude it from the
-				// current rendering run.
-				// The root might be added to the graph, after the rendering
-				// has started, so we do not want to fail the rendering.
-				roots = append(roots[:index], roots[index+1:]...)
+		filteredRoots := make([]T, 0, len(roots))
+		if err := r.graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[T]) error {
+			for _, root := range roots {
+				if _, exists := d.Vertices[root]; exists {
+					// If root does not exist in the graph yet, we exclude it from the
+					// current rendering run.
+					// The root might be added to the graph, after the rendering
+					// has started, so we do not want to fail the rendering.
+					filteredRoots = append(filteredRoots, root)
+				}
 			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("failed to filter non-existent roots: %w", err)
 		}
+		roots = filteredRoots
 	}
 
-	for _, root := range roots {
-		if err := r.traverseGraph(ctx, root); err != nil {
-			return fmt.Errorf("failed to traverse graph: %w", err)
+	if err := r.graph.WithReadLock(func(graph *dag.DirectedAcyclicGraph[T]) error {
+		slog.DebugContext(ctx, "locking graph for traversal", "roots", roots)
+		defer func() {
+			slog.DebugContext(ctx, "unlocking graph after traversal")
+		}()
+
+		for _, root := range roots {
+			if err := r.traverseGraph(ctx, graph, root); err != nil {
+				return fmt.Errorf("failed to traverse graph: %w", err)
+			}
 		}
-	}
-	if err := r.renderObjects(writer); err != nil {
-		return err
+		if err := r.renderObjects(writer); err != nil {
+			return fmt.Errorf("failed to render objects: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("failed to traverse and render graph in read lock: %w", err)
 	}
 
 	return nil
 }
 
-func (r *Renderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
-	vertex, ok := r.dag.GetVertex(nodeId)
+func (r *Renderer[T]) traverseGraph(ctx context.Context, lockedGraph *dag.DirectedAcyclicGraph[T], nodeId T) error {
+	vertex, ok := lockedGraph.Vertices[nodeId]
 	if !ok {
 		return fmt.Errorf("vertex for nodeId %v does not exist", nodeId)
 	}
 	r.vertices = append(r.vertices, vertex)
 
 	// Get children and sort them for stable output
-	children := graph.GetNeighborsSorted(ctx, vertex)
+	children, err := graphutils.GetNeighborsSorted(ctx, vertex)
+	if err != nil {
+		return fmt.Errorf("failed to get sorted children of vertex %v: %w", vertex.ID, err)
+	}
 
 	for _, child := range children {
-		if err := r.traverseGraph(ctx, child); err != nil {
+		if err := r.traverseGraph(ctx, lockedGraph, child); err != nil {
 			return err
 		}
 	}

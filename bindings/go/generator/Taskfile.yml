@@ -12,6 +12,7 @@ tasks:
     desc: "Run all Generator tests"
     cmds:
       - task: ocmtypegen/test
+      - task: jsonschemagen/test
       - go test -v -coverprofile=tmp/coverage.out ./...
 
   ocmtypegen/install:
@@ -26,11 +27,37 @@ tasks:
   ocmtypegen/generate:
     deps: ["ocmtypegen/install"]
     desc: "Run Type OCM Type Code Generation in the Project"
-    cmds:
+    cmds: [ task: ocmtypegen/concurrent ]
+
+  ocmtypegen/concurrent:
+    internal: true
+    deps:
       - for: { var: GO_MODULES }
-        cmd: '{{ .ROOT_DIR }}/tmp/bin/ocmtypegen {{ .ROOT_DIR }}/{{.ITEM}}'
+        task: 'ocmtypegen/module'
+        vars: { ITEM: '{{ .ITEM }}' }
+
+  ocmtypegen/module:
+    internal: true
+    silent: true
+    prefix: '{{.ITEM}}'
+    cmd: '{{ .ROOT_DIR }}/tmp/bin/ocmtypegen {{ .ROOT_DIR }}/{{.ITEM}}'
 
   ocmtypegen/test:
     desc: "Run OCM Type Generation test"
     cmds:
       - cmd: 'go run {{ .TASKFILE_DIR }}/ocmtypegen/... {{ .TASKFILE_DIR }}/ocmtypegen/test'
+
+  jsonschemagen/install:
+    desc: "Install {{.PKG}} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
+    cmds:
+      - 'go build -o {{ .ROOT_DIR }}/tmp/bin/jsonschemagen {{ .TASKFILE_DIR }}/jsonschemagen/cmd/main.go'
+
+  jsonschemagen/generate:
+    deps: ["jsonschemagen/install"]
+    desc: "Run Type OCM JSON Schema Generation in the Project"
+    cmd: '{{ .ROOT_DIR }}/tmp/bin/jsonschemagen {{ .CLI_ARGS }} {{ .ROOT_DIR }}'
+
+  jsonschemagen/test:
+    desc: "Run OCM JSON Schema Generation test"
+    cmds:
+      - cmd: 'go run {{ .TASKFILE_DIR }}/jsonschemagen/cmd/... {{ .CLI_ARGS }} {{ .TASKFILE_DIR }}'

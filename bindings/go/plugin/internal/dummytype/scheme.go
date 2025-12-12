@@ -1,7 +1,7 @@
 package dummytype
 
 import (
-	v2 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -12,10 +12,10 @@ func init() {
 }
 
 func MustAddToScheme(scheme *runtime.Scheme) {
-	scheme.MustRegisterWithAlias(&v2.Repository{},
-		runtime.NewVersionedType(v2.Type, v2.Version),
-		runtime.NewUnversionedType(v2.Type),
-		runtime.NewVersionedType(v2.ShortType, v2.Version),
-		runtime.NewUnversionedType(v2.ShortType),
+	scheme.MustRegisterWithAlias(&dummyv1.Repository{},
+		runtime.NewVersionedType(dummyv1.Type, dummyv1.Version),
+		runtime.NewUnversionedType(dummyv1.Type),
+		runtime.NewVersionedType(dummyv1.ShortType, dummyv1.Version),
+		runtime.NewUnversionedType(dummyv1.ShortType),
 	)
 }

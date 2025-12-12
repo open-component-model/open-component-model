@@ -17,6 +17,7 @@ You should be familiar with the following concepts:
 - [Kubernetes](https://kubernetes.io/) ecosystem
 - [kro](https://kro.run)
 - Kubernetes resource deployer such as [FluxCD](https://fluxcd.io/).
+- [Task](https://taskfile.dev/)
 
 ## Concept
 
@@ -138,22 +139,7 @@ Kubernetes cluster.
 
 ## Installation
 
-Currently, the OCM K8s Toolkit is available as [image][controller-image] and
-[Kustomization](config/default/kustomization.yaml). A Helm chart is planned for the future.
-
-To install the OCM K8s Toolkit into your running Kubernetes cluster, you can use the following commands:
-
-```console
-# In the ocm mono-repo root directory
-cd kubernetes/controller
-make deploy
-```
-
-or
-
-```console
-kubectl apply -k https://github.com/open-component-model/open-component-model/kubernetes/controller/config/default?ref=main
-```
+Take a look at our [installation guide](docs/getting-started/setup.md#install-the-ocm-k8s-toolkit) to get started.
 
 > [!IMPORTANT]
 > While the OCM K8s Toolkit technically can be used standalone, it requires kro and a deployer, e.g. FluxCD, to deploy
@@ -177,5 +163,3 @@ Code contributions, feature requests, bug reports, and help requests are very we
 for more information on how to contribute to OCM.
 
 OCM K8s Toolkit follows the [CNCF Code of Conduct](https://github.com/cncf/foundation/blob/main/code-of-conduct.md).
-
-[controller-image]: https://github.com/open-component-model/ocm-k8s-toolkit/pkgs/container/ocm-k8s-toolkit

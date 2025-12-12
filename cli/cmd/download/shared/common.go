@@ -16,14 +16,14 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/log"
-	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
 // GetContextItems extracts common dependencies from cobra command
-func GetContextItems(cmd *cobra.Command) (*manager.PluginManager, credentials.GraphResolver, *slog.Logger, error) {
+func GetContextItems(cmd *cobra.Command) (*manager.PluginManager, credentials.Resolver, *slog.Logger, error) {
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
 		return nil, nil, nil, fmt.Errorf("could not retrieve plugin manager from context")
@@ -43,13 +43,13 @@ func GetContextItems(cmd *cobra.Command) (*manager.PluginManager, credentials.Gr
 }
 
 // DownloadResourceData handles the actual data download from repository
-func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.GraphResolver, repo *ocm.ComponentRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
+func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.Resolver, component, version string, repo repository.ComponentVersionRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
 	access := res.GetAccess()
 	var data blob.ReadOnlyBlob
 	var err error
 
 	if IsLocal(access) {
-		data, _, err = repo.GetLocalResource(ctx, identity)
+		data, _, err = repo.GetLocalResource(ctx, component, version, identity)
 	} else {
 		var plugin resource.Repository
 		plugin, err = pluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, access)

@@ -35,3 +35,9 @@ This page contains all active and inactive TSC members.
 | Name             | Organization | Github Handle                         |
 |------------------|--------------|---------------------------------------|
 | Christian Cwienk | SAP SE       | [ccwienk](https://github.com/ccwienk) |
+
+## Security Officer
+
+The security officer is the public contact for security related questions, issues and reports of the project. The security officer role can be held by any TSC member (including the chairperson) or other project contributors.
+
+Currently, the role of the Security Officer is delegated to the entire TSC. The TSC can be reached via [Mail](mailto:open-component-model-tsc@lists.neonephos.org).

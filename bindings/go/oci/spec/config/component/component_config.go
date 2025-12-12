@@ -9,7 +9,8 @@ import (
 )
 
 // MediaType is the media type for ComponentConfiguration
-const MediaType = "application/vnd.ocm.software/ocm.component.config.v1+json"
+// see https://github.com/open-component-model/ocm/blob/4a1aa4fa4668b2a0758a0d0a2d2c0e7c5d180d7e/api/ocm/extensions/repositories/genericocireg/componentmapping/constants.go#L45
+const MediaType = "application/vnd.ocm.software.component.config.v1+json"
 
 // Config is a Component-Descriptor OCI configuration that is used to componentVersionStore the reference to the
 // (pseudo-)layer used to componentVersionStore the Component-Descriptor in.

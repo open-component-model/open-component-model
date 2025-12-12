@@ -1,6 +1,3 @@
-// Package runtime provides conversion functions between runtime and v1 types
-// for the Open Component Model. These functions handle the transformation of
-// component model structures between their runtime representation and v1 format.
 package runtime
 
 import (

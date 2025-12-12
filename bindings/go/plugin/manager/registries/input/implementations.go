@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
+	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -21,9 +21,7 @@ type RepositoryPlugin struct {
 	path   string
 	client *http.Client
 
-	// jsonSchema is the schema for all endpoints for this plugin.
-	// for input repositories, this is the schema for the input type.
-	jsonSchema []byte
+	capability inputv1.CapabilitySpec
 
 	// location is where the plugin started listening.
 	location string
@@ -31,18 +29,18 @@ type RepositoryPlugin struct {
 
 // This plugin implements all the given contracts.
 var (
-	_ v1.InputPluginContract = (*RepositoryPlugin)(nil)
+	_ inputv1.InputPluginContract = (*RepositoryPlugin)(nil)
 )
 
 // NewConstructionRepositoryPlugin creates a new input method plugin instance with the provided configuration.
 // It initializes the plugin with an HTTP client, unique ID, path, configuration, location, and JSON schema.
-func NewConstructionRepositoryPlugin(client *http.Client, id string, path string, config types.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
+func NewConstructionRepositoryPlugin(client *http.Client, id string, path string, config types.Config, loc string, capability inputv1.CapabilitySpec) *RepositoryPlugin {
 	return &RepositoryPlugin{
 		ID:         id,
 		path:       path,
 		config:     config,
 		client:     client,
-		jsonSchema: jsonSchema,
+		capability: capability,
 		location:   loc,
 	}
 }
@@ -57,12 +55,12 @@ func (r *RepositoryPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
-	if err := r.validateEndpoint(request.Typ, r.jsonSchema); err != nil {
+func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *inputv1.GetIdentityRequest[runtime.Typed]) (*inputv1.GetIdentityResponse, error) {
+	if err := r.validateEndpoint(request.Typ); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", r.ID, err)
 	}
 
-	identity := v1.GetIdentityResponse{}
+	identity := inputv1.GetIdentityResponse{}
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
 		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", r.ID, err)
 	}
@@ -70,8 +68,8 @@ func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdent
 	return &identity, nil
 }
 
-func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceInputResponse, error) {
-	if err := r.validateEndpoint(request.Resource.Input, r.jsonSchema); err != nil {
+func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *inputv1.ProcessResourceInputRequest, credentials map[string]string) (*inputv1.ProcessResourceInputResponse, error) {
+	if err := r.validateEndpoint(request.Resource.Input); err != nil {
 		return nil, err
 	}
 
@@ -80,7 +78,7 @@ func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *v1.Proc
 		return nil, fmt.Errorf("error converting credentials: %w", err)
 	}
 
-	body := v1.ProcessResourceInputResponse{}
+	body := inputv1.ProcessResourceInputResponse{}
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, ProcessResource, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&body), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to process resource input %s: %w", r.ID, err)
 	}
@@ -88,8 +86,8 @@ func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *v1.Proc
 	return &body, nil
 }
 
-func (r *RepositoryPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceInputResponse, error) {
-	if err := r.validateEndpoint(request.Source.Input, r.jsonSchema); err != nil {
+func (r *RepositoryPlugin) ProcessSource(ctx context.Context, request *inputv1.ProcessSourceInputRequest, credentials map[string]string) (*inputv1.ProcessSourceInputResponse, error) {
+	if err := r.validateEndpoint(request.Source.Input); err != nil {
 		return nil, err
 	}
 
@@ -98,7 +96,7 @@ func (r *RepositoryPlugin) ProcessSource(ctx context.Context, request *v1.Proces
 		return nil, fmt.Errorf("error converting credentials: %w", err)
 	}
 
-	body := v1.ProcessSourceInputResponse{}
+	body := inputv1.ProcessSourceInputResponse{}
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, ProcessSource, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&body), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to process resource input %s: %w", r.ID, err)
 	}
@@ -106,8 +104,17 @@ func (r *RepositoryPlugin) ProcessSource(ctx context.Context, request *v1.Proces
 	return &body, nil
 }
 
-func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
-	valid, err := plugins.ValidatePlugin(obj, jsonSchema)
+// TODO(fabianburth): this method looks essentially the same for all plugin make it reusable!
+func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
+	var schema []byte
+	for _, t := range r.capability.SupportedInputTypes {
+		if t.Type != obj.GetType() {
+			continue
+		}
+		schema = t.JSONSchema
+	}
+
+	valid, err := plugins.ValidatePlugin(obj, schema)
 	if err != nil {
 		return fmt.Errorf("failed to validate plugin %q: %w", r.ID, err)
 	}

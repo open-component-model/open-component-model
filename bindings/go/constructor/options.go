@@ -4,6 +4,7 @@ import (
 	"context"
 
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
@@ -43,8 +44,8 @@ type Options struct {
 
 	// While constructing a component version, the constructor library will use the given credential provider
 	// to resolve credentials for the input methods.
-	// The CredentialProvider is OPTIONAL, if not provided, the constructor library will not resolve credentials.
-	CredentialProvider
+	// The Resolver is OPTIONAL, if not provided, the constructor library will not resolve credentials.
+	credentials.Resolver
 
 	// While constructing a component version, the constructor library will use the given concurrency limit
 	// to limit the number of concurrent operations.
@@ -54,6 +55,10 @@ type Options struct {
 	// While constructing a component version, the constructor library will use the policy to determine how to handle conflicts
 	// of component versions when interacting with the target repository.
 	ComponentVersionConflictPolicy
+
+	// While constructing a component version, the constructor library will use the policy to determine how to handle
+	// external references to component versions not located within the constructor or target repository itself.
+	ExternalComponentVersionCopyPolicy
 
 	// While constructing a component version, the constructor library will use the given callbacks to notify about
 	// the construction process. This can be used to implement custom logging or other actions such as progress trackers.
@@ -100,4 +105,19 @@ const (
 	ComponentVersionConflictReplace
 	// ComponentVersionConflictSkip will skip the construction of the component version if it already exists in the target repository.
 	ComponentVersionConflictSkip
+)
+
+// ExternalComponentVersionCopyPolicy defines the policy for handling external component version references
+// when interacting with the target repository.
+// If the constructor library encounters an external component version reference that is not part of the constructor
+// specification, it will use this policy to determine how to handle the reference.
+type ExternalComponentVersionCopyPolicy int
+
+const (
+	// ExternalComponentVersionCopyPolicySkip will skip the copy of the component version to the target repository.
+	// This is the default policy.
+	ExternalComponentVersionCopyPolicySkip = iota
+	// ExternalComponentVersionCopyPolicyCopyOrFail will copy the external component version to the target repository.
+	// If a copy fails, the construction process will fail.
+	ExternalComponentVersionCopyPolicyCopyOrFail ExternalComponentVersionCopyPolicy = iota
 )

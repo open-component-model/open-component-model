@@ -3,22 +3,22 @@
 # The 
 
 sigs:
-  - name: SIG Placeholder
-    purpose: Act as placeholder for new SIGs. Update this file when creating a new SIG.
+  - name: SIG Runtime
+    purpose: The SIG Runtime maintains and shapes the OCM CLI, OCM Kubernetes controller and the OCM language bindings
     leads:
-      - name: Jane Doe
+      - name: Jakob Moeller
         role: Chair
-        github: janedoe
-      - name: John Smith
+        github: @jakobmoellerdev
+      - name: Fabian Burth
         role: Tech Lead
-        github: johnsmith
+        github: @fabianburth
     meeting:
-      cadence: Every 8 weeks
-      url: https://zoom-lfx.platform.linuxfoundation.org/meeting/123456789
-      notes: https://github.com/open-component-model/open-component-model/tree/main/community/docs/SIGs/meeting-notes/sig-placeholder
+      cadence: no regular SIG meetings, but participation in monthly community meetings
+      url: 
+      notes: https://github.com/open-component-model/open-component-model/tree/main/community/docs/SIGs/Runtime/meeting-notes
     communication:
-      mailing_list: sig-runtime@lists.linuxfoundation.org
-      slack: ocm-placeholder
+      mailing_list: open-component-model-sig-runtime@lists.neonephos.org
+      zulip: https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support
     repositories:
-      - https://github.com/open-component-model/ocm-placeholder
+      - https://github.com/open-component-model/open-component-model
     status: active

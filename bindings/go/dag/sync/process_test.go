@@ -4,26 +4,28 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/dag"
 )
 
 func TestProcessTopology(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
 	t.Run("processes vertices in topological order", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
 		//    A
 		//   / \
 		//  B   C
 		//   \ /
 		//    D
-		graph := NewDirectedAcyclicGraph[string]()
-		r.NoError(graph.AddVertex("A"))
-		r.NoError(graph.AddVertex("B"))
-		r.NoError(graph.AddVertex("C"))
-		r.NoError(graph.AddVertex("D"))
+		graph := dag.NewDirectedAcyclicGraph[string]()
+		r.NoError(graph.AddVertex("A", map[string]any{AttributeValue: "A"}))
+		r.NoError(graph.AddVertex("B", map[string]any{AttributeValue: "B"}))
+		r.NoError(graph.AddVertex("C", map[string]any{AttributeValue: "C"}))
+		r.NoError(graph.AddVertex("D", map[string]any{AttributeValue: "D"}))
 		r.NoError(graph.AddEdge("A", "B", nil))
 		r.NoError(graph.AddEdge("A", "C", nil))
 		r.NoError(graph.AddEdge("B", "D", nil))
@@ -31,7 +33,7 @@ func TestProcessTopology(t *testing.T) {
 
 		var orderMu sync.Mutex
 		var order []string
-		processor := VertexProcessorFunc[string](func(ctx context.Context, v string) error {
+		processorFunc := ProcessorFunc[string](func(ctx context.Context, v string) error {
 			// prevent data race
 			orderMu.Lock()
 			defer orderMu.Unlock()
@@ -39,7 +41,11 @@ func TestProcessTopology(t *testing.T) {
 			return nil
 		})
 
-		r.NoError(graph.ProcessTopology(ctx, processor))
+		processor := NewGraphProcessor(ToSyncedGraph(graph), &GraphProcessorOptions[string, string]{
+			Processor: processorFunc,
+		})
+
+		r.NoError(processor.Process(ctx))
 		// D must be last, A must be first, B and C after A, before D
 		idxMap := make(map[string]int)
 		for i, v := range order {
@@ -53,37 +59,42 @@ func TestProcessTopology(t *testing.T) {
 	})
 
 	t.Run("returns error if processor fails", func(t *testing.T) {
-		graph := NewDirectedAcyclicGraph[string]()
-		r.NoError(graph.AddVertex("A"))
-		r.NoError(graph.AddVertex("B"))
+		r := require.New(t)
+		ctx := t.Context()
+
+		graph := dag.NewDirectedAcyclicGraph[string]()
+		r.NoError(graph.AddVertex("A", map[string]any{AttributeValue: "A"}))
+		r.NoError(graph.AddVertex("B", map[string]any{AttributeValue: "B"}))
 		r.NoError(graph.AddEdge("A", "B", nil))
 
-		processor := VertexProcessorFunc[string](func(ctx context.Context, v string) error {
+		processorFunc := ProcessorFunc[string](func(ctx context.Context, v string) error {
 			if v == "B" {
 				return fmt.Errorf("fail on B")
 			}
 			return nil
 		})
-		err := graph.ProcessTopology(ctx, processor)
-		r.ErrorContains(err, "fail on B")
+		processor := NewGraphProcessor(ToSyncedGraph(graph), &GraphProcessorOptions[string, string]{
+			Processor: processorFunc,
+		})
+
+		r.ErrorContains(processor.Process(ctx), "fail on B")
 	})
 }
 
 func TestProcessReverseTopology(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
 	t.Run("processes vertices in reverse topological order", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
 		//    A
 		//   / \
 		//  B   C
 		//   \ /
 		//    D
-		graph := NewDirectedAcyclicGraph[string]()
-		r.NoError(graph.AddVertex("A"))
-		r.NoError(graph.AddVertex("B"))
-		r.NoError(graph.AddVertex("C"))
-		r.NoError(graph.AddVertex("D"))
+		graph := dag.NewDirectedAcyclicGraph[string]()
+		r.NoError(graph.AddVertex("A", map[string]any{AttributeValue: "A"}))
+		r.NoError(graph.AddVertex("B", map[string]any{AttributeValue: "B"}))
+		r.NoError(graph.AddVertex("C", map[string]any{AttributeValue: "C"}))
+		r.NoError(graph.AddVertex("D", map[string]any{AttributeValue: "D"}))
 		r.NoError(graph.AddEdge("A", "B", nil))
 		r.NoError(graph.AddEdge("A", "C", nil))
 		r.NoError(graph.AddEdge("B", "D", nil))
@@ -91,7 +102,7 @@ func TestProcessReverseTopology(t *testing.T) {
 
 		var orderMu sync.Mutex
 		var order []string
-		processor := VertexProcessorFunc[string](func(ctx context.Context, v string) error {
+		processorFunc := ProcessorFunc[string](func(ctx context.Context, v string) error {
 			// prevent data race
 			orderMu.Lock()
 			defer orderMu.Unlock()
@@ -99,7 +110,14 @@ func TestProcessReverseTopology(t *testing.T) {
 			return nil
 		})
 
-		r.NoError(graph.ProcessTopology(ctx, processor, WithReverseTopology()))
+		graph, err := graph.Reverse()
+		r.NoError(err)
+
+		processor := NewGraphProcessor(ToSyncedGraph(graph), &GraphProcessorOptions[string, string]{
+			Processor: processorFunc,
+		})
+
+		r.NoError(processor.Process(ctx))
 		// A must be last, D must be first, B and C after D, before A
 		idxMap := make(map[string]int)
 		for i, v := range order {
@@ -113,18 +131,63 @@ func TestProcessReverseTopology(t *testing.T) {
 	})
 
 	t.Run("returns error if processor fails", func(t *testing.T) {
-		graph := NewDirectedAcyclicGraph[string]()
-		r.NoError(graph.AddVertex("A"))
-		r.NoError(graph.AddVertex("B"))
+		r := require.New(t)
+		ctx := t.Context()
+		graph := dag.NewDirectedAcyclicGraph[string]()
+		r.NoError(graph.AddVertex("A", map[string]any{AttributeValue: "A"}))
+		r.NoError(graph.AddVertex("B", map[string]any{AttributeValue: "A"}))
 		r.NoError(graph.AddEdge("A", "B", nil))
 
-		processor := VertexProcessorFunc[string](func(ctx context.Context, v string) error {
+		processorFunc := ProcessorFunc[string](func(ctx context.Context, v string) error {
 			if v == "A" {
 				return fmt.Errorf("fail on A")
 			}
 			return nil
 		})
-		err := graph.ProcessTopology(ctx, processor, WithReverseTopology())
+
+		processor := NewGraphProcessor(ToSyncedGraph(graph), &GraphProcessorOptions[string, string]{
+			Processor: processorFunc,
+		})
+		err := processor.Process(ctx)
 		r.ErrorContains(err, "fail on A")
 	})
+}
+
+func TestProcessTopology_ConcurrentExecution(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	//    A
+	//   / \
+	//  B   C
+	//   \ /
+	//    D
+	graph := dag.NewDirectedAcyclicGraph[string]()
+	r.NoError(graph.AddVertex("A", map[string]any{AttributeValue: "A"}))
+	r.NoError(graph.AddVertex("B", map[string]any{AttributeValue: "B"}))
+	r.NoError(graph.AddVertex("C", map[string]any{AttributeValue: "C"}))
+	r.NoError(graph.AddVertex("D", map[string]any{AttributeValue: "D"}))
+	r.NoError(graph.AddEdge("A", "B", nil))
+	r.NoError(graph.AddEdge("A", "C", nil))
+	r.NoError(graph.AddEdge("B", "D", nil))
+	r.NoError(graph.AddEdge("C", "D", nil))
+
+	var concurrent int32
+	var maxConcurrent int32
+	processorFunc := ProcessorFunc[string](func(ctx context.Context, v string) error {
+		cur := atomic.AddInt32(&concurrent, 1)
+		defer atomic.AddInt32(&concurrent, -1)
+		atomic.StoreInt32(&maxConcurrent, max(atomic.LoadInt32(&maxConcurrent), cur))
+		time.Sleep(100 * time.Millisecond)
+		return nil
+	})
+
+	processor := NewGraphProcessor(ToSyncedGraph(graph), &GraphProcessorOptions[string, string]{
+		Processor:   processorFunc,
+		Concurrency: 2, // enforce limit
+	})
+
+	r.NoError(processor.Process(ctx))
+
+	r.LessOrEqual(int(maxConcurrent), 2, "must never exceed concurrency limit 2")
 }

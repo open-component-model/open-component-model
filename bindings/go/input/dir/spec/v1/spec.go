@@ -9,7 +9,10 @@ import (
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type Dir struct {
+	// +ocm:jsonschema-gen:enum=dir/v1,Dir/v1
+	// +ocm:jsonschema-gen:enum:deprecated=dir,Dir
 	Type runtime.Type `json:"type"`
 
 	// Path is the path to the directory.

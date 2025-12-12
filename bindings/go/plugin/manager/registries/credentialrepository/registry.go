@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
+	credentialsv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -19,6 +19,7 @@ import (
 func NewCredentialRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 	return &RepositoryRegistry{
 		ctx:                                 ctx,
+		capabilities:                        make(map[string]credentialsv1.CapabilitySpec),
 		registry:                            make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins:                  make(map[string]*constructedPlugin), // running plugins
 		consumerTypeRegistrations:           make(map[runtime.Type]runtime.Type),
@@ -29,10 +30,11 @@ func NewCredentialRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 
 // RepositoryRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
 type RepositoryRegistry struct {
-	ctx      context.Context
-	mu       sync.Mutex
-	registry map[runtime.Type]mtypes.Plugin
-	scheme   *runtime.Scheme
+	ctx          context.Context
+	mu           sync.Mutex
+	capabilities map[string]credentialsv1.CapabilitySpec
+	registry     map[runtime.Type]mtypes.Plugin
+	scheme       *runtime.Scheme
 
 	constructedPlugins        map[string]*constructedPlugin // running plugins
 	consumerTypeRegistrations map[runtime.Type]runtime.Type
@@ -44,19 +46,29 @@ func (r *RepositoryRegistry) RepositoryScheme() *runtime.Scheme {
 	return r.scheme
 }
 
-// AddPlugin takes a credentialGraphPlugin discovered by the manager and adds it to the stored credentialGraphPlugin registry.
-// This function will return an error if the given capability + type already has a registered credentialGraphPlugin.
+// AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.
+// This function will return an error if the given capability + type already has a registered plugin.
 // Multiple plugins for the same cap+typ is not allowed.
-func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, consumerIdentityType, configType runtime.Type) error {
+func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, spec runtime.Typed) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if plugin, ok := r.registry[consumerIdentityType]; ok {
-		return fmt.Errorf("credentialGraphPlugin for consumer identity type %q and config type %q already registered with ID: %s", consumerIdentityType, configType, plugin.ID)
+	capability := credentialsv1.CapabilitySpec{}
+	if err := credentialsv1.Scheme.Convert(spec, &capability); err != nil {
+		return fmt.Errorf("failed to convert object: %w", err)
 	}
+	if _, ok := r.capabilities[plugin.ID]; ok {
+		return fmt.Errorf("plugin with ID %s already registered", plugin.ID)
+	}
+	r.capabilities[plugin.ID] = capability
 
-	// _Note_: No need to be more intricate because we know the endpoints, and we have a specific credentialGraphPlugin here.
-	r.registry[configType] = plugin
+	for _, typ := range capability.SupportedConsumerIdentityTypes {
+		if v, ok := r.registry[typ.Type]; ok {
+			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ.Type, v.ID)
+		}
+		// Note: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
+		r.registry[typ.Type] = plugin
+	}
 
 	return nil
 }
@@ -101,39 +113,33 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 
 // RegisterInternalCredentialRepositoryPlugin can be called by actual implementations in the source.
 // It will register any implementations directly for a given type and capability.
-func RegisterInternalCredentialRepositoryPlugin[T runtime.Typed](
-	scheme *runtime.Scheme,
-	r *RepositoryRegistry,
-	plugin credentials.RepositoryPlugin,
-	cfg T,
+func (r *RepositoryRegistry) RegisterInternalCredentialRepositoryPlugin(
+	plugin BuiltinCredentialRepositoryPlugin,
 	consumerTypes []runtime.Type,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	typ, err := scheme.TypeForPrototype(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", cfg, err)
-	}
+	for providerType, providerTypeAliases := range plugin.GetCredentialRepositoryScheme().GetTypes() {
+		if err := r.scheme.RegisterSchemeType(plugin.GetCredentialRepositoryScheme(), providerType); err != nil {
+			return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+		}
 
-	r.internalCredentialRepositoryPlugins[typ] = plugin
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internalCredentialRepositoryPlugins[alias] = r.internalCredentialRepositoryPlugins[typ]
-	}
+		r.internalCredentialRepositoryPlugins[providerType] = plugin
+		for _, alias := range providerTypeAliases {
+			r.internalCredentialRepositoryPlugins[alias] = r.internalCredentialRepositoryPlugins[providerType]
+		}
 
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil {
-		return fmt.Errorf("failed to register type %T with alias %s: %w", cfg, typ, err)
-	}
-
-	for _, consumerType := range consumerTypes {
-		r.consumerTypeRegistrations[consumerType] = typ
+		for _, consumerType := range consumerTypes {
+			r.consumerTypeRegistrations[consumerType] = providerType
+		}
 	}
 
 	return nil
 }
 
 type constructedPlugin struct {
-	Plugin v1.CredentialRepositoryPluginContract[runtime.Typed]
+	Plugin credentialsv1.CredentialRepositoryPluginContract[runtime.Typed]
 	cmd    *exec.Cmd
 }
 
@@ -155,7 +161,7 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	return errs
 }
 
-func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *mtypes.Plugin) (v1.CredentialRepositoryPluginContract[runtime.Typed], error) {
+func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *mtypes.Plugin) (credentialsv1.CredentialRepositoryPluginContract[runtime.Typed], error) {
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
@@ -169,17 +175,7 @@ func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *mt
 	// use the baseCtx here from the manager here so the streaming isn't stopped when the request is stopped.
 	go plugins.StartLogStreamer(r.ctx, plugin)
 
-	// think about this better, we have a single json schema, maybe even have different maps for different types + schemas?
-	var jsonSchema []byte
-loop:
-	for _, tps := range plugin.Types {
-		for _, tp := range tps {
-			jsonSchema = tp.JSONSchema
-			break loop
-		}
-	}
-
-	repoPlugin := NewCredentialRepositoryPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, jsonSchema)
+	repoPlugin := NewCredentialRepositoryPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: repoPlugin,
 		cmd:    plugin.Cmd,

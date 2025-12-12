@@ -31,11 +31,11 @@ type ctxReader struct {
 
 func (r ctxReader) Read(p []byte) (n int, err error) {
 	if err = r.ctx.Err(); err != nil {
-		return
+		return n, err
 	}
 	if n, err = r.r.Read(p); err != nil {
-		return
+		return n, err
 	}
 	err = r.ctx.Err()
-	return
+	return n, err
 }

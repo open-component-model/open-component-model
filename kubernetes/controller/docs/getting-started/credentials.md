@@ -114,7 +114,7 @@ spec:
     type: OCIRegistry
   interval: 1m
   ocmConfig:
-    - kind: secret
+    - kind: Secret
       name: ocm-secret
 ```
 

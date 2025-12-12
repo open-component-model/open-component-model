@@ -12,8 +12,11 @@ import (
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"golang.org/x/sync/errgroup"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/utils/ptr"
@@ -65,6 +68,8 @@ type Reconciler struct {
 	// Note that technically we also store tracked objects in the status, but to stay idempotent
 	// we use a tracker so as to only write to the status, and not read from it.
 	resourceWatches func(parent client.Object) []client.Object
+	// resourceRESTMapper is the RESTMapper that can be used to introspect resource mappings for dynamic resources
+	resourceRESTMapper meta.RESTMapper
 
 	DownloadCache cache.DigestObjectCache[string, []*unstructured.Unstructured]
 
@@ -184,6 +189,7 @@ func (r *Reconciler) setupDynamicResourceWatcherWithManager(mgr ctrl.Manager) (*
 	// The resourceWatchIsStopped function is used to check if a resource watch is stopped. useful for cleanup purposes.
 	r.resourceWatchIsStopped = informerManager.IsStopped
 	r.resourceWatches = informerManager.ActiveForParent
+	r.resourceRESTMapper = informerManager.RESTMapper()
 	// Add the dynamic informer deployerManager to the controller deployerManager. This will make the dynamic informer deployerManager start
 	// its registration and unregistration workers once the controller deployerManager is started.
 	if err := mgr.Add(informerManager); err != nil {
@@ -265,6 +271,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			// return no requeue as we watch the object for changes anyway
 			return ctrl.Result{}, nil
 		}
+
+		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: %w", err)
+	}
+	if resource.Status.Resource == nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, "resource is empty in status")
 
 		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: %w", err)
 	}
@@ -520,6 +531,10 @@ func (r *Reconciler) apply(ctx context.Context, resource *deliveryv1alpha1.Resou
 		return fmt.Errorf("failed to set controller reference on object: %w", err)
 	}
 
+	if err := r.defaultObj(ctx, resource, obj); err != nil {
+		return err
+	}
+
 	applyConfig := client.ApplyConfigurationFromUnstructured(obj)
 	if err := r.GetClient().Apply(ctx, applyConfig, &client.ApplyOptions{
 		Force:        ptr.To(true),
@@ -528,6 +543,37 @@ func (r *Reconciler) apply(ctx context.Context, resource *deliveryv1alpha1.Resou
 		return fmt.Errorf("failed to apply object: %w", err)
 	}
 
+	return nil
+}
+
+// defaultObj ensures an unstructured object has consistent API metadata before being applied.
+// It performs defaulting for namespace and apiVersion based on the cluster REST mapping.
+//
+// Behavior:
+//  1. Determines the GroupVersionKind (GVK) using the RESTMapper that is dynamically filled.
+//  2. If the object is namespaced but lacks a namespace, it defaults to "default" and logs the action.
+//  3. If the object's apiVersion is missing but the RESTMapper provides one, it applies that version.
+func (r *Reconciler) defaultObj(ctx context.Context, resource *deliveryv1alpha1.Resource, obj *unstructured.Unstructured) error {
+	logger := log.FromContext(ctx).WithValues(
+		"operation", "apply",
+		"gvk", obj.GetObjectKind().GroupVersionKind().String())
+
+	// now we default the namespace in case we do not have it from the base object.
+	gvk := schema.FromAPIVersionAndKind(obj.GetAPIVersion(), obj.GetKind())
+	mapping, err := r.resourceRESTMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil {
+		return fmt.Errorf("failed to determine resource mapping: %w", err)
+	}
+	if mapping.Scope.Name() == meta.RESTScopeNameNamespace && obj.GetNamespace() == "" {
+		// TODO(jakobmoellerdev) we can think of adding more namespacing options down the line
+		logger.Info("namespace will be defaulted", "defaultNamespace", resource.GetNamespace())
+		obj.SetNamespace(metav1.NamespaceDefault)
+	}
+	if gvk.Version == "" && mapping.GroupVersionKind.Version != "" {
+		logger.Info("apiVersion will be defaulted to match discovered rest mapping", "defaultAPIVersion", mapping.GroupVersionKind.Version)
+		gvk.Version = mapping.GroupVersionKind.Version
+		obj.SetGroupVersionKind(gvk)
+	}
 	return nil
 }
 

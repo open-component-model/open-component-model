@@ -27,14 +27,11 @@ ocm download plugin [flags]
 ### Examples
 
 ```
- # Download a plugin binary with resource name 'ocm-plugin' and version 'v1.0.0'
-  ocm download plugin ghcr.io/org/component:v1 --resource-name ocm-plugin --resource-version v1.0.0 --output ./plugins/ocm-plugin
+ # Download a plugin binary with resource name 'helminput' and version 'v0.0.0-main'
+  ocm download plugin ghcr.io/open-component-model/plugins//ocm.software/plugins/helminput:0.0.0-main
 
-  # Download a platform-specific plugin binary with extra identity parameters
-  ocm download plugin ghcr.io/org/component:v1 --resource-name ocm-plugin --resource-version v1.0.0 --extra-identity os=linux,arch=amd64 --output ./plugins/ocm-plugin-linux-amd64
-
-  # Download plugin using only resource name (uses component version if resource version not specified)
-  ocm download plugin ghcr.io/org/component:v1 --resource-name ocm-plugin --output ./plugins/ocm-plugin
+  # Download a platform-specific plugin binary with extra identity parameters with specified output location.
+  ocm download plugin ghcr.io/open-component-model/plugins//ocm.software/plugins/helminput:0.0.0-main --extra-identity os=linux,arch=amd64 --output ./plugins/ocm-plugin-linux-amd64
 ```
 
 ### Options
@@ -42,10 +39,10 @@ ocm download plugin [flags]
 ```
       --extra-identity strings    extra identity parameters for resource matching (e.g., os=linux,arch=amd64)
   -h, --help                      help for plugin
-      --output string             output location to download the plugin binary to (required) (default ".")
+      --output string             output folder to download the plugin binary to (default $HOME/.config/ocm/plugins)
   -f, --output-format enum        output format of the plugin information, defaults to table
                                   (must be one of [json table yaml]) (default table)
-      --resource-name string      name of the plugin resource to download (required)
+      --plugin-type string        type of the plugin resource in the component version containing the plugin binary (default "ocmPlugin")
       --resource-version string   version of the plugin resource to download (optional, defaults to component version)
       --skip-validation           skip validation of the downloaded plugin binary
 ```

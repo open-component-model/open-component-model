@@ -33,17 +33,17 @@ tasks:
   # Development
   manifests:
     deps: [controller-gen]
-    cmd: '{{.CONTROLLER_GEN}} rbac:roleName=manager-role crd webhook paths="{{ .TASKFILE_DIR }}/..." output:crd:artifacts:config=config/crd/bases'
+    cmd: '"{{.CONTROLLER_GEN}}" rbac:roleName=manager-role crd webhook paths="{{ .TASKFILE_DIR }}/..." output:crd:artifacts:config=config/crd/bases'
 
   generate:
     deps: [controller-gen]
-    cmd: '{{.CONTROLLER_GEN}} object paths="{{ .TASKFILE_DIR }}/..."'
+    cmd: '"{{.CONTROLLER_GEN}}" object paths="{{ .TASKFILE_DIR }}/..."'
 
   fmt:
-    cmd: 'go fmt {{ .TASKFILE_DIR }}/...'
+    cmd: 'go fmt "{{ .TASKFILE_DIR }}/..."'
 
   vet:
-    cmd: 'go vet {{ .TASKFILE_DIR }}/...'
+    cmd: 'go vet "{{ .TASKFILE_DIR }}/..."'
 
   test:
     deps: [manifests, generate, envtest]
@@ -68,7 +68,7 @@ tasks:
     cmds:
       - task: install
       - task: deploy
-      - PROJECT_DIR={{.TASKFILE_DIR}} go test {{.TASKFILE_DIR}}/test/e2e/ -v -timeout 30m -ginkgo.v
+      - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v
       - task: undeploy
       - task: uninstall
         vars:
@@ -104,15 +104,19 @@ tasks:
     cmd: |
       args=(
         --platform={{.PLATFORMS}}
-        -t {{.CONTROLLER_IMG}}
-        -f {{.TASKFILE_DIR}}/Dockerfile {{.TASKFILE_DIR}}
+        -f '{{.TASKFILE_DIR}}/Dockerfile' '{{.TASKFILE_DIR}}'
       )
-      
+
+      # Add tags - CONTROLLER_IMG can be space-separated for multiple tags
+      for tag in {{.CONTROLLER_IMG}}; do
+        args+=(-t "$tag")
+      done
+
       # If LOAD is set, load single-arch image into local daemon
       if [ "{{.LOAD | default ""}}" = "true" ]; then
         args+=(--load)
       fi
-      
+
       # If PUSH is set, push image (or manifest) to registry
       if [ "{{.PUSH | default ""}}" = "true" ]; then
         args+=(--push)
@@ -131,7 +135,7 @@ tasks:
   # Deployment
   install:
     deps: [manifests, kustomize]
-    cmd: '{{.KUSTOMIZE}} build config/crd | {{.KUBECTL}} apply -f -'
+    cmd: '"{{.KUSTOMIZE}}" build config/crd | {{.KUBECTL}} apply -f -'
 
   uninstall:
     deps: [manifests, kustomize]
@@ -141,11 +145,11 @@ tasks:
     deps: [manifests, kustomize]
     cmds:
       - task: set-images
-      - '{{.KUSTOMIZE}} build config/default | {{.KUBECTL}} apply -f -'
+      - '"{{.KUSTOMIZE}}" build config/default | {{.KUBECTL}} apply -f -'
 
   undeploy:
     deps: [kustomize]
-    cmd: '{{.KUSTOMIZE}} build config/default | {{.KUBECTL}} delete --ignore-not-found={{.IGNORE_NOT_FOUND}} -f -'
+    cmd: '"{{.KUSTOMIZE}}" build config/default | {{.KUBECTL}} delete --ignore-not-found={{.IGNORE_NOT_FOUND}} -f -'
 
   # Tool installers (all via helper)
   kustomize:
@@ -193,4 +197,4 @@ tasks:
   set-images:
     internal: true
     dir: config/manager
-    cmd: '{{.KUSTOMIZE}} edit set image ghcr.io/open-component-model/kubernetes/controller={{.CONTROLLER_IMG}}'
+    cmd: '"{{.KUSTOMIZE}}" edit set image ghcr.io/open-component-model/kubernetes/controller={{.CONTROLLER_IMG}}'

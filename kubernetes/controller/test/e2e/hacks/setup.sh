@@ -20,7 +20,7 @@ for cmd in "${cmds[@]}"; do
 done
 
 ## Check that there is not a kind cluster already running
-if kind get clusters | grep -q kind; then
+if kind get clusters | grep -q "^kind$"; then
   echo "A kind cluster is already running. Please delete it before running this script."
   exit 1
 fi
@@ -101,8 +101,4 @@ kubectl wait pod -l app=protected-registry2 --for condition=Ready --timeout 5m |
 flux install || exit 1
 
 # Install kro operators
-kroVersion=$(curl -sL \
-    https://api.github.com/repos/kro-run/kro/releases/latest | \
-    jq -r '.tag_name | ltrimstr("v")'
-  )
-helm install kro oci://ghcr.io/kro-run/kro/kro --namespace kro --create-namespace --version="${kroVersion}" || exit 1
+helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.6.3 || exit 1

@@ -17,6 +17,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -40,8 +41,8 @@ type FallbackRepository struct {
 	// operations.
 	goRoutineLimit int
 
-	repositoryProvider repository.ComponentVersionRepositoryProvider
-	credentialProvider repository.CredentialProvider
+	repositoryProvider  repository.ComponentVersionRepositoryProvider
+	credentialsResolver credentials.Resolver
 
 	// The resolvers slice is a list of resolvers sorted by priority (highest first).
 	// The order in this list determines the order in which repositories are
@@ -76,7 +77,7 @@ type FallbackRepositoryOptions struct {
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
 // and only added for backwards compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
-func NewFallbackRepository(_ context.Context, repositoryProvider repository.ComponentVersionRepositoryProvider, credentialProvider repository.CredentialProvider, res []*resolverruntime.Resolver, opts ...FallbackRepositoryOption) (*FallbackRepository, error) {
+func NewFallbackRepository(_ context.Context, repositoryProvider repository.ComponentVersionRepositoryProvider, credentialsResolver credentials.Resolver, res []*resolverruntime.Resolver, opts ...FallbackRepositoryOption) (*FallbackRepository, error) {
 	options := &FallbackRepositoryOptions{}
 	for _, opt := range opts {
 		opt(options)
@@ -93,8 +94,8 @@ func NewFallbackRepository(_ context.Context, repositoryProvider repository.Comp
 	return &FallbackRepository{
 		goRoutineLimit: options.GoRoutineLimit,
 
-		repositoryProvider: repositoryProvider,
-		credentialProvider: credentialProvider,
+		repositoryProvider:  repositoryProvider,
+		credentialsResolver: credentialsResolver,
 
 		resolvers:                    resolvers,
 		repositoriesForResolverCache: make([]repository.ComponentVersionRepository, len(resolvers)),
@@ -328,19 +329,26 @@ func (f *FallbackRepository) GetResolvers() []*resolverruntime.Resolver {
 
 // Deprecated
 func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
-	var credentials map[string]string
+	var creds map[string]string
 	consumerIdentity, err := f.repositoryProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, specification)
 	if err == nil {
-		if f.credentialProvider != nil {
-			if credentials, err = f.credentialProvider.Resolve(ctx, consumerIdentity); err != nil {
-				slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, err.Error()))
+		if f.credentialsResolver != nil {
+			if c, err := f.credentialsResolver.Resolve(ctx, consumerIdentity); err != nil {
+				// does not know the credentials package - so we need to check manually
+				if errors.Is(err, credentials.ErrNotFound) {
+					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, err.Error()))
+				} else {
+					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", specification, err)
+				}
+			} else {
+				creds = c
 			}
 		}
 	} else {
 		slog.DebugContext(ctx, "no credentials found for repository", "realm", Realm, "repository", specification, "error", err)
 	}
 
-	repo, err := f.repositoryProvider.GetComponentVersionRepository(ctx, specification, credentials)
+	repo, err := f.repositoryProvider.GetComponentVersionRepository(ctx, specification, creds)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version repository for %q failed: %w", specification, err)
 	}

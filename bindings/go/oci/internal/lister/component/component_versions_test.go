@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
+	componentConfig "ocm.software/open-component-model/bindings/go/oci/spec/config/component"
 )
 
 type mockStore struct {
@@ -189,6 +190,85 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 				fetchFunc: func(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 					data, err := json.Marshal(&ociImageSpecV1.Index{
 						MediaType: ociImageSpecV1.MediaTypeImageIndex,
+					})
+					if err != nil {
+						return nil, fmt.Errorf("failed to marshal manifest: %w", err)
+					}
+					return io.NopCloser(bytes.NewReader(data)), nil
+				},
+			},
+			expected:      "v1.0.0",
+			expectedError: lister.ErrSkip,
+		},
+		{
+			name: "old component version without annotation (pre-2024)",
+			ref:  "example.com/repo",
+			tag:  "v1.0.0",
+			store: &mockStore{
+				resolveFunc: func(ctx context.Context, ref string) (ociImageSpecV1.Descriptor, error) {
+					return ociImageSpecV1.Descriptor{
+						MediaType: ociImageSpecV1.MediaTypeImageManifest,
+					}, nil
+				},
+				fetchFunc: func(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+					data, err := json.Marshal(&ociImageSpecV1.Manifest{
+						MediaType: ociImageSpecV1.MediaTypeImageManifest,
+						Config: ociImageSpecV1.Descriptor{
+							MediaType: componentConfig.MediaType,
+						},
+					})
+					if err != nil {
+						return nil, fmt.Errorf("failed to marshal manifest: %w", err)
+					}
+					return io.NopCloser(bytes.NewReader(data)), nil
+				},
+			},
+			expected: "v1.0.0",
+		},
+		{
+			name: "old component version with annotation present (not fallback case)",
+			ref:  "example.com/repo",
+			tag:  "v1.0.0",
+			store: &mockStore{
+				resolveFunc: func(ctx context.Context, ref string) (ociImageSpecV1.Descriptor, error) {
+					return ociImageSpecV1.Descriptor{
+						MediaType: ociImageSpecV1.MediaTypeImageManifest,
+					}, nil
+				},
+				fetchFunc: func(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+					data, err := json.Marshal(&ociImageSpecV1.Manifest{
+						MediaType: ociImageSpecV1.MediaTypeImageManifest,
+						Config: ociImageSpecV1.Descriptor{
+							MediaType: componentConfig.MediaType,
+						},
+						Annotations: map[string]string{
+							annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation("example.com/repo", "v1.0.0"),
+						},
+					})
+					if err != nil {
+						return nil, fmt.Errorf("failed to marshal manifest: %w", err)
+					}
+					return io.NopCloser(bytes.NewReader(data)), nil
+				},
+			},
+			expected: "v1.0.0",
+		},
+		{
+			name: "manifest without annotation and wrong config media type",
+			ref:  "example.com/repo",
+			tag:  "v1.0.0",
+			store: &mockStore{
+				resolveFunc: func(ctx context.Context, ref string) (ociImageSpecV1.Descriptor, error) {
+					return ociImageSpecV1.Descriptor{
+						MediaType: ociImageSpecV1.MediaTypeImageManifest,
+					}, nil
+				},
+				fetchFunc: func(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+					data, err := json.Marshal(&ociImageSpecV1.Manifest{
+						MediaType: ociImageSpecV1.MediaTypeImageManifest,
+						Config: ociImageSpecV1.Descriptor{
+							MediaType: "application/vnd.oci.image.config.v1+json",
+						},
 					})
 					if err != nil {
 						return nil, fmt.Errorf("failed to marshal manifest: %w", err)

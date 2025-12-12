@@ -158,25 +158,7 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 		r.NoError(err)
 	})
 
-	t.Run("health check with invalid authentication fails", func(t *testing.T) {
-		r := require.New(t)
-
-		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
-		r.NoError(err)
-		resolver.SetClient(createAuthClient(reg, "invalid-user", "invalid-password"))
-
-		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
-		r.NoError(err)
-
-		// Health check should fail for ghcr.io with invalid credentials
-		// GHCR returns 403 during token exchange when credentials are invalid
-		err = repo.CheckHealth(t.Context())
-		r.Error(err)
-		r.True(strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "denied"),
-			"Expected 403 or denied error, got: %v", err)
-	})
-
-	t.Run("health check without authentication fails for ghcr.io", func(t *testing.T) {
+	t.Run("health check without authentication for ghcr.io works", func(t *testing.T) {
 		r := require.New(t)
 
 		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
@@ -186,11 +168,7 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 
 		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
 		r.NoError(err)
-
-		// Health check should fail without credentials for ghcr.io
-		// GHCR returns 403 during token exchange when no credentials provided
-		err = repo.CheckHealth(t.Context())
-		r.ErrorContains(err, "401")
+		r.NoError(repo.CheckHealth(t.Context()))
 	})
 
 	t.Run("resolver ping with valid authentication succeeds", func(t *testing.T) {
@@ -205,30 +183,16 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 		r.NoError(err)
 	})
 
-	t.Run("resolver ping with invalid authentication fails", func(t *testing.T) {
-		r := require.New(t)
-
-		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
-		r.NoError(err)
-		resolver.SetClient(createAuthClient(reg, "invalid-user", "invalid-password"))
-
-		// Direct resolver ping should fail for ghcr.io with invalid credentials
-		// GHCR returns 403 during token exchange when credentials are invalid
-		err = resolver.Ping(t.Context())
-		r.ErrorContains(err, "403")
-	})
-
-	t.Run("resolver ping without authentication fails", func(t *testing.T) {
+	t.Run("resolver ping without authentication works", func(t *testing.T) {
 		r := require.New(t)
 
 		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
 		r.NoError(err)
 		resolver.SetClient(http.DefaultClient)
 
-		// Direct resolver ping should fail for ghcr.io without credentials
-		// GHCR returns 403 during token exchange when no credentials provided
-		err = resolver.Ping(t.Context())
-		r.ErrorContains(err, "401")
+		// Direct resolver ping should pass for ghcr.io without credentials
+		// Because we are explicitly ignoring 401 and 403.
+		r.NoError(resolver.Ping(t.Context()))
 	})
 }
 
@@ -400,11 +364,9 @@ func Test_Integration_CTF(t *testing.T) {
 	t.Run("specification-based", func(t *testing.T) {
 		r := require.New(t)
 		repoProvider := provider.NewComponentVersionRepositoryProvider()
-		repoSpec := &ctfrepospecv1.Repository{Path: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
-		id, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
-		r.NoError(err)
-
-		r.Equal(id[ocmruntime.IdentityAttributePath], fs.String())
+		repoSpec := &ctfrepospecv1.Repository{FilePath: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
+		_, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
+		r.Error(err)
 
 		repo, err := repoProvider.GetComponentVersionRepository(t.Context(), repoSpec, nil)
 		r.NoError(err)
@@ -413,6 +375,51 @@ func Test_Integration_CTF(t *testing.T) {
 			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v5.0.0")
 		})
 	})
+}
+
+func Test_Integration_CTF_Lister(t *testing.T) {
+	t.Parallel()
+
+	// Test data.
+	cvs := []struct {
+		name    string
+		version string
+	}{
+		{"github.com/acme.org/helloworld", "v1.0.0"},
+		{"github.com/acme.org/helloworld", "v2.0.0"},
+		{"github.com/acme.org/helloocm", "v1.0.0"},
+		{"github.com/acme.org/hello-open-component-model", "v1.0.0"},
+	}
+
+	// Expectation: sorted list, elements are unique.
+	expectedList := []string{
+		"github.com/acme.org/hello-open-component-model",
+		"github.com/acme.org/helloocm",
+		"github.com/acme.org/helloworld",
+	}
+
+	// Write components to CTF, while validating that everything is written correctly.
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	require.NoError(t, err)
+	archive := ctf.NewFileSystemCTF(fs)
+	store := ocictf.NewFromCTF(archive)
+	repo, err := oci.NewRepository(oci.WithResolver(store), oci.WithTempDir(t.TempDir()))
+	require.NoError(t, err)
+
+	for _, cv := range cvs {
+		uploadDownloadBarebonesComponentVersion(t, repo, cv.name, cv.version)
+	}
+
+	// Retrieve the component list and check the results.
+	lister := ocictf.NewComponentLister(archive)
+	result := []string{}
+	err = lister.ListComponents(t.Context(), "", func(names []string) error {
+		result = append(result, names...)
+		return nil
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, expectedList, result)
 }
 
 func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, component string, version string) {

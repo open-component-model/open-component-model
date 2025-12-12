@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	slogcontext "github.com/veqryn/slog-context"
 	"oras.land/oras-go/v2"
@@ -78,6 +79,10 @@ type Repository struct {
 
 	// logger is the logger used for OCI operations.
 	logger *slog.Logger
+
+	// the media type of the descriptor encoding used for component versions.
+	// this is used to determine the media type of the component descriptor when adding new component versions.
+	descriptorEncodingMediaType string
 }
 
 // AddComponentVersion adds a new component version to the repository.
@@ -100,6 +105,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		AdditionalDescriptorManifests: repo.localArtifactManifestCache.Get(reference),
 		AdditionalLayers:              repo.localArtifactLayerCache.Get(reference),
 		ReferrerTrackingPolicy:        repo.referrerTrackingPolicy,
+		DescriptorEncodingMediaType:   repo.descriptorEncodingMediaType,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
@@ -415,11 +421,9 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	// now that we have a unique candidate, we should use its identity instead of the one requested, as
 	// the requested identity might not be fully qualified.
 	// For example, it is valid to ask for "name=abc", but receive an artifact with "name=abc,version=1.0.0".
-	identity = meta.ToIdentity()
-	slogcontext.Info(ctx, "found artifact in descriptor", "artifact", identity)
+	slogcontext.Info(ctx, "found artifact in descriptor", "artifact", meta.ToIdentity())
 
 	access := artifact.GetAccess()
-
 	typed, err := repo.scheme.NewObject(access.GetType())
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating resource access: %w", err)
@@ -430,59 +434,51 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
-		b, err := repo.getLocalBlobFromIndexOrManifest(ctx, store, index, manifest, identity, kind)
+		b, err := repo.getLocalBlobFromIndexOrManifest(ctx, store, index, manifest, typed.LocalReference)
 		return b, artifact, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
 }
 
+// getLocalBlobFromIndexOrManifest resolves and fetches a blob from either an
+// OCI index or a manifest. It looks up the descriptor matching the given
+// reference and then:
 func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	ctx context.Context,
-	store spec.Store, // store to fetch the local blob from
-	index *ociImageSpecV1.Index, // may be nil for legacy manifests
-	manifest *ociImageSpecV1.Manifest, // always present, even if index is nil
-	identity runtime.Identity, // identity of the artifact to fetch
-	kind annotations.ArtifactKind, // kind of the artifact to fetch (e.g., Resource or Source)
+	store spec.Store,
+	index *ociImageSpecV1.Index,
+	manifest *ociImageSpecV1.Manifest,
+	ref string,
 ) (LocalBlob, error) {
-	// if the index does not exist, we can only use the manifest
-	// and thus local blobs can only be available as image layers
-	if index == nil {
-		b, err := fetch.SingleLayerLocalBlobFromManifestByIdentity(ctx, store, manifest, identity, kind)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get local blob from manifest: %w", err)
-		}
-		return b, nil
-	}
+	descriptors := collectDescriptors(index, manifest)
 
-	// lets lookup our artifact based on our annotation from either the index or the manifest layers.
-	artifact, err := annotations.FilterFirstMatchingArtifact(append(index.Manifests, manifest.Layers...), identity, kind)
+	artifact, err := findDescriptorFromReference(descriptors, ref)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find matching descriptor: %w", err)
+		return nil, fmt.Errorf("resolve artifact %q: %w", ref, err)
 	}
 
-	// if we are not a manifest compatible with OCI, we can assume that we only care about a single layer
-	// that means we can just return the blob that contains that exact layer and not the entire oci layout
-	if !introspection.IsOCICompliantManifest(artifact) {
-		layerData, err := store.Fetch(ctx, artifact)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch layer data: %w", err)
-		}
-
-		b := ociblob.NewDescriptorBlob(layerData, artifact)
-
-		if actualDigest, _ := b.Digest(); actualDigest != artifact.Digest.String() {
-			return nil, fmt.Errorf("expected single layer artifact digest %q but got %q", artifact.Digest.String(), actualDigest)
-		}
-		return b, nil
+	// Nested manifest: copy full OCI layout
+	if index != nil && introspection.IsOCICompliantManifest(artifact) {
+		// copy the full OCI manifest and its dependency graph
+		// into an in-memory OCI layout. This is used when the descriptor refers
+		// to another OCI-compliant manifest instead of a single layer.
+		return tar.CopyToOCILayoutInMemory(ctx, store, artifact, tar.CopyToOCILayoutOptions{
+			CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
+		})
 	}
 
-	// if we dont have a single layer we have to copy not only the manifest or index, but all layers that are part of it!
-	b, err := tar.CopyToOCILayoutInMemory(ctx, store, artifact, tar.CopyToOCILayoutOptions{
-		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
-	})
+	// Fetch a single layer blob from the store and verify
+	// that its digest matches the expected descriptor digest. This path is used
+	// when the reference is a raw layer rather than a manifest.
+	data, err := store.Fetch(ctx, artifact)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get local blob from discovered image layout: %w", err)
+		return nil, fmt.Errorf("fetch layer: %w", err)
+	}
+	// data cannot be closed, as it is used by the blob
+	b := ociblob.NewDescriptorBlob(data, artifact)
+	if actual, _ := b.Digest(); actual != artifact.Digest.String() {
+		return nil, fmt.Errorf("digest mismatch: expected %q, got %q", artifact.Digest, actual)
 	}
 	return b, nil
 }
@@ -684,7 +680,7 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 	if err != nil {
 		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
 	}
-	slogcontext.Log(ctx, slog.LevelInfo, "fetching descriptor", log.DescriptorLogAttr(base))
+	slogcontext.Log(ctx, slog.LevelDebug, "fetching descriptor", log.DescriptorLogAttr(base))
 	manifestRaw, err := store.Fetch(ctx, ociImageSpecV1.Descriptor{
 		MediaType: base.MediaType,
 		Digest:    base.Digest,
@@ -709,17 +705,47 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 		if descriptorManifest.MediaType != ociImageSpecV1.MediaTypeImageManifest {
 			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index manifest is not an OCI image manifest")
 		}
-		manifestRaw, err = store.Fetch(ctx, descriptorManifest)
+		indexManifestRaw, err := store.Fetch(ctx, descriptorManifest)
+		defer func() {
+			err = errors.Join(err, indexManifestRaw.Close())
+		}()
 		if err != nil {
 			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to fetch manifest: %w", err)
 		}
+		if err := json.NewDecoder(indexManifestRaw).Decode(&manifest); err != nil {
+			return ociImageSpecV1.Manifest{}, nil, err
+		}
 	case ociImageSpecV1.MediaTypeImageManifest:
+		if err := json.NewDecoder(manifestRaw).Decode(&manifest); err != nil {
+			return ociImageSpecV1.Manifest{}, nil, err
+		}
 	default:
 		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("unsupported media type %q", base.MediaType)
 	}
 
-	if err := json.NewDecoder(manifestRaw).Decode(&manifest); err != nil {
-		return ociImageSpecV1.Manifest{}, nil, err
-	}
 	return manifest, index, nil
+}
+
+func collectDescriptors(index *ociImageSpecV1.Index, manifest *ociImageSpecV1.Manifest) []ociImageSpecV1.Descriptor {
+	if index == nil {
+		return manifest.Layers
+	}
+	descs := make([]ociImageSpecV1.Descriptor, 0, len(index.Manifests)+len(manifest.Layers))
+	descs = append(descs, index.Manifests...)
+	descs = append(descs, manifest.Layers...)
+	return descs
+}
+
+func findDescriptorFromReference(descriptors []ociImageSpecV1.Descriptor, reference string) (ociImageSpecV1.Descriptor, error) {
+	asDigest := digest.Digest(reference)
+	if err := asDigest.Validate(); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to validate reference %q as digest: %w", reference, err)
+	}
+
+	for _, desc := range descriptors {
+		if desc.Digest == asDigest {
+			return desc, nil
+		}
+	}
+	return ociImageSpecV1.Descriptor{}, fmt.Errorf("no matching descriptor found for reference %s", reference)
 }

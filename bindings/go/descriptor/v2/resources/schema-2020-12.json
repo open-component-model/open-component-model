@@ -1,4 +1,5 @@
 {
+  "$id": "ocm.software/open-component-model/bindings/go/descriptor/v2/resources/schema-2020-12.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Open Component Model v2 schema",
   "$defs": {
@@ -162,10 +163,17 @@
         },
         "labels": {
           "description": "Labels associated with the source",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/label"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/label"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "access": {
           "description": "Access specification for the source",
@@ -309,10 +317,17 @@
         },
         "resourceDigests": {
           "description": "Digest information for resources in the component",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/nestedDigestSpec"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/nestedDigestSpec"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -327,10 +342,17 @@
         },
         "labels": {
           "description": "Labels for further identification of the source",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/label"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/label"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -363,10 +385,17 @@
         },
         "labels": {
           "description": "Labels associated with the reference",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/label"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/label"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "digest": {
           "description": "Optional digest of the referenced component",
@@ -411,10 +440,17 @@
         },
         "srcRefs": {
           "description": "References to sources that produced this resource",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/srcRef"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/srcRef"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "relation": {
           "description": "Relation of the resource to the component (local or external)",
@@ -426,10 +462,17 @@
         },
         "labels": {
           "description": "Labels associated with the resource",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/label"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/label"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "access": {
           "description": "Access specification for the resource",
@@ -471,18 +514,29 @@
         },
         "creationTime": {
           "description": "Creation time of the component version",
-          "type": [
-            "string",
-            "null"
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
           "format": "date-time"
         },
         "repositoryContexts": {
           "description": "Previous repositories of the component",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/repositoryContext"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/repositoryContext"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "provider": {
           "description": "Provider type of the component in the origin's context",
@@ -490,24 +544,45 @@
         },
         "labels": {
           "description": "Labels associated with the component",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/label"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/label"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "sources": {
           "description": "Sources that produced the component",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/sourceDefinition"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/sourceDefinition"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "componentReferences": {
           "description": "References to other component versions",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/componentReference"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/componentReference"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "resources": {
           "description": "Resources created by the component or third parties",
@@ -601,10 +676,17 @@
     },
     "nestedDigests": {
       "description": "Digest information for nested components",
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/nestedComponentDigests"
-      }
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nestedComponentDigests"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   }
 }

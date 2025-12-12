@@ -92,6 +92,10 @@ type InformerManager struct {
 
 	// Timeout duration for graceful shutdown of all informers.
 	shutdownTimeout time.Duration
+
+	// RESTMapper that is backing the dynamic informers. It is dynamically loaded with resource information
+	// and mappings
+	mapper meta.RESTMapper
 }
 
 // watchTask holds the informer and its registration handle.
@@ -163,6 +167,7 @@ func NewInformerManager(opts *Options) (*InformerManager, error) {
 		workers:         workers,
 		metricsLabel:    opts.MetricsLabel,
 		shutdownTimeout: shutdownTimeout,
+		mapper:          mapper,
 	}
 
 	return mgr, nil
@@ -174,6 +179,11 @@ func (mgr *InformerManager) Source() source.TypedSource[reconcile.Request] {
 		// this means that from this point on, the queue will receive events for all registered watches
 		return mgr.SetQueue(w)
 	})
+}
+
+// RESTMapper returns a meta.RESTMapper with its discovery data filled by all informers
+func (mgr *InformerManager) RESTMapper() meta.RESTMapper {
+	return mgr.mapper
 }
 
 func (mgr *InformerManager) NeedLeaderElection() bool {

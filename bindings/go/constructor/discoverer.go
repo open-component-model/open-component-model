@@ -2,94 +2,81 @@ package constructor
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log/slog"
 
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// neighborDiscoverer is responsible for setting up a DAG based on the
-// component in the constructor specification and their references.
-type neighborDiscoverer struct {
-	constructor *DefaultConstructor
-	dag         *syncdag.DirectedAcyclicGraph[string]
+type resolverAndDiscoverer struct {
+	componentConstructor                *constructor.ComponentConstructor
+	externalComponentRepositoryProvider ExternalComponentRepositoryProvider
 }
 
-var _ syncdag.NeighborDiscoverer[string] = (*neighborDiscoverer)(nil)
+var (
+	_ syncdag.Resolver[string, *ConstructorOrExternalComponent]   = (*resolverAndDiscoverer)(nil)
+	_ syncdag.Discoverer[string, *ConstructorOrExternalComponent] = (*resolverAndDiscoverer)(nil)
+)
 
-func newNeighborDiscoverer(constructor *DefaultConstructor, dag *syncdag.DirectedAcyclicGraph[string]) *neighborDiscoverer {
-	return &neighborDiscoverer{
-		constructor: constructor,
-		dag:         dag,
+func (d *resolverAndDiscoverer) Resolve(ctx context.Context, id string) (*ConstructorOrExternalComponent, error) {
+	constructorComponent, err := d.resolveConstructorComponent(ctx, id)
+	if err == nil {
+		return &ConstructorOrExternalComponent{
+			ConstructorComponent: constructorComponent,
+		}, nil
 	}
-}
+	if !errors.Is(err, repository.ErrNotFound) {
+		return nil, fmt.Errorf("error resolving constructor component %q: %w", id, err)
+	}
 
-// DiscoverNeighbors neighbors analyzes the component represented by the given
-// vertex and returns the identities of referenced components as neighbors.
-func (d *neighborDiscoverer) DiscoverNeighbors(ctx context.Context, v string) (neighbors []string, err error) {
-	vertex := d.dag.MustGetVertex(v)
-	_, isInternal := vertex.GetAttribute(attributeComponentConstructor)
-	if !isInternal {
-		// This means we are on an external component node (= component is
-		// not in the constructor specification).
-		slog.DebugContext(ctx, "discovering external component", "component", vertex.ID)
-		_, err := d.discoverExternalComponent(ctx, vertex)
-		if err != nil {
-			return nil, fmt.Errorf("failed to discover external component: %w", err)
-		}
-		return nil, nil
-	}
-	// This means we are on a constructor node (= component is in the
-	// constructor specification).
-	slog.DebugContext(ctx, "discovering internal component", "component", vertex.ID)
-	neighbors, err = d.discoverInternalComponent(vertex)
+	// Not found in constructor, try external repository.
+	externalComponent, err := d.resolveExternalComponent(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to discover internal component: %w", err)
+		return nil, fmt.Errorf("error resolving external component %q: %w", id, err)
 	}
-	return neighbors, nil
+	return &ConstructorOrExternalComponent{
+		ExternalComponent: externalComponent,
+	}, nil
 }
 
-// initializeDAGWithConstructor initializes the DAG with the components from the
-// constructor specification.
-// Due to this initialization, we do not have to fetch the constructor components
-// during the discovery.
-func (d *neighborDiscoverer) initializeDAGWithConstructor(constructor *constructor.ComponentConstructor) ([]string, error) {
-	roots := make([]string, len(constructor.Components))
-
-	for index, component := range constructor.Components {
-		root := component.ToIdentity().String()
-		if err := d.dag.AddVertex(component.ToIdentity().String(), map[string]any{
-			attributeComponentConstructor: &component,
-		}); err != nil {
-			return nil, fmt.Errorf("failed to add root %q to dag: %w", root, err)
+func (d *resolverAndDiscoverer) Discover(ctx context.Context, component *ConstructorOrExternalComponent) ([]string, error) {
+	switch {
+	case component.ConstructorComponent != nil:
+		children := make([]string, len(component.ConstructorComponent.References))
+		for index, ref := range component.ConstructorComponent.References {
+			children[index] = ref.ToComponentIdentity().String()
 		}
-		roots[index] = root
+		return children, nil
+	case component.ExternalComponent != nil:
+		children := make([]string, len(component.ExternalComponent.Component.References))
+		for index, ref := range component.ExternalComponent.Component.References {
+			children[index] = ref.ToComponentIdentity().String()
+		}
+		return children, nil
 	}
-	return roots, nil
+	return nil, fmt.Errorf("constructor or external component must have either a constructor component or an external component")
 }
 
-// discoverInternalComponent discovers a component from the internal constructor
-// specification.
-func (d *neighborDiscoverer) discoverInternalComponent(vertex *syncdag.Vertex[string]) ([]string, error) {
-	component := vertex.MustGetAttribute(attributeComponentConstructor).(*constructor.Component)
-	neighbors := make([]string, len(component.References))
-	for index, ref := range component.References {
-		neighbors[index] = ref.ToComponentIdentity().String()
+func (d *resolverAndDiscoverer) resolveConstructorComponent(_ context.Context, id string) (*constructor.Component, error) {
+	for _, component := range d.componentConstructor.Components {
+		identity := component.ToIdentity().String()
+		if identity == id {
+			return &component, nil
+		}
 	}
-	return neighbors, nil
+	return nil, fmt.Errorf("component %s not found in constructor: %w", id, repository.ErrNotFound)
 }
 
-// discoverExternalComponent discovers a component from an external repository.
-// So, a component that is not part of the current constructor specification.
-func (d *neighborDiscoverer) discoverExternalComponent(ctx context.Context, vertex *syncdag.Vertex[string]) ([]string, error) {
-	identity, err := ocmruntime.ParseIdentity(vertex.ID)
+func (d *resolverAndDiscoverer) resolveExternalComponent(ctx context.Context, id string) (*descriptor.Descriptor, error) {
+	identity, err := ocmruntime.ParseIdentity(id)
 	if err != nil {
-		return nil, fmt.Errorf("failed parsing identity %q: %w", vertex.ID, err)
+		return nil, fmt.Errorf("failed parsing identity %q: %w", id, err)
 	}
-	repo, err := d.constructor.opts.GetExternalRepository(ctx, identity[descriptor.IdentityAttributeName], identity[descriptor.IdentityAttributeVersion])
+	repo, err := d.externalComponentRepositoryProvider.GetExternalRepository(ctx, identity[descriptor.IdentityAttributeName], identity[descriptor.IdentityAttributeVersion])
 	if err != nil {
 		return nil, fmt.Errorf("error getting external repository for component %q: %w", identity.String(), err)
 	}
@@ -101,9 +88,5 @@ func (d *neighborDiscoverer) discoverExternalComponent(ctx context.Context, vert
 	if err != nil {
 		return nil, fmt.Errorf("error getting component version %q from repository: %w", identity.String(), err)
 	}
-	vertex.Attributes.Store(attributeComponentDescriptor, desc)
-
-	// TODO(fabianburth): once we support recursive, we need to discover the
-	//   neighbors here (https://github.com/open-component-model/ocm-project/issues/666)
-	return nil, nil
+	return desc, nil
 }

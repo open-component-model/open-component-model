@@ -19,6 +19,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
+const testPluginType = "test-plugin-type"
+
 func TestPluginSDK(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	r := require.New(t)
@@ -29,7 +31,7 @@ func TestPluginSDK(t *testing.T) {
 	p := NewPlugin(ctx, slog.Default(), types.Config{
 		ID:         "test-plugin-flow",
 		Type:       types.Socket,
-		PluginType: types.ComponentVersionRepositoryPluginType,
+		PluginType: testPluginType,
 	}, output)
 
 	t.Cleanup(func() {
@@ -76,7 +78,7 @@ func TestPluginSDKForceShutdownContext(t *testing.T) {
 	p := NewPlugin(baseCtx, slog.Default(), types.Config{
 		ID:         "test-plugin-force",
 		Type:       types.Socket,
-		PluginType: types.ComponentVersionRepositoryPluginType,
+		PluginType: testPluginType,
 	}, output)
 
 	t.Cleanup(func() {
@@ -135,7 +137,7 @@ func TestIdleChecker(t *testing.T) {
 	p := NewPlugin(ctx, slog.Default(), types.Config{
 		ID:          "test-plugin-idle",
 		Type:        types.Socket,
-		PluginType:  types.ComponentVersionRepositoryPluginType,
+		PluginType:  testPluginType,
 		IdleTimeout: &timeout,
 	}, output)
 
@@ -178,7 +180,7 @@ func TestHealthCheckInvalidMethod(t *testing.T) {
 	p := NewPlugin(ctx, slog.Default(), types.Config{
 		ID:         "test-plugin-invalid",
 		Type:       types.Socket,
-		PluginType: types.ComponentVersionRepositoryPluginType,
+		PluginType: testPluginType,
 	}, output)
 
 	t.Cleanup(func() {
@@ -210,7 +212,7 @@ func TestPanicRecovery(t *testing.T) {
 	p := NewPlugin(ctx, slog.Default(), types.Config{
 		ID:         "test-plugin-panic",
 		Type:       types.Socket,
-		PluginType: types.ComponentVersionRepositoryPluginType,
+		PluginType: testPluginType,
 	}, output)
 
 	t.Cleanup(func() {
@@ -272,7 +274,7 @@ func TestLockFileCreationAndCleanup(t *testing.T) {
 	p := NewPlugin(ctx, slog.Default(), types.Config{
 		ID:         "test-plugin-lock",
 		Type:       types.Socket,
-		PluginType: types.ComponentVersionRepositoryPluginType,
+		PluginType: testPluginType,
 	}, os.Stdout)
 
 	// Start the plugin in a goroutine
@@ -320,7 +322,7 @@ func TestLockFileProcessValidation(t *testing.T) {
 		p1 := NewPlugin(ctx, slog.Default(), types.Config{
 			ID:         "test-plugin-process-validation",
 			Type:       types.Socket,
-			PluginType: types.ComponentVersionRepositoryPluginType,
+			PluginType: testPluginType,
 		}, os.Stdout)
 
 		go func() {
@@ -340,7 +342,7 @@ func TestLockFileProcessValidation(t *testing.T) {
 		p2 := NewPlugin(ctx, slog.Default(), types.Config{
 			ID:         "test-plugin-process-validation",
 			Type:       types.Socket,
-			PluginType: types.ComponentVersionRepositoryPluginType,
+			PluginType: testPluginType,
 		}, os.Stdout)
 
 		_, err = p2.determineLocation(t.Context())
@@ -371,7 +373,7 @@ func TestLockFileProcessValidation(t *testing.T) {
 		p := NewPlugin(ctx, slog.Default(), types.Config{
 			ID:         "test-plugin-process-validation",
 			Type:       types.Socket,
-			PluginType: types.ComponentVersionRepositoryPluginType,
+			PluginType: testPluginType,
 		}, os.Stdout)
 
 		loc, err := p.determineLocation(t.Context())

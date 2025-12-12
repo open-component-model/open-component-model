@@ -1,0 +1,12 @@
+name: ocm.software/plugin-registry
+version: ((REGISTRY_VERSION))
+provider:
+  name: ocm.software
+labels:
+  - name: ocm.software/category
+    value: plugin-registry
+  - name: ocm.software/registry
+    value: official
+  - name: ocm.software/description
+    value: Official OCM plugin registry
+componentReferences: []

@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -18,22 +20,32 @@ import (
 	"sigs.k8s.io/yaml"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types/spec"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
+	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
+	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
 const (
-	FlagResourceName        = "resource-name"
 	FlagResourceVersion     = "resource-version"
 	FlagOutput              = "output"
 	FlagOutputFormat        = "output-format"
+	FlagPluginType          = "plugin-type"
 	FlagExtraIdentity       = "extra-identity"
 	SkipValidation          = "skip-validation"
 	pluginValidationTimeout = 30 * time.Second
 )
+
+// PluginType is the type of the resource containing the plugin in the component version.
+// This type has been established by OCM v1 here:
+// https://github.com/open-component-model/ocm/blob/bccf3310af0665eaab3f0ea9803e6b903d858d52/api/ocm/extensions/artifacttypes/const.go#L40
+const PluginType = "ocmPlugin"
+
+// pluginDirectoryDefault contains all plugins for ocm.
+var pluginDirectoryDefault = filepath.Join(os.Getenv("HOME"), ".config", "ocm", "plugins")
 
 func New() *cobra.Command {
 	cmd := &cobra.Command{
@@ -47,40 +59,34 @@ This command fetches a specific plugin resource from the given OCM component ver
 The plugin binary can be identified by resource name and version, with optional extra identity parameters for platform-specific binaries.
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.`,
-		Example: ` # Download a plugin binary with resource name 'ocm-plugin' and version 'v1.0.0'
-  ocm download plugin ghcr.io/org/component:v1 --resource-name ocm-plugin --resource-version v1.0.0 --output ./plugins/ocm-plugin
+		Example: ` # Download a plugin binary with resource name 'helminput' and version 'v0.0.0-main'
+  ocm download plugin ghcr.io/open-component-model/plugins//ocm.software/plugins/helminput:0.0.0-main
 
-  # Download a platform-specific plugin binary with extra identity parameters
-  ocm download plugin ghcr.io/org/component:v1 --resource-name ocm-plugin --resource-version v1.0.0 --extra-identity os=linux,arch=amd64 --output ./plugins/ocm-plugin-linux-amd64
-
-  # Download plugin using only resource name (uses component version if resource version not specified)
-  ocm download plugin ghcr.io/org/component:v1 --resource-name ocm-plugin --output ./plugins/ocm-plugin`,
+  # Download a platform-specific plugin binary with extra identity parameters with specified output location.
+  ocm download plugin ghcr.io/open-component-model/plugins//ocm.software/plugins/helminput:0.0.0-main --extra-identity os=linux,arch=amd64 --output ./plugins/ocm-plugin-linux-amd64`,
 		RunE:              DownloadPlugin,
 		DisableAutoGenTag: true,
 	}
 
-	cmd.Flags().String(FlagResourceName, "", "name of the plugin resource to download (required)")
 	cmd.Flags().String(FlagResourceVersion, "", "version of the plugin resource to download (optional, defaults to component version)")
-	cmd.Flags().String(FlagOutput, ".", "output location to download the plugin binary to (required)")
+	cmd.Flags().String(FlagOutput, "", "output folder to download the plugin binary to (default $HOME/.config/ocm/plugins)")
 	enum.VarP(cmd.Flags(), FlagOutputFormat, "f", []string{"table", "yaml", "json"}, "output format of the plugin information, defaults to table")
 	cmd.Flags().StringSlice(FlagExtraIdentity, []string{}, "extra identity parameters for resource matching (e.g., os=linux,arch=amd64)")
 	cmd.Flags().Bool(SkipValidation, false, "skip validation of the downloaded plugin binary")
-
-	_ = cmd.MarkFlagRequired(FlagResourceName)
-	_ = cmd.MarkFlagRequired(FlagOutput)
+	cmd.Flags().String(FlagPluginType, PluginType, "type of the plugin resource in the component version containing the plugin binary")
 
 	return cmd
 }
 
 func DownloadPlugin(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
 	pluginManager, credentialGraph, logger, err := shared.GetContextItems(cmd)
 	if err != nil {
 		return err
 	}
-
-	resourceName, err := cmd.Flags().GetString(FlagResourceName)
-	if err != nil {
-		return fmt.Errorf("getting resource-name flag failed: %w", err)
+	ocmContext := ocmctx.FromContext(ctx)
+	if ocmContext == nil {
+		return fmt.Errorf("no OCM context found")
 	}
 
 	resourceVersion, err := cmd.Flags().GetString(FlagResourceVersion)
@@ -92,10 +98,8 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)
 	}
-
-	extraIdentitySlice, err := cmd.Flags().GetStringSlice(FlagExtraIdentity)
-	if err != nil {
-		return fmt.Errorf("getting extra-identity flag failed: %w", err)
+	if output == "" {
+		output = pluginDirectoryDefault
 	}
 
 	skipValidation, err := cmd.Flags().GetBool(SkipValidation)
@@ -108,26 +112,49 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		outputFormat = "table"
 	}
 
+	extraIdentitySlice, err := cmd.Flags().GetStringSlice(FlagExtraIdentity)
+	if err != nil {
+		return fmt.Errorf("getting extra-identity flag failed: %w", err)
+	}
 	extraIdentity, err := parseExtraIdentity(extraIdentitySlice)
 	if err != nil {
 		return err
 	}
 
 	reference := args[0]
-	repo, err := ocm.NewFromRef(cmd.Context(), pluginManager, credentialGraph, reference)
+	// we have a reference and parse it
+	ref, err := compref.Parse(reference)
+	if err != nil {
+		return fmt.Errorf("parsing component reference %q failed: %w", reference, err)
+	}
+	config := ocmContext.Configuration()
+	slog.DebugContext(ctx, "parsed component reference", "reference", reference, "parsed", ref)
+
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, ref)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
 
-	desc, err := repo.GetComponentVersion(cmd.Context())
+	repo, err := repoProvider.GetComponentVersionRepositoryForComponent(cmd.Context(), ref.Component, ref.Version)
+	if err != nil {
+		return fmt.Errorf("could not access ocm repository: %w", err)
+	}
+
+	desc, err := repo.GetComponentVersion(cmd.Context(), ref.Component, ref.Version)
 	if err != nil {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
 
-	// Build resource identity for matching
-	resourceIdentity := ocmruntime.Identity{
-		"name": resourceName,
+	resourceType, err := cmd.Flags().GetString(FlagPluginType)
+	if err != nil {
+		return fmt.Errorf("getting resource type flag failed: %w", err)
 	}
+	if resourceType == "" {
+		resourceType = PluginType
+	}
+
+	// Build resource identity for matching
+	resourceIdentity := ocmruntime.Identity{}
 
 	if resourceVersion != "" {
 		resourceIdentity["version"] = resourceVersion
@@ -152,6 +179,15 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 
 	var toDownload []descriptor.Resource
 	for _, resource := range desc.Component.Resources {
+		// Type is not part of the identity so the below identity matcher will not
+		// catch that, hence, we do this here.
+		if resource.Type != resourceType {
+			continue
+		}
+
+		// if the type matches we have our resource; we set the name for the identity match.
+		resourceIdentity["name"] = resource.Name
+
 		resourceIdent := resource.ToIdentity()
 		if resourceIdentity.Match(resourceIdent, ocmruntime.IdentityMatchingChainFn(ocmruntime.IdentitySubset)) {
 			toDownload = append(toDownload, resource)
@@ -172,10 +208,14 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		slog.String("type", res.Type),
 		slog.Any("identity", res.ToIdentity()))
 
-	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, repo, res, resourceIdentity)
+	data, err := shared.DownloadResourceData(ctx, pluginManager, credentialGraph, ref.Component, ref.Version, repo, res, resourceIdentity)
 	if err != nil {
 		return fmt.Errorf("downloading plugin resource for identity %q failed: %w", resourceIdentity, err)
 	}
+
+	// ocm.software/plugins/[helminput]
+	pluginFileName := path.Base(ref.Component)
+	output = filepath.Join(output, pluginFileName)
 
 	if err := shared.SaveBlobToFile(data, output); err != nil {
 		return err
@@ -299,18 +339,16 @@ func validatePlugin(pluginPath string, logger *slog.Logger) error {
 		return fmt.Errorf("plugin capabilities command failed: %w", err)
 	}
 
-	var capabilities types.Types
+	var capabilities spec.PluginSpec
 	if err := json.Unmarshal(output, &capabilities); err != nil {
 		return fmt.Errorf("plugin capabilities returned invalid JSON: %w", err)
 	}
 
-	if len(capabilities.Types) == 0 {
+	if len(capabilities.CapabilitySpecs) == 0 {
 		return fmt.Errorf("plugin capabilities missing required 'types' field or is empty")
 	}
 
-	logger.Info("plugin validation successful",
-		slog.Int("plugin_types", len(capabilities.Types)),
-		slog.Int("config_types", len(capabilities.ConfigTypes)))
+	logger.Info("plugin validation successful")
 
 	return nil
 }

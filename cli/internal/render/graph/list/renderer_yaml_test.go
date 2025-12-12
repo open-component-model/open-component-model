@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/cli/internal/render"
 )
@@ -19,7 +20,7 @@ func TestRunRenderLoopYAML(t *testing.T) {
 		ctx := t.Context()
 		r := require.New(t)
 
-		d := syncdag.NewDirectedAcyclicGraph[string]()
+		graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
 
 		buf := &bytes.Buffer{}
 		logWriter := testLogWriter{t}
@@ -27,26 +28,31 @@ func TestRunRenderLoopYAML(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 
-		serializer := func(vertex *syncdag.Vertex[string]) (any, error) {
-			state, ok := vertex.GetAttribute(syncdag.AttributeDiscoveryState)
+		serializer := func(vertex *dag.Vertex[string]) (any, error) {
+			state, ok := vertex.Attributes[syncdag.AttributeDiscoveryState]
 			if !ok {
 				return nil, fmt.Errorf("attribute %s not found for vertex %s", syncdag.AttributeDiscoveryState, vertex.ID)
 			}
-			DiscoveryState, ok := state.(syncdag.DiscoveryState)
+			discoveryState, ok := state.(syncdag.DiscoveryState)
 			if !ok {
 				return nil, fmt.Errorf("attribute %s for vertex %s is not of type %T", syncdag.AttributeDiscoveryState, vertex.ID, syncdag.DiscoveryState(0))
 			}
 			return map[string]any{
 				"id":    vertex.ID,
-				"state": DiscoveryState.String(),
+				"state": discoveryState.String(),
 			}, nil
 		}
-		renderer := New(ctx, d, WithListSerializer(NewSerializer(WithVertexSerializerFunc(serializer), WithOutputFormat[string](render.OutputFormatYAML))))
+		renderer := New(ctx, graph, WithListSerializer(NewSerializer(WithVertexSerializerFunc(serializer), WithOutputFormat[string](render.OutputFormatYAML))))
 
 		refreshRate := 10 * time.Millisecond
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(refreshRate), render.WithRenderOptions(render.WithWriter(writer)))
 
-		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeDiscoveryState: syncdag.DiscoveryStateDiscovering}))
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			if err := d.AddVertex("A", map[string]any{syncdag.AttributeDiscoveryState: syncdag.DiscoveryStateDiscovering}); err != nil {
+				return fmt.Errorf("failed to add vertex: %w", err)
+			}
+			return nil
+		}))
 
 		// sleep to allow ticker based render loop to start
 		time.Sleep(refreshRate)
@@ -73,9 +79,15 @@ func TestRunRenderLoopYAML(t *testing.T) {
 		buf.Reset()
 
 		// Add B as child of A
-		r.NoError(d.AddVertex("B", map[string]any{syncdag.AttributeDiscoveryState: syncdag.DiscoveryStateDiscovering}))
-		r.NoError(d.AddEdge("A", "B"))
-		vB, _ := d.GetVertex("B")
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			if err := d.AddVertex("B", map[string]any{syncdag.AttributeDiscoveryState: syncdag.DiscoveryStateDiscovering}); err != nil {
+				return fmt.Errorf("failed adding vertex: %w", err)
+			}
+			if err := d.AddEdge("A", "B"); err != nil {
+				return fmt.Errorf("failed adding edge: %w", err)
+			}
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -88,9 +100,15 @@ func TestRunRenderLoopYAML(t *testing.T) {
 		buf.Reset()
 
 		// Add C as child of B
-		r.NoError(d.AddVertex("C", map[string]any{syncdag.AttributeDiscoveryState: syncdag.DiscoveryStateDiscovering}))
-		r.NoError(d.AddEdge("B", "C"))
-		vC, _ := d.GetVertex("C")
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			if err := d.AddVertex("C", map[string]any{syncdag.AttributeDiscoveryState: syncdag.DiscoveryStateDiscovering}); err != nil {
+				return fmt.Errorf("failed adding vertex: %w", err)
+			}
+			if err := d.AddEdge("B", "C"); err != nil {
+				return fmt.Errorf("failed adding edge: %w", err)
+			}
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -105,9 +123,15 @@ func TestRunRenderLoopYAML(t *testing.T) {
 		buf.Reset()
 
 		// Add D as another child of A
-		r.NoError(d.AddVertex("D", map[string]any{syncdag.AttributeDiscoveryState: syncdag.DiscoveryStateDiscovering}))
-		r.NoError(d.AddEdge("A", "D"))
-		vD, _ := d.GetVertex("D")
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			if err := d.AddVertex("D", map[string]any{syncdag.AttributeDiscoveryState: syncdag.DiscoveryStateDiscovering}); err != nil {
+				return fmt.Errorf("failed adding vertex: %w", err)
+			}
+			if err := d.AddEdge("A", "D"); err != nil {
+				return fmt.Errorf("failed adding edge: %w", err)
+			}
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -124,7 +148,10 @@ func TestRunRenderLoopYAML(t *testing.T) {
 		buf.Reset()
 
 		// Mark D as completed
-		vD.Attributes.Store(syncdag.AttributeDiscoveryState, syncdag.DiscoveryStateCompleted)
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			d.Vertices["D"].Attributes[syncdag.AttributeDiscoveryState] = syncdag.DiscoveryStateCompleted
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -141,7 +168,10 @@ func TestRunRenderLoopYAML(t *testing.T) {
 		buf.Reset()
 
 		// Mark C as completed
-		vC.Attributes.Store(syncdag.AttributeDiscoveryState, syncdag.DiscoveryStateCompleted)
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			d.Vertices["C"].Attributes[syncdag.AttributeDiscoveryState] = syncdag.DiscoveryStateCompleted
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -158,7 +188,10 @@ func TestRunRenderLoopYAML(t *testing.T) {
 		buf.Reset()
 
 		// Mark B as completed
-		vB.Attributes.Store(syncdag.AttributeDiscoveryState, syncdag.DiscoveryStateCompleted)
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			d.Vertices["B"].Attributes[syncdag.AttributeDiscoveryState] = syncdag.DiscoveryStateCompleted
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -175,8 +208,10 @@ func TestRunRenderLoopYAML(t *testing.T) {
 		buf.Reset()
 
 		// Mark A as completed
-		vA, _ := d.GetVertex("A")
-		vA.Attributes.Store(syncdag.AttributeDiscoveryState, syncdag.DiscoveryStateCompleted)
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			d.Vertices["A"].Attributes[syncdag.AttributeDiscoveryState] = syncdag.DiscoveryStateCompleted
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -200,7 +235,12 @@ func TestRunRenderLoopYAML(t *testing.T) {
 func TestRenderOnceYAML(t *testing.T) {
 	r := require.New(t)
 
-	d := syncdag.NewDirectedAcyclicGraph[string]()
+	// We are cheating here. Since this logic is completely synchronous, we keep
+	// using the reference to the raw dag and not the synced wrapper.
+	// This makes adding vertices and edges much simpler.
+	// DO NOT DO THIS IN PRODUCTION CODE!
+	d := dag.NewDirectedAcyclicGraph[string]()
+	graph := syncdag.ToSyncedGraph(d)
 
 	buf := &bytes.Buffer{}
 	logWriter := testLogWriter{t}
@@ -208,7 +248,7 @@ func TestRenderOnceYAML(t *testing.T) {
 
 	ctx := t.Context()
 
-	renderer := New(ctx, d, WithListSerializer(NewSerializer(WithOutputFormat[string](render.OutputFormatYAML))))
+	renderer := New(ctx, graph, WithListSerializer(NewSerializer(WithOutputFormat[string](render.OutputFormatYAML))))
 
 	// Add A
 	r.NoError(d.AddVertex("A"))

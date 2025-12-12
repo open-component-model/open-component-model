@@ -42,7 +42,7 @@ func TestLoggingStore(t *testing.T) {
 			mockErr:        nil,
 			wantLogs: []string{
 				"level=DEBUG msg=\"getting credentials\" serverAddress=test-server",
-				"level=INFO msg=\"got credential\" serverAddress=test-server username=testuser serverAddress=test-server",
+				"level=DEBUG msg=\"got credential\" serverAddress=test-server username=testuser serverAddress=test-server",
 			},
 		},
 		{
@@ -51,7 +51,7 @@ func TestLoggingStore(t *testing.T) {
 			mockErr:        nil,
 			wantLogs: []string{
 				"level=DEBUG msg=\"getting credentials\" serverAddress=test-server",
-				"level=INFO msg=\"got no credential\" serverAddress=test-server",
+				"level=DEBUG msg=\"got no credential\" serverAddress=test-server",
 			},
 		},
 		{

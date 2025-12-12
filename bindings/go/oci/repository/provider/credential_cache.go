@@ -22,6 +22,9 @@ type cachedCredential struct {
 // It maintains a list of credentials indexed by repository identity (hostname and port).
 // The cache supports multiple credential types including username/password,
 // refresh tokens, and access tokens.
+//
+// The purpose of the cache is to be able to centrally update the credentials
+// also for existing repositories.
 type credentialCache struct {
 	mu          sync.RWMutex
 	credentials []cachedCredential

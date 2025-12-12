@@ -7,13 +7,13 @@ import (
 	"log/slog"
 	"net/http"
 
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
+	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// RepositoryPlugin implements the v1.ReadWriteResourceRepositoryPluginContract interface.
+// RepositoryPlugin implements the resourcev1.ReadWriteResourceRepositoryPluginContract interface.
 type RepositoryPlugin struct {
 	ID string
 
@@ -22,14 +22,13 @@ type RepositoryPlugin struct {
 	path   string
 	client *http.Client
 
-	// jsonSchema is the schema for all endpoints for this plugin.
-	jsonSchema []byte
+	capability resourcev1.CapabilitySpec
 
 	// location is where the plugin started listening.
 	location string
 }
 
-var _ v1.ReadWriteResourcePluginContract = (*RepositoryPlugin)(nil)
+var _ resourcev1.ReadWriteResourcePluginContract = (*RepositoryPlugin)(nil)
 
 // NewResourceRepositoryPlugin creates a new RepositoryPlugin.
 func NewResourceRepositoryPlugin(
@@ -38,14 +37,14 @@ func NewResourceRepositoryPlugin(
 	path string,
 	config types.Config,
 	location string,
-	jsonSchema []byte,
+	capability resourcev1.CapabilitySpec,
 ) *RepositoryPlugin {
 	return &RepositoryPlugin{
 		ID:         id,
 		path:       path,
 		config:     config,
 		client:     client,
-		jsonSchema: jsonSchema,
+		capability: capability,
 		location:   location,
 	}
 }
@@ -60,12 +59,12 @@ func (p *RepositoryPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (p *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
-	if err := p.validateEndpoint(request.Typ, p.jsonSchema); err != nil {
+func (p *RepositoryPlugin) GetIdentity(ctx context.Context, request *resourcev1.GetIdentityRequest[runtime.Typed]) (*resourcev1.GetIdentityResponse, error) {
+	if err := p.validateEndpoint(request.Typ); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
 
-	identity := v1.GetIdentityResponse{}
+	identity := resourcev1.GetIdentityResponse{}
 	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, GetIdentity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
 		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", p.ID, err)
 	}
@@ -74,8 +73,8 @@ func (p *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdent
 }
 
 // GetGlobalResource retrieves a global resource.
-func (p *RepositoryPlugin) GetGlobalResource(ctx context.Context, req *v1.GetGlobalResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
-	if err := p.validateEndpoint(req.Resource.Access, p.jsonSchema); err != nil {
+func (p *RepositoryPlugin) GetGlobalResource(ctx context.Context, req *resourcev1.GetGlobalResourceRequest, credentials map[string]string) (*resourcev1.GetGlobalResourceResponse, error) {
+	if err := p.validateEndpoint(req.Resource.Access); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
 
@@ -84,7 +83,7 @@ func (p *RepositoryPlugin) GetGlobalResource(ctx context.Context, req *v1.GetGlo
 		return nil, fmt.Errorf("error converting credentials: %w", err)
 	}
 
-	var response v1.GetGlobalResourceResponse
+	var response resourcev1.GetGlobalResourceResponse
 	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, GetGlobalResource, http.MethodPost, plugins.WithPayload(req), plugins.WithResult(&response), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to get global resource from plugin %q: %w", p.ID, err)
 	}
@@ -92,8 +91,8 @@ func (p *RepositoryPlugin) GetGlobalResource(ctx context.Context, req *v1.GetGlo
 }
 
 // AddGlobalResource adds a global resource.
-func (p *RepositoryPlugin) AddGlobalResource(ctx context.Context, req *v1.AddGlobalResourceRequest, credentials map[string]string) (*v1.AddGlobalResourceResponse, error) {
-	if err := p.validateEndpoint(req.Resource.Access, p.jsonSchema); err != nil {
+func (p *RepositoryPlugin) AddGlobalResource(ctx context.Context, req *resourcev1.AddGlobalResourceRequest, credentials map[string]string) (*resourcev1.AddGlobalResourceResponse, error) {
+	if err := p.validateEndpoint(req.Resource.Access); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
 
@@ -102,7 +101,7 @@ func (p *RepositoryPlugin) AddGlobalResource(ctx context.Context, req *v1.AddGlo
 		return nil, fmt.Errorf("error converting credentials: %w", err)
 	}
 
-	var response v1.AddGlobalResourceResponse
+	var response resourcev1.AddGlobalResourceResponse
 	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, AddGlobalResource, http.MethodPost, plugins.WithPayload(req), plugins.WithResult(&response), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to add global resource to plugin %q: %w", p.ID, err)
 	}
@@ -110,8 +109,17 @@ func (p *RepositoryPlugin) AddGlobalResource(ctx context.Context, req *v1.AddGlo
 	return &response, nil
 }
 
-func (p *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
-	valid, err := plugins.ValidatePlugin(obj, jsonSchema)
+// TODO(fabianburth): this method looks essentially the same for all plugin make it reusable!
+func (p *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
+	var schema []byte
+	for _, t := range p.capability.SupportedAccessTypes {
+		if t.Type != obj.GetType() {
+			continue
+		}
+		schema = t.JSONSchema
+	}
+
+	valid, err := plugins.ValidatePlugin(obj, schema)
 	if err != nil {
 		return fmt.Errorf("failed to validate plugin %q: %w", p.ID, err)
 	}

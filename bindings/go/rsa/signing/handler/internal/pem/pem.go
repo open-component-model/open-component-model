@@ -1,4 +1,4 @@
-// Package internal contains low-level PEM and X.509 helpers used by the RSA-PSS
+// Package pem contains low-level PEM and X.509 helpers used by the RSA-PSS
 // handler. Functions here are intentionally small and dependency-free.
 package pem
 

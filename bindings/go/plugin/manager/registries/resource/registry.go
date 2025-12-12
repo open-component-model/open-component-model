@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"sync"
 
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
+	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -18,6 +18,7 @@ import (
 func NewResourceRegistry(ctx context.Context) *ResourceRegistry {
 	return &ResourceRegistry{
 		ctx:                ctx,
+		capabilities:       make(map[string]resourcev1.CapabilitySpec),
 		registry:           make(map[runtime.Type]types.Plugin),
 		scheme:             runtime.NewScheme(runtime.WithAllowUnknown()),
 		internalPlugins:    make(map[runtime.Type]Repository),
@@ -29,6 +30,7 @@ func NewResourceRegistry(ctx context.Context) *ResourceRegistry {
 type ResourceRegistry struct {
 	ctx                context.Context
 	mu                 sync.Mutex
+	capabilities       map[string]resourcev1.CapabilitySpec
 	registry           map[runtime.Type]types.Plugin
 	internalPlugins    map[runtime.Type]Repository
 	scheme             *runtime.Scheme
@@ -40,17 +42,29 @@ func (r *ResourceRegistry) ResourceScheme() *runtime.Scheme {
 	return r.scheme
 }
 
-// AddPlugin takes a plugin discovered by the manager and puts it into the relevant internal map for
-// tracking the plugin.
-func (r *ResourceRegistry) AddPlugin(plugin types.Plugin, constructionType runtime.Type) error {
+// AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.
+// This function will return an error if the given capability + type already has a registered plugin.
+// Multiple plugins for the same cap+typ is not allowed.
+func (r *ResourceRegistry) AddPlugin(plugin types.Plugin, spec runtime.Typed) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if plugin, ok := r.registry[constructionType]; ok {
-		return fmt.Errorf("plugin for construction type %q already registered with ID: %s", constructionType, plugin.ID)
+	capability := resourcev1.CapabilitySpec{}
+	if err := resourcev1.Scheme.Convert(spec, &capability); err != nil {
+		return fmt.Errorf("failed to convert object: %w", err)
 	}
+	if _, ok := r.capabilities[plugin.ID]; ok {
+		return fmt.Errorf("plugin with ID %s already registered", plugin.ID)
+	}
+	r.capabilities[plugin.ID] = capability
 
-	r.registry[constructionType] = plugin
+	for _, typ := range capability.SupportedAccessTypes {
+		if v, ok := r.registry[typ.Type]; ok {
+			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ.Type, v.ID)
+		}
+		// Note: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
+		r.registry[typ.Type] = plugin
+	}
 
 	return nil
 }
@@ -83,7 +97,7 @@ func (r *ResourceRegistry) GetResourcePlugin(ctx context.Context, spec runtime.T
 
 // getPlugin returns a Resource plugin for a given type using a specific plugin storage map. It will also first look
 // for existing registered internal plugins based on the type and the same registry name.
-func (r *ResourceRegistry) getPlugin(ctx context.Context, spec runtime.Type) (v1.ReadWriteResourcePluginContract, error) {
+func (r *ResourceRegistry) getPlugin(ctx context.Context, spec runtime.Type) (resourcev1.ReadWriteResourcePluginContract, error) {
 	plugin, ok := r.registry[spec]
 	if !ok {
 		return nil, fmt.Errorf("failed to get plugin for typ %q", spec)
@@ -97,34 +111,26 @@ func (r *ResourceRegistry) getPlugin(ctx context.Context, spec runtime.Type) (v1
 }
 
 // RegisterInternalResourcePlugin is called to register an internal implementation for a resource plugin.
-func RegisterInternalResourcePlugin(
-	scheme *runtime.Scheme,
-	r *ResourceRegistry,
-	plugin Repository,
-	proto runtime.Typed,
-) error {
+func (r *ResourceRegistry) RegisterInternalResourcePlugin(plugin BuiltinResourceRepository) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	typ, err := scheme.TypeForPrototype(proto)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
-	}
+	for providerType, providerTypeAliases := range plugin.GetResourceRepositoryScheme().GetTypes() {
+		if err := r.scheme.RegisterSchemeType(plugin.GetResourceRepositoryScheme(), providerType); err != nil {
+			return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+		}
 
-	r.internalPlugins[typ] = plugin
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internalPlugins[alias] = r.internalPlugins[typ]
-	}
-
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil {
-		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
+		r.internalPlugins[providerType] = plugin
+		for _, alias := range providerTypeAliases {
+			r.internalPlugins[alias] = r.internalPlugins[providerType]
+		}
 	}
 
 	return nil
 }
 
 type constructedPlugin struct {
-	Plugin v1.ReadWriteResourcePluginContract
+	Plugin resourcev1.ReadWriteResourcePluginContract
 	cmd    *exec.Cmd
 }
 
@@ -145,7 +151,7 @@ func (r *ResourceRegistry) Shutdown(ctx context.Context) error {
 	return errs
 }
 
-func startAndReturnPlugin(ctx context.Context, r *ResourceRegistry, plugin *types.Plugin) (v1.ReadWriteResourcePluginContract, error) {
+func startAndReturnPlugin(ctx context.Context, r *ResourceRegistry, plugin *types.Plugin) (resourcev1.ReadWriteResourcePluginContract, error) {
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
@@ -158,16 +164,7 @@ func startAndReturnPlugin(ctx context.Context, r *ResourceRegistry, plugin *type
 	// start log streaming once the plugin is up and running.
 	go plugins.StartLogStreamer(r.ctx, plugin)
 
-	var jsonSchema []byte
-loop:
-	for _, tps := range plugin.Types {
-		for _, tp := range tps {
-			jsonSchema = tp.JSONSchema
-			break loop
-		}
-	}
-
-	resourcePlugin := NewResourceRepositoryPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, jsonSchema)
+	resourcePlugin := NewResourceRepositoryPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: resourcePlugin,
 		cmd:    plugin.Cmd,

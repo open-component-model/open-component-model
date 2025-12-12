@@ -198,7 +198,7 @@ func TestIdentityFromCTFRepository(t *testing.T) {
 		{
 			name: "valid CTF repository",
 			repository: ctf.Repository{
-				Path: "/path/to/repo",
+				FilePath: "/path/to/repo",
 			},
 			want: runtime.Identity{
 				runtime.IdentityAttributeType: Type.String(),

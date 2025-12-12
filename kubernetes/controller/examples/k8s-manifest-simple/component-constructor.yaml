@@ -1,0 +1,12 @@
+components:
+  - name: ocm.software/ocm-k8s-toolkit/examples/k8s-manifest-simple
+    version: "1.0.0"
+    provider:
+      name: ocm.software
+    resources:
+      - name: k8s-manifest-resource
+        type: blob
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./k8s-manifest.yaml

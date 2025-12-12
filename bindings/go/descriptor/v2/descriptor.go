@@ -32,6 +32,9 @@ const (
 
 // Descriptor defines a schema specific descriptor of a component containing additionally embedded signatures
 // verifying the validity of the component.
+// +k8s:deepcopy-gen=true
+// +ocm:jsonschema-gen=true
+// +ocm:jsonschema-gen:schema-from=resources/schema-2020-12.json
 type Descriptor struct {
 	// Meta defines the schema version of the component.
 	Meta Meta `json:"meta"`
@@ -51,6 +54,7 @@ func (d *Descriptor) String() string {
 
 // Component defines a named and versioned component containing dependencies such as sources, resources and
 // references pointing to further component versions.
+// +k8s:deepcopy-gen=true
 type Component struct {
 	ComponentMeta `json:",inline"`
 	// RepositoryContexts defines the previous repositories of the component.

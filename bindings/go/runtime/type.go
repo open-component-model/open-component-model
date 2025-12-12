@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	_ "embed"
 )
 
 // Typed is any object that is defined by a type that is versioned.
@@ -21,6 +23,11 @@ type Typed interface {
 type Type struct {
 	Version string
 	Name    string
+}
+
+// CompareTypesLexicographically compares two Types lexicographically based on their string representations.
+func CompareTypesLexicographically(a, b Type) int {
+	return strings.Compare(a.String(), b.String())
 }
 
 // NewUnversionedType creates a new Type instance without a version.
@@ -69,7 +76,7 @@ func (t Type) Equal(other Type) bool {
 // - Versioned: "name/version"
 func (t Type) String() string {
 	if t.Version != "" {
-		return fmt.Sprintf("%s/%s", t.Name, t.Version)
+		return t.Name + "/" + t.Version
 	}
 	return t.Name // Unversioned type
 }
@@ -119,4 +126,11 @@ func (t *Type) UnmarshalJSON(data []byte) error {
 
 	*t = parsed
 	return nil
+}
+
+//go:embed schemas/Type.schema.json
+var schemaType []byte
+
+func (t Type) JSONSchema() []byte {
+	return schemaType
 }
