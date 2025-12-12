@@ -21,8 +21,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/utils/ptr"
 	ocmctx "ocm.software/ocm/api/ocm"
-	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
+	ocmv1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	"ocm.software/ocm/api/ocm/extensions/attrs/signingattr"
+	"ocm.software/ocm/api/ocm/selectors/rscsel"
 	"ocm.software/ocm/api/ocm/tools/signing"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -357,16 +358,36 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to get component version: %w", err)
 	}
 
-	resourceReference := v1.ResourceReference{
-		Resource:      resource.Spec.Resource.ByReference.Resource,
-		ReferencePath: resource.Spec.Resource.ByReference.ReferencePath,
-	}
+	// Take the resource reference from the status to ensure we are getting the exact same resource
+	resourceSelector := rscsel.And(
+		rscsel.Name(resource.Status.Resource.Name),
+		rscsel.Version(resource.Status.Resource.Version),
+		rscsel.ExtraIdentity(resource.Status.Resource.ExtraIdentity),
+	)
 
-	resourceAccess, _, err := ocm.GetResourceAccessForComponentVersion(ctx, cv, resourceReference, ocm.NewSessionResolver(octx, session), resource.Spec.SkipVerify)
+	resourceAccesses, err := cv.SelectResources(resourceSelector)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to get resource access: %w", err)
+	}
+
+	var resourceAccess ocmctx.ResourceAccess
+	switch len(resourceAccesses) {
+	case 0:
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, "resource not found in component version")
+		return nil, fmt.Errorf("resource not found in component version")
+	case 1:
+		resourceAccess = resourceAccesses[0]
+	default:
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, "multiple resources found in component version")
+		return nil, fmt.Errorf("multiple resources found in component version")
+	}
+
+	if err := ocm.VerifyResource(resourceAccess, cv); err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to verify resource: %w", err)
 	}
 
 	// Get the manifest and its digest. Compare the digest to the one in the resource to make
@@ -375,7 +396,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
-		return nil, fmt.Errorf("failed to get  manifest: %w", err)
+		return nil, fmt.Errorf("failed to get manifest: %w", err)
 	}
 	defer func() {
 		err = errors.Join(err, manifest.Close())
@@ -471,13 +492,13 @@ func (r *Reconciler) getResource(cv ocmctx.ComponentVersionAccess, resourceAcces
 var digestSpecStringPattern = regexp.MustCompile(`^(?P<algo>[\w\-]+):(?P<digest>[a-fA-F0-9]+)\[(?P<norm>[\w\/]+)\]$`)
 
 // TODO(jakobmoellerdev): currently digests are stored as strings in resource status, we should really consider storing them natively...
-func digestSpec(s string) (v1.DigestSpec, error) {
+func digestSpec(s string) (ocmv1.DigestSpec, error) {
 	matches := digestSpecStringPattern.FindStringSubmatch(s)
 	if expectedMatches := 4; len(matches) != expectedMatches {
-		return v1.DigestSpec{}, fmt.Errorf("invalid digest spec format: %s", s)
+		return ocmv1.DigestSpec{}, fmt.Errorf("invalid digest spec format: %s", s)
 	}
 
-	digestSpec := v1.DigestSpec{}
+	digestSpec := ocmv1.DigestSpec{}
 	for i, name := range digestSpecStringPattern.SubexpNames() {
 		switch name {
 		case "algo":
