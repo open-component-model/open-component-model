@@ -1,0 +1,45 @@
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: helm-nested-repository
+spec:
+  repositorySpec:
+    # Adjust to your OCM repository
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: helm-nested-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/helm-nested
+  repositoryRef:
+    name: helm-nested-repository
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-nested-resource-nested-rgd
+spec:
+  componentRef:
+    name: helm-nested-component
+  resource:
+    byReference:
+      resource:
+        name: kro-rgd
+      referencePath:
+        - name: nested-rgd
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-nested-deployer
+spec:
+  resourceRef:
+    name: helm-nested-resource-nested-rgd
+    namespace: default
