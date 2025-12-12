@@ -21,10 +21,10 @@ type AddComponentVersion struct {
 func (t *AddComponentVersion) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
 	transformation, err := t.Scheme.NewObject(step.GetType())
 	if err != nil {
-		return nil, fmt.Errorf("failed creating download component transformation object: %v", err)
+		return nil, fmt.Errorf("failed creating download component transformation object: %w", err)
 	}
 	if err := t.Scheme.Convert(step, transformation); err != nil {
-		return nil, fmt.Errorf("failed converting generic transformation to download component transformation: %v", err)
+		return nil, fmt.Errorf("failed converting generic transformation to download component transformation: %w", err)
 	}
 	var repoSpec runtime.Typed
 	var v2desc *v2.Descriptor
@@ -44,23 +44,23 @@ func (t *AddComponentVersion) Transform(ctx context.Context, step runtime.Typed)
 		if consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec); err == nil {
 			creds, err = t.CredentialProvider.Resolve(ctx, consumerId)
 			if err != nil {
-				return nil, fmt.Errorf("failed resolving credentials: %v", err)
+				return nil, fmt.Errorf("failed resolving credentials: %w", err)
 			}
 		}
 	}
 
 	repo, err := t.RepoProvider.GetComponentVersionRepository(ctx, repoSpec, creds)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting component version repository: %v", err)
+		return nil, fmt.Errorf("failed getting component version repository: %w", err)
 	}
 
 	desc, err := descriptor.ConvertFromV2(v2desc)
 	if err != nil {
-		return nil, fmt.Errorf("failed converting component version from v2: %v", err)
+		return nil, fmt.Errorf("failed converting component version from v2: %w", err)
 	}
 
 	if err := repo.AddComponentVersion(ctx, desc); err != nil {
-		return nil, fmt.Errorf("failed getting component version %s:%s: %v",
+		return nil, fmt.Errorf("failed getting component version %s:%s: %w",
 			desc.Component.Name, desc.Component.Version, err)
 	}
 

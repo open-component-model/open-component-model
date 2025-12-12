@@ -8,6 +8,8 @@ import (
 
 const OCIAddComponentVersionType = "OCIAddComponentVersion"
 
+// OCIAddComponentVersion is a transformer specification to add a component
+// version to a CTF repository.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
@@ -20,10 +22,14 @@ type OCIAddComponentVersion struct {
 	Output *OCIAddComponentVersionOutput `json:"output,omitempty"`
 }
 
+// OCIAddComponentVersionOutput is the output specification of the
+// OCIAddComponentVersion.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type OCIAddComponentVersionOutput struct{}
 
+// OCIAddComponentVersionSpec is the specification of the input specification
+// for the OCIAddComponentVersion.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type OCIAddComponentVersionSpec struct {

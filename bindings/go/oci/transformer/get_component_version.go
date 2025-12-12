@@ -20,10 +20,10 @@ type GetComponentVersion struct {
 func (t *GetComponentVersion) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
 	transformation, err := t.Scheme.NewObject(step.GetType())
 	if err != nil {
-		return nil, fmt.Errorf("failed creating download component transformation object: %v", err)
+		return nil, fmt.Errorf("failed creating download component transformation object: %w", err)
 	}
 	if err := t.Scheme.Convert(step, transformation); err != nil {
-		return nil, fmt.Errorf("failed converting generic transformation to download component transformation: %v", err)
+		return nil, fmt.Errorf("failed converting generic transformation to download component transformation: %w", err)
 	}
 	var repoSpec runtime.Typed
 	var component, version string
@@ -43,25 +43,25 @@ func (t *GetComponentVersion) Transform(ctx context.Context, step runtime.Typed)
 		if consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec); err == nil {
 			creds, err = t.CredentialProvider.Resolve(ctx, consumerId)
 			if err != nil {
-				return nil, fmt.Errorf("failed resolving credentials: %v", err)
+				return nil, fmt.Errorf("failed resolving credentials: %w", err)
 			}
 		}
 	}
 
 	repo, err := t.RepoProvider.GetComponentVersionRepository(ctx, repoSpec, creds)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting component version repository: %v", err)
+		return nil, fmt.Errorf("failed getting component version repository: %w", err)
 	}
 
 	desc, err := repo.GetComponentVersion(ctx, component, version)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting component version %s:%s: %v", component, version, err)
+		return nil, fmt.Errorf("failed getting component version %s:%s: %w", component, version, err)
 	}
 
 	// TODO(jakobmoellerdev): mabye use the OCI scheme here instead of a blank scheme.
 	v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)
 	if err != nil {
-		return nil, fmt.Errorf("failed converting component version to v2: %v", err)
+		return nil, fmt.Errorf("failed converting component version to v2: %w", err)
 	}
 
 	switch transformation := transformation.(type) {
