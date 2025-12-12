@@ -98,13 +98,13 @@ func buildResolver(client remote.Client, repository *ocirepospecv1.Repository) (
 		return nil, fmt.Errorf("a base url is required")
 	}
 
-	purl, err := runtime.ParseURLAndAllowNoScheme(repository.BaseUrl)
+	baseURL := strings.TrimSuffix(repository.BaseUrl, "/")
+	purl, err := runtime.ParseURLAndAllowNoScheme(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse OCI repository URL %q: %w", repository.BaseUrl, err)
 	}
 
 	// Extract SubPath from BaseUrl if not explicitly set
-	baseURL := repository.BaseUrl
 	subPath := repository.SubPath
 	if subPath == "" && purl.Path != "" && purl.Path != "/" {
 		// Use path as SubPath and Host as BaseURL.
