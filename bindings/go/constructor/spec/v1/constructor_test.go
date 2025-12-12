@@ -46,7 +46,7 @@ const jsonArrayData = `{
         {
           "name": "example-reference",
           "version": "v1.0.0",
-          "componentName": "other-component"
+          "componentName": "github.com/example/other-component"
         }
       ]
     }
@@ -86,7 +86,7 @@ const jsonSingleData = `{
     {
       "name": "example-reference",
       "version": "v1.0.0",
-      "componentName": "other-component"
+      "componentName": "github.com/example/other-component"
     }
   ]
 }`

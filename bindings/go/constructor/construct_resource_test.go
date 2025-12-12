@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -21,6 +22,10 @@ import (
 type mockInputMethod struct {
 	processedResource *descriptor.Resource
 	processedBlob     blob.ReadOnlyBlob
+}
+
+func (m *mockInputMethod) GetInputMethodScheme() *runtime.Scheme {
+	return runtime.NewScheme()
 }
 
 func (m *mockInputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
@@ -117,6 +122,10 @@ func (m *mockAccess) DeepCopyTyped() runtime.Typed {
 // mockDigestProcessor implements ResourceDigestProcessor for testing
 type mockDigestProcessor struct {
 	processedDigest *descriptor.Digest
+}
+
+func (m *mockDigestProcessor) GetResourceRepositoryScheme() *runtime.Scheme {
+	return runtime.NewScheme()
 }
 
 func (m *mockDigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
@@ -226,15 +235,18 @@ func TestConstructWithMockInputMethod(t *testing.T) {
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	constructorInstance := NewDefaultConstructor(opts)
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	descs := collectDescriptors(t, graph)
+	require.NoError(t, err)
+	require.Len(t, descs, 1)
 
 	// Verify the results
-	desc := descriptors[0]
+	desc := descs[0]
 	verifyBasicComponent(t, desc)
 
 	// Verify the resource was processed correctly
@@ -267,15 +279,19 @@ func TestConstructWithResourceAccess(t *testing.T) {
 	opts := Options{
 		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	constructorInstance := NewDefaultConstructor(opts)
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	descs := collectDescriptors(t, graph)
+	require.NoError(t, err)
+	require.Len(t, descs, 1)
 
 	// Verify the results
-	desc := descriptors[0]
+	desc := descs[0]
 	verifyBasicComponent(t, desc)
 
 	// Verify the resource was processed correctly
@@ -346,17 +362,21 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 	opts := Options{
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
-		CredentialProvider:          mockCredProvider,
+		Resolver:                    mockCredProvider,
 	}
-	constructorInstance := NewDefaultConstructor(opts)
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	descs := collectDescriptors(t, graph)
+	require.NoError(t, err)
+	require.Len(t, descs, 1)
 
 	// Verify the results
-	desc := descriptors[0]
+	desc := descs[0]
 	verifyBasicComponent(t, desc)
 
 	// Verify the resource was processed correctly
@@ -417,15 +437,19 @@ func TestConstructWithResourceByValue(t *testing.T) {
 		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
 		ResourceRepositoryProvider: mockRepoProvider,
 	}
-	constructorInstance := NewDefaultConstructor(opts)
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	descs := collectDescriptors(t, graph)
+	require.NoError(t, err)
+	require.Len(t, descs, 1)
 
 	// Verify the results
-	desc := descriptors[0]
+	desc := descs[0]
 	verifyBasicComponent(t, desc)
 
 	// Verify the resource was processed correctly
@@ -475,15 +499,19 @@ func TestConstructWithResourceDigest(t *testing.T) {
 		TargetRepositoryProvider:        &mockTargetRepositoryProvider{repo: mockTargetRepo},
 		ResourceDigestProcessorProvider: mockDigestProvider,
 	}
-	constructorInstance := NewDefaultConstructor(opts)
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	descs := collectDescriptors(t, graph)
+	require.NoError(t, err)
+	require.Len(t, descs, 1)
 
 	// Verify the results
-	desc := descriptors[0]
+	desc := descs[0]
 	verifyBasicComponent(t, desc)
 
 	// Verify the resource was processed correctly
@@ -524,10 +552,11 @@ func TestConstructWithInvalidInputMethod(t *testing.T) {
 		},
 		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	constructorInstance := NewDefaultConstructor(opts)
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
 
 	// Process the constructor and expect an error
-	_, err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no input method resolvable for input specification of type")
 }
@@ -570,10 +599,10 @@ func TestConstructWithMissingAccess(t *testing.T) {
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	constructorInstance := NewDefaultConstructor(opts)
+	constructorInstance := NewDefaultConstructor(constructor, opts)
 
 	// Process the constructor and expect an error
-	_, err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "after the input method was processed, no access was present in the resource")
 }
@@ -624,12 +653,13 @@ func TestConstructWithCredentialResolutionFailure(t *testing.T) {
 	opts := Options{
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
-		CredentialProvider:          mockCredProvider,
+		Resolver:                    mockCredProvider,
 	}
-	constructorInstance := NewDefaultConstructor(opts)
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
 
 	// Process the constructor and expect an error
-	_, err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error resolving credentials for resource input method")
 }
@@ -666,10 +696,10 @@ func TestConstructWithResourceByValueFailure(t *testing.T) {
 		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
 		ResourceRepositoryProvider: mockRepoProvider,
 	}
-	constructorInstance := NewDefaultConstructor(opts)
+	constructorInstance := NewDefaultConstructor(constructor, opts)
 
 	// Process the constructor and expect an error
-	_, err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error downloading resource")
 }
@@ -751,15 +781,18 @@ components:
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	constructorInstance := NewDefaultConstructor(opts)
+	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
+	constructorInstance := NewDefaultConstructor(converted, opts)
+	graph = constructorInstance.GetGraph()
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), converted)
+	err = constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	descs := collectDescriptors(t, graph)
+	require.Len(t, descs, 1)
 
 	// Verify the results
-	desc := descriptors[0]
+	desc := descs[0]
 	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
 	assert.Equal(t, "v1.0.0", desc.Component.Version)
 	assert.Equal(t, "test-provider", desc.Component.Provider.Name)

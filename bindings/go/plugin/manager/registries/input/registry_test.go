@@ -10,14 +10,28 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
 	constructor2 "ocm.software/open-component-model/bindings/go/constructor"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+var (
+	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+)
+
+func dummyCapability(schema []byte) inputv1.CapabilitySpec {
+	return inputv1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(inputv1.InputPluginType)),
+		SupportedInputTypes: []mtypes.Type{{
+			Type:       dummyType,
+			JSONSchema: schema,
+		}},
+	}
+}
 
 func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
@@ -31,13 +45,9 @@ func TestPluginFlow(t *testing.T) {
 	config := mtypes.Config{
 		ID:         "test-plugin-1-construction",
 		Type:       mtypes.Socket,
-		PluginType: mtypes.InputPluginType,
+		PluginType: inputv1.InputPluginType,
 	}
 	serialized, err := json.Marshal(config)
-	require.NoError(t, err)
-
-	proto := &dummyv1.Repository{}
-	typ, err := scheme.TypeForPrototype(proto)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
@@ -56,23 +66,14 @@ func TestPluginFlow(t *testing.T) {
 		Config: mtypes.Config{
 			ID:         "test-plugin-1-construction",
 			Type:       mtypes.Socket,
-			PluginType: mtypes.ComponentVersionRepositoryPluginType,
-		},
-		Types: map[mtypes.PluginType][]mtypes.Type{
-			mtypes.ComponentVersionRepositoryPluginType: {
-				{
-					Type:       typ,
-					JSONSchema: []byte(`{}`),
-				},
-			},
+			PluginType: inputv1.InputPluginType,
 		},
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 	}
-	require.NoError(t, registry.AddPlugin(plugin, typ))
-	p, err := scheme.NewObject(typ)
-	require.NoError(t, err)
-	retrievedResourcePlugin, err := registry.GetResourceInputPlugin(ctx, p)
+	capability := dummyCapability([]byte(`{}`))
+	require.NoError(t, registry.AddPlugin(plugin, &capability))
+	retrievedResourcePlugin, err := registry.GetResourceInputPlugin(ctx, &runtime.Raw{Type: dummyType})
 	require.NoError(t, err)
 	resource, err := retrievedResourcePlugin.ProcessResource(ctx, &constructor.Resource{
 		ElementMeta: constructor.ElementMeta{
@@ -84,11 +85,8 @@ func TestPluginFlow(t *testing.T) {
 		Type:     "type",
 		Relation: "local",
 		AccessOrInput: constructor.AccessOrInput{
-			Access: &runtime.Raw{
-				Type: runtime.Type{
-					Version: "test-access",
-					Name:    "v1",
-				},
+			Input: &runtime.Raw{
+				Type: dummyType,
 				Data: []byte(`{ "access": "v1" }`),
 			},
 		},
@@ -96,7 +94,7 @@ func TestPluginFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "test-resource", resource.ProcessedResource.Name)
 
-	retrievedSourcePlugin, err := registry.GetSourceInputPlugin(ctx, p)
+	retrievedSourcePlugin, err := registry.GetSourceInputPlugin(ctx, &runtime.Raw{Type: dummyType})
 	require.NoError(t, err)
 	source, err := retrievedSourcePlugin.ProcessSource(ctx, &constructor.Source{
 		ElementMeta: constructor.ElementMeta{
@@ -107,11 +105,8 @@ func TestPluginFlow(t *testing.T) {
 		},
 		Type: "type",
 		AccessOrInput: constructor.AccessOrInput{
-			Access: &runtime.Raw{
-				Type: runtime.Type{
-					Version: "test-access",
-					Name:    "v1",
-				},
+			Input: &runtime.Raw{
+				Type: dummyType,
 				Data: []byte(`{ "access": "v1" }`),
 			},
 		},
@@ -121,38 +116,94 @@ func TestPluginFlow(t *testing.T) {
 }
 
 func TestRegisterInternalResourceInputPlugin(t *testing.T) {
-	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	dummytype.MustAddToScheme(scheme)
-	registry := NewInputRepositoryRegistry(ctx)
-	p := &mockResourceInputPlugin{}
-	require.NoError(t, RegisterInternalResourceInputPlugin(scheme, registry, p, &dummyv1.Repository{}))
-	retrievedPlugin, err := registry.GetResourceInputPlugin(ctx, &dummyv1.Repository{})
-	require.NoError(t, err)
-	require.Equal(t, p, retrievedPlugin)
-	_, err = retrievedPlugin.ProcessResource(ctx, &constructor.Resource{}, nil)
-	require.NoError(t, err)
-	require.True(t, p.processCalled)
-}
+	ctx := t.Context()
+	r := require.New(t)
 
-func TestRegisterInternalSourceInputPlugin(t *testing.T) {
-	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	dummytype.MustAddToScheme(scheme)
 	registry := NewInputRepositoryRegistry(ctx)
-	p := &mockSourceInputPlugin{}
-	require.NoError(t, RegisterInternalSourcePlugin(scheme, registry, p, &dummyv1.Repository{}))
-	retrievedPlugin, err := registry.GetSourceInputPlugin(ctx, &dummyv1.Repository{})
-	require.NoError(t, err)
-	require.Equal(t, p, retrievedPlugin)
-	_, err = retrievedPlugin.ProcessSource(ctx, &constructor.Source{}, nil)
-	require.NoError(t, err)
-	require.True(t, p.processCalled)
+	resourcePlugin := &mockResourceInputPlugin{}
+	sourcePlugin := &mockSourceInputPlugin{}
+	r.NoError(registry.RegisterInternalResourceInputPlugin(resourcePlugin))
+	r.NoError(registry.RegisterInternalSourceInputPlugin(sourcePlugin))
+
+	tests := []struct {
+		name      string
+		inputSpec runtime.Typed
+		err       require.ErrorAssertionFunc
+	}{
+		{
+			name:      "prototype",
+			inputSpec: &dummyv1.Repository{},
+			err:       require.NoError,
+		},
+		{
+			name: "canonical type",
+			inputSpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.Type,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "short type",
+			inputSpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.ShortType,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "invalid type",
+			inputSpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "NonExistingType",
+					Version: "v1",
+				},
+			},
+			err: require.Error,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name+"resource input", func(t *testing.T) {
+			resourceInputMethod, err := registry.GetResourceInputPlugin(ctx, tc.inputSpec)
+			tc.err(t, err)
+			if err != nil {
+				return
+			}
+			r.NotNil(resourceInputMethod)
+			r.Equal(resourcePlugin, resourceInputMethod)
+
+			_, err = resourceInputMethod.ProcessResource(ctx, &constructor.Resource{}, nil)
+			require.NoError(t, err)
+			require.True(t, resourcePlugin.processCalled)
+		})
+		t.Run(tc.name+"source input", func(t *testing.T) {
+			sourceInputMethod, err := registry.GetSourceInputPlugin(ctx, tc.inputSpec)
+			tc.err(t, err)
+			if err != nil {
+				return
+			}
+			r.NotNil(sourceInputMethod)
+			r.Equal(sourcePlugin, sourceInputMethod)
+
+			_, err = sourceInputMethod.ProcessSource(ctx, &constructor.Source{}, nil)
+			require.NoError(t, err)
+			require.True(t, sourcePlugin.processCalled)
+		})
+	}
 }
 
 type mockResourceInputPlugin struct {
 	credCalled    bool
 	processCalled bool
+}
+
+func (m *mockResourceInputPlugin) GetInputMethodScheme() *runtime.Scheme {
+	return dummytype.Scheme
 }
 
 func (m *mockResourceInputPlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error) {
@@ -170,6 +221,10 @@ var _ constructor2.ResourceInputMethod = (*mockResourceInputPlugin)(nil)
 type mockSourceInputPlugin struct {
 	credCalled    bool
 	processCalled bool
+}
+
+func (m *mockSourceInputPlugin) GetInputMethodScheme() *runtime.Scheme {
+	return dummytype.Scheme
 }
 
 func (m *mockSourceInputPlugin) GetSourceCredentialConsumerIdentity(ctx context.Context, source *constructor.Source) (identity runtime.Identity, err error) {

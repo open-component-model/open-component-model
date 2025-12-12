@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -123,8 +124,8 @@ func TestRepository_GetComponentVersion(t *testing.T) {
 	r.NoError(err, "Failed to add component version when it should succeed")
 
 	desc, err = repo.GetComponentVersion(ctx, "test-component", "1.0.0")
-	r.NoError(err, "Expected error when getting non-existent component version")
-	r.NotNil(desc, "Expected nil descriptor when getting non-existent component version")
+	r.NoError(err, "No error expected when getting existing component version")
+	r.NotNil(desc, "Expected non-nil descriptor when getting existing component version")
 
 }
 
@@ -397,6 +398,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 				newRes, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, tc.resource, b)
 				r.NoError(err, "Failed to add test resource")
 				r.NotNil(newRes, "Resource should not be nil after adding")
+				desc.Component.Resources[0] = *newRes
 
 				// Then add the component version
 				err = repo.AddComponentVersion(ctx, desc)
@@ -408,7 +410,6 @@ func TestRepository_GetLocalResource(t *testing.T) {
 
 			// Test getting the resource
 			blob, _, err := repo.GetLocalResource(ctx, desc.Component.Name, desc.Component.Version, tc.identity)
-
 			if tc.expectError {
 				r.Error(err, "Expected error but got none")
 				if tc.errorContains != "" {
@@ -426,7 +427,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 					defer reader.Close()
 
 					content, err := io.ReadAll(reader)
-					r.NoError(err, "Failed to read blob content")
+					r.NoError(err, fmt.Errorf("failed to read blob content: %w", err))
 
 					// If the content is gzipped (starts with gzip magic number), decompress it
 					if len(content) >= 2 && content[0] == 0x1f && content[1] == 0x8b {
@@ -855,6 +856,7 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 	newRes, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, resource, b)
 	r.NoError(err, "Failed to add OCI layout resource")
 	r.NotNil(newRes, "Resource should not be nil after adding")
+	desc.Component.Resources[0] = *newRes
 
 	// Add the component version
 	err = repo.AddComponentVersion(ctx, desc)
@@ -1316,6 +1318,7 @@ func TestRepository_GetLocalSource(t *testing.T) {
 				newSrc, err := repo.AddLocalSource(ctx, desc.Component.Name, desc.Component.Version, tc.source, b)
 				r.NoError(err, "Failed to add test source")
 				r.NotNil(newSrc, "Source should not be nil after adding")
+				desc.Component.Sources[0] = *newSrc
 
 				// Then add the component version
 				err = repo.AddComponentVersion(ctx, desc)
@@ -1555,7 +1558,8 @@ func TestRepositoryHealthCheck(t *testing.T) {
 		// Test health check - should fail for unreachable URL
 		err = repo.CheckHealth(ctx)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to create registry client")
+		// Should fail with ping error containing the domain
+		assert.Contains(t, err.Error(), "failed to ping registry")
 	})
 
 	t.Run("URL resolver health check with malformed URL fails", func(t *testing.T) {
@@ -1571,5 +1575,7 @@ func TestRepositoryHealthCheck(t *testing.T) {
 		// Test health check - should fail for malformed URL
 		err = repo.CheckHealth(ctx)
 		require.Error(t, err)
+		// Should fail with ping error containing the URL
+		assert.Contains(t, err.Error(), "failed to ping registry")
 	})
 }

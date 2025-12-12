@@ -1,10 +1,17 @@
+# https://ocm.software/dev/docs/getting-started/prerequisites/
 version: '3'
 
 dotenv: ['.env', '.env.local']
 
+output: prefixed
+
 includes:
   tools:
     taskfile: ./tools.Taskfile.yml
+  bindings/go/cel:
+    optional: true
+    taskfile: ./bindings/go/cel/Taskfile.yml
+    dir: ./bindings/go/cel
   bindings/go/credentials:
     optional: true
     taskfile: ./bindings/go/credentials/Taskfile.yml
@@ -89,6 +96,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/signing/Taskfile.yml
     dir: ./bindings/go/signing
+  bindings/go/transform:
+    optional: true
+    taskfile: ./bindings/go/transform/Taskfile.yml
+    dir: ./bindings/go/transform
   cli:
     optional: true
     taskfile: ./cli/Taskfile.yml
@@ -104,8 +115,7 @@ includes:
 
 vars:
   GO_MODULES:
-    sh: find {{ .ROOT_DIR }} -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/||'
-
+    sh: find '{{ .ROOT_DIR }}' -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/||'
 
 tasks:
   default:
@@ -141,12 +151,18 @@ tasks:
       - go work init
       - for: { var: GO_MODULES }
         cmd: 'go work use {{.ITEM}}'
-      - go work sync
+
+  tidy:
+    desc: "Run go mod tidy on all Go modules in the project"
+    cmds:
+      - for: { var: GO_MODULES }
+        cmd: 'cd {{.ITEM}} && go mod tidy'
 
   generate:
     desc: "Run all Code Generators in the project"
-    cmds:
+    deps:
       - task: 'bindings/go/generator:ocmtypegen/generate'
+      - task: 'bindings/go/generator:jsonschemagen/generate'
       - task: 'tools:deepcopy-gen/generate-deepcopy'
       - task: 'kubernetes/controller:manifests'
       - task: 'kubernetes/controller:generate'

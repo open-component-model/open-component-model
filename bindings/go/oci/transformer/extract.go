@@ -47,6 +47,10 @@ func New(logger *slog.Logger) *Transformer {
 	}
 }
 
+func (t *Transformer) GetTransformerScheme() *runtime.Scheme {
+	return spec.Scheme
+}
+
 // TransformBlob transforms an OCI Layout blob by extracting its main artifacts.
 func (t *Transformer) TransformBlob(ctx context.Context, input blob.ReadOnlyBlob, config runtime.Typed, _ map[string]string) (_ blob.ReadOnlyBlob, err error) {
 	store, err := ocitar.ReadOCILayout(ctx, input)
@@ -63,10 +67,10 @@ func (t *Transformer) TransformBlob(ctx context.Context, input blob.ReadOnlyBlob
 	}
 
 	// Parse configuration
-	var extractConfig *spec.Config
+	extractConfig := &spec.Config{}
 	if config != nil {
-		if cfg, ok := config.(*spec.Config); ok {
-			extractConfig = cfg
+		if err := t.GetTransformerScheme().Convert(config, extractConfig); err != nil {
+			return nil, fmt.Errorf("failed to convert config: %w", err)
 		}
 	}
 

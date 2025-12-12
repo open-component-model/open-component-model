@@ -44,6 +44,21 @@ type Vertex[T cmp.Ordered] struct {
 	InDegree, OutDegree int
 }
 
+func (v *Vertex[T]) Clone() *Vertex[T] {
+	clone := &Vertex[T]{
+		ID:        v.ID,
+		InDegree:  v.InDegree,
+		OutDegree: v.OutDegree,
+	}
+	clone.Attributes = maps.Clone(v.Attributes)
+	clone.Edges = make(map[T]map[string]any, len(v.Edges))
+	for k, v := range v.Edges {
+		clone.Edges[k] = maps.Clone(v)
+	}
+
+	return clone
+}
+
 // DirectedAcyclicGraph represents a directed acyclic graph.
 type DirectedAcyclicGraph[T cmp.Ordered] struct {
 	// Vertices stores the nodes in the graph
@@ -58,9 +73,11 @@ func NewDirectedAcyclicGraph[T cmp.Ordered]() *DirectedAcyclicGraph[T] {
 }
 
 func (d *DirectedAcyclicGraph[T]) Clone() *DirectedAcyclicGraph[T] {
-	return &DirectedAcyclicGraph[T]{
-		Vertices: maps.Clone(d.Vertices),
+	clone := &DirectedAcyclicGraph[T]{Vertices: make(map[T]*Vertex[T], len(d.Vertices))}
+	for k, v := range d.Vertices {
+		clone.Vertices[k] = v.Clone()
 	}
+	return clone
 }
 
 // AddVertex adds a new node to the graph.
@@ -68,7 +85,7 @@ func (d *DirectedAcyclicGraph[T]) AddVertex(id T, attributes ...map[string]any) 
 	if _, exists := d.Vertices[id]; exists {
 		return fmt.Errorf("node %v already exists", id)
 	}
-	d.Vertices[id] = &Vertex[T]{
+	vertex := &Vertex[T]{
 		ID:         id,
 		Attributes: make(map[string]any),
 		Edges:      make(map[T]map[string]any),
@@ -77,8 +94,32 @@ func (d *DirectedAcyclicGraph[T]) AddVertex(id T, attributes ...map[string]any) 
 	}
 
 	for _, attributes := range attributes {
-		maps.Copy(d.Vertices[id].Attributes, attributes)
+		maps.Copy(vertex.Attributes, attributes)
 	}
+	d.Vertices[id] = vertex
+	return nil
+}
+
+func (d *DirectedAcyclicGraph[T]) DeleteEdge(from, to T) error {
+	fromNode, fromExists := d.Vertices[from]
+	toNode, toExists := d.Vertices[to]
+	if !fromExists {
+		return fmt.Errorf("node %v does not exist", from)
+	}
+	if !toExists {
+		return fmt.Errorf("node %v does not exist", to)
+	}
+
+	if _, exists := fromNode.Edges[to]; !exists {
+		return fmt.Errorf("edge from %v to %v does not exist", from, to)
+	}
+
+	// Remove the edge
+	delete(fromNode.Edges, to)
+	// Decrement the out-degree and in-degree
+	fromNode.OutDegree--
+	toNode.InDegree--
+
 	return nil
 }
 
@@ -89,12 +130,9 @@ func (d *DirectedAcyclicGraph[T]) DeleteVertex(id T) error {
 	}
 
 	// Remove all edges to this node
-	for _, node := range d.Vertices {
-		if _, exists := node.Edges[id]; exists {
-			// Decrement the in-degree of the node
-			d.Vertices[node.ID].InDegree--
-			// Remove the edge from the node
-			delete(node.Edges, id)
+	for edge := range d.Vertices[id].Edges {
+		if err := d.DeleteEdge(id, edge); err != nil {
+			return err
 		}
 	}
 
@@ -292,7 +330,7 @@ func (d *DirectedAcyclicGraph[T]) HasCycle() (bool, []string) {
 
 func (d *DirectedAcyclicGraph[T]) Contains(v T) (ok bool) {
 	_, ok = d.Vertices[v]
-	return
+	return ok
 }
 
 // Reverse converts Parent → Child to Child → Parent.
@@ -302,15 +340,15 @@ func (d *DirectedAcyclicGraph[T]) Reverse() (*DirectedAcyclicGraph[T], error) {
 
 	// Ensure all vertices exist in the new graph
 	for _, parent := range d.Vertices {
-		if err := reverse.AddVertex(parent.ID); err != nil {
+		if err := reverse.AddVertex(parent.ID, maps.Clone(parent.Attributes)); err != nil {
 			return nil, err
 		}
 	}
 
 	// Reverse the edges: Child -> Parent instead of Parent -> Child
 	for _, parent := range d.Vertices {
-		for child := range parent.Edges {
-			if err := reverse.AddEdge(child, parent.ID); err != nil {
+		for child, attributes := range parent.Edges {
+			if err := reverse.AddEdge(child, parent.ID, maps.Clone(attributes)); err != nil {
 				return nil, err
 			}
 		}

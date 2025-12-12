@@ -296,6 +296,18 @@ func NewRepositorySpec(name string, components map[string][]string, failPolicy .
 
 type MockProvider struct{}
 
+func (m MockProvider) GetComponentVersionRepositoryScheme() *runtime.Scheme {
+	//TODO implement me
+	panic("implement me")
+}
+
+var _ repository.ComponentVersionRepositoryProvider = MockProvider{}
+
+func (m MockProvider) GetJSONSchemaForRepositorySpecification(typ runtime.Type) ([]byte, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m MockProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
 	return nil, nil
 }

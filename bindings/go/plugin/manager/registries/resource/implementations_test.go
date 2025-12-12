@@ -33,8 +33,8 @@ func TestGetGlobalResource(t *testing.T) {
 	plugin := NewResourceRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ResourceRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+		PluginType: v1.ResourceRepositoryPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	ctx := context.Background()
 	_, err := plugin.GetGlobalResource(ctx, &v1.GetGlobalResourceRequest{
@@ -48,10 +48,7 @@ func TestGetGlobalResource(t *testing.T) {
 			Type:     "test",
 			Relation: descriptorv2.LocalRelation,
 			Access: &runtime.Raw{
-				Type: runtime.Type{
-					Name:    "test",
-					Version: "v1",
-				},
+				Type: dummyType,
 				Data: []byte(`{ "foo": "bar" }`),
 			},
 		},
@@ -77,8 +74,8 @@ func TestAddGlobalResource(t *testing.T) {
 	plugin := NewResourceRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ResourceRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+		PluginType: v1.ResourceRepositoryPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	ctx := context.Background()
 	_, err := plugin.AddGlobalResource(ctx, &v1.AddGlobalResourceRequest{
@@ -92,10 +89,7 @@ func TestAddGlobalResource(t *testing.T) {
 			Type:     "test",
 			Relation: descriptorv2.LocalRelation,
 			Access: &runtime.Raw{
-				Type: runtime.Type{
-					Name:    "test",
-					Version: "v1",
-				},
+				Type: dummyType,
 				Data: []byte(`{ "foo": "bar" }`),
 			},
 		},
@@ -119,8 +113,8 @@ func TestPing(t *testing.T) {
 	plugin := NewResourceRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ResourceRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+		PluginType: v1.ResourceRepositoryPluginType,
+	}, server.URL, v1.CapabilitySpec{})
 
 	ctx := context.Background()
 	err := plugin.Ping(ctx)
@@ -147,18 +141,15 @@ func TestValidateEndpoint(t *testing.T) {
 	plugin := NewResourceRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ResourceRepositoryPluginType,
-	}, server.URL, []byte(validSchema))
+		PluginType: v1.ResourceRepositoryPluginType,
+	}, server.URL, dummyCapability([]byte(validSchema)))
 
 	// Test valid object
 	validObj := &runtime.Raw{
-		Type: runtime.Type{
-			Name:    "test",
-			Version: "v1",
-		},
+		Type: dummyType,
 		Data: []byte(`{ "type": "test" }`),
 	}
-	err := plugin.validateEndpoint(validObj, []byte(validSchema))
+	err := plugin.validateEndpoint(validObj)
 	require.NoError(t, err)
 
 	// Test invalid object
@@ -168,6 +159,6 @@ func TestValidateEndpoint(t *testing.T) {
 			Version: "v1",
 		},
 	}
-	err = plugin.validateEndpoint(invalidObj, []byte(validSchema))
+	err = plugin.validateEndpoint(invalidObj)
 	require.Error(t, err)
 }

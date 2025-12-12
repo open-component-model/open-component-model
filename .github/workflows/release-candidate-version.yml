@@ -1,0 +1,97 @@
+name: Release Candidate Version
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        required: true
+        type: string
+        description: "Branch to cut to, must match regex releases/v0.[0-9]+"
+      component_path:
+        required: true
+        type: string
+        description: "Path to the CLI component, e.g. cli"
+    outputs:
+      new_tag:
+        description: "New RC tag name (e.g. cli/v0.1.0-rc.3)"
+        value: ${{ jobs.prepare.outputs.new_tag }}
+      new_version:
+        description: "New RC version (e.g. v0.1.0-rc.3)"
+        value: ${{ jobs.prepare.outputs.new_version }}
+      base_version:
+        description: "Base version (e.g. v0.1.0-rc.1 -> v0.1.0)"
+        value: ${{ jobs.prepare.outputs.base_version }}
+      promotion_tag:
+        description: "Tag to be used for promotion later, eg. cli/v0.1.0-rc.1 -> cli/v0.1.0"
+        value: ${{ jobs.prepare.outputs.promotion_tag }}
+      changelog_b64:
+        description: "Changelog encoded in base64 for release body"
+        value: ${{ jobs.prepare.outputs.changelog_b64 }}
+
+jobs:
+  prepare:
+    name: Tag & Changelog
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.compute.outputs.new_tag }}
+      new_version: ${{ steps.compute.outputs.new_version }}
+      base_version: ${{ steps.compute.outputs.base_version }}
+      promotion_tag: ${{ steps.compute.outputs.promotion_tag }}
+      changelog_b64: ${{ steps.summarize.outputs.changelog_b64 }}
+    steps:
+      # Checkout the repository and target branch
+      - name: Checkout Repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          sparse-checkout: |
+            ${{ inputs.component_path }}
+            .github/scripts
+          fetch-depth: 0
+          ref: ${{ inputs.branch }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Compute new RC version based on branch and existing tags
+      - name: Compute new RC version
+        id: compute
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          BRANCH: ${{ inputs.branch }}
+          COMPONENT_PATH: ${{ inputs.component_path }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/compute-rc-version.js');
+            await script.default({ core, github, context });
+
+      - name: Generate changelog with git-cliff
+        uses: orhun/git-cliff-action@d77b37db2e3f7398432d34b72a12aa3e2ba87e51 # v4
+        id: git-cliff
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          config: ${{ inputs.component_path }}/cliff.toml
+          args: |
+            --include-path "${{ inputs.component_path }}/**" \
+            --tag-pattern "^${{ inputs.component_path }}/v\\d+\\.\\d+\\.\\d+(?:[-\\w\\.]+)?$" \
+            --ignore-tags "^${{ inputs.component_path }}/v\\d+\\.\\d+\\.\\d+-rc\\.\\d+$" \
+            --tag "${{ steps.compute.outputs.new_tag }}" \
+            -o "$RUNNER_TEMP/CHANGELOG.md" \
+            --use-branch-tags \
+            --latest
+
+      - name: Summarize changelog
+        id: summarize
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          CHANGELOG_FILE: ${{ runner.temp }}/CHANGELOG.md
+          TAG: ${{ steps.compute.outputs.new_tag }}
+        with:
+          script: |
+            const fs = require("fs");
+            const log = fs.existsSync(process.env.CHANGELOG_FILE)
+              ? fs.readFileSync(process.env.CHANGELOG_FILE, "utf8").trim()
+              : "No changelog.";
+            const encoded = Buffer.from(log).toString("base64");
+            core.setOutput("changelog_b64", encoded);
+            await core.summary.addRaw(log).write();

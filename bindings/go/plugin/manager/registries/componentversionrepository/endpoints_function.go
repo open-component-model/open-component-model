@@ -3,8 +3,9 @@ package componentversionrepository
 import (
 	"fmt"
 
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
+	ocmrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -16,13 +17,9 @@ import (
 // during lookup the right endpoint + type is used.
 func RegisterComponentVersionRepository[T runtime.Typed](
 	proto T,
-	handler v1.ReadWriteOCMRepositoryPluginContract[T],
+	handler ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[T],
 	c *endpoints.EndpointBuilder,
 ) error {
-	if c.CurrentTypes.Types == nil {
-		c.CurrentTypes.Types = map[types.PluginType][]types.Type{}
-	}
-
 	typ, err := c.Scheme.TypeForPrototype(proto)
 	if err != nil {
 		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
@@ -64,22 +61,21 @@ func RegisterComponentVersionRepository[T runtime.Typed](
 		},
 	)
 
-	schema, err := runtime.GenerateJSONSchemaForType(proto)
+	schema, err := plugins.GenerateJSONSchemaForType(proto)
 	if err != nil {
 		return fmt.Errorf("failed to generate jsonschema for prototype %T: %w", proto, err)
 	}
 
-	c.CurrentTypes.Types[types.ComponentVersionRepositoryPluginType] = append(c.CurrentTypes.Types[types.ComponentVersionRepositoryPluginType],
-		// we only need ONE type because we have multiple endpoints, but those endpoints
-		// support the same type with the same schema... Figure out how to differentiate
-		// if there are multiple schemas and multiple types so which belongs to which?
-		// Maybe it's enough to have a convention where the first typee is the FROM and
-		// the second type is the TO part when we construct the type affiliation to the
-		// implementation.
-		types.Type{
-			Type:       typ,
-			JSONSchema: schema,
-		})
+	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &ocmrepositoryv1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(ocmrepositoryv1.ComponentVersionRepositoryPluginType)),
+		SupportedRepositorySpecTypes: []types.Type{
+			{
+				Type:       typ,
+				Aliases:    nil,
+				JSONSchema: schema,
+			},
+		},
+	})
 
 	return nil
 }

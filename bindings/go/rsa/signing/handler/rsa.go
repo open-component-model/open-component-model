@@ -9,7 +9,7 @@ import (
 )
 
 // signRSA signs dig using the requested RSA algorithm and hash.
-func signRSA(algorithm string, priv *rsa.PrivateKey, h crypto.Hash, dig []byte) ([]byte, error) {
+func signRSA(algorithm v1alpha1.SignatureAlgorithm, priv *rsa.PrivateKey, h crypto.Hash, dig []byte) ([]byte, error) {
 	switch algorithm {
 	case v1alpha1.AlgorithmRSASSAPSS:
 		return rsa.SignPSS(rand.Reader, priv, h, dig, nil)
@@ -21,7 +21,7 @@ func signRSA(algorithm string, priv *rsa.PrivateKey, h crypto.Hash, dig []byte) 
 }
 
 // verifyRSA verifies sig over dig using the requested RSA algorithm and hash.
-func verifyRSA(algorithm string, pub *rsa.PublicKey, h crypto.Hash, dig, sig []byte) error {
+func verifyRSA(algorithm v1alpha1.SignatureAlgorithm, pub *rsa.PublicKey, h crypto.Hash, dig, sig []byte) error {
 	switch algorithm {
 	case v1alpha1.AlgorithmRSASSAPSS:
 		return rsa.VerifyPSS(pub, h, dig, sig, nil)

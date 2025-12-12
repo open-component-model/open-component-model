@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "test/EnumConstOneOf.schema.json",
+  "title": "EnumConstOneOf",
+  "type": "object",
+  "properties": {
+    "custom": {
+      "type": "string",
+      "enum": ["A", "B"],
+      "oneOf": [
+        { "const": "B" },
+        { "const": "C" }
+      ]
+    }
+  }
+}

@@ -48,9 +48,13 @@ func init() {
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type Config struct {
+	// +ocm:jsonschema-gen:enum=ocm.config.ocm.software/v1
+	// +ocm:jsonschema-gen:enum:deprecated=ocm.config.ocm.software
 	Type runtime.Type `json:"type"`
 
+	//nolint:gocritic // Deprecated field is okay
 	// With aliases repository alias names can be mapped to a repository specification.
 	// The alias name can be used in a string notation for an OCM repository.
 	// Deprecated: Aliases are deprecated and are ignored with a warning message.
@@ -98,6 +102,7 @@ type Resolver struct {
 	// means higher priority (default DefaultLookupPriority).
 	// Pointer because this is optional. To default the priority, we need to be
 	// able to distinguish between "not set" and "set to zero".
+	// +ocm:jsonschema-gen:minimum=0
 	Priority *int `json:"priority,omitempty"`
 }
 

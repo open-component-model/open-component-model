@@ -6,13 +6,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -39,8 +39,10 @@ func TestRegisterBlobTransformer(t *testing.T) {
 	proto := &dummyv1.Repository{}
 	plugin := &mockPlugin{}
 	r.NoError(RegisterBlobTransformer(proto, plugin, builder))
-	content, err := json.Marshal(builder)
+	rawPluginSpec, err := pluginruntime.ConvertToSpec(&builder.PluginSpec)
 	r.NoError(err)
+	// Validate registered types
+	content, err := json.Marshal(rawPluginSpec)
 	r.Contains(string(content), "blobTransformer")
 
 	handlers := builder.GetHandlers()
@@ -48,8 +50,11 @@ func TestRegisterBlobTransformer(t *testing.T) {
 	r.Equal(TransformBlob, handlers[0].Location)
 	r.Equal(Identity, handlers[1].Location)
 
-	typesList := builder.CurrentTypes.Types[types.BlobTransformerPluginType]
-	r.Len(typesList, 1)
-	r.Equal("DummyRepository/v1", typesList[0].Type.String())
-	r.NotEmpty(typesList[0].JSONSchema)
+	capabilityList := builder.PluginSpec.CapabilitySpecs
+	r.Len(capabilityList, 1)
+	capability := v1.CapabilitySpec{}
+	r.NoError(v1.Scheme.Convert(capabilityList[0], &capability))
+	typeInfo := capability.SupportedTransformerSpecTypes[0]
+	r.Equal("DummyRepository/v1", typeInfo.Type.String())
+	r.NotEmpty(typeInfo.JSONSchema)
 }

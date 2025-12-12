@@ -43,8 +43,16 @@
           "$ref": "#/$defs/nonEmptyString"
         },
         "value": {
-          "description": "Value of the label",
-          "$ref": "#/$defs/nonEmptyString"
+          "oneOf": [
+            {
+              "description": "Value of the label",
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            {
+              "type": "object",
+              "description": "an arbitrarily complex structured value"
+            }
+          ]
         },
         "version": {
           "description": "Version of the label",
@@ -361,6 +369,16 @@
               "description": "Input specification for the resource",
               "$ref": "#/$defs/input"
             }
+          }
+        },
+        {
+          "required": ["input"],
+          "properties": {
+            "input": {
+              "description": "Input specification for the resource",
+              "$ref": "#/$defs/input"
+            },
+            "relation": false
           }
         }
       ]

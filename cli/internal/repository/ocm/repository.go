@@ -1,158 +1,24 @@
-// Package ocm provides functionality for interacting with OCM (Open Component Model) repositories.
-// It offers a high-level interface for managing component versions, handling credentials,
-// and performing repository operations through plugin-based implementations.
 package ocm
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
-	"math"
 	"slices"
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
 
-	"ocm.software/open-component-model/bindings/go/blob"
-	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
-	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
-	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
-	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-// ComponentRepository is a wrapper around the [v1.ReadWriteOCMRepositoryPluginContract] that provides
-// useful CLI relevant helper functions that make high level operations easier.
-// It manages component references, repository specifications, and credentials for OCM operations.
-type ComponentRepository struct {
-	ref  *compref.Ref                          // Component reference containing repository and component information
-	spec runtime.Typed                         // Repository specification
-	base repository.ComponentVersionRepository // Base repository plugin contract
-
-	credentials map[string]string // Credentials for repository access
-}
-
-// NewFromRef creates a new ComponentRepository instance for the given component reference.
-// It resolves the appropriate plugin and credentials for the repository.
-func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, componentReference string) (*ComponentRepository, error) {
-	ref, err := compref.Parse(componentReference)
-	if err != nil {
-		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
-	}
-
-	var creds map[string]string
-	identity, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, ref.Repository)
-	if err == nil {
-		if graph != nil {
-			if creds, err = graph.Resolve(ctx, identity); err != nil {
-				slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", ref.Repository, err.Error()))
-			}
-		}
-	} else {
-		slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", ref.Repository, "error", err)
-	}
-
-	prov, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, ref.Repository, creds)
-	if err != nil {
-		return nil, fmt.Errorf("getting component version repository for %q failed: %w", ref.Repository, err)
-	}
-
-	return &ComponentRepository{
-		ref:         ref,
-		spec:        ref.Repository,
-		base:        prov,
-		credentials: creds,
-	}, nil
-}
-
-// NewFromRefWithFallbackRepo creates a new ComponentRepository instance for the given component reference.
-// It resolves the appropriate plugin and credentials for the repository.
-//
-//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, resolvers []*resolverruntime.Resolver, componentReference string) (*ComponentRepository, error) {
-	ref, err := compref.Parse(componentReference)
-	if err != nil {
-		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
-	}
-	if len(resolvers) == 0 {
-		//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-		resolvers = make([]*resolverruntime.Resolver, 0)
-	}
-
-	if ref.Repository != nil {
-		//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-		resolvers = append(resolvers, &resolverruntime.Resolver{
-			Repository: ref.Repository,
-			// Add the current repository as a resolver with the highest possible
-			// priority.
-			Priority: math.MaxInt,
-		})
-	}
-
-	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-	fallbackRepo, err := fallback.NewFallbackRepository(ctx, manager.ComponentVersionRepositoryRegistry, graph, resolvers)
-	if err != nil {
-		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
-	}
-	return &ComponentRepository{
-		ref:  ref,
-		base: fallbackRepo,
-	}, nil
-}
-
-func (repo *ComponentRepository) Version(ctx context.Context) (string, error) {
-	version := repo.ref.Version
-	if version == "" {
-		versions, err := repo.Versions(ctx, VersionOptions{LatestOnly: true})
-		if err != nil {
-			return "", fmt.Errorf("getting component versions failed: %w", err)
-		}
-		if len(versions) == 0 {
-			return "", fmt.Errorf("no versions found for component %q", repo.ref.Component)
-		}
-		if len(versions) > 1 {
-			return "", fmt.Errorf("multiple versions found for component %q, expected only one: %v", repo.ref.Component, versions)
-		}
-		version = versions[0]
-	}
-	return version, nil
-}
-
-func (repo *ComponentRepository) GetComponentVersion(ctx context.Context) (*descriptor.Descriptor, error) {
-	version, err := repo.Version(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("getting component version failed: %w", err)
-	}
-
-	desc, err := repo.base.GetComponentVersion(ctx, repo.ref.Component, version)
-	if err != nil {
-		return nil, fmt.Errorf("getting component descriptor for %q failed: %w", repo.ref.Component, err)
-	}
-
-	return desc, nil
-}
-
-func (repo *ComponentRepository) GetLocalResource(ctx context.Context, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
-	version, err := repo.Version(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("getting component version failed: %w", err)
-	}
-
-	return repo.base.GetLocalResource(ctx, repo.ref.Component, version, identity)
-}
-
-func (repo *ComponentRepository) ComponentVersionRepository() repository.ComponentVersionRepository {
-	return repo.base
-}
-
-// ComponentReference returns the component reference associated with this repository.
-func (repo *ComponentRepository) ComponentReference() *compref.Ref {
-	return repo.ref
+// ComponentVersionRepositoryForComponentProvider provides a [repository.ComponentVersionRepository] based on a given identity.
+// Implementations may use different strategies to resolve the repository, such as using component references,
+// configuration-based resolvers, or other mechanisms.
+type ComponentVersionRepositoryForComponentProvider interface {
+	GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error)
 }
 
 // GetComponentVersionsOptions configures how component versions are retrieved.
@@ -163,8 +29,16 @@ type GetComponentVersionsOptions struct {
 
 // GetComponentVersions retrieves component version descriptors based on the provided options.
 // It supports concurrent retrieval of multiple versions with a configurable limit.
-func (repo *ComponentRepository) GetComponentVersions(ctx context.Context, opts GetComponentVersionsOptions) ([]*descriptor.Descriptor, error) {
-	versions, err := repo.Versions(ctx, opts.VersionOptions)
+func GetComponentVersions(ctx context.Context, opts GetComponentVersionsOptions, component, version string, repo repository.ComponentVersionRepository) ([]*descriptor.Descriptor, error) {
+	var (
+		versions []string
+		err      error
+	)
+	if version != "" {
+		versions = append(versions, version)
+	} else {
+		versions, err = VersionsWithFiltering(ctx, component, repo, opts.VersionOptions)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("getting component versions failed: %w", err)
 	}
@@ -173,10 +47,13 @@ func (repo *ComponentRepository) GetComponentVersions(ctx context.Context, opts 
 	var descMu sync.Mutex
 
 	eg, ctx := errgroup.WithContext(ctx)
+	if opts.ConcurrencyLimit == 0 {
+		opts.ConcurrencyLimit = -1
+	}
 	eg.SetLimit(opts.ConcurrencyLimit)
 	for i, version := range versions {
 		eg.Go(func() error {
-			desc, err := repo.base.GetComponentVersion(ctx, repo.ref.Component, version)
+			desc, err := repo.GetComponentVersion(ctx, component, version)
 			if err != nil {
 				return fmt.Errorf("getting component version failed: %w", err)
 			}
@@ -217,14 +94,10 @@ type VersionOptions struct {
 	LatestOnly       bool   // If true, only return the latest version
 }
 
-// Versions retrieve available versions for the component based on the provided options.
+// VersionsWithFiltering retrieve available versions for the component based on the provided options.
 // It supports filtering by semantic version constraints and retrieving only the latest version.
-func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptions) ([]string, error) {
-	if repo.ref.Version != "" {
-		return []string{repo.ref.Version}, nil
-	}
-
-	versions, err := repo.base.ListComponentVersions(ctx, repo.ref.Component)
+func VersionsWithFiltering(ctx context.Context, component string, repo repository.ComponentVersionRepository, opts VersionOptions) ([]string, error) {
+	versions, err := repo.ListComponentVersions(ctx, component)
 	if err != nil {
 		return nil, fmt.Errorf("listing component versions failed: %w", err)
 	}

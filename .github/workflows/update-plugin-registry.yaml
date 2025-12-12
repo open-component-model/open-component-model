@@ -1,0 +1,104 @@
+name: Update Plugin Registry
+
+on:
+  repository_dispatch:
+    types: [plugin-published]
+  workflow_dispatch:
+    inputs:
+      plugin_name:
+        description: "Plugin name (e.g., helminput)"
+        required: true
+        type: string
+      plugin_version:
+        description: "Plugin version (e.g., 0.1.0)"
+        required: true
+        type: string
+      plugin_component:
+        description: "Plugin component name (e.g., ocm.software/plugins/helminput)"
+        required: true
+        type: string
+      dry_run:
+        description: "Perform a dry run without publishing"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  # Repository selection for checkout
+  REGISTRY_CONSTRUCTOR: ${{ github.workspace }}/.github/config/plugin-registry-constructor.yaml
+
+jobs:
+  update-registry:
+    name: Update Plugin Registry
+    runs-on: ubuntu-latest
+    concurrency:
+      group: plugin-registry-publish
+      cancel-in-progress: false  # Queue updates, don't cancel
+    permissions:
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          sparse-checkout: |
+            .github/scripts
+            .github/config
+
+      - name: Extract plugin details
+        id: plugin
+        shell: bash
+        run: |
+          # Handle both repository_dispatch and workflow_dispatch
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            PLUGIN_NAME="${{ github.event.client_payload.plugin_name }}"
+            PLUGIN_VERSION="${{ github.event.client_payload.plugin_version }}"
+            PLUGIN_COMPONENT="${{ github.event.client_payload.plugin_component }}"
+          else
+            PLUGIN_NAME="${{ inputs.plugin_name }}"
+            PLUGIN_VERSION="${{ inputs.plugin_version }}"
+            PLUGIN_COMPONENT="${{ inputs.plugin_component }}"
+          fi
+
+          echo "plugin_name=${PLUGIN_NAME}" >> "$GITHUB_OUTPUT"
+          echo "plugin_version=${PLUGIN_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "plugin_component=${PLUGIN_COMPONENT}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+
+      - name: Login to GHCR
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
+        with:
+          registry-auth: |
+            - registry: ghcr.io
+              username: ${{ github.actor }}
+              password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: OCM Plugin Repository
+        run: |
+          echo "OCM_REPOSITORY=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/plugins" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ github.workspace }}/.github/scripts
+
+      - name: Update plugin registry
+        id: new_version
+        if: ${{ inputs.dry_run != true && github.event_name != 'pull_request' }}
+        env:
+          REGISTRY_CONSTRUCTOR: ${{ env.REGISTRY_CONSTRUCTOR }}
+          REGISTRY_COMPONENT: ocm.software/plugin-registry
+          OCM_REPOSITORY: ${{ env.OCM_REPOSITORY }}
+          PLUGIN_NAME: ${{ steps.plugin.outputs.plugin_name }}
+          PLUGIN_COMPONENT: ${{ steps.plugin.outputs.plugin_component }}
+          PLUGIN_VERSION: ${{ steps.plugin.outputs.plugin_version }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/prepare-registry-constructor.js');
+            await script.default({ core });
+

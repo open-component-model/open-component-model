@@ -144,10 +144,6 @@ func RegisterPlugin[CONTRACT v1.SignatureHandlerContract[T], T runtime.Typed](
 	plugin CONTRACT,
 	c *endpoints.EndpointBuilder,
 ) error {
-	if c.CurrentTypes.Types == nil {
-		c.CurrentTypes.Types = make(map[types.PluginType][]types.Type)
-	}
-
 	typ, err := c.Scheme.TypeForPrototype(proto)
 	if err != nil {
 		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
@@ -173,15 +169,21 @@ func RegisterPlugin[CONTRACT v1.SignatureHandlerContract[T], T runtime.Typed](
 		},
 	)
 
-	schema, err := runtime.GenerateJSONSchemaForType(proto)
+	schema, err := plugins.GenerateJSONSchemaForType(proto)
 	if err != nil {
 		return fmt.Errorf("failed to generate jsonschema for prototype %T: %w", proto, err)
 	}
 
 	// Add resource type to the plugin's types
-	c.CurrentTypes.Types[types.SigningHandlerPluginType] = append(c.CurrentTypes.Types[types.SigningHandlerPluginType], types.Type{
-		Type:       typ,
-		JSONSchema: schema,
+	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
+		SupportedSigningSpecTypes: []types.Type{
+			{
+				Type:       typ,
+				Aliases:    nil,
+				JSONSchema: schema,
+			},
+		},
 	})
 
 	return nil

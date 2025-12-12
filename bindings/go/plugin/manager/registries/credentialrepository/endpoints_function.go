@@ -5,6 +5,7 @@ import (
 
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -19,10 +20,6 @@ func RegisterCredentialRepository[T runtime.Typed](
 	handler v1.CredentialRepositoryPluginContract[T],
 	c *endpoints.EndpointBuilder,
 ) error {
-	if c.CurrentTypes.Types == nil {
-		c.CurrentTypes.Types = map[types.PluginType][]types.Type{}
-	}
-
 	typ, err := c.Scheme.TypeForPrototype(proto)
 	if err != nil {
 		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
@@ -40,16 +37,21 @@ func RegisterCredentialRepository[T runtime.Typed](
 		},
 	)
 
-	schema, err := runtime.GenerateJSONSchemaForType(proto)
+	schema, err := plugins.GenerateJSONSchemaForType(proto)
 	if err != nil {
 		return fmt.Errorf("failed to generate jsonschema for prototype %T: %w", proto, err)
 	}
 
-	c.CurrentTypes.Types[types.CredentialRepositoryPluginType] = append(c.CurrentTypes.Types[types.CredentialRepositoryPluginType],
-		types.Type{
-			Type:       typ,
-			JSONSchema: schema,
-		})
+	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.CredentialRepositoryPluginType)),
+		SupportedCredentialRepositorySpecTypes: []types.Type{
+			{
+				Type:       typ,
+				Aliases:    nil,
+				JSONSchema: schema,
+			},
+		},
+	})
 
 	return nil
 }

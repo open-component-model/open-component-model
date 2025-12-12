@@ -73,6 +73,20 @@ func WaitForResource(ctx context.Context, condition, timeout string, resource ..
 	return err
 }
 
+func MakeServiceAccountClusterAdmin(ctx context.Context, serviceAccountNamespace string, serviceAccountName string) error {
+	cmdArgs := []string{"create", "clusterrolebinding", fmt.Sprintf("%s-admin", serviceAccountName), "--clusterrole=cluster-admin", "--serviceaccount=" + serviceAccountNamespace + ":" + serviceAccountName}
+	cmd := exec.CommandContext(ctx, "kubectl", cmdArgs...)
+	_, err := Run(cmd)
+	return err
+}
+
+func DeleteServiceAccountClusterAdmin(ctx context.Context, serviceAccountName string) error {
+	cmdArgs := []string{"delete", "clusterrolebinding", fmt.Sprintf("%s-admin", serviceAccountName), "--ignore-not-found=true"}
+	cmd := exec.CommandContext(ctx, "kubectl", cmdArgs...)
+	_, err := Run(cmd)
+	return err
+}
+
 // PrepareOCMComponent creates an OCM component from a component-constructor file.
 // After creating the OCM component, the component is transferred to imageRegistry.
 func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, imageRegistry, signingKey string) error {
@@ -200,7 +214,7 @@ func GetOCMResourceImageRef(ctx context.Context, componentReference, resourceNam
 	return r.Items[0].Element.Access.ImageReference, nil
 }
 
-// Create Kubernetes namespace.
+// CreateNamespace creates Kubernetes namespace.
 func CreateNamespace(ctx context.Context, ns string) error {
 	cmd := exec.CommandContext(ctx, "kubectl", "create", "ns", ns)
 	_, err := Run(cmd)
@@ -208,7 +222,7 @@ func CreateNamespace(ctx context.Context, ns string) error {
 	return err
 }
 
-// Delete Kubernetes namespace.
+// DeleteNamespace deletes Kubernetes namespace.
 func DeleteNamespace(ctx context.Context, ns string) error {
 	cmd := exec.CommandContext(ctx, "kubectl", "delete", "ns", ns, "--ignore-not-found=true", "--cascade=foreground")
 	_, err := Run(cmd)

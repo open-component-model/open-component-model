@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode"
 
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -109,6 +110,17 @@ func (ref *Ref) String() string {
 	return sb.String()
 }
 
+func (ref *Ref) Identity() runtime.Identity {
+	id := runtime.Identity{}
+	if ref.Component != "" {
+		id[descruntime.IdentityAttributeName] = ref.Component
+	}
+	if ref.Version != "" {
+		id[descruntime.IdentityAttributeVersion] = ref.Version
+	}
+	return id
+}
+
 // Parse parses an input string into a Ref.
 // Accepted inputs are of the forms
 //
@@ -125,9 +137,16 @@ func (ref *Ref) String() string {
 // This code roughly resembles
 // https://github.com/open-component-model/ocm/blob/2ea69c7ecca1e8be7e9d9f94dfdcac6090f1c69d/api/oci/ref_test.go
 // in a much smaller scope and size and will grow over time.
-func Parse(input string) (*Ref, error) {
+func Parse(input string, opts ...Option) (*Ref, error) {
 	ref := &Ref{}
 	originalInput := input
+
+	parsedOptions := Options{}
+	for _, o := range opts {
+		if err := o.Apply(&parsedOptions); err != nil {
+			return nil, fmt.Errorf("failed to apply option: %w", err)
+		}
+	}
 
 	// Step 1: Extract optional type
 	if idx := strings.Index(input, "::"); idx != -1 {
@@ -144,6 +163,7 @@ func Parse(input string) (*Ref, error) {
 		if !digestRegex.MatchString(digestPart) {
 			return nil, fmt.Errorf("invalid digest %q in %q, must match %q", digestPart, originalInput, DigestRegex)
 		}
+
 		ref.Digest = digestPart
 	}
 
@@ -152,9 +172,16 @@ func Parse(input string) (*Ref, error) {
 	if idx := strings.LastIndex(input, ":"); idx != -1 && !strings.Contains(input[idx:], "/") {
 		versionPart = input[idx+1:]
 		input = input[:idx]
-
 		if !versionRegex.MatchString(versionPart) {
-			return nil, fmt.Errorf("invalid semantic version %q in %q, must match %q", versionPart, originalInput, VersionRegex)
+			// If IgnoreSemverCompatibility is not set, return an error
+			// to ensure strict compliance with semantic versioning.
+			if !parsedOptions.IgnoreSemverCompatibility {
+				return nil, fmt.Errorf("invalid semantic version %q in %q, must match %q", versionPart, originalInput, VersionRegex)
+			}
+
+			// If IgnoreSemverCompatibility is set, we just log a warning instead of erroring out
+			// This is a compatibility feature to work with non-semver compliant versions for requesting components
+			slog.Warn("ignoring invalid semantic version due to IgnoreSemverCompatibility option", "version", versionPart, "input", originalInput)
 		}
 		ref.Version = versionPart
 	}
@@ -196,7 +223,7 @@ func Parse(input string) (*Ref, error) {
 		repositoryRef = input
 	}
 
-	repository, err := ParseRepository(repositoryRef)
+	repository, err := ParseRepository(repositoryRef, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse repository: %w", err)
 	}
@@ -222,7 +249,12 @@ func Parse(input string) (*Ref, error) {
 //
 // Where type can be "ctf" or "oci", and repository reference is the actual repository location.
 // If no type is specified, it will be guessed using heuristics.
-func ParseRepository(repoRef string) (runtime.Typed, error) {
+func ParseRepository(repoRef string, opts ...Option) (runtime.Typed, error) {
+	options, err := NewOptions(opts...)
+	if err != nil {
+		return nil, err
+	}
+
 	originalInput := repoRef
 	input := repoRef
 
@@ -259,18 +291,29 @@ func ParseRepository(repoRef string) (runtime.Typed, error) {
 		// For OCI repositories, we accept URLs with or without a scheme.
 		// If a scheme is provided (e.g., https, http, oci), keep it in the resulting string.
 		// If no scheme is provided, return a string without scheme containing host, optional port, and path.
+		// The path component is extracted as SubPath.
 		uri, err := runtime.ParseURLAndAllowNoScheme(input)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse repository URI %q: %w", input, err)
 		}
 		if uri.Scheme != "" {
-			// Preserve the full URL including scheme if it was explicitly set
-			t.BaseUrl = uri.String()
+			// Include scheme in BaseUrl: "https://registry.io:443"
+			t.BaseUrl = fmt.Sprintf("%s://%s", uri.Scheme, uri.Host)
 		} else {
-			t.BaseUrl = fmt.Sprintf("%s%s", uri.Host, uri.EscapedPath())
+			// No scheme, just hostname and optional port: "registry.io:443"
+			t.BaseUrl = uri.Host
+		}
+
+		// Extract SubPath from the path component if present
+		if uri.Path != "" && uri.Path != "/" {
+			t.SubPath = strings.TrimPrefix(uri.Path, "/")
 		}
 	case *ctfv1.Repository:
-		t.Path = input
+		t.FilePath = input
+		if options.CTFAccessMode != "" {
+			Base.Debug("overriding ctf access mode for repository reference", "mode", options.CTFAccessMode, "ref", repoRef)
+			t.AccessMode = options.CTFAccessMode
+		}
 	default:
 		return nil, fmt.Errorf("unsupported repository type: %q", repoType)
 	}

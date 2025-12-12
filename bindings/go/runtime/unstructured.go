@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 )
 
+// Unstructured is a generic representation of a typed object.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 type Unstructured struct {

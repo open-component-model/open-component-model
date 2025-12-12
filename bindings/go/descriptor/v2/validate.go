@@ -1,5 +1,3 @@
-// Package v2 provides functionality for validating Open Component Model descriptors
-// against a JSON schema.
 package v2
 
 import (

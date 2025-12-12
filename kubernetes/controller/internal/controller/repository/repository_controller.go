@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
-	ocmctx "ocm.software/ocm/api/ocm"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -19,8 +19,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 )
 
@@ -30,7 +32,9 @@ var repositoryKey = ".spec.repositoryRef"
 type Reconciler struct {
 	*ocm.BaseReconciler
 
-	OCMContextCache *ocm.ContextCache
+	// Resolver provides repository resolution and health checking for repository validation.
+	// It ensures that repository access is efficient and properly configured during reconciliation operations.
+	Resolver *resolution.Resolver
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -141,19 +145,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
-	octx, session, err := r.OCMContextCache.GetSession(&ocm.GetSessionOptions{
-		RepositorySpecification: ocmRepo.Spec.RepositorySpec,
-		OCMConfigurations:       configs,
-	})
-	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), ocmRepo, v1alpha1.ConfigureContextFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to get session: %w", err)
+	repoSpec := &runtime.Raw{}
+	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(bytes.NewReader(ocmRepo.Spec.RepositorySpec.Raw), repoSpec); err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), ocmRepo, v1alpha1.GetRepositoryFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
-	logger = logger.WithValues("ocmContext", octx.GetId())
 
-	err = r.validate(octx, session, ocmRepo)
-	if err != nil {
+	if err = r.validate(ctx, repoSpec, configs, ocmRepo); err != nil {
 		status.MarkNotReady(r.EventRecorder, ocmRepo, v1alpha1.GetRepositoryFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to validate ocm repository: %w", err)
@@ -167,19 +167,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	return ctrl.Result{RequeueAfter: ocmRepo.GetRequeueAfter()}, nil
 }
 
-func (r *Reconciler) validate(octx ocmctx.Context, session ocmctx.Session, ocmRepo *v1alpha1.Repository) error {
-	spec, err := octx.RepositorySpecForConfig(ocmRepo.Spec.RepositorySpec.Raw, nil)
+func (r *Reconciler) validate(ctx context.Context, repoSpec runtime.Typed, configs []v1alpha1.OCMConfiguration, ocmRepo *v1alpha1.Repository) error {
+	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+		RepositorySpec:    repoSpec,
+		OCMConfigurations: configs,
+		Namespace:         ocmRepo.GetNamespace(),
+	})
 	if err != nil {
-		return fmt.Errorf("cannot create RepositorySpec from raw data: %w", err)
+		return fmt.Errorf("failed to create repository: %w", err)
 	}
 
-	if err = spec.Validate(octx, nil); err != nil {
-		return fmt.Errorf("invalid RepositorySpec: %w", err)
-	}
-
-	_, err = session.LookupRepository(octx, spec)
-	if err != nil {
-		return fmt.Errorf("cannot lookup repository for RepositorySpec: %w", err)
+	// Perform health check on the repository
+	if err := cacheBackedRepo.CheckHealth(ctx); err != nil {
+		return fmt.Errorf("health check failed: %w", err)
 	}
 
 	return nil

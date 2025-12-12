@@ -19,19 +19,19 @@ func TestNewComponentVersionAnnotation(t *testing.T) {
 			name:      "valid component and version",
 			component: "test-component",
 			version:   "1.0.0",
-			expected:  "component-descriptors/test-component:1.0.0",
+			expected:  "test-component:1.0.0",
 		},
 		{
 			name:      "empty component",
 			component: "",
 			version:   "1.0.0",
-			expected:  "component-descriptors/:1.0.0",
+			expected:  ":1.0.0",
 		},
 		{
 			name:      "empty version",
 			component: "test-component",
 			version:   "",
-			expected:  "component-descriptors/test-component:",
+			expected:  "test-component:",
 		},
 	}
 

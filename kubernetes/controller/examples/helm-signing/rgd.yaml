@@ -39,9 +39,9 @@ spec:
           layerSelector:
             mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
             operation: copy
-          url: oci://${resourceChart.status.additional.?registry}/${resourceChart.status.additional.?repository}
+          url: oci://${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
           ref:
-            digest: ${resourceChart.status.additional.?digest}
+            digest: ${resourceChart.status.additional.digest}
     - id: helmrelease
       template:
         apiVersion: helm.toolkit.fluxcd.io/v2

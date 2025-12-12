@@ -325,3 +325,263 @@ func TestIdentitySubset(t *testing.T) {
 		})
 	}
 }
+
+func TestIdentityMatchesURL(t *testing.T) {
+	type args struct {
+		a runtime.Identity
+		b runtime.Identity
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			"https with explicit port 443 matches https without port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributePort:     "443",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+			},
+			true,
+		},
+		{
+			"http with explicit port 80 matches http without port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "80",
+					runtime.IdentityAttributeScheme:   "http",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "http",
+				},
+			},
+			true,
+		},
+		{
+			"https with non-default port does not match https without port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributePort:     "8080",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+			},
+			false,
+		},
+		{
+			"different schemes do not match",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "http",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+			},
+			false,
+		},
+		{
+			"different hosts do not match",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "other.com",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+			},
+			false,
+		},
+		{
+			"both without ports match",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+			},
+			true,
+		},
+		{
+			"both with same explicit port match",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "8080",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "8080",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+			},
+			true,
+		},
+		{
+			"no scheme but one has port - does not match",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+				},
+			},
+			false,
+		},
+		{
+			"empty identities match",
+			args{
+				a: runtime.Identity{},
+				b: runtime.Identity{},
+			},
+			true,
+		},
+		{
+			"https without port matches https with explicit port 443 (reverse)",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributePort:     "443",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+			},
+			true,
+		},
+		{
+			"both have different non-default ports",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "8080",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "9090",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+			},
+			false,
+		},
+		{
+			"only hostname, no scheme or port - match",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+				},
+			},
+			true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := runtime.IdentityMatchesURL(tt.args.a, tt.args.b); got != tt.want {
+				t.Errorf("IdentityMatchesURL() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIdentity_Match_WithURLMatching(t *testing.T) {
+	tests := []struct {
+		name string
+		i    runtime.Identity
+		o    runtime.Identity
+		want bool
+	}{
+		{
+			"full URL match with default port normalization",
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributePort:     "443",
+				runtime.IdentityAttributeScheme:   "https",
+			},
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributeScheme:   "https",
+			},
+			true,
+		},
+		{
+			"URL match with additional attributes",
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributePort:     "443",
+				runtime.IdentityAttributeScheme:   "https",
+				"repository":                      "myrepo",
+			},
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributeScheme:   "https",
+				"repository":                      "myrepo",
+			},
+			true,
+		},
+		{
+			"URL match fails due to different additional attributes",
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributeScheme:   "https",
+				"repository":                      "myrepo",
+			},
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributeScheme:   "https",
+				"repository":                      "otherrepo",
+			},
+			false,
+		},
+		{
+			"URL with path pattern matching",
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributeScheme:   "https",
+				runtime.IdentityAttributePath:     "org/repo",
+			},
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributeScheme:   "https",
+				runtime.IdentityAttributePath:     "org/*",
+			},
+			true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.i.Match(tt.o); got != tt.want {
+				t.Errorf("Identity.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

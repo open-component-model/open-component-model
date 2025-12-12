@@ -26,7 +26,10 @@ const (
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type OCIImageLayer struct {
+	// +ocm:jsonschema-gen:enum=OCIImageLayer/v1,ociBlob/v1
+	// +ocm:jsonschema-gen:enum:deprecated=OCIImageLayer,ociBlob
 	Type runtime.Type `json:"type"`
 	// Reference is the oci reference to the OCI repository
 	Reference string `json:"ref"`
@@ -35,6 +38,7 @@ type OCIImageLayer struct {
 	// Digest is the digest of the targeted content.
 	Digest digest.Digest `json:"digest"`
 	// Size specifies the size in bytes of the blob.
+	// +ocm:jsonschema-gen:minimum=0
 	Size int64 `json:"size"`
 }
 

@@ -36,6 +36,8 @@ type Component struct {
 	References    []Reference `json:"-"`
 }
 
+// Provider describes the provider of a component.
+// It contains a name and optional labels.
 // +k8s:deepcopy-gen=true
 type Provider struct {
 	Name   string  `json:"-"`
@@ -77,6 +79,7 @@ type Resource struct {
 	ConstructorAttributes `json:"-"`
 }
 
+// ConstructorAttributes defines additional attributes used during component construction.
 // +k8s:deepcopy-gen=true
 type ConstructorAttributes struct {
 	CopyPolicy `json:"-"`
@@ -100,7 +103,7 @@ const (
 	CopyPolicyByValue CopyPolicy = "byValue"
 )
 
-// A Source is an artifact which describes the sources that were used to generate one or more of the resources.
+// Source is an artifact which describes the sources that were used to generate one or more of the resources.
 // Source elements do not have specific additional formal attributes.
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/02-elements-toplevel.md#sources
 // +k8s:deepcopy-gen=true

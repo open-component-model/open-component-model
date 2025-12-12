@@ -68,7 +68,7 @@ func main() {
 	logger.Info("registered test plugin")
 
 	if len(args) > 0 && args[0] == "capabilities" {
-		content, err := json.Marshal(capabilities)
+		content, err := capabilities.MarshalJSON()
 		if err != nil {
 			logger.Error("failed to marshal capabilities", "error", err)
 			os.Exit(1)

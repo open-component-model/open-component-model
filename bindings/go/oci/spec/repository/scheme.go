@@ -34,6 +34,12 @@ func MustAddToScheme(scheme *runtime.Scheme) {
 
 func MustAddLegacyToScheme(scheme *runtime.Scheme) {
 	ociRepository := &oci.Repository{}
-	scheme.MustRegisterWithAlias(ociRepository, runtime.NewVersionedType(oci.LegacyRegistryType, oci.Version))
-	scheme.MustRegisterWithAlias(ociRepository, runtime.NewVersionedType(oci.LegacyRegistryType2, oci.Version))
+	scheme.MustRegisterWithAlias(ociRepository,
+		runtime.NewVersionedType(oci.LegacyRegistryType, oci.Version),
+		runtime.NewUnversionedType(oci.LegacyRegistryType),
+	)
+	scheme.MustRegisterWithAlias(ociRepository,
+		runtime.NewVersionedType(oci.LegacyRegistryType2, oci.Version),
+		runtime.NewUnversionedType(oci.LegacyRegistryType2),
+	)
 }

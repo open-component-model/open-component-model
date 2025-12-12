@@ -174,11 +174,6 @@ type ResourceRepositoryProvider interface {
 	GetResourceRepository(ctx context.Context, comp *constructor.Resource) (ResourceRepository, error)
 }
 
-type CredentialProvider interface {
-	// Resolve attempts to resolve credentials for the given identity.
-	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
-}
-
 type ResourceConsumerIdentityProvider interface {
 	// GetResourceCredentialConsumerIdentity resolves the identity of the given [constructor.Resource] to use for credential resolution.
 	GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error)

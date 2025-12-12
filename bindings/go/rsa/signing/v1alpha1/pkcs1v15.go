@@ -29,5 +29,5 @@ const (
 	// Notes:
 	//   - RSASSA-PKCS1 v1.5 was the default algorithm in older versions of OCM.
 	//   - For new signatures, RSASSA-PSS is recommended and is the default in the new OCM Signature Libraries.
-	AlgorithmRSASSAPKCS1V15 = "RSASSA-PKCS1-V1_5"
+	AlgorithmRSASSAPKCS1V15 SignatureAlgorithm = "RSASSA-PKCS1-V1_5"
 )

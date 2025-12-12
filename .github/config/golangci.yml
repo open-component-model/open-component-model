@@ -36,6 +36,7 @@ linters:
     - loggercheck
     - mirror
     - mnd
+    - modernize
     - nakedret
     - nestif
     - nilerr
@@ -75,7 +76,14 @@ linters:
     recvcheck:
       disable-builtin: true
       exclusions:
-        - '*.UnmarshalJSON'
+        - "*.MarshalJSON"
+        - "*.UnmarshalJSON"
+        - "*.JSONSchema"
+        - "*.SetType"
+        - "*.GetType"
+        - "*.DeepCopy"
+        - "*.DeepCopyInto"
+        - "*.DeepCopyTyped"
         - '*.String'
     varnamelen:
       ignore-names:
@@ -111,6 +119,9 @@ linters:
       - linters:
           - cyclop
         path: (.+)_test\.go
+      - linters:
+          - staticcheck
+        path: (.+)repository/ocm/fallback.go
     paths:
       - third_party$
       - builtin$

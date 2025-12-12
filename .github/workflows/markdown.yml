@@ -8,23 +8,13 @@ on:
       - '**/*.md'
 
 jobs:
-  markdown-lint:
-    runs-on: ubuntu-latest
-    name: Lint Markdown
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-      - uses: DavidAnson/markdownlint-cli2-action@992badcdf24e3b8eb7e87ff9287fe931bcb00c6e # v20
-        with:
-          globs: '**/*.md'
-          separator: ","
-          config: .github/config/.markdownlint-cli2.yaml
   verify-links:
     name: Verify links
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - name: Run linkspector
-        uses: umbrelladocs/action-linkspector@874d01cae9fd488e3077b08952093235bd626977 # v1
+        uses: umbrelladocs/action-linkspector@652f85bc57bb1e7d4327260decc10aa68f7694c3 # v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
@@ -35,9 +25,9 @@ jobs:
     name: Spellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - name: Spellcheck
-        uses: rojopolis/spellcheck-github-actions@739a1e3ceb79a98a5d4a9bf76f351137f9d78892 # v0
+        uses: rojopolis/spellcheck-github-actions@16d0338a5a3b5e3111a078029fb9a07a8125053d # v0
         with:
           config_path: .github/config/spellcheck.yml
           task_name: Markdown

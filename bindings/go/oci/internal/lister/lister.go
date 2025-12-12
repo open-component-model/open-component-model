@@ -239,7 +239,6 @@ func listViaTags(ctx context.Context, lister registry.TagLister, opts TagListerO
 	}
 
 	wg, ctx := errgroup.WithContext(ctx)
-	wg.SetLimit(runtime.NumCPU())
 	var mu sync.Mutex
 
 	// every time we get a callback for tags (i.e.g from a paginated list),

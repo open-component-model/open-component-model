@@ -28,5 +28,5 @@ const (
 	//
 	// This is the default algorithm for the new OCM Signature Libraries, but older version of OCM used
 	// RSASSA-PKCS1 v1.5 as default.
-	AlgorithmRSASSAPSS = "RSASSA-PSS"
+	AlgorithmRSASSAPSS SignatureAlgorithm = "RSASSA-PSS"
 )

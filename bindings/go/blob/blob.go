@@ -29,7 +29,7 @@ type ReadOnlyBlob interface {
 	// It is the caller's responsibility to close the reader.
 	//
 	// ReadCloser MUST be safe for concurrent use, serializing access as necessary.
-	// ReadCloser MUST be able to be called multiple times, which each invocation
+	// ReadCloser MUST be able to be called multiple times, where each invocation
 	// returning a new reader, that starts from the beginning of the blob.
 	//
 	// Note that this behavior is not parallel to WriteableBlob.WriteCloser

@@ -1,6 +1,7 @@
 version: '3'
 
 vars:
+  IMAGE_TOOL: docker
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
   CLI_DOCUMENTATION_MODE: "markdown"
   CLI_DOCUMENTATION_DIRECTORY: tmp/docs
@@ -8,7 +9,7 @@ vars:
   NAME: cli
   DEFAULT_VERSION:
     sh: |
-      echo "0.0.0-$(date -u +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)$(git diff --quiet || echo '+dirty')"
+      echo "0.0.0-$(date -u +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)"
   VERSION: '{{ .VERSION | default .DEFAULT_VERSION }}'
   COMPONENT_CONSTRUCTOR_FILE: "{{ .TASKFILE_DIR }}/tmp/component-constructor.yaml"
   CTF_LOCATION: '{{ .TASKFILE_DIR }}/tmp/transport-archive'
@@ -51,6 +52,10 @@ tasks:
     cmds:
       - cmd: ln -sf {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }} {{ .TASKFILE_DIR }}/tmp/bin/ocm
 
+  download/deps:
+    internal: true
+    cmd: go mod download
+
   build/multiarch:
     desc: "Build CLI for all supported targets"
     deps:
@@ -63,22 +68,47 @@ tasks:
           GOOS: '{{.ITEM.GOOS }}'
           GOARCH: '{{.ITEM.GOARCH }}'
 
+  build/multiarch/image:
+    deps: [ "build/multiarch" ]
+    dir: '{{ .TASKFILE_DIR }}'
+    cmds:
+      - |
+        mkdir -p {{ .TASKFILE_DIR }}/tmp/oci
+        {{ .IMAGE_TOOL }} buildx build \
+          --platform linux/amd64,linux/arm64 \
+          --tag ghcr.io/open-component-model/cli:{{ .VERSION }} \
+          --output type=oci,dest={{ .TASKFILE_DIR }}/tmp/oci/cli.tar,oci-mediatypes=true,name=ghcr.io/open-component-model/cli \
+          -f ./Containerfile .
+      - |
+        mkdir -p {{ .TASKFILE_DIR }}/tmp/resources
+        cat > {{ .TASKFILE_DIR }}/tmp/resources/ocm-multi-arch-container-image.yaml <<EOF
+        - name: image
+          type: ociImage
+          version: {{ .VERSION }}
+          relation: local
+          input:
+            type: file
+            mediaType: application/vnd.ocm.software.oci.layout.v1+tar
+            path: {{ .TASKFILE_DIR }}/tmp/oci/cli.tar
+        EOF
+
   build:target:
     desc: "Build CLI for a specific GOOS/GOARCH target"
     internal: true
     silent: false
+    prefix: '{{.GOOS}}-{{.GOARCH}}'
     generates:
       - tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
       - tmp/resources/ocm-{{ .GOOS }}-{{ .GOARCH }}.yaml
     cmds:
       - cmd: |
-          GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
-            -ldflags "-X ocm.software/open-component-model/cli/cmd/version.BuildVersion={{ .VERSION }}" \
+          CGO_ENABLED=0 GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
+            -ldflags "-s -w -X ocm.software/open-component-model/cli/cmd/version.BuildVersion={{ .VERSION }}" \
             -o {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/resources
         cat > {{ .TASKFILE_DIR }}/tmp/resources/ocm-{{ .GOOS }}-{{ .GOARCH }}.yaml <<EOF
-        - name: ocmcli
+        - name: cli
           type: executable
           version: {{ .VERSION }}
           labels:
@@ -107,8 +137,6 @@ tasks:
   verify/ctf:
     desc: "Verify the CTF by checking the component version and being able to fetch and run the CLI for the Host Architecture"
     silent: true
-    deps:
-      - generate/ctf
     vars:
       REFERENCE: '{{ .CTF_LOCATION }}//{{ .PROVIDER }}/{{ .NAME }}'
     dir: '{{ .TASKFILE_DIR }}/tmp/verify-ctf'
@@ -121,22 +149,22 @@ tasks:
       echo "Component version found: $VERSION"
       
       {{ .TASKFILE_DIR }}/tmp/bin/ocm download resource {{ .REFERENCE }}:$VERSION \
-        --identity name=ocmcli,os={{ .GOOS }},architecture={{ .GOARCH }}
+        --identity name=cli,os={{ .GOOS }},architecture={{ .GOARCH }}
       
       chmod +x ./ocm
       ./ocm version
-      
-      
+  
+  
 
   generate/component-constructor:
     desc: "Generate the component-constructor.yaml by building the CLI for all targets"
     generates:
       - '{{ .COMPONENT_CONSTRUCTOR_FILE }}'
     silent: true
-    deps:
-      - task: build/multiarch
-        silent: true
     cmds:
+      - task: download/deps
+      - task: build/multiarch/image
+        silent: true
       - |
         cat <<EOF > {{ .COMPONENT_CONSTRUCTOR_FILE }}
         name: {{ .PROVIDER }}/{{ .NAME }}

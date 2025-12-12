@@ -1,34 +1,213 @@
 name: CLI
+
 on:
+  # Trigger workflow on pushes to main or release branches, and on PRs targeting main as well as release tags
+  # if we are on a PR, limit runtime and only build the cli if it has been modified.
+  # if we are on a push, build the CLI regardless of what has changed to always be up to date
+  # also allow manual triggering for rebuilds or failing jobs or rebuilding the artifact
   push:
     branches:
-    - main
-    paths:
-      - cli/**
+      - main
+      - 'releases/v**'
+    tags:
+      - 'cli/v**'
   pull_request:
     branches:
-    - main
+      - main
     paths:
-      - cli/**
+      - 'cli/**'
+      - '.github/workflows/cli.yml'
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: "The artifact name to build."
+        type: string
+        required: false
+      ref:
+        description: "The ref to build on (branch or tag). Defaults to the current ref."
+        type: string
+        required: false
+    outputs:
+      artifact_name:
+        description: "The artifact name that was built."
+        value: ${{ jobs.build.outputs.artifact_name }}
+      artifact_id:
+        description: "The artifact id that was built."
+        value: ${{ jobs.build.outputs.artifact_id }}
+
+env:
+  LOCATION: "cli"                       # Folder containing the CLI source
+  REGISTRY: ghcr.io                     # Target container registry
+  # github.head_ref → branch name from the PR target (works only for pull_request events)
+  # github.ref_name → branch or tag name for normal push/tag events
+  # inputs.ref → overrides both for workflow_call
+  REF: ${{ inputs.ref || github.head_ref || github.ref_name }}
+  ARTIFACT_NAME: ${{ inputs.artifact_name || 'cli-artifacts' }}
+  # Repository selection for checkout:
+  # - pull_request: Use head repository (fork) for PR changes
+  # - other events: Use current repository
+  CHECKOUT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+
 jobs:
-  CTF:
-    name: CTF
+  build:
+    name: Build CLI
     runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ env.ARTIFACT_NAME }}
+      artifact_id: ${{ steps.upload-artifacts.outputs.artifact_id }}
+      should_push_oci_image: ${{ steps.branch-check.outputs.should_push_oci_image }}  # Used by publish job
+    permissions:
+      contents: read
+      id-token: write         # Needed for provenance attestations
+      attestations: write     # Allows storing build attestations
     steps:
+      # Checkout only the CLI
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - name: Setup Go (required for CLI build)
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          sparse-checkout: |
+            .github/scripts
+            ${{ env.LOCATION }}
+          persist-credentials: 'false'  # Disable automatic token persistence
+          ref: ${{ env.REF }}
+
+      - name: Setup Go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
           go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum
+          cache-dependency-path: cli/go.sum  # Cache dependencies by go.sum
+
       - name: Install Task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
         with:
-          version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Generate
-        run: task cli:generate/ctf
-      - name: Verify
-        run: task cli:verify/ctf
-          
+          version: 3.x
+
+      # Setup Docker Buildx for multi-arch and advanced image building
+      - name: Setup docker/buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
+
+      # Compute VERSION from env.REF
+      - name: Compute VERSION
+        id: version
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          TAG_PREFIX: "cli/v"
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/compute-version.js');
+            await script.default({ core });
+
+      # Generate and verify the Component Transport Format (CTF) resulting in all artifacts
+      # use a version that includes the branch name to ensure uniqueness
+      # make sure that the version doesn't contain invalid semver characters
+      - name: Generate & Verify CTF
+        run: |
+          task cli:generate/ctf VERSION="${VERSION}"
+          task cli:verify/ctf
+
+      # Attest built binaries with provenance metadata, but only if we're not on a PR
+      - name: Attest binaries
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          subject-path: "${{ env.LOCATION }}/tmp/bin/ocm-*"
+
+      # Determine if this branch is eligible for publishing, but only if we're not on a PR
+      - name: Determine if this is a push-eligible branch
+        if: ${{ github.event_name != 'pull_request' }}
+        id: branch-check
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            core.setOutput(
+              "should_push_oci_image",
+              process.env.GITHUB_REF_NAME === context.payload.repository.default_branch ||
+              /^releases\/v0\./.test(process.env.GITHUB_REF_NAME) ||
+              /^cli\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(process.env.GITHUB_REF_NAME)
+            )
+
+      # Upload CLI binaries and OCI layout only if branch is eligible for push
+      - name: Upload Artifacts
+        if: ${{ steps.branch-check.outputs.should_push_oci_image }}
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        id: upload-artifacts
+        with:
+          if-no-files-found: 'error'
+          name: ${{ env.ARTIFACT_NAME }}
+          # Compiled CLI binaries
+          # OCI layout files
+          path: |
+            ${{ env.LOCATION }}/tmp/bin/ocm-*    
+            ${{ env.LOCATION }}/tmp/oci/*      
+
+  publish:
+    name: Push & Attest
+    needs: build
+    if: ${{ needs.build.outputs.should_push_oci_image == 'true' }}  # Skip unless we should push
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read           # Needed for artifact download
+      packages: write         # Needed for pushing OCI images and provenance layers
+      id-token: write         # Needed for provenance attestation identity
+      attestations: write     # Allows storing provenance attestation
+    steps:
+      # Retrieve artifacts produced by the build job
+      - name: Download build artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+
+      - name: Set LAYOUT
+        env:
+          LAYOUT: ${{ github.workspace }}/oci/cli.tar
+        run: |
+          test -e "$LAYOUT" || exit 1
+          echo "LAYOUT=$LAYOUT" >> "$GITHUB_ENV"
+
+      # Setup ORAS CLI for pushing OCI artifacts from OCI layouts.
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      # use discovered tag from layout
+      - name: Set TAG
+        run: echo "TAG=$(oras repo tags --oci-layout ${LAYOUT} | head -n 1)" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Define target repository path in environment
+      - name: Set TARGET_REPO
+        run: echo "TARGET_REPO=${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/cli" >> "$GITHUB_ENV"
+
+      # Push the OCI layout as an image to GHCR
+      - name: Push OCI image
+        id: push-oci
+        run: oras cp --from-oci-layout "${LAYOUT}:${TAG}" "${TARGET_REPO}:${TAG}"
+
+      # This is only convenience so when we push to main there is a CLI image that always points to main as well
+      # technically we already have a tagged version called 0.0.0-main but this is more standard
+      - name: Tag Image as branch when default ( :${{ env.REF }} )
+        if: ${{ env.REF == github.event.repository.default_branch }}
+        env:
+          FROM: ${{ env.TAG }}
+          TO: ${{ env.REF }}
+        run: oras tag "${TARGET_REPO}:${FROM}" "${TARGET_REPO}:${TO}"
+
+      # Attest pushed OCI image with provenance metadata
+      - name: Resolve Pushed Digest for Attestation
+        id: digest
+        run: echo "digest=$(oras resolve ${TARGET_REPO}:${TAG})" >> "$GITHUB_OUTPUT"
+      - name: Attest OCI image
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          subject-name: ${{ env.TARGET_REPO }}
+          push-to-registry: true

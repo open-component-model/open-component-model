@@ -15,6 +15,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
@@ -28,30 +30,30 @@ import (
 // e.g. because the component version already exists in the target repository.
 var ErrShouldSkipConstruction = errors.New("should skip construction")
 
+const AttributeDescriptor string = "constructor/descriptor"
+
 type Constructor interface {
 	// Construct processes a component constructor specification and creates the corresponding component descriptors.
 	// It validates the constructor specification and processes each component in topological order.
-	Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
-}
+	Construct(ctx context.Context) error
 
-// ConstructDefault is a convenience function that creates a new default DefaultConstructor and calls its Constructor.Construct method.
-func ConstructDefault(ctx context.Context, constructor *constructor.ComponentConstructor, opts Options) ([]*descriptor.Descriptor, error) {
-	return NewDefaultConstructor(opts).Construct(ctx, constructor)
+	// GetGraph returns the internal graph used during construction.
+	// It can be used to inspect the relationships between components.
+	// Construct must be called to ensure the graph is populated.
+	// TODO: https://github.com/open-component-model/ocm-project/issues/736 this is temporary and needs to be replaced with proper abstraction
+	GetGraph() *syncdag.SyncedDirectedAcyclicGraph[string]
 }
 
 type DefaultConstructor struct {
 	componentDigestCacheMu sync.Mutex
 	componentDigestCache   map[string]*descriptor.Digest
-
-	opts Options
+	discoverer             *syncdag.GraphDiscoverer[string, *ConstructorOrExternalComponent]
+	constructor            *constructor.ComponentConstructor
+	constructMutex         sync.Mutex
+	opts                   Options
 }
 
 var _ Constructor = (*DefaultConstructor)(nil)
-
-const (
-	attributeComponentConstructor = "componentConstructor"
-	attributeComponentDescriptor  = "componentDescriptor"
-)
 
 type componentVersionRepositoryWrapper struct {
 	repository repository.ComponentVersionRepository
@@ -67,7 +69,24 @@ func RepositoryAsExternalComponentVersionRepositoryProvider(repo repository.Comp
 
 var _ ExternalComponentRepositoryProvider = (*componentVersionRepositoryWrapper)(nil)
 
-func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
+type ConstructorOrExternalComponent struct {
+	ConstructorComponent *constructor.Component
+	ExternalComponent    *descriptor.Descriptor
+}
+
+func (c *DefaultConstructor) Construct(ctx context.Context) error {
+	c.constructMutex.Lock()
+	defer c.constructMutex.Unlock()
+
+	if err := c.discoverer.Graph().WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		if len(d.Vertices) > 0 {
+			return fmt.Errorf("component constructor graph has already been constructed")
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	logger := log.Base().With("operation", "constructComponent")
 
 	if c.opts.ResourceInputMethodProvider == nil {
@@ -79,57 +98,96 @@ func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor
 		c.opts.SourceInputMethodProvider = DefaultInputMethodRegistry
 	}
 
-	if len(componentConstructor.Components) == 0 {
-		return nil, nil
+	if len(c.constructor.Components) == 0 {
+		return nil
 	}
 
-	// We might want to allow the DAG to be passed in. This would allow to
-	// pre-populate it with known components to avoid re-resolving them.
-	dag := syncdag.NewDirectedAcyclicGraph[string]()
-	if err := c.discover(ctx, dag, componentConstructor); err != nil {
-		return nil, fmt.Errorf("failed to discover component constructor graph: %w", err)
-	}
-	if err := c.construct(ctx, dag); err != nil {
-		return nil, fmt.Errorf("failed to constructComponent components from graph: %w", err)
-	}
-
-	constructedDescriptors := make([]*descriptor.Descriptor, len(componentConstructor.Components))
-	for index, component := range componentConstructor.Components {
-		constructedDescriptors[index] = dag.MustGetVertex(component.ToIdentity().String()).MustGetAttribute(attributeComponentDescriptor).(*descriptor.Descriptor)
-	}
-	return constructedDescriptors, nil
-}
-
-func (c *DefaultConstructor) discover(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
-	discoverer := newNeighborDiscoverer(c, dag)
-	roots, err := discoverer.initializeDAGWithConstructor(componentConstructor)
+	err := c.discover(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to initialize component constructor graph: %w", err)
+		return fmt.Errorf("failed to discover component constructor graph: %w", err)
 	}
-	slog.DebugContext(ctx, "starting discovery based on components in constructor", "num_components", len(roots), "components", roots)
-	if err := dag.Discover(ctx, discoverer, syncdag.WithRoots(roots...), syncdag.WithDiscoveryGoRoutineLimit[string](c.opts.ConcurrencyLimit)); err != nil {
-		return fmt.Errorf("failed to discover component references: %w", err)
+	err = c.construct(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to constructComponent components from graph: %w", err)
 	}
-	slog.DebugContext(ctx, "component reference discovery completed successfully", "num_components", dag.LengthVertices())
+
 	return nil
 }
 
-func (c *DefaultConstructor) construct(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string]) error {
-	processor := newVertexProcessor(c, dag)
+func (c *DefaultConstructor) GetGraph() *syncdag.SyncedDirectedAcyclicGraph[string] {
+	return c.discoverer.Graph()
+}
 
-	slog.DebugContext(ctx, "starting processing of discovered component graph", "num_components", dag.LengthVertices())
-	if err := dag.ProcessTopology(ctx, processor, syncdag.WithReverseTopology(), syncdag.WithProcessGoRoutineLimit(c.opts.ConcurrencyLimit)); err != nil {
+func (c *DefaultConstructor) discover(ctx context.Context) error {
+	slog.DebugContext(ctx, "starting discovery based on components in constructor")
+	if err := c.discoverer.Discover(ctx); err != nil {
+		return fmt.Errorf("failed to discover components: %w", err)
+	}
+	slog.DebugContext(ctx, "component reference discovery completed successfully")
+	return nil
+}
+
+func (c *DefaultConstructor) construct(ctx context.Context) error {
+	var (
+		reversedGraph *dag.DirectedAcyclicGraph[string]
+		err           error
+	)
+	if err = c.discoverer.Graph().WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		if reversedGraph, err = d.Reverse(); err != nil {
+			return fmt.Errorf("failed to reverse graph: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	proc := processor{
+		constructor: c,
+		processedDescriptors: descriptors{
+			graph: c.discoverer.Graph(),
+		},
+	}
+
+	syncedReversedGraph := syncdag.ToSyncedGraph(reversedGraph)
+
+	graphProcessor := syncdag.NewGraphProcessor(syncedReversedGraph, &syncdag.GraphProcessorOptions[string, *ConstructorOrExternalComponent]{
+		Processor: &proc,
+	})
+	slog.DebugContext(ctx, "starting processing of discovered component graph")
+	if err := graphProcessor.Process(ctx); err != nil {
 		return fmt.Errorf("failed to process component constructor graph: %w", err)
 	}
-	slog.DebugContext(ctx, "component construction completed successfully", "num_components", dag.LengthVertices())
+	slog.DebugContext(ctx, "component construction completed successfully")
 	return nil
 }
 
-func NewDefaultConstructor(opts Options) Constructor {
+func NewDefaultConstructor(constructor *constructor.ComponentConstructor, opts Options) Constructor {
+	discoverer := buildDiscoverer(constructor, opts)
 	return &DefaultConstructor{
 		componentDigestCache: make(map[string]*descriptor.Digest),
+		constructor:          constructor,
+		discoverer:           discoverer,
 		opts:                 opts,
 	}
+}
+
+// buildDiscoverer creates a graph discoverer for the component constructor.
+// It sets up the roots of the graph based on the components in the constructor
+func buildDiscoverer(componentConstructor *constructor.ComponentConstructor, opts Options) *syncdag.GraphDiscoverer[string, *ConstructorOrExternalComponent] {
+	roots := make([]string, len(componentConstructor.Components))
+	for index, comp := range componentConstructor.Components {
+		roots[index] = comp.ToIdentity().String()
+	}
+	resAndDis := resolverAndDiscoverer{
+		componentConstructor:                componentConstructor,
+		externalComponentRepositoryProvider: opts.ExternalComponentRepositoryProvider,
+	}
+	graphDiscoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *ConstructorOrExternalComponent]{
+		Roots:      roots,
+		Resolver:   &resAndDis,
+		Discoverer: &resAndDis,
+	})
+	return graphDiscoverer
 }
 
 // constructComponent creates a single component descriptor from a component specification.
@@ -354,7 +412,7 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 				if digestProcessor, err = c.opts.GetDigestProcessor(ctx, res); err == nil {
 					logger.Debug("processing resource digest")
 					var creds map[string]string
-					if c.opts.CredentialProvider != nil {
+					if c.opts.Resolver != nil {
 						identity, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, res)
 						if err != nil {
 							return nil, fmt.Errorf("error getting credential consumer identity of access type %q: %w", resource.Access.GetType(), err)
@@ -383,11 +441,12 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 	}
 
 	logger.Debug("resource processed successfully")
+
 	return res, nil
 }
 
 func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetRepo TargetRepository, resource *constructor.Resource, component, version string) (*descriptor.Resource, error) {
-	repository, err := c.opts.GetResourceRepository(ctx, resource)
+	repo, err := c.opts.GetResourceRepository(ctx, resource)
 	if err != nil {
 		return nil, err
 	}
@@ -397,13 +456,13 @@ func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetR
 	// best effort to resolve credentials for by value resource download.
 	// if no identity is resolved, we assume resolution is simply skipped.
 	var creds map[string]string
-	if identity, err := repository.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
-		if creds, err = resolveCredentials(ctx, c.opts.CredentialProvider, identity); err != nil {
+	if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
+		if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for resource by-value processing %w", err)
 		}
 	}
 
-	data, err := repository.DownloadResource(ctx, converted, creds)
+	data, err := repo.DownloadResource(ctx, converted, creds)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource: %w", err)
 	}
@@ -454,7 +513,7 @@ func (c *DefaultConstructor) processSourceWithInput(ctx context.Context, targetR
 	// if no identity is resolved, we assume resolution is simply skipped.
 	var creds map[string]string
 	if identity, err := method.GetSourceCredentialConsumerIdentity(ctx, src); err == nil {
-		if creds, err = resolveCredentials(ctx, c.opts.CredentialProvider, identity); err != nil {
+		if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for source input method: %w", err)
 		}
 	}
@@ -495,7 +554,7 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 	// if no identity is resolved, we assume resolution is simply skipped.
 	var creds map[string]string
 	if identity, err := method.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
-		if creds, err = resolveCredentials(ctx, c.opts.CredentialProvider, identity); err != nil {
+		if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for resource input method: %w", err)
 		}
 	}
@@ -680,7 +739,7 @@ func newConcurrencyGroup(ctx context.Context, limit int) (*errgroup.Group, conte
 // resolveCredentials attempts to resolve credentials for a given credential consumerIdentity.
 // It returns the resolved credentials and any error that occurred during resolution.
 // If no credentials are needed or available, it returns nil credentials and no error.
-func resolveCredentials(ctx context.Context, provider CredentialProvider, consumerIdentity ocmruntime.Identity) (map[string]string, error) {
+func resolveCredentials(ctx context.Context, provider credentials.Resolver, consumerIdentity ocmruntime.Identity) (map[string]string, error) {
 	logger := log.Base().With("identity", consumerIdentity)
 
 	if provider == nil {

@@ -47,7 +47,7 @@ type Handler struct {
 }
 
 // New returns a Handler. If useSystemRoots is true, system trust roots are loaded, otherwise an empty pool is used.
-func New(useSystemRoots bool) (*Handler, error) {
+func New(scheme *runtime.Scheme, useSystemRoots bool) (*Handler, error) {
 	var (
 		roots *x509.CertPool
 		err   error
@@ -64,19 +64,23 @@ func New(useSystemRoots bool) (*Handler, error) {
 	}, nil
 }
 
+func (h *Handler) GetSigningHandlerScheme() *runtime.Scheme {
+	return v1alpha1.Scheme
+}
+
 // ---- SPI ----
 
 // Sign produces a signature for the given digest, using RSA and the configured
 // algorithm and encoding policy. For PEM encoding, the certificate chain is
 // read from credentials and embedded into the SIGNATURE block.
-func (*Handler) Sign(
+func (h *Handler) Sign(
 	ctx context.Context,
 	unsigned descruntime.Digest,
 	rawCfg runtime.Typed,
 	creds map[string]string,
 ) (descruntime.SignatureInfo, error) {
 	var supported v1alpha1.Config
-	if err := v1alpha1.Scheme.Convert(rawCfg, &supported); err != nil {
+	if err := h.GetSigningHandlerScheme().Convert(rawCfg, &supported); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
 	}
 	algorithm := supported.GetSignatureAlgorithm()
@@ -103,9 +107,9 @@ func (*Handler) Sign(
 		if err != nil {
 			return descruntime.SignatureInfo{}, fmt.Errorf("read certificate chain: %w", err)
 		}
-		pem := rsasignature.SignatureBytesToPem(algorithm, rawSig, chain...)
+		pem := rsasignature.SignatureBytesToPem(string(algorithm), rawSig, chain...)
 		return descruntime.SignatureInfo{
-			Algorithm: algorithm,
+			Algorithm: string(algorithm),
 			MediaType: v1alpha1.MediaTypePEM,
 			Value:     string(pem),
 		}, nil
@@ -113,7 +117,7 @@ func (*Handler) Sign(
 		fallthrough
 	default:
 		return descruntime.SignatureInfo{
-			Algorithm: algorithm,
+			Algorithm: string(algorithm),
 			MediaType: supported.GetDefaultMediaType(),
 			Value:     hex.EncodeToString(rawSig),
 		}, nil
@@ -178,7 +182,7 @@ func (h *Handler) Verify(
 			return fmt.Errorf("issuer verification based on underlying certificate failed: %w", err)
 		}
 
-		return verifyRSA(algFromPEM, rsaPub, hash, dig, sig)
+		return verifyRSA(v1alpha1.SignatureAlgorithm(algFromPEM), rsaPub, hash, dig, sig)
 
 	default:
 		return fmt.Errorf("unsupported media type %q", signed.Signature.MediaType)
@@ -226,11 +230,11 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 		}
 	} else if alg == "" {
 		if inferred, err := algorithmFromPlainMedia(signature.Signature.MediaType); err == nil {
-			alg = inferred
+			alg = string(inferred)
 		}
 	}
 
-	id := baseIdentity(alg)
+	id := baseIdentity(v1alpha1.SignatureAlgorithm(alg))
 	id[IdentityAttributeSignature] = signature.Name
 	return id, nil
 }
@@ -238,7 +242,7 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 // ---- internal helpers ----
 
 // algorithmFromPlainMedia infers the RSA algorithm from a plain media type.
-func algorithmFromPlainMedia(mt string) (string, error) {
+func algorithmFromPlainMedia(mt string) (v1alpha1.SignatureAlgorithm, error) {
 	switch mt {
 	case v1alpha1.MediaTypePlainRSASSAPSS:
 		return v1alpha1.AlgorithmRSASSAPSS, nil
@@ -312,8 +316,8 @@ func verifyIssuerForUnderlyingCert(signed descruntime.Signature, underlyingCert 
 }
 
 // baseIdentity builds a credential consumer identity for RSA handlers.
-func baseIdentity(algorithm string) runtime.Identity {
-	id := runtime.Identity{IdentityAttributeAlgorithm: algorithm}
+func baseIdentity(algorithm v1alpha1.SignatureAlgorithm) runtime.Identity {
+	id := runtime.Identity{IdentityAttributeAlgorithm: string(algorithm)}
 	id.SetType(rsacredentials.IdentityTypeRSA)
 	return id
 }

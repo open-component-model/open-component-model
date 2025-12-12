@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/opencontainers/go-digest"
 	"oras.land/oras-go/v2/errdef"
 	oras "oras.land/oras-go/v2/registry"
 )
@@ -28,43 +29,105 @@ type LooseReference struct {
 }
 
 // String implements `fmt.Stringer` and returns the reference string.
-// The resulted string is meaningful only if the reference is valid.
+// It builds the string in the following order:
+//  1. Registry and/or repository (e.g., "registry/repo" or "repo")
+//  2. Tag prefixed with ":" if present (e.g., ":v1.0.0")
+//  3. Digest prefixed with "@" if present (e.g., "@sha256:abc...")
 func (r LooseReference) String() string {
-	var ref string
+	var result strings.Builder
+
+	hasRegistry := r.Registry != ""
+	hasRepository := r.Repository != ""
+	hasBasePath := hasRegistry || hasRepository
 
 	switch {
-	case r.Repository == "" && r.Registry != "":
-		ref = r.Registry
-	case r.Repository != "" && r.Registry == "":
-		ref = r.Repository
-	default:
-		ref = r.Registry + "/" + r.Repository
+	case hasRegistry && hasRepository:
+		result.WriteString(r.Registry)
+		result.WriteString("/")
+		result.WriteString(r.Repository)
+	case hasRegistry:
+		result.WriteString(r.Registry)
+	case hasRepository:
+		result.WriteString(r.Repository)
 	}
 
-	if ref == "/" {
-		return ""
-	}
-
-	if r.Reference.Reference == "" && r.Tag == "" {
-		return ref
-	}
-
+	// Add tag if present
 	if r.Tag != "" {
-		ref += ":" + r.Tag
+		if hasBasePath {
+			result.WriteString(":")
+		}
+		result.WriteString(r.Tag)
 	}
 
-	if d, err := r.Digest(); err == nil {
-		return ref + "@" + d.String()
+	// Add digest if present
+	if hasDigestAlgorithmPrefix(r.Reference.Reference) {
+		result.WriteString("@")
+		result.WriteString(r.Reference.Reference)
 	}
 
-	return ref
+	return result.String()
 }
 
-// ValidateReferenceAsTag validates the reference as a tag.
-func (r LooseReference) ValidateReferenceAsTag() error {
+// ValidateTag validates the tag.
+func (r LooseReference) ValidateTag() error {
 	if !tagRegexp.MatchString(r.Tag) {
 		return fmt.Errorf("%w: invalid tag %q", errdef.ErrInvalidReference, r.Reference)
 	}
+	return nil
+}
+
+// ReferenceOrTag returns the appropriate reference string following precedence:
+//  1. Reference field if it's a valid digest
+//  2. Tag field if Reference is a valid tag
+//  3. Empty string otherwise
+func (r LooseReference) ReferenceOrTag() string {
+	switch {
+	case r.ValidateReferenceAsDigest() == nil:
+		return r.Reference.Reference
+	case r.ValidateReferenceAsTag() == nil:
+		return r.Tag
+	}
+	return ""
+}
+
+// hasDigestAlgorithmPrefix checks if the path starts with a known digest algorithm prefix.
+// Uses the digest package to determine which algorithms are supported.
+func hasDigestAlgorithmPrefix(path string) bool {
+	idx := strings.Index(path, ":")
+	if idx <= 0 {
+		return false
+	}
+	algorithm := digest.Algorithm(path[:idx])
+	return algorithm.Available()
+}
+
+// validateReference validates the components of a LooseReference.
+// It validates the registry, repository, and reference (tag or digest) according to the OCI spec.
+func validateReference(ref LooseReference) error {
+	if ref.Registry != "" {
+		if err := ref.ValidateRegistry(); err != nil {
+			return err
+		}
+	}
+
+	if ref.Repository != "" {
+		if err := ref.ValidateRepository(); err != nil {
+			return err
+		}
+	}
+
+	if ref.Reference.Reference != "" {
+		if err := ref.ValidateReference(); err != nil {
+			return err
+		}
+	}
+
+	if ref.Tag != "" {
+		if err := ref.ValidateTag(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -72,10 +135,22 @@ func (r LooseReference) ValidateReferenceAsTag() error {
 // Corresponding cryptographic hash implementations are required to be imported
 // as specified by https://pkg.go.dev/github.com/opencontainers/go-digest#readme-usage
 // if the string contains a digest.
-// Compared to `ParseReference` from ORAS, this function is more lenient and allows for
-// no registry (Valid Form E). This is useful for passing references to the `oras` Interfaces
-// that do not have registries set. It also exposes the Tag (the tag in oras ParseReference gets
-// removed when a digest is present)
+//
+// Compared to ORAS ParseReference, this function extends the valid forms to:
+//   - Registry is optional
+//   - Tag is preserved when digest is present
+//   - Bare digests are supported
+//
+// The reference string can take on the following forms:
+//
+//	ORAS Valid Forms:
+//	<=== REPOSITORY ===> @ <=================== digest ===> |    - Valid Form A (digest preserved)
+//	<=== REPOSITORY ===> : <!!! TAG !!!> @ <=== digest ===> |    - Valid Form B (tag dropped, digest preserved)
+//	<=== REPOSITORY ===> : <=== TAG ======================> |    - Valid Form C (tag only)
+//	<=== REPOSITORY ======================================> |    - Valid Form D (no tag or digest, repository only)
+//	OCM Valid Forms:
+//	<=== REPOSITORY ===> : <=== TAG ====> @ <=== digest ===>|    - OCM Valid Form (tag and digest preserved)
+//	<=================== digest ==========================> |    - OCM Valid Form (digest only)
 func ParseReference(artifact string) (LooseReference, error) {
 	// Split the input artifact string into registry and path components.
 	parts := strings.SplitN(artifact, "/", 2)
@@ -111,8 +186,14 @@ func ParseReference(artifact string) (LooseReference, error) {
 			return LooseReference{}, errdef.ErrInvalidReference
 		}
 		// Case: Only tag is present; Valid Form C
-		repository = path[:index]
-		tag = path[index+1:]
+		// Special case: treat digest algorithm prefixes (e.g., "sha256:abc", "sha512:xyz") without registry as tag-only reference
+		if len(parts) == 1 && hasDigestAlgorithmPrefix(path) {
+			reference = path
+		} else {
+			repository = path[:index]
+			tag = path[index+1:]
+			reference = tag
+		}
 	} else {
 		// Case: No tag or digest; Valid Form D or E
 		repository = path
@@ -127,27 +208,8 @@ func ParseReference(artifact string) (LooseReference, error) {
 		Tag: tag,
 	}
 
-	if len(registry) > 0 {
-		// Validate the registry component
-		if err := ref.ValidateRegistry(); err != nil {
-			return LooseReference{}, err
-		}
-	}
-
-	// Validate the repository component
-	if err := ref.ValidateRepository(); err != nil {
+	if err := validateReference(ref); err != nil {
 		return LooseReference{}, err
-	}
-
-	// If a reference (tag or digest) is present, validate it
-	if len(ref.Reference.Reference) > 0 {
-		validator := ref.ValidateReferenceAsDigest
-		if len(tag) > 0 && len(reference) == 0 {
-			validator = ref.ValidateReferenceAsTag
-		}
-		if err := validator(); err != nil {
-			return LooseReference{}, err
-		}
 	}
 
 	return ref, nil

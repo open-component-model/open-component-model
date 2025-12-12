@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
+	blobtransformerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -32,42 +32,41 @@ type RepositoryPlugin struct {
 	path   string
 	client *http.Client
 
-	// jsonSchema is the schema for all endpoints for this plugin.
-	jsonSchema []byte
+	capability blobtransformerv1.CapabilitySpec
 	// location is where the plugin started listening.
 	location string
 }
 
 // This plugin implements all the given contracts.
 var (
-	_ v1.BlobTransformerPluginContract[runtime.Typed] = &RepositoryPlugin{}
+	_ blobtransformerv1.BlobTransformerPluginContract[runtime.Typed] = &RepositoryPlugin{}
 )
 
 // NewPlugin creates a new plugin instance with the provided configuration.
 // It initializes the plugin with an HTTP client, unique ID, path, configuration, location, and JSON schema.
-func NewPlugin(client *http.Client, id string, path string, config types.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
+func NewPlugin(client *http.Client, id string, path string, config types.Config, loc string, capability blobtransformerv1.CapabilitySpec) *RepositoryPlugin {
 	return &RepositoryPlugin{
 		ID:         id,
 		path:       path,
 		config:     config,
 		client:     client,
-		jsonSchema: jsonSchema,
+		capability: capability,
 		location:   loc,
 	}
 }
 
-func (r *RepositoryPlugin) TransformBlob(ctx context.Context, request *v1.TransformBlobRequest[runtime.Typed], credentials map[string]string) (*v1.TransformBlobResponse, error) {
+func (r *RepositoryPlugin) TransformBlob(ctx context.Context, request *blobtransformerv1.TransformBlobRequest[runtime.Typed], credentials map[string]string) (*blobtransformerv1.TransformBlobResponse, error) {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
 	}
 
 	// We know we only have this single schema for all endpoints which require validation.
-	if err := r.validateEndpoint(request.Specification, r.jsonSchema); err != nil {
+	if err := r.validateEndpoint(request.Specification); err != nil {
 		return nil, err
 	}
 
-	response := &v1.TransformBlobResponse{}
+	response := &blobtransformerv1.TransformBlobResponse{}
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, TransformBlob, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(response), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to transform blob via %s: %w", r.ID, err)
 	}
@@ -85,12 +84,12 @@ func (r *RepositoryPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
-	if err := r.validateEndpoint(request.Typ, r.jsonSchema); err != nil {
+func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *blobtransformerv1.GetIdentityRequest[runtime.Typed]) (*blobtransformerv1.GetIdentityResponse, error) {
+	if err := r.validateEndpoint(request.Typ); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", r.ID, err)
 	}
 
-	identity := v1.GetIdentityResponse{}
+	identity := blobtransformerv1.GetIdentityResponse{}
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
 		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", r.ID, err)
 	}
@@ -100,8 +99,17 @@ func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdent
 
 // validateEndpoint uses the provided JSON schema and the runtime.Typed and, using the JSON schema, validates that the
 // underlying runtime.Type conforms to the provided schema.
-func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
-	valid, err := plugins.ValidatePlugin(obj, jsonSchema)
+// TODO(fabianburth): this method looks essentially the same for all plugin make it reusable!
+func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
+	var schema []byte
+	for _, t := range r.capability.SupportedTransformerSpecTypes {
+		if t.Type != obj.GetType() {
+			continue
+		}
+		schema = t.JSONSchema
+	}
+
+	valid, err := plugins.ValidatePlugin(obj, schema)
 	if err != nil {
 		return fmt.Errorf("failed to validate plugin %q: %w", r.ID, err)
 	}

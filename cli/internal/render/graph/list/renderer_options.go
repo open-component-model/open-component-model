@@ -4,7 +4,7 @@ import (
 	"cmp"
 	"io"
 
-	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	"ocm.software/open-component-model/bindings/go/dag"
 )
 
 // RendererOptions defines the options for the list Renderer.
@@ -28,7 +28,7 @@ func WithListSerializer[T cmp.Ordered](serializer ListSerializer[T]) RendererOpt
 }
 
 // WithListSerializerFunc sets the ListSerializer based on a function.
-func WithListSerializerFunc[T cmp.Ordered](serializerFunc func(writer io.Writer, vertices []*syncdag.Vertex[T]) error) RendererOption[T] {
+func WithListSerializerFunc[T cmp.Ordered](serializerFunc func(writer io.Writer, vertices []*dag.Vertex[T]) error) RendererOption[T] {
 	return func(opts *RendererOptions[T]) {
 		opts.ListSerializer = ListSerializerFunc[T](serializerFunc)
 	}

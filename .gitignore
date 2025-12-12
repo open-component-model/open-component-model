@@ -36,6 +36,9 @@ output/
 # env files
 .env.local
 
+# github action node modules
+.github/scripts/node_modules/
+
 # Task files and generation with tmp folders
 **/tmp
 **/.task

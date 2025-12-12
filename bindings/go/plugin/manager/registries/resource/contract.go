@@ -16,3 +16,14 @@ type Repository interface {
 	// DownloadResource downloads a [descriptor.Resource] from the repository.
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error)
 }
+
+// The BuiltinResourceRepository has the primary purpose to allow plugin
+// registries to register internal plugins without requiring callers to
+// explicitly provide a scheme with their supported types.
+// A scheme is mapping types to their go types. As the go types of external
+// plugins are not compiled in, they cannot have a scheme and therefore, cannot
+// implement this interface.
+type BuiltinResourceRepository interface {
+	Repository
+	GetResourceRepositoryScheme() *runtime.Scheme
+}

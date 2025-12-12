@@ -34,7 +34,7 @@ func (cache *ociCache) get(ctx context.Context, spec runtime.Typed) (manifests c
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
-	identity, err := GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, cache.scheme, spec)
+	identity, err := getCacheIdentity(ctx, cache.scheme, spec)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get identity from OCI repository: %w", err)
 	}

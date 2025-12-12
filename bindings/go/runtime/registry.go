@@ -5,14 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"maps"
 	"reflect"
 	"slices"
-	"strings"
 	"sync"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"sigs.k8s.io/yaml"
+
+	"ocm.software/open-component-model/bindings/go/runtime/internal/bimap"
 )
 
 // Scheme is a dynamic registry for Typed types.
@@ -22,46 +24,101 @@ type Scheme struct {
 	// if the constructors cannot determine a match,
 	// this will trigger the creation of an unstructured.Unstructured with NewScheme instead of failing.
 	allowUnknown bool
-	aliases      map[Type]Type
-	defaults     map[Type]Typed
-}
-
-// GetTypes returns a map of all registered types.
-// The keys are the default types, and the values are slices containing all aliases for that type.
-// If a type has no aliases, it will have an empty slice as its value.
-// The slices of aliases are always sorted for consistent ordering.
-func (r *Scheme) GetTypes() map[Type][]Type {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	types := make(map[Type][]Type, len(r.defaults))
-	// process aliases first
-	for alias, def := range r.aliases {
-		types[def] = append(types[def], alias)
-		// ensure the slice is always sorted for comparability.
-		slices.SortFunc(types[def], func(a, b Type) int {
-			return strings.Compare(a.String(), b.String())
-		})
-	}
-	// if there are any types left with no aliases, add them with an empty slice
-	for def := range r.defaults {
-		if _, exists := types[def]; !exists {
-			types[def] = nil
-		}
-	}
-	return types
+	// defaults maps default Types to their reflect.Type.
+	// the reflect.Type is the authoritative type for the default Type.
+	defaults *bimap.Map[Type, reflect.Type]
+	// aliases maps alias Types to their default Type.
+	// they are alternative forms of the default Type.
+	aliases map[Type]Type
+	// instances maps reflect.Type to their prototype instance.
+	// this avoids the need to create new instances via reflection and allows
+	// passing pre-initialized default values if needed.
+	instances map[reflect.Type]Typed
 }
 
 // NewScheme creates a new registry.
 func NewScheme(opts ...SchemeOption) *Scheme {
 	reg := &Scheme{
-		defaults: make(map[Type]Typed),
-		aliases:  make(map[Type]Type),
+		defaults:  bimap.New[Type, reflect.Type](),
+		aliases:   map[Type]Type{},
+		instances: make(map[reflect.Type]Typed),
 	}
 	for _, opt := range opts {
 		opt(reg)
 	}
 	return reg
+}
+
+// GetTypes returns a map of all registered types, where the keys are the default types
+// and the values are slices containing all aliases for that type, sorted lexicographically.
+func (r *Scheme) GetTypes() map[Type][]Type {
+	result := map[Type][]Type{}
+	for k, v := range r.GetTypesIter() {
+		result[k] = slices.SortedFunc(v, CompareTypesLexicographically)
+	}
+	return result
+}
+
+// GetTypesIter returns an iterator of all registered types.
+// The keys are the default types, and the values are iterators containing all aliases for that type.
+// If a type has no aliases, it will have an empty slice as its value.
+// The slices of aliases are always sorted for consistent ordering.
+func (r *Scheme) GetTypesIter() iter.Seq2[Type, iter.Seq[Type]] {
+	return func(yield func(Type, iter.Seq[Type]) bool) {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		for typ := range r.defaults.Iter() {
+			if !yield(typ, r.AliasesIter(typ)) {
+				return
+			}
+		}
+	}
+}
+
+// AliasesIter returns an iterator of all aliases for the given type.
+func (r *Scheme) AliasesIter(typ Type) iter.Seq[Type] {
+	return func(yield func(Type) bool) {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		for alias, forTyp := range r.aliases {
+			if !forTyp.Equal(typ) {
+				continue
+			}
+			if !yield(alias) {
+				return
+			}
+		}
+	}
+}
+
+// RegisterSchemeType registers a given type from another scheme into this scheme.
+// It registers the type as well as all its aliases.
+func (r *Scheme) RegisterSchemeType(scheme *Scheme, typ Type) error {
+	if scheme == nil {
+		return errors.New("cannot register type from nil scheme")
+	}
+
+	scheme.mu.RLock()
+	defer scheme.mu.RUnlock()
+
+	// check if the type is registered as default type in the source scheme
+	// or get its default type if it's an alias
+	rt, exists := scheme.defaults.GetLeft(typ)
+	if !exists {
+		if aliasFor, ok := scheme.aliases[typ]; ok {
+			rt, _ = scheme.defaults.GetLeft(aliasFor)
+		} else {
+			return fmt.Errorf("type %q is not registered in the scheme", typ)
+		}
+	}
+
+	// register the type in the new scheme
+	return r.RegisterWithAlias(
+		// first the default type
+		scheme.instances[rt],
+		// then the default type and all its aliases
+		append([]Type{typ}, slices.Collect(scheme.AliasesIter(typ))...)...,
+	)
 }
 
 type SchemeOption func(*Scheme)
@@ -78,8 +135,9 @@ func (r *Scheme) Clone() *Scheme {
 	defer r.mu.RUnlock()
 	clone := NewScheme()
 	clone.allowUnknown = r.allowUnknown
-	maps.Copy(clone.defaults, r.defaults)
+	clone.defaults = r.defaults.Clone()
 	maps.Copy(clone.aliases, r.aliases)
+	maps.Copy(clone.instances, r.instances)
 	return clone
 }
 
@@ -102,9 +160,12 @@ func (r *Scheme) RegisterScheme(scheme *Scheme) error {
 		return nil
 	}
 
+	scheme.mu.RLock()
+	defer scheme.mu.RUnlock()
+
 	// Register each type from the source scheme
-	for typ := range scheme.defaults {
-		if err := r.RegisterSchemeType(scheme, typ); err != nil {
+	for defaultType := range scheme.defaults.Iter() {
+		if err := r.RegisterSchemeType(scheme, defaultType); err != nil {
 			return err
 		}
 	}
@@ -112,37 +173,10 @@ func (r *Scheme) RegisterScheme(scheme *Scheme) error {
 	return nil
 }
 
-// RegisterSchemeType adds a single type from the given scheme to the current scheme
-func (r *Scheme) RegisterSchemeType(scheme *Scheme, typ Type) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if scheme == nil {
-		return fmt.Errorf("cannot add to nil scheme")
+func (r *Scheme) MustRegisterScheme(scheme *Scheme) {
+	if err := r.RegisterScheme(scheme); err != nil {
+		panic(err)
 	}
-
-	if _, exists := r.defaults[typ]; exists {
-		return TypeAlreadyRegisteredError(typ)
-	}
-
-	prototype, ok := scheme.defaults[typ]
-	if !ok {
-		return fmt.Errorf("type %q not found in the provided scheme", typ)
-	}
-
-	r.defaults[typ] = prototype
-
-	// now copy aliases if they exist
-	for alias, forTyp := range scheme.aliases {
-		if forTyp.Equal(typ) {
-			if _, exists := r.aliases[alias]; exists {
-				return fmt.Errorf("%w: cannot register for type %q", TypeAlreadyRegisteredError(alias), typ)
-			}
-			r.aliases[alias] = typ
-		}
-	}
-
-	return nil
 }
 
 // TypeAlreadyRegisteredError is returned when a type is already registered in the scheme.
@@ -168,23 +202,29 @@ func IsTypeAlreadyRegisteredError(err error) bool {
 // Note that if Scheme.RegisterWithAlias or Scheme.MustRegister were called before,
 // even the first type will be counted as an alias.
 func (r *Scheme) RegisterWithAlias(prototype Typed, types ...Type) error {
+	if len(types) == 0 {
+		return fmt.Errorf("no types provided to register %T", prototype)
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for i, typ := range types {
-		if prototype, exists := r.defaults[typ]; exists {
+	rt := reflect.TypeOf(prototype).Elem()
+	defaultTyp, defaultExists := r.defaults.GetRight(rt)
+	if !defaultExists {
+		r.defaults.Set(types[0], rt)
+		r.instances[rt] = prototype.DeepCopyTyped()
+		defaultTyp = types[0]
+		types = types[1:]
+	}
+	for _, typ := range types {
+		if _, exists := r.defaults.GetLeft(typ); exists {
 			return fmt.Errorf("%w: as default for %T", TypeAlreadyRegisteredError(typ), prototype)
 		}
 		if def, ok := r.aliases[typ]; ok {
 			return fmt.Errorf("%w: as alias for %q", TypeAlreadyRegisteredError(typ), def)
 		}
-		if i == 0 {
-			// first type is the def type
-			r.defaults[typ] = prototype
-		} else {
-			// all other types are aliases
-			r.aliases[typ] = types[0]
-		}
+		r.aliases[typ] = defaultTyp
 	}
 	return nil
 }
@@ -202,8 +242,8 @@ func (r *Scheme) TypeForPrototype(prototype any) (Type, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for typ, proto := range r.defaults {
-		if reflect.TypeOf(prototype).Elem() == reflect.TypeOf(proto).Elem() {
+	for typ, proto := range r.defaults.Iter() {
+		if reflect.TypeOf(prototype).Elem() == proto {
 			return typ, nil
 		}
 	}
@@ -223,7 +263,7 @@ func (r *Scheme) IsRegistered(typ Type) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	_, exists := r.defaults[typ]
+	_, exists := r.defaults.GetLeft(typ)
 	if exists {
 		return true
 	}
@@ -246,14 +286,15 @@ func (r *Scheme) NewObject(typ Type) (Typed, error) {
 	defer r.mu.RUnlock()
 
 	// construct by full type if present in defaults
-	if proto, exists := r.defaults[typ]; exists {
-		instance := proto.DeepCopyTyped()
+	if proto, exists := r.defaults.GetLeft(typ); exists {
+		instance := r.instances[proto].DeepCopyTyped()
 		instance.SetType(typ)
 		return instance, nil
 	}
 	// construct by alias if present
 	if def, ok := r.aliases[typ]; ok {
-		instance := r.defaults[def].DeepCopyTyped()
+		rt, _ := r.defaults.GetLeft(def)
+		instance := r.instances[rt].DeepCopyTyped()
 		instance.SetType(typ)
 		return instance, nil
 	}

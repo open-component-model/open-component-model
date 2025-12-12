@@ -26,7 +26,10 @@ func init() {
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type Config struct {
+	// +ocm:jsonschema-gen:enum=filesystem.config.ocm.software/v1alpha1
+	// +ocm:jsonschema-gen:enum:deprecated=filesystem.config.ocm.software
 	Type runtime.Type `json:"type"`
 
 	// TempFolder defines places where plugins and other functionalities can put ephemeral files under.

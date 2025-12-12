@@ -1,4 +1,4 @@
-// Package descriptor defines the main objects that compose a component version.
+// Package v2 descriptor defines the main objects that compose a component version.
 // The following objects make up a descriptor:
 //
 //	  meta:

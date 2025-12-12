@@ -24,7 +24,7 @@ const (
 )
 
 func NewComponentVersionAnnotation(component, version string) string {
-	return fmt.Sprintf("%s/%s:%s", path.DefaultComponentDescriptorPath, component, version)
+	return fmt.Sprintf("%s:%s", component, version)
 }
 
 // ParseComponentVersionAnnotation parses the component version annotation and returns the component name and version.

@@ -54,7 +54,6 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 ### Options
 
 ```
-      --concurrency-limit int      maximum amount of parallel requests to the repository for resolving component versions (default 4)
       --display-mode enum          display mode can be used in combination with --recursive
                                      static: print the output once the complete component graph is discovered
                                      live (experimental): continuously updates the output to represent the current discovery state of the component graph

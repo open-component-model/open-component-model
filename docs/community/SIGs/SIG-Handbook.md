@@ -24,7 +24,7 @@ All SIG members and activities are subject to the OCM Code of Conduct. See [CODE
 
 ### 2.3 SIG Creation & Charter Requirements
 
-To create a SIG, draft a charter outlining:
+To create a SIG, draft a charter as a standalone markdown document outlining:
 
 - Scope and mission of the SIG
 - Responsibilities and deliverables
@@ -36,13 +36,15 @@ To create a SIG, draft a charter outlining:
 
 Decision-making and conflict resolution processes are defined in this handbook and do not need to be included in the charter.
 
-Fill out the [SIG Submission Template](SIG-Submission-Template.md) with all required info (purpose, scope, initial leadership, initial voting members, meeting cadence, communication channels, repository needs, and code/test ownership statement).
+Create your SIG charter as a markdown document in a new folder `SIG-<sig-name>` under the [`docs/community/SIGs`](https://github.com/open-component-model/open-component-model/tree/main/docs/community/SIGs) directory. The charter should include all required information (purpose, scope, initial leadership, initial voting members, meeting cadence, communication channels, repository needs, and code/test ownership statement). In addition add your SIG to [`sigs.yaml`](sigs.yaml) in the same PR.
 
-Submit your proposal and charter as a new issue in the OCM repository ([create issue](https://github.com/open-component-model/open-component-model/issues)). The OCM Technical Steering Committee (TSC) reviews and approves proposals through a formal vote. The proposal must be added to the TSC meeting agenda. Chair and Tech Lead must be proposed by the SIG and approved by the TSC.
+Submit a pull request containing your charter. To get the TSC aware of the submission, create another PR for a new agenda item for the next TSC meeting, linking the PR containing the charter. The folder for the [TSC meeting minutes](https://github.com/open-component-model/open-component-model/tree/main/docs/steering/meeting-notes) always contains one document for the next TSC meeting occurrence that you can use.
 
-Once approved, announce your SIG in the community (mailing list, Slack, etc.) and update documentation. Add your SIG to [`sigs.yaml`](sigs.yaml) and update documentation as needed.
+The OCM Technical Steering Committee (TSC) reviews and approves proposals through a formal vote.
 
-In case the submission is not approved, the TSC will provide feedback to the proposers for revision and resubmission.
+Once approved, merge your charter PR and announce your SIG in the community using the appropriate channels (mailing list, Slack, etc.).
+
+In case the submission is not approved, the TSC will provide feedback to the proposers for revision of the charter PR and resubmission.
 
 ### 2.4 Decision-Making & TSC Approval
 
@@ -51,7 +53,7 @@ Routine decisions are made by consensus; if consensus cannot be reached, a simpl
 Quorum for votes requires at least 50% of all voting members to be present.
 Major decisions (changes to the SIG charter, leadership, or dissolution) require a two-thirds supermajority of all voting members and formal approval by the TSC (majority vote).
 
-All decisions, votes, and meeting notes must be documented and made public in the OCM community repository.
+All decisions, votes, and meeting notes must be documented and made public in the [`docs/community`](https://github.com/open-component-model/open-component-model/tree/main/docs/community) section in the `open-component-model` Github repository. Every SIG has a sub-folder in the `docs/community/SIGs` directory where charter, meeting notes, decisions, and other relevant documentation are stored.
 
 ### 2.5 SIG Lifecycle
 

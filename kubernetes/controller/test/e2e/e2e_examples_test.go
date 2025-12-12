@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
 	"ocm.software/open-component-model/kubernetes/controller/test/utils"
 )
 
@@ -16,6 +17,7 @@ const (
 	Bootstrap            = "bootstrap.yaml"
 	Rgd                  = "rgd.yaml"
 	Instance             = "instance.yaml"
+	K8sManifest          = "k8s-manifest.yaml"
 	PublicKey            = "ocm.software.pub"
 	PrivateKey           = "ocm.software"
 )
@@ -29,7 +31,7 @@ var _ = Describe("controller", func() {
 				continue
 			}
 
-			reqFiles := []string{ComponentConstructor, Bootstrap, Rgd, Instance}
+			reqFiles := []string{ComponentConstructor, Bootstrap}
 
 			It("should deploy the example "+example.Name(), func(ctx SpecContext) {
 
@@ -66,35 +68,44 @@ var _ = Describe("controller", func() {
 
 				By("bootstrapping the example")
 				Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
-				name := "rgd/" + example.Name()
-				Expect(utils.WaitForResource(ctx, "create", timeout, name)).To(Succeed())
+				name := ""
 
-				Expect(utils.WaitForResource(ctx, "condition=ResourceGraphAccepted=true", timeout, name)).To(
-					Succeed(),
-					"The resource graph definition %s was not accepted which means the RGD is invalid", name,
-				)
-				Expect(
-					utils.WaitForResource(ctx, "condition=KindReady=true", timeout, name)).To(
-					Succeed(),
-					"The kind for the resource graph definition %s is not ready, which means KRO wasn't able to install the CRD in the Cluster", name,
-				)
-				Expect(
-					utils.WaitForResource(ctx, "condition=ControllerReady=true", timeout, name)).To(
-					Succeed(),
-					"The controller for the resource graph definition %s is not ready, which means KRO wasn't able to reconcile the CRD", name,
-				)
-				Expect(
-					utils.WaitForResource(ctx, "condition=Ready=true", timeout, name)).To(
-					Succeed(),
-					"The final readiness condition was not set, which means KRO believes the RGD %s was not reconciled correctly", name,
-				)
+				if slices.Contains(files, K8sManifest) {
+					Expect(utils.MakeServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
+				}
+				if slices.Contains(files, Rgd) {
+					name = "rgd/" + example.Name()
+					Expect(utils.WaitForResource(ctx, "create", timeout, name)).To(Succeed())
 
-				By("creating an instance of the example")
-				Expect(utils.DeployAndWaitForResource(
-					ctx, filepath.Join(examplesDir, example.Name(), Instance),
-					"condition=InstanceSynced=true",
-					timeout,
-				)).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "condition=ResourceGraphAccepted=true", timeout, name)).To(
+						Succeed(),
+						"The resource graph definition %s was not accepted which means the RGD is invalid", name,
+					)
+					Expect(
+						utils.WaitForResource(ctx, "condition=KindReady=true", timeout, name)).To(
+						Succeed(),
+						"The kind for the resource graph definition %s is not ready, which means KRO wasn't able to install the CRD in the Cluster", name,
+					)
+					Expect(
+						utils.WaitForResource(ctx, "condition=ControllerReady=true", timeout, name)).To(
+						Succeed(),
+						"The controller for the resource graph definition %s is not ready, which means KRO wasn't able to reconcile the CRD", name,
+					)
+					Expect(
+						utils.WaitForResource(ctx, "condition=Ready=true", timeout, name)).To(
+						Succeed(),
+						"The final readiness condition was not set, which means KRO believes the RGD %s was not reconciled correctly", name,
+					)
+				}
+
+				if slices.Contains(files, Instance) {
+					By("creating an instance of the example")
+					Expect(utils.DeployAndWaitForResource(
+						ctx, filepath.Join(examplesDir, example.Name(), Instance),
+						"condition=Ready=true",
+						timeout,
+					)).To(Succeed())
+				}
 
 				By("validating the example")
 				name = "deployment.apps/" + example.Name() + "-podinfo"
@@ -120,6 +131,9 @@ var _ = Describe("controller", func() {
 						"'{.items[0].spec.containers[0].env[?(@.name==\"PODINFO_UI_MESSAGE\")].value}'",
 						example.Name(),
 					)).To(Succeed())
+				}
+				if slices.Contains(files, K8sManifest) {
+					Expect(utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")).To(Succeed())
 				}
 			})
 		}

@@ -131,6 +131,8 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 		identity     runtime.Identity
 		wantErr      bool
 		wantEmpty    bool
+		wantNil      bool
+		wantCreds    map[string]string
 	}{
 		{
 			name:         "missing hostname in identity",
@@ -146,6 +148,115 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 			},
 			wantErr:   false,
 			wantEmpty: true,
+		},
+		{
+			name:         "hostname not in dockerconfig",
+			dockerConfig: credentialsv1.DockerConfig{},
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "example.com",
+			},
+			wantNil: true,
+		},
+		{
+			name: "credentials found without port - no fallback needed",
+			dockerConfig: credentialsv1.DockerConfig{
+				DockerConfig: `{"auths":{"registry.example.com":{"username":"testuser","password":"testpass"}}}`,
+			},
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "registry.example.com",
+			},
+			wantCreds: map[string]string{
+				CredentialKeyUsername: "testuser",
+				CredentialKeyPassword: "testpass",
+			},
+		},
+		{
+			name: "credentials stored with port - fallback succeeds",
+			dockerConfig: credentialsv1.DockerConfig{
+				DockerConfig: `{"auths":{"registry.example.com:5000":{"username":"portuser","password":"portpass"}}}`,
+			},
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "registry.example.com",
+				runtime.IdentityAttributePort:     "5000",
+			},
+			wantCreds: map[string]string{
+				CredentialKeyUsername: "portuser",
+				CredentialKeyPassword: "portpass",
+			},
+		},
+		{
+			name: "no credentials for hostname, fallback with port also fails",
+			dockerConfig: credentialsv1.DockerConfig{
+				DockerConfig: `{"auths":{"other.example.com":{"username":"otheruser","password":"otherpass"}}}`,
+			},
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "registry.example.com",
+				runtime.IdentityAttributePort:     "5000",
+			},
+			wantNil: true,
+		},
+		{
+			name: "no credentials for hostname and no port in identity",
+			dockerConfig: credentialsv1.DockerConfig{
+				DockerConfig: `{"auths":{"other.example.com":{"username":"otheruser","password":"otherpass"}}}`,
+			},
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "registry.example.com",
+			},
+			wantNil: true,
+		},
+		{
+			name: "credentials with auth field - fallback with port",
+			dockerConfig: credentialsv1.DockerConfig{
+				DockerConfig: `{"auths":{"registry.example.com:443":{"auth":"dXNlcjpwYXNz"}}}`,
+			},
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "registry.example.com",
+				runtime.IdentityAttributePort:     "443",
+			},
+			wantCreds: map[string]string{
+				CredentialKeyUsername: "user",
+				CredentialKeyPassword: "pass",
+			},
+		},
+		{
+			name: "credentials with username and password - found via hostname:port fallback",
+			dockerConfig: credentialsv1.DockerConfig{
+				DockerConfig: `{"auths":{"registry.example.com:8080":{"username":"fulluser","password":"fullpass"}}}`,
+			},
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "registry.example.com",
+				runtime.IdentityAttributePort:     "8080",
+			},
+			wantCreds: map[string]string{
+				CredentialKeyUsername: "fulluser",
+				CredentialKeyPassword: "fullpass",
+			},
+		},
+		{
+			name: "credentials exist for both hostname and hostname:port - prefers hostname (no fallback)",
+			dockerConfig: credentialsv1.DockerConfig{
+				DockerConfig: `{"auths":{"registry.example.com":{"username":"noport","password":"noport"},"registry.example.com:5000":{"username":"withport","password":"withport"}}}`,
+			},
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "registry.example.com",
+				runtime.IdentityAttributePort:     "5000",
+			},
+			wantCreds: map[string]string{
+				CredentialKeyUsername: "noport",
+				CredentialKeyPassword: "noport",
+			},
+		},
+		{
+			name: "wrong port in fallback - returns nil",
+			dockerConfig: credentialsv1.DockerConfig{
+				DockerConfig: `{"auths":{"registry.example.com:9999":{"username":"wrongport","password":"wrongport"}}}`,
+			},
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "registry.example.com",
+				runtime.IdentityAttributePort:     "5000",
+			},
+			wantNil: true,
 		},
 	}
 
@@ -164,7 +275,15 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 				return
 			}
 
-			// Additional assertions for successful cases can be added here
+			if tt.wantNil {
+				assert.Nil(t, creds)
+				return
+			}
+
+			if tt.wantCreds != nil {
+				assert.Equal(t, tt.wantCreds, creds)
+				return
+			}
 		})
 	}
 }

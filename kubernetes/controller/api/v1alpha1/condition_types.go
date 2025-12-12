@@ -42,4 +42,7 @@ const (
 
 	// ResourceNotSynced is used when the referenced resource is not yet synced.
 	ResourceNotSynced = "ResourceNotSynced"
+
+	// ResolutionInProgress is used when resolution is still in progress.
+	ResolutionInProgress = "ResolutionInProgress"
 )

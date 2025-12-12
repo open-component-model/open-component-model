@@ -7,6 +7,7 @@ import (
 
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -97,10 +98,6 @@ func RegisterResourcePlugin[T runtime.Typed](
 	plugin v1.ReadWriteResourcePluginContract,
 	c *endpoints.EndpointBuilder,
 ) error {
-	if c.CurrentTypes.Types == nil {
-		c.CurrentTypes.Types = make(map[types.PluginType][]types.Type)
-	}
-
 	typ, err := c.Scheme.TypeForPrototype(proto)
 	if err != nil {
 		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
@@ -122,15 +119,21 @@ func RegisterResourcePlugin[T runtime.Typed](
 		},
 	)
 
-	schema, err := runtime.GenerateJSONSchemaForType(proto)
+	schema, err := plugins.GenerateJSONSchemaForType(proto)
 	if err != nil {
 		return fmt.Errorf("failed to generate jsonschema for prototype %T: %w", proto, err)
 	}
 
 	// Add resource type to the plugin's types
-	c.CurrentTypes.Types[types.ResourceRepositoryPluginType] = append(c.CurrentTypes.Types[types.ResourceRepositoryPluginType], types.Type{
-		Type:       typ,
-		JSONSchema: schema,
+	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.ResourceRepositoryPluginType)),
+		SupportedAccessTypes: []types.Type{
+			{
+				Type:       typ,
+				Aliases:    nil,
+				JSONSchema: schema,
+			},
+		},
 	})
 
 	return nil

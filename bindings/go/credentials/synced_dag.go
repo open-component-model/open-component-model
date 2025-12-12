@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"errors"
 	"fmt"
 	"path"
 	"sync"
@@ -14,6 +15,11 @@ const (
 	//nolint:gosec // gosec thinks this is a hardcoded credential, but it's not.
 	attributeCredentials = "attributes.ocm.software/credentials"
 )
+
+// ErrNoDirectCredentials is returned when a node in the graph does not have any directly
+// attached credentials. There might still be credentials available through
+// plugins which can be resolved at runtime.
+var ErrNoDirectCredentials = errors.New("no direct credentials found in graph")
 
 func newSyncedDag() *syncedDag {
 	return &syncedDag{
@@ -30,7 +36,7 @@ func (g *syncedDag) getVertex(id string) (v *dag.Vertex[string], ok bool) {
 	g.dagMu.RLock()
 	defer g.dagMu.RUnlock()
 	v, ok = g.dag.Vertices[id]
-	return
+	return v, ok
 }
 
 func (g *syncedDag) getIdentity(id string) (runtime.Identity, bool) {

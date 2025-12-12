@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: docker-config-json
+data:
+  # Base64 encoded value of docker config for registry and basic auth
+  .dockerconfigjson: "eyJhdXRocyI6eyJodHRwOi8vcHJvdGVjdGVkLXJlZ2lzdHJ5Mi1pbnRlcm5hbC5kZWZhdWx0LnN2Yy5jbHVzdGVyLmxvY2FsIjp7InVzZXJuYW1lIjoiYWRtaW4yIiwicGFzc3dvcmQiOiJhZG1pbjIiLCJhdXRoIjoiWVdSdGFXNHlPbUZrYldsdU1nPT0ifX19"
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: docker-config-json-repository
+spec:
+  repositorySpec:
+    baseUrl: http://protected-registry2-internal.default.svc.cluster.local:5003
+    port: 5003
+    scheme: http
+    type: OCIRegistry # ocm lib v1 type
+  interval: 10m
+  ocmConfig:
+    - kind: Secret
+      name: docker-config-json
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: docker-config-json-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/docker-config-json
+  repositoryRef:
+    name: docker-config-json-repository
+  semver: 1.0.0
+  interval: 10m
+  ocmConfig:
+    - kind: Secret
+      name: docker-config-json
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: docker-config-json-resource-rgd
+spec:
+  componentRef:
+    name: docker-config-json-component
+  resource:
+    byReference:
+      resource:
+        name: kro-rgd
+  interval: 10m
+  ocmConfig:
+    - kind: Secret
+      name: docker-config-json
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: docker-config-json-deployer
+spec:
+  resourceRef:
+    name: docker-config-json-resource-rgd
+    namespace: default
+  ocmConfig:
+    - kind: Secret
+      name: docker-config-json
+      namespace: default

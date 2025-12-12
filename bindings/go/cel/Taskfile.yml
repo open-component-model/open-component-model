@@ -1,0 +1,14 @@
+version: '3'
+
+
+tasks:
+  tmp:
+    cmds:
+      - mkdir -p tmp
+    status:
+      - test -d tmp
+  test:
+    cmds:
+      - go test -v -coverprofile=tmp/coverage.out ./...
+    deps:
+      - tmp

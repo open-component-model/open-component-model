@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	_ "embed"
+
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 )
 
@@ -59,4 +61,11 @@ func (u *Raw) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+//go:embed schemas/Raw.schema.json
+var schemaRaw []byte
+
+func (u Raw) JSONSchema() []byte {
+	return schemaRaw
 }

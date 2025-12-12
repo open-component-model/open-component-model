@@ -1,4 +1,3 @@
-// Package signing defines the interface for signing and verification of Component Descriptors.
 package signing
 
 import (

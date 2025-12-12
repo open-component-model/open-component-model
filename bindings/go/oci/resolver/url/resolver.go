@@ -2,15 +2,19 @@ package url
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 
 	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
+	"oras.land/oras-go/v2/registry/remote/errcode"
 
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func New(opts ...Option) (*CachingResolver, error) {
@@ -31,6 +35,7 @@ func New(opts ...Option) (*CachingResolver, error) {
 // each repository is only created once per reference.
 type CachingResolver struct {
 	baseURL    string
+	subPath    string
 	baseClient remote.Client
 	plainHTTP  bool
 
@@ -45,7 +50,11 @@ func (resolver *CachingResolver) SetClient(client remote.Client) {
 }
 
 func (resolver *CachingResolver) BasePath() string {
-	return resolver.baseURL + "/" + path.DefaultComponentDescriptorPath
+	basePath := resolver.baseURL
+	if resolver.subPath != "" {
+		basePath = basePath + "/" + resolver.subPath
+	}
+	return basePath + "/" + path.DefaultComponentDescriptorPath
 }
 
 func (resolver *CachingResolver) ComponentVersionReference(ctx context.Context, component, version string) string {
@@ -57,10 +66,18 @@ func (resolver *CachingResolver) Reference(reference string) (fmt.Stringer, erro
 	return registry.ParseReference(reference)
 }
 
-// Ping does a resolver.Ping that uses OCI specific technology, in our case it's Oras. Oras' Ping
-// does make sure that authentication is working and that the registry is available.
+// Ping checks registry availability and validates authentication credentials.
+// It extracts the host (hostname:port) from baseURL and calls ORAS registry.Ping on the /v2/ endpoint.
+// The subPath is ignored as ORAS only supports pinging the registry root.
 func (resolver *CachingResolver) Ping(ctx context.Context) error {
-	r, err := remote.NewRegistry(resolver.baseURL)
+	// Parse baseURL (with or without scheme) and extract host
+	parsedURL, err := runtime.ParseURLAndAllowNoScheme(resolver.baseURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse base URL: %w", err)
+	}
+
+	// Use only host (hostname:port) for registry ping (discard scheme and path)
+	r, err := remote.NewRegistry(parsedURL.Host)
 	if err != nil {
 		return fmt.Errorf("failed to create registry client: %w", err)
 	}
@@ -68,7 +85,23 @@ func (resolver *CachingResolver) Ping(ctx context.Context) error {
 	if resolver.baseClient != nil {
 		r.Client = resolver.baseClient
 	}
-	return r.Ping(ctx)
+	if err := r.Ping(ctx); err != nil {
+		errResp := &errcode.ErrorResponse{}
+		if ok := errors.As(err, &errResp); ok {
+			switch errResp.StatusCode {
+			case http.StatusForbidden, http.StatusUnauthorized:
+				// According to the distribution spec the registry might opt for credentials
+				// for pinging the Base. We consider that as a success, because at least the
+				// registry responded and is available regardless of access or configured credentials.
+				// References:
+				//   - https://distribution.github.io/distribution/spec/api/#base
+				return nil
+			}
+		}
+
+		return fmt.Errorf("failed to ping registry: %w", err)
+	}
+	return nil
 }
 
 func (resolver *CachingResolver) StoreForReference(_ context.Context, reference string) (spec.Store, error) {

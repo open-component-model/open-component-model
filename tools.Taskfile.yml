@@ -8,13 +8,27 @@ tasks:
   deepcopy-gen/generate-deepcopy:
     desc: "Generate kubernetes-style deepcopy code for all types in the project"
     deps: [deepcopy-gen/install]
-    cmds:
+    cmds: [ task: deepcopy-gen/concurrent ]
+
+  deepcopy-gen/concurrent:
+    desc: "Run golangci-lint on all modules concurrently after install"
+    internal: true
+    deps:
       - for: { var: GO_MODULES }
-        cmd: |
-          cd {{.ITEM}} && \
-          {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }} \
-          --output-file "zz_generated.deepcopy.go" \
-          ./...
+        task: 'deepcopy-gen/module'
+        vars: { ITEM: '{{ .ITEM }}' }
+
+  deepcopy-gen/module:
+    desc: "Generate kubernetes-style deepcopy code for all types in a single module"
+    internal: true
+    silent: true
+    prefix: '{{.ITEM}}'
+    dir: '{{.ITEM}}'
+    cmd: |
+      {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }} \
+      --output-file "zz_generated.deepcopy.go" \
+      ./...
+
 
   deepcopy-gen/install:
     desc: "Install {{.PKG}} at {{ .DEEPCOPY_GEN_TARGET_VERSION }} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
@@ -45,21 +59,24 @@ tasks:
         task: 'golangci-lint/module'
         vars:
           ITEM: '{{ .ITEM }}'
-      - task: 'golangci-lint/module'
-        vars:
-          ITEM: 'cli'
 
 
   golangci-lint/module:
     desc: "Run golangci-lint on a single go module specified by ITEM"
     internal: true
+    silent: true
+    prefix: '{{.ITEM}}'
+    dir: '{{.ITEM}}'
+    vars:
+      GOLANGCI_LINT: '{{ .ROOT_DIR }}/tmp/bin/golangci-lint'
+      GOLANGCI_LINT_CONFIG: '{{ .ROOT_DIR }}/.github/config/golangci.yml'
+      TIMEOUT: '10m'
     cmd: |
-      cd {{.ITEM}} && 
-        {{ .ROOT_DIR }}/tmp/bin/golangci-lint run \
-          --timeout 10m \
-          --config={{ .ROOT_DIR }}/.github/config/golangci.yml \
-          --path-prefix {{.ITEM}} \
-          {{ .CLI_ARGS }} ./...
+      {{ .GOLANGCI_LINT }} run \
+        --config={{ .GOLANGCI_LINT_CONFIG }} \
+        --timeout {{ .TIMEOUT }} \
+        --path-prefix {{.ITEM}} \
+        {{ .CLI_ARGS }} ./...
 
   golangci-lint/install:
     desc: "Install golangci-lint {{ .GOLANGCI_LINT_TARGET_VERSION }} into {{ .ROOT_DIR }}/tmp/bin if needed"
@@ -76,3 +93,13 @@ tasks:
         curl -fsSL
         "https://raw.githubusercontent.com/golangci/golangci-lint/{{ .GOLANGCI_LINT_TARGET_VERSION }}/install.sh"
         | sh -s -- -b "{{ .ROOT_DIR }}/tmp/bin" "{{ .GOLANGCI_LINT_TARGET_VERSION }}"
+
+  golangci-lint/verify:
+    desc: "Run golangci-lint verify once on the config file"
+    deps: [golangci-lint/install]
+    vars:
+      GOLANGCI_LINT: '{{ .ROOT_DIR }}/tmp/bin/golangci-lint'
+      GOLANGCI_LINT_CONFIG: '{{ .ROOT_DIR }}/.github/config/golangci.yml'
+    cmd: |
+      {{ .GOLANGCI_LINT }} config verify \
+        --config={{ .GOLANGCI_LINT_CONFIG }}

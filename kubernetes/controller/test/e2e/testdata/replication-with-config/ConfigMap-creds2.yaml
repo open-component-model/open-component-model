@@ -11,9 +11,31 @@ data:
       - type: credentials.config.ocm.software
         consumers:
           - identity:
+              type: OCIRepository
+              hostname: localhost
+              port: "31003"
+              scheme: http
+            credentials:
+              - type: Credentials
+                properties:
+                  username: admin2
+                  password: admin2
+          - identity:
+              type: OCIRepository
+              hostname: protected-registry2-internal.default.svc.cluster.local
+              port: "5003"
+              scheme: http
+            credentials:
+              - type: Credentials
+                properties:
+                  username: admin2
+                  password: admin2
+          # Identity for ocm v1 matcher (OCIRegistry (v1) != OCIRepository (v2))
+          - identity:
               type: OCIRegistry
               hostname: localhost
-              port: 31003
+              port: "31003"
+              scheme: http
             credentials:
               - type: Credentials
                 properties:
@@ -22,7 +44,8 @@ data:
           - identity:
               type: OCIRegistry
               hostname: protected-registry2-internal.default.svc.cluster.local
-              port: 5003
+              port: "5003"
+              scheme: http
             credentials:
               - type: Credentials
                 properties:

@@ -16,6 +16,20 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+var (
+	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+)
+
+func dummyCapability(schema []byte) v1.CapabilitySpec {
+	return v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.CredentialRepositoryPluginType)),
+		SupportedConsumerIdentityTypes: []types.Type{{
+			Type:       dummyType,
+			JSONSchema: schema,
+		}},
+	}
+}
+
 func TestConsumerIdentityForConfig(t *testing.T) {
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
@@ -30,12 +44,15 @@ func TestConsumerIdentityForConfig(t *testing.T) {
 		{
 			name: "success",
 			request: v1.ConsumerIdentityForConfigRequest[runtime.Typed]{
-				Config: &dummyv1.Repository{},
+				Config: &runtime.Raw{
+					Type: dummyType,
+					Data: []byte(`{}`),
+				},
 			},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == ConsumerIdentityForConfig {
-						identity := map[string]string{"id": "test-identity", "type": "test-type"}
+						identity := map[string]string{"id": "test-identity", "type": dummyType.String()}
 						err := json.NewEncoder(w).Encode(identity)
 						require.NoError(t, err)
 						return
@@ -80,8 +97,8 @@ func TestConsumerIdentityForConfig(t *testing.T) {
 			plugin := NewCredentialRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.CredentialRepositoryPluginType,
-			}, server.URL, []byte(`{}`))
+				PluginType: v1.CredentialRepositoryPluginType,
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			identity, err := plugin.ConsumerIdentityForConfig(context.Background(), tt.request)
 			if tt.expectErr {
@@ -109,7 +126,10 @@ func TestResolve(t *testing.T) {
 		{
 			name: "success",
 			request: v1.ResolveRequest[runtime.Typed]{
-				Config:   &dummyv1.Repository{},
+				Config: &runtime.Raw{
+					Type: dummyType,
+					Data: []byte(`{}`),
+				},
 				Identity: map[string]string{"id": "test-identity"},
 			},
 			credentials: map[string]string{"key": "value"},
@@ -179,8 +199,8 @@ func TestResolve(t *testing.T) {
 			plugin := NewCredentialRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.CredentialRepositoryPluginType,
-			}, server.URL, []byte(`{}`))
+				PluginType: v1.CredentialRepositoryPluginType,
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			resolved, err := plugin.Resolve(context.Background(), tt.request, tt.credentials)
 			if tt.expectErr {
@@ -231,8 +251,8 @@ func TestPing(t *testing.T) {
 			plugin := NewCredentialRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.CredentialRepositoryPluginType,
-			}, server.URL, []byte(`{}`))
+				PluginType: v1.CredentialRepositoryPluginType,
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			err := plugin.Ping(context.Background())
 			if tt.expectErr {
