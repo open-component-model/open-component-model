@@ -4,5 +4,6 @@
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/schemas/OCIAddComponentVersionOutput.schema.json",
   "title": "OCIAddComponentVersionOutput",
   "type": "object",
+  "description": "OCIAddComponentVersionOutput is the output specification of the\nOCIAddComponentVersion.",
   "additionalProperties": false
 }

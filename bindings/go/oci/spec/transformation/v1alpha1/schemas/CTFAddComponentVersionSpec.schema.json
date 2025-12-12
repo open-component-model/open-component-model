@@ -4,6 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/schemas/CTFAddComponentVersionSpec.schema.json",
   "title": "CTFAddComponentVersionSpec",
   "type": "object",
+  "description": "CTFAddComponentVersionSpec is the specification of the input specification\nfor the CTFAddComponentVersion.",
   "properties": {
     "descriptor": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

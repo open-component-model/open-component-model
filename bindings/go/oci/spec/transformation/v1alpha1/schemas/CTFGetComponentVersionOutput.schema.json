@@ -4,6 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/schemas/CTFGetComponentVersionOutput.schema.json",
   "title": "CTFGetComponentVersionOutput",
   "type": "object",
+  "description": "CTFGetComponentVersionOutput is the output specification of the\nCTFGetComponentVersion.",
   "properties": {
     "descriptor": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

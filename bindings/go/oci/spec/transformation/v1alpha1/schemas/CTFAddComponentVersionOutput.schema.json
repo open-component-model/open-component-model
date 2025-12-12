@@ -4,5 +4,6 @@
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/schemas/CTFAddComponentVersionOutput.schema.json",
   "title": "CTFAddComponentVersionOutput",
   "type": "object",
+  "description": "CTFAddComponentVersionOutput is the output specification of the\nCTFAddComponentVersion.",
   "additionalProperties": false
 }

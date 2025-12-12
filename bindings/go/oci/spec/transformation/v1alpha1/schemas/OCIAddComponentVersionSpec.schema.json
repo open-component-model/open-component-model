@@ -4,6 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/schemas/OCIAddComponentVersionSpec.schema.json",
   "title": "OCIAddComponentVersionSpec",
   "type": "object",
+  "description": "OCIAddComponentVersionSpec is the specification of the input specification\nfor the OCIAddComponentVersion.",
   "properties": {
     "descriptor": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

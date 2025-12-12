@@ -4,6 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/schemas/CTFGetComponentVersionSpec.schema.json",
   "title": "CTFGetComponentVersionSpec",
   "type": "object",
+  "description": "CTFGetComponentVersionSpec is the specification of the input specification\nof the CTFGetComponentVersion.",
   "properties": {
     "component": {
       "type": "string"

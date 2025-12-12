@@ -4,6 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/schemas/OCIGetComponentVersionSpec.schema.json",
   "title": "OCIGetComponentVersionSpec",
   "type": "object",
+  "description": "OCIGetComponentVersionSpec is the specification of the input specification\nfor the OCIGetComponentVersion.",
   "properties": {
     "component": {
       "type": "string"
