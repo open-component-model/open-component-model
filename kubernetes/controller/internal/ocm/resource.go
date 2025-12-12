@@ -16,14 +16,13 @@ import (
 func GetResourceAccessForComponentVersion(ctx context.Context, cv ocmctx.ComponentVersionAccess, reference metav1.ResourceReference, resolver ocmctx.ComponentVersionResolver, skipVerification bool) (ocmctx.ResourceAccess, ocmctx.ComponentVersionAccess, error) {
 	logger := log.FromContext(ctx)
 
-	// resAcc, cvAcc, err := resourcerefs.ResolveResourceReference(cv, reference, resolver)
 	resAcc, cvAcc, err := ResolveResourceReference(cv, reference, resolver)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to resolve resource reference: %w", err)
 	}
 
 	if !skipVerification {
-		if err := verifyResource(resAcc, cvAcc); err != nil {
+		if err := VerifyResource(resAcc, cvAcc); err != nil {
 			return nil, nil, fmt.Errorf("failed to verify resource: %w", err)
 		}
 	} else {
@@ -33,8 +32,8 @@ func GetResourceAccessForComponentVersion(ctx context.Context, cv ocmctx.Compone
 	return resAcc, cvAcc, nil
 }
 
-// verifyResource verifies the resource digest with the digest from the component version access and component descriptor.
-func verifyResource(access ocmctx.ResourceAccess, cv ocmctx.ComponentVersionAccess) error {
+// VerifyResource verifies the resource digest with the digest from the component version access and component descriptor.
+func VerifyResource(access ocmctx.ResourceAccess, cv ocmctx.ComponentVersionAccess) error {
 	// Create data access
 	accessMethod, err := access.AccessMethod()
 	if err != nil {

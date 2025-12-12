@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: HelmNested
+metadata:
+  name: helm-nested
+spec:
+  prefix: helm-nested
