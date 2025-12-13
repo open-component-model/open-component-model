@@ -25,6 +25,6 @@ require (
 	golang.org/x/text v0.31.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha4 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha5 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
