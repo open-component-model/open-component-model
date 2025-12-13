@@ -1,16 +1,21 @@
 package jsonschemagen
 
 import (
+	"go/constant"
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
 
-// ApplyConstEnum populates s.OneOf from const values declared for the type.
-// Marker-based enums always override const-based enums.
-// Additionally, const-level doc comments are copied into the "description" field.
-func ApplyConstEnum(s *JSONSchemaDraft202012, consts []*universe.ConstInfo) {
-	if s == nil || len(consts) == 0 {
+// ApplyConstEnum populates or enriches s.OneOf from enum values declared
+// as Go consts for the type.
+//
+// Rules:
+//   - Marker-based enums always win structurally
+//   - Const-based enums provide descriptions + deprecated flags
+//   - If no enum exists yet, const enums create it
+func ApplyConstEnum(s *JSONSchemaDraft202012, enums []*universe.Const) {
+	if s == nil || len(enums) == 0 {
 		return
 	}
 
@@ -23,24 +28,23 @@ func ApplyConstEnum(s *JSONSchemaDraft202012, consts []*universe.ConstInfo) {
 	meta := map[any]constMeta{}
 	var order []any
 
-	for _, c := range consts {
-		lit, ok := c.Literal()
+	for _, ev := range enums {
+		lit, ok := constLiteral(ev)
 		if !ok {
 			continue
 		}
 
-		// const-level markers
-		markers := ExtractMarkers(c.Doc, BaseMarker)
-		for k, v := range ExtractMarkers(c.Comment, BaseMarker) {
+		// collect markers
+		markers := ExtractMarkers(ev.Doc, BaseMarker)
+		for k, v := range ExtractMarkers(ev.Comment, BaseMarker) {
 			markers[k] = v
 		}
 
-		desc, deprecated := extractConstDescription(c)
+		desc, deprecated := extractEnumDescription(ev)
 		if !deprecated {
 			_, deprecated = markers["enum:deprecated"]
 		}
 
-		// keep first occurrence order
 		if _, exists := meta[lit]; !exists {
 			order = append(order, lit)
 		}
@@ -54,7 +58,7 @@ func ApplyConstEnum(s *JSONSchemaDraft202012, consts []*universe.ConstInfo) {
 		return
 	}
 
-	// CASE 1: no existing enum/oneOf → build oneOf from consts
+	// CASE 1: no enum yet → create oneOf from const enums
 	if len(s.OneOf) == 0 && len(s.Enum) == 0 {
 		var oneOf []*JSONSchemaDraft202012
 		for _, lit := range order {
@@ -64,8 +68,7 @@ func ApplyConstEnum(s *JSONSchemaDraft202012, consts []*universe.ConstInfo) {
 				Description: m.desc,
 			}
 			if m.deprecated {
-				b := true
-				entry.Deprecated = &b
+				entry.Deprecated = Ptr(true)
 			}
 			oneOf = append(oneOf, entry)
 		}
@@ -73,8 +76,7 @@ func ApplyConstEnum(s *JSONSchemaDraft202012, consts []*universe.ConstInfo) {
 		return
 	}
 
-	// CASE 2: oneOf already present (e.g. from +ocm:jsonschema-gen:enum=…)
-	// → enrich matching entries with description/Deprecated from consts.
+	// CASE 2: enum already exists → enrich entries
 	if len(s.OneOf) > 0 {
 		for _, entry := range s.OneOf {
 			m, ok := meta[entry.Const]
@@ -85,20 +87,36 @@ func ApplyConstEnum(s *JSONSchemaDraft202012, consts []*universe.ConstInfo) {
 				entry.Description = m.desc
 			}
 			if m.deprecated && entry.Deprecated == nil {
-				b := true
-				entry.Deprecated = &b
+				entry.Deprecated = Ptr(true)
 			}
 		}
 	}
 }
 
-func extractConstDescription(c *universe.ConstInfo) (string, bool) {
-	if c == nil {
-		return "", false
-	}
-	lines, deprecated := collectDoc(c.Doc)
+func extractEnumDescription(ev *universe.Const) (string, bool) {
+	lines, deprecated := collectDoc(ev.Doc)
 	if len(lines) == 0 {
-		lines, deprecated = collectDoc(c.Comment)
+		lines, deprecated = collectDoc(ev.Comment)
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n")), deprecated
+}
+
+func constLiteral(c *universe.Const) (any, bool) {
+	if c.Obj == nil {
+		return nil, false
+	}
+
+	v := c.Obj.Val()
+
+	switch v.Kind() {
+	case constant.String:
+		return constant.StringVal(v), true
+	case constant.Int:
+		i, _ := constant.Int64Val(v)
+		return i, true
+	case constant.Bool:
+		return constant.BoolVal(v), true
+	default:
+		return nil, false
+	}
 }
