@@ -10,7 +10,7 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/constructor v0.0.4
-	ocm.software/open-component-model/bindings/go/oci v0.0.19
+	ocm.software/open-component-model/bindings/go/oci v0.0.21
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	oras.land/oras-go/v2 v2.6.0
@@ -118,7 +118,7 @@ require (
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251212081102-d29be105f685 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251212081102-d29be105f685 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha4 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha5 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.4 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.20.1 // indirect
