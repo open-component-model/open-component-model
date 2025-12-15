@@ -889,7 +889,7 @@ var _ = Describe("Component Controller", func() {
 					Verify: []v1alpha1.Verification{
 						{
 							Signature: signatureName,
-							SecretRef: corev1.LocalObjectReference{secretName},
+							SecretRef: corev1.LocalObjectReference{Name: secretName},
 						},
 					},
 				},
@@ -980,7 +980,7 @@ var _ = Describe("Component Controller", func() {
 					Verify: []v1alpha1.Verification{
 						{
 							Signature: signatureNameSecret,
-							SecretRef: corev1.LocalObjectReference{secretNameSecret},
+							SecretRef: corev1.LocalObjectReference{Name: secretNameSecret},
 						},
 						{
 							Signature: signatureNameValue,

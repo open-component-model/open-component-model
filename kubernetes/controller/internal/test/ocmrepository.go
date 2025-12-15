@@ -52,7 +52,7 @@ func SetupRepositoryWithSpecData(
 func SetupCTFComponentVersionRepository(ctx SpecContext, ctfpath string, descs []*descriptor.Descriptor) (*oci.Repository, []byte) {
 	GinkgoHelper()
 
-	repoSpec := &ctf.Repository{Type: runtime.Type{"v1", "ctf"}, FilePath: ctfpath, AccessMode: ctf.AccessModeReadWrite}
+	repoSpec := &ctf.Repository{Type: runtime.Type{Version: "v1", Name: "ctf"}, FilePath: ctfpath, AccessMode: ctf.AccessModeReadWrite}
 	repo, err := ocirepository.NewFromCTFRepoV1(ctx, repoSpec)
 	Expect(err).NotTo(HaveOccurred())
 
