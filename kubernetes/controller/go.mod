@@ -32,7 +32,7 @@ require (
 
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
-	github.com/docker/cli v28.5.2+incompatible
+	github.com/docker/cli v29.0.2+incompatible
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	ocm.software/ocm v0.32.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
@@ -278,6 +278,8 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/locker v1.0.1 // indirect
+	github.com/moby/moby/api v1.52.0 // indirect
+	github.com/moby/moby/client v0.2.1 // indirect
 	github.com/moby/spdystream v0.5.0 // indirect
 	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/moby/sys/capability v0.4.0 // indirect
