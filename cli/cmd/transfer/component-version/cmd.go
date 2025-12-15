@@ -161,7 +161,7 @@ func buildGraphDefinition(
 			},
 			{
 				TransformationMeta: meta.TransformationMeta{
-					Type: chooseAddType(from),
+					Type: chooseAddType(to),
 					ID:   "upload",
 				},
 				Spec: &runtime.Unstructured{Data: map[string]interface{}{
