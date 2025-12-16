@@ -71,6 +71,7 @@ ocm [sub-command] [flags]
 * [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
 * [ocm plugin]({{< relref "ocm_plugin.md" >}})	 - Manage OCM plugins
 * [ocm sign]({{< relref "ocm_sign.md" >}})	 - create signatures for component versions in OCM
+* [ocm transfer]({{< relref "ocm_transfer.md" >}})	 - Transfer anything in OCM
 * [ocm verify]({{< relref "ocm_verify.md" >}})	 - verify digests and signatures of component versions in OCM
 * [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
 

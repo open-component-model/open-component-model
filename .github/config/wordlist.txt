@@ -99,6 +99,8 @@ crs
 crypto
 ctf
 ctfs
+CTFAddComponentVersion
+CTFGetComponentVersion
 ctx
 cvs
 cwienk
@@ -315,6 +317,8 @@ ociartifact
 ocireg
 ociregistry
 ocirepository
+OCIAddComponentVersion
+OCIGetComponentVersion
 ocm
 ocmbot
 ocmcli
@@ -455,6 +459,7 @@ toolset
 transformationtypes
 transformerplugin
 transportarchive
+TransformationGraphDefinition
 tsc
 typehandler
 typename
