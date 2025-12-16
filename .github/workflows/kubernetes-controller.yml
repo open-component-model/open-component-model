@@ -40,7 +40,7 @@ jobs:
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
           go-version-file: kubernetes/controller/go.mod
-          cache-dependency-path: kubernetes/controller/go.sum
+          cache: false
 
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
@@ -66,9 +66,7 @@ jobs:
       - name: Cleanup unused cache
         shell: bash
         run: |
-          docker system prune --force
-          go clean -cache
-          go clean -modcache        
+          docker system prune --force        
 
   publish_latest:
     name: "Publish Latest Image"
