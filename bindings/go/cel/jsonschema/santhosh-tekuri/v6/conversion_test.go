@@ -42,7 +42,7 @@ func TestSchemas(t *testing.T) {
 		{
 			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/Config.schema.json",
 			verify: func(t *testing.T, decl *jsonschema.DeclType) {
-				require.Equal(t, "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1/schemas/Config.schema.json", decl.TypeName())
+				require.Equal(t, "ocm__dot__software__slash__open__dash__component__dash__model__slash__bindings__slash__go__slash__rsa__slash__signing__slash__v1alpha1__slash__schemas__slash__Config__dot__schema__dot__json", decl.TypeName())
 				require.True(t, decl.IsObject())
 				require.Equal(t, []string{"type"}, decl.Required())
 				require.Len(t, decl.Fields, 3)
@@ -179,7 +179,7 @@ func TestSchemas(t *testing.T) {
 		{
 			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/EnumConstOneOf.schema.json",
 			verify: func(t *testing.T, decl *jsonschema.DeclType) {
-				require.Equal(t, "test/EnumConstOneOf.schema.json", decl.TypeName())
+				require.Equal(t, "test__slash__EnumConstOneOf__dot__schema__dot__json", decl.TypeName())
 				require.Len(t, decl.Fields, 1)
 				field := decl.Fields["custom"]
 				require.Equal(t, "string", field.Type.TypeName())
