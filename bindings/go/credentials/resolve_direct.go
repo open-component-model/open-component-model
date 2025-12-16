@@ -27,7 +27,7 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 		return creds, nil
 	}
 
-	// Non–leaf node: try to resolve each child and use first result.
+	// Non–leaf node: try to resolve each child and use first successfully resolved result.
 	node := identity.String()
 
 	var result runtime.Typed
