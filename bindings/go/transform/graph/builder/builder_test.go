@@ -32,7 +32,15 @@ func TestGraphBuilder_EvaluateAndProcessGraph(t *testing.T) {
 	r := require.New(t)
 	builder := newTestBuilder(t)
 
-	yamlSrc := `
+	tests := []struct {
+		name                 string
+		transformationSpec   string
+		staticAnalysisErr    require.ErrorAssertionFunc
+		runtimeProcessingErr require.ErrorAssertionFunc
+	}{
+		{
+			name: "valid graph",
+			transformationSpec: `
 environment:
   name: "my-object"
   version: "1.0.0"
@@ -46,12 +54,85 @@ transformations:
   type: MockAddObjectTransformer/v1alpha1
   spec:
     object: ${get1.output.object}
-`
-	tgd := &v1alpha1.TransformationGraphDefinition{}
-	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
-	graph, err := builder.BuildAndCheck(tgd)
-	r.NoError(err)
-	r.NotNil(graph)
+`,
+			staticAnalysisErr:    require.NoError,
+			runtimeProcessingErr: require.NoError,
+		},
+		{
+			name: "cel reference to non existing variable",
+			transformationSpec: `
+environment:
+  name: "my-object"
+  version: "1.0.0"
+transformations:
+- id: get1
+  type: MockGetObjectTransformer/v1alpha1
+  spec:
+    name: "${nonExistingVariable.name}"
+    version: "${environment.version}"
+`,
+			staticAnalysisErr: require.Error,
+		},
+		{
+			name: "cel reference to non existing subpath of variable",
+			transformationSpec: `
+environment:
+  name: "my-object"
+  version: "1.0.0"
+transformations:
+- id: get1
+  type: MockGetObjectTransformer/v1alpha1
+  spec:
+    name: "${environment.nonExistingSubpath}"
+    version: "${environment.version}"
+`,
+			staticAnalysisErr: require.Error,
+		},
+		{
+			name: "cel reference to variable with primitive type mismatch",
+			transformationSpec: `
+environment:
+  number: 1
+  version: "1.0.0"
+transformations:
+- id: get1
+  type: MockGetObjectTransformer/v1alpha1
+  spec:
+    name: "${environment.number}"
+    version: "${environment.version}"
+`,
+			staticAnalysisErr: require.Error,
+		},
+		{
+			name: "cel reference to variable with structural type mismatch",
+			transformationSpec: `
+environment:
+  object:
+    key: "value"
+transformations:
+- id: add1
+  type: MockAddObjectTransformer/v1alpha1
+  spec:
+    object: ${environment.object}
+`,
+			staticAnalysisErr: require.Error,
+		},
+	}
 
-	r.NoError(graph.Process(t.Context()))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tgd := &v1alpha1.TransformationGraphDefinition{}
+			r.NoError(yaml.Unmarshal([]byte(tc.transformationSpec), tgd))
+			graph, err := builder.BuildAndCheck(tgd)
+			tc.staticAnalysisErr(t, err)
+			if err != nil {
+				r.Nil(graph)
+				return
+			}
+			r.NotNil(graph)
+
+			r.NoError(graph.Process(t.Context()))
+			tc.runtimeProcessingErr(t, err)
+		})
+	}
 }
