@@ -25,12 +25,9 @@ concurrency:
 jobs:
   E2E:
     name: E2E
-    runs-on: large_runner
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Self Hosted Runner Post Job Cleanup Action
-        uses: TooMuch4U/actions-clean@9b358e33df99574ac0bdf2e92fa3db1ae1415563 # v2.2
-
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -65,11 +62,17 @@ jobs:
 
       - name: Run
         run: task kubernetes/controller:test/e2e
+      - name: Cleanup unused cache
+        shell: bash
+        run: |
+          docker system prune --force
+          go clean -cache
+          go clean -modcache        
 
   publish_latest:
     name: "Publish Latest Image"
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: large_runner
+    runs-on: ubuntu-latest
     permissions:
       # Needed to push the image to GitHub Packages.
       # this token is the repo token, not the user token
@@ -78,8 +81,6 @@ jobs:
       contents: read
     needs: E2E
     steps:
-      - name: Self Hosted Runner Post Job Cleanup Action
-        uses: TooMuch4U/actions-clean@9b358e33df99574ac0bdf2e92fa3db1ae1415563 # v2.2
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
         with:
@@ -114,3 +115,7 @@ jobs:
           # create an additional tag that is easy to pin to and reference
           CONTROLLER_IMG: "ghcr.io/open-component-model/kubernetes/controller:${{ steps.version.outputs.version }} ghcr.io/open-component-model/kubernetes/controller:latest"
         run: task kubernetes/controller:docker-build/multi-arch PUSH=true
+      - name: Cleanup unused cache
+        shell: bash
+        run: |
+          docker system prune --force
