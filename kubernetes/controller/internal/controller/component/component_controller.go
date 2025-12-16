@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -55,6 +56,8 @@ type Reconciler struct {
 var _ ocm.Reconciler = (*Reconciler)(nil)
 
 var resourceIndex = ".spec.componentRef.Name"
+
+const fallbackRecoveryTimeout = 10 * time.Minute
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -266,8 +269,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			"component", component.Spec.Component,
 			"version", version)
 
-		// Return without requeueing - the event source will trigger reconciliation when resolution completes
-		return ctrl.Result{}, nil
+		// We requeue as a fallback. This is to avoid stuck component versions if the event queue was full.
+		// Naturally, this component version should be notified way before this timeout.
+		return ctrl.Result{RequeueAfter: fallbackRecoveryTimeout}, nil
 	}
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
