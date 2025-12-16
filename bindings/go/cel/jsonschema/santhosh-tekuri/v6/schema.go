@@ -1,17 +1,20 @@
 package jsonschema
 
 import (
-	"github.com/santhosh-tekuri/jsonschema/v6"
+	stjsonschemav6 "github.com/santhosh-tekuri/jsonschema/v6"
+
+	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 )
 
 // NewSchemaDeclType creates a DeclType wrapping the given santhosh-tekuri/jsonschema Schema.
-func NewSchemaDeclType(s *jsonschema.Schema) *DeclType {
+func NewSchemaDeclType(s *stjsonschemav6.Schema) *DeclType {
 	base := NewDeclType(&Schema{Schema: s})
 	if base == nil {
 		return nil
 	}
 	if s != nil && s.ID != "" {
-		base.Type = base.MaybeAssignTypeName(s.ID)
+		escapedId, _ := jsonschema.Escape(s.ID)
+		base.Type = base.MaybeAssignTypeName(escapedId)
 	}
 	return base
 }
@@ -19,7 +22,7 @@ func NewSchemaDeclType(s *jsonschema.Schema) *DeclType {
 // Schema wraps a santhosh-tekuri/jsonschema Schema to provide accessors for use in introspection
 // and with CEL declaration generation.
 type Schema struct {
-	Schema *jsonschema.Schema
+	Schema *stjsonschemav6.Schema
 }
 
 func (s *Schema) Type() string {
@@ -37,9 +40,9 @@ func (s *Schema) Items() *Schema {
 		return &Schema{Schema: s.Schema.Items2020}
 	}
 	switch items := s.Schema.Items.(type) {
-	case *jsonschema.Schema:
+	case *stjsonschemav6.Schema:
 		return &Schema{Schema: items}
-	case []*jsonschema.Schema:
+	case []*stjsonschemav6.Schema:
 		if len(items) == 0 {
 			return nil
 		}
@@ -77,7 +80,7 @@ func (s *Schema) AdditionalProperties() *Schema {
 	if s.Schema == nil || s.Schema.AdditionalProperties == nil {
 		return nil
 	}
-	if propSchema, ok := s.Schema.AdditionalProperties.(*jsonschema.Schema); ok {
+	if propSchema, ok := s.Schema.AdditionalProperties.(*stjsonschemav6.Schema); ok {
 		return &Schema{Schema: propSchema}
 	}
 	return nil
