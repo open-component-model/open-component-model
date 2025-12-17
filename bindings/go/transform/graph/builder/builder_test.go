@@ -22,10 +22,14 @@ func newTestBuilder(t *testing.T) *Builder {
 	mockAddObject := &testutils.MockAddObject{
 		Scheme: transformerScheme,
 	}
+	mockCustomSchema := &testutils.MockCustomSchema{
+		Scheme: transformerScheme,
+	}
 
 	return NewBuilder(transformerScheme).
 		WithTransformer(&testutils.MockGetObjectTransformer{}, mockGetObject).
-		WithTransformer(&testutils.MockAddObjectTransformer{}, mockAddObject)
+		WithTransformer(&testutils.MockAddObjectTransformer{}, mockAddObject).
+		WithTransformer(&testutils.MockCustomSchemaObjectTransformer{}, mockCustomSchema)
 }
 
 func TestGraphBuilder_EvaluateAndProcessGraph(t *testing.T) {
@@ -190,6 +194,19 @@ transformations:
     version: "${get1.spec.name}"
 `,
 			staticAnalysisErr: require.Error,
+		},
+		{
+			name: "field with pattern constraint valid value",
+			transformationSpec: `
+transformations:
+- id: transform1
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "object"
+`,
+			staticAnalysisErr:    require.NoError,
+			runtimeProcessingErr: require.NoError,
 		},
 		// runtime schema checking (e.g. regexp pattern)
 	}
