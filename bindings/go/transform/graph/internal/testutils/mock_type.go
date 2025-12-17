@@ -13,6 +13,7 @@ type MockObject struct {
 
 // MockCustomSchemaObject is a mock object to test a set of known
 // JSONSchema edge cases.
+// +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 // +ocm:jsonschema-gen:schema-from=schemas/custom_schema.json
 type MockCustomSchemaObject struct {
@@ -34,7 +35,7 @@ func (o OneOfStringNumberOrNull) MarshalJSON() ([]byte, error) {
 	if o.Number != nil {
 		return json.Marshal(*o.Number)
 	}
-	return []byte(`{}`), nil
+	return []byte(`""`), nil
 }
 
 func (o *OneOfStringNumberOrNull) UnmarshalJSON(data []byte) error {

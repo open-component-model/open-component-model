@@ -17,15 +17,8 @@ func (t *MockCustomSchema) Transform(ctx context.Context, step runtime.Typed) (r
 		return nil, fmt.Errorf("failed converting generic transformation to mock add object transformation: %w", err)
 	}
 
-	s := fmt.Sprintf("object transformed by %s at step with id %s", MockCustomSchemaObjectV1alpha1, transformation.ID)
 	transformation.Output = &MockCustomSchemaObjectTransformerOutput{
-		Object: &MockCustomSchemaObjectAlias{
-			StringWithPattern: transformation.Spec.Object.StringWithPattern,
-			OneOfStringOrNull: transformation.Spec.Object.OneOfStringOrNull,
-			OneOfStringNumberOrNull: OneOfStringNumberOrNull{
-				String: &s,
-			},
-		},
+		String: fmt.Sprintf("object transformed by %s at step with id %s", MockCustomSchemaObjectV1alpha1, transformation.ID),
 	}
 	return transformation, nil
 }

@@ -33,7 +33,6 @@ func newTestBuilder(t *testing.T) *Builder {
 }
 
 func TestGraphBuilder_EvaluateAndProcessGraph(t *testing.T) {
-	r := require.New(t)
 	builder := newTestBuilder(t)
 
 	tests := []struct {
@@ -208,11 +207,60 @@ transformations:
 			staticAnalysisErr:    require.NoError,
 			runtimeProcessingErr: require.NoError,
 		},
+		{
+			name: "field with pattern constraint valid invalue",
+			transformationSpec: `
+transformations:
+- id: transform1
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "not-an-object"
+`,
+			staticAnalysisErr: require.Error,
+		},
+		{
+			name: "field with pattern constraint valid invalue",
+			transformationSpec: `
+environment:
+  invalidPattern: "not-an-object"
+transformations:
+- id: transform1
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "${environment.invalidPattern}"
+`,
+			staticAnalysisErr:    require.NoError,
+			runtimeProcessingErr: require.Error,
+		},
+		{
+			name: "field with optional value",
+			transformationSpec: `
+transformations:
+- id: transform1
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "object"
+      oneOfStringOrNull: "a string value"
+- id: transform2
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "object"
+      oneOfStringOrNull: "${transform1.spec.object.oneOfStringOrNull}"
+`,
+			staticAnalysisErr:    require.NoError,
+			runtimeProcessingErr: require.NoError,
+		},
 		// runtime schema checking (e.g. regexp pattern)
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+
 			tgd := &v1alpha1.TransformationGraphDefinition{}
 			r.NoError(yaml.Unmarshal([]byte(tc.transformationSpec), tgd))
 			graph, err := builder.BuildAndCheck(tgd)
@@ -223,8 +271,7 @@ transformations:
 			}
 			r.NotNil(graph)
 
-			r.NoError(graph.Process(t.Context()))
-			tc.runtimeProcessingErr(t, err)
+			tc.runtimeProcessingErr(t, graph.Process(t.Context()))
 		})
 	}
 }

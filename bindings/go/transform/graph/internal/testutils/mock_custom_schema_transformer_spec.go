@@ -21,12 +21,12 @@ type MockCustomSchemaObjectTransformer struct {
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type MockCustomSchemaObjectTransformerOutput struct {
-	Object *MockCustomSchemaObjectAlias `json:"object"`
+	String string `json:"content"`
 }
 
 // MockCustomSchemaObjectTransformerSpec is the spec of the MockCustomSchemaObjectTransformer.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type MockCustomSchemaObjectTransformerSpec struct {
-	Object *MockCustomSchemaObjectAlias `json:"object"`
+	Object *MockCustomSchemaObject `json:"object"`
 }

@@ -30,6 +30,10 @@ const (
 // The provider is required for introspecting struct field information.
 // Returns true if types are compatible, false otherwise. If false, the error describes why.
 func AreTypesStructurallyCompatible(output, expected *cel.Type, provider *provider.DeclTypeProvider) (bool, error) {
+	if output.IsAssignableType(expected) {
+		return true, nil
+	}
+
 	if output == nil || expected == nil {
 		return false, fmt.Errorf("nil type(s): output=%v, expected=%v", output, expected)
 	}
