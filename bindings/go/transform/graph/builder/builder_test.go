@@ -191,6 +191,7 @@ transformations:
 `,
 			staticAnalysisErr: require.Error,
 		},
+		// runtime schema checking (e.g. regexp pattern)
 	}
 
 	for _, tc := range tests {
