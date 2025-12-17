@@ -117,6 +117,80 @@ transformations:
 `,
 			staticAnalysisErr: require.Error,
 		},
+		{
+			name: "cel reference to variable with structural type mismatch",
+			transformationSpec: `
+environment:
+  object:
+    key: "value"
+transformations:
+- id: add1
+  type: MockAddObjectTransformer/v1alpha1
+  spec:
+    object: ${environment.object}
+`,
+			staticAnalysisErr: require.Error,
+		},
+		{
+			name: "cel reference to variable with partial field match",
+			transformationSpec: `
+environment:
+  object:
+    name: "object"
+    version: "1.0.0"
+transformations:
+- id: add1
+  type: MockAddObjectTransformer/v1alpha1
+  spec:
+    object: ${environment.object}
+`,
+			staticAnalysisErr:    require.NoError,
+			runtimeProcessingErr: require.NoError,
+		},
+		{
+			name: "cel reference to variable with partial field match and type mismatch",
+			transformationSpec: `
+environment:
+  object:
+    name: "object"
+    version: 1
+transformations:
+- id: add1
+  type: MockAddObjectTransformer/v1alpha1
+  spec:
+    object: ${environment.object}
+`,
+			staticAnalysisErr: require.Error,
+		},
+		{
+			name: "cel reference creating cyclic dependency",
+			transformationSpec: `
+transformations:
+- id: get1
+  type: MockGetObjectTransformer/v1alpha1
+  spec:
+    name: "${add1.spec.object.name}"
+    version: "1.0.0"
+- id: add1
+  type: MockAddObjectTransformer/v1alpha1
+  spec:
+    object:
+      name: "${get1.spec.name}"
+`,
+			staticAnalysisErr: require.Error,
+		},
+		{
+			name: "cel reference to self creating cyclic dependency",
+			transformationSpec: `
+transformations:
+- id: get1
+  type: MockGetObjectTransformer/v1alpha1
+  spec:
+    name: "object"
+    version: "${get1.spec.name}"
+`,
+			staticAnalysisErr: require.Error,
+		},
 	}
 
 	for _, tc := range tests {
