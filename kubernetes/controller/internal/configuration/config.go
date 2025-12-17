@@ -75,7 +75,7 @@ func createConfigFromDockerConfig(data []byte) (*genericv1.Config, error) {
 	credScheme := runtime.NewScheme()
 	credentialsv1.MustRegister(credScheme)
 	credConfig := &credentialsv1.Config{
-		Repositories: []credentialsv1.RepositoryConfigEntry{{raw}},
+		Repositories: []credentialsv1.RepositoryConfigEntry{{Repository: raw}},
 	}
 	if _, err := credScheme.DefaultType(credConfig); err != nil {
 		return nil, fmt.Errorf("failed to get default type for credentials config: %w", err)

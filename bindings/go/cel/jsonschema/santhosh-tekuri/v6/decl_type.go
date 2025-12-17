@@ -145,10 +145,6 @@ func NewDeclType(s *Schema) *DeclType {
 			)
 		}
 		id := ObjectType
-		if s.Schema.ID != "" {
-			// if we have a unique schema ID, use that
-			id = s.Schema.ID
-		}
 		objType := decl.NewObjectType(id, fields)
 		objType.MinSerializedSize = minSerializedSize
 		base := declTypeForSchema(objType, s)
