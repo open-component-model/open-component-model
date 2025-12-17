@@ -3,9 +3,11 @@ package jsonschemagen_test
 import (
 	"encoding/json"
 	"go/ast"
+	"go/types"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/tools/go/packages"
 	"ocm.software/open-component-model/bindings/go/generator/jsonschemagen"
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
@@ -48,6 +50,10 @@ func mkTypeInfo(pkgPath, typeName string, expr ast.Expr, st *ast.StructType) *un
 		FilePath: filePath,
 		TypeSpec: &ast.TypeSpec{Type: expr},
 		GenDecl:  &ast.GenDecl{},
+		Pkg: &packages.Package{
+			Types:     types.NewPackage(pkgPath, "pkg"),
+			TypesInfo: &types.Info{Uses: make(map[*ast.Ident]types.Object)},
+		},
 	}
 }
 
@@ -169,8 +175,8 @@ func TestGenerate_MixedFieldTypes(t *testing.T) {
 	st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{nameField, ptrField, selField, arrField, mapField, inlineField, omitField, optField}}}
 
 	root := mkTypeInfo("example.com/pkg", "Mixed", nil, st)
-	// set the import map for the root's file path so selector resolution works
-	u.ImportMaps[root.FilePath] = map[string]string{"ext": "example.com/otherpkg"}
+	// set the import map for the root's pkg path so selector resolution works
+	u.Imports[root.Key.PkgPath] = map[string]string{"ext": "example.com/otherpkg"}
 
 	u.Types[root.Key] = root
 
@@ -291,7 +297,13 @@ func TestBuiltinRuntimeSchemas(t *testing.T) {
 	g := jsonschemagen.New(u)
 
 	// Raw
-	rawTI := &universe.TypeInfo{Key: universe.TypeKey{PkgPath: universe.RuntimePackage, TypeName: "Raw"}}
+	rawTI := &universe.TypeInfo{
+		Key: universe.TypeKey{PkgPath: universe.RuntimePackage, TypeName: "Raw"},
+		Pkg: &packages.Package{
+			Types:     types.NewPackage(universe.RuntimePackage, "runtime"),
+			TypesInfo: &types.Info{Uses: make(map[*ast.Ident]types.Object)},
+		},
+	}
 	rawSch := g.GenerateJSONSchemaDraft202012(rawTI)
 	require.Equal(t, "object", rawSch.Type)
 	require.NotNil(t, rawSch.AdditionalProperties)
@@ -301,7 +313,13 @@ func TestBuiltinRuntimeSchemas(t *testing.T) {
 	require.Equal(t, "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type", rawSch.Properties["type"].Ref)
 
 	// Type
-	typTI := &universe.TypeInfo{Key: universe.TypeKey{PkgPath: universe.RuntimePackage, TypeName: "Type"}}
+	typTI := &universe.TypeInfo{
+		Key: universe.TypeKey{PkgPath: universe.RuntimePackage, TypeName: "Type"},
+		Pkg: &packages.Package{
+			Types:     types.NewPackage(universe.RuntimePackage, "runtime"),
+			TypesInfo: &types.Info{Uses: make(map[*ast.Ident]types.Object)},
+		},
+	}
 	typSch := g.GenerateJSONSchemaDraft202012(typTI)
 	require.Equal(t, "string", typSch.Type)
 	require.Equal(t, "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.schema.json", typSch.ID)

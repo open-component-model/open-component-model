@@ -106,7 +106,6 @@ func Build(ctx context.Context, roots []string) (*Universe, error) {
 	var mu sync.Mutex
 
 	for _, root := range modRoots {
-		root := root
 		g.Go(func() error {
 			pkgs, err := loadModule(ctx, root)
 			if err != nil {
@@ -308,7 +307,6 @@ func (u *Universe) ResolveExpr(
 	pkgPath string,
 	expr ast.Expr,
 ) (*TypeInfo, bool) {
-
 	switch e := expr.(type) {
 	case *ast.Ident:
 		return u.resolveIdent(info, pkgPath, e)
@@ -323,7 +321,6 @@ func (u *Universe) resolveIdent(
 	pkgPath string,
 	id *ast.Ident,
 ) (*TypeInfo, bool) {
-
 	if obj, ok := info.Uses[id].(*types.TypeName); ok {
 		ti := u.typeByObject(obj)
 		return ti, ti != nil
@@ -338,7 +335,6 @@ func (u *Universe) resolveSelector(
 	pkgPath string,
 	sel *ast.SelectorExpr,
 ) (*TypeInfo, bool) {
-
 	if obj, ok := info.Uses[sel.Sel].(*types.TypeName); ok {
 		ti := u.typeByObject(obj)
 		return ti, ti != nil

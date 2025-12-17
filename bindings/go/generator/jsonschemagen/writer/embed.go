@@ -61,7 +61,6 @@ func (%s) JSONSchema() []byte {
 
 	formatted, err := format.Source(code)
 	if err != nil {
-		fmt.Print(string(code))
 		return fmt.Errorf("formatting failed: %w", err)
 	}
 
