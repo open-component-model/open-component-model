@@ -21,8 +21,6 @@ type EventSource struct {
 var _ source.Source = &EventSource{}
 
 // NewEventSource creates a new event source from a worker pool.
-// TODO: I'm using a separate entity here as opposed to workerpool because this has a separate start at a different
-// location in the controllers i.e.: the controller setup manager instead of the entire controller runtime.
 func NewEventSource(workerPool *WorkerPool) *EventSource {
 	return &EventSource{
 		workerPool: workerPool,
@@ -46,7 +44,6 @@ func (es *EventSource) Start(ctx context.Context, queue workqueue.TypedRateLimit
 					return
 				}
 
-				// Enqueue all requesters for reconciliation
 				for _, requester := range event.Requesters {
 					queue.Add(reconcile.Request{NamespacedName: requester.NamespacedName})
 					logger.V(1).Info("enqueued reconciliation request from resolution event",
@@ -81,22 +78,22 @@ var _ handler.EventHandler = &EnqueueRequestForResolution{}
 type EnqueueRequestForResolution struct{}
 
 // Create implements handler.EventHandler.
-func (e *EnqueueRequestForResolution) Create(ctx context.Context, evt event.CreateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (e *EnqueueRequestForResolution) Create(_ context.Context, _ event.CreateEvent, _ workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	// Not applicable for resolution events
 }
 
 // Update implements handler.EventHandler.
-func (e *EnqueueRequestForResolution) Update(ctx context.Context, evt event.UpdateEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (e *EnqueueRequestForResolution) Update(_ context.Context, _ event.UpdateEvent, _ workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	// Not applicable for resolution events
 }
 
 // Delete implements handler.EventHandler.
-func (e *EnqueueRequestForResolution) Delete(ctx context.Context, evt event.DeleteEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (e *EnqueueRequestForResolution) Delete(_ context.Context, _ event.DeleteEvent, _ workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	// Not applicable for resolution events
 }
 
 // Generic implements handler.EventHandler.
-func (e *EnqueueRequestForResolution) Generic(ctx context.Context, evt event.GenericEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+func (e *EnqueueRequestForResolution) Generic(_ context.Context, evt event.GenericEvent, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	if evt.Object == nil {
 		return
 	}

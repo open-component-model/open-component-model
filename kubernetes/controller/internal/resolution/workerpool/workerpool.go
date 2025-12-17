@@ -185,7 +185,7 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 
 	// check if already/still in progress
 	if requesters, exists := wp.inProgress[key]; exists {
-		// Add this requester to the list if not already present (deduplicate)
+		// add this requester to the list if not already present (deduplicate)
 		alreadyRequested := false
 		for _, r := range requesters {
 			if r.NamespacedName == opts.Requester.NamespacedName {
@@ -222,7 +222,7 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 
 	select {
 	case wp.workQueue <- workItem:
-		// Initialize with first requester
+		// first requester
 		wp.inProgress[key] = []RequesterInfo{opts.Requester}
 		InProgressGauge.Set(float64(len(wp.inProgress)))
 		QueueSizeGauge.Set(float64(len(wp.workQueue)))
