@@ -26,6 +26,7 @@ func TestComponentConstructorSchema(t *testing.T) {
 					{
 						"name": "resource1",
 						"type": "plain",
+						"version": "1.0.0",
 						"relation": "local",
 						"input": {
 							"type": "file",
@@ -133,24 +134,6 @@ func TestComponentConstructorSchema(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "resource with input only (valid implied local)",
-			json: `{
-				"name": "github.com/acme.org/component",
-				"version": "1.0.0",
-				"provider": { "name": "acme" },
-				"resources": [
-					{
-						"name": "res1",
-						"type": "plain",
-						"input": {
-							"type": "file"
-						}
-					}
-				]
-			}`,
-			wantErr: false,
-		},
-		{
 			name: "valid component reference with string label",
 			json: `{
 				"name": "github.com/acme.org/component",
@@ -220,6 +203,40 @@ func TestComponentConstructorSchema(t *testing.T) {
 				]
 			}`,
 			wantErr: true,
+		},
+		{
+			name: "example component constructor from ocm docs",
+			json: `{
+  "components": [
+    {
+      "name": "github.com/acme.org/helloworld",
+      "version": "1.0.0",
+      "provider": {
+        "name": "acme.org"
+      },
+      "resources": [
+        {
+          "name": "mylocalfile",
+          "type": "blob",
+          "input": {
+            "type": "file",
+            "path": "./my-local-resource.txt"
+          }
+        },
+        {
+          "name": "image",
+          "type": "ociImage",
+          "version": "1.0.0",
+          "access": {
+            "type": "ociArtifact",
+            "imageReference": "ghcr.io/stefanprodan/podinfo:6.9.1"
+          }
+        }
+      ]
+    }
+  ]
+}`,
+			wantErr: false,
 		},
 	}
 

@@ -333,8 +333,16 @@
       "$ref": "#/$defs/commonResourceProperties",
       "oneOf": [
         {
-          "required": ["version", "relation", "access"],
+          "required": [
+            "type",
+            "version",
+            "access"
+          ],
           "properties": {
+            "type": {
+              "description": "Type of the resource",
+              "$ref": "#/$defs/ocmType"
+            },
             "version": {
               "description": "Version of the resource",
               "$ref": "#/$defs/relaxedSemver"
@@ -358,27 +366,27 @@
           }
         },
         {
-          "required": ["relation", "input"],
+          "required": [
+            "type",
+            "input"
+          ],
           "properties": {
+            "input": {
+              "description": "Input specification for the resource",
+              "$ref": "#/$defs/input"
+            },
             "relation": {
-              "description": "Relation of the resource to the component (always must be local for input types)",
-              "type": "string",
+              "description": "Relation of the resource to the component (local only)",
               "const": "local"
             },
-            "input": {
-              "description": "Input specification for the resource",
-              "$ref": "#/$defs/input"
-            }
-          }
-        },
-        {
-          "required": ["input"],
-          "properties": {
-            "input": {
-              "description": "Input specification for the resource",
-              "$ref": "#/$defs/input"
+            "type": {
+              "description": "Type of the resource",
+              "$ref": "#/$defs/ocmType"
             },
-            "relation": false
+            "version": {
+              "description": "Version of the resource",
+              "$ref": "#/$defs/relaxedSemver"
+            }
           }
         }
       ]
