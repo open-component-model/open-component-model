@@ -7,9 +7,11 @@
   "description": "SignatureEncodingPolicy defines how signatures are serialized and stored.\nDifferent policies trade off compactness, self-containment, and ease of verification.",
   "oneOf": [
     {
+      "description": "SignatureEncodingPolicyPlain encodes the signature as a plain hex string.\n\nCharacteristics:\n- Most compact representation.\n- Not self-contained: verification requires the public key to be supplied\nfrom an external source (e.g. configuration, key management system).\n- No support for embedding or distributing certificate chains.",
       "const": "Plain"
     },
     {
+      "description": "SignatureEncodingPolicyPEM encodes the signature in a PEM block, optionally\nfollowed by the signer’s certificate chain.\n\nEncoding procedure:\n1. Create a PEM block with type \"SIGNATURE\".\n2. Insert the raw signature bytes into the block.\n3. Add the signing algorithm (e.g. \"RSASSA-PSS\") as the \"Signature Algorithm\" header.\n4. Encode the block into PEM format.\n5. Optionally append the signer’s certificate chain in PEM format\n(only possible if the signature was created with a certificate).\n\nVerification rules:\n1. The public key may be extracted from an appended and validated certificate chain.\n2. The signature’s logical identity (its OCM signature name) must match the\nDistinguished Name (DN) of the trusted certificate used for verification.\n3. If no external public key is supplied, verification MUST use a validated\ncertificate chain bundled with the signature. Validation can rely on the host\nsystem’s trust store or on a distributed PKI root certificate.\n4. Every signature MUST be stored together with its certificate chain to ensure\nthat the trust path can be verified upon retrieval.\n\nNotes:\n- This is the default signature encoding policy.\n- Background: https://github.com/open-component-model/ocm/issues/584\n\nExperimental: This encoding policy is experimental and may change or be deprecated in the future.",
       "const": "PEM"
     }
   ]
