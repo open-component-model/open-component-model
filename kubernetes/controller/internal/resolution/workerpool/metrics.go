@@ -13,6 +13,7 @@ func init() {
 		QueueSizeGauge,
 		InProgressGauge,
 		ResolutionDurationHistogram,
+		EventChannelDropsTotal,
 	)
 }
 
@@ -27,6 +28,8 @@ const (
 	InProgressGaugeLabel = "in_progress"
 	// ResolutionDurationHistogramLabel tracks the duration of component version resolutions.
 	ResolutionDurationHistogramLabel = "resolution_duration_seconds"
+	// EventChannelDropsLabel tracks the number of times events could not be emitted due to channel overflow.
+	EventChannelDropsLabel = "event_channel_drops"
 	// MetricsNamespace defines the namespace of all the resolution metrics.
 	MetricsNamespace = "ocm_system"
 	// OcmComponent is the name of the component registering for these metrics.
@@ -84,5 +87,15 @@ var ResolutionDurationHistogram = metrics.MustRegisterHistogramVec(
 	ResolutionDurationHistogramLabel,
 	"Duration of component version resolutions in seconds.",
 	[]float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
+	ComponentLabel, VersionLabel,
+)
+
+// EventChannelDropsTotal counts the number of times events could not be emitted due to channel overflow.
+// [component, version].
+var EventChannelDropsTotal = metrics.MustRegisterCounterVec(
+	MetricsNamespace,
+	OcmComponent,
+	EventChannelDropsLabel,
+	"Number of times resolution events could not be emitted due to channel overflow.",
 	ComponentLabel, VersionLabel,
 )
