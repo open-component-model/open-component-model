@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"sync"
 
-	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/errcode"
 
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 	"ocm.software/open-component-model/bindings/go/runtime"
