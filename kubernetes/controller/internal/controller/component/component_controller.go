@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -56,8 +55,6 @@ type Reconciler struct {
 var _ ocm.Reconciler = (*Reconciler)(nil)
 
 var resourceIndex = ".spec.componentRef.Name"
-
-const fallbackRecoveryTimeout = 10 * time.Minute
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
