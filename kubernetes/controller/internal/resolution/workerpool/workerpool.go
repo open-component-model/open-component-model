@@ -73,7 +73,9 @@ type WorkerPool struct {
 	// be notified of any change.
 	inProgress  map[string][]RequesterInfo
 	workersDone sync.WaitGroup
-	eventChan   chan ResolutionEvent // channel for emitting resolution events
+	// eventChan is a channel for a list of requesters that watch this resolution.
+	// These will be enqueued for reconciliation when the resolution completes.
+	eventChan chan []RequesterInfo
 }
 
 // ErrResolutionInProgress is returned when a component version is being resolved in the background.
@@ -93,13 +95,13 @@ func NewWorkerPool(opts PoolOptions) *WorkerPool {
 		PoolOptions: opts,
 		workQueue:   make(chan *WorkItem, opts.QueueSize),
 		inProgress:  make(map[string][]RequesterInfo),
-		eventChan:   make(chan ResolutionEvent),
+		eventChan:   make(chan []RequesterInfo),
 	}
 }
 
 // EventChannel returns the channel that emits resolution events.
 // Controllers can watch this channel to get notified when resolutions complete.
-func (wp *WorkerPool) EventChannel() <-chan ResolutionEvent {
+func (wp *WorkerPool) EventChannel() <-chan []RequesterInfo {
 	return wp.eventChan
 }
 
@@ -287,18 +289,11 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, i
 	// get all requesters AFTER resolution completes but BEFORE cleanup
 	// ensures we capture all requesters that were added during the resolution and the wait for it to be finished
 	requesters := wp.setResult(item.key, result, err)
-	event := ResolutionEvent{
-		Component:  item.Opts.Component,
-		Version:    item.Opts.Version,
-		Error:      err,
-		Requesters: requesters,
-	}
-
 	select {
 	case <-ctx.Done():
 		logger.V(1).Error(ctx.Err(), "worker stopped due to context cancellation")
 		return
-	case wp.eventChan <- event:
+	case wp.eventChan <- requesters:
 		logger.V(1).Info("emitted resolution event",
 			"component", item.Opts.Component,
 			"version", item.Opts.Version,

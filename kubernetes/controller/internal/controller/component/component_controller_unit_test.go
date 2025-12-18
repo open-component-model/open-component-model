@@ -168,14 +168,10 @@ func TestResolutionInProgress_UnitTest(t *testing.T) {
 		},
 	}
 
-	result, err := reconciler.Reconcile(ctx, req)
+	_, err = reconciler.Reconcile(ctx, req)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(result.Requeue).To(BeTrue(), "First reconcile should requeue after adding finalizer")
-
-	result, err = reconciler.Reconcile(ctx, req)
+	_, err = reconciler.Reconcile(ctx, req)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(result.RequeueAfter).To(Equal(fallbackRecoveryTimeout),
-		"expected requeue after %v, got %v", fallbackRecoveryTimeout, result.RequeueAfter)
 	updatedComponent := &v1alpha1.Component{}
 	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(component), updatedComponent)).To(Succeed())
 

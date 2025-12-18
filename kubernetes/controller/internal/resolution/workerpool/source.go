@@ -39,19 +39,16 @@ func (es *EventSource) Start(ctx context.Context, queue workqueue.TypedRateLimit
 			case <-ctx.Done():
 				logger.Info("stopping resolution event source")
 				return
-			case event, ok := <-es.workerPool.EventChannel():
+			case requesters, ok := <-es.workerPool.EventChannel():
 				if !ok {
 					logger.Info("event channel closed, stopping resolution event source")
 					return
 				}
 
-				for _, requester := range event.Requesters {
+				for _, requester := range requesters {
 					queue.Add(reconcile.Request{NamespacedName: requester.NamespacedName})
 					logger.V(1).Info("enqueued reconciliation request from resolution event",
-						"component", event.Component,
-						"version", event.Version,
-						"requester", requester.NamespacedName,
-						"error", event.Error)
+						"requester", requester.NamespacedName)
 				}
 			}
 		}

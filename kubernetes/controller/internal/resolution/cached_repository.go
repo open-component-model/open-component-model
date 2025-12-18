@@ -21,11 +21,14 @@ import (
 // It wraps a real repository and uses a worker pool to handle concurrent access with caching.
 // This is a READ-ONLY cache. Writing operations are not cached.
 type CacheBackedRepository struct {
-	spec          runtime.Typed
-	cfg           *configuration.Configuration
-	workerPool    *workerpool.WorkerPool
-	repo          repository.ComponentVersionRepository
-	logger        *logr.Logger
+	spec       runtime.Typed
+	cfg        *configuration.Configuration
+	workerPool *workerpool.WorkerPool
+	repo       repository.ComponentVersionRepository
+	logger     *logr.Logger
+	// requesterFunc is used to get a collection of types.NamespacedNames that want to listen to reconcile events
+	// that the cache handles. Upon an event ( resolution complete regardless of outcome ) all objects in this
+	// list are notified which will trigger a new reconcile event.
 	requesterFunc func() workerpool.RequesterInfo
 }
 
