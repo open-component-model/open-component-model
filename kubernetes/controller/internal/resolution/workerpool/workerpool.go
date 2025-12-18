@@ -2,6 +2,7 @@ package workerpool
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -85,13 +86,11 @@ func NewWorkerPool(opts PoolOptions) *WorkerPool {
 		opts.QueueSize = 100
 	}
 
-	const eventChannelSize = 1000
 	return &WorkerPool{
 		PoolOptions: opts,
 		workQueue:   make(chan *WorkItem, opts.QueueSize),
-		// TODO: I bet Jakob will tell me to use an Informer.
-		inProgress: make(map[string][]RequesterInfo),
-		eventChan:  make(chan ResolutionEvent, eventChannelSize),
+		inProgress:  make(map[string][]RequesterInfo),
+		eventChan:   make(chan ResolutionEvent),
 	}
 }
 
@@ -102,7 +101,7 @@ func (wp *WorkerPool) EventChannel() <-chan ResolutionEvent {
 }
 
 // Start begins the worker pool.
-// This method blocks until the context is cancelled to implement graceful shutdown.
+// This method blocks until the context is canceled to implement graceful shutdown.
 func (wp *WorkerPool) Start(ctx context.Context) error {
 	wp.Logger.Info("starting worker pool", "workers", wp.WorkerCount, "queueSize", wp.QueueSize)
 
@@ -262,7 +261,8 @@ type workFunc func(ctx context.Context, item ResolveOptions) (any, error)
 func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, item *WorkItem) {
 	key, err := item.Opts.KeyFunc()
 	if err != nil {
-		logger.Error(err, "failed to generate cache key")
+		wp.setResult(key, nil, fmt.Errorf("failed to generate cache key: %w", err))
+
 		return
 	}
 
@@ -287,19 +287,9 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, i
 			"duration", duration)
 	}
 
-	wp.Cache.Add(key, &Result{
-		Value: result,
-		Error: err,
-	})
-
 	// get all requesters AFTER resolution completes but BEFORE cleanup
 	// ensures we capture all requesters that were added during the resolution and the wait for it to be finished
-	wp.inProgressMu.Lock()
-	requesters := slices.Clone(wp.inProgress[key])
-	delete(wp.inProgress, key)
-	InProgressGauge.Set(float64(len(wp.inProgress)))
-	wp.inProgressMu.Unlock()
-
+	requesters := wp.setResult(key, result, err)
 	event := ResolutionEvent{
 		Component:  item.Opts.Component,
 		Version:    item.Opts.Version,
@@ -307,22 +297,37 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, i
 		Requesters: requesters,
 	}
 
-	select {
-	case wp.eventChan <- event:
-		logger.V(1).Info("emitted resolution event",
-			"component", item.Opts.Component,
-			"version", item.Opts.Version,
-			"requesterCount", len(requesters),
-			"requesters", requesters)
-	default:
-		logger.Error(fmt.Errorf("event channel full"), "failed to emit resolution event, controllers will not be notified",
-			"component", item.Opts.Component,
-			"version", item.Opts.Version,
-			"requesterCount", len(requesters),
-			"requesters", requesters,
-			"channelCapacity", cap(wp.eventChan))
-		EventChannelDropsTotal.WithLabelValues(item.Opts.Component, item.Opts.Version).Inc()
-	}
+	// non-blocking send so this worker can be done and pick-up the next thing
+	go func() {
+		select {
+		case wp.eventChan <- event:
+			logger.V(1).Info("emitted resolution event",
+				"component", item.Opts.Component,
+				"version", item.Opts.Version,
+				"requesterCount", len(requesters),
+				"requesters", requesters)
+		default:
+			logger.Error(errors.New("failed to send event on requesters channel"), "failed to emit resolution event, requesters will not be notified",
+				"component", item.Opts.Component,
+				"version", item.Opts.Version)
+			EventChannelDropsTotal.WithLabelValues(item.Opts.Component, item.Opts.Version).Inc()
+		}
+	}()
+}
+
+func (wp *WorkerPool) setResult(key string, result any, err error) []RequesterInfo {
+	wp.inProgressMu.Lock()
+	defer wp.inProgressMu.Unlock()
+
+	wp.Cache.Add(key, &Result{
+		Value: result,
+		Error: err,
+	})
+
+	requesters := slices.Clone(wp.inProgress[key])
+	delete(wp.inProgress, key)
+	InProgressGauge.Set(float64(len(wp.inProgress)))
+	return requesters
 }
 
 // getComponentVersion performs the actual component version resolution.
