@@ -10,14 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	slogcontext "github.com/veqryn/slog-context"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/errdef"
-
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -39,6 +35,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/errdef"
 )
 
 var _ ComponentVersionRepository = (*Repository)(nil)
@@ -267,24 +265,25 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 		return nil, err
 	}
 
-	resolved, err := repo.resolver.Reference(typed.ImageReference)
+	resolved, err := looseref.ParseReference(typed.ImageReference)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing image reference %q: %w", typed.ImageReference, err)
 	}
 
-	reference := resolved.String()
-
-	// reference is not a FQDN because it can be pinned, for resolving, use the FQDN part of the reference
-	fqdn := reference
-	pinnedDigest := ""
-	if index := strings.IndexByte(reference, '@'); index != -1 {
-		fqdn = reference[:index]
-		pinnedDigest = reference[index+1:]
+	var pinnedDigest digest.Digest
+	if dig, err := resolved.Digest(); err == nil {
+		pinnedDigest = dig
 	}
 
 	var desc ociImageSpecV1.Descriptor
-	if desc, err = src.Resolve(ctx, fqdn); err != nil {
-		return nil, fmt.Errorf("failed to resolve reference to process digest %q: %w", typed.ImageReference, err)
+	if pinnedDigest.String() == "" {
+		if desc, err = src.Resolve(ctx, resolved.String()); err != nil {
+			return nil, fmt.Errorf("failed to resolve reference to process digest %q: %w", typed.ImageReference, err)
+		}
+	} else {
+		if desc, err = src.Resolve(ctx, pinnedDigest.String()); err != nil {
+			return nil, fmt.Errorf("failed to verify existence of pinned digest %q (derived from %q): %w", pinnedDigest, resolved, err)
+		}
 	}
 
 	// if the resource did not have a digest, we apply the digest from the descriptor
@@ -298,12 +297,14 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
 	}
 
-	if pinnedDigest != "" && pinnedDigest != desc.Digest.String() {
-		return nil, fmt.Errorf("expected pinned digest %q (derived from %q) but got %q", pinnedDigest, reference, desc.Digest)
+	if pinnedDigest != "" && pinnedDigest.String() != desc.Digest.String() {
+		return nil, fmt.Errorf("expected pinned digest %q (derived from %q) but got %q", pinnedDigest, resolved, desc.Digest)
 	}
 
+	resolved.Reference.Reference = desc.Digest.String()
+
 	// in any case, after successful processing, we can pin the access
-	typed.ImageReference = fqdn + "@" + desc.Digest.String()
+	typed.ImageReference = resolved.String()
 	res.Access = typed
 
 	return res, nil
@@ -641,17 +642,12 @@ func (repo *Repository) download(ctx context.Context, access runtime.Typed) (dat
 			return nil, err
 		}
 
-		resolved, err := repo.resolver.Reference(typed.ImageReference)
+		resolved, err := looseref.ParseReference(typed.ImageReference)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing image reference %q: %w", typed.ImageReference, err)
 		}
 
-		reference := resolved.String()
-
-		// reference is not a FQDN
-		if index := strings.IndexByte(reference, '@'); index != -1 {
-			reference = reference[index+1:]
-		}
+		reference := resolved.ReferenceOrTag()
 
 		desc, err := src.Resolve(ctx, reference)
 		if err != nil {
