@@ -13,7 +13,10 @@ func NewSchemaDeclType(s *stjsonschemav6.Schema) *DeclType {
 		return nil
 	}
 	if s != nil && s.ID != "" {
-		escapedId, _ := jsonschema.Escape(s.ID)
+		escapedId, ok := jsonschema.Escape(s.ID)
+		if !ok {
+			return nil
+		}
 		base.Type = base.MaybeAssignTypeName(escapedId)
 	}
 	return base
