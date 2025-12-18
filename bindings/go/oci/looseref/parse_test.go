@@ -152,6 +152,22 @@ func TestParseReferenceUglies(t *testing.T) {
 			raw:  "localhost:v1/hello-world",
 		},
 		{
+			name: "invalid scheme",
+			raw:  "upsie://localhost:v1",
+		},
+		{
+			name: "invalid scheme b",
+			raw:  "://localhost:v1",
+		},
+		{
+			name: "invalid scheme c",
+			raw:  "://",
+		},
+		{
+			name: "invalid scheme d",
+			raw:  "oci://",
+		},
+		{
 			name: "invalid digest",
 			raw:  fmt.Sprintf("registry.example.com/foobar@%s", InvalidDigest),
 		},

@@ -171,6 +171,12 @@ func validateReference(ref LooseReference) error {
 func ParseReference(artifact string) (LooseReference, error) {
 	scheme, artifact := getScheme(artifact)
 
+	if scheme != "" {
+		if _, ok := allowedSchemes[scheme]; !ok {
+			return LooseReference{}, fmt.Errorf("%w: invalid scheme %q", errdef.ErrInvalidReference, scheme)
+		}
+	}
+
 	// Split the input artifact string into registry and path components.
 	parts := strings.SplitN(artifact, "/", 2)
 	var registry, path string
@@ -235,10 +241,16 @@ func ParseReference(artifact string) (LooseReference, error) {
 	return ref, nil
 }
 
+var allowedSchemes = map[string]struct{}{
+	"oci":   {},
+	"http":  {},
+	"https": {},
+}
+
 // getScheme extracts a leading scheme of the form "scheme://path".
 func getScheme(raw string) (scheme, rest string) {
 	// Strong form: scheme://path
-	if i := strings.Index(raw, "://"); i > 0 {
+	if i := strings.Index(raw, "://"); i > 0 && i < len(raw)-3 {
 		return raw[:i], raw[i+3:]
 	}
 	return "", raw
