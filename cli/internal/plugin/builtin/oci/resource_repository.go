@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"oras.land/oras-go/v2/registry"
-
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -97,7 +96,7 @@ func (p *ResourceRepositoryPlugin) getIdentity(obj runtime.Typed) (runtime.Ident
 		if err != nil {
 			return nil, fmt.Errorf("error parsing URL to identity: %w", err)
 		}
-		identity.SetType(runtime.NewVersionedType(ociv1.Type, ociv1.Version))
+		identity.SetType(runtime.NewUnversionedType(ociv1.Type))
 		return identity, nil
 	default:
 		return nil, fmt.Errorf("unsupported type %s for getting identity", obj.GetType())
@@ -147,11 +146,11 @@ func (p *ResourceRepositoryPlugin) getRepository(spec *ociv1.Repository, creds m
 }
 
 func ociImageAccessToBaseURL(access *v1.OCIImage) (string, error) {
-	ref, err := registry.ParseReference(access.ImageReference)
+	ref, err := looseref.ParseReference(access.ImageReference)
 	if err != nil {
-		return "", fmt.Errorf("error parsing image reference %q: %w", access.ImageReference, err)
+		return "", fmt.Errorf("error parsing loose image reference %q: %w", access.ImageReference, err)
 	}
 	// host is the registry with sane defaulting
-	baseURL := ref.Host()
+	baseURL := ref.RegistryWithScheme()
 	return baseURL, nil
 }
