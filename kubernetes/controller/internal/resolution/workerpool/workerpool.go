@@ -297,22 +297,22 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, i
 		Requesters: requesters,
 	}
 
-	// non-blocking send so this worker can be done and pick-up the next thing
-	go func() {
-		select {
-		case wp.eventChan <- event:
-			logger.V(1).Info("emitted resolution event",
-				"component", item.Opts.Component,
-				"version", item.Opts.Version,
-				"requesterCount", len(requesters),
-				"requesters", requesters)
-		default:
-			logger.Error(errors.New("failed to send event on requesters channel"), "failed to emit resolution event, requesters will not be notified",
-				"component", item.Opts.Component,
-				"version", item.Opts.Version)
-			EventChannelDropsTotal.WithLabelValues(item.Opts.Component, item.Opts.Version).Inc()
-		}
-	}()
+	select {
+	case <-ctx.Done():
+		logger.V(1).Error(ctx.Err(), "worker stopped due to context cancellation")
+		return
+	case wp.eventChan <- event:
+		logger.V(1).Info("emitted resolution event",
+			"component", item.Opts.Component,
+			"version", item.Opts.Version,
+			"requesterCount", len(requesters),
+			"requesters", requesters)
+	default:
+		logger.Error(errors.New("failed to send event on requesters channel"), "failed to emit resolution event, requesters will not be notified",
+			"component", item.Opts.Component,
+			"version", item.Opts.Version)
+		EventChannelDropsTotal.WithLabelValues(item.Opts.Component, item.Opts.Version).Inc()
+	}
 }
 
 func (wp *WorkerPool) setResult(key string, result any, err error) []RequesterInfo {
