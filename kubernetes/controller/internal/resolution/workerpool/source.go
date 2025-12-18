@@ -6,6 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -64,32 +65,13 @@ func (es *EventSource) String() string {
 	return "resolution-event-source"
 }
 
-// WaitForSync implements source.SyncingSource (optional).
-// The event source is always synced since it only watches a channel.
-func (es *EventSource) WaitForSync(ctx context.Context) error {
-	return nil
-}
-
 var _ handler.EventHandler = &EnqueueRequestForResolution{}
 
 // EnqueueRequestForResolution is a handler.EventHandler that enqueues requests when resolution events occur.
 // This is typically not needed since the EventSource directly enqueues requests, but it's provided
 // for compatibility with the standard Watch pattern.
-type EnqueueRequestForResolution struct{}
-
-// Create implements handler.EventHandler.
-func (e *EnqueueRequestForResolution) Create(_ context.Context, _ event.CreateEvent, _ workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-	// Not applicable for resolution events
-}
-
-// Update implements handler.EventHandler.
-func (e *EnqueueRequestForResolution) Update(_ context.Context, _ event.UpdateEvent, _ workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-	// Not applicable for resolution events
-}
-
-// Delete implements handler.EventHandler.
-func (e *EnqueueRequestForResolution) Delete(_ context.Context, _ event.DeleteEvent, _ workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-	// Not applicable for resolution events
+type EnqueueRequestForResolution struct {
+	handler.TypedEventHandler[client.Object, reconcile.Request]
 }
 
 // Generic implements handler.EventHandler.
