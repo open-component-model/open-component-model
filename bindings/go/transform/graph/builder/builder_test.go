@@ -121,18 +121,58 @@ transformations:
 			staticAnalysisErr: require.Error,
 		},
 		{
-			name: "cel reference to variable with structural type mismatch",
+			name: "cel reference to existing variable as optional",
 			transformationSpec: `
 environment:
   object:
-    key: "value"
+    name: "value"
 transformations:
 - id: add1
   type: MockAddObjectTransformer/v1alpha1
   spec:
-    object: ${environment.object}
+    object: 
+      name: ${environment.object.?name}
 `,
-			staticAnalysisErr: require.Error,
+			staticAnalysisErr:    require.NoError,
+			runtimeProcessingErr: require.NoError,
+		},
+		{
+			name: "cel reference to non-existing variable as optional with default",
+			transformationSpec: `
+transformations:
+- id: add1
+  type: MockAddObjectTransformer/v1alpha1
+  spec:
+    object: 
+      name: "object"
+- id: add2
+  type: MockAddObjectTransformer/v1alpha1
+  spec:
+    object: 
+      name: "object2"
+      version: ${add1.spec.object.?version.orValue("1.0.0")}
+`,
+			staticAnalysisErr:    require.NoError,
+			runtimeProcessingErr: require.NoError,
+		},
+		{
+			name: "cel reference to non-existing variable as optional without default",
+			transformationSpec: `
+transformations:
+- id: add1
+  type: MockAddObjectTransformer/v1alpha1
+  spec:
+    object: 
+      name: "object"
+- id: add2
+  type: MockAddObjectTransformer/v1alpha1
+  spec:
+    object: 
+      name: "object2"
+      version: ${add1.spec.object.?version}
+`,
+			staticAnalysisErr:    require.NoError,
+			runtimeProcessingErr: require.Error,
 		},
 		{
 			name: "cel reference to variable with partial field match",
@@ -254,7 +294,104 @@ transformations:
 			staticAnalysisErr:    require.NoError,
 			runtimeProcessingErr: require.NoError,
 		},
-		// runtime schema checking (e.g. regexp pattern)
+		{
+			name: "field with valid dyn number value",
+			transformationSpec: `
+transformations:
+- id: transform1
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "object"
+      oneOfStringNumberOrNull: 42
+- id: transform2
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "object"
+      oneOfStringNumberOrNull: "${transform1.spec.object.oneOfStringNumberOrNull}"
+`,
+			staticAnalysisErr:    require.NoError,
+			runtimeProcessingErr: require.NoError,
+		},
+		{
+			name: "field with valid dyn string value",
+			transformationSpec: `
+transformations:
+- id: transform1
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "object"
+      oneOfStringNumberOrNull: "hello"
+- id: transform2
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "object"
+      oneOfStringNumberOrNull: "${transform1.spec.object.oneOfStringNumberOrNull}"
+`,
+			staticAnalysisErr:    require.NoError,
+			runtimeProcessingErr: require.NoError,
+		},
+		{
+			name: "field with valid dyn null value",
+			transformationSpec: `
+transformations:
+- id: transform1
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "object"
+      oneOfStringNumberOrNull: null
+- id: transform2
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "object"
+      oneOfStringNumberOrNull: "${transform1.spec.object.oneOfStringNumberOrNull}"
+`,
+			staticAnalysisErr:    require.NoError,
+			runtimeProcessingErr: require.NoError,
+		},
+		{
+			name: "field with valid dyn null value from optional",
+			transformationSpec: `
+transformations:
+- id: transform1
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "object"
+- id: transform2
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "object"
+      oneOfStringNumberOrNull: "${transform1.spec.object.?oneOfStringNumberOrNull}"
+`,
+			staticAnalysisErr:    require.NoError,
+			runtimeProcessingErr: require.NoError,
+		},
+		{
+			name: "field with invalid dyn value",
+			transformationSpec: `
+transformations:
+- id: transform1
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "object"
+- id: transform2
+  type: MockCustomSchemaObjectTransformer/v1alpha1
+  spec:
+    object:
+      stringWithPattern: "object"
+      oneOfStringNumberOrNull: "${transform1.output.object.oneOfStringNumberOrNull.nested}"
+`,
+			staticAnalysisErr:    require.NoError,
+			runtimeProcessingErr: require.Error,
+		},
 	}
 
 	for _, tc := range tests {

@@ -6,12 +6,54 @@
   "type": "object",
   "description": "MockCustomSchemaObjectTransformerOutput is the output of the MockCustomSchemaObjectTransformer.",
   "properties": {
-    "content": {
-      "type": "string"
+    "object": {
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transform.graph.internal.testutils.MockCustomSchemaObject"
     }
   },
   "required": [
-    "content"
+    "object"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "ocm.software.open-component-model.bindings.go.transform.graph.internal.testutils.MockCustomSchemaObject": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "description": "Test schema to validate transformation graph behavior",
+      "properties": {
+        "oneOfStringNumberOrNull": {
+          "description": "Used to test dyn type behavior",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "oneOfStringOrNull": {
+          "description": "Used to test optional type behavior",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stringWithPattern": {
+          "type": "string",
+          "description": "Used to test pattern validation",
+          "pattern": "^object-*$"
+        }
+      },
+      "required": [
+        "stringWithPattern"
+      ]
+    }
+  }
 }
