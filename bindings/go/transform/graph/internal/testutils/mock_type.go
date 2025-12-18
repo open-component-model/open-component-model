@@ -22,6 +22,7 @@ type MockCustomSchemaObject struct {
 	OneOfStringNumberOrNull OneOfStringNumberOrNull `json:"oneOfStringNumberOrNull,omitempty"`
 }
 
+// OneOfStringNumberOrNull is a mock type to test oneOf with multiple types.
 // +k8s:deepcopy-gen=true
 type OneOfStringNumberOrNull struct {
 	String *string `json:"string,omitempty"`
