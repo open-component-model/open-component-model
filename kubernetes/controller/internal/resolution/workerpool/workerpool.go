@@ -45,6 +45,9 @@ type WorkItem struct {
 	Fn workFunc
 	// Opts contains the resolve options.
 	Opts ResolveOptions
+	// key is the calculated key that is passed in from the top to avoid
+	// the error handling from the key function later.
+	key string
 }
 
 // PoolOptions configures the worker pool.
@@ -217,6 +220,7 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 	workItem := &WorkItem{
 		Fn:   fn,
 		Opts: opts,
+		key:  key,
 	}
 
 	select {
@@ -259,14 +263,7 @@ func (wp *WorkerPool) worker(ctx context.Context, id int) {
 type workFunc func(ctx context.Context, item ResolveOptions) (any, error)
 
 func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, item *WorkItem) {
-	key, err := item.Opts.KeyFunc()
-	if err != nil {
-		wp.setResult(key, nil, fmt.Errorf("failed to generate cache key: %w", err))
-
-		return
-	}
-
-	logger.V(1).Info("processing work item", "key", key)
+	logger.V(1).Info("processing work item", "key", item.key)
 
 	start := time.Now()
 	result, err := item.Fn(ctx, item.Opts)
@@ -289,7 +286,7 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, i
 
 	// get all requesters AFTER resolution completes but BEFORE cleanup
 	// ensures we capture all requesters that were added during the resolution and the wait for it to be finished
-	requesters := wp.setResult(key, result, err)
+	requesters := wp.setResult(item.key, result, err)
 	event := ResolutionEvent{
 		Component:  item.Opts.Component,
 		Version:    item.Opts.Version,
