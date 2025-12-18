@@ -2,6 +2,7 @@ package jsonschema
 
 import (
 	stjsonschemav6 "github.com/santhosh-tekuri/jsonschema/v6"
+
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 )
 

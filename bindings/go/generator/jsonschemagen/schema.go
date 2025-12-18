@@ -84,7 +84,7 @@ func (sb *SchemaOrBool) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (g *Generator) buildRootSchema(ti *universe.TypeInfo) *JSONSchemaDraft202012 {
+func (g *generation) buildRootSchema(ti *universe.TypeInfo) *JSONSchemaDraft202012 {
 	switch {
 	case universe.IsRuntimeRaw(ti):
 		return g.builtinRuntimeRaw()
@@ -116,7 +116,7 @@ func (g *Generator) buildRootSchema(ti *universe.TypeInfo) *JSONSchemaDraft20201
 	return g.buildAliasSchema(ti)
 }
 
-func (g *Generator) buildAliasSchema(ti *universe.TypeInfo) *JSONSchemaDraft202012 {
+func (g *generation) buildAliasSchema(ti *universe.TypeInfo) *JSONSchemaDraft202012 {
 	desc, deprecated := extractStructDoc(ti.TypeSpec, ti.GenDecl)
 
 	var sch *JSONSchemaDraft202012
@@ -157,7 +157,7 @@ func (g *Generator) buildAliasSchema(ti *universe.TypeInfo) *JSONSchemaDraft2020
 	return sch
 }
 
-func (g *Generator) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo, field *ast.Field) *JSONSchemaDraft202012 {
+func (g *generation) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo, field *ast.Field) *JSONSchemaDraft202012 {
 	if sch, ok := g.schemaRefForExpr(expr, ctx); ok {
 		applyMarkers(sch, ctx.TypeSpec, ctx.GenDecl, field)
 		return sch
@@ -188,20 +188,29 @@ func (g *Generator) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo, field *
 	return anyObjectSchema()
 }
 
-func (g *Generator) schemaRefForExpr(expr ast.Expr, ti *universe.TypeInfo) (*JSONSchemaDraft202012, bool) {
+func (g *generation) schemaRefForExpr(expr ast.Expr, ti *universe.TypeInfo) (*JSONSchemaDraft202012, bool) {
 	ti, ok := g.U.ResolveExpr(ti.Pkg.TypesInfo, ti.Key.PkgPath, expr)
 	if !ok {
 		return nil, false
 	}
 
+	def := universe.Definition(ti.Key)
+
 	if schema, ok := SchemaFromUniverseType(ti); ok {
 		out := &JSONSchemaDraft202012{}
 		ApplyFileMarkers(out, schema, ti.FilePath)
-		return out, true
+
+		if g.external == nil {
+			g.external = map[string]*JSONSchemaDraft202012{}
+		}
+		// store once
+		if _, exists := g.external[def]; !exists {
+			g.external[def] = out
+		}
 	}
 
 	out := &JSONSchemaDraft202012{
-		Ref: "#/$defs/" + universe.Definition(ti.Key),
+		Ref: "#/$defs/" + def,
 	}
 	return out, true
 }
@@ -223,7 +232,7 @@ func applyMarkers(
 	}
 }
 
-func (g *Generator) buildStructProperties(st *ast.StructType, ti *universe.TypeInfo) map[string]*JSONSchemaDraft202012 {
+func (g *generation) buildStructProperties(st *ast.StructType, ti *universe.TypeInfo) map[string]*JSONSchemaDraft202012 {
 	props := make(map[string]*JSONSchemaDraft202012)
 
 	for _, field := range st.Fields.List {
@@ -251,7 +260,7 @@ func (g *Generator) buildStructProperties(st *ast.StructType, ti *universe.TypeI
 	return props
 }
 
-func (g *Generator) buildStructRequired(st *ast.StructType) []string {
+func (g *generation) buildStructRequired(st *ast.StructType) []string {
 	var req []string
 	for _, f := range st.Fields.List {
 		if len(f.Names) == 0 {
@@ -266,7 +275,7 @@ func (g *Generator) buildStructRequired(st *ast.StructType) []string {
 	return req
 }
 
-func (g *Generator) inlineAnonymousStruct(st *ast.StructType, ctx *universe.TypeInfo) *JSONSchemaDraft202012 {
+func (g *generation) inlineAnonymousStruct(st *ast.StructType, ctx *universe.TypeInfo) *JSONSchemaDraft202012 {
 	props := map[string]*JSONSchemaDraft202012{}
 	var req []string
 
@@ -304,7 +313,7 @@ func (g *Generator) inlineAnonymousStruct(st *ast.StructType, ctx *universe.Type
 	}
 }
 
-func (g *Generator) collectReachableQueue(root *universe.TypeInfo) []*universe.TypeInfo {
+func (g *generation) collectReachableQueue(root *universe.TypeInfo) []*universe.TypeInfo {
 	seen := map[universe.TypeKey]bool{}
 	var out []*universe.TypeInfo
 
@@ -341,7 +350,7 @@ func (g *Generator) collectReachableQueue(root *universe.TypeInfo) []*universe.T
 	return out
 }
 
-func (g *Generator) collectFromExpr(
+func (g *generation) collectFromExpr(
 	expr ast.Expr,
 	ctx *universe.TypeInfo,
 	walk func(*universe.TypeInfo),
@@ -367,7 +376,7 @@ func (g *Generator) collectFromExpr(
 	}
 }
 
-func (g *Generator) schemaID(ti *universe.TypeInfo) string {
+func (g *generation) schemaID(ti *universe.TypeInfo) string {
 	return ti.Key.PkgPath + "/schemas/" + ti.Key.TypeName + ".schema.json"
 }
 

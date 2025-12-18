@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"golang.org/x/tools/go/packages"
+
 	"ocm.software/open-component-model/bindings/go/generator/jsonschemagen"
 	"ocm.software/open-component-model/bindings/go/generator/jsonschemagen/writer"
 	"ocm.software/open-component-model/bindings/go/generator/universe"
