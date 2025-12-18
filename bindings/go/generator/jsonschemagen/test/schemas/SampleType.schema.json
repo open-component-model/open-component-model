@@ -40,14 +40,12 @@
       }
     },
     "myRaw": {
-      "type": "object",
-      "description": "MyRawComment",
-      "additionalProperties": true
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",
+      "description": "MyRawComment"
     },
     "myRuntime": {
-      "type": "object",
-      "description": "MyRuntimeComment",
-      "additionalProperties": true
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Typed",
+      "description": "MyRuntimeComment"
     },
     "mySlice": {
       "type": "array",
@@ -77,8 +75,7 @@
       "description": "NestedPointerComment"
     },
     "type": {
-      "type": "object",
-      "additionalProperties": true
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
     }
   },
   "required": [
@@ -114,6 +111,37 @@
         "nestedField"
       ],
       "additionalProperties": false
+    },
+    "ocm.software.open-component-model.bindings.go.runtime.Raw": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
+      "title": "Raw",
+      "type": "object",
+      "description": "Raw is used to hold extensions that dynamically define behavior at runtime",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": true
+    },
+    "ocm.software.open-component-model.bindings.go.runtime.Type": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
+      "title": "Type",
+      "type": "string",
+      "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    },
+    "ocm.software.open-component-model.bindings.go.runtime.Typed": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
+      "title": "Typed",
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",
+      "description": "Typed is used to hold arbitrary typed objects identified by their Type field"
     }
   }
 }
