@@ -8,4 +8,4 @@ includes:
 tasks:
   test:
     cmds:
-      - task: reuse:run-test
+      - task: reuse:run-go-test

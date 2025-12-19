@@ -1,7 +1,7 @@
 version: '3'
 
 tasks:
-  run-test:
+  run-go-test:
     desc: "Run unit tests. Pass extra args with --, e.g. task test -- -run TestFoo"
     vars:
       COVERAGE_DIR: '{{.COVERAGE_DIR | default "tmp"}}'

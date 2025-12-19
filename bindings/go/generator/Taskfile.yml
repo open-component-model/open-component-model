@@ -10,7 +10,7 @@ tasks:
     cmds:
       - task: ocmtypegen/test
       - task: jsonschemagen/test
-      - task: reuse:run-test
+      - task: reuse:run-go-test
 
   ocmtypegen/install:
     desc: "Install {{.PKG}} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"

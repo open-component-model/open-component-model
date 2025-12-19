@@ -10,6 +10,6 @@ vars:
 tasks:
   test:
     cmds:
-      - task: reuse:run-test
+      - task: reuse:run-go-test
         vars:
           SKIP_PATTERN: '{{ .INTEGRATION_TEST_IDENTIFIER }}'
