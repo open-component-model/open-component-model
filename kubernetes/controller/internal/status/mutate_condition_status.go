@@ -26,7 +26,7 @@ func MarkAsStalled(recorder kuberecorder.EventRecorder, obj conditions.Setter, r
 
 // MarkReady sets the condition status of an Object to `Ready`.
 func MarkReady(recorder kuberecorder.EventRecorder, obj conditions.Setter, msg string, messageArgs ...any) {
-	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, msg, messageArgs...)
 	conditions.Delete(obj, meta.ReconcilingCondition)
+	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, msg, messageArgs...)
 	event.New(recorder, obj, nil, eventv1.EventSeverityInfo, msg, messageArgs...)
 }

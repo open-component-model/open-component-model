@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"sync"
 
-	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/errcode"
 
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -62,10 +62,6 @@ func (resolver *CachingResolver) ComponentVersionReference(ctx context.Context, 
 	return fmt.Sprintf("%s/%s:%s", resolver.BasePath(), component, tag)
 }
 
-func (resolver *CachingResolver) Reference(reference string) (fmt.Stringer, error) {
-	return registry.ParseReference(reference)
-}
-
 // Ping checks registry availability and validates authentication credentials.
 // It extracts the host (hostname:port) from baseURL and calls ORAS registry.Ping on the /v2/ endpoint.
 // The subPath is ignored as ORAS only supports pinging the registry root.
@@ -105,19 +101,22 @@ func (resolver *CachingResolver) Ping(ctx context.Context) error {
 }
 
 func (resolver *CachingResolver) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
-	rawRef, err := resolver.Reference(reference)
+	ref, err := looseref.ParseReference(reference)
 	if err != nil {
 		return nil, err
 	}
-	ref := rawRef.(registry.Reference)
+
 	key := fmt.Sprintf("%s/%s", ref.Registry, ref.Repository)
+	if ref.Scheme != "" {
+		key = fmt.Sprintf("%s://%s", ref.Scheme, key)
+	}
 
 	if store, ok := resolver.getFromCache(key); ok {
 		return store, nil
 	}
 
 	repo := &remote.Repository{
-		Reference: ref,
+		Reference: ref.Reference,
 		// to remain fully compatible with all OCI repositories, we MUST skip referrers GC.
 		// this is because most "classic" OCI repositories such as Docker or GHCR that were
 		// developed before the referrers API ALSO do not provide delete support for manifests.
@@ -128,7 +127,10 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		SkipReferrersGC: true,
 	}
 
-	repo.PlainHTTP = resolver.plainHTTP
+	if resolver.plainHTTP || ref.Scheme == "http" {
+		repo.PlainHTTP = true
+	}
+
 	if resolver.baseClient != nil {
 		repo.Client = resolver.baseClient
 	}

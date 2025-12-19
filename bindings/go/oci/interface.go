@@ -2,7 +2,6 @@ package oci
 
 import (
 	"context"
-	"fmt"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
@@ -50,11 +49,6 @@ type Resolver interface {
 
 	// ComponentVersionReference returns a unique reference for a component version.
 	ComponentVersionReference(ctx context.Context, component, version string) string
-
-	// Reference resolves a reference string to a fmt.Stringer whose "native"
-	// format represents a valid reference that can be used for a given store returned
-	// by StoreForReference.
-	Reference(reference string) (fmt.Stringer, error)
 
 	// Ping does a healthcheck for the underlying Store. The implementation varies based on the implementing
 	// technology.

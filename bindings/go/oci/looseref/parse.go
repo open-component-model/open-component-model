@@ -24,6 +24,7 @@ import (
 var tagRegexp = regexp.MustCompile(`^[\w][\w.-]{0,127}$`)
 
 type LooseReference struct {
+	Scheme string
 	oras.Reference
 	Tag string
 }
@@ -39,6 +40,12 @@ func (r LooseReference) String() string {
 	hasRegistry := r.Registry != ""
 	hasRepository := r.Repository != ""
 	hasBasePath := hasRegistry || hasRepository
+	hasScheme := r.Scheme != ""
+
+	if hasScheme && (hasRegistry || hasRepository) {
+		result.WriteString(r.Scheme)
+		result.WriteString("://")
+	}
 
 	switch {
 	case hasRegistry && hasRepository:
@@ -74,6 +81,13 @@ func (r LooseReference) ValidateTag() error {
 		return fmt.Errorf("%w: invalid tag %q", errdef.ErrInvalidReference, r.Reference)
 	}
 	return nil
+}
+
+func (r LooseReference) RegistryWithScheme() string {
+	if r.Scheme != "" && r.Registry != "" {
+		return r.Scheme + "://" + r.Registry
+	}
+	return r.Registry
 }
 
 // ReferenceOrTag returns the appropriate reference string following precedence:
@@ -137,7 +151,7 @@ func validateReference(ref LooseReference) error {
 // if the string contains a digest.
 //
 // Compared to ORAS ParseReference, this function extends the valid forms to:
-//   - Registry is optional
+//   - Registry is optional, and can contain a scheme prefix
 //   - Tag is preserved when digest is present
 //   - Bare digests are supported
 //
@@ -151,7 +165,18 @@ func validateReference(ref LooseReference) error {
 //	OCM Valid Forms:
 //	<=== REPOSITORY ===> : <=== TAG ====> @ <=== digest ===>|    - OCM Valid Form (tag and digest preserved)
 //	<=================== digest ==========================> |    - OCM Valid Form (digest only)
+//
+// Note that compared to OCI, in OCM Loose References can contain scheme prefixes (e.g., "oci://").
+// This is mainly used to support switching connection behavior.
 func ParseReference(artifact string) (LooseReference, error) {
+	scheme, artifact := getScheme(artifact)
+
+	if scheme != "" {
+		if _, ok := allowedSchemes[scheme]; !ok {
+			return LooseReference{}, fmt.Errorf("%w: invalid scheme %q", errdef.ErrInvalidReference, scheme)
+		}
+	}
+
 	// Split the input artifact string into registry and path components.
 	parts := strings.SplitN(artifact, "/", 2)
 	var registry, path string
@@ -200,6 +225,7 @@ func ParseReference(artifact string) (LooseReference, error) {
 	}
 
 	ref := LooseReference{
+		Scheme: scheme,
 		Reference: oras.Reference{
 			Registry:   registry,
 			Repository: repository,
@@ -213,4 +239,19 @@ func ParseReference(artifact string) (LooseReference, error) {
 	}
 
 	return ref, nil
+}
+
+var allowedSchemes = map[string]struct{}{
+	"oci":   {},
+	"http":  {},
+	"https": {},
+}
+
+// getScheme extracts a leading scheme of the form "scheme://path".
+func getScheme(raw string) (scheme, rest string) {
+	// Strong form: scheme://path
+	if i := strings.Index(raw, "://"); i > 0 && i < len(raw)-3 {
+		return raw[:i], raw[i+3:]
+	}
+	return "", raw
 }

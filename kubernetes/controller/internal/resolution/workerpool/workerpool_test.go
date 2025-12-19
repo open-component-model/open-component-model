@@ -663,6 +663,160 @@ func (p *mockRepository) GetComponentVersion(ctx context.Context, component, ver
 	}, nil
 }
 
+func TestWorkerPoolEventChannelNotifiesRequesters(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx := t.Context()
+		logger := logr.Discard()
+
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ocm-config",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				".ocmconfig": `{
+				"type": "generic.config.ocm.software/v1",
+				"configurations": []
+			}`,
+			},
+		}
+
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, v1alpha1.AddToScheme(scheme))
+
+		k8sClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(configMap).
+			Build()
+
+		env := setupTestEnvironment(t, k8sClient, &logger)
+
+		requester1 := workerpool.RequesterInfo{
+			NamespacedName: client.ObjectKey{Namespace: "ns1", Name: "component1"},
+		}
+		requester2 := workerpool.RequesterInfo{
+			NamespacedName: client.ObjectKey{Namespace: "ns2", Name: "component2"},
+		}
+		requester3 := workerpool.RequesterInfo{
+			NamespacedName: client.ObjectKey{Namespace: "ns3", Name: "component3"},
+		}
+
+		opts1 := workerpool.ResolveOptions{
+			Component:  "shared-component",
+			Version:    "v1.0.0",
+			KeyFunc:    func() (string, error) { return "shared-key", nil },
+			Repository: &mockRepository{},
+			Requester:  requester1,
+		}
+		opts2 := workerpool.ResolveOptions{
+			Component:  "shared-component",
+			Version:    "v1.0.0",
+			KeyFunc:    func() (string, error) { return "shared-key", nil },
+			Repository: &mockRepository{},
+			Requester:  requester2,
+		}
+		opts3 := workerpool.ResolveOptions{
+			Component:  "shared-component",
+			Version:    "v1.0.0",
+			KeyFunc:    func() (string, error) { return "shared-key", nil },
+			Repository: &mockRepository{},
+			Requester:  requester3,
+		}
+
+		eventReceived := make(chan []workerpool.RequesterInfo, 1)
+		go func() {
+			select {
+			case requesters := <-env.Pool.EventChannel():
+				eventReceived <- requesters
+			case <-ctx.Done():
+			}
+		}()
+
+		_, err := env.Pool.GetComponentVersion(ctx, opts1)
+		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		_, err = env.Pool.GetComponentVersion(ctx, opts2)
+		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		_, err = env.Pool.GetComponentVersion(ctx, opts3)
+		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+
+		synctest.Wait()
+
+		var requesters []workerpool.RequesterInfo
+		select {
+		case requesters = <-eventReceived:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timeout waiting for event notification")
+		}
+
+		require.Len(t, requesters, 3, "expected 3 requesters to be notified")
+
+		foundRequesters := make(map[client.ObjectKey]bool)
+		for _, r := range requesters {
+			foundRequesters[r.NamespacedName] = true
+		}
+
+		assert.True(t, foundRequesters[requester1.NamespacedName], "requester1 should be notified")
+		assert.True(t, foundRequesters[requester2.NamespacedName], "requester2 should be notified")
+		assert.True(t, foundRequesters[requester3.NamespacedName], "requester3 should be notified")
+	})
+}
+
+func TestWorkerPoolEventChannelClosedOnShutdown(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	logger := logr.Discard()
+
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ocm-config",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			".ocmconfig": `{
+				"type": "generic.config.ocm.software/v1",
+				"configurations": []
+			}`,
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, v1alpha1.AddToScheme(scheme))
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(configMap).
+		Build()
+
+	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
+	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
+		Logger: &logger,
+		Client: k8sClient,
+		Cache:  cache,
+	})
+	t.Cleanup(cancel)
+
+	go func() {
+		_ = wp.Start(ctx)
+	}()
+
+	channelClosed := make(chan bool, 1)
+	go func() {
+		for range wp.EventChannel() {
+			// drain
+		}
+		channelClosed <- true
+	}()
+
+	cancel()
+
+	select {
+	case <-channelClosed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for event channel to close")
+	}
+}
+
 // testEnvironment holds the test infrastructure for workerpool testing.
 type testEnvironment struct {
 	Pool *workerpool.WorkerPool

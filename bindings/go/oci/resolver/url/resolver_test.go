@@ -162,7 +162,7 @@ func TestURLPathResolver_StoreForReference(t *testing.T) {
 		},
 		{
 			name:        "invalid reference",
-			reference:   "invalid:reference",
+			reference:   "!invalid:reference",
 			expectError: true,
 		},
 	}
