@@ -34,6 +34,7 @@ import (
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
 	"ocm.software/open-component-model/kubernetes/controller/internal/event"
@@ -587,6 +588,84 @@ func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1
 	}
 
 	return eg.Wait()
+}
+
+// applyWithApplySet applies the resource objects using ApplySet for proper tracking and pruning.
+// This method uses the ApplySet specification (KEP-3659) to manage sets of resources with automatic
+// pruning of orphaned resources.
+//
+// The deployer object itself is used as the ApplySet parent, which means:
+// - All deployed resources are labeled with applyset.k8s.io/part-of=<applyset-id>
+// - The deployer carries annotations tracking the GroupKinds and namespaces of managed resources
+// - Pruning automatically removes resources that were previously deployed but are no longer in the manifest
+func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured, prune bool) error {
+	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
+
+	// Use the deployer as the ApplySet parent
+	// This allows us to track all resources deployed by this deployer
+	applySetConfig := applyset.Config{
+		ToolingID: applyset.ToolingID{
+			Name:    deployerManager,
+			Version: "v1alpha1",
+		},
+		FieldManager: fmt.Sprintf("%s/%s", deployerManager, deployer.UID),
+		ToolLabels: map[string]string{
+			// Include the standard managed-by label
+			managedByLabel: deployerManager,
+		},
+		Concurrency: runtime.NumCPU(),
+	}
+
+	set, err := applyset.New(ctx, deployer, r.Client, r.resourceRESTMapper, applySetConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create ApplySet: %w", err)
+	}
+
+	logger.Info("adding objects to ApplySet", "count", len(objs))
+
+	// Add all objects to the ApplySet
+	for _, obj := range objs {
+		// Clone the object to avoid modifying the original
+		objCopy := obj.DeepCopy()
+
+		// Set ownership labels and annotations (preserving existing behavior)
+		setOwnershipLabels(objCopy, resource, deployer)
+		setOwnershipAnnotations(objCopy, resource)
+
+		// Set controller reference
+		if err := controllerutil.SetControllerReference(deployer, objCopy, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on object %s/%s: %w", objCopy.GetNamespace(), objCopy.GetName(), err)
+		}
+
+		// Default namespace and apiVersion if needed
+		if err := r.defaultObj(ctx, resource, objCopy); err != nil {
+			return fmt.Errorf("failed to default object %s/%s: %w", objCopy.GetNamespace(), objCopy.GetName(), err)
+		}
+
+		// Add to the ApplySet
+		if _, err := set.Add(ctx, objCopy); err != nil {
+			return fmt.Errorf("failed to add object %s/%s to ApplySet: %w", objCopy.GetNamespace(), objCopy.GetName(), err)
+		}
+	}
+
+	// Apply all objects (and prune if requested)
+	logger.Info("applying ApplySet", "prune", prune)
+	result, err := set.Apply(ctx, prune)
+	if err != nil {
+		return fmt.Errorf("failed to apply ApplySet: %w", err)
+	}
+
+	// Log results
+	logger.Info("ApplySet operation complete",
+		"applied", len(result.Applied),
+		"pruned", len(result.Pruned),
+		"errors", len(result.Errors))
+
+	if len(result.Errors) > 0 {
+		return fmt.Errorf("ApplySet completed with errors: %v", result.Errors)
+	}
+
+	return nil
 }
 
 // apply applies the object to the cluster using Server-Side Apply. It sets the controller reference on the object
