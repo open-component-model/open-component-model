@@ -1,4 +1,8 @@
-version: '3'
+version: "3"
+
+includes:
+  reuse: ../../../reuse.Taskfile.yml
+
 
 
 tasks:
@@ -9,6 +13,6 @@ tasks:
       - test -d tmp
   test:
     cmds:
-      - go test -v -coverprofile=tmp/coverage.out ./...
+      - task: reuse:run-test
     deps:
       - tmp

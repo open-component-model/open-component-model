@@ -1,4 +1,8 @@
-version: '3'
+version: "3"
+
+includes:
+  reuse: ../../../reuse.Taskfile.yml
+
 
 
 tasks:
@@ -8,11 +12,7 @@ tasks:
     status:
       - test -d tmp
   test:
-    sources:
-      - ./**/*.go
-      - ./go.mod
-      - ./go.sum
     cmds:
-      - go test -v -coverprofile=tmp/coverage.out ./...
+      - task: reuse:run-test
     deps:
       - tmp

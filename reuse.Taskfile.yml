@@ -1,0 +1,21 @@
+version: '3'
+
+tasks:
+  run-test:
+    desc: "Run unit tests. Pass extra args with --, e.g. task test -- -run TestFoo"
+    vars:
+      COVERAGE_DIR: '{{.COVERAGE_DIR | default "tmp"}}'
+      COVERAGE_PROFILE: '{{.COVERAGE_PROFILE | default "coverage.out"}}'
+      PACKAGES: '{{.PACKAGES | default "./..."}}'
+      SKIP_PATTERN: '{{.SKIP_PATTERN}}'
+      GO_TEST_FLAGS: '{{.GO_TEST_FLAGS}}'
+    cmds:
+      - mkdir -p {{.COVERAGE_DIR}}
+      - >-
+        go test 
+        {{if .SKIP_PATTERN}}-skip "{{.SKIP_PATTERN}}"{{end}} 
+        {{.GO_TEST_FLAGS}} 
+        -v 
+        -coverprofile={{.COVERAGE_DIR}}/{{.COVERAGE_PROFILE}} 
+        {{.PACKAGES}} 
+        {{.CLI_ARGS}}

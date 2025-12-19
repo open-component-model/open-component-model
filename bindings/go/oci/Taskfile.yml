@@ -1,5 +1,9 @@
 version: '3'
 
+includes:
+  reuse: ../../../reuse.Taskfile.yml
+
+
 vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
 
@@ -11,6 +15,8 @@ tasks:
       - test -d tmp
   test:
     cmds:
-      - 'go test -skip "{{ .INTEGRATION_TEST_IDENTIFIER }}" -v -coverprofile=tmp/coverage.out ./...'
+      - task: reuse:run-test
+        vars:
+          SKIP_PATTERN: '{{ .INTEGRATION_TEST_IDENTIFIER }}'
     deps:
       - tmp
