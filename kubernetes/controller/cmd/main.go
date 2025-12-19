@@ -263,7 +263,8 @@ func main() {
 			Scheme:        mgr.GetScheme(),
 			EventRecorder: eventsRecorder,
 		},
-		OCMContextCache: ocmContextCache,
+		Resolver:      resolver,
+		PluginManager: pm,
 	}).SetupWithManager(ctx, mgr, resourceConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Resource")
 		os.Exit(1)
