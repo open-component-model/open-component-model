@@ -7,7 +7,7 @@ vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
 
 tasks:
-  test:
+  test/integration:
     cmds:
       - task: reuse:run-test
         vars:
