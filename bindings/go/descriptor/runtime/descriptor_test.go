@@ -95,6 +95,29 @@ const jsonData = `
   ]
 }`
 
+func TestRuntimeDescriptorMarshaling(t *testing.T) {
+	d := descriptorRuntime.Descriptor{
+		Meta: descriptorRuntime.Meta{Version: "v1"},
+		Component: descriptorRuntime.Component{
+			ComponentMeta: descriptorRuntime.ComponentMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{
+					Name:    "test-component",
+					Version: "1.0.0",
+				},
+			},
+		},
+	}
+	data, err := json.Marshal(d)
+	require.ErrorContains(t, err, "marshaling of runtime descriptor is not supported")
+	require.Nil(t, data)
+}
+
+func TestRuntimeDescriptorUnmarshaling(t *testing.T) {
+	var runtimeDesc descriptorRuntime.Descriptor
+	err := json.Unmarshal([]byte(`{}`), &runtimeDesc)
+	require.ErrorContains(t, err, "unmarshaling of runtime descriptor is not supported")
+}
+
 func TestDescriptorString(t *testing.T) {
 	d := descriptorRuntime.Descriptor{
 		Meta: descriptorRuntime.Meta{Version: "v1"},
