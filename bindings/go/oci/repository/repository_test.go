@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -258,7 +259,7 @@ func TestBuildResolver_SubPathExtraction(t *testing.T) {
 
 			assert.Equal(t, tt.expectedBasePath, resolver.BasePath())
 			assert.Equal(t, tt.expectedCVRef, resolver.ComponentVersionReference(t.Context(), "test-component", "1.0.0"))
-			stringer, err := resolver.Reference(resolver.ComponentVersionReference(t.Context(), "test-component", "1.0.0"))
+			stringer, err := looseref.ParseReference(resolver.ComponentVersionReference(t.Context(), "test-component", "1.0.0"))
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedReference, stringer.String())
 		})

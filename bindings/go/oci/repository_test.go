@@ -1430,7 +1430,7 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 				r.NoError(store.Tag(ctx, desc, "v2.0.0"))
 			},
 			err: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.ErrorContains(t, err, "expected pinned digest")
+				return assert.ErrorContains(t, err, "failed to verify existence of pinned digest")
 			},
 		},
 		{
