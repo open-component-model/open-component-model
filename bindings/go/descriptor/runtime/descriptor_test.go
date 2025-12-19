@@ -108,7 +108,7 @@ func TestRuntimeDescriptorMarshaling(t *testing.T) {
 		},
 	}
 	data, err := json.Marshal(d)
-	require.ErrorContains(t, err, "marshaling of runtime descriptor is not supported")
+	require.ErrorContains(t, err, "marshalling of runtime descriptor is not supported")
 	require.Nil(t, data)
 }
 
