@@ -115,7 +115,7 @@ func TestRuntimeDescriptorMarshaling(t *testing.T) {
 func TestRuntimeDescriptorUnmarshaling(t *testing.T) {
 	var runtimeDesc descriptorRuntime.Descriptor
 	err := json.Unmarshal([]byte(`{}`), &runtimeDesc)
-	require.ErrorContains(t, err, "unmarshaling of runtime descriptor is not supported")
+	require.ErrorContains(t, err, "unmarshalling of runtime descriptor is not supported")
 }
 
 func TestDescriptorString(t *testing.T) {
