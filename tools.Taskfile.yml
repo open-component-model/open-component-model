@@ -4,8 +4,6 @@ vars:
   DEEPCOPY_GEN_TARGET_VERSION: '${DEEPCOPY_GEN_VERSION}'
   GOLANGCI_LINT_TARGET_VERSION: '${GOLANGCI_LINT_VERSION}'
 
-
-
 tasks:
   deepcopy-gen/generate-deepcopy:
     desc: "Generate kubernetes-style deepcopy code for all types in the project"
