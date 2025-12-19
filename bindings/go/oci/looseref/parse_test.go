@@ -77,17 +77,24 @@ func TestParseReferenceGoodies(t *testing.T) {
 
 	registries := []string{
 		"localhost",
+		"http://localhost",
 		"registry.example.com",
+		"https://registry.example.com",
 		"localhost:5000",
+		"oci://localhost:5000",
 		"127.0.0.1:5000",
+		"http://127.0.0.1:5000",
 		"[::1]:5000",
+		"http://[::1]:5000",
 		"",
 	}
 
 	for _, tt := range tests {
 		want := tt.wantTemplate
 		for _, registry := range registries {
-			want.Registry = registry
+			scheme, rest := getScheme(registry)
+			want.Registry = rest
+			want.Scheme = scheme
 			t.Run(tt.name, func(t *testing.T) {
 				ref := fmt.Sprintf("%s/%s", registry, tt.image)
 				if registry == "" {
@@ -145,6 +152,22 @@ func TestParseReferenceUglies(t *testing.T) {
 			raw:  "localhost:v1/hello-world",
 		},
 		{
+			name: "invalid scheme",
+			raw:  "upsie://localhost:v1",
+		},
+		{
+			name: "invalid scheme b",
+			raw:  "://localhost:v1",
+		},
+		{
+			name: "invalid scheme c",
+			raw:  "://",
+		},
+		{
+			name: "invalid scheme d",
+			raw:  "oci://",
+		},
+		{
 			name: "invalid digest",
 			raw:  fmt.Sprintf("registry.example.com/foobar@%s", InvalidDigest),
 		},
@@ -193,6 +216,15 @@ func TestLooseReferenceString(t *testing.T) {
 				},
 			},
 			expected: "localhost:5000",
+		}, {
+			name: "registry with scheme",
+			ref: LooseReference{
+				Scheme: "oci",
+				Reference: registry.Reference{
+					Registry: "localhost:5000",
+				},
+			},
+			expected: "oci://localhost:5000",
 		},
 		{
 			name: "repository only",

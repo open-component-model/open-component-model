@@ -71,21 +71,16 @@ func (s *Store) Ping(ctx context.Context) error {
 
 // StoreForReference returns a new Store instance for a specific repository within the CTF archive.
 func (s *Store) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
-	rawRef, err := s.Reference(reference)
+	rawRef, err := looseref.ParseReference(reference)
 	if err != nil {
 		return nil, err
 	}
-	ref := rawRef.(looseref.LooseReference)
 
 	return &repository{
 		mu:      &s.mu,
 		archive: s.archive,
-		repo:    ref.Repository,
+		repo:    rawRef.Repository,
 	}, nil
-}
-
-func (s *Store) Reference(reference string) (fmt.Stringer, error) {
-	return looseref.ParseReference(reference)
 }
 
 // ComponentVersionReference creates a reference string for a component version in the format "component-descriptors/component:version".

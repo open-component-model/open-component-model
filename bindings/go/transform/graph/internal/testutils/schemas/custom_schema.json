@@ -1,0 +1,41 @@
+{
+  "$id": "ocm.software/open-component-model/bindings/go/transform/graph/internal/testutils/schemas/custom_schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Test schema to validate transformation graph behavior",
+  "type": "object",
+  "required": [
+    "stringWithPattern"
+  ],
+  "properties": {
+    "stringWithPattern": {
+      "description": "Used to test pattern validation",
+      "pattern": "^object-*$",
+      "type": "string"
+    },
+    "oneOfStringOrNull": {
+      "description": "Used to test optional type behavior",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "oneOfStringNumberOrNull": {
+      "description": "Used to test dyn type behavior",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}
