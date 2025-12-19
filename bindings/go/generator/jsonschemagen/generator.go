@@ -47,12 +47,12 @@ func (g *generation) runForRoot(root *universe.TypeInfo) *JSONSchemaDraft202012 
 		defs[key] = full
 	}
 
-	// merge externals exactly once
-	maps.Copy(defs, g.external)
-
 	for _, def := range defs {
 		def.ID = ""
 	}
+
+	// merge externals exactly once
+	maps.Copy(defs, g.external)
 
 	schema.Defs = defs
 	return schema
