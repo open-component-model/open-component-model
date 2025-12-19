@@ -17,6 +17,7 @@
   "$defs": {
     "ocm.software.open-component-model.bindings.go.transform.graph.internal.testutils.MockCustomSchemaObject": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/transform/graph/internal/testutils/schemas/custom_schema.json",
       "type": "object",
       "description": "Test schema to validate transformation graph behavior",
       "properties": {
