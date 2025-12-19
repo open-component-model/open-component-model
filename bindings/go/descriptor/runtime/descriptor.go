@@ -41,11 +41,11 @@ type Descriptor struct {
 }
 
 func (d Descriptor) MarshalJSON() ([]byte, error) {
-	return nil, fmt.Errorf("marshaling of runtime descriptor is not supported")
+	return nil, fmt.Errorf("marshalling of runtime descriptor is not supported")
 }
 
 func (d *Descriptor) UnmarshalJSON(data []byte) error {
-	return fmt.Errorf("unmarshaling of runtime descriptor is not supported")
+	return fmt.Errorf("unmarshalling of runtime descriptor is not supported")
 }
 
 func (d *Descriptor) String() string {
