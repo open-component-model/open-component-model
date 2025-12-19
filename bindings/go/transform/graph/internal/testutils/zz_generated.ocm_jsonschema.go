@@ -18,6 +18,18 @@ var schemaMockAddObjectTransformerOutput []byte
 //go:embed schemas/MockAddObjectTransformerSpec.schema.json
 var schemaMockAddObjectTransformerSpec []byte
 
+//go:embed schemas/custom_schema.json
+var schemaMockCustomSchemaObject []byte
+
+//go:embed schemas/MockCustomSchemaObjectTransformer.schema.json
+var schemaMockCustomSchemaObjectTransformer []byte
+
+//go:embed schemas/MockCustomSchemaObjectTransformerOutput.schema.json
+var schemaMockCustomSchemaObjectTransformerOutput []byte
+
+//go:embed schemas/MockCustomSchemaObjectTransformerSpec.schema.json
+var schemaMockCustomSchemaObjectTransformerSpec []byte
+
 //go:embed schemas/MockGetObjectTransformer.schema.json
 var schemaMockGetObjectTransformer []byte
 
@@ -40,6 +52,26 @@ func (MockAddObjectTransformerOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for MockAddObjectTransformerSpec.
 func (MockAddObjectTransformerSpec) JSONSchema() []byte {
 	return schemaMockAddObjectTransformerSpec
+}
+
+// JSONSchema returns the JSON Schema for MockCustomSchemaObject.
+func (MockCustomSchemaObject) JSONSchema() []byte {
+	return schemaMockCustomSchemaObject
+}
+
+// JSONSchema returns the JSON Schema for MockCustomSchemaObjectTransformer.
+func (MockCustomSchemaObjectTransformer) JSONSchema() []byte {
+	return schemaMockCustomSchemaObjectTransformer
+}
+
+// JSONSchema returns the JSON Schema for MockCustomSchemaObjectTransformerOutput.
+func (MockCustomSchemaObjectTransformerOutput) JSONSchema() []byte {
+	return schemaMockCustomSchemaObjectTransformerOutput
+}
+
+// JSONSchema returns the JSON Schema for MockCustomSchemaObjectTransformerSpec.
+func (MockCustomSchemaObjectTransformerSpec) JSONSchema() []byte {
+	return schemaMockCustomSchemaObjectTransformerSpec
 }
 
 // JSONSchema returns the JSON Schema for MockGetObjectTransformer.

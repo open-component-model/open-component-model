@@ -32,6 +32,11 @@ func NewResolver(client client.Reader, logger *logr.Logger, workerPool *workerpo
 	return resolver
 }
 
+// WorkerPool returns the underlying worker pool for event source creation.
+func (r *Resolver) WorkerPool() *workerpool.WorkerPool {
+	return r.workerPool
+}
+
 // Resolver provides implementation for component version resolution using a worker pool. The async resolution
 // is non-blocking so the controller can return once the resolution is done.
 type Resolver struct {
@@ -47,6 +52,7 @@ type RepositoryOptions struct {
 	RepositorySpec    runtime.Typed
 	OCMConfigurations []v1alpha1.OCMConfiguration
 	Namespace         string
+	RequesterFunc     func() workerpool.RequesterInfo
 }
 
 // NewCacheBackedRepository creates a new cache-backed repository wrapper.
@@ -62,7 +68,14 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 		return nil, err
 	}
 
-	return newCacheBackedRepository(r.logger, opts.RepositorySpec, cfg, r.workerPool, repo), nil
+	requesterFunc := opts.RequesterFunc
+	if requesterFunc == nil {
+		requesterFunc = func() workerpool.RequesterInfo {
+			return workerpool.RequesterInfo{}
+		}
+	}
+
+	return newCacheBackedRepository(r.logger, opts.RepositorySpec, cfg, r.workerPool, repo, requesterFunc), nil
 }
 
 func (r *Resolver) createRepository(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (repository.ComponentVersionRepository, error) {

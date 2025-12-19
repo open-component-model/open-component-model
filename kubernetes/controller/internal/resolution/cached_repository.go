@@ -26,18 +26,23 @@ type CacheBackedRepository struct {
 	workerPool *workerpool.WorkerPool
 	repo       repository.ComponentVersionRepository
 	logger     *logr.Logger
+	// requesterFunc is used to get a collection of types.NamespacedNames that want to listen to reconcile events
+	// that the cache handles. Upon an event ( resolution complete regardless of outcome ) all objects in this
+	// list are notified which will trigger a new reconcile event.
+	requesterFunc func() workerpool.RequesterInfo
 }
 
 var _ repository.ComponentVersionRepository = (*CacheBackedRepository)(nil)
 
 // newCacheBackedRepository creates a new CacheBackedRepository instance.
-func newCacheBackedRepository(logger *logr.Logger, spec runtime.Typed, cfg *configuration.Configuration, wp *workerpool.WorkerPool, repo repository.ComponentVersionRepository) *CacheBackedRepository {
+func newCacheBackedRepository(logger *logr.Logger, spec runtime.Typed, cfg *configuration.Configuration, wp *workerpool.WorkerPool, repo repository.ComponentVersionRepository, requesterFunc func() workerpool.RequesterInfo) *CacheBackedRepository {
 	return &CacheBackedRepository{
-		logger:     logger,
-		spec:       spec,
-		cfg:        cfg,
-		workerPool: wp,
-		repo:       repo,
+		logger:        logger,
+		spec:          spec,
+		cfg:           cfg,
+		workerPool:    wp,
+		repo:          repo,
+		requesterFunc: requesterFunc,
 	}
 }
 
@@ -65,6 +70,7 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 		Version:    version,
 		Repository: c.repo,
 		KeyFunc:    keyFunc,
+		Requester:  c.requesterFunc(),
 	}
 
 	result, err := c.workerPool.GetComponentVersion(ctx, wpOpts)

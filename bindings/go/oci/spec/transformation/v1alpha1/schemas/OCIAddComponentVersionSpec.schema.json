@@ -21,6 +21,7 @@
   "$defs": {
     "ocm.software.open-component-model.bindings.go.descriptor.v2.Descriptor": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/descriptor/v2/resources/schema-2020-12.json",
       "type": "object",
       "description": "Open Component Model v2 schema",
       "properties": {

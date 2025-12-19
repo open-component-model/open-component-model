@@ -85,8 +85,11 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
 
+	// event source from resolver's worker pool to get notified when resolutions complete
+	eventSource := workerpool.NewEventSource(r.Resolver.WorkerPool())
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Component{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		WatchesRawSource(eventSource).
 		Watches(
 			&v1alpha1.Repository{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
@@ -233,6 +236,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		RepositorySpec:    repoSpec,
 		OCMConfigurations: configs,
 		Namespace:         component.GetNamespace(),
+		RequesterFunc: func() workerpool.RequesterInfo {
+			return workerpool.RequesterInfo{
+				NamespacedName: types.NamespacedName{
+					Namespace: component.GetNamespace(),
+					Name:      component.GetName(),
+				},
+			}
+		},
 	})
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetRepositoryFailedReason, err.Error())
@@ -248,11 +259,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	desc, err := cacheBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)
-	// TODO: Adjust when https://github.com/open-component-model/ocm-project/issues/784 is merged (@frewilhelm @
 	if errors.Is(err, workerpool.ErrResolutionInProgress) {
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.ResolutionInProgress, err.Error())
+		logger.Info("component version resolution in progress, waiting for event notification",
+			"component", component.Spec.Component,
+			"version", version)
 
-		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
+		return ctrl.Result{}, nil
 	}
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
