@@ -5,11 +5,6 @@ includes:
 
 
 tasks:
-  tmp:
-    cmds:
-      - mkdir -p tmp
-    status:
-      - test -d tmp
   build:
     cmds:
       - go build -o tmp/testdata/test-plugin-component-version internal/testplugin-component-version/main.go
@@ -23,5 +18,4 @@ tasks:
     cmds:
       - task: reuse:run-test
     deps:
-      - tmp
       - build

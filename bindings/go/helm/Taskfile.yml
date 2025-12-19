@@ -19,11 +19,6 @@ vars:
   VERSION: '{{ .VERSION | default "0.0.0-local.dev" }}'
 
 tasks:
-  tmp:
-    cmds:
-      - mkdir -p tmp
-    status:
-      - test -d tmp
 
   build:
     cmds:
@@ -33,7 +28,6 @@ tasks:
     cmds:
       - task: reuse:run-test
     deps:
-      - tmp
       - build
 
   install/local:
@@ -55,8 +49,6 @@ tasks:
     generates:
       - '{{ .OUTDIR }}/bin/helminput-plugin-{{ .GOOS }}-{{ .GOARCH }}'
       - '{{ .OUTDIR }}/resources/helminput-plugin-{{ .GOOS }}-{{ .GOARCH }}.yaml'
-    deps:
-      - tmp
       - download/deps
     requires:
       vars: [ GOOS, GOARCH ]

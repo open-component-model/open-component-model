@@ -8,15 +8,8 @@ vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
 
 tasks:
-  tmp:
-    cmds:
-      - mkdir -p tmp
-    status:
-      - test -d tmp
   test:
     cmds:
       - task: reuse:run-test
         vars:
           SKIP_PATTERN: '{{ .INTEGRATION_TEST_IDENTIFIER }}'
-    deps:
-      - tmp

@@ -24,18 +24,11 @@ vars:
     sh: |
       go env GOARCH
 tasks:
-  tmp:
-    cmds:
-      - mkdir -p tmp
-    status:
-      - test -d tmp
   test:
     cmds:
       - task: reuse:run-test
         vars:
           SKIP_PATTERN: '{{ .INTEGRATION_TEST_IDENTIFIER }}'
-    deps:
-      - tmp
 
   install:
     desc: "Install the CLI"

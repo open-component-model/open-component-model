@@ -5,14 +5,7 @@ includes:
 
 
 tasks:
-  tmp:
-    cmds:
-      - mkdir -p tmp
-    status:
-      - test -d tmp
   test:
-    deps:
-      - tmp
     desc: "Run all Generator tests"
     cmds:
       - task: ocmtypegen/test

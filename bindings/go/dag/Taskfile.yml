@@ -5,15 +5,8 @@ includes:
 
 
 tasks:
-  tmp:
-    cmds:
-      - mkdir -p tmp
-    status:
-      - test -d tmp
   test:
     cmds:
       - task: reuse:run-test
         vars:
           GO_TEST_FLAGS: -race
-    deps:
-      - tmp
