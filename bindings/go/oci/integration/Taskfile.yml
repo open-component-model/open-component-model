@@ -1,9 +1,14 @@
 version: '3'
 
+includes:
+  reuse: ../../../../reuse.Taskfile.yml
+
 vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
 
 tasks:
   test/integration:
     cmds:
-      - 'go test -run "{{ .INTEGRATION_TEST_IDENTIFIER }}" -v ./...'
+      - task: reuse:run-go-test
+        vars:
+          GO_TEST_FLAGS: '-run "{{ .INTEGRATION_TEST_IDENTIFIER }}"'
