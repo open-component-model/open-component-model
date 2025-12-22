@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -310,7 +311,7 @@ func ComputeID(parent client.Object) string {
 }
 
 func (a *applySet) Add(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
-	logger := log.FromContext(ctx).WithValues(
+	logger := slogcontext.FromCtx(ctx).With(
 		"operation", "add",
 		"name", obj.GetName(),
 		"namespace", obj.GetNamespace(),
@@ -345,7 +346,7 @@ func (a *applySet) Add(ctx context.Context, obj *unstructured.Unstructured) (*un
 	observed, err := dynResource.Get(ctx, obj.GetName(), metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.V(1).Info("object does not exist in cluster")
+			logger.Info("object does not exist in cluster")
 			observed = nil
 		} else {
 			return nil, fmt.Errorf("error getting object from cluster: %w", err)
@@ -353,7 +354,7 @@ func (a *applySet) Add(ctx context.Context, obj *unstructured.Unstructured) (*un
 	}
 
 	a.desiredObjects = append(a.desiredObjects, obj)
-	logger.V(1).Info("added object to applyset")
+	logger.Info("added object to applyset")
 
 	return observed, nil
 }
@@ -444,7 +445,7 @@ func (a *applySet) DryRun(ctx context.Context, prune bool) (*Result, error) {
 }
 
 func (a *applySet) applyAndPrune(ctx context.Context, prune bool, dryRun bool) (*Result, error) {
-	logger := log.FromContext(ctx).WithValues("operation", "apply", "dryRun", dryRun, "prune", prune)
+	logger := slogcontext.FromCtx(ctx).With("operation", "apply", "dryRun", dryRun, "prune", prune)
 
 	result := &Result{
 		Applied: make([]AppliedObject, 0, len(a.desiredObjects)),
@@ -506,7 +507,6 @@ func (a *applySet) apply(ctx context.Context, result *Result, dryRun bool) error
 	}
 
 	for _, obj := range a.desiredObjects {
-		obj := obj // capture loop variable
 		eg.Go(func() error {
 			applied, err := a.applyObject(egctx, obj, applyOptions)
 			result.recordApplied(applied, err)
@@ -522,7 +522,7 @@ func (a *applySet) applyObject(
 	obj *unstructured.Unstructured,
 	options metav1.ApplyOptions,
 ) (*unstructured.Unstructured, error) {
-	logger := log.FromContext(ctx).WithValues(
+	logger := slogcontext.FromCtx(ctx).With(
 		"name", obj.GetName(),
 		"namespace", obj.GetNamespace(),
 		"gvk", obj.GetObjectKind().GroupVersionKind().String(),
@@ -545,11 +545,11 @@ func (a *applySet) applyObject(
 
 	applied, err := dynResource.Apply(ctx, obj.GetName(), obj, options)
 	if err != nil {
-		logger.Error(err, "failed to apply object")
+		logger.Error("failed to apply object", "error", err)
 		return nil, err
 	}
 
-	logger.V(1).Info("applied object", "resourceVersion", applied.GetResourceVersion())
+	logger.Info("applied object", "resourceVersion", applied.GetResourceVersion())
 	return applied, nil
 }
 
@@ -631,7 +631,6 @@ func (a *applySet) findObjectsToPrune(ctx context.Context, appliedUIDs sets.Set[
 	eg.SetLimit(10) // Limit concurrent list operations
 
 	for _, gkStr := range gks {
-		gkStr := gkStr // capture loop variable
 		eg.Go(func() error {
 			gk := parseGroupKind(gkStr)
 			mapping, err := a.restMapper.RESTMapping(gk)

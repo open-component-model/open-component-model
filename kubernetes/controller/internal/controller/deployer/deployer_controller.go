@@ -551,7 +551,7 @@ func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1
 // - All deployed resources are labeled with applyset.k8s.io/part-of=<applyset-id>
 // - The deployer carries annotations tracking the GroupKinds and namespaces of managed resources
 // - Pruning automatically removes resources that were previously deployed but are no longer in the manifest
-func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured, prune bool) error {
+func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured, prune bool) error { //nolint:unused // currently unused, but will be used once we switch to ApplySet fully
 	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
 
 	// Use the deployer as the ApplySet parent
