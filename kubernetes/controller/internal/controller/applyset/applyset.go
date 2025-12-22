@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -20,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -310,7 +310,7 @@ func ComputeID(parent client.Object) string {
 }
 
 func (a *applySet) Add(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
-	logger := log.FromContext(ctx).WithValues(
+	logger := slogcontext.FromCtx(ctx).With(
 		"operation", "add",
 		"name", obj.GetName(),
 		"namespace", obj.GetNamespace(),
@@ -345,7 +345,7 @@ func (a *applySet) Add(ctx context.Context, obj *unstructured.Unstructured) (*un
 	observed, err := dynResource.Get(ctx, obj.GetName(), metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.V(1).Info("object does not exist in cluster")
+			logger.Info("object does not exist in cluster")
 			observed = nil
 		} else {
 			return nil, fmt.Errorf("error getting object from cluster: %w", err)
@@ -353,7 +353,7 @@ func (a *applySet) Add(ctx context.Context, obj *unstructured.Unstructured) (*un
 	}
 
 	a.desiredObjects = append(a.desiredObjects, obj)
-	logger.V(1).Info("added object to applyset")
+	logger.Info("added object to applyset")
 
 	return observed, nil
 }
@@ -444,7 +444,7 @@ func (a *applySet) DryRun(ctx context.Context, prune bool) (*Result, error) {
 }
 
 func (a *applySet) applyAndPrune(ctx context.Context, prune bool, dryRun bool) (*Result, error) {
-	logger := log.FromContext(ctx).WithValues("operation", "apply", "dryRun", dryRun, "prune", prune)
+	logger := slogcontext.FromCtx(ctx).With("operation", "apply", "dryRun", dryRun, "prune", prune)
 
 	result := &Result{
 		Applied: make([]AppliedObject, 0, len(a.desiredObjects)),
@@ -506,7 +506,6 @@ func (a *applySet) apply(ctx context.Context, result *Result, dryRun bool) error
 	}
 
 	for _, obj := range a.desiredObjects {
-		obj := obj // capture loop variable
 		eg.Go(func() error {
 			applied, err := a.applyObject(egctx, obj, applyOptions)
 			result.recordApplied(applied, err)
@@ -522,7 +521,7 @@ func (a *applySet) applyObject(
 	obj *unstructured.Unstructured,
 	options metav1.ApplyOptions,
 ) (*unstructured.Unstructured, error) {
-	logger := log.FromContext(ctx).WithValues(
+	logger := slogcontext.FromCtx(ctx).With(
 		"name", obj.GetName(),
 		"namespace", obj.GetNamespace(),
 		"gvk", obj.GetObjectKind().GroupVersionKind().String(),
@@ -545,16 +544,16 @@ func (a *applySet) applyObject(
 
 	applied, err := dynResource.Apply(ctx, obj.GetName(), obj, options)
 	if err != nil {
-		logger.Error(err, "failed to apply object")
+		logger.Error("failed to apply object", "error", err)
 		return nil, err
 	}
 
-	logger.V(1).Info("applied object", "resourceVersion", applied.GetResourceVersion())
+	logger.Info("applied object", "resourceVersion", applied.GetResourceVersion())
 	return applied, nil
 }
 
 func (a *applySet) prune(ctx context.Context, result *Result, dryRun bool) error {
-	logger := log.FromContext(ctx)
+	logger := slogcontext.FromCtx(ctx)
 
 	// Find all objects that should be pruned
 	pruneObjects, err := a.findObjectsToPrune(ctx, result.AppliedUIDs())
@@ -583,12 +582,13 @@ func (a *applySet) prune(ctx context.Context, result *Result, dryRun bool) error
 		result.recordPruned(obj, err)
 
 		if err != nil && !apierrors.IsNotFound(err) {
-			logger.Error(err, "failed to prune object",
+			logger.Error("failed to prune object",
 				"name", obj.Name,
 				"namespace", obj.Namespace,
-				"gvk", obj.GVK.String())
+				"gvk", obj.GVK.String(),
+				"error", err)
 		} else {
-			logger.V(1).Info("pruned object",
+			logger.Info("pruned object",
 				"name", obj.Name,
 				"namespace", obj.Namespace,
 				"gvk", obj.GVK.String())
@@ -608,19 +608,19 @@ type PrunableObject struct {
 }
 
 func (a *applySet) findObjectsToPrune(ctx context.Context, appliedUIDs sets.Set[types.UID]) ([]PrunableObject, error) {
-	logger := log.FromContext(ctx)
+	logger := slogcontext.FromCtx(ctx)
 
 	// Get the list of GKs from current annotations to know what to look for
 	gks := a.getGKsFromAnnotations()
 	if len(gks) == 0 {
-		logger.V(1).Info("no group-kinds found in annotations, nothing to prune")
+		logger.Info("no group-kinds found in annotations, nothing to prune")
 		return nil, nil
 	}
 
 	// Get the list of namespaces to check
 	namespaces := a.getNamespacesToCheck()
 
-	logger.V(1).Info("searching for objects to prune",
+	logger.Info("searching for objects to prune",
 		"gks", len(gks),
 		"namespaces", len(namespaces))
 
@@ -631,12 +631,11 @@ func (a *applySet) findObjectsToPrune(ctx context.Context, appliedUIDs sets.Set[
 	eg.SetLimit(10) // Limit concurrent list operations
 
 	for _, gkStr := range gks {
-		gkStr := gkStr // capture loop variable
 		eg.Go(func() error {
 			gk := parseGroupKind(gkStr)
 			mapping, err := a.restMapper.RESTMapping(gk)
 			if err != nil {
-				logger.V(1).Info("could not find mapping for group-kind, skipping", "gk", gkStr, "error", err)
+				logger.Info("could not find mapping for group-kind, skipping", "gk", gkStr, "error", err)
 				return nil // Skip unknown GKs
 			}
 
@@ -765,7 +764,7 @@ func parseGroupKind(gkStr string) schema.GroupKind {
 }
 
 func (a *applySet) updateParentLabelsAndAnnotations(ctx context.Context, useSuperset bool) error {
-	logger := log.FromContext(ctx)
+	logger := slogcontext.FromCtx(ctx)
 
 	// Generate desired labels and annotations
 	desiredLabels := a.desiredParentLabels()
@@ -780,7 +779,7 @@ func (a *applySet) updateParentLabelsAndAnnotations(ctx context.Context, useSupe
 	// Check if we need to update
 	if equality.Semantic.DeepEqual(a.currentLabels, desiredLabels) &&
 		equality.Semantic.DeepEqual(a.currentAnnotations, desiredAnnotations) {
-		logger.V(1).Info("parent labels and annotations unchanged, skipping update")
+		logger.Info("parent labels and annotations unchanged, skipping update")
 		return nil
 	}
 
@@ -803,7 +802,7 @@ func (a *applySet) updateParentLabelsAndAnnotations(ctx context.Context, useSupe
 		return fmt.Errorf("error updating parent: %w", err)
 	}
 
-	logger.V(1).Info("updated parent labels and annotations")
+	logger.Info("updated parent labels and annotations")
 
 	// Update current state
 	a.currentLabels = desiredLabels
