@@ -32,9 +32,9 @@ require (
 
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
-	github.com/docker/cli v28.5.2+incompatible
+	github.com/docker/cli v29.0.2+incompatible
 	github.com/hashicorp/golang-lru/v2 v2.0.7
-	ocm.software/ocm v0.32.0
+	ocm.software/ocm v0.34.2
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5
@@ -61,7 +61,7 @@ require (
 	cloud.google.com/go/spanner v1.86.1 // indirect
 	cloud.google.com/go/storage v1.57.2 // indirect
 	dario.cat/mergo v1.0.2 // indirect
-	github.com/AliyunContainerService/ack-ram-tool/pkg/credentials/provider v0.18.1 // indirect
+	github.com/AliyunContainerService/ack-ram-tool/pkg/credentials/provider v0.19.0 // indirect
 	github.com/AliyunContainerService/ack-ram-tool/pkg/ecsmetadata v0.0.10 // indirect
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
@@ -82,7 +82,7 @@ require (
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.3.0 // indirect
-	github.com/ThalesIgnite/crypto11 v1.4.1 // indirect
+	github.com/ThalesIgnite/crypto11 v1.6.0 // indirect
 	github.com/a8m/envsubst v1.4.3 // indirect
 	github.com/alecthomas/participle/v2 v2.1.4 // indirect
 	github.com/alibabacloud-go/alibabacloud-gateway-spi v0.0.5 // indirect
@@ -127,7 +127,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
-	github.com/buildkite/agent/v3 v3.110.0 // indirect
+	github.com/buildkite/agent/v3 v3.111.0 // indirect
 	github.com/buildkite/go-pipeline v0.16.0 // indirect
 	github.com/buildkite/interpolate v0.1.5 // indirect
 	github.com/buildkite/roko v1.4.0 // indirect
@@ -141,14 +141,14 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
 	github.com/cloudflare/cfssl v1.6.5 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
-	github.com/cncf/xds/go v0.0.0-20251022180443-0feb69152e9f // indirect
+	github.com/cncf/xds/go v0.0.0-20251031190108-5cf4b1949528 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
 	github.com/containerd/containerd v1.7.29 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v0.2.1 // indirect
-	github.com/containerd/stargz-snapshotter/estargz v0.18.0 // indirect
+	github.com/containerd/stargz-snapshotter/estargz v0.18.1 // indirect
 	github.com/containers/image/v5 v5.36.2 // indirect
 	github.com/containers/libtrust v0.0.0-20230121012942-c1716e8a8d01 // indirect
 	github.com/containers/ocicrypt v1.2.1 // indirect
@@ -164,7 +164,6 @@ require (
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker v28.5.2+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.4 // indirect
-	github.com/docker/go v1.5.1-1 // indirect
 	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/drone/envsubst v1.0.3 // indirect
@@ -256,7 +255,7 @@ require (
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinburke/ssh_config v1.4.0 // indirect
-	github.com/klauspost/compress v1.18.0 // indirect
+	github.com/klauspost/compress v1.18.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/letsencrypt/boulder v0.20251118.0 // indirect
@@ -278,6 +277,8 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/locker v1.0.1 // indirect
+	github.com/moby/moby/api v1.52.0 // indirect
+	github.com/moby/moby/client v0.1.0 // indirect
 	github.com/moby/spdystream v0.5.0 // indirect
 	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/moby/sys/capability v0.4.0 // indirect
@@ -320,7 +321,7 @@ require (
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
 	github.com/sigstore/cosign/v2 v2.6.1 // indirect
-	github.com/sigstore/fulcio v1.7.1 // indirect
+	github.com/sigstore/fulcio v1.8.1 // indirect
 	github.com/sigstore/protobuf-specs v0.5.0 // indirect
 	github.com/sigstore/rekor v1.4.3 // indirect
 	github.com/sigstore/rekor-tiles v0.1.11 // indirect
@@ -346,7 +347,7 @@ require (
 	github.com/titanous/rocacheck v0.0.0-20171023193734-afe73141d399 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/tonglil/buflogr v1.1.1 // indirect
-	github.com/transparency-dev/formats v0.0.0-20250825093915-4fde0c3c9ab1 // indirect
+	github.com/transparency-dev/formats v0.0.0-20251103090025-99ec6f4410eb // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect
 	github.com/transparency-dev/tessera v1.0.0 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
@@ -383,7 +384,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/exp v0.0.0-20250911091902-df9299821621 // indirect
+	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/mod v0.30.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.33.0 // indirect
@@ -394,8 +395,8 @@ require (
 	golang.org/x/tools v0.39.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/api v0.256.0 // indirect
-	google.golang.org/genproto v0.0.0-20250922171735-9219d122eba9 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20251022142026-3a174f9686a8 // indirect
+	google.golang.org/genproto v0.0.0-20251103181224-f26f9409b101 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20251103181224-f26f9409b101 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251103181224-f26f9409b101 // indirect
 	google.golang.org/grpc v1.77.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
@@ -429,5 +430,7 @@ replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250910181357-589584f
 
 // TODO: remove once mandelsoft utils no longer has an unreleased version of vfs as dep
 replace github.com/mandelsoft/vfs => github.com/mandelsoft/vfs v0.4.4
+
+replace github.com/klauspost/compress => github.com/klauspost/compress v1.18.0
 
 replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.0
