@@ -298,12 +298,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to download resource from OCM or retrieve it from the cache: %w", err)
 	}
 
-	if err = r.applyConcurrently(ctx, resource, deployer, objs); err != nil {
+	// Apply resources using ApplySet for proper tracking and pruning support
+	// TODO: Add a spec field (deployer.Spec.Prune) to control pruning behavior per-deployer
+	const enablePruning = false // Set to true to enable automatic pruning of orphaned resources
+
+	if err = r.applyWithApplySet(ctx, resource, deployer, objs, enablePruning); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ApplyFailed, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to apply resources: %w", err)
 	}
 
+	// Track the applied objects for the dynamic informer manager
 	if err = r.trackConcurrently(ctx, deployer, objs); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceNotSynced, err.Error())
 
@@ -598,7 +603,7 @@ func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1
 // - All deployed resources are labeled with applyset.k8s.io/part-of=<applyset-id>
 // - The deployer carries annotations tracking the GroupKinds and namespaces of managed resources
 // - Pruning automatically removes resources that were previously deployed but are no longer in the manifest
-func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured, prune bool) error { //nolint:unused // currently unused, but will be used once we switch to ApplySet fully
+func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured, prune bool) error {
 	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
 
 	// Use the deployer as the ApplySet parent
