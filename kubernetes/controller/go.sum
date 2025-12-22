@@ -1034,8 +1034,8 @@ github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/fluxcd/cli-utils v0.36.0-flux.15 h1:Et5QLnIpRjj+oZtM9gEybkAaoNsjysHq0y1253Ai94Y=
 github.com/fluxcd/cli-utils v0.36.0-flux.15/go.mod h1:AqRUmWIfNE7cdL6NWSGF0bAlypGs+9x5UQ2qOtlEzv4=
-github.com/fluxcd/pkg/apis/event v0.20.0 h1:Vxd1kkS/CsQNPHTbmlL4qOcCmUmavEtaEOod2yJsBVU=
-github.com/fluxcd/pkg/apis/event v0.20.0/go.mod h1:wyY+8BHicfFP7sXzhMrKpZTQeojCsSpK9idAidjv61c=
+github.com/fluxcd/pkg/apis/event v0.21.0 h1:VVl0WmgDXJwDS3Pivkk+31h3fWHbq+BpbNLUF5d61ec=
+github.com/fluxcd/pkg/apis/event v0.21.0/go.mod h1:jacQdE6DdxoBsUOLMzEZNtpd4TqtYaiH1DWoyHMSUSo=
 github.com/fluxcd/pkg/apis/meta v1.22.0 h1:EHWQH5ZWml7i8eZ/AMjm1jxid3j/PQ31p+hIwCt6crM=
 github.com/fluxcd/pkg/apis/meta v1.22.0/go.mod h1:Kc1+bWe5p0doROzuV9XiTfV/oL3ddsemYXt8ZYWdVVg=
 github.com/fluxcd/pkg/runtime v0.89.0 h1:bULflHbYBZm1HFp6M7SvQWLePBvmIjjT8fSavD5mIs0=
