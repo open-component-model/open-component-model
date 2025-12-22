@@ -94,7 +94,7 @@ require (
 	github.com/alibabacloud-go/openapi-util v0.1.1 // indirect
 	github.com/alibabacloud-go/tea v1.3.13 // indirect
 	github.com/alibabacloud-go/tea-utils v1.4.5 // indirect
-	github.com/alibabacloud-go/tea-utils/v2 v2.0.7 // indirect
+	github.com/alibabacloud-go/tea-utils/v2 v2.0.8 // indirect
 	github.com/alibabacloud-go/tea-xml v1.1.3 // indirect
 	github.com/aliyun/credentials-go v1.4.8 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
@@ -109,7 +109,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.14 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.4 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.14 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ecr v1.52.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ecr v1.54.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ecrpublic v1.38.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.5 // indirect
@@ -141,7 +141,7 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
 	github.com/cloudflare/cfssl v1.6.5 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
-	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
+	github.com/cncf/xds/go v0.0.0-20251022180443-0feb69152e9f // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
 	github.com/containerd/containerd v1.7.29 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
@@ -153,7 +153,7 @@ require (
 	github.com/containers/libtrust v0.0.0-20230121012942-c1716e8a8d01 // indirect
 	github.com/containers/ocicrypt v1.2.1 // indirect
 	github.com/containers/storage v1.59.1 // indirect
-	github.com/coreos/go-oidc/v3 v3.16.0 // indirect
+	github.com/coreos/go-oidc/v3 v3.17.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
@@ -259,7 +259,7 @@ require (
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
-	github.com/letsencrypt/boulder v0.20251110.0 // indirect
+	github.com/letsencrypt/boulder v0.20251118.0 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
@@ -395,9 +395,9 @@ require (
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/api v0.256.0 // indirect
 	google.golang.org/genproto v0.0.0-20250922171735-9219d122eba9 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20251022142026-3a174f9686a8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251103181224-f26f9409b101 // indirect
-	google.golang.org/grpc v1.76.0 // indirect
+	google.golang.org/grpc v1.77.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
