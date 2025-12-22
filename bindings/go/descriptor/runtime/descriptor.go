@@ -40,6 +40,14 @@ type Descriptor struct {
 	Signatures []Signature `json:"-"`
 }
 
+func (d Descriptor) MarshalJSON() ([]byte, error) {
+	return nil, fmt.Errorf("marshalling of runtime descriptor is not supported")
+}
+
+func (d *Descriptor) UnmarshalJSON(data []byte) error {
+	return fmt.Errorf("unmarshalling of runtime descriptor is not supported")
+}
+
 func (d *Descriptor) String() string {
 	base := d.Component.String()
 	if d.Meta.Version != "" {
