@@ -1,11 +1,10 @@
 version: '3'
 
+includes:
+  reuse: ../../../reuse.Taskfile.yml
+
+
 tasks:
-  tmp:
-    cmds:
-      - mkdir -p tmp
-    status:
-      - test -d tmp
   build:
     cmds:
       - go build -o tmp/testdata/test-plugin-component-version internal/testplugin-component-version/main.go
@@ -17,7 +16,6 @@ tasks:
       - go build -o tmp/testdata/test-plugin-component-lister internal/testplugin-component-lister/main.go
   test:
     cmds:
-      - go test -v -coverprofile=tmp/coverage.out ./...
+      - task: reuse:run-go-test
     deps:
-      - tmp
       - build
