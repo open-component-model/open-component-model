@@ -132,7 +132,7 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (*ArtifactSet, error) {
 	// if we are media type aware, we need to check the media type.
 	// otherwise we do a best effort to detect the media type.
 	if mtAware, ok := b.(blob.MediaTypeAware); ok {
-		if mt, known := mtAware.MediaType(); known && IsArtifactSetMediaType(mt) {
+		if mt, known := mtAware.MediaType(); known && !IsArtifactSetMediaType(mt) {
 			return nil, fmt.Errorf("unsupported media type %q, expected one of %v", mt, recognizedArtifactSetMediaTypes)
 		}
 	}
