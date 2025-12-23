@@ -3,49 +3,30 @@ package resource
 import (
 	_ "embed"
 	"encoding/json"
+	"os"
 	"path/filepath"
 
-	"github.com/mandelsoft/vfs/pkg/osfs"
-	"github.com/mandelsoft/vfs/pkg/projectionfs"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	k8smetav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	. "ocm.software/ocm/api/helper/builder"
-	ocmmetav1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
-	"ocm.software/ocm/api/ocm/extensions/accessmethods/git"
-	"ocm.software/ocm/api/ocm/extensions/accessmethods/github"
-	"ocm.software/ocm/api/ocm/extensions/accessmethods/helm"
-	ocmociartifact "ocm.software/ocm/api/ocm/extensions/accessmethods/ociartifact"
-	"ocm.software/ocm/api/ocm/extensions/artifacttypes"
-	"ocm.software/ocm/api/ocm/extensions/repositories/ctf"
-	"ocm.software/ocm/api/utils/accessio"
-	"ocm.software/ocm/api/utils/mime"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	environment "ocm.software/ocm/api/helper/env"
-
+	ocmmetav1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 )
 
 var _ = Describe("Resource Controller", func() {
-	var (
-		env     *Builder
-		tempDir string
-	)
+	var tempDir string
 
 	BeforeEach(func() {
 		tempDir = GinkgoT().TempDir()
-		fs, err := projectionfs.New(osfs.OsFs, tempDir)
-		Expect(err).NotTo(HaveOccurred())
-		env = NewBuilder(environment.FileSystem(fs))
-		DeferCleanup(func(ctx SpecContext) {
-			Expect(env.Cleanup()).To(Succeed())
-		})
 	})
 
 	Context("resource controller", func() {
@@ -80,14 +61,11 @@ var _ = Describe("Resource Controller", func() {
 		}
 
 		DescribeTable("reconciles a created resource",
-			func(ctx SpecContext, createCTF func() string, tc *testCase) {
+			func(ctx SpecContext, createDescriptors func() ([]*descruntime.Descriptor, string), tc *testCase) {
 				By("creating a CTF")
-				ctfPath := createCTF()
-
-				spec, err := ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfPath)
-				Expect(err).NotTo(HaveOccurred())
-				specData, err := spec.MarshalJSON()
-				Expect(err).NotTo(HaveOccurred())
+				descs, ctfPath := createDescriptors()
+				Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+				_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, descs)
 
 				By("mocking a component")
 				namespace := test.NamespaceForTest(ctx)
@@ -185,32 +163,81 @@ var _ = Describe("Resource Controller", func() {
 				test.WaitForReadyObject(ctx, k8sClient, resourceObj, fields)
 			},
 
-			Entry("plain text", func() string {
+			Entry("plain text", func() ([]*descruntime.Descriptor, string) {
 				ctfName := "plainText"
-				env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-					env.Component(componentName, func() {
-						env.Version(componentVersion, func() {
-							env.Resource(resourceName, "1.0.0", artifacttypes.PLAIN_TEXT, ocmmetav1.LocalRelation, func() {
-								env.BlobData(mime.MIME_TEXT, []byte("Hello World!"))
-							})
-						})
-					})
-				})
-				return filepath.Join(tempDir, ctfName)
+				ctfPath := filepath.Join(tempDir, ctfName)
+				return []*descruntime.Descriptor{
+					{
+						Component: descruntime.Component{
+							ComponentMeta: descruntime.ComponentMeta{
+								ObjectMeta: descruntime.ObjectMeta{
+									Name:    componentName,
+									Version: componentVersion,
+								},
+							},
+							Resources: []descruntime.Resource{
+								{
+									ElementMeta: descruntime.ElementMeta{
+										ObjectMeta: descruntime.ObjectMeta{
+											Name:    resourceName,
+											Version: "1.0.0",
+										},
+									},
+									Type:     "plainText",
+									Relation: descruntime.LocalRelation,
+									Access: &v2.LocalBlob{
+										Type: runtime.Type{
+											Name:    v2.LocalBlobAccessType,
+											Version: v2.LocalBlobAccessTypeVersion,
+										},
+										LocalReference: "sha256:1234567890",
+										MediaType:      "text/plain",
+									},
+								},
+							},
+							Provider: descruntime.Provider{Name: "ocm.software"},
+						},
+					},
+				}, ctfPath
 			},
 				nil),
-			Entry("OCI artifact access", func() string {
+			Entry("OCI artifact access", func() ([]*descruntime.Descriptor, string) {
 				ctfName := "ociArtifactAccess"
-				env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-					env.Component(componentName, func() {
-						env.Version(componentVersion, func() {
-							env.Resource(resourceName, "1.0.0", artifacttypes.OCI_ARTIFACT, ocmmetav1.ExternalRelation, func() {
-								env.Access(ocmociartifact.New("ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0"))
-							})
-						})
-					})
-				})
-				return filepath.Join(tempDir, ctfName)
+				ctfPath := filepath.Join(tempDir, ctfName)
+				return []*descruntime.Descriptor{
+					{
+						Component: descruntime.Component{
+							ComponentMeta: descruntime.ComponentMeta{
+								ObjectMeta: descruntime.ObjectMeta{
+									Name:    componentName,
+									Version: componentVersion,
+								},
+							},
+							Resources: []descruntime.Resource{
+								{
+									ElementMeta: descruntime.ElementMeta{
+										ObjectMeta: descruntime.ObjectMeta{
+											Name:    resourceName,
+											Version: "1.0.0",
+										},
+									},
+									Type:     "ociArtifact",
+									Relation: descruntime.ExternalRelation,
+									Access: &runtime.Raw{
+										Type: runtime.Type{
+											Name:    "ociArtifact",
+											Version: "v1",
+										},
+										Data: mustMarshalJSON(map[string]any{
+											"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
+										}),
+									},
+								},
+							},
+							Provider: descruntime.Provider{Name: "ocm.software"},
+						},
+					},
+				}, ctfPath
 			},
 				&testCase{
 					Registry:   "ghcr.io",
@@ -218,59 +245,131 @@ var _ = Describe("Resource Controller", func() {
 					Reference:  "0.24.0",
 				},
 			),
-			Entry("Helm access", func() string {
+			Entry("Helm access", func() ([]*descruntime.Descriptor, string) {
 				ctfName := "helmAccess"
-				env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-					env.Component(componentName, func() {
-						env.Version(componentVersion, func() {
-							env.Resource(resourceName, "1.0.0", artifacttypes.HELM_CHART, ocmmetav1.ExternalRelation, func() {
-								env.Access(helm.New("podinfo:6.9.1", "oci://ghcr.io/stefanprodan/charts"))
-							})
-						})
-					})
-				})
-				return filepath.Join(tempDir, ctfName)
+				ctfPath := filepath.Join(tempDir, ctfName)
+				return []*descruntime.Descriptor{
+					{
+						Component: descruntime.Component{
+							ComponentMeta: descruntime.ComponentMeta{
+								ObjectMeta: descruntime.ObjectMeta{
+									Name:    componentName,
+									Version: componentVersion,
+								},
+							},
+							Resources: []descruntime.Resource{
+								{
+									ElementMeta: descruntime.ElementMeta{
+										ObjectMeta: descruntime.ObjectMeta{
+											Name:    resourceName,
+											Version: "1.0.0",
+										},
+									},
+									Type:     "helmChart",
+									Relation: descruntime.ExternalRelation,
+									Access: &runtime.Raw{
+										Type: runtime.Type{
+											Name:    "helmChart",
+											Version: "v1",
+										},
+										Data: mustMarshalJSON(map[string]any{
+											"helmChart":      "podinfo:6.9.1",
+											"helmRepository": "oci://ghcr.io/stefanprodan/charts",
+										}),
+									},
+								},
+							},
+							Provider: descruntime.Provider{Name: "ocm.software"},
+						},
+					},
+				}, ctfPath
 			},
 				&testCase{
 					HELMChart: "podinfo:6.9.1",
 				},
 			),
-			Entry("GitHub access", func() string {
+			Entry("GitHub access", func() ([]*descruntime.Descriptor, string) {
 				ctfName := "gitHubAccess"
-				env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-					env.Component(componentName, func() {
-						env.Version(componentVersion, func() {
-							env.Resource(resourceName, "1.0.0", artifacttypes.DIRECTORY_TREE, ocmmetav1.ExternalRelation, func() {
-								env.Access(github.New(
-									"https://github.com/open-component-model/ocm-k8s-toolkit",
-									"/repos/open-component-model/ocm-k8s-toolkit",
-									"8f7e04f4b58d2a9e22f88e79dddfc36183688f28",
-								))
-							})
-						})
-					})
-				})
-				return filepath.Join(tempDir, ctfName)
+				ctfPath := filepath.Join(tempDir, ctfName)
+				return []*descruntime.Descriptor{
+					{
+						Component: descruntime.Component{
+							ComponentMeta: descruntime.ComponentMeta{
+								ObjectMeta: descruntime.ObjectMeta{
+									Name:    componentName,
+									Version: componentVersion,
+								},
+							},
+							Resources: []descruntime.Resource{
+								{
+									ElementMeta: descruntime.ElementMeta{
+										ObjectMeta: descruntime.ObjectMeta{
+											Name:    resourceName,
+											Version: "1.0.0",
+										},
+									},
+									Type:     "directoryTree",
+									Relation: descruntime.ExternalRelation,
+									Access: &runtime.Raw{
+										Type: runtime.Type{
+											Name:    "github",
+											Version: "v1",
+										},
+										Data: mustMarshalJSON(map[string]any{
+											"repoUrl": "https://github.com/open-component-model/ocm-k8s-toolkit",
+											"apiUrl":  "/repos/open-component-model/ocm-k8s-toolkit",
+											"commit":  "8f7e04f4b58d2a9e22f88e79dddfc36183688f28",
+										}),
+									},
+								},
+							},
+							Provider: descruntime.Provider{Name: "ocm.software"},
+						},
+					},
+				}, ctfPath
 			},
 				&testCase{
 					GithubRepoURL: "https://github.com/open-component-model/ocm-k8s-toolkit",
 				},
 			),
-			Entry("git access", func() string {
+			Entry("git access", func() ([]*descruntime.Descriptor, string) {
 				ctfName := "gitAccess"
-				env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-					env.Component(componentName, func() {
-						env.Version(componentVersion, func() {
-							env.Resource(resourceName, "1.0.0", artifacttypes.DIRECTORY_TREE, ocmmetav1.ExternalRelation, func() {
-								env.Access(git.New(
-									"https://github.com/open-component-model/ocm-k8s-toolkit",
-									git.WithRef("refs/heads/main"),
-								))
-							})
-						})
-					})
-				})
-				return filepath.Join(tempDir, ctfName)
+				ctfPath := filepath.Join(tempDir, ctfName)
+				return []*descruntime.Descriptor{
+					{
+						Component: descruntime.Component{
+							ComponentMeta: descruntime.ComponentMeta{
+								ObjectMeta: descruntime.ObjectMeta{
+									Name:    componentName,
+									Version: componentVersion,
+								},
+							},
+							Resources: []descruntime.Resource{
+								{
+									ElementMeta: descruntime.ElementMeta{
+										ObjectMeta: descruntime.ObjectMeta{
+											Name:    resourceName,
+											Version: "1.0.0",
+										},
+									},
+									Type:     "directoryTree",
+									Relation: descruntime.ExternalRelation,
+									Access: &runtime.Raw{
+										Type: runtime.Type{
+											Name:    "git",
+											Version: "v1",
+										},
+										Data: mustMarshalJSON(map[string]any{
+											"repository": "https://github.com/open-component-model/ocm-k8s-toolkit",
+											"ref":        "refs/heads/main",
+										}),
+									},
+								},
+							},
+							Provider: descruntime.Provider{Name: "ocm.software"},
+						},
+					},
+				}, ctfPath
 			},
 				&testCase{
 					GitRepository: "https://github.com/open-component-model/ocm-k8s-toolkit",
@@ -336,21 +435,40 @@ var _ = Describe("Resource Controller", func() {
 		It("returns an appropriate error when the resource cannot be fetched", func(ctx SpecContext) {
 			By("creating a CTF")
 			ctfName := "resource-not-found"
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, "1.0.0", artifacttypes.PLAIN_TEXT, ocmmetav1.LocalRelation, func() {
-							env.BlobData(mime.MIME_TEXT, []byte("Hello World!"))
-						})
-					})
-				})
-			})
-
 			ctfPath := filepath.Join(tempDir, ctfName)
-			spec, err := ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfPath)
-			Expect(err).NotTo(HaveOccurred())
-			specData, err := spec.MarshalJSON()
-			Expect(err).NotTo(HaveOccurred())
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersion,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.0",
+									},
+								},
+								Type:     "plainText",
+								Relation: descruntime.LocalRelation,
+								Access: &v2.LocalBlob{
+									Type: runtime.Type{
+										Name:    v2.LocalBlobAccessType,
+										Version: v2.LocalBlobAccessTypeVersion,
+									},
+									LocalReference: "sha256:1234567890",
+									MediaType:      "text/plain",
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
 
 			By("mocking a component")
 			namespace := test.NamespaceForTest(ctx)
@@ -403,21 +521,41 @@ var _ = Describe("Resource Controller", func() {
 		It("reconciles when the component is updated to ready status", func(ctx SpecContext) {
 			By("creating a CTF")
 			ctfName := "component-ready"
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, "1.0.0", artifacttypes.OCI_ARTIFACT, ocmmetav1.ExternalRelation, func() {
-							env.Access(ocmociartifact.New("ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0"))
-						})
-					})
-				})
-			})
-
 			ctfPath := filepath.Join(tempDir, ctfName)
-			spec, err := ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfPath)
-			Expect(err).NotTo(HaveOccurred())
-			specData, err := spec.MarshalJSON()
-			Expect(err).NotTo(HaveOccurred())
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersion,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.0",
+									},
+								},
+								Type:     "ociArtifact",
+								Relation: descruntime.ExternalRelation,
+								Access: &runtime.Raw{
+									Type: runtime.Type{
+										Name:    "ociArtifact",
+										Version: "v1",
+									},
+									Data: mustMarshalJSON(map[string]any{
+										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
+									}),
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
 
 			By("mocking a component")
 			namespace := test.NamespaceForTest(ctx)
@@ -499,24 +637,60 @@ var _ = Describe("Resource Controller", func() {
 			By("creating a CTF")
 			ctfName := "resource-change"
 			resourceVersionUpdated := "1.0.1"
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, "1.0.0", artifacttypes.OCI_ARTIFACT, ocmmetav1.ExternalRelation, func() {
-							env.Access(ocmociartifact.New("ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.23.0"))
-						})
-						env.Resource("resource-update", resourceVersionUpdated, artifacttypes.OCI_ARTIFACT, ocmmetav1.ExternalRelation, func() {
-							env.Access(ocmociartifact.New("ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0"))
-						})
-					})
-				})
-			})
-
 			ctfPath := filepath.Join(tempDir, ctfName)
-			spec, err := ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfPath)
-			Expect(err).NotTo(HaveOccurred())
-			specData, err := spec.MarshalJSON()
-			Expect(err).NotTo(HaveOccurred())
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersion,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.0",
+									},
+								},
+								Type:     "ociArtifact",
+								Relation: descruntime.ExternalRelation,
+								Access: &runtime.Raw{
+									Type: runtime.Type{
+										Name:    "ociArtifact",
+										Version: "v1",
+									},
+									Data: mustMarshalJSON(map[string]any{
+										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.23.0",
+									}),
+								},
+							},
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    "resource-update",
+										Version: resourceVersionUpdated,
+									},
+								},
+								Type:     "ociArtifact",
+								Relation: descruntime.ExternalRelation,
+								Access: &runtime.Raw{
+									Type: runtime.Type{
+										Name:    "ociArtifact",
+										Version: "v1",
+									},
+									Data: mustMarshalJSON(map[string]any{
+										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
+									}),
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
 
 			By("mocking a component")
 			namespace := test.NamespaceForTest(ctx)
@@ -573,8 +747,7 @@ var _ = Describe("Resource Controller", func() {
 
 			By("updating resource spec")
 			resourceObjUpdate := &v1alpha1.Resource{}
-			err = k8sClient.Get(ctx, client.ObjectKeyFromObject(resourceObj), resourceObjUpdate)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(resourceObj), resourceObjUpdate)).To(Succeed())
 
 			resourceObjUpdate.Spec.Resource = v1alpha1.ResourceID{
 				ByReference: v1alpha1.ResourceReference{
@@ -597,21 +770,41 @@ var _ = Describe("Resource Controller", func() {
 		It("reconciles again when the component and resource changes", func(ctx SpecContext) {
 			By("creating a CTF")
 			ctfName := "component-change"
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, "1.0.0", artifacttypes.OCI_ARTIFACT, ocmmetav1.ExternalRelation, func() {
-							env.Access(ocmociartifact.New("ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.23.0"))
-						})
-					})
-				})
-			})
-
 			ctfPath := filepath.Join(tempDir, ctfName)
-			spec, err := ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfPath)
-			Expect(err).NotTo(HaveOccurred())
-			specData, err := spec.MarshalJSON()
-			Expect(err).NotTo(HaveOccurred())
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersion,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.0",
+									},
+								},
+								Type:     "ociArtifact",
+								Relation: descruntime.ExternalRelation,
+								Access: &runtime.Raw{
+									Type: runtime.Type{
+										Name:    "ociArtifact",
+										Version: "v1",
+									},
+									Data: mustMarshalJSON(map[string]any{
+										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.23.0",
+									}),
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
 
 			By("mocking a component")
 			namespace := test.NamespaceForTest(ctx)
@@ -673,49 +866,54 @@ var _ = Describe("Resource Controller", func() {
 
 			By("updating the component version with a new resource")
 			componentVersionUpdated := "v1.0.1"
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, "1.0.0", artifacttypes.OCI_ARTIFACT, ocmmetav1.ExternalRelation, func() {
-							env.Access(ocmociartifact.New("ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.23.0"))
-						})
-					})
-				})
-				env.Component(componentName, func() {
-					env.Version(componentVersionUpdated, func() {
-						env.Resource(resourceName, "1.0.1", artifacttypes.OCI_ARTIFACT, ocmmetav1.ExternalRelation, func() {
-							env.Access(ocmociartifact.New("ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0"))
-						})
-					})
-				})
+			test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersionUpdated,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.1",
+									},
+								},
+								Type:     "ociArtifact",
+								Relation: descruntime.ExternalRelation,
+								Access: &runtime.Raw{
+									Type: runtime.Type{
+										Name:    "ociArtifact",
+										Version: "v1",
+									},
+									Data: mustMarshalJSON(map[string]any{
+										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
+									}),
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
 			})
 
 			By("updating mock component status")
-			componentObj = &v1alpha1.Component{
-				ObjectMeta: k8smetav1.ObjectMeta{
-					Namespace: componentObj.GetNamespace(),
-					Name:      componentObj.GetName(),
-				},
-			}
-			err = k8sClient.Get(ctx, client.ObjectKeyFromObject(componentObj), componentObj)
-			Expect(err).ToNot(HaveOccurred())
+			componentObjUpdate := &v1alpha1.Component{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(componentObj), componentObjUpdate)).To(Succeed())
 
-			componentObj.Status.Component.Version = componentVersionUpdated
-			Expect(k8sClient.Status().Update(ctx, componentObj)).To(Succeed())
+			componentObjUpdate.Status.Component.Version = componentVersionUpdated
+			Expect(k8sClient.Status().Update(ctx, componentObjUpdate)).To(Succeed())
 
 			By("updating mock component spec")
-			componentObj = &v1alpha1.Component{
-				ObjectMeta: k8smetav1.ObjectMeta{
-					Namespace: componentObj.GetNamespace(),
-					Name:      componentObj.GetName(),
-				},
-			}
-			err = k8sClient.Get(ctx, client.ObjectKeyFromObject(componentObj), componentObj)
-			Expect(err).ToNot(HaveOccurred())
+			componentObjUpdate = &v1alpha1.Component{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(componentObj), componentObjUpdate)).To(Succeed())
 
-			componentObj.Spec.Semver = componentVersionUpdated
-			ocmContextCache.Clear()
-			Expect(k8sClient.Update(ctx, componentObj)).To(Succeed())
+			componentObjUpdate.Spec.Semver = componentVersionUpdated
+			Expect(k8sClient.Update(ctx, componentObjUpdate)).To(Succeed())
 
 			// component spec update should trigger resource reconciliation
 			By("checking that the resource was reconciled again")
@@ -738,26 +936,64 @@ var _ = Describe("Resource Controller", func() {
 			ctfName := "nested-component"
 			nestedComponentName := "ocm.software/nested-component"
 			nestedComponentReference := "some-reference"
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Reference(nestedComponentReference, nestedComponentName, componentVersion, func() {})
-					})
-				})
-				env.Component(nestedComponentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, "1.0.0", artifacttypes.OCI_ARTIFACT, ocmmetav1.ExternalRelation, func() {
-							env.Access(ocmociartifact.New("ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.23.0"))
-						})
-					})
-				})
-			})
-
 			ctfPath := filepath.Join(tempDir, ctfName)
-			spec, err := ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfPath)
-			Expect(err).NotTo(HaveOccurred())
-			specData, err := spec.MarshalJSON()
-			Expect(err).NotTo(HaveOccurred())
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(BeAnExistingFile())
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersion,
+							},
+						},
+						References: []descruntime.Reference{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    nestedComponentReference,
+										Version: componentVersion,
+									},
+								},
+								Component: nestedComponentName,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    nestedComponentName,
+								Version: componentVersion,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.0",
+									},
+								},
+								Type:     "ociArtifact",
+								Relation: descruntime.ExternalRelation,
+								Access: &runtime.Raw{
+									Type: runtime.Type{
+										Name:    "ociArtifact",
+										Version: "v1",
+									},
+									Data: mustMarshalJSON(map[string]any{
+										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.23.0",
+									}),
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
 
 			By("mocking a component")
 			namespace := test.NamespaceForTest(ctx)
@@ -823,4 +1059,10 @@ func mustToJSON(v string) apiextensionsv1.JSON {
 	raw, err := json.Marshal(v)
 	Expect(err).ToNot(HaveOccurred())
 	return apiextensionsv1.JSON{Raw: raw}
+}
+
+func mustMarshalJSON(v any) []byte {
+	raw, err := json.Marshal(v)
+	Expect(err).ToNot(HaveOccurred())
+	return raw
 }
