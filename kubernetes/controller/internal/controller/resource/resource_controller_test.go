@@ -1,19 +1,20 @@
 package resource
 
 import (
-	_ "embed"
 	"encoding/json"
 	"os"
 	"path/filepath"
 
+	_ "embed"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	ocmmetav1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -122,7 +123,7 @@ var _ = Describe("Resource Controller", func() {
 						},
 						Resource: v1alpha1.ResourceID{
 							ByReference: v1alpha1.ResourceReference{
-								Resource: ocmmetav1.NewIdentity(resourceName),
+								Resource: runtime.Identity{"name": resourceName},
 							},
 						},
 						AdditionalStatusFields: additionalStatusFields,
@@ -377,6 +378,113 @@ var _ = Describe("Resource Controller", func() {
 			),
 		)
 
+		// TODO: Fix required digest and ready-condition of resource although failing
+		PIt("should reconcile when the resource has extra identities", func(ctx SpecContext) {
+			By("creating a CTF")
+			ctfName := "resource-with-extra-identities"
+			ctfPath := filepath.Join(tempDir, ctfName)
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+
+			extraIdentity := runtime.Identity{
+				"key1": "value1",
+				"key2": "value2",
+			}
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersion,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.0",
+									},
+									ExtraIdentity: extraIdentity,
+								},
+								Type:     "plainText",
+								Relation: descruntime.LocalRelation,
+								Access: &v2.LocalBlob{
+									Type: runtime.Type{
+										Name:    v2.LocalBlobAccessType,
+										Version: v2.LocalBlobAccessTypeVersion,
+									},
+									LocalReference: "sha256:1234567890",
+									MediaType:      "text/plain",
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("mocking a component")
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+					Repository: repositoryName,
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
+			By("creating a resource")
+			identity := extraIdentity.Clone()
+			identity["name"] = resourceName
+			resourceObj := &v1alpha1.Resource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: namespace.GetName(),
+				},
+				Spec: v1alpha1.ResourceSpec{
+					ComponentRef: corev1.LocalObjectReference{
+						Name: componentObj.GetName(),
+					},
+					Resource: v1alpha1.ResourceID{
+						ByReference: v1alpha1.ResourceReference{
+							Resource: identity,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
+
+			By("checking that the resource has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
+				"Status.Component.Component": componentName,
+				"Status.Component.Version":   componentVersion,
+				"Status.Resource.ExtraIdentity": map[string]apiextensionsv1.JSON{
+					"key1": mustToJSON("value1"),
+					"key2": mustToJSON("value2"),
+				},
+			})
+		})
+
+		// TODO: Fix required digest and ready-condition of resource although failing
+		PIt("should not reconcile when the resource has non-matching extra identities", func(ctx SpecContext) {
+
+		})
+
 		It("should not reconcile when the component is not ready", func(ctx SpecContext) {
 			By("mocking a component")
 			namespace := test.NamespaceForTest(ctx)
@@ -418,7 +526,7 @@ var _ = Describe("Resource Controller", func() {
 					},
 					Resource: v1alpha1.ResourceID{
 						ByReference: v1alpha1.ResourceReference{
-							Resource: ocmmetav1.NewIdentity(resourceName),
+							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
 				},
@@ -503,7 +611,7 @@ var _ = Describe("Resource Controller", func() {
 					},
 					Resource: v1alpha1.ResourceID{
 						ByReference: v1alpha1.ResourceReference{
-							Resource: ocmmetav1.NewIdentity("resource-not-found"),
+							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
 				},
@@ -597,7 +705,7 @@ var _ = Describe("Resource Controller", func() {
 					},
 					Resource: v1alpha1.ResourceID{
 						ByReference: v1alpha1.ResourceReference{
-							Resource: ocmmetav1.NewIdentity(resourceName),
+							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
 					AdditionalStatusFields: map[string]string{
@@ -725,7 +833,7 @@ var _ = Describe("Resource Controller", func() {
 					},
 					Resource: v1alpha1.ResourceID{
 						ByReference: v1alpha1.ResourceReference{
-							Resource: ocmmetav1.NewIdentity(resourceName),
+							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
 					AdditionalStatusFields: map[string]string{
@@ -751,7 +859,7 @@ var _ = Describe("Resource Controller", func() {
 
 			resourceObjUpdate.Spec.Resource = v1alpha1.ResourceID{
 				ByReference: v1alpha1.ResourceReference{
-					Resource: ocmmetav1.NewIdentity("resource-update"),
+					Resource: runtime.Identity{"name": resourceName},
 				},
 			}
 			Expect(k8sClient.Update(ctx, resourceObjUpdate)).To(Succeed())
@@ -839,7 +947,7 @@ var _ = Describe("Resource Controller", func() {
 					},
 					Resource: v1alpha1.ResourceID{
 						ByReference: v1alpha1.ResourceReference{
-							Resource: ocmmetav1.NewIdentity(resourceName),
+							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
 					AdditionalStatusFields: map[string]string{
@@ -1028,8 +1136,8 @@ var _ = Describe("Resource Controller", func() {
 					},
 					Resource: v1alpha1.ResourceID{
 						ByReference: v1alpha1.ResourceReference{
-							Resource:      ocmmetav1.NewIdentity(resourceName),
-							ReferencePath: []ocmmetav1.Identity{ocmmetav1.NewIdentity(nestedComponentReference)},
+							Resource:      runtime.Identity{"name": resourceName},
+							ReferencePath: []runtime.Identity{{"name": nestedComponentReference}},
 						},
 					},
 					AdditionalStatusFields: map[string]string{

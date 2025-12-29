@@ -136,16 +136,18 @@ spec:
                           additionalProperties:
                             type: string
                           description: |-
-                            Identity describes the identity of an object.
-                            Only ascii characters are allowed
+                            Identity is a map that represents a set of attributes that uniquely identity
+                            arbitrary resources. It is used in various places in Open Component Model to uniquely
+                            identity objects such as resources or components.
                           type: object
                         type: array
                       resource:
                         additionalProperties:
                           type: string
                         description: |-
-                          Identity describes the identity of an object.
-                          Only ascii characters are allowed
+                          Identity is a map that represents a set of attributes that uniquely identity
+                          arbitrary resources. It is used in various places in Open Component Model to uniquely
+                          identity objects such as resources or components.
                         type: object
                     required:
                     - resource

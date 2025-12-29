@@ -14,7 +14,6 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -295,7 +294,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	_, err = cacheBackedRepo.GetComponentVersion(ctx,
+	parentDesc, err := cacheBackedRepo.GetComponentVersion(ctx,
 		component.Status.Component.Component,
 		component.Status.Component.Version)
 	if errors.Is(err, resolution.ErrResolutionInProgress) {
@@ -311,15 +310,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
-	}
-
-	parentDesc, err := cacheBackedRepo.GetComponentVersion(ctx,
-		component.Status.Component.Component,
-		component.Status.Component.Version)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to get parent component version: %w", err)
 	}
 
 	startRetrievingResource := time.Now()
@@ -342,7 +332,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	var matchedResource *descriptor.Resource
 	for i, res := range finalDesc.Component.Resources {
 		resIdentity := res.ToIdentity()
-		if matched, _ := resourceIdentity.Match(resIdentity); matched {
+		if resourceIdentity.Match(resIdentity, runtime.IdentityMatchingChainFn(func(i, o runtime.Identity) bool {
+			version, ok := i["version"]
+			if !ok || version == "" {
+				delete(o, "version")
+			}
+			return runtime.IdentityEqual(i, o)
+		})) {
 			matchedResource = &finalDesc.Component.Resources[i]
 			break
 		}
@@ -387,7 +383,7 @@ func (r *Reconciler) resolveReferencePath(
 	ctx context.Context,
 	parentDesc *descriptor.Descriptor,
 	parentRepoSpec runtime.Typed,
-	referencePath []v1.Identity,
+	referencePath []runtime.Identity,
 	configs []v1alpha1.OCMConfiguration,
 	namespace string,
 ) (*descriptor.Descriptor, runtime.Typed, error) {
@@ -405,7 +401,7 @@ func (r *Reconciler) resolveReferencePath(
 		var matchedRef *descriptor.Reference
 		for j, ref := range currentDesc.Component.References {
 			refIdent := ref.ToIdentity()
-			if matched, _ := refIdentity.Match(refIdent); matched {
+			if refIdentity.Match(refIdent) {
 				matchedRef = &currentDesc.Component.References[j]
 				break
 			}
