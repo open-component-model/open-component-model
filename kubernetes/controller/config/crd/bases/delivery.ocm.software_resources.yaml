@@ -395,7 +395,6 @@ spec:
                     type: string
                 required:
                 - access
-                - digest
                 - name
                 - type
                 type: object

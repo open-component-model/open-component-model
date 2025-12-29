@@ -101,7 +101,7 @@ type ResourceInfo struct {
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:validation:Type=object
 	Access apiextensionsv1.JSON `json:"access,omitempty"`
-	// +required
+	// +optional
 	Digest string `json:"digest,omitempty"`
 	// +optional
 	Labels []Label `json:"labels,omitempty"`
