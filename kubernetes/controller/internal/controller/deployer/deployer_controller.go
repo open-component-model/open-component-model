@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"slices"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -19,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,7 +35,6 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
-	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
@@ -566,35 +563,6 @@ func identityFunc() ocmruntime.IdentityMatchingChainFn {
 	}
 }
 
-// applyConcurrently applies the resource objects to the cluster concurrently.
-//
-// See Apply for more details on how the objects are applied.
-func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured) error {
-	if len(objs) > 1 {
-		// TODO(jakobmoellerdev): remove once https://github.com/open-component-model/ocm-k8s-toolkit/issues/273#issue-3201709052
-		//  is implemented in the deployer controller. We need proper apply detection so we can support pruning diffs.
-		//  Otherwise we can orphan resources.
-		msg := "multiple objects found in manifest," +
-			"the current deployer implementation does not officially support this yet," +
-			"and will not prune diffs properly."
-		event.New(r, deployer, nil, eventv1.EventSeverityInfo, msg)
-		log.FromContext(ctx).Info(msg)
-	}
-
-	eg, egctx := errgroup.WithContext(ctx)
-
-	for i := range objs {
-		eg.Go(func() error {
-			//nolint:forcetypeassert // we know that objs[i] is a client.Object because we just cloned it
-			obj := objs[i].DeepCopyObject().(*unstructured.Unstructured)
-
-			return r.apply(egctx, resource, deployer, obj)
-		})
-	}
-
-	return eg.Wait()
-}
-
 // applyWithApplySet applies the resource objects using ApplySet for proper tracking and pruning.
 // This method uses the ApplySet specification (KEP-3659) to manage sets of resources with automatic
 // pruning of orphaned resources.
@@ -668,31 +636,6 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 
 	if len(result.Errors) > 0 {
 		return fmt.Errorf("ApplySet completed with errors: %v", result.Errors)
-	}
-
-	return nil
-}
-
-// apply applies the object to the cluster using Server-Side Apply. It sets the controller reference on the object
-// and patches it with the FieldManager set to the deployer UID. It also updates the deployer status with the
-// applied object reference.
-func (r *Reconciler) apply(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, obj *unstructured.Unstructured) error {
-	setOwnershipLabels(obj, resource, deployer)
-	setOwnershipAnnotations(obj, resource)
-	if err := controllerutil.SetControllerReference(deployer, obj, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set controller reference on object: %w", err)
-	}
-
-	if err := r.defaultObj(ctx, resource, obj); err != nil {
-		return err
-	}
-
-	applyConfig := client.ApplyConfigurationFromUnstructured(obj)
-	if err := r.GetClient().Apply(ctx, applyConfig, &client.ApplyOptions{
-		Force:        ptr.To(true),
-		FieldManager: fmt.Sprintf("%s/%s", deployerManager, deployer.UID),
-	}); err != nil {
-		return fmt.Errorf("failed to apply object: %w", err)
 	}
 
 	return nil
