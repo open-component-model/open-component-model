@@ -32,7 +32,7 @@ require (
 
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
-	github.com/docker/cli v29.0.3+incompatible
+	github.com/docker/cli v29.0.4+incompatible
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	ocm.software/ocm v0.34.3
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
