@@ -413,13 +413,10 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 					logger.Debug("processing resource digest")
 					var creds map[string]string
 					if c.opts.Resolver != nil {
-						identity, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, res)
-						if err != nil {
-							return nil, fmt.Errorf("error getting credential consumer identity of access type %q: %w", resource.Access.GetType(), err)
-						}
-
-						if creds, err = c.opts.Resolve(ctx, identity); err != nil {
-							return nil, fmt.Errorf("error resolving credentials for input method of access type %q: %w", resource.Access.GetType(), err)
+						if identity, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, res); err == nil {
+							if creds, err = c.opts.Resolve(ctx, identity); err != nil && !errors.Is(err, credentials.ErrNotFound) {
+								return nil, fmt.Errorf("error resolving credentials for resource digest processor: %w", err)
+							}
 						}
 					}
 					if res, err = digestProcessor.ProcessResourceDigest(ctx, res, creds); err != nil {
