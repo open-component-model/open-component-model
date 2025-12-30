@@ -142,6 +142,10 @@ func (r *RepositoryRegistry) getPlugin(ctx context.Context, spec runtime.Typed) 
 	}
 
 	if existingPlugin, ok := r.constructedPlugins[plugin.ID]; ok {
+		if existingPlugin.wasmPlugin != nil {
+			return existingPlugin.wasmPlugin, nil
+		}
+
 		return existingPlugin.Plugin, nil
 	}
 
@@ -236,6 +240,8 @@ func (r *RepositoryRegistry) RegisterInternalSourceInputPlugin(
 type constructedPlugin struct {
 	Plugin inputv1.InputPluginContract
 	cmd    *exec.Cmd
+	// wasmPlugin is set if this is a Wasm-based plugin (cmd will be nil in this case)
+	wasmPlugin *WasmInputPlugin
 }
 
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
@@ -247,6 +253,15 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, p := range r.constructedPlugins {
 		eg.Go(func() error {
+			if p.wasmPlugin != nil {
+				return p.wasmPlugin.Close()
+			}
+
+			// wasm plugins don't have commands
+			if p.cmd == nil {
+				return nil
+			}
+
 			// The plugins should handle the Interrupt signal for shutdowns.
 			if err := p.cmd.Process.Signal(os.Interrupt); err != nil {
 				return fmt.Errorf("failed to send interrupt signal to plugin: %w", errors.Join(err, p.cmd.Process.Kill()))
@@ -274,6 +289,22 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 }
 
 func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *types.Plugin) (inputv1.InputPluginContract, error) {
+	// Check if this is a Wasm plugin
+	if isWasmPlugin(plugin.Path) {
+		wasmPlugin, err := NewWasmInputPlugin(ctx, plugin.Path, plugin.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create wasm plugin %s: %w", plugin.ID, err)
+		}
+
+		r.constructedPlugins[plugin.ID] = &constructedPlugin{
+			Plugin:     wasmPlugin,
+			wasmPlugin: wasmPlugin,
+		}
+
+		return wasmPlugin, nil
+	}
+
+	// Handle HTTP-based plugins
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
@@ -295,4 +326,9 @@ func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *ty
 
 	// wrap the untyped internal plugin into a typed representation.
 	return repoPlugin, nil
+}
+
+// isWasmPlugin checks if the plugin path points to a Wasm file.
+func isWasmPlugin(path string) bool {
+	return len(path) > 5 && path[len(path)-5:] == ".wasm"
 }

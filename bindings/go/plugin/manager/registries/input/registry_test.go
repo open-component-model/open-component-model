@@ -115,6 +115,75 @@ func TestPluginFlow(t *testing.T) {
 	require.Equal(t, "test-source", source.ProcessedSource.Name)
 }
 
+func TestWasmPluginFlow(t *testing.T) {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-wasm-input.wasm")
+	_, err := os.Stat(path)
+	require.NoError(t, err, "wasm test plugin not found, please build the plugin under tmp/testdata/test-plugin-wasm-input.wasm first")
+
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	dummytype.MustAddToScheme(scheme)
+	registry := NewInputRepositoryRegistry(ctx)
+
+	plugin := mtypes.Plugin{
+		ID:   "test-wasm-plugin",
+		Path: path,
+		Config: mtypes.Config{
+			ID:         "test-wasm-plugin",
+			PluginType: inputv1.InputPluginType,
+		},
+	}
+
+	capability := dummyCapability([]byte(`{}`))
+	require.NoError(t, registry.AddPlugin(plugin, &capability))
+
+	// Test Resource Input
+	retrievedResourcePlugin, err := registry.GetResourceInputPlugin(ctx, &runtime.Raw{Type: dummyType})
+	require.NoError(t, err)
+	resource, err := retrievedResourcePlugin.ProcessResource(ctx, &constructor.Resource{
+		ElementMeta: constructor.ElementMeta{
+			ObjectMeta: constructor.ObjectMeta{
+				Name:    "test-resource-1",
+				Version: "0.1.0",
+			},
+		},
+		Type:     "type",
+		Relation: "local",
+		AccessOrInput: constructor.AccessOrInput{
+			Input: &runtime.Raw{
+				Type: dummyType,
+				Data: []byte(`{ "access": "v1" }`),
+			},
+		},
+	}, map[string]string{})
+	require.NoError(t, err)
+	require.Equal(t, "test-resource", resource.ProcessedResource.Name)
+	require.Equal(t, "v0.0.1", resource.ProcessedResource.Version)
+
+	// Test Source Input
+	retrievedSourcePlugin, err := registry.GetSourceInputPlugin(ctx, &runtime.Raw{Type: dummyType})
+	require.NoError(t, err)
+	source, err := retrievedSourcePlugin.ProcessSource(ctx, &constructor.Source{
+		ElementMeta: constructor.ElementMeta{
+			ObjectMeta: constructor.ObjectMeta{
+				Name:    "test-source-1",
+				Version: "0.1.0",
+			},
+		},
+		Type: "type",
+		AccessOrInput: constructor.AccessOrInput{
+			Input: &runtime.Raw{
+				Type: dummyType,
+				Data: []byte(`{ "access": "v1" }`),
+			},
+		},
+	}, map[string]string{})
+	require.NoError(t, err)
+	require.Equal(t, "test-source", source.ProcessedSource.Name)
+	require.Equal(t, "v0.0.1", source.ProcessedSource.Version)
+}
+
 func TestRegisterInternalResourceInputPlugin(t *testing.T) {
 	ctx := t.Context()
 	r := require.New(t)

@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	extism "github.com/extism/go-sdk"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	blobtransformerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	componentlisterv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
@@ -139,19 +140,59 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 		plugin.Config = *conf
 
 		output := bytes.NewBuffer(nil)
-		// TODO(fabianburth): provide developer documentation on how to debug
-		//   plugins.
-		// The commented command below can be used to start the plugin in headless mode with Delve for debugging purposes.
-		// Depending on your IDE, you can create a remote debugging configuration that connects to the specified port.
-		// The execution will wait for a debugger to attach before proceeding.
-		// cmd := exec.CommandContext(ctx, "dlv", "exec", cleanPath(plugin.Path), "--headless=true", "--listen=:40000", "--api-version=2", "--accept-multiclient", "--log", "--log-dest=2", "--", "capabilities")
-		cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint:gosec // G204 does not apply
-		cmd.Stdout = output
-		cmd.Stderr = os.Stderr
 
-		// Use Wait so we get the capabilities and make sure that the command exists and returns the values we need.
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
+		// TODO: This needs to a bit better here, but I don't care about the config right now. This is POC.
+		if isWasmPlugin(plugin.Path) {
+			// TODO: This should be build once, then use `Instance` to execute.
+			wasmBytes, err := os.ReadFile(plugin.Path)
+			if err != nil {
+				return fmt.Errorf("failed to read wasm file %s: %w", plugin.Path, err)
+			}
+
+			manifest := extism.Manifest{
+				Wasm: []extism.Wasm{
+					extism.WasmData{
+						Data: wasmBytes,
+					},
+				},
+				AllowedHosts: []string{"*"},
+				Config:       map[string]string{},
+			}
+
+			config := extism.PluginConfig{
+				EnableWasi: true,
+			}
+
+			wasmPlugin, err := extism.NewPlugin(ctx, manifest, config, []extism.HostFunction{})
+			if err != nil {
+				return fmt.Errorf("failed to create extism plugin %s: %w", plugin.ID, err)
+			}
+
+			_, capabilitiesOutput, err := wasmPlugin.Call("capabilities", nil)
+			if err != nil {
+				return fmt.Errorf("failed to call capabilities function on wasm plugin %s: %w", plugin.ID, err)
+			}
+
+			if err := wasmPlugin.Close(ctx); err != nil {
+				return fmt.Errorf("failed to close extism plugin %s: %w", plugin.ID, err)
+			}
+
+			output.Write(capabilitiesOutput)
+		} else {
+			// TODO(fabianburth): provide developer documentation on how to debug
+			//   plugins.
+			// The commented command below can be used to start the plugin in headless mode with Delve for debugging purposes.
+			// Depending on your IDE, you can create a remote debugging configuration that connects to the specified port.
+			// The execution will wait for a debugger to attach before proceeding.
+			// cmd := exec.CommandContext(ctx, "dlv", "exec", cleanPath(plugin.Path), "--headless=true", "--listen=:40000", "--api-version=2", "--accept-multiclient", "--log", "--log-dest=2", "--", "capabilities")
+			cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint:gosec // G204 does not apply
+			cmd.Stdout = output
+			cmd.Stderr = os.Stderr
+
+			// Use Wait so we get the capabilities and make sure that the command exists and returns the values we need.
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
+			}
 		}
 
 		if err := pm.addPlugin(pm.baseCtx, defaultOpts.Config, *plugin, output); err != nil {
@@ -164,6 +205,11 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 
 func cleanPath(path string) string {
 	return strings.Trim(path, `,;:'"|&*!@#$`)
+}
+
+// isWasmPlugin checks if the plugin path points to a Wasm file.
+func isWasmPlugin(path string) bool {
+	return filepath.Ext(path) == ".wasm"
 }
 
 // Shutdown is called to terminate all plugins.
@@ -201,9 +247,9 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 			return nil
 		}
 
-		// TODO(Skarlso): Determine plugin extension.
+		// Allow executables (no extension) and .wasm files
 		ext := filepath.Ext(info.Name())
-		if ext != "" {
+		if ext != "" && ext != ".wasm" {
 			return nil
 		}
 
