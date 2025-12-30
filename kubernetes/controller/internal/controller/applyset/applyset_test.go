@@ -679,40 +679,6 @@ func Test_ParseGroupKind(t *testing.T) {
 	}
 }
 
-func Test_UnstructuredList(t *testing.T) {
-	input := &unstructured.UnstructuredList{
-		Items: []unstructured.Unstructured{
-			{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"name": "obj1",
-					},
-				},
-			},
-			{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"name": "obj2",
-					},
-				},
-			},
-			{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"name": "obj3",
-					},
-				},
-			},
-		},
-	}
-
-	result := unstructuredList(input)
-
-	assert.Len(t, result, 3)
-	assert.Equal(t, "obj1", result[0].Object["metadata"].(map[string]interface{})["name"])
-	assert.Equal(t, "obj2", result[1].Object["metadata"].(map[string]interface{})["name"])
-	assert.Equal(t, "obj3", result[2].Object["metadata"].(map[string]interface{})["name"])
-}
 
 func Test_New_ValidationErrors(t *testing.T) {
 	parent := &corev1.ConfigMap{

@@ -19,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -194,37 +193,17 @@ func New(
 		return nil, fmt.Errorf("fieldManager is required")
 	}
 
-	// Convert to dynamic client for server-side apply support
-	dynClient, ok := k8sClient.(dynamic.Interface)
-	if !ok {
-		return nil, fmt.Errorf("client must implement dynamic.Interface")
-	}
-
-	gvk := parent.GetObjectKind().GroupVersionKind()
-	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
-	if err != nil {
-		return nil, fmt.Errorf("error getting rest mapping for parent %v: %w", gvk, err)
-	}
-
 	aset := &applySet{
 		parent:              parent,
 		toolingID:           config.ToolingID,
 		fieldManager:        config.FieldManager,
 		toolLabels:          config.ToolLabels,
 		k8sClient:           k8sClient,
-		dynamicClient:       dynClient,
 		restMapper:          restMapper,
 		desiredRESTMappings: make(map[schema.GroupKind]*meta.RESTMapping),
 		desiredNamespaces:   sets.New[string](),
 		desiredObjects:      make([]*unstructured.Unstructured, 0),
 		concurrency:         config.Concurrency,
-	}
-
-	// Set up the resource interface for the parent
-	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-		aset.parentResource = dynClient.Resource(mapping.Resource).Namespace(parent.GetNamespace())
-	} else {
-		aset.parentResource = dynClient.Resource(mapping.Resource)
 	}
 
 	// Read the parent's current state to get labels and annotations
@@ -241,11 +220,8 @@ type applySet struct {
 	fieldManager string
 	toolLabels   map[string]string
 
-	k8sClient     client.Client
-	dynamicClient dynamic.Interface
-	restMapper    meta.RESTMapper
-
-	parentResource dynamic.ResourceInterface
+	k8sClient  client.Client
+	restMapper meta.RESTMapper
 
 	currentLabels      map[string]string
 	currentAnnotations map[string]string
@@ -337,13 +313,24 @@ func (a *applySet) Add(ctx context.Context, obj *unstructured.Unstructured) (*un
 	// Inject ApplySet labels
 	obj.SetLabels(a.injectApplySetLabels(a.injectToolLabels(obj.GetLabels())))
 
-	// Get current state from cluster
-	dynResource, err := a.resourceClient(obj, restMapping)
-	if err != nil {
-		return nil, err
+	// Get current state from cluster using controller-runtime client
+	observed := &unstructured.Unstructured{}
+	observed.SetGroupVersionKind(gvk)
+	
+	// Set namespace if applicable
+	ns := obj.GetNamespace()
+	if ns == "" && restMapping.Scope.Name() == meta.RESTScopeNameNamespace {
+		ns = a.parent.GetNamespace()
+		if ns == "" {
+			ns = metav1.NamespaceDefault
+		}
 	}
 
-	observed, err := dynResource.Get(ctx, obj.GetName(), metav1.GetOptions{})
+	err = a.k8sClient.Get(ctx, client.ObjectKey{
+		Name:      obj.GetName(),
+		Namespace: ns,
+	}, observed)
+	
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("object does not exist in cluster")
@@ -397,23 +384,6 @@ func (a *applySet) recordNamespace(obj *unstructured.Unstructured, mapping *meta
 	}
 
 	return nil
-}
-
-func (a *applySet) resourceClient(obj *unstructured.Unstructured, mapping *meta.RESTMapping) (dynamic.ResourceInterface, error) {
-	dynResource := a.dynamicClient.Resource(mapping.Resource)
-
-	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-		ns := obj.GetNamespace()
-		if ns == "" {
-			ns = a.parent.GetNamespace()
-			if ns == "" {
-				ns = metav1.NamespaceDefault
-			}
-		}
-		return dynResource.Namespace(ns), nil
-	}
-
-	return dynResource, nil
 }
 
 func (a *applySet) injectToolLabels(labels map[string]string) map[string]string {
@@ -498,17 +468,10 @@ func (a *applySet) apply(ctx context.Context, result *Result, dryRun bool) error
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.SetLimit(concurrency)
 
-	applyOptions := metav1.ApplyOptions{
-		FieldManager: a.fieldManager,
-		Force:        true,
-	}
-	if dryRun {
-		applyOptions.DryRun = []string{metav1.DryRunAll}
-	}
-
 	for _, obj := range a.desiredObjects {
+		obj := obj // capture loop variable
 		eg.Go(func() error {
-			applied, err := a.applyObject(egctx, obj, applyOptions)
+			applied, err := a.applyObject(egctx, obj, dryRun)
 			result.recordApplied(applied, err)
 			return nil // Don't stop on individual errors
 		})
@@ -520,7 +483,7 @@ func (a *applySet) apply(ctx context.Context, result *Result, dryRun bool) error
 func (a *applySet) applyObject(
 	ctx context.Context,
 	obj *unstructured.Unstructured,
-	options metav1.ApplyOptions,
+	dryRun bool,
 ) (*unstructured.Unstructured, error) {
 	logger := slogcontext.FromCtx(ctx).With(
 		"name", obj.GetName(),
@@ -528,29 +491,27 @@ func (a *applySet) applyObject(
 		"gvk", obj.GetObjectKind().GroupVersionKind().String(),
 	)
 
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Empty() {
-		gvk = schema.FromAPIVersionAndKind(obj.GetAPIVersion(), obj.GetKind())
+	// Use controller-runtime Patch with Apply patch type for server-side apply
+	patchOptions := []client.PatchOption{
+		client.ForceOwnership,
+		client.FieldOwner(a.fieldManager),
 	}
 
-	mapping, ok := a.desiredRESTMappings[gvk.GroupKind()]
-	if !ok {
-		return nil, fmt.Errorf("rest mapping not found for %v", gvk)
+	if dryRun {
+		patchOptions = append(patchOptions, client.DryRunAll)
 	}
 
-	dynResource, err := a.resourceClient(obj, mapping)
-	if err != nil {
-		return nil, err
-	}
+	// Make a copy to apply
+	appliedObj := obj.DeepCopy()
 
-	applied, err := dynResource.Apply(ctx, obj.GetName(), obj, options)
+	err := a.k8sClient.Patch(ctx, appliedObj, client.Apply, patchOptions...)
 	if err != nil {
 		logger.Error("failed to apply object", "error", err)
 		return nil, err
 	}
 
-	logger.Info("applied object", "resourceVersion", applied.GetResourceVersion())
-	return applied, nil
+	logger.Info("applied object", "resourceVersion", appliedObj.GetResourceVersion())
+	return appliedObj, nil
 }
 
 func (a *applySet) prune(ctx context.Context, result *Result, dryRun bool) error {
@@ -564,21 +525,19 @@ func (a *applySet) prune(ctx context.Context, result *Result, dryRun bool) error
 
 	logger.Info("found objects to prune", "count", len(pruneObjects))
 
-	deleteOptions := metav1.DeleteOptions{}
+	deleteOptions := []client.DeleteOption{}
 	if dryRun {
-		deleteOptions.DryRun = []string{metav1.DryRunAll}
+		deleteOptions = append(deleteOptions, client.DryRunAll)
 	}
 
 	for _, obj := range pruneObjects {
-		var err error
-		if obj.Mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-			err = a.dynamicClient.Resource(obj.Mapping.Resource).
-				Namespace(obj.Namespace).
-				Delete(ctx, obj.Name, deleteOptions)
-		} else {
-			err = a.dynamicClient.Resource(obj.Mapping.Resource).
-				Delete(ctx, obj.Name, deleteOptions)
-		}
+		// Create an unstructured object for deletion
+		deleteObj := &unstructured.Unstructured{}
+		deleteObj.SetGroupVersionKind(obj.GVK)
+		deleteObj.SetName(obj.Name)
+		deleteObj.SetNamespace(obj.Namespace)
+
+		err := a.k8sClient.Delete(ctx, deleteObj, deleteOptions...)
 
 		result.recordPruned(obj, err)
 
@@ -632,6 +591,7 @@ func (a *applySet) findObjectsToPrune(ctx context.Context, appliedUIDs sets.Set[
 	eg.SetLimit(10) // Limit concurrent list operations
 
 	for _, gkStr := range gks {
+		gkStr := gkStr // capture loop variable
 		eg.Go(func() error {
 			gk := parseGroupKind(gkStr)
 			mapping, err := a.restMapper.RESTMapping(gk)
@@ -675,8 +635,17 @@ func (a *applySet) findObjectsToPrune(ctx context.Context, appliedUIDs sets.Set[
 }
 
 func (a *applySet) listObjectsForGK(ctx context.Context, mapping *meta.RESTMapping, namespaces sets.Set[string]) ([]*unstructured.Unstructured, error) {
-	listOptions := metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s", ApplySetPartOfLabel, a.ID()),
+	labelSelector, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			ApplySetPartOfLabel: a.ID(),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create label selector: %w", err)
+	}
+
+	listOptions := &client.ListOptions{
+		LabelSelector: labelSelector,
 	}
 
 	var allObjects []*unstructured.Unstructured
@@ -684,35 +653,36 @@ func (a *applySet) listObjectsForGK(ctx context.Context, mapping *meta.RESTMappi
 	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
 		// List in each namespace
 		for ns := range namespaces {
-			list, err := a.dynamicClient.Resource(mapping.Resource).
-				Namespace(ns).
-				List(ctx, listOptions)
+			list := &unstructured.UnstructuredList{}
+			list.SetGroupVersionKind(mapping.GroupVersionKind)
+
+			listOptions.Namespace = ns
+			err := a.k8sClient.List(ctx, list, listOptions)
 			if err != nil {
 				if apierrors.IsNotFound(err) {
 					continue // Namespace might not exist
 				}
 				return nil, fmt.Errorf("failed to list %s in namespace %s: %w", mapping.GroupVersionKind, ns, err)
 			}
-			allObjects = append(allObjects, unstructuredList(list)...)
+			for i := range list.Items {
+				allObjects = append(allObjects, &list.Items[i])
+			}
 		}
 	} else {
 		// Cluster-scoped resource
-		list, err := a.dynamicClient.Resource(mapping.Resource).List(ctx, listOptions)
+		list := &unstructured.UnstructuredList{}
+		list.SetGroupVersionKind(mapping.GroupVersionKind)
+
+		err := a.k8sClient.List(ctx, list, listOptions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list cluster-scoped %s: %w", mapping.GroupVersionKind, err)
 		}
-		allObjects = append(allObjects, unstructuredList(list)...)
+		for i := range list.Items {
+			allObjects = append(allObjects, &list.Items[i])
+		}
 	}
 
 	return allObjects, nil
-}
-
-func unstructuredList(list *unstructured.UnstructuredList) []*unstructured.Unstructured {
-	result := make([]*unstructured.Unstructured, len(list.Items))
-	for i := range list.Items {
-		result[i] = &list.Items[i]
-	}
-	return result
 }
 
 func (a *applySet) getGKsFromAnnotations() []string {
@@ -784,7 +754,7 @@ func (a *applySet) updateParentLabelsAndAnnotations(ctx context.Context, useSupe
 		return nil
 	}
 
-	// Create a patch for the parent
+	// Create a patch for the parent using controller-runtime client
 	parentPatch := &unstructured.Unstructured{}
 	parentPatch.SetGroupVersionKind(a.parent.GetObjectKind().GroupVersionKind())
 	parentPatch.SetName(a.parent.GetName())
@@ -792,13 +762,9 @@ func (a *applySet) updateParentLabelsAndAnnotations(ctx context.Context, useSupe
 	parentPatch.SetLabels(desiredLabels)
 	parentPatch.SetAnnotations(desiredAnnotations)
 
-	// Apply the patch
-	applyOptions := metav1.ApplyOptions{
-		FieldManager: a.fieldManager + "-parent",
-		Force:        false,
-	}
-
-	_, err := a.parentResource.Apply(ctx, a.parent.GetName(), parentPatch, applyOptions)
+	// Apply using controller-runtime client
+	err := a.k8sClient.Patch(ctx, parentPatch, client.Apply, 
+		client.FieldOwner(a.fieldManager+"-parent"))
 	if err != nil {
 		return fmt.Errorf("error updating parent: %w", err)
 	}
