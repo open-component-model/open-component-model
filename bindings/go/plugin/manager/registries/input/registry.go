@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"sync"
 
@@ -289,8 +290,8 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 }
 
 func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *types.Plugin) (inputv1.InputPluginContract, error) {
-	// Check if this is a Wasm plugin
 	if isWasmPlugin(plugin.Path) {
+		// TODO: Should use build once here, and then use Instance from there on.
 		wasmPlugin, err := NewWasmInputPlugin(ctx, plugin.Path, plugin.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create wasm plugin %s: %w", plugin.ID, err)
@@ -330,5 +331,5 @@ func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *ty
 
 // isWasmPlugin checks if the plugin path points to a Wasm file.
 func isWasmPlugin(path string) bool {
-	return len(path) > 5 && path[len(path)-5:] == ".wasm"
+	return filepath.Ext(path) == ".wasm"
 }

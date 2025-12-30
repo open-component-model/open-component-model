@@ -18,6 +18,7 @@ import (
 	"time"
 
 	extism "github.com/extism/go-sdk"
+
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	blobtransformerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	componentlisterv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"

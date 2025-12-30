@@ -7,6 +7,7 @@ import (
 	"os"
 
 	extism "github.com/extism/go-sdk"
+
 	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -34,7 +35,7 @@ func NewWasmInputPlugin(ctx context.Context, wasmPath string, pluginID string) (
 		AllowedHosts: []string{"*"},
 		AllowedPaths: map[string]string{
 			// TODO: This should be configured by the filepath setting.
-			//"*": "/tmp",
+			// "*": "/tmp",
 		},
 		Config: map[string]string{},
 	}
