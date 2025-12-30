@@ -14,8 +14,8 @@ require (
 	helm.sh/helm/v3 v3.19.3
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251212081102-d29be105f685
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha5
-	ocm.software/open-component-model/bindings/go/oci v0.0.23
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha6
+	ocm.software/open-component-model/bindings/go/oci v0.0.24
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	ocm.software/open-component-model/cli v0.0.0-20251212081102-d29be105f685
@@ -108,7 +108,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20251211122149-413b01a4c39a // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9 // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.4 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect

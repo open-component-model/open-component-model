@@ -8,7 +8,6 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
-	"ocm.software/open-component-model/cli/internal/repository/ocm"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -23,6 +22,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/render"
+	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
 const (
