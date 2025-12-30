@@ -24,14 +24,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	ocmcel "ocm.software/open-component-model/kubernetes/controller/internal/cel"
+	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 )
@@ -355,6 +358,57 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
 
 		return ctrl.Result{}, err
+	}
+
+	if digestProcessor, err := r.PluginManager.DigestProcessorRegistry.GetPlugin(ctx, matchedResource.Access); err == nil {
+		logger.V(1).Info("processing resource digest")
+
+		id, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, matchedResource)
+		if err != nil {
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+
+			return ctrl.Result{}, fmt.Errorf("failed getting digest processor identity: %w", err)
+		}
+
+		// TODO: Checkout if it is possible to use the credentials stored previously
+		var creds map[string]string
+		if len(configs) != 0 {
+			cfg, err := configuration.LoadConfigurations(ctx, r.Client, resource.GetNamespace(), configs)
+			if err != nil {
+				status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+
+				return ctrl.Result{}, fmt.Errorf("failed getting configs: %w", err)
+			}
+
+			credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
+				PluginManager: r.PluginManager,
+				Logger:        &logger,
+			})
+			if err != nil {
+				status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+
+				return ctrl.Result{}, fmt.Errorf("failed creating credential graph: %w", err)
+			}
+
+			creds, err = credGraph.Resolve(ctx, id)
+			if err != nil && !errors.Is(err, credentials.ErrNotFound) {
+				status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+
+				return ctrl.Result{}, fmt.Errorf("failed resolving credentials for digest processor: %w", err)
+			}
+		}
+
+		// Process resource digest will also verify the digest if already present
+		digestResource, err := digestProcessor.ProcessResourceDigest(ctx, matchedResource, creds)
+		if err != nil {
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+
+			return ctrl.Result{}, fmt.Errorf("failed processing resource digest: %w", err)
+		}
+
+		matchedResource = digestResource
+	} else {
+		logger.V(1).Info("no digest processor plugin found for resource, skipping digest processing", "error", err)
 	}
 
 	logger.V(1).Info("retrieved resource", "component", fmt.Sprintf("%s:%s", resourceDescriptor.Component.Name, resourceDescriptor.Component.Version),

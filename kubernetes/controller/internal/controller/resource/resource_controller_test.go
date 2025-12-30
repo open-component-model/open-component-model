@@ -17,6 +17,7 @@ import (
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
@@ -211,6 +212,17 @@ var _ = Describe("Resource Controller", func() {
 			Entry("OCI artifact access", func() ([]*descruntime.Descriptor, string) {
 				ctfName := "ociArtifactAccess"
 				ctfPath := filepath.Join(tempDir, ctfName)
+				access := ocispec.OCIImage{
+					Type: runtime.Type{
+						Name:    "ociArtifact",
+						Version: "v1",
+					},
+					ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
+				}
+
+				rawAccess := &runtime.Raw{}
+				Expect(runtime.NewScheme(runtime.WithAllowUnknown()).Convert(&access, rawAccess)).To(Succeed())
+
 				return []*descruntime.Descriptor{
 					{
 						Component: descruntime.Component{
@@ -230,15 +242,7 @@ var _ = Describe("Resource Controller", func() {
 									},
 									Type:     "ociArtifact",
 									Relation: descruntime.ExternalRelation,
-									Access: &runtime.Raw{
-										Type: runtime.Type{
-											Name:    "ociArtifact",
-											Version: "v1",
-										},
-										Data: mustMarshalJSON(map[string]any{
-											"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
-										}),
-									},
+									Access:   rawAccess,
 								},
 							},
 							Provider: descruntime.Provider{Name: "ocm.software"},
@@ -249,7 +253,7 @@ var _ = Describe("Resource Controller", func() {
 				&testCase{
 					Registry:   "ghcr.io",
 					Repository: "open-component-model/ocm/ocm.software/ocmcli/ocmcli-image",
-					Reference:  "0.24.0",
+					Reference:  "0.24.0@sha256:7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2",
 				},
 			),
 			Entry("Helm access", func() ([]*descruntime.Descriptor, string) {

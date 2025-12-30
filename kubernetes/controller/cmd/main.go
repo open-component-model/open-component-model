@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"log/slog"
 	"os"
 	"time"
 
@@ -24,11 +25,14 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
@@ -41,6 +45,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
@@ -199,6 +204,23 @@ func main() {
 	}
 	if err := pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{credentials.AnyConsumerIdentityType}); err != nil {
 		setupLog.Error(err, "failed to register internal credential repository plugin")
+		os.Exit(1)
+	}
+
+	ociResourceRepoPlugin := plugins.ResourceRepositoryPlugin{Manifests: inmemory.New(), Layers: inmemory.New(), FilesystemConfig: &filesystemv1alpha1.Config{}}
+	if err := pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(&ociResourceRepoPlugin); err != nil {
+		setupLog.Error(err, "failed to register internal resource repository plugin")
+		os.Exit(1)
+	}
+	if err := pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(&ociResourceRepoPlugin); err != nil {
+		setupLog.Error(err, "failed to register internal resource repository plugin")
+		os.Exit(1)
+	}
+
+	// TODO: Adjust logger
+	ociBlobTransformerPlugin := transformer.New(&slog.Logger{})
+	if err := pm.BlobTransformerRegistry.RegisterInternalBlobTransformerPlugin(ociBlobTransformerPlugin); err != nil {
+		setupLog.Error(err, "failed to register internal blob transformer plugin")
 		os.Exit(1)
 	}
 

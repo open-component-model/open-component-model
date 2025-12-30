@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -22,7 +23,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -33,6 +36,7 @@ import (
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
@@ -149,6 +153,10 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
 	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{credentials.AnyConsumerIdentityType}))
+
+	ociResourceRepoPlugin := plugins.ResourceRepositoryPlugin{Manifests: inmemory.New(), Layers: inmemory.New(), FilesystemConfig: &filesystemv1alpha1.Config{}}
+	Expect(pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(&ociResourceRepoPlugin)).To(Succeed())
+	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(&ociResourceRepoPlugin)).To(Succeed())
 
 	// Setup resolver with worker pool
 	const unlimited = 0
