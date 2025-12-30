@@ -22,8 +22,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251212081102-d29be105f685 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251212081102-d29be105f685 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251230114524-e830e062083a // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251230114524-e830e062083a // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha6 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.4 // indirect
 )
