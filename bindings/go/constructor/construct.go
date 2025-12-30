@@ -414,9 +414,11 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 					var creds map[string]string
 					if c.opts.Resolver != nil {
 						if identity, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, res); err == nil {
-							if creds, err = c.opts.Resolve(ctx, identity); err != nil && !errors.Is(err, credentials.ErrNotFound) {
+							if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
 								return nil, fmt.Errorf("error resolving credentials for resource digest processor: %w", err)
 							}
+						} else {
+							logger.Debug("no credential consumer identity found for resource digest processor, skipping credential resolution")
 						}
 					}
 					if res, err = digestProcessor.ProcessResourceDigest(ctx, res, creds); err != nil {
@@ -749,5 +751,11 @@ func resolveCredentials(ctx context.Context, provider credentials.Resolver, cons
 		return nil, nil
 	}
 
-	return provider.Resolve(ctx, consumerIdentity)
+	creds, err := provider.Resolve(ctx, consumerIdentity)
+	if errors.Is(err, credentials.ErrNotFound) {
+		logger.DebugContext(ctx, "no credentials found for consumer identity, proceeding without credentials")
+		return nil, nil
+	}
+
+	return creds, err
 }
