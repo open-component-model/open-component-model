@@ -87,6 +87,8 @@ func ProcessSource() int32 {
 func Capabilities() int32 {
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
+	// TODO: Since we are using WASM plugins, there is no need to construct handlers at all.
+	// Which means we need a different way to construct the capabilities. For now, just return none.
 	capabilities := endpoints.NewEndpoints(scheme)
 	content, err := capabilities.MarshalJSON()
 	if err != nil {

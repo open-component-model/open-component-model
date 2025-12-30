@@ -3,9 +3,11 @@ package manager
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -177,7 +179,14 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 				return fmt.Errorf("failed to close extism plugin %s: %w", plugin.ID, err)
 			}
 
-			output.Write(capabilitiesOutput)
+			// TODO: WHY THE EVER LOVING FUCK IS THIS QUOTED?
+			decoder := base64.NewDecoder(base64.StdEncoding, bytes.NewReader(bytes.Trim(capabilitiesOutput, "\"")))
+			content, err := io.ReadAll(decoder)
+			if err != nil {
+				return fmt.Errorf("failed to read capabilities output %s: %w", string(capabilitiesOutput), err)
+			}
+
+			output.Write(content)
 		} else {
 			// TODO(fabianburth): provide developer documentation on how to debug
 			//   plugins.
@@ -293,8 +302,9 @@ func init() {
 func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Config, plugin mtypes.Plugin, capabilitiesCommandOutput *bytes.Buffer) error {
 	// Determine Configuration requirements.
 	rawPluginSpec := spec.PluginSpec{}
-	if err := json.Unmarshal(capabilitiesCommandOutput.Bytes(), &rawPluginSpec); err != nil {
-		return fmt.Errorf("failed to unmarshal capabilities: %w", err)
+	capabilities := capabilitiesCommandOutput.Bytes()
+	if err := json.Unmarshal(capabilities, &rawPluginSpec); err != nil {
+		return fmt.Errorf("failed to unmarshal capabilities %q: %w", string(capabilities), err)
 	}
 	pluginSpec, err := pluginruntime.ConvertFromSpec(scheme, &rawPluginSpec)
 	if err != nil {
