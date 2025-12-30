@@ -204,7 +204,7 @@ flowchart TD
     Y -->|Yes| V
     Y -->|No| R
 
-    R --> AA[Update Deployer Status<br/>deployed[] with references]
+    R --> AA[Update Deployer Status<br/>with deployed references]
     AA --> AB[Mark Ready<br/>Set RequeueAfter]
     AB --> AC[ApplySet Complete]
 
@@ -262,7 +262,7 @@ stateDiagram-v2
   TrackObjects --> RegisterWatches : dynamic informer
   RegisterWatches --> UpdateStatus : watches registered
 
-  UpdateStatus --> MarkReady : update deployed[]
+  UpdateStatus --> MarkReady : update deployed
   MarkReady --> Done : set conditions
 
   NotReady --> Done
