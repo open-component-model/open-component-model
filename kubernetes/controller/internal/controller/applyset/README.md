@@ -232,10 +232,10 @@ stateDiagram-v2
   VerifyDigest --> DecodeObjects : digest ok
 
   DecodeObjects --> CreateApplySet : parse YAML/JSON
-  CreateApplySet --> AddObjects : parent: Deployer
+  CreateApplySet --> AddObjects : parent is Deployer
 
   AddObjects --> PrepareObjects : set ownership
-  PrepareObjects --> AddToSet : controller reference + defaults
+  PrepareObjects --> AddToSet : controller reference and defaults
   AddToSet --> PreUpdateParent : all objects added
 
   PreUpdateParent --> Applying : parent updated with GKs
@@ -284,8 +284,8 @@ stateDiagram-v2
   state RegisterWatches {
     [*] --> ForEachObject
     ForEachObject --> CheckSynced
-    CheckSynced --> RegisterInformer : not synced
-    CheckSynced --> Skip : already synced
+  CheckSynced --> RegisterInformer : not yet synced
+  CheckSynced --> Skip : already synced
     RegisterInformer --> [*]
     Skip --> [*]
   }
