@@ -11,7 +11,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.40.0
 	golang.org/x/crypto v0.45.0
-	helm.sh/helm/v3 v3.19.2
+	helm.sh/helm/v3 v3.19.3
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251212081102-d29be105f685
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha5
