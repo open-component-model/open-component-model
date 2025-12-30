@@ -293,6 +293,7 @@ func (a *applySet) ID() string {
 
 // ComputeID computes an ApplySet identifier for a given parent object.
 // Format: base64(sha256(<name>.<namespace>.<kind>.<group>)), using the URL safe encoding of RFC4648.
+// @see https://github.com/kubernetes/enhancements/blob/master/keps/sig-cli/3659-kubectl-apply-prune/README.md#applyset-identification
 func ComputeID(parent client.Object) string {
 	gvk := parent.GetObjectKind().GroupVersionKind()
 	unencoded := strings.Join([]string{
