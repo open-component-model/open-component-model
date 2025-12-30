@@ -294,7 +294,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	parentDesc, err := cacheBackedRepo.GetComponentVersion(ctx,
+	referencedDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
 		component.Status.Component.Component,
 		component.Status.Component.Version)
 	if errors.Is(err, resolution.ErrResolutionInProgress) {
@@ -314,9 +314,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	startRetrievingResource := time.Now()
 	logger.V(1).Info("resolving reference path", "referencePath", resource.Spec.Resource.ByReference.ReferencePath)
-	finalDesc, finalRepoSpec, err := r.resolveReferencePath(
+	resourceDescriptor, resourceRepoSpec, err := r.resolveReferencePath(
 		ctx,
-		parentDesc,
+		referencedDescriptor,
 		repoSpec,
 		resource.Spec.Resource.ByReference.ReferencePath,
 		configs,
@@ -341,26 +341,26 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	resourceIdentity := resource.Spec.Resource.ByReference.Resource
 	var matchedResource *descriptor.Resource
-	for i, res := range finalDesc.Component.Resources {
+	for i, res := range resourceDescriptor.Component.Resources {
 		resIdentity := res.ToIdentity()
 		if resourceIdentity.Match(resIdentity, identityFunc()) {
-			matchedResource = &finalDesc.Component.Resources[i]
+			matchedResource = &resourceDescriptor.Component.Resources[i]
 			break
 		}
 	}
 
 	if matchedResource == nil {
 		err := fmt.Errorf("resource with identity %v not found in component %s:%s",
-			resourceIdentity, finalDesc.Component.Name, finalDesc.Component.Version)
+			resourceIdentity, resourceDescriptor.Component.Name, resourceDescriptor.Component.Version)
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
 
 		return ctrl.Result{}, err
 	}
 
-	logger.V(1).Info("retrieved resource", "component", fmt.Sprintf("%s:%s", finalDesc.Component.Name, finalDesc.Component.Version),
+	logger.V(1).Info("retrieved resource", "component", fmt.Sprintf("%s:%s", resourceDescriptor.Component.Name, resourceDescriptor.Component.Version),
 		"resource", matchedResource.Name, "duration", time.Since(startRetrievingResource))
 
-	finalRepoSpecData, err := json.Marshal(finalRepoSpec)
+	resourceRepoSpecData, err := json.Marshal(resourceRepoSpec)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.MarshalFailedReason, err.Error())
 
@@ -368,9 +368,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	if err = setResourceStatus(ctx, configs, resource, matchedResource, &v1alpha1.ComponentInfo{
-		RepositorySpec: &apiextensionsv1.JSON{Raw: finalRepoSpecData},
-		Component:      finalDesc.Component.Name,
-		Version:        finalDesc.Component.Version,
+		RepositorySpec: &apiextensionsv1.JSON{Raw: resourceRepoSpecData},
+		Component:      resourceDescriptor.Component.Name,
+		Version:        resourceDescriptor.Component.Version,
 	}); err != nil {
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.StatusSetFailedReason, err.Error())
 
