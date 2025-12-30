@@ -314,8 +314,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	startRetrievingResource := time.Now()
 	logger.V(1).Info("resolving reference path", "referencePath", resource.Spec.Resource.ByReference.ReferencePath)
-	finalDesc, finalRepoSpec, err := r.resolveReferencePath(ctx, parentDesc, repoSpec,
-		resource.Spec.Resource.ByReference.ReferencePath, configs, resource.GetNamespace())
+	finalDesc, finalRepoSpec, err := r.resolveReferencePath(
+		ctx,
+		parentDesc,
+		repoSpec,
+		resource.Spec.Resource.ByReference.ReferencePath,
+		configs,
+		workerpool.RequesterInfo{
+			NamespacedName: k8stypes.NamespacedName{
+				Namespace: resource.GetNamespace(),
+				Name:      resource.GetName(),
+			},
+		},
+	)
 	if errors.Is(err, resolution.ErrResolutionInProgress) {
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
 		logger.Info("reference path resolution in progress, waiting for event notification")
@@ -332,13 +343,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	var matchedResource *descriptor.Resource
 	for i, res := range finalDesc.Component.Resources {
 		resIdentity := res.ToIdentity()
-		if resourceIdentity.Match(resIdentity, runtime.IdentityMatchingChainFn(func(i, o runtime.Identity) bool {
-			version, ok := i["version"]
-			if !ok || version == "" {
-				delete(o, "version")
-			}
-			return runtime.IdentityEqual(i, o)
-		})) {
+		if resourceIdentity.Match(resIdentity, identityFunc()) {
 			matchedResource = &finalDesc.Component.Resources[i]
 			break
 		}
@@ -385,7 +390,7 @@ func (r *Reconciler) resolveReferencePath(
 	parentRepoSpec runtime.Typed,
 	referencePath []runtime.Identity,
 	configs []v1alpha1.OCMConfiguration,
-	namespace string,
+	reqInfo workerpool.RequesterInfo,
 ) (*descriptor.Descriptor, runtime.Typed, error) {
 	logger := log.FromContext(ctx)
 
@@ -401,7 +406,7 @@ func (r *Reconciler) resolveReferencePath(
 		var matchedRef *descriptor.Reference
 		for j, ref := range currentDesc.Component.References {
 			refIdent := ref.ToIdentity()
-			if refIdentity.Match(refIdent) {
+			if refIdentity.Match(refIdent, identityFunc()) {
 				matchedRef = &currentDesc.Component.References[j]
 				break
 			}
@@ -415,9 +420,9 @@ func (r *Reconciler) resolveReferencePath(
 		refRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
 			RepositorySpec:    currentRepoSpec,
 			OCMConfigurations: configs,
-			Namespace:         namespace,
+			Namespace:         reqInfo.NamespacedName.Namespace,
 			RequesterFunc: func() workerpool.RequesterInfo {
-				return workerpool.RequesterInfo{}
+				return reqInfo
 			},
 		})
 		if err != nil {
@@ -520,15 +525,20 @@ func computeAdditionalStatusFields(
 		return fmt.Errorf("extending CEL env: %w", err)
 	}
 
-	resourceMap, err := toGenericMapViaJSON(res)
+	resV2, err := descriptor.ConvertToV2Resource(runtime.NewScheme(runtime.WithAllowUnknown()), res)
+	if err != nil {
+		return fmt.Errorf("converting resource to v2: %w", err)
+	}
+
+	resourceMap, err := toGenericMapViaJSON(resV2)
 	if err != nil {
 		return fmt.Errorf("preparing CEL variables: %w", err)
 	}
 
-	fields := resource.Spec.AdditionalStatusFields
-	resource.Status.Additional = make(map[string]apiextensionsv1.JSON, len(fields))
+	statusFields := resource.Spec.AdditionalStatusFields
+	resource.Status.Additional = make(map[string]apiextensionsv1.JSON, len(statusFields))
 
-	for name, expr := range fields {
+	for name, expr := range statusFields {
 		ast, issues := env.Compile(expr)
 		if issues.Err() != nil {
 			return fmt.Errorf("compiling CEL %q: %w", name, issues.Err())
@@ -563,4 +573,15 @@ func toGenericMapViaJSON(v any) (map[string]any, error) {
 	}
 
 	return m, nil
+}
+
+// identityFunc is a custom identity matching function that ignores the "version" field if it is not set.
+func identityFunc() runtime.IdentityMatchingChainFn {
+	return func(i, o runtime.Identity) bool {
+		version, ok := i["version"]
+		if !ok || version == "" {
+			delete(o, "version")
+		}
+		return runtime.IdentityEqual(i, o)
+	}
 }

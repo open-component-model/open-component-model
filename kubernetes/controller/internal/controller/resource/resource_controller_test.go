@@ -136,7 +136,13 @@ var _ = Describe("Resource Controller", func() {
 
 				By("checking that the resource has been reconciled successfully")
 
-				fields := map[string]any{}
+				fields := map[string]any{
+					"Status.Component.Component": descs[0].Component.Name,
+					"Status.Component.Version":   descs[0].Component.Version,
+					"Status.Resource.Name":       descs[0].Component.Resources[0].Name,
+					"Status.Resource.Type":       descs[0].Component.Resources[0].Type,
+					"Status.Resource.Version":    descs[0].Component.Resources[0].Version,
+				}
 
 				if tc != nil {
 					m := map[string]apiextensionsv1.JSON{}
@@ -378,13 +384,11 @@ var _ = Describe("Resource Controller", func() {
 			),
 		)
 
-		// TODO: Fix required digest and ready-condition of resource although failing
-		PIt("should reconcile when the resource has extra identities", func(ctx SpecContext) {
+		It("should reconcile when the resource has extra identities", func(ctx SpecContext) {
 			By("creating a CTF")
 			ctfName := "resource-with-extra-identities"
 			ctfPath := filepath.Join(tempDir, ctfName)
 			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
-
 			extraIdentity := runtime.Identity{
 				"key1": "value1",
 				"key2": "value2",
@@ -470,18 +474,109 @@ var _ = Describe("Resource Controller", func() {
 			})
 
 			By("checking that the resource has been reconciled successfully")
+			var expExtraIdentity map[string]string
+			expExtraIdentity = extraIdentity.DeepCopy()
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
-				"Status.Component.Component": componentName,
-				"Status.Component.Version":   componentVersion,
-				"Status.Resource.ExtraIdentity": map[string]apiextensionsv1.JSON{
-					"key1": mustToJSON("value1"),
-					"key2": mustToJSON("value2"),
-				},
+				"Status.Component.Component":    componentName,
+				"Status.Component.Version":      componentVersion,
+				"Status.Resource.Name":          resourceName,
+				"Status.Resource.ExtraIdentity": expExtraIdentity,
 			})
 		})
 
-		// TODO: Fix required digest and ready-condition of resource although failing
-		PIt("should not reconcile when the resource has non-matching extra identities", func(ctx SpecContext) {
+		It("should not reconcile when the resource has non-matching extra identities", func(ctx SpecContext) {
+			By("creating a CTF")
+			ctfName := "resource-without-matching-extra-identities"
+			ctfPath := filepath.Join(tempDir, ctfName)
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+			extraIdentity := runtime.Identity{
+				"key1": "value1",
+				"key2": "value2",
+			}
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersion,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.0",
+									},
+									ExtraIdentity: extraIdentity,
+								},
+								Type:     "plainText",
+								Relation: descruntime.LocalRelation,
+								Access: &v2.LocalBlob{
+									Type: runtime.Type{
+										Name:    v2.LocalBlobAccessType,
+										Version: v2.LocalBlobAccessTypeVersion,
+									},
+									LocalReference: "sha256:1234567890",
+									MediaType:      "text/plain",
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("mocking a component")
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+					Repository: repositoryName,
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
+			By("creating a resource")
+			identity := extraIdentity.Clone()
+			identity["name"] = resourceName
+			// Mismatched extra identity
+			identity["extra"] = "non-matching-value"
+			resourceObj := &v1alpha1.Resource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: namespace.GetName(),
+				},
+				Spec: v1alpha1.ResourceSpec{
+					ComponentRef: corev1.LocalObjectReference{
+						Name: componentObj.GetName(),
+					},
+					Resource: v1alpha1.ResourceID{
+						ByReference: v1alpha1.ResourceReference{
+							Resource: identity,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
+
+			By("checking that the resource has been reconciled successfully")
+			test.WaitForNotReadyObject(ctx, k8sClient, resourceObj, v1alpha1.GetOCMResourceFailedReason)
 
 		})
 
@@ -540,96 +635,12 @@ var _ = Describe("Resource Controller", func() {
 			test.WaitForNotReadyObject(ctx, k8sClient, resourceObj, v1alpha1.ResourceIsNotAvailable)
 		})
 
-		It("returns an appropriate error when the resource cannot be fetched", func(ctx SpecContext) {
-			By("creating a CTF")
-			ctfName := "resource-not-found"
-			ctfPath := filepath.Join(tempDir, ctfName)
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
-				{
-					Component: descruntime.Component{
-						ComponentMeta: descruntime.ComponentMeta{
-							ObjectMeta: descruntime.ObjectMeta{
-								Name:    componentName,
-								Version: componentVersion,
-							},
-						},
-						Resources: []descruntime.Resource{
-							{
-								ElementMeta: descruntime.ElementMeta{
-									ObjectMeta: descruntime.ObjectMeta{
-										Name:    resourceName,
-										Version: "1.0.0",
-									},
-								},
-								Type:     "plainText",
-								Relation: descruntime.LocalRelation,
-								Access: &v2.LocalBlob{
-									Type: runtime.Type{
-										Name:    v2.LocalBlobAccessType,
-										Version: v2.LocalBlobAccessTypeVersion,
-									},
-									LocalReference: "sha256:1234567890",
-									MediaType:      "text/plain",
-								},
-							},
-						},
-						Provider: descruntime.Provider{Name: "ocm.software"},
-					},
-				},
-			})
-
-			By("mocking a component")
-			namespace := test.NamespaceForTest(ctx)
-			componentObj := test.MockComponent(
-				ctx,
-				componentObjName,
-				namespace.GetName(),
-				&test.MockComponentOptions{
-					Client:   k8sClient,
-					Recorder: recorder,
-					Info: v1alpha1.ComponentInfo{
-						Component:      componentName,
-						Version:        componentVersion,
-						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
-					},
-					Repository: repositoryName,
-				},
-			)
-			DeferCleanup(func(ctx SpecContext) {
-				test.DeleteObject(ctx, k8sClient, componentObj)
-			})
-
-			By("creating a resource")
-			resourceObj := &v1alpha1.Resource{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: namespace.GetName(),
-				},
-				Spec: v1alpha1.ResourceSpec{
-					ComponentRef: corev1.LocalObjectReference{
-						Name: componentObj.GetName(),
-					},
-					Resource: v1alpha1.ResourceID{
-						ByReference: v1alpha1.ResourceReference{
-							Resource: runtime.Identity{"name": resourceName},
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
-			DeferCleanup(func(ctx SpecContext) {
-				test.DeleteObject(ctx, k8sClient, resourceObj)
-			})
-
-			By("checking that the resource has not been reconciled successfully")
-			test.WaitForNotReadyObject(ctx, k8sClient, resourceObj, v1alpha1.GetOCMResourceFailedReason)
-		})
-
 		// This test is checking that the resource is reconciled again when the status of the component changes.
 		It("reconciles when the component is updated to ready status", func(ctx SpecContext) {
 			By("creating a CTF")
 			ctfName := "component-ready"
 			ctfPath := filepath.Join(tempDir, ctfName)
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
 			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
 				{
 					Component: descruntime.Component{
@@ -732,6 +743,10 @@ var _ = Describe("Resource Controller", func() {
 
 			By("checking that the resource has updated its additional status to the new version")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
+				"Status.Component.Component": componentName,
+				"Status.Component.Version":   componentVersion,
+				"Status.Resource.Name":       resourceName,
+				"Status.Resource.Type":       "ociArtifact",
 				"Status.Additional": map[string]apiextensionsv1.JSON{
 					"registry":   mustToJSON("ghcr.io"),
 					"repository": mustToJSON("open-component-model/ocm/ocm.software/ocmcli/ocmcli-image"),
@@ -746,6 +761,7 @@ var _ = Describe("Resource Controller", func() {
 			ctfName := "resource-change"
 			resourceVersionUpdated := "1.0.1"
 			ctfPath := filepath.Join(tempDir, ctfName)
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
 			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
 				{
 					Component: descruntime.Component{
@@ -778,7 +794,7 @@ var _ = Describe("Resource Controller", func() {
 							{
 								ElementMeta: descruntime.ElementMeta{
 									ObjectMeta: descruntime.ObjectMeta{
-										Name:    "resource-update",
+										Name:    resourceName,
 										Version: resourceVersionUpdated,
 									},
 								},
@@ -833,7 +849,7 @@ var _ = Describe("Resource Controller", func() {
 					},
 					Resource: v1alpha1.ResourceID{
 						ByReference: v1alpha1.ResourceReference{
-							Resource: runtime.Identity{"name": resourceName},
+							Resource: runtime.Identity{"name": resourceName, "version": "1.0.0"},
 						},
 					},
 					AdditionalStatusFields: map[string]string{
@@ -859,7 +875,7 @@ var _ = Describe("Resource Controller", func() {
 
 			resourceObjUpdate.Spec.Resource = v1alpha1.ResourceID{
 				ByReference: v1alpha1.ResourceReference{
-					Resource: runtime.Identity{"name": resourceName},
+					Resource: runtime.Identity{"name": resourceName, "version": resourceVersionUpdated},
 				},
 			}
 			Expect(k8sClient.Update(ctx, resourceObjUpdate)).To(Succeed())
@@ -879,6 +895,7 @@ var _ = Describe("Resource Controller", func() {
 			By("creating a CTF")
 			ctfName := "component-change"
 			ctfPath := filepath.Join(tempDir, ctfName)
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
 			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
 				{
 					Component: descruntime.Component{
@@ -1045,7 +1062,7 @@ var _ = Describe("Resource Controller", func() {
 			nestedComponentName := "ocm.software/nested-component"
 			nestedComponentReference := "some-reference"
 			ctfPath := filepath.Join(tempDir, ctfName)
-			Expect(os.MkdirAll(ctfPath, 0o777)).To(BeAnExistingFile())
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
 			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
 				{
 					Component: descruntime.Component{
