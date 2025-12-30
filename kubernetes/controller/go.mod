@@ -409,7 +409,7 @@ require (
 	k8s.io/cli-runtime v0.34.2 // indirect
 	k8s.io/component-base v0.34.2 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
+	k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59e963e // indirect
 	k8s.io/kubectl v0.34.2 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.4 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
@@ -424,7 +424,7 @@ require (
 )
 
 // TODO: remove once structured merge diff v6 support lands in k8s upstream
-replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912
+replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59e963e
 
 // TODO: remove once mandelsoft utils no longer has an unreleased version of vfs as dep
 replace github.com/mandelsoft/vfs => github.com/mandelsoft/vfs v0.4.4
