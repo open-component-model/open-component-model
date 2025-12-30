@@ -316,7 +316,7 @@ func (a *applySet) Add(ctx context.Context, obj *unstructured.Unstructured) (*un
 	// Get current state from cluster using controller-runtime client
 	observed := &unstructured.Unstructured{}
 	observed.SetGroupVersionKind(gvk)
-	
+
 	// Set namespace if applicable
 	ns := obj.GetNamespace()
 	if ns == "" && restMapping.Scope.Name() == meta.RESTScopeNameNamespace {
@@ -330,7 +330,6 @@ func (a *applySet) Add(ctx context.Context, obj *unstructured.Unstructured) (*un
 		Name:      obj.GetName(),
 		Namespace: ns,
 	}, observed)
-	
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("object does not exist in cluster")
@@ -469,7 +468,6 @@ func (a *applySet) apply(ctx context.Context, result *Result, dryRun bool) error
 	eg.SetLimit(concurrency)
 
 	for _, obj := range a.desiredObjects {
-		obj := obj // capture loop variable
 		eg.Go(func() error {
 			applied, err := a.applyObject(egctx, obj, dryRun)
 			result.recordApplied(applied, err)
@@ -591,7 +589,6 @@ func (a *applySet) findObjectsToPrune(ctx context.Context, appliedUIDs sets.Set[
 	eg.SetLimit(10) // Limit concurrent list operations
 
 	for _, gkStr := range gks {
-		gkStr := gkStr // capture loop variable
 		eg.Go(func() error {
 			gk := parseGroupKind(gkStr)
 			mapping, err := a.restMapper.RESTMapping(gk)
@@ -763,7 +760,7 @@ func (a *applySet) updateParentLabelsAndAnnotations(ctx context.Context, useSupe
 	parentPatch.SetAnnotations(desiredAnnotations)
 
 	// Apply using controller-runtime client
-	err := a.k8sClient.Patch(ctx, parentPatch, client.Apply, 
+	err := a.k8sClient.Patch(ctx, parentPatch, client.Apply,
 		client.FieldOwner(a.fieldManager+"-parent"))
 	if err != nil {
 		return fmt.Errorf("error updating parent: %w", err)
