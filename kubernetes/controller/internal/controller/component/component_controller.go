@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +33,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
@@ -281,7 +283,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to generate digest: %w", err)
 	}
 
-	if err := r.verifyComponentVersion(ctx, desc, component.Spec.Verify, component.GetNamespace()); err != nil {
+	if err := r.verifyComponentVersion(ctx, component, desc); err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to verify component version: %w", err)
@@ -426,20 +428,21 @@ func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, comp
 }
 
 // verifyComponentVersion verifies the component version signatures.
-func (r *Reconciler) verifyComponentVersion(ctx context.Context, desc *descruntime.Descriptor, verifications []v1alpha1.Verification, namespace string) error {
+func (r *Reconciler) verifyComponentVersion(ctx context.Context, component *v1alpha1.Component, desc *descruntime.Descriptor) error {
 	logger := log.FromContext(ctx)
 
+	verifications := component.GetVerifications()
 	if len(verifications) == 0 {
 		logger.Info("no verifications configured, skipping signature verification")
 
 		return nil
 	}
 
-	logger.Info("verifying component version signatures", "verifications", len(verifications))
-
 	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
-		return err
+		event.New(r.EventRecorder, component, nil, eventv1.EventSeverityInfo, err.Error())
 	}
+
+	logger.Info("verifying component version signatures", "verifications", len(verifications))
 
 	for _, verify := range verifications {
 		var signature *descruntime.Signature
@@ -467,7 +470,7 @@ func (r *Reconciler) verifyComponentVersion(ctx context.Context, desc *descrunti
 			return fmt.Errorf("failed to get signing handler for signature %q: %w", verify.Signature, err)
 		}
 
-		credentials, err := r.createCredentials(ctx, verify, signature.Signature.Algorithm, namespace)
+		credentials, err := r.createCredentials(ctx, verify, signature.Signature.Algorithm, component.GetNamespace())
 		if err != nil {
 			return fmt.Errorf("failed to create credentials for signature %q: %w", verify.Signature, err)
 		}
