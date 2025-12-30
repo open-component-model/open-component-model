@@ -374,43 +374,6 @@ if err != nil {
 }
 ```
 
-## Labels and Annotations
-
-### ApplySet Parent (Deployer)
-```yaml
-apiVersion: delivery.ocm.software/v1alpha1
-kind: Deployer
-metadata:
-  name: my-app-deployer
-  namespace: default
-  labels:
-    applyset.k8s.io/id: applyset-xyzABC123...
-  annotations:
-    applyset.k8s.io/tooling: deployer.delivery.ocm.software/v1alpha1
-    applyset.k8s.io/contains-group-kinds: "ConfigMap,Secret,Deployment.apps"
-    applyset.k8s.io/additional-namespaces: "app-namespace,monitoring"
-```
-
-### Member Object (Deployed Resource)
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-  namespace: default
-  labels:
-    applyset.k8s.io/part-of: applyset-xyzABC123...
-    delivery.ocm.software/managed-by: deployer.delivery.ocm.software
-    delivery.ocm.software/resource-name: manifests
-    delivery.ocm.software/resource-version: v1.0.0
-  ownerReferences:
-  - apiVersion: delivery.ocm.software/v1alpha1
-    kind: Deployer
-    name: my-app-deployer
-    uid: <deployer-uid>
-    controller: true
-```
-
 ## Future Enhancements
 
 - **Prune Configuration**: Add `spec.prune` field to Deployer CRD to enable/disable pruning per-deployer
