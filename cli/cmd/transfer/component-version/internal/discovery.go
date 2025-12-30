@@ -67,42 +67,48 @@ func BuildGraphDefinition(
 
 	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		for _, v := range d.Vertices {
-			val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
-			ref := val.Ref
-
-			id := identityToTransformationID(ref.Identity())
-
-			tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
-				TransformationMeta: meta.TransformationMeta{
-					Type: ChooseGetType(ref.Repository),
-					ID:   id + "Download",
-				},
-				Spec: &runtime.Unstructured{Data: map[string]interface{}{
-					"repository": AsUnstructured(ref.Repository).Data,
-					"component":  ref.Component,
-					"version":    ref.Version,
-				}},
-			})
-
-			tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
-				TransformationMeta: meta.TransformationMeta{
-					Type: ChooseAddType(toSpec),
-					ID:   id + "Upload",
-				},
-				Spec: &runtime.Unstructured{Data: map[string]interface{}{
-					"repository": AsUnstructured(toSpec).Data,
-					"descriptor": fmt.Sprintf("${%sDownload.output.descriptor}", id),
-				}},
-			})
-		}
-		return nil
+		return fillGraphDefinitionWithPrefetchedComponents(d, toSpec, tgd)
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	return tgd, nil
+}
+
+func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[string], toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition) error {
+	for _, v := range d.Vertices {
+		val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
+		ref := val.Ref
+
+		id := identityToTransformationID(ref.Identity())
+
+		download := transformv1alpha1.GenericTransformation{
+			TransformationMeta: meta.TransformationMeta{
+				Type: ChooseGetType(ref.Repository),
+				ID:   id + "Download",
+			},
+			Spec: &runtime.Unstructured{Data: map[string]interface{}{
+				"repository": AsUnstructured(ref.Repository).Data,
+				"component":  ref.Component,
+				"version":    ref.Version,
+			}},
+		}
+
+		upload := transformv1alpha1.GenericTransformation{
+			TransformationMeta: meta.TransformationMeta{
+				Type: ChooseAddType(toSpec),
+				ID:   id + "Upload",
+			},
+			Spec: &runtime.Unstructured{Data: map[string]interface{}{
+				"repository": AsUnstructured(toSpec).Data,
+				"descriptor": fmt.Sprintf("${%sDownload.output.descriptor}", id),
+			}},
+		}
+
+		tgd.Transformations = append(tgd.Transformations, download, upload)
+	}
+	return nil
 }
 
 type discoveryValue struct {
