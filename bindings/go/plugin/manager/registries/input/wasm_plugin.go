@@ -79,6 +79,10 @@ func (w *WasmInputPlugin) ProcessResource(ctx context.Context, request *inputv1.
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate plugin: %w", err)
 	}
+	defer func() {
+		// ignore for now
+		_ = instance.Close(ctx)
+	}()
 
 	_, output, err := instance.Call("process_resource", requestJSON)
 	if err != nil {
@@ -104,6 +108,10 @@ func (w *WasmInputPlugin) ProcessSource(ctx context.Context, request *inputv1.Pr
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate plugin: %w", err)
 	}
+	defer func() {
+		// ignore for now
+		_ = instance.Close(ctx)
+	}()
 
 	_, output, err := instance.Call("process_source", requestJSON)
 	if err != nil {
