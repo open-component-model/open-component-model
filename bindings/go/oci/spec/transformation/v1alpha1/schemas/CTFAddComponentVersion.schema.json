@@ -151,11 +151,18 @@
               ]
             },
             "resources": {
-              "type": "array",
               "description": "Resources created by the component or third parties",
-              "items": {
-                "$ref": "#/$defs/resourceDefinition"
-              }
+              "oneOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/resourceDefinition"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "sources": {
               "description": "Sources that produced the component",

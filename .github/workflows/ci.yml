@@ -231,7 +231,7 @@ jobs:
   run_integration_tests:
     name: "Integration Tests"
     needs: discover_modules
-    runs-on: large_runner
+    runs-on: ubuntu-latest
     if: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
