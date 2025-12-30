@@ -284,8 +284,8 @@ stateDiagram-v2
   state RegisterWatches {
     [*] --> ForEachObject
     ForEachObject --> CheckSynced
-  CheckSynced --> RegisterInformer : not yet synced
-  CheckSynced --> Skip : already synced
+    CheckSynced --> RegisterInformer : not yet synced
+    CheckSynced --> Skip : already synced
     RegisterInformer --> [*]
     Skip --> [*]
   }
@@ -315,14 +315,6 @@ Each object also has a controller reference set to the Deployer for proper garba
 Each Deployer instance uses a unique field manager: `deployer.delivery.ocm.software/<deployer-uid>`
 
 This ensures that different Deployers don't conflict with each other when managing the same resource types.
-
-### Pruning (Future Enhancement)
-Currently, pruning is disabled by default (`enablePruning = false`). When enabled in the future:
-- Resources that exist in the cluster with the ApplySet labels
-- But are NOT in the current manifest
-- Will be automatically deleted
-
-This keeps the cluster state synchronized with the OCM component version.
 
 ### Dynamic Resource Watching
 After applying resources, the Deployer Controller:
@@ -376,8 +368,6 @@ if err != nil {
 
 ## Future Enhancements
 
-- **Prune Configuration**: Add `spec.prune` field to Deployer CRD to enable/disable pruning per-deployer
-- **Prune Strategies**: Support different pruning strategies (immediate, delayed, manual)
 - **Status Propagation**: Propagate health status from deployed resources back to Deployer status
 - **Dry-Run Support**: Add dry-run capability for preview before actual deployment
 - **Rollback Support**: Track previous ApplySet states for rollback capabilities
