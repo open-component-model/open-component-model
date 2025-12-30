@@ -1,18 +1,10 @@
 version: '3'
 
+includes:
+  reuse: ../../../reuse.Taskfile.yml
+
 
 tasks:
-  tmp:
-    cmds:
-      - mkdir -p tmp
-    status:
-      - test -d tmp
   test:
-    sources:
-      - ./**/*.go
-      - ./go.mod
-      - ./go.sum
     cmds:
-      - go test -v -coverprofile=tmp/coverage.out ./...
-    deps:
-      - tmp
+      - task: reuse:run-go-test

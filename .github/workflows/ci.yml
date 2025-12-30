@@ -221,7 +221,7 @@ jobs:
           source .env
           echo "golangci_lint=${GOLANGCI_LINT_VERSION}" >> $GITHUB_OUTPUT
       - name: golangci-lint ${{ matrix.modules }}
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9
         with:
           verify: 'false' # we verify in a separate command ONCE instead of every run on every module
           version: ${{ steps.versions.outputs.golangci_lint }}
@@ -287,6 +287,7 @@ jobs:
           ref: ${{ env.REF }}
           sparse-checkout: |
             ${{ matrix.module }}
+            reuse.Taskfile.yml
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
@@ -319,15 +320,15 @@ jobs:
             .github/workflows/ci.yml
             ${{ matrix.project }}
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@bffd034ab1518ad839a542b8a7356e13a240e076 # v3
+        uses: github/codeql-action/init@45c373516f557556c15d420e3f5e0aa3d64366bc # v3
         with:
           languages: go
           queries: security-extended
       - name: Autobuild
-        uses: github/codeql-action/autobuild@bffd034ab1518ad839a542b8a7356e13a240e076 # v3
+        uses: github/codeql-action/autobuild@45c373516f557556c15d420e3f5e0aa3d64366bc # v3
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@bffd034ab1518ad839a542b8a7356e13a240e076 # v3
+        uses: github/codeql-action/analyze@45c373516f557556c15d420e3f5e0aa3d64366bc # v3
         with:
           category: "/language:go"
 
