@@ -18,19 +18,19 @@ require (
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251212081102-d29be105f685
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251212081102-d29be105f685
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251230114524-e830e062083a
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251230114524-e830e062083a
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha6
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251212081102-d29be105f685
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251230114524-e830e062083a
 	ocm.software/open-component-model/bindings/go/oci v0.0.23
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251212081102-d29be105f685
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251230114524-e830e062083a
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251212081102-d29be105f685
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20251212144004-005f2245428d
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251230114524-e830e062083a
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20251230114524-e830e062083a
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -67,5 +67,5 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20251211122149-413b01a4c39a // indirect
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20251230114524-e830e062083a // indirect
 )
