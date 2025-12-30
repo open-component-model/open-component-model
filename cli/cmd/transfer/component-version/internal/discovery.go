@@ -47,8 +47,10 @@ func BuildGraphDefinition(
 		},
 	}
 
+	root := fromSpec.String()
+
 	dr := dagsync.NewGraphDiscoverer(&dagsync.GraphDiscovererOptions[string, *discoveryValue]{
-		Roots:      []string{fromSpec.String()},
+		Roots:      []string{root},
 		Resolver:   resolver,
 		Discoverer: discoverer,
 	})

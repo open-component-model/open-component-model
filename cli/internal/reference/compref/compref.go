@@ -100,7 +100,23 @@ func (ref *Ref) String() string {
 	if ref.Type != "" {
 		sb.WriteString(ref.Type + "::")
 	}
-	sb.WriteString(fmt.Sprintf("%v", ref.Repository) + "/" + ref.Prefix + "/" + ref.Component)
+
+	switch repo := ref.Repository.(type) {
+	case *ociv1.Repository:
+		sb.WriteString(repo.BaseUrl)
+		if repo.BaseUrl != "" {
+			sb.WriteRune('/')
+			sb.WriteString(repo.SubPath)
+		}
+	case *ctfv1.Repository:
+		sb.WriteString(repo.FilePath)
+	}
+
+	sb.WriteRune('/')
+	sb.WriteString(ref.Prefix)
+	sb.WriteRune('/')
+	sb.WriteString(ref.Component)
+
 	if ref.Version != "" {
 		sb.WriteString(":" + ref.Version)
 	}
