@@ -512,6 +512,11 @@ func (in *ResourceInfo) DeepCopyInto(out *ResourceInfo) {
 		}
 	}
 	in.Access.DeepCopyInto(&out.Access)
+	if in.Digest != nil {
+		in, out := &in.Digest, &out.Digest
+		*out = new(v2.Digest)
+		**out = **in
+	}
 	if in.Labels != nil {
 		in, out := &in.Labels, &out.Labels
 		*out = make([]Label, len(*in))

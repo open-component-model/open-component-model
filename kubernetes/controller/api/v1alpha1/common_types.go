@@ -102,7 +102,7 @@ type ResourceInfo struct {
 	// +kubebuilder:validation:Type=object
 	Access apiextensionsv1.JSON `json:"access,omitempty"`
 	// +optional
-	Digest string `json:"digest,omitempty"`
+	Digest *v2.Digest `json:"digest,omitempty"`
 	// +optional
 	Labels []Label `json:"labels,omitempty"`
 }

@@ -479,18 +479,13 @@ func buildResourceInfo(res *descriptor.Resource) (*v1alpha1.ResourceInfo, error)
 		return nil, fmt.Errorf("converting labels: %w", err)
 	}
 
-	var digest string
-	if res.Digest != nil {
-		digest = res.Digest.Value
-	}
-
 	return &v1alpha1.ResourceInfo{
 		Name:          res.Name,
 		Type:          res.Type,
 		Version:       res.Version,
 		ExtraIdentity: res.ExtraIdentity,
 		Access:        apiextensionsv1.JSON{Raw: raw},
-		Digest:        digest,
+		Digest:        descriptor.ConvertToV2Digest(res.Digest),
 		Labels:        labels,
 	}, nil
 }
