@@ -12,7 +12,7 @@ require (
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251212081102-d29be105f685
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251212081102-d29be105f685
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha5
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha6
 	ocm.software/open-component-model/bindings/go/oci v0.0.23
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5

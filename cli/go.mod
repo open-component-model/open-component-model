@@ -20,7 +20,7 @@ require (
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251212081102-d29be105f685
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251212081102-d29be105f685
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha5
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha6
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251212081102-d29be105f685
