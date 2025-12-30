@@ -14,7 +14,7 @@ import (
 
 // WasmInputPlugin implements InputPluginContract using Extism to execute Wasm modules.
 type WasmInputPlugin struct {
-	plugin *extism.Plugin
+	plugin *extism.CompiledPlugin
 	id     string
 	path   string
 }
@@ -44,7 +44,7 @@ func NewWasmInputPlugin(ctx context.Context, wasmPath string, pluginID string) (
 		EnableWasi: true,
 	}
 
-	plugin, err := extism.NewPlugin(ctx, manifest, config, []extism.HostFunction{})
+	plugin, err := extism.NewCompiledPlugin(ctx, manifest, config, []extism.HostFunction{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extism plugin: %w", err)
 	}
@@ -75,7 +75,12 @@ func (w *WasmInputPlugin) ProcessResource(ctx context.Context, request *inputv1.
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	_, output, err := w.plugin.Call("process_resource", requestJSON)
+	instance, err := w.plugin.Instance(ctx, extism.PluginInstanceConfig{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to instantiate plugin: %w", err)
+	}
+
+	_, output, err := instance.Call("process_resource", requestJSON)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call wasm function: %w", err)
 	}
@@ -95,7 +100,12 @@ func (w *WasmInputPlugin) ProcessSource(ctx context.Context, request *inputv1.Pr
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	_, output, err := w.plugin.Call("process_source", requestJSON)
+	instance, err := w.plugin.Instance(ctx, extism.PluginInstanceConfig{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to instantiate plugin: %w", err)
+	}
+
+	_, output, err := instance.Call("process_source", requestJSON)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call wasm function: %w", err)
 	}

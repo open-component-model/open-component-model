@@ -146,7 +146,6 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 
 		// TODO: This needs to a bit better here, but I don't care about the config right now. This is POC.
 		if isWasmPlugin(plugin.Path) {
-			// TODO: This should be build once, then use `Instance` to execute.
 			wasmBytes, err := os.ReadFile(plugin.Path)
 			if err != nil {
 				return fmt.Errorf("failed to read wasm file %s: %w", plugin.Path, err)
