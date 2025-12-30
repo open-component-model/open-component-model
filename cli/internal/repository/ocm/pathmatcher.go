@@ -54,7 +54,7 @@ func (r *resolverProvider) GetComponentVersionRepositoryForComponent(ctx context
 			}
 		}
 	} else {
-		slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", repoSpec, "error", err)
+		slog.DebugContext(ctx, "could not get credential consumer identity for component version repository", "repository", repoSpec, "error", err)
 	}
 
 	repo, err := r.repoProvider.GetComponentVersionRepository(ctx, repoSpec, credMap)
