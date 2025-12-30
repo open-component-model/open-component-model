@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,7 @@ type combinedFakeClient struct {
 
 type mockDynamicClient struct {
 	dynamic.Interface
+	mu      sync.RWMutex
 	objects map[string]*unstructured.Unstructured
 }
 
@@ -53,7 +55,9 @@ func (r *mockResource) Namespace(ns string) dynamic.ResourceInterface {
 
 func (r *mockResource) Create(ctx context.Context, obj *unstructured.Unstructured, opts metav1.CreateOptions, subresources ...string) (*unstructured.Unstructured, error) {
 	key := r.key(obj.GetName())
+	r.m.mu.Lock()
 	r.m.objects[key] = obj
+	r.m.mu.Unlock()
 	return obj, nil
 }
 
@@ -65,13 +69,17 @@ func (r *mockResource) Apply(ctx context.Context, name string, obj *unstructured
 		return obj, nil
 	}
 	key := r.key(name)
+	r.m.mu.Lock()
 	r.m.objects[key] = obj
+	r.m.mu.Unlock()
 	return obj, nil
 }
 
 func (r *mockResource) Get(ctx context.Context, name string, opts metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
 	key := r.key(name)
+	r.m.mu.RLock()
 	obj, ok := r.m.objects[key]
+	r.m.mu.RUnlock()
 	if !ok {
 		return nil, apierrors.NewNotFound(r.resource.GroupResource(), name)
 	}
@@ -80,12 +88,16 @@ func (r *mockResource) Get(ctx context.Context, name string, opts metav1.GetOpti
 
 func (r *mockResource) Delete(ctx context.Context, name string, opts metav1.DeleteOptions, subresources ...string) error {
 	key := r.key(name)
+	r.m.mu.Lock()
 	delete(r.m.objects, key)
+	r.m.mu.Unlock()
 	return nil
 }
 
 func (r *mockResource) List(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
 	list := &unstructured.UnstructuredList{}
+	r.m.mu.RLock()
+	defer r.m.mu.RUnlock()
 	for _, obj := range r.m.objects {
 		// Matching for the mock
 		if opts.LabelSelector != "" {
@@ -102,7 +114,11 @@ func (r *mockResource) List(ctx context.Context, opts metav1.ListOptions) (*unst
 }
 
 func (r *mockResource) Update(ctx context.Context, obj *unstructured.Unstructured, opts metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
-	return r.Create(ctx, obj, metav1.CreateOptions{})
+	key := r.key(obj.GetName())
+	r.m.mu.Lock()
+	r.m.objects[key] = obj
+	r.m.mu.Unlock()
+	return obj, nil
 }
 func (r *mockResource) UpdateStatus(ctx context.Context, obj *unstructured.Unstructured, opts metav1.UpdateOptions) (*unstructured.Unstructured, error) {
 	return obj, nil
