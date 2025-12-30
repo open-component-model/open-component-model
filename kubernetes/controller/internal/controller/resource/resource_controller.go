@@ -165,7 +165,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=resources,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=resources/status,verbs=get;update;patch
 
-//nolint:cyclop,funlen,gocognit // we do not want to cut the function at arbitrary points
+//nolint:cyclop,funlen,gocognit,maintidx // we do not want to cut the function at arbitrary points
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
 	logger.Info("starting reconciliation")
@@ -474,7 +474,10 @@ func buildResourceInfo(res *descriptor.Resource) (*v1alpha1.ResourceInfo, error)
 		return nil, fmt.Errorf("marshaling access spec: %w", err)
 	}
 
-	labels := convertLabels(res.Labels)
+	labels, err := convertLabels(res.Labels)
+	if err != nil {
+		return nil, fmt.Errorf("converting labels: %w", err)
+	}
 
 	var digest string
 	if res.Digest != nil {
@@ -493,10 +496,13 @@ func buildResourceInfo(res *descriptor.Resource) (*v1alpha1.ResourceInfo, error)
 }
 
 // convertLabels maps descriptor labels to API Label objects.
-func convertLabels(in []descriptor.Label) []v1alpha1.Label {
+func convertLabels(in []descriptor.Label) ([]v1alpha1.Label, error) {
 	out := make([]v1alpha1.Label, len(in))
 	for i, l := range in {
-		valueBytes, _ := json.Marshal(l.Value)
+		valueBytes, err := json.Marshal(l.Value)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling label %q value: %w", l.Name, err)
+		}
 		out[i] = v1alpha1.Label{
 			Name:    l.Name,
 			Value:   apiextensionsv1.JSON{Raw: valueBytes},
@@ -505,7 +511,7 @@ func convertLabels(in []descriptor.Label) []v1alpha1.Label {
 		}
 	}
 
-	return out
+	return out, nil
 }
 
 // computeAdditionalStatusFields compiles and evaluates CEL expressions for additional fields.
