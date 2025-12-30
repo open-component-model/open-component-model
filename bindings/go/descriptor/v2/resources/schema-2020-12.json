@@ -592,10 +592,17 @@
         },
         "resources": {
           "description": "Resources created by the component or third parties",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/resourceDefinition"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/resourceDefinition"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "examples": [
