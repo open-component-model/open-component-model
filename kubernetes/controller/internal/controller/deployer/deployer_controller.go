@@ -589,6 +589,17 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 		Concurrency: runtime.NumCPU(),
 	}
 
+	// client -> client / go / client
+
+	// REMOVE -> Upstream Lib (K8s):
+	// Dynamic Client: https://caiorcferreira.github.io/post/the-kubernetes-dynamic-client/
+	// https://pkg.go.dev/k8s.io/client-go/dynamic
+
+	// USE -> Controller Runtime (our operator):
+	// manager.Client: https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/client
+	// caiorcferreira.github.io
+	// The Kubernetes dynamic client
+	// A dive into a hidden tool to build Controllers and Operators
 	set, err := applyset.New(ctx, deployer, r.Client, r.resourceRESTMapper, applySetConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create ApplySet: %w", err)
