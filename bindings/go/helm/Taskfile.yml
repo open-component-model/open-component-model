@@ -24,6 +24,11 @@ tasks:
     cmds:
       - go build -o tmp/testdata/test-input-plugin cmd/main.go
 
+  build:wasm:
+    desc: 'Build WASM version of Helm plugin'
+    cmds:
+      - GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o tmp/testdata/helm-plugin-wasm.wasm wasm/main.go wasm/roundtripper.go
+
   test:
     cmds:
       - task: reuse:run-go-test
