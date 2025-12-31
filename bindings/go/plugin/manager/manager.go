@@ -144,11 +144,19 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 
 		output := bytes.NewBuffer(nil)
 
-		// TODO: This needs to a bit better here, but I don't care about the config right now. This is POC.
 		if isWasmPlugin(plugin.Path) {
 			wasmBytes, err := os.ReadFile(plugin.Path)
 			if err != nil {
 				return fmt.Errorf("failed to read wasm file %s: %w", plugin.Path, err)
+			}
+
+			manifestConfig := map[string]string{}
+			if len(plugin.Config.ConfigTypes) > 0 {
+				configJSON, err := json.Marshal(plugin.Config)
+				if err != nil {
+					return fmt.Errorf("failed to marshal plugin config for %s: %w", plugin.ID, err)
+				}
+				manifestConfig["ocm_config"] = string(configJSON)
 			}
 
 			manifest := extism.Manifest{
@@ -158,7 +166,7 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 					},
 				},
 				AllowedHosts: []string{"*"},
-				Config:       map[string]string{},
+				Config:       manifestConfig,
 			}
 
 			config := extism.PluginConfig{
@@ -170,7 +178,7 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 				return fmt.Errorf("failed to create extism plugin %s: %w", plugin.ID, err)
 			}
 
-			_, capabilitiesOutput, err := wasmPlugin.Call("capabilities", nil)
+			_, capabilitiesOutput, err := wasmPlugin.CallWithContext(ctx, "capabilities", nil)
 			if err != nil {
 				return fmt.Errorf("failed to call capabilities function on wasm plugin %s: %w", plugin.ID, err)
 			}

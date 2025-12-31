@@ -291,8 +291,7 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 
 func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *types.Plugin) (inputv1.InputPluginContract, error) {
 	if isWasmPlugin(plugin.Path) {
-		// TODO: Should use build once here, and then use Instance from there on.
-		wasmPlugin, err := NewWasmInputPlugin(ctx, plugin.Path, plugin.ID)
+		wasmPlugin, err := NewWasmInputPlugin(ctx, plugin.Path, plugin.ID, &plugin.Config)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create wasm plugin %s: %w", plugin.ID, err)
 		}

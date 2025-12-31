@@ -20,10 +20,19 @@ type WasmInputPlugin struct {
 }
 
 // NewWasmInputPlugin creates a new Wasm-based input plugin.
-func NewWasmInputPlugin(ctx context.Context, wasmPath string, pluginID string) (*WasmInputPlugin, error) {
+func NewWasmInputPlugin(ctx context.Context, wasmPath string, pluginID string, pluginConfig interface{}) (*WasmInputPlugin, error) {
 	wasmBytes, err := os.ReadFile(wasmPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read wasm file: %w", err)
+	}
+
+	manifestConfig := map[string]string{}
+	if pluginConfig != nil {
+		configJSON, err := json.Marshal(pluginConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal plugin config: %w", err)
+		}
+		manifestConfig["ocm_config"] = string(configJSON)
 	}
 
 	manifest := extism.Manifest{
@@ -37,7 +46,7 @@ func NewWasmInputPlugin(ctx context.Context, wasmPath string, pluginID string) (
 			// TODO: This should be configured by the filepath setting.
 			// "*": "/tmp",
 		},
-		Config: map[string]string{},
+		Config: manifestConfig,
 	}
 
 	config := extism.PluginConfig{
@@ -84,7 +93,7 @@ func (w *WasmInputPlugin) ProcessResource(ctx context.Context, request *inputv1.
 		_ = instance.Close(ctx)
 	}()
 
-	_, output, err := instance.Call("process_resource", requestJSON)
+	_, output, err := instance.CallWithContext(ctx, "process_resource", requestJSON)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call wasm function: %w", err)
 	}
@@ -113,7 +122,7 @@ func (w *WasmInputPlugin) ProcessSource(ctx context.Context, request *inputv1.Pr
 		_ = instance.Close(ctx)
 	}()
 
-	_, output, err := instance.Call("process_source", requestJSON)
+	_, output, err := instance.CallWithContext(ctx, "process_source", requestJSON)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call wasm function: %w", err)
 	}
