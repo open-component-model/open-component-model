@@ -296,7 +296,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	// TODO(https://github.com/open-component-model/ocm-project/issues/624) should we allow opt-in/opt-out of pruning?
-	const enablePruning = true // Set to true to enable automatic pruning of orphaned resources
+	const enablePruning = false
 
 	if err = r.applyWithApplySet(ctx, resource, deployer, objs, enablePruning); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ApplyFailed, err.Error())
