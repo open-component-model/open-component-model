@@ -14,7 +14,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
-	ocm.software/open-component-model/bindings/go/constructor v0.0.4
+	ocm.software/open-component-model/bindings/go/constructor v0.0.5
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
@@ -24,7 +24,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251230114524-e830e062083a
-	ocm.software/open-component-model/bindings/go/oci v0.0.23
+	ocm.software/open-component-model/bindings/go/oci v0.0.24
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251230114524-e830e062083a
