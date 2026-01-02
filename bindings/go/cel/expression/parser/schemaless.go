@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/google/cel-go/cel"
@@ -22,6 +23,7 @@ func parseSchemalessResource(resource any, path fieldpath.Path) ([]variable.Fiel
 	switch field := resource.(type) {
 	case map[string]any:
 		for field, value := range field {
+			path := slices.Clone(path)
 			fieldPath := path.AddNamed(field)
 			fieldExpressions, err := parseSchemalessResource(value, fieldPath)
 			if err != nil {
@@ -31,6 +33,7 @@ func parseSchemalessResource(resource any, path fieldpath.Path) ([]variable.Fiel
 		}
 	case []any:
 		for i, item := range field {
+			path := slices.Clone(path)
 			itemPath := path.AddIndexed(i)
 			itemExpressions, err := parseSchemalessResource(item, itemPath)
 			if err != nil {
