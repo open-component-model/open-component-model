@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -20,8 +23,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
+	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
 // +kubebuilder:scaffold:imports
@@ -35,7 +52,6 @@ var testEnv *envtest.Environment
 var recorder record.EventRecorder
 var ctx context.Context
 var cancel context.CancelFunc
-var ocmContextCache *ocm.ContextCache
 
 func TestControllers(t *testing.T) {
 	t.Parallel()
@@ -108,8 +124,57 @@ var _ = BeforeSuite(func() {
 		}
 	}()
 
-	ocmContextCache = ocm.NewContextCache("shared_ocm_context_cache", 100, 100, k8sManager.GetClient(), GinkgoLogr)
-	Expect(k8sManager.Add(ocmContextCache)).To(Succeed())
+	// Setup plugin manager for new architecture
+	pm := manager.NewPluginManager(ctx)
+	pluginScheme := ocmruntime.NewScheme()
+	pluginScheme.MustRegisterWithAlias(&ociv1.Repository{},
+		ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.Type),
+		ocmruntime.NewVersionedType(ociv1.ShortType, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.ShortType),
+		ocmruntime.NewVersionedType(ociv1.ShortType2, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.ShortType2),
+		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType),
+		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType2, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType2),
+	)
+	pluginScheme.MustRegisterWithAlias(&ctfv1.Repository{},
+		ocmruntime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.Type),
+		ocmruntime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.ShortType),
+		ocmruntime.NewVersionedType(ctfv1.ShortType2, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.ShortType2),
+	)
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(pluginScheme))
+	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
+	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
+	Expect(err).ToNot(HaveOccurred())
+	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
+	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{credentials.AnyConsumerIdentityType}))
+
+	ociResourceRepoPlugin := plugins.ResourceRepositoryPlugin{Manifests: inmemory.New(), Layers: inmemory.New(), FilesystemConfig: &filesystemv1alpha1.Config{}}
+	Expect(pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(&ociResourceRepoPlugin)).To(Succeed())
+	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(&ociResourceRepoPlugin)).To(Succeed())
+
+	// Setup resolver with worker pool
+	const unlimited = 0
+	ttl := time.Minute * 30
+	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
+
+	workerLogger := logf.Log.WithName("worker-pool")
+	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
+		WorkerCount: 10,
+		QueueSize:   100,
+		Logger:      &workerLogger,
+		Client:      k8sManager.GetClient(),
+		Cache:       resolverCache,
+	})
+	Expect(k8sManager.Add(workerPool)).To(Succeed())
+
+	resolutionLogger := logf.Log.WithName("resolution")
+	resolver := resolution.NewResolver(k8sClient, &resolutionLogger, workerPool, pm)
 
 	Expect((&Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
@@ -117,7 +182,8 @@ var _ = BeforeSuite(func() {
 			Scheme:        testEnv.Scheme,
 			EventRecorder: recorder,
 		},
-		OCMContextCache: ocmContextCache,
+		Resolver:      resolver,
+		PluginManager: pm,
 	}).SetupWithManager(ctx, k8sManager, 1)).To(Succeed())
 
 	go func() {

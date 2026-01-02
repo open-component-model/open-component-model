@@ -8,7 +8,8 @@ import (
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 	"k8s.io/apiserver/pkg/cel/lazy"
-	"ocm.software/ocm/api/oci"
+
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 )
 
 const ToOCIFunctionName = "toOCI"
@@ -69,15 +70,10 @@ func BindingToOCI(lhs ref.Val) ref.Val {
 		return types.NewErr("expected string or map with key 'imageReference', got %T", lhs.Value())
 	}
 
-	// Parse the OCI reference using the oci.ParseRef helper
-	// TODO: Replace with another reference parser that is not ocm v1 lib (@frewilhelm)
-	//   Why is it needed in the first place?
-	//   Because if a reference consists of a tag and a digest, we need to store both of them.
-	//   Additionally, consuming resources, as a HelmRelease or OCIRepository, might need the tag, the digest, or
-	//   both of them. Thus, we have to offer some flexibility here.
-	//   ocm v2 lib offers a LooseReference that is able to parse a reference with a tag and a digest. However, the
-	//   functionality is placed in an internal package and not available for us (yet).
-	r, err := oci.ParseRef(reference)
+	// Parse the OCI reference using the oci.ParseRef helper because if a reference consists of a tag and a digest,
+	// we need to store both of them. Additionally, consuming resources, as a HelmRelease or OCIRepository, might need
+	// the tag, the digest, or both of them. Thus, we have to offer some flexibility here.
+	r, err := looseref.ParseReference(reference)
 	if err != nil {
 		return types.WrapErr(err)
 	}
@@ -85,12 +81,13 @@ func BindingToOCI(lhs ref.Val) ref.Val {
 	// Extract optional tag and digest values
 	var tag, digest string
 
-	if r.Tag != nil {
-		tag = *r.Tag
+	// Check for digest and ignore error (validation error indicates no digest present)
+	if refDigest, err := r.Digest(); err == nil {
+		digest = refDigest.String()
 	}
 
-	if r.Digest != nil {
-		digest = r.Digest.String()
+	if r.Tag != "" {
+		tag = r.Tag
 	}
 
 	// Construct a lazy map to defer value computation until accessed
@@ -98,10 +95,10 @@ func BindingToOCI(lhs ref.Val) ref.Val {
 
 	// host and registry are the same value (OCI spec)
 	mv.Append("host", func(*lazy.MapValue) ref.Val {
-		return types.String(r.Host)
+		return types.String(r.Host())
 	})
 	mv.Append("registry", func(*lazy.MapValue) ref.Val {
-		return types.String(r.Host)
+		return types.String(r.Host())
 	})
 
 	// repository: trim any leading slash
@@ -113,11 +110,11 @@ func BindingToOCI(lhs ref.Val) ref.Val {
 	mv.Append("reference", func(*lazy.MapValue) ref.Val {
 		var refStr string
 		switch {
-		case r.Tag != nil && r.Digest != nil:
-			refStr = fmt.Sprintf("%s@%s", *r.Tag, r.Digest)
-		case r.Tag != nil:
-			refStr = tag
-		case r.Digest != nil:
+		case r.Tag != "" && digest != "":
+			refStr = fmt.Sprintf("%s@%s", r.Tag, digest)
+		case r.Tag != "":
+			refStr = r.Tag
+		case digest != "":
 			refStr = digest
 		}
 

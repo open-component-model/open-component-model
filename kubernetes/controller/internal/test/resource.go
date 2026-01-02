@@ -10,9 +10,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
-	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 )
@@ -39,7 +39,7 @@ func MockResource(
 		Spec: v1alpha1.ResourceSpec{
 			Resource: v1alpha1.ResourceID{
 				ByReference: v1alpha1.ResourceReference{
-					Resource: v1.NewIdentity(name),
+					Resource: runtime.Identity{"name": name},
 				},
 			},
 			ComponentRef: options.ComponentRef,
