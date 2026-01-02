@@ -88,7 +88,7 @@ jobs:
           RENOVATE_REPOSITORY_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.repoCache || 'enabled' }}
           RENOVATE_ALLOWED_ENV: 'GONOPROXY,GOPRIVATE'
           RENOVATE_ALLOWED_COMMANDS: |
-            ^(command -v go >/dev/null 2>&1 \|\| exit 0;\s*)?find\s+\.\s+-name\s+\"go\.mod\".*-path\s+'\*/integration/\*'.*go\s+mod\s+tidy
+            ^./.github/scripts/renovate-post-upgrade.sh$
 
       - name: Compress renovate cache
         if: ${{ env.RENOVATE_DRY_RUN == '' && (github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled') }}
