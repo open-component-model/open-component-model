@@ -14,6 +14,7 @@ tasks:
       - go build -o tmp/testdata/test-plugin-blobtransformer internal/testplugin-blobtransformer/main.go
       - go build -o tmp/testdata/test-plugin-signinghandler internal/testplugin-signinghandler/main.go
       - go build -o tmp/testdata/test-plugin-component-lister internal/testplugin-component-lister/main.go
+      - GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o tmp/testdata/test-plugin-wasm-input.wasm internal/testplugin-wasm-input/main.go
   test:
     cmds:
       - task: reuse:run-go-test
