@@ -12,7 +12,7 @@ jobs:
     name: Verify links
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
       - name: Run linkspector
         uses: umbrelladocs/action-linkspector@652f85bc57bb1e7d4327260decc10aa68f7694c3 # v1
         with:
@@ -25,9 +25,9 @@ jobs:
     name: Spellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
       - name: Spellcheck
-        uses: rojopolis/spellcheck-github-actions@16d0338a5a3b5e3111a078029fb9a07a8125053d # v0
+        uses: rojopolis/spellcheck-github-actions@cebe06444da3ac5e9d3146f5f02a0e2a236f7488 # v0
         with:
           config_path: .github/config/spellcheck.yml
           task_name: Markdown

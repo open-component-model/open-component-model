@@ -38,7 +38,6 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
-	"ocm.software/open-component-model/kubernetes/controller/internal/controller/replication"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
@@ -266,18 +265,6 @@ func main() {
 		OCMContextCache: ocmContextCache,
 	}).SetupWithManager(ctx, mgr, resourceConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Resource")
-		os.Exit(1)
-	}
-
-	if err = (&replication.Reconciler{
-		BaseReconciler: &ocm.BaseReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        mgr.GetScheme(),
-			EventRecorder: eventsRecorder,
-		},
-		OCMContextCache: ocmContextCache,
-	}).SetupWithManager(ctx, mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Replication")
 		os.Exit(1)
 	}
 

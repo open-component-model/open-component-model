@@ -32,7 +32,6 @@ rules:
   resources:
   - components
   - deployers
-  - replications
   - repositories
   - resources
   verbs:
@@ -48,7 +47,6 @@ rules:
   resources:
   - components/finalizers
   - deployers/finalizers
-  - replications/finalizers
   - repositories/finalizers
   verbs:
   - update
@@ -57,7 +55,6 @@ rules:
   resources:
   - components/status
   - deployers/status
-  - replications/status
   - repositories/status
   - resources/status
   verbs:
