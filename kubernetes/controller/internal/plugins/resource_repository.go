@@ -20,9 +20,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// TODO: This is just copied from cli/internal/plugin/builtin/oci and needs to be refactored properly when available as
-//       a module.
-
 type ResourceRepositoryPlugin struct {
 	Manifests, Layers cache.OCIDescriptorCache
 	FilesystemConfig  *filesystemv1alpha1.Config
