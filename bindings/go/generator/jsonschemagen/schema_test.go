@@ -348,3 +348,101 @@ func TestGenerate_FieldWithJSONDashExcludedFromRequired(t *testing.T) {
 
 	require.NotContains(t, s.Required, "-")
 }
+
+func TestGenerate_StructInlineFlattensPropertiesAndRequired(t *testing.T) {
+	u := universe.New()
+
+	// Base has:
+	// - A (required)
+	// - b (omitempty)
+	baseSt := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{
+		{Names: []*ast.Ident{{Name: "A"}}, Type: &ast.Ident{Name: "string"}},
+		{Names: []*ast.Ident{{Name: "B"}}, Type: &ast.Ident{Name: "string"}, Tag: &ast.BasicLit{Value: "`json:\"b,omitempty\"`"}},
+	}}}
+	base := mkTypeInfo("example.com/pkg", "Base", nil, baseSt)
+	u.Types[base.Key] = base
+
+	// Wrapper has:
+	// - Base `json:",inline"`
+	// - C (required)
+	wrapperSt := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{
+		{Names: []*ast.Ident{{Name: "Base"}}, Type: &ast.Ident{Name: "Base"}, Tag: &ast.BasicLit{Value: "`json:\",inline\"`"}},
+		{Names: []*ast.Ident{{Name: "C"}}, Type: &ast.Ident{Name: "int"}},
+	}}}
+	wrapper := mkTypeInfo("example.com/pkg", "Wrapper", nil, wrapperSt)
+	u.Types[wrapper.Key] = wrapper
+
+	g := jsonschemagen.New(u)
+	s := g.GenerateJSONSchemaDraft202012(wrapper)
+
+	require.Equal(t, "object", s.Type)
+
+	// Flattened properties from Base should appear at top-level.
+	require.Contains(t, s.Properties, "A")
+	require.Contains(t, s.Properties, "b")
+	require.Contains(t, s.Properties, "C")
+
+	// The inline field itself must not appear as a property.
+	require.NotContains(t, s.Properties, "Base")
+	require.NotContains(t, s.Required, "Base")
+
+	// Required must reflect flattened required fields + Wrapper required fields.
+	require.Contains(t, s.Required, "A")
+	require.Contains(t, s.Required, "C")
+	require.NotContains(t, s.Required, "b")
+}
+
+func TestGenerate_StructInlinePointerTypeFlattens(t *testing.T) {
+	u := universe.New()
+
+	baseSt := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{
+		{Names: []*ast.Ident{{Name: "A"}}, Type: &ast.Ident{Name: "string"}},
+	}}}
+	base := mkTypeInfo("example.com/pkg", "Base", nil, baseSt)
+	u.Types[base.Key] = base
+
+	wrapperSt := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{
+		{
+			Names: []*ast.Ident{{Name: "Base"}},
+			Type:  &ast.StarExpr{X: &ast.Ident{Name: "Base"}},
+			Tag:   &ast.BasicLit{Value: "`json:\",inline\"`"},
+		},
+	}}}
+	wrapper := mkTypeInfo("example.com/pkg", "WrapperPtrInline", nil, wrapperSt)
+	u.Types[wrapper.Key] = wrapper
+
+	g := jsonschemagen.New(u)
+	s := g.GenerateJSONSchemaDraft202012(wrapper)
+
+	require.Equal(t, "object", s.Type)
+	require.Contains(t, s.Properties, "A")
+	require.NotContains(t, s.Properties, "Base")
+	require.Contains(t, s.Required, "A")
+	require.NotContains(t, s.Required, "Base")
+}
+
+func TestGenerate_StructInlineAndExplicitFieldSameName_ExplicitWinsWhenLater(t *testing.T) {
+	u := universe.New()
+
+	// Base contributes "A" as string.
+	baseSt := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{
+		{Names: []*ast.Ident{{Name: "A"}}, Type: &ast.Ident{Name: "string"}},
+	}}}
+	base := mkTypeInfo("example.com/pkg", "Base", nil, baseSt)
+	u.Types[base.Key] = base
+
+	// Wrapper has inline first, then explicit A int.
+	wrapperSt := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{
+		{Names: []*ast.Ident{{Name: "Base"}}, Type: &ast.Ident{Name: "Base"}, Tag: &ast.BasicLit{Value: "`json:\",inline\"`"}},
+		{Names: []*ast.Ident{{Name: "A"}}, Type: &ast.Ident{Name: "int"}},
+	}}}
+	wrapper := mkTypeInfo("example.com/pkg", "WrapperOverride", nil, wrapperSt)
+	u.Types[wrapper.Key] = wrapper
+
+	g := jsonschemagen.New(u)
+	s := g.GenerateJSONSchemaDraft202012(wrapper)
+
+	require.Contains(t, s.Properties, "A")
+	// Explicit field should override inline-provided one if it appears later.
+	require.Equal(t, "integer", s.Properties["A"].Type)
+}
