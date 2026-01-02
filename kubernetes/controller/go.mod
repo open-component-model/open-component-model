@@ -41,7 +41,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251230114524-e830e062083a
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251230114524-e830e062083a
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha6
-	ocm.software/open-component-model/bindings/go/oci v0.0.23
+	ocm.software/open-component-model/bindings/go/oci v0.0.24
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251230114524-e830e062083a
@@ -127,7 +127,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
-	github.com/buildkite/agent/v3 v3.111.0 // indirect
+	github.com/buildkite/agent/v3 v3.114.0 // indirect
 	github.com/buildkite/go-pipeline v0.16.0 // indirect
 	github.com/buildkite/interpolate v0.1.5 // indirect
 	github.com/buildkite/roko v1.4.0 // indirect
@@ -411,7 +411,7 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59e963e // indirect
 	k8s.io/kubectl v0.34.2 // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.4 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
