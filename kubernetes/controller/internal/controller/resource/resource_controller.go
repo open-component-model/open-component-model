@@ -24,7 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -34,7 +33,6 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
-	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 )
@@ -262,6 +260,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 		return ctrl.Result{}, fmt.Errorf("failed to get ready component: %w", err)
 	}
+
 	logger.Info("reconciling resource")
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), resource)
 	if err != nil {
@@ -360,55 +359,30 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	if digestProcessor, err := r.PluginManager.DigestProcessorRegistry.GetPlugin(ctx, matchedResource.Access); err == nil && !resource.Spec.SkipVerify {
-		logger.V(1).Info("processing resource digest")
+	if !resource.Spec.SkipVerify {
+		logger.V(1).Info("verifying resource")
 
-		id, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, matchedResource)
+		cfg, err := configuration.LoadConfigurations(ctx, r.Client, resource.GetNamespace(), configs)
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
 
-			return ctrl.Result{}, fmt.Errorf("failed getting digest processor identity: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed getting configs: %w", err)
 		}
 
-		// TODO: Checkout if it is possible to use the credentials stored previously
-		var creds map[string]string
-		if len(configs) != 0 {
-			cfg, err := configuration.LoadConfigurations(ctx, r.Client, resource.GetNamespace(), configs)
-			if err != nil {
-				status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
-
-				return ctrl.Result{}, fmt.Errorf("failed getting configs: %w", err)
-			}
-
-			credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
-				PluginManager: r.PluginManager,
-				Logger:        &logger,
-			})
-			if err != nil {
-				status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
-
-				return ctrl.Result{}, fmt.Errorf("failed creating credential graph: %w", err)
-			}
-
-			creds, err = credGraph.Resolve(ctx, id)
-			if err != nil && !errors.Is(err, credentials.ErrNotFound) {
-				status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
-
-				return ctrl.Result{}, fmt.Errorf("failed resolving credentials for digest processor: %w", err)
-			}
-		}
-
-		// Process resource digest will also verify the digest if already present
-		digestResource, err := digestProcessor.ProcessResourceDigest(ctx, matchedResource, creds)
+		matchedResource, err = ocm.VerifyResourceV2(ctx, r.PluginManager, matchedResource, cfg)
 		if err != nil {
-			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+			if errors.Is(err, ocm.ErrPluginNotFound) {
+				// TODO(@frewilhelm): For now we skip resource types that do not have a digest processor plugin.
+				//                    We need to adjust this when the plugins are available
+				logger.V(1).Info("skipping resource verification as no suitable plugin was found")
+			} else {
+				status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
 
-			return ctrl.Result{}, fmt.Errorf("failed processing resource digest: %w", err)
+				return ctrl.Result{}, fmt.Errorf("failed to verify resource: %w", err)
+			}
 		}
-
-		matchedResource = digestResource
 	} else {
-		logger.V(1).Info("no digest processor plugin found for resource or skipping verify was set, skipping digest processing", "error", err)
+		logger.V(1).Info("skip verifying resource")
 	}
 
 	logger.V(1).Info("retrieved resource", "component", fmt.Sprintf("%s:%s", resourceDescriptor.Component.Name, resourceDescriptor.Component.Version),
