@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"strings"
-	"time"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -171,9 +170,6 @@ func ConvertFromV2Resource(res *v2.Resource) *Resource {
 	resource.Name = res.Name
 	resource.Version = res.Version
 	resource.Type = res.Type
-	if res.CreationTime != nil {
-		resource.CreationTime = CreationTime(res.CreationTime.Time.Time)
-	}
 	if res.Labels != nil {
 		resource.Labels = ConvertFromV2Labels(res.Labels)
 	}
@@ -374,9 +370,6 @@ func ConvertToV2Resource(scheme *runtime.Scheme, res *Resource) (*v2.Resource, e
 	resource.Name = res.Name
 	resource.Version = res.Version
 	resource.Type = res.Type
-	if time.Time(res.CreationTime) != (time.Time{}) {
-		resource.CreationTime = &v2.Timestamp{Time: v2.Time{Time: time.Time(res.CreationTime)}}
-	}
 	l, err := ConvertToV2Labels(res.Labels)
 	if err != nil {
 		return nil, fmt.Errorf("could not convert labels for resource %q: %w", res.Name, err)
