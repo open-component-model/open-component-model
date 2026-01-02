@@ -406,21 +406,11 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	// descriptor. If a digest is present in the resource status, we verify that it matches one of the digests
 	// calculated for the resource.
 	if resource.Status.Resource.Digest != nil {
-		found := false
-		for _, digest := range digests {
-			if digest.NormalisationAlgorithm != resource.Status.Resource.Digest.NormalisationAlgorithm {
-				continue
-			}
-			if digest.HashAlgorithm != resource.Status.Resource.Digest.HashAlgorithm {
-				continue
-			}
-			if digest.Value != resource.Status.Resource.Digest.Value {
-				continue
-			}
-
-			found = true
-			break
-		}
+		found := slices.ContainsFunc(digests, func(d ocmv1.DigestSpec) bool {
+			return d.NormalisationAlgorithm == resource.Status.Resource.Digest.NormalisationAlgorithm &&
+				d.HashAlgorithm == resource.Status.Resource.Digest.HashAlgorithm &&
+				d.Value == resource.Status.Resource.Digest.Value
+		})
 
 		if !found {
 			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, "resource digest mismatch")

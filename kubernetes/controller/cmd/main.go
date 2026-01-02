@@ -13,6 +13,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"github.com/fluxcd/pkg/runtime/events"
+	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -217,8 +218,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO: Adjust logger
-	ociBlobTransformerPlugin := transformer.New(&slog.Logger{})
+	logHandler := logr.ToSlogHandler(setupLog)
+	ociBlobTransformerPlugin := transformer.New(slog.New(logHandler))
 	if err := pm.BlobTransformerRegistry.RegisterInternalBlobTransformerPlugin(ociBlobTransformerPlugin); err != nil {
 		setupLog.Error(err, "failed to register internal blob transformer plugin")
 		os.Exit(1)
