@@ -182,112 +182,98 @@ func (r *Resolver) getValueFromPath(path fieldpath.Path) (interface{}, error) {
 	return current, nil
 }
 
-// setValueAtPath sets a value in the resource using a dot-separated path.
 func (r *Resolver) setValueAtPath(path fieldpath.Path, value interface{}) error {
 	if len(path) == 0 {
 		return nil
 	}
 
-	// We need to keep track of the parent and current object to be able to
-	// create new maps and arrays (pointers) as needed. This is crucial for
-	// maintaining the proper chain of references.
-	var parent interface{} = r.resource
 	var current interface{} = r.resource
+	var parent interface{}
 	var parentKey string
 	var parentIndex int
+	var parentIsArray bool
 
 	for i, segment := range path {
+		last := i == len(path)-1
+
 		if segment.Index != nil {
-			newCurrent, err := handleArraySegment(current, parent, segment, parentKey, parentIndex)
-			if err != nil {
-				return err
-			}
-			current = newCurrent
-
-			if i == len(path)-1 {
-				array := current.([]interface{})
-				array[*segment.Index] = value
-				return nil
-			}
-			parent = current
-			parentIndex = *segment.Index
-
-			current = getOrCreateNext(current.([]interface{}), *segment.Index, path[i+1].Index != nil)
-		} else {
-			currentMap, ok := current.(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("expected map at path segment: %v", segment)
+			// Ensure current is slice
+			var arr []interface{}
+			switch v := current.(type) {
+			case []interface{}:
+				arr = v
+			case nil:
+				arr = []interface{}{}
+			default:
+				return fmt.Errorf("expected array at %v", segment)
 			}
 
-			if i == len(path)-1 {
-				currentMap[segment.Name] = value
-				return nil
-			}
+			idx := *segment.Index
 
-			parent = currentMap
-			parentKey = segment.Name
-			if currentMap[segment.Name] == nil {
-				if path[i+1].Index != nil {
-					currentMap[segment.Name] = make([]interface{}, 0)
+			// Reattach slice to parent
+			var extended bool
+			if arr, extended = ensureSliceLen(arr, idx); parent != nil && extended {
+				if parentIsArray {
+					parent.([]interface{})[parentIndex] = arr
 				} else {
-					currentMap[segment.Name] = make(map[string]interface{})
+					parent.(map[string]interface{})[parentKey] = arr
 				}
 			}
-			current = currentMap[segment.Name]
+
+			if last {
+				arr[idx] = value
+				return nil
+			}
+
+			// Prepare next level
+			if arr[idx] == nil {
+				if path[i+1].Index != nil {
+					arr[idx] = []interface{}{}
+				} else {
+					arr[idx] = map[string]interface{}{}
+				}
+			}
+
+			parent = arr
+			parentIndex = idx
+			parentIsArray = true
+			current = arr[idx]
+			continue
 		}
+
+		// Map segment
+		m, ok := current.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("expected map at %v", segment)
+		}
+
+		if last {
+			m[segment.Name] = value
+			return nil
+		}
+
+		if m[segment.Name] == nil {
+			if path[i+1].Index != nil {
+				m[segment.Name] = []interface{}{}
+			} else {
+				m[segment.Name] = map[string]interface{}{}
+			}
+		}
+
+		parent = m
+		parentKey = segment.Name
+		parentIsArray = false
+		current = m[segment.Name]
 	}
 
 	return nil
 }
 
-// handleArraySegment manages array access including creation and resizing.
-func handleArraySegment(
-	current, parent interface{},
-	segment fieldpath.Segment,
-	parentKey string,
-	parentIndex int,
-) (interface{}, error) {
-	array, ok := current.([]interface{})
-	if !ok && current == nil {
-		array = make([]interface{}, *segment.Index+1)
-		updateParent(parent, parentKey, parentIndex, array)
-		return array, nil
-	} else if !ok {
-		return nil, fmt.Errorf("expected array or nil at segment %v, got %T", segment, current)
+func ensureSliceLen(s []interface{}, idx int) ([]interface{}, bool) {
+	if idx < len(s) {
+		return s, false
 	}
-
-	if *segment.Index >= len(array) {
-		newArray := make([]interface{}, *segment.Index+1)
-		copy(newArray, array)
-		updateParent(parent, parentKey, parentIndex, newArray)
-		return newArray, nil
-	}
-
-	return array, nil
-}
-
-// getOrCreateNext ensures the next element in the path exists.
-// It initializes a new array or map based on whether the next
-// segment is array access.
-func getOrCreateNext(array []interface{}, index int, nextIsArray bool) interface{} {
-	if array[index] == nil {
-		if nextIsArray {
-			array[index] = make([]interface{}, 0)
-		} else {
-			array[index] = make(map[string]interface{})
-		}
-	}
-	return array[index]
-}
-
-// updateParent updates the parent's reference to point to a new value.
-// This is crucial when we create new arrays or maps to ensure the entire
-// object structure remains properly connected.
-func updateParent(parent interface{}, key string, index int, value interface{}) {
-	switch p := parent.(type) {
-	case map[string]interface{}:
-		p[key] = value
-	case []interface{}:
-		p[index] = value
-	}
+	ns := make([]interface{}, idx+1)
+	copy(ns, s)
+	return ns, true
 }

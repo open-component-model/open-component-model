@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -66,7 +67,12 @@ func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transfo
 		return fmt.Errorf("failed to parse resolved transformation %q: %w", transformation.ID, err)
 	}
 	if len(fieldDescriptors) > 0 {
-		return fmt.Errorf("transformation %q has unresolved fields after resolution", transformation.ID)
+		obj, _ := json.MarshalIndent(unstructuredTransformationData, "", "  ")
+		err = fmt.Errorf("transformation %q has unresolved fields after resolution:\n%s", transformation.ID, string(obj))
+		for _, fd := range fieldDescriptors {
+			err = errors.Join(err, fmt.Errorf("field path %q is unresolved", fd.Path.String()))
+		}
+		return err
 	}
 
 	runtimeType := transformation.GetType()
