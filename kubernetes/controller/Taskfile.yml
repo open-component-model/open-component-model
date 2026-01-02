@@ -16,6 +16,8 @@ vars:
     sh: 'source ../../.env && echo "$ENVTEST_VERSION"'
   ENVTEST_K8S_VERSION:
     sh: 'source ../../.env && echo "$ENVTEST_K8S_VERSION"'
+  KIND_NODE_IMAGE_VERSION:
+    sh: 'source ../../.env && echo "$KIND_NODE_IMAGE_VERSION"'
   
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
   LOCALBIN: '{{.TASKFILE_DIR}}/bin'
