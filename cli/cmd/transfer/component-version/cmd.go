@@ -3,11 +3,13 @@ package component_version
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -18,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/cli/cmd/transfer/component-version/internal"
+	genericv1alpha1 "ocm.software/open-component-model/cli/cmd/transfer/component-version/internal/generic/v1alpha1"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
@@ -123,25 +126,28 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	// Build transformer builder
 	b := graphBuilder(pm, credGraph)
 
-	graph, err := b.BuildAndCheck(tgd)
+	var graph *builder.Graph
+	graph, checkErr := b.BuildAndCheck(tgd)
+
+	reader, err := renderTGD(tgd, output)
 	if err != nil {
-		return fmt.Errorf("graph validation failed: %w", err)
+		return fmt.Errorf("rendering transformation graph failed: %w", errors.Join(err, checkErr))
 	}
+	defer func() {
+		if err := reader.Close(); err != nil {
+			slog.WarnContext(ctx, "closing transformation graph reader failed", "error", errors.Join(err, checkErr))
+		}
+	}()
 
 	if dryRun {
-		reader, err := renderTGD(tgd, output)
-		if err != nil {
-			return fmt.Errorf("rendering transformation graph failed: %w", err)
-		}
-		defer func() {
-			if err := reader.Close(); err != nil {
-				slog.WarnContext(ctx, "closing transformation graph reader failed", "error", err)
-			}
-		}()
 		if _, err := io.Copy(cmd.OutOrStdout(), reader); err != nil {
-			return fmt.Errorf("writing transformation graph failed: %w", err)
+			return fmt.Errorf("writing transformation graph failed: %w", errors.Join(err, checkErr))
 		}
-		return nil
+		return checkErr
+	}
+	if checkErr != nil {
+		data, _ := io.ReadAll(reader)
+		return fmt.Errorf("building graph failed: %w", errors.Join(fmt.Errorf("transformation graph could not be built:\n%s", data), checkErr))
 	}
 
 	// Execute graph
@@ -155,24 +161,33 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 
 // TODO: make this a plugin manager integration.
 func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Resolver) *builder.Builder {
-	transformerScheme := ociv1alpha1.Scheme
+	scheme := runtime.NewScheme()
+
+	scheme.MustRegisterScheme(ociv1alpha1.Scheme)
+	scheme.MustRegisterScheme(genericv1alpha1.Scheme)
 
 	ociGet := &transformer.GetComponentVersion{
-		Scheme:             transformerScheme,
+		Scheme:             scheme,
 		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
 		CredentialProvider: credentialProvider,
 	}
 	ociAdd := &transformer.AddComponentVersion{
-		Scheme:             transformerScheme,
+		Scheme:             scheme,
+		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
+		CredentialProvider: credentialProvider,
+	}
+	copyLocalBlob := &genericv1alpha1.CopyLocalBlobImpl{
+		Scheme:             scheme,
 		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
 		CredentialProvider: credentialProvider,
 	}
 
-	return builder.NewBuilder(transformerScheme).
+	return builder.NewBuilder(scheme).
 		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
 		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
 		WithTransformer(&ociv1alpha1.CTFGetComponentVersion{}, ociGet).
-		WithTransformer(&ociv1alpha1.CTFAddComponentVersion{}, ociAdd)
+		WithTransformer(&ociv1alpha1.CTFAddComponentVersion{}, ociAdd).
+		WithTransformer(&genericv1alpha1.CopyLocalBlob{}, copyLocalBlob)
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {

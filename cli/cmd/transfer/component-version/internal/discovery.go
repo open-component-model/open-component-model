@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/signing"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
+	"ocm.software/open-component-model/cli/cmd/transfer/component-version/internal/generic/v1alpha1"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
@@ -97,6 +99,58 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 			}},
 		}
 
+		globalResourceReferences := map[int]*descriptorv2.Resource{}
+		localResourceTransformations := map[int]transformv1alpha1.GenericTransformation{}
+		for idx, resource := range val.Descriptor.Component.Resources {
+			if resource.Access.GetType().Name != descriptorv2.LocalBlobAccessType {
+				globalResourceReferences[idx] = &resource
+				continue
+			}
+
+			resourceIdentity := map[string]any{}
+			for k, v := range resource.ToIdentity() {
+				resourceIdentity[k] = v
+			}
+
+			id := id + identityToTransformationID(resource.ToIdentity()) + "Copy"
+			localResourceTransformations[idx] = transformv1alpha1.GenericTransformation{
+				TransformationMeta: meta.TransformationMeta{
+					Type: v1alpha1.CopyLocalBlobVersionV1alpha1,
+					ID:   id,
+				},
+				Spec: &runtime.Unstructured{Data: map[string]interface{}{
+					"resource":  resourceIdentity,
+					"from":      AsUnstructured(ref.Repository).Data,
+					"to":        AsUnstructured(toSpec).Data,
+					"component": ref.Component,
+					"version":   ref.Version,
+				}},
+			}
+		}
+
+		comp := map[string]any{
+			"name":                fmt.Sprintf("${%sDownload.output.descriptor.component.name}", id),
+			"version":             fmt.Sprintf("${%sDownload.output.descriptor.component.version}", id),
+			"resources":           []interface{}{},
+			"sources":             fmt.Sprintf("${%sDownload.output.descriptor.component.sources}", id),
+			"repositoryContexts":  []interface{}{},
+			"provider":            fmt.Sprintf("${%sDownload.output.descriptor.component.provider}", id),
+			"componentReferences": fmt.Sprintf("${%sDownload.output.descriptor.component.componentReferences}", id),
+		}
+
+		for i := 0; i < len(val.Descriptor.Component.Resources); i++ {
+			if _, ok := localResourceTransformations[i]; ok {
+				comp["resources"] = append(comp["resources"].([]interface{}), fmt.Sprintf("${%s.output.resource}", localResourceTransformations[i].ID))
+			}
+			comp["resources"] = append(comp["resources"].([]interface{}), globalResourceReferences[i])
+		}
+
+		desc := map[string]any{
+			"meta":       fmt.Sprintf("${%sDownload.output.descriptor.meta}", id),
+			"component":  comp,
+			"signatures": fmt.Sprintf("${%sDownload.output.descriptor.?signatures}", id),
+		}
+
 		upload := transformv1alpha1.GenericTransformation{
 			TransformationMeta: meta.TransformationMeta{
 				Type: ChooseAddType(toSpec),
@@ -104,11 +158,15 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 			},
 			Spec: &runtime.Unstructured{Data: map[string]interface{}{
 				"repository": AsUnstructured(toSpec).Data,
-				"descriptor": fmt.Sprintf("${%sDownload.output.descriptor}", id),
+				"descriptor": desc,
 			}},
 		}
 
-		tgd.Transformations = append(tgd.Transformations, download, upload)
+		tgd.Transformations = append(tgd.Transformations, download)
+		for transformation := range maps.Values(localResourceTransformations) {
+			tgd.Transformations = append(tgd.Transformations, transformation)
+		}
+		tgd.Transformations = append(tgd.Transformations, upload)
 	}
 	return nil
 }
