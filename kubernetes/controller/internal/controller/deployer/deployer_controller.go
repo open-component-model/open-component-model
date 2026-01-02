@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"slices"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -19,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/utils/ptr"
 	ocmctx "ocm.software/ocm/api/ocm"
 	ocmv1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	"ocm.software/ocm/api/ocm/extensions/attrs/signingattr"
@@ -35,9 +33,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
-	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
@@ -82,7 +80,7 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/finalizers,verbs=update
-// +kubebuilder:rbac:groups=kro.run,resources=resourcegraphdefinitions,verbs=list;watch;create;update;patch
+// +kubebuilder:rbac:groups=kro.run,resources=resourcegraphdefinitions,verbs=get;list;watch;create;update;patch
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -291,12 +289,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to download resource from OCM or retrieve it from the cache: %w", err)
 	}
 
-	if err = r.applyConcurrently(ctx, resource, deployer, objs); err != nil {
+	// TODO(https://github.com/open-component-model/ocm-project/issues/624) should we allow opt-in/opt-out of pruning?
+	const enablePruning = false
+
+	if err = r.applyWithApplySet(ctx, resource, deployer, objs, enablePruning); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ApplyFailed, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to apply resources: %w", err)
 	}
 
+	// Track the applied objects for the dynamic informer manager
 	if err = r.trackConcurrently(ctx, deployer, objs); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceNotSynced, err.Error())
 
@@ -513,55 +515,90 @@ func digestSpec(s string) (ocmv1.DigestSpec, error) {
 	return digestSpec, nil
 }
 
-// applyConcurrently applies the resource objects to the cluster concurrently.
+// applyWithApplySet applies the resource objects using ApplySet for proper tracking and pruning.
+// This method uses the ApplySet specification (KEP-3659) to manage sets of resources with automatic
+// pruning of orphaned resources.
 //
-// See Apply for more details on how the objects are applied.
-func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured) error {
-	if len(objs) > 1 {
-		// TODO(jakobmoellerdev): remove once https://github.com/open-component-model/ocm-k8s-toolkit/issues/273#issue-3201709052
-		//  is implemented in the deployer controller. We need proper apply detection so we can support pruning diffs.
-		//  Otherwise we can orphan resources.
-		msg := "multiple objects found in manifest," +
-			"the current deployer implementation does not officially support this yet," +
-			"and will not prune diffs properly."
-		event.New(r, deployer, nil, eventv1.EventSeverityInfo, msg)
-		log.FromContext(ctx).Info(msg)
-	}
+// The deployer object itself is used as the ApplySet parent, which means:
+// - All deployed resources are labeled with applyset.k8s.io/part-of=<applyset-id>
+// - The deployer carries annotations tracking the GroupKinds and namespaces of managed resources
+// - Pruning automatically removes resources that were previously deployed but are no longer in the manifest
+func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured, prune bool) error {
+	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
 
-	eg, egctx := errgroup.WithContext(ctx)
-
-	for i := range objs {
-		eg.Go(func() error {
-			//nolint:forcetypeassert // we know that objs[i] is a client.Object because we just cloned it
-			obj := objs[i].DeepCopyObject().(*unstructured.Unstructured)
-
-			return r.apply(egctx, resource, deployer, obj)
-		})
-	}
-
-	return eg.Wait()
-}
-
-// apply applies the object to the cluster using Server-Side Apply. It sets the controller reference on the object
-// and patches it with the FieldManager set to the deployer UID. It also updates the deployer status with the
-// applied object reference.
-func (r *Reconciler) apply(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, obj *unstructured.Unstructured) error {
-	setOwnershipLabels(obj, resource, deployer)
-	setOwnershipAnnotations(obj, resource)
-	if err := controllerutil.SetControllerReference(deployer, obj, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set controller reference on object: %w", err)
-	}
-
-	if err := r.defaultObj(ctx, resource, obj); err != nil {
-		return err
-	}
-
-	applyConfig := client.ApplyConfigurationFromUnstructured(obj)
-	if err := r.GetClient().Apply(ctx, applyConfig, &client.ApplyOptions{
-		Force:        ptr.To(true),
+	// Use the deployer as the ApplySet parent
+	// This allows us to track all resources deployed by this deployer
+	applySetConfig := applyset.Config{
+		ToolingID: applyset.ToolingID{
+			Name:    deployerManager,
+			Version: "v1alpha1",
+		},
 		FieldManager: fmt.Sprintf("%s/%s", deployerManager, deployer.UID),
-	}); err != nil {
-		return fmt.Errorf("failed to apply object: %w", err)
+		ToolLabels: map[string]string{
+			// Include the standard managed-by label
+			managedByLabel: deployerManager,
+		},
+		Concurrency: runtime.NumCPU(),
+	}
+
+	// client -> client / go / client
+
+	// REMOVE -> Upstream Lib (K8s):
+	// Dynamic Client: https://caiorcferreira.github.io/post/the-kubernetes-dynamic-client/
+	// https://pkg.go.dev/k8s.io/client-go/dynamic
+
+	// USE -> Controller Runtime (our operator):
+	// manager.Client: https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/client
+	// caiorcferreira.github.io
+	// The Kubernetes dynamic client
+	// A dive into a hidden tool to build Controllers and Operators
+	set, err := applyset.New(ctx, deployer, r.Client, r.resourceRESTMapper, applySetConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create ApplySet: %w", err)
+	}
+
+	logger.Info("adding objects to ApplySet", "count", len(objs))
+
+	// Add all objects to the ApplySet
+	for _, obj := range objs {
+		// Clone the object to avoid modifying the original
+		objCopy := obj.DeepCopy()
+
+		// Set ownership labels and annotations (preserving existing behavior)
+		setOwnershipLabels(objCopy, resource, deployer)
+		setOwnershipAnnotations(objCopy, resource)
+
+		// Set controller reference
+		if err := controllerutil.SetControllerReference(deployer, objCopy, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on object %s/%s: %w", objCopy.GetNamespace(), objCopy.GetName(), err)
+		}
+
+		// Default namespace and apiVersion if needed
+		if err := r.defaultObj(ctx, resource, objCopy); err != nil {
+			return fmt.Errorf("failed to default object %s/%s: %w", objCopy.GetNamespace(), objCopy.GetName(), err)
+		}
+
+		// Add to the ApplySet
+		if _, err := set.Add(ctx, objCopy); err != nil {
+			return fmt.Errorf("failed to add object %s/%s to ApplySet: %w", objCopy.GetNamespace(), objCopy.GetName(), err)
+		}
+	}
+
+	// Apply all objects (and prune if requested)
+	logger.Info("applying ApplySet", "prune", prune)
+	result, err := set.Apply(ctx, prune)
+	if err != nil {
+		return fmt.Errorf("failed to apply ApplySet: %w", err)
+	}
+
+	// Log results
+	logger.Info("ApplySet operation complete",
+		"applied", len(result.Applied),
+		"pruned", len(result.Pruned),
+		"errors", len(result.Errors))
+
+	if len(result.Errors) > 0 {
+		return fmt.Errorf("ApplySet completed with errors: %v", result.Errors)
 	}
 
 	return nil
