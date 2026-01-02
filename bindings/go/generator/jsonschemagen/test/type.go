@@ -35,6 +35,8 @@ type SampleType struct {
 	// NestedComment
 	Nested NestedType `json:"nested"`
 
+	InlineType `json:",inline"`
+
 	// NestedPointerComment
 	NestedPointer *NestedType `json:"nestedPointer"`
 }
@@ -44,6 +46,13 @@ type SampleType struct {
 type NestedType struct {
 	// NestedFieldComment
 	NestedField string `json:"nestedField"`
+}
+
+// InlineType is a struct that is referenced as inline field
+// +ocm:jsonschema-gen=true
+type InlineType struct {
+	// InlineFieldComment
+	InlineField string `json:"inlineField"`
 }
 
 // MonoType is a struct with a single runtime.Typed field.
