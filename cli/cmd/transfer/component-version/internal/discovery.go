@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -131,7 +132,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 		comp := map[string]any{
 			"name":                fmt.Sprintf("${%sDownload.output.descriptor.component.name}", id),
 			"version":             fmt.Sprintf("${%sDownload.output.descriptor.component.version}", id),
-			"resources":           []interface{}{},
+			"resources":           make([]interface{}, len(val.Descriptor.Component.Resources)),
 			"sources":             fmt.Sprintf("${%sDownload.output.descriptor.component.sources}", id),
 			"repositoryContexts":  []interface{}{},
 			"provider":            fmt.Sprintf("${%sDownload.output.descriptor.component.provider}", id),
@@ -140,9 +141,18 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 
 		for i := 0; i < len(val.Descriptor.Component.Resources); i++ {
 			if _, ok := localResourceTransformations[i]; ok {
-				comp["resources"] = append(comp["resources"].([]interface{}), fmt.Sprintf("${%s.output.resource}", localResourceTransformations[i].ID))
+				comp["resources"].([]interface{})[i] = fmt.Sprintf("${%s.output.resource}", localResourceTransformations[i].ID)
+				continue
 			}
-			comp["resources"] = append(comp["resources"].([]interface{}), globalResourceReferences[i])
+			raw, err := json.Marshal(globalResourceReferences[i])
+			if err != nil {
+				return fmt.Errorf("failed marshaling resource: %w", err)
+			}
+			data := map[string]any{}
+			if err := json.Unmarshal(raw, &data); err != nil {
+				return fmt.Errorf("failed unmarshaling resource: %w", err)
+			}
+			comp["resources"].([]interface{})[i] = data
 		}
 
 		desc := map[string]any{

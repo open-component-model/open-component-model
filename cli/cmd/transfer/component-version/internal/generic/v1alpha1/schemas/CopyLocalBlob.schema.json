@@ -67,8 +67,27 @@
         "extraIdentity": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",
           "description": "ExtraIdentity is the identity of an object.\nAn additional label with key \"name\" is not allowed"
+        },
+        "labels": {
+          "type": "array",
+          "description": "Labels defines an optional set of additional labels\ndescribing the object.",
+          "items": {
+            "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Label"
+          }
+        },
+        "name": {
+          "type": "string",
+          "description": "Name is the context unique name of the object."
+        },
+        "version": {
+          "type": "string",
+          "description": "Version is the semver version of the object."
         }
       },
+      "required": [
+        "name",
+        "version"
+      ],
       "additionalProperties": false
     },
     "ocm.software.open-component-model.bindings.go.descriptor.v2.Label": {
@@ -146,6 +165,21 @@
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Digest",
           "description": "Digest is the optional digest of the referenced resource."
         },
+        "extraIdentity": {
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",
+          "description": "ExtraIdentity is the identity of an object.\nAn additional label with key \"name\" is not allowed"
+        },
+        "labels": {
+          "type": "array",
+          "description": "Labels defines an optional set of additional labels\ndescribing the object.",
+          "items": {
+            "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Label"
+          }
+        },
+        "name": {
+          "type": "string",
+          "description": "Name is the context unique name of the object."
+        },
         "relation": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.ResourceRelation",
           "description": "Relation describes the relation of the resource to the component.\nCan be a local or external resource."
@@ -160,9 +194,15 @@
         "type": {
           "type": "string",
           "description": "Type describes the type of the object."
+        },
+        "version": {
+          "type": "string",
+          "description": "Version is the semver version of the object."
         }
       },
       "required": [
+        "name",
+        "version",
         "type",
         "relation",
         "access"

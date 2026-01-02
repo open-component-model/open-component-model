@@ -88,6 +88,13 @@ func (t *CopyLocalBlobImpl) Transform(ctx context.Context, step runtime.Typed) (
 		return nil, fmt.Errorf("failed getting local resource: %w", err)
 	}
 
+	acc := res.GetAccess()
+	var localBlob v2.LocalBlob
+	if err := v2.Scheme.Convert(acc, &localBlob); err != nil {
+		return nil, fmt.Errorf("failed to convert artifact access to local blob: %w", err)
+	}
+	res.Access = &localBlob
+
 	res, err = targetRepo.AddLocalResource(ctx, copyLocalBlob.Spec.Component, copyLocalBlob.Spec.Version, res, blob)
 	if err != nil {
 		return nil, fmt.Errorf("failed adding local resource: %w", err)
@@ -98,7 +105,7 @@ func (t *CopyLocalBlobImpl) Transform(ctx context.Context, step runtime.Typed) (
 		return nil, fmt.Errorf("failed converting resource to v2: %w", err)
 	}
 
-	copyLocalBlob.Output.Resource = v2res
+	copyLocalBlob.Output = &CopyLocalBlobOutput{Resource: v2res}
 
 	return copyLocalBlob, nil
 }
