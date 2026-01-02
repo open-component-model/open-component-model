@@ -1,9 +1,11 @@
 package jsonschema
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 
 	"github.com/google/cel-go/cel"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -55,6 +57,13 @@ func ParseResourceFromDeclType(resource map[string]interface{}, declType *DeclTy
 	// validation errors at expression locations are filtered out.
 	if err := declType.Schema.Schema.Validate(resource); err != nil {
 		err = filterExpressionErrors(err, annotated)
+
+		if err != nil {
+			if underlyingResource, _ := json.MarshalIndent(resource, "", "  "); underlyingResource != nil {
+				err = errors.Join(err, fmt.Errorf("resource failed validation:\n%s", underlyingResource))
+			}
+		}
+
 		return annotated, err
 	}
 
@@ -134,10 +143,12 @@ func suppressErrors(err *jsonschema.ValidationError, exprPaths map[string]struct
 
 	// Recurse into causes and keep only those that should not be suppressed.
 	cleaned := make([]*jsonschema.ValidationError, 0, len(err.Causes))
+	atLeastOneSuppressed := false
 	for _, c := range err.Causes {
 		if !suppressErrors(c, exprPaths) {
 			cleaned = append(cleaned, c)
 		}
+		atLeastOneSuppressed = true
 	}
 	err.Causes = cleaned
 
@@ -146,10 +157,18 @@ func suppressErrors(err *jsonschema.ValidationError, exprPaths map[string]struct
 		// there may be other kinds that could be added here as needed.
 		// for now we focus on the most common errors that can have leafs:
 		// 1. schema errors, which can encompass N actual errors
-		// 2. oneOf errors, which can encompass N errors based on each one of branch
+		// 2. oneOf / anyOf errors, which can encompass N errors based on each one of branch
 		// 3. reference errors, which can encompass 1 error from the referenced schema
+		// 4. not errors, which can encompass 1 error from the not schema
 		switch err.ErrorKind.(type) {
-		case *kind.Schema, *kind.OneOf, *kind.Reference:
+		case *kind.Schema, *kind.OneOf, *kind.AnyOf, *kind.Reference, *kind.Not:
+			return true
+		}
+	} else if atLeastOneSuppressed {
+		// for one of or any of, even if there are still errors present, we cannot guarantee
+		// that the suppressed path is the one that would match, so we supress the entire block
+		switch err.ErrorKind.(type) {
+		case *kind.OneOf, *kind.AnyOf:
 			return true
 		}
 	}
@@ -160,7 +179,12 @@ func suppressErrors(err *jsonschema.ValidationError, exprPaths map[string]struct
 func instanceLocationToString(loc []string) string {
 	fp := fieldpath.New()
 	for _, l := range loc {
-		fp = fp.AddNamed(l)
+		i, err := strconv.ParseInt(l, 10, 64)
+		if err != nil {
+			fp = fp.AddNamed(l)
+		} else {
+			fp = fp.AddIndexed(int(i))
+		}
 	}
 	return fp.String()
 }

@@ -332,7 +332,7 @@ func TestTypeMismatches(t *testing.T) {
 			if tc.wantErr {
 				require.Error(t, err, "expected error but got none")
 				if tc.expectedError != "" {
-					assert.Equal(t, tc.expectedError, err.Error())
+					assert.ErrorContains(t, err, tc.expectedError)
 				}
 			} else {
 				require.NoError(t, err, "did not expect an error")
@@ -583,7 +583,7 @@ func TestParserEdgeCases(t *testing.T) {
 			}
 
 			require.Error(t, err, "expected an error but got none")
-			assert.Equal(t, tc.expectedError, err.Error())
+			assert.ErrorContains(t, err, tc.expectedError)
 		})
 	}
 }
