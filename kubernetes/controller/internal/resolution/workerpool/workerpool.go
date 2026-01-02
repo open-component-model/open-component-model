@@ -302,22 +302,30 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, i
 
 	// notify all subscribers of an event happening.
 	wp.subscribersMu.RLock()
-	for _, ch := range wp.subscribers {
-		go func(ch chan []RequesterInfo) {
+	subscribers := slices.Clone(wp.subscribers)
+	wp.subscribersMu.RUnlock()
+
+	for _, ch := range subscribers {
+		go func() {
 			select {
 			case <-ctx.Done():
 				logger.V(1).Info("context canceled while sending resolution event to subscriber",
 					"component", item.Opts.Component,
 					"version", item.Opts.Version)
 				return
+			case <-time.After(5 * time.Second):
+				logger.Info("timeout sending resolution event to subscriber, subscriber may be slow or blocked",
+					"component", item.Opts.Component,
+					"version", item.Opts.Version)
+				EventChannelDropsTotal.WithLabelValues(item.Opts.Component, item.Opts.Version).Inc()
+				return
 			case ch <- requesters:
 				logger.V(1).Info("successfully sent resolution event to subscriber",
 					"component", item.Opts.Component,
 					"version", item.Opts.Version)
 			}
-		}(ch)
+		}()
 	}
-	wp.subscribersMu.RUnlock()
 }
 
 func (wp *WorkerPool) setResult(key string, result any, err error) []RequesterInfo {
