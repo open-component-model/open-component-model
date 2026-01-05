@@ -295,8 +295,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to download resource from OCM or retrieve it from the cache: %w", err)
 	}
 
-	// TODO(https://github.com/open-component-model/ocm-project/issues/624) should we allow opt-in/opt-out of pruning?
-	const enablePruning = false
+	// TODO If needed in the future, we can make pruning configurable via the deployer spec.
+	const enablePruning = true
 
 	if err = r.applyWithApplySet(ctx, resource, deployer, objs, enablePruning); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ApplyFailed, err.Error())
