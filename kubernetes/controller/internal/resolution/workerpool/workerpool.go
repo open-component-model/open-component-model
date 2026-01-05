@@ -72,9 +72,8 @@ type WorkerPool struct {
 	subscribers   []chan []RequesterInfo
 	// tracks all requesters per resolution key to make sure that all objects who request this item will
 	// be notified of any change.
-	inProgress       map[string][]RequesterInfo
-	workersDone      sync.WaitGroup
-	eventSendersDone sync.WaitGroup
+	inProgress  map[string][]RequesterInfo
+	workersDone sync.WaitGroup
 }
 
 // ErrResolutionInProgress is returned when a component version is being resolved in the background.
@@ -99,14 +98,15 @@ func NewWorkerPool(opts PoolOptions) *WorkerPool {
 }
 
 // Subscribe creates a new event subscription channel and registers it to receive
-// resolution events. Each subscriber gets its own channel to avoid events being
+// resolution events. Each subscriber gets its own buffered channel to avoid events being
 // consumed by only one listener and controllers stealing events from other controllers.
+// The channel is buffered to prevent blocking workers. If the buffer fills, events are dropped.
 // The returned channel will be closed when the worker pool shuts down.
 func (wp *WorkerPool) Subscribe() <-chan []RequesterInfo {
 	wp.subscribersMu.Lock()
 	defer wp.subscribersMu.Unlock()
 
-	ch := make(chan []RequesterInfo)
+	ch := make(chan []RequesterInfo, 10)
 	wp.subscribers = append(wp.subscribers, ch)
 	return ch
 }
@@ -129,7 +129,6 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {
 		wp.workersDone.Wait()
-		wp.eventSendersDone.Wait()
 
 		// now it's safe to close the channels
 		close(wp.workQueue)
@@ -303,36 +302,29 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, i
 	requesters := wp.setResult(item.key, result, err)
 
 	// notify all subscribers of an event happening.
+	// Uses buffered channels with non-blocking send to avoid worker goroutine overhead.
 	wp.subscribersMu.RLock()
 	subscribers := slices.Clone(wp.subscribers)
 	wp.subscribersMu.RUnlock()
 
 	for _, ch := range subscribers {
-		wp.eventSendersDone.Add(1)
-		go func() {
-			defer wp.eventSendersDone.Done()
-
-			timer := time.NewTimer(5 * time.Second)
-			defer timer.Stop()
-
-			select {
-			case <-ctx.Done():
-				logger.V(1).Info("context canceled while sending resolution event to subscriber",
-					"component", item.Opts.Component,
-					"version", item.Opts.Version)
-				return
-			case <-timer.C:
-				logger.Info("timeout sending resolution event to subscriber, subscriber may be slow or blocked",
-					"component", item.Opts.Component,
-					"version", item.Opts.Version)
-				EventChannelDropsTotal.WithLabelValues(item.Opts.Component, item.Opts.Version).Inc()
-				return
-			case ch <- requesters:
-				logger.V(1).Info("successfully sent resolution event to subscriber",
-					"component", item.Opts.Component,
-					"version", item.Opts.Version)
-			}
-		}()
+		select {
+		case <-ctx.Done():
+			logger.V(1).Info("context canceled, skipping event broadcast",
+				"component", item.Opts.Component,
+				"version", item.Opts.Version)
+			return
+		case ch <- requesters:
+			logger.V(1).Info("sent resolution event to subscriber",
+				"component", item.Opts.Component,
+				"version", item.Opts.Version,
+				"requesterCount", len(requesters))
+		default:
+			logger.Info("dropped resolution event, subscriber buffer full",
+				"component", item.Opts.Component,
+				"version", item.Opts.Version)
+			EventChannelDropsTotal.WithLabelValues(item.Opts.Component, item.Opts.Version).Inc()
+		}
 	}
 }
 
