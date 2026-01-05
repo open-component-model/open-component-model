@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/helm
 
-go 1.25.4
+go 1.25.5
 
 require (
 	github.com/opencontainers/go-digest v1.0.0
