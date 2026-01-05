@@ -72,8 +72,9 @@ type WorkerPool struct {
 	subscribers   []chan []RequesterInfo
 	// tracks all requesters per resolution key to make sure that all objects who request this item will
 	// be notified of any change.
-	inProgress  map[string][]RequesterInfo
-	workersDone sync.WaitGroup
+	inProgress       map[string][]RequesterInfo
+	workersDone      sync.WaitGroup
+	eventSendersDone sync.WaitGroup
 }
 
 // ErrResolutionInProgress is returned when a component version is being resolved in the background.
@@ -128,6 +129,7 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {
 		wp.workersDone.Wait()
+		wp.eventSendersDone.Wait()
 
 		// now it's safe to close the channels
 		close(wp.workQueue)
@@ -306,14 +308,20 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, i
 	wp.subscribersMu.RUnlock()
 
 	for _, ch := range subscribers {
+		wp.eventSendersDone.Add(1)
 		go func() {
+			defer wp.eventSendersDone.Done()
+
+			timer := time.NewTimer(5 * time.Second)
+			defer timer.Stop()
+
 			select {
 			case <-ctx.Done():
 				logger.V(1).Info("context canceled while sending resolution event to subscriber",
 					"component", item.Opts.Component,
 					"version", item.Opts.Version)
 				return
-			case <-time.After(5 * time.Second):
+			case <-timer.C:
 				logger.Info("timeout sending resolution event to subscriber, subscriber may be slow or blocked",
 					"component", item.Opts.Component,
 					"version", item.Opts.Version)
