@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/input/utf8
 
-go 1.25.4
+go 1.25.5
 
 require (
 	github.com/stretchr/testify v1.11.1
@@ -17,7 +17,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5 // indirect
