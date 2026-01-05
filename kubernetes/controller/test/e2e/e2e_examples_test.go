@@ -71,6 +71,8 @@ var _ = Describe("controller", func() {
 				name := ""
 
 				if slices.Contains(files, K8sManifest) {
+					// Delete first to ensure idempotency across multiple test runs
+					_ = utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")
 					Expect(utils.MakeServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
 				}
 				if slices.Contains(files, Rgd) {
@@ -116,6 +118,12 @@ var _ = Describe("controller", func() {
 					timeout,
 					"pod", "-l", "app.kubernetes.io/name="+example.Name()+"-podinfo",
 				)).To(Succeed())
+
+				By("verifying ApplySet labels on deployer (parent)")
+				verifyDeployerApplySetLabelsAndAnnotations(ctx, example.Name())
+
+				By("verifying ApplySet labels on deployed resources")
+				verifyDeployedResourcesApplySetLabels(ctx, example.Name())
 
 				// Check for configuration and localization
 				if strings.HasSuffix(example.Name(), "-configuration-localization") {
