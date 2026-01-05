@@ -104,7 +104,7 @@ func (ref *Ref) String() string {
 	switch repo := ref.Repository.(type) {
 	case *ociv1.Repository:
 		sb.WriteString(repo.BaseUrl)
-		if repo.BaseUrl != "" {
+		if repo.SubPath != "" {
 			sb.WriteRune('/')
 			sb.WriteString(repo.SubPath)
 		}
