@@ -69,7 +69,7 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnly
 	}
 
 	const gzipMagic1, gzipMagic2 = 0x1F, 0x8B
-	if n == 2 && header[0] == gzipMagic1 && header[1] == gzipMagic2 { //nolint:gosec // false positive
+	if n == 2 && header[0] == gzipMagic1 && header[1] == gzipMagic2 {
 		var gzReader *gzip.Reader
 		if gzReader, err = gzip.NewReader(reader); err != nil {
 			return nil, fmt.Errorf("failed to initialize gzip reader: %w", err)

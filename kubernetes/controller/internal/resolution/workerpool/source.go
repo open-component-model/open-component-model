@@ -13,18 +13,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// EventSource is a controller-runtime source that watches the worker pool's event channel
-// and triggers reconciliation for all requesters when a resolution completes.
+// EventSource is a controller-runtime source that subscribes to the worker pool's
+// resolution events and triggers reconciliation for all requesters when a resolution completes.
 type EventSource struct {
 	workerPool *WorkerPool
+	eventChan  <-chan []RequesterInfo
 }
 
 var _ source.Source = &EventSource{}
 
 // NewEventSource creates a new event source from a worker pool.
+// This creates a new subscription channel dedicated to this source.
+// Events are broadcasted to all subscribers.
 func NewEventSource(workerPool *WorkerPool) *EventSource {
 	return &EventSource{
 		workerPool: workerPool,
+		eventChan:  workerPool.Subscribe(),
 	}
 }
 
@@ -37,9 +41,9 @@ func (es *EventSource) Start(ctx context.Context, queue workqueue.TypedRateLimit
 		for {
 			select {
 			case <-ctx.Done():
-				logger.Info("stopping resolution event source")
+				logger.Info("stopping resolution event source due to context cancellation")
 				return
-			case requesters, ok := <-es.workerPool.EventChannel():
+			case requesters, ok := <-es.eventChan:
 				if !ok {
 					logger.Info("event channel closed, stopping resolution event source")
 					return

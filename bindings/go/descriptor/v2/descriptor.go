@@ -92,7 +92,7 @@ type Resource struct {
 	// SourceRefs defines a list of source names.
 	// These entries reference the sources defined in the
 	// component.sources.
-	SourceRefs []SourceRef `json:"sourceRefs,omitempty"`
+	SourceRefs []SourceRef `json:"srcRefs,omitempty"`
 	// Type describes the type of the object.
 	Type string `json:"type"`
 	// Relation describes the relation of the resource to the component.
@@ -102,8 +102,6 @@ type Resource struct {
 	Access *runtime.Raw `json:"access"`
 	// Digest is the optional digest of the referenced resource.
 	Digest *Digest `json:"digest,omitempty"`
-	// CreationTime of the resource.
-	CreationTime *Timestamp `json:"creationTime,omitempty"`
 }
 
 // A Source is an artifact which describes the sources that were used to generate one or more of the resources.

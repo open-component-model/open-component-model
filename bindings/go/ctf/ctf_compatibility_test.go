@@ -172,6 +172,8 @@ func Test_CTF_Advanced_ReadOnly_Compatibility(t *testing.T) {
 			})
 			r.NoError(err)
 
+			r.Equal(as.Format(), ctf.ArtifactSetFormatLegacyOCI)
+
 			blobs, err = as.ListBlobs(ctx)
 			r.NoError(err)
 			r.Len(blobs, 3)

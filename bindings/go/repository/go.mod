@@ -1,16 +1,16 @@
 module ocm.software/open-component-model/bindings/go/repository
 
-go 1.25.4
+go 1.25.5
 
 require (
 	github.com/gobwas/glob v0.2.3
 	github.com/stretchr/testify v1.11.1
 	github.com/veqryn/slog-context v0.8.0
-	golang.org/x/sync v0.18.0
+	golang.org/x/sync v0.19.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251230114524-e830e062083a
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260102115023-ca7c68fe3c03
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 )
 

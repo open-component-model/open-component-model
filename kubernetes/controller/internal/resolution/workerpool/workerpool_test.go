@@ -725,9 +725,10 @@ func TestWorkerPoolEventChannelNotifiesRequesters(t *testing.T) {
 		}
 
 		eventReceived := make(chan []workerpool.RequesterInfo, 1)
+		eventChan := env.Pool.Subscribe()
 		go func() {
 			select {
-			case requesters := <-env.Pool.EventChannel():
+			case requesters := <-eventChan:
 				eventReceived <- requesters
 			case <-ctx.Done():
 			}
@@ -801,8 +802,9 @@ func TestWorkerPoolEventChannelClosedOnShutdown(t *testing.T) {
 	}()
 
 	channelClosed := make(chan bool, 1)
+	eventChan := wp.Subscribe()
 	go func() {
-		for range wp.EventChannel() {
+		for range eventChan {
 			// drain
 		}
 		channelClosed <- true
