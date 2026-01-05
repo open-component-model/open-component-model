@@ -269,11 +269,6 @@ func (in *Resource) DeepCopyInto(out *Resource) {
 		*out = new(Digest)
 		**out = **in
 	}
-	if in.CreationTime != nil {
-		in, out := &in.CreationTime, &out.CreationTime
-		*out = new(Timestamp)
-		(*in).DeepCopyInto(*out)
-	}
 	return
 }
 
