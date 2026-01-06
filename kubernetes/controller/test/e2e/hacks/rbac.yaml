@@ -1,108 +1,108 @@
-# These RBAC roles are there to make the e2e tests work.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: ocm-k8s-toolkit-servicereader-e2e
-  namespace: default
-rules:
-  - apiGroups: [""]
-    resources: ["services"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: ocm-k8s-toolkit-servicereader-e2e
-  namespace: default
-subjects:
-  - kind: ServiceAccount
-    name: ocm-k8s-toolkit-controller-manager
-    namespace: ocm-k8s-toolkit-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: ocm-k8s-toolkit-servicereader-e2e
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: ocm-k8s-toolkit-applier-e2e
-  namespace: default
-rules:
-  # Core
-  - apiGroups: [""]
-    resources: ["services", "configmaps", "secrets", "endpoints", "pods"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # Apps
-  - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # Networking
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["ingresses", "networkpolicies"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # Autoscaling (optional, common)
-  - apiGroups: ["autoscaling"]
-    resources: ["horizontalpodautoscalers"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # RBAC (only if your manifests include Roles/RoleBindings/ServiceAccounts)
-  - apiGroups: [""]
-    resources: ["serviceaccounts"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["rbac.authorization.k8s.io"]
-    resources: ["roles", "rolebindings"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: ocm-k8s-toolkit-applier-e2e
-  namespace: default
-subjects:
-  - kind: ServiceAccount
-    name: ocm-k8s-toolkit-controller-manager
-    namespace: ocm-k8s-toolkit-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: ocm-k8s-toolkit-applier-e2e
----
-# ClusterRole for dynamic informer manager to watch deployed resources cluster-wide
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: ocm-k8s-toolkit-resource-watcher-e2e
-rules:
-  # Core resources
-  - apiGroups: [""]
-    resources: ["services", "configmaps", "secrets", "endpoints", "pods", "serviceaccounts"]
-    verbs: ["get", "list", "watch"]
-  # Apps resources
-  - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
-    verbs: ["get", "list", "watch"]
-  # Networking resources
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["ingresses", "networkpolicies"]
-    verbs: ["get", "list", "watch"]
-  # Autoscaling resources
-  - apiGroups: ["autoscaling"]
-    resources: ["horizontalpodautoscalers"]
-    verbs: ["get", "list", "watch"]
-  # RBAC resources
-  - apiGroups: ["rbac.authorization.k8s.io"]
-    resources: ["roles", "rolebindings"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: ocm-k8s-toolkit-resource-watcher-e2e
-subjects:
-  - kind: ServiceAccount
-    name: ocm-k8s-toolkit-controller-manager
-    namespace: ocm-k8s-toolkit-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: ocm-k8s-toolkit-resource-watcher-e2e
+## These RBAC roles are there to make the e2e tests work.
+#apiVersion: rbac.authorization.k8s.io/v1
+#kind: Role
+#metadata:
+#  name: ocm-k8s-toolkit-servicereader-e2e
+#  namespace: default
+#rules:
+#  - apiGroups: [""]
+#    resources: ["services"]
+#    verbs: ["get", "list", "watch"]
+#---
+#apiVersion: rbac.authorization.k8s.io/v1
+#kind: RoleBinding
+#metadata:
+#  name: ocm-k8s-toolkit-servicereader-e2e
+#  namespace: default
+#subjects:
+#  - kind: ServiceAccount
+#    name: ocm-k8s-toolkit-controller-manager
+#    namespace: ocm-k8s-toolkit-system
+#roleRef:
+#  apiGroup: rbac.authorization.k8s.io
+#  kind: Role
+#  name: ocm-k8s-toolkit-servicereader-e2e
+#---
+#apiVersion: rbac.authorization.k8s.io/v1
+#kind: Role
+#metadata:
+#  name: ocm-k8s-toolkit-applier-e2e
+#  namespace: default
+#rules:
+#  # Core
+#  - apiGroups: [""]
+#    resources: ["services", "configmaps", "secrets", "endpoints", "pods"]
+#    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+#  # Apps
+#  - apiGroups: ["apps"]
+#    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+#    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+#  # Networking
+#  - apiGroups: ["networking.k8s.io"]
+#    resources: ["ingresses", "networkpolicies"]
+#    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+#  # Autoscaling (optional, common)
+#  - apiGroups: ["autoscaling"]
+#    resources: ["horizontalpodautoscalers"]
+#    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+#  # RBAC (only if your manifests include Roles/RoleBindings/ServiceAccounts)
+#  - apiGroups: [""]
+#    resources: ["serviceaccounts"]
+#    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+#  - apiGroups: ["rbac.authorization.k8s.io"]
+#    resources: ["roles", "rolebindings"]
+#    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+#---
+#apiVersion: rbac.authorization.k8s.io/v1
+#kind: RoleBinding
+#metadata:
+#  name: ocm-k8s-toolkit-applier-e2e
+#  namespace: default
+#subjects:
+#  - kind: ServiceAccount
+#    name: ocm-k8s-toolkit-controller-manager
+#    namespace: ocm-k8s-toolkit-system
+#roleRef:
+#  apiGroup: rbac.authorization.k8s.io
+#  kind: Role
+#  name: ocm-k8s-toolkit-applier-e2e
+#---
+## ClusterRole for dynamic informer manager to watch deployed resources cluster-wide
+#apiVersion: rbac.authorization.k8s.io/v1
+#kind: ClusterRole
+#metadata:
+#  name: ocm-k8s-toolkit-resource-watcher-e2e
+#rules:
+#  # Core resources
+#  - apiGroups: [""]
+#    resources: ["services", "configmaps", "secrets", "endpoints", "pods", "serviceaccounts"]
+#    verbs: ["get", "list", "watch"]
+#  # Apps resources
+#  - apiGroups: ["apps"]
+#    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+#    verbs: ["get", "list", "watch"]
+#  # Networking resources
+#  - apiGroups: ["networking.k8s.io"]
+#    resources: ["ingresses", "networkpolicies"]
+#    verbs: ["get", "list", "watch"]
+#  # Autoscaling resources
+#  - apiGroups: ["autoscaling"]
+#    resources: ["horizontalpodautoscalers"]
+#    verbs: ["get", "list", "watch"]
+#  # RBAC resources
+#  - apiGroups: ["rbac.authorization.k8s.io"]
+#    resources: ["roles", "rolebindings"]
+#    verbs: ["get", "list", "watch"]
+#---
+#apiVersion: rbac.authorization.k8s.io/v1
+#kind: ClusterRoleBinding
+#metadata:
+#  name: ocm-k8s-toolkit-resource-watcher-e2e
+#subjects:
+#  - kind: ServiceAccount
+#    name: ocm-k8s-toolkit-controller-manager
+#    namespace: ocm-k8s-toolkit-system
+#roleRef:
+#  apiGroup: rbac.authorization.k8s.io
+#  kind: ClusterRole
+#  name: ocm-k8s-toolkit-resource-watcher-e2e
