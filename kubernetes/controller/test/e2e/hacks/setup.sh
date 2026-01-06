@@ -42,7 +42,7 @@ if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true
     registry:2
 fi
 
-KIND_NODE_IMAGE="kindest/node:v${KIND_NODE_IMAGE_VERSION:-1.34.0}"
+KIND_NODE_IMAGE="kindest/node:v${KIND_NODE_IMAGE_VERSION}"
 
 # Create kind cluster with
 # - Port mappings for additional cluster OCI registries (replication tests).
