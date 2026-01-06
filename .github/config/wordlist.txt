@@ -579,3 +579,5 @@ colocated
 localblobs
 artifactset
 stackit
+sast
+agentic
