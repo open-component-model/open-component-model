@@ -22,7 +22,7 @@ require (
 	golang.org/x/sync v0.19.0
 	k8s.io/api v0.34.2
 	k8s.io/apiextensions-apiserver v0.34.2
-	k8s.io/apimachinery v0.34.3
+	k8s.io/apimachinery v0.35.0
 	k8s.io/apiserver v0.34.2
 	k8s.io/client-go v0.34.2
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
@@ -310,7 +310,7 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.4 // indirect
 	github.com/prometheus/procfs v0.19.2 // indirect
-	github.com/redis/go-redis/extra/rediscmd/v9 v9.17.1 // indirect
+	github.com/redis/go-redis/extra/rediscmd/v9 v9.17.2 // indirect
 	github.com/redis/go-redis/v9 v9.17.2 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
