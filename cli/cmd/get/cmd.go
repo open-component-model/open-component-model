@@ -2,6 +2,7 @@ package get
 
 import (
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/cli/cmd/describe/types"
 
 	componentversion "ocm.software/open-component-model/cli/cmd/get/component-version"
 )
@@ -15,6 +16,7 @@ func New() *cobra.Command {
 			return cmd.Help()
 		},
 	}
+	cmd.AddCommand(types.New())
 	cmd.AddCommand(componentversion.New())
 	return cmd
 }

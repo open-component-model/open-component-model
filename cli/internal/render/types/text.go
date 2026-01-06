@@ -3,12 +3,14 @@ package types
 import (
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 	"text/template"
 
+	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/spf13/cobra"
-	"ocm.software/open-component-model/cli/internal/render/jsonschema"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/subsystem"
 )
 
@@ -24,38 +26,10 @@ var (
 {{if .Subsystem.Description}}{{bold "SUMMARY:"}}
 {{indent .Subsystem.Description 2}}
 
-{{end}}{{if .Subsystem.Guides}}{{bold "USAGE GUIDES & DOCUMENTATION"}}
-{{range .Subsystem.Guides}}
-{{bold "GUIDE:"}} {{.Title}}
-{{if .Summary}}  {{bold .Summary}}
-{{end}}{{range .Sections}}
-  {{bold .Title}}
-{{if .Content}}{{indent .Content 4}}
-
-{{end}}{{if .Example}}    {{bold "Example: "}}{{bold .Example.Caption}}
-{{indent .Example.Content 6}}
-{{end}}{{end}}{{end}}
 {{end}}{{if .LinkedCommands}}{{bold "RELEVANT CLI COMMANDS"}}
 
 {{range .LinkedCommands}}  - {{bold .CommandPath}}
 {{if .Short}}    {{.Short}}
-{{end}}{{end}}
-{{end}}`
-
-	typeTemplate = `{{bold "TYPE:   "}} {{.Name}}
-{{bold "SYSTEM: "}} {{.Subsystem.Name}} ({{.Subsystem.Title}})
-
-{{if .Doc.Description}}{{bold "DESCRIPTION:"}}
-{{indent .Doc.Description 2}}
-
-{{end}}{{if .Properties}}{{bold "SCHEMA FIELDS"}}
-
-  {{bold "Field Name                Type       Req   Description"}}
-  {{bold "----------                ----       ---   -----------"}}
-{{range .Properties}}  {{printf "%-25s %-10s %-5s %s" .Path .DisplayType .ReqStr .FirstDesc}}
-{{if .RemainingDesc}}{{indent .RemainingDesc 29}}
-{{end}}{{if .Default}}                             {{bold "Default: "}}{{.Default}}
-{{end}}{{if .Enum}}                             {{bold "Enum:    "}}{{.Enum}}
 {{end}}{{end}}
 {{end}}`
 )
@@ -64,7 +38,6 @@ var (
 type TextRenderer struct {
 	rootCommand *cobra.Command
 	subTemplate *template.Template
-	typTemplate *template.Template
 }
 
 func NewTextRenderer() *TextRenderer {
@@ -88,7 +61,6 @@ func NewTextRenderer() *TextRenderer {
 
 	return &TextRenderer{
 		subTemplate: template.Must(template.New("subsystem").Funcs(funcMap).Parse(subsystemTemplate)),
-		typTemplate: template.Must(template.New("type").Funcs(funcMap).Parse(typeTemplate)),
 	}
 }
 
@@ -111,65 +83,65 @@ func (r *TextRenderer) RenderSubsystem(w io.Writer, s *subsystem.Subsystem) erro
 	return r.subTemplate.Execute(w, data)
 }
 
-type propData struct {
-	Path          string
-	DisplayType   string
-	ReqStr        string
-	FirstDesc     string
-	RemainingDesc string
-	Default       interface{}
-	Enum          []interface{}
-}
+func (r *TextRenderer) RenderType(w io.Writer, s *subsystem.Subsystem, typ runtime.Type, schema io.Reader) error {
+	tw := table.NewWriter()
+	tw.SetOutputMirror(w)
 
-func (r *TextRenderer) RenderType(w io.Writer, s *subsystem.Subsystem, name string, doc *jsonschema.TypeDoc) error {
-	var props []propData
-	if len(doc.Properties) > 0 {
-		sortedProps := append([]jsonschema.PropertyDoc{}, doc.Properties...)
-		sort.Slice(sortedProps, func(i, j int) bool { return sortedProps[i].Path < sortedProps[j].Path })
+	unmarshaled, err := jsonschema.UnmarshalJSON(schema)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal JSON schema: %w", err)
+	}
 
-		for _, p := range sortedProps {
-			reqStr := "[ ]"
-			if p.Required {
-				reqStr = "[x]"
-			}
-			typ := p.Type
-			if p.Type == "array" && p.ItemsType != "" {
-				typ = fmt.Sprintf("[]%s", p.ItemsType)
-			}
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource(typ.String(), unmarshaled); err != nil {
+		return fmt.Errorf("failed to add resource: %w", err)
+	}
 
-			descLines := strings.Split(p.Description, "\n")
-			first := ""
-			remaining := ""
-			if len(descLines) > 0 {
-				first = descLines[0]
-				if len(descLines) > 1 {
-					remaining = strings.Join(descLines[1:], "\n")
+	compiled, err := compiler.Compile(typ.String())
+	if err != nil {
+		return fmt.Errorf("failed to compile schema: %w", err)
+	}
+
+	current := compiled
+	// TODO recursive descent based on optional field path
+
+	var title string
+	if current.Title != "" {
+		title = colorBold + current.Title + colorReset + fmt.Sprintf(" (%s)", typ.String())
+	} else {
+		title = colorBold + typ.String() + colorReset
+	}
+	if current.Description != "" {
+		title += "\n" + current.Description
+	}
+
+	tw.SetTitle(title)
+
+	tw.AppendHeader(table.Row{"Field Name", "Type", "Required", "Description"})
+	for id, prop := range current.Properties {
+		ts := ""
+		if typ := prop.Types; typ != nil {
+			ts = typ.String()
+		}
+
+		desc := prop.Description
+
+		if prop.Enum != nil {
+			desc += "\nPossible values: " + fmt.Sprintf("%v", prop.Enum.Values)
+		}
+		if prop.OneOf != nil {
+			var oneOfDesc []string
+			for _, of := range prop.OneOf {
+				if of.Const != nil {
+					oneOfDesc = append(oneOfDesc, fmt.Sprintf("%v", *of.Const))
 				}
 			}
-
-			props = append(props, propData{
-				Path:          p.Path,
-				DisplayType:   typ,
-				ReqStr:        reqStr,
-				FirstDesc:     first,
-				RemainingDesc: remaining,
-				Default:       p.Default,
-				Enum:          p.Enum,
-			})
+			desc += "\nPossible values: " + fmt.Sprintf("%v", oneOfDesc)
 		}
+
+		tw.AppendRow(table.Row{colorBold + id + colorReset, ts, slices.Contains(current.Required, id), desc})
 	}
 
-	data := struct {
-		Name       string
-		Subsystem  *subsystem.Subsystem
-		Doc        *jsonschema.TypeDoc
-		Properties []propData
-	}{
-		Name:       name,
-		Subsystem:  s,
-		Doc:        doc,
-		Properties: props,
-	}
-
-	return r.typTemplate.Execute(w, data)
+	tw.Render()
+	return nil
 }

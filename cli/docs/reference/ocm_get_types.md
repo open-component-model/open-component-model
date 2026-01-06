@@ -1,5 +1,5 @@
 ---
-title: ocm describe types
+title: ocm get types
 description: Describe OCM types and their configuration schema.
 suppressTitle: true
 toc: true
@@ -7,7 +7,7 @@ sidebar:
   collapsed: true
 ---
 
-## ocm describe types
+## ocm get types
 
 Describe OCM types and their configuration schema
 
@@ -19,7 +19,7 @@ If a subsystem is specified, it lists all types in that subsystem.
 If both subsystem and type are specified, it shows detailed documentation for that type.
 
 ```
-ocm describe types [subsystem [type]] [flags]
+ocm get types [subsystem [type]] [flags]
 ```
 
 ### Options
@@ -71,5 +71,5 @@ ocm describe types [subsystem [type]] [flags]
 
 ### SEE ALSO
 
-* [ocm describe]({{< relref "ocm_describe.md" >}})	 - Describe OCM entities or metadata
+* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
 

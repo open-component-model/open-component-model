@@ -4,8 +4,8 @@ import (
 	"io"
 
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/bindings/go/runtime"
 
-	"ocm.software/open-component-model/cli/internal/render/jsonschema"
 	"ocm.software/open-component-model/cli/internal/subsystem"
 )
 
@@ -18,5 +18,5 @@ type DocRenderer interface {
 	RenderSubsystem(w io.Writer, s *subsystem.Subsystem) error
 
 	// RenderType renders the documentation for a specific OCM type.
-	RenderType(w io.Writer, s *subsystem.Subsystem, name string, doc *jsonschema.TypeDoc) error
+	RenderType(w io.Writer, s *subsystem.Subsystem, typ runtime.Type, schema io.Reader) error
 }
