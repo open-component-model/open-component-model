@@ -69,18 +69,5 @@
       "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
       "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
     }
-  },
-  "x-docs": {
-    "diataxis": {
-      "explanation": [
-        {
-          "content": "# OCI Repository\n\nAn **OCI repository** in OCM is a structured representation of a repository namespace hosted by an OCI-compatible registry, as defined by the OCI Distribution Specification.\n\n---\n\n## Purpose\n\nOCM models an OCI repository explicitly to avoid ambiguity between:\n\n- **Registry endpoint** (host, scheme, port)\n- **Repository namespace** (path within the registry)\n\nThis enables consistent addressing, validation, and tooling behavior.\n\n---\n\n## Structure\n\nAn OCM OCI repository is defined by two parts:\n\n- **BaseURL**  \n  The registry endpoint (e.g. `ghcr.io`, `https://registry.example.com:5000`)\n\n- **SubPath**  \n  The repository namespace within the registry (e.g. `open-component-model/ocm`)\n\nTogether, they uniquely identify the repository location.\n\n---\n\n## Why This Matters\n\nExplicit repository modeling allows OCM to:\n\n- Normalize user input (embedded paths vs. explicit subpaths)\n- Support multiple repositories per registry\n- Reason about transfers, mirroring, and relocation\n- Avoid implicit parsing rules in higher-level tooling\n\n---\n\n## Usage\n\nOCI repositories are used whenever OCM:\n\n- Pushes or pulls component versions\n- Resolves component references\n- Transfers components between registries\n\nThey are **configuration objects**, not artifacts.\n\n---\n\n## Summary\n\nAn OCM OCI repository:\n\n- Represents an OCI repository namespace explicitly\n- Separates registry endpoint from repository path\n- Provides a stable abstraction for OCM tooling\n- Remains fully compatible with OCI semantics",
-          "audience": [
-            "user",
-            "implementer"
-          ]
-        }
-      ]
-    }
   }
 }

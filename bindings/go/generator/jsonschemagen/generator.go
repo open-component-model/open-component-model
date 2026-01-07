@@ -1,9 +1,7 @@
 package jsonschemagen
 
 import (
-	"log/slog"
 	"maps"
-	"path/filepath"
 
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
@@ -57,13 +55,5 @@ func (g *generation) runForRoot(root *universe.TypeInfo) *JSONSchemaDraft202012 
 	maps.Copy(defs, g.external)
 
 	schema.Defs = defs
-
-	if docsMarkers := ExtractDocsMarkers(root.TypeSpec.Doc, root.GenDecl.Doc); len(docsMarkers) > 0 {
-		slog.Debug("discovered documentation markers for type", "type", root.TypeSpec.Name.Name, "markers", docsMarkers)
-		if err := ApplyDocsMarkers(schema, filepath.Dir(root.FilePath), docsMarkers); err != nil {
-			slog.Error("failed to apply documentation markers", "error", err)
-		}
-	}
-
 	return schema
 }

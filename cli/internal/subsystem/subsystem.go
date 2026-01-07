@@ -9,6 +9,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+func NewSubsystem(name, title, description string) *Subsystem {
+	return &Subsystem{
+		Name:        name,
+		Title:       title,
+		Description: description,
+		Scheme:      runtime.NewScheme(),
+	}
+}
+
 // Subsystem represents a logical grouping of OCM types with associated documentation.
 type Subsystem struct {
 	// Name is a computer-readable ID (e.g., "ocm-repository").

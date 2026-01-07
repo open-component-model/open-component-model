@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	"ocm.software/open-component-model/bindings/go/generator/universe"
-	"ocm.software/open-component-model/bindings/go/runtime/docs"
 )
 
 const (
@@ -53,8 +52,6 @@ type JSONSchemaDraft202012 struct {
 	Defs  map[string]*JSONSchemaDraft202012 `json:"$defs,omitempty"`
 
 	Items *JSONSchemaDraft202012 `json:"items,omitempty"`
-
-	XDocs *docs.XDocs `json:"x-docs,omitempty"`
 }
 
 type SchemaOrBool struct {

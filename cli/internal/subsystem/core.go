@@ -4,32 +4,75 @@ import (
 	"errors"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/runtime"
+)
+
+func init() {
+	Register(ocmRepositorySystem)
+	Register(ocmRepositoryListerSystem)
+	Register(ocmResourceRepositorySystem)
+	Register(inputSystem)
+	Register(credentialRepositorySystem)
+	Register(signingHandlerSystem)
+}
+
+var (
+	ocmRepositorySystem = NewSubsystem(
+		"ocm-repository",
+		"OCM Component Version Repositories",
+		"Repositories for storing and managing OCM component versions.",
+	)
+	ocmRepositoryListerSystem = NewSubsystem(
+		"ocm-repository-lister",
+		"OCM Component Listers",
+		"Listers for listing OCM component repositories. Can be seen as repository of versioned repositories",
+	)
+	ocmResourceRepositorySystem = NewSubsystem(
+		"ocm-resource-repository",
+		"OCM Resource Repositories",
+		"Repositories for storing and managing OCM resources.",
+	)
+	inputSystem = NewSubsystem(
+		"input",
+		"Resource/Source Input Methods",
+		"Input methods define how content is sourced and ingested into an OCM component version.",
+	)
+	credentialRepositorySystem = NewSubsystem(
+		"credential-repository",
+		"Credential Repositories",
+		"Repositories for storing and managing credentials so they can be referenced in the OCM credential graph.",
+	)
+	signingHandlerSystem = NewSubsystem(
+		"signing-handler",
+		"Signing Handlers",
+		"Signing handlers are responsible for signing and verification of component versions.",
+	)
+	// TODO: blob transformer registry does not yet expose a scheme
+	//blobTransformerSystem = NewSubsystem(
+	//	"blob-transformer",
+	//	"Blob Transformers",
+	//	"Blob transformers are responsible for transforming blobs into other formats. They are mainly used for input digestion
+	//	when adding new resources into a component version",
+	//)
+
+	// TODO: transformer registry does not yet expose a scheme
+	// graphTransformer = NewSubsystem(
+	// 	"graph-transformer",
+	// 	"Transformation Graph Transformers",
+	// 	"Transformation Graph Transformers are responsible for acting as atomic transforming units inside a transformation graph.
+	//	Transformation Graphs are used in complex operations such as transferring of component versions, but can also delegate
+	//  to other plugins and transformer types.",
+	// )
 )
 
 func RegisterPluginManager(pm *manager.PluginManager) error {
 	return errors.Join(
-		inputSystem.Scheme.RegisterScheme(pm.InputRegistry.InputRepositoryScheme()),
 		ocmRepositorySystem.Scheme.RegisterScheme(pm.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryScheme()),
+		ocmRepositoryListerSystem.Scheme.RegisterScheme(pm.ComponentListerRegistry.GetComponentVersionRepositoryScheme()),
+		ocmResourceRepositorySystem.Scheme.RegisterScheme(pm.ResourcePluginRegistry.ResourceScheme()),
+		inputSystem.Scheme.RegisterScheme(pm.InputRegistry.InputRepositoryScheme()),
+		credentialRepositorySystem.Scheme.RegisterScheme(pm.CredentialRepositoryRegistry.RepositoryScheme()),
+		signingHandlerSystem.Scheme.RegisterScheme(pm.SigningRegistry.ResourceScheme()),
+		// blobTransformerSystem.Scheme.RegisterScheme(pm.BlobTransformerRegistry.TransformerScheme())
+		// graphTransformer.Scheme.RegisterScheme(pm.GraphTransformerRegistry.TransformerScheme())
 	)
-}
-
-var (
-	inputSystem = &Subsystem{
-		Name:        "input",
-		Title:       "Resource/Source Input Methods",
-		Description: "Input methods define how content is sourced and ingested into an OCM component version.",
-		Scheme:      runtime.NewScheme(),
-	}
-	ocmRepositorySystem = &Subsystem{
-		Name:        "ocm-repository",
-		Title:       "OCM Component Version Repositories",
-		Description: "Repositories for storing and managing OCM component versions.",
-		Scheme:      runtime.NewScheme(),
-	}
-)
-
-func init() {
-	Register(inputSystem)
-	Register(ocmRepositorySystem)
 }

@@ -24,7 +24,6 @@ const (
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
-// +ocm:jsonschema-gen:docs:diataxis:explanation=docs/concepts/oci-repository.md,audience=user,implementer
 type Repository struct {
 	// +ocm:jsonschema-gen:enum=OCIRepository/v1,OCI/v1,oci/v1,OCIRegistry/v1,ociRegistry/v1
 	// +ocm:jsonschema-gen:enum:deprecated=OCIRepository,OCI,oci,OCIRegistry,ociRegistry
