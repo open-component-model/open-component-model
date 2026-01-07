@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -195,7 +196,7 @@ func getGroupFromAPIVersion(apiVersion string) string {
 }
 
 var _ = Describe("ApplySet Pruning Tests", func() {
-	FContext("when testing pruning with OCM deployer", func() {
+	Context("when testing pruning with OCM deployer", func() {
 		var example os.DirEntry
 		for _, e := range examples {
 			// skip other examples
@@ -210,37 +211,68 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			example = e
 		}
 
-		It("should verify ApplySet labels and pruning behavior", func(ctx SpecContext) {
-			By("creating and transferring the component version")
+		reqFiles := []string{ComponentConstructor, Bootstrap}
+
+		It("should deploy the example "+example.Name(), func(ctx SpecContext) {
+			By("validating the example directory " + example.Name())
+			var files []string
+			Expect(filepath.WalkDir(
+				filepath.Join(examplesDir, example.Name()),
+				func(path string, d os.DirEntry, err error) error {
+					if err != nil {
+						return err
+					}
+					if d.IsDir() {
+						return nil
+					}
+					files = append(files, d.Name())
+					return nil
+				})).To(Succeed())
+
+			Expect(files).To(ContainElements(reqFiles), "required files %s not found in example directory %q", reqFiles, example.Name())
+
+			By("creating and transferring a component version for " + example.Name())
+			// If directory contains a private key, the component version must signed.
+			signingKey := ""
+			if slices.Contains(files, PrivateKey) {
+				signingKey = filepath.Join(examplesDir, example.Name(), PrivateKey)
+			}
 			Expect(utils.PrepareOCMComponent(
 				ctx,
 				example.Name(),
 				filepath.Join(examplesDir, example.Name(), ComponentConstructor),
 				imageRegistry,
-				"", // No signing
+				signingKey,
 			)).To(Succeed())
 
 			By("bootstrapping the example")
 			Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
 
-			By("making service account cluster admin for k8s-manifest deployment")
+			// Delete first to ensure idempotency across multiple test runs
 			_ = utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")
 			Expect(utils.MakeServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
 
-			By("waiting for the deployer to be ready")
-			deployerName := "deployer.delivery.ocm.software/" + example.Name() + "-deployer"
-			Expect(utils.WaitForResource(ctx, "condition=Ready=true", timeout, deployerName)).To(Succeed())
+			name := ""
 
 			By("waiting for the first deployment to be ready")
-			Expect(utils.WaitForResource(ctx, "condition=Available", timeout, "deployment.apps/"+example.Name()+"-podinfo")).To(Succeed())
+			name = "deployment.apps/" + example.Name() + "-podinfo"
+			Expect(utils.WaitForResource(ctx, "create", timeout, name)).To(Succeed())
+			Expect(utils.WaitForResource(ctx, "condition=Available", timeout, name)).To(Succeed())
+			Expect(utils.WaitForResource(
+				ctx, "condition=Ready=true",
+				timeout,
+				"pod", "-l", "app.kubernetes.io/name="+example.Name()+"-podinfo",
+			)).To(Succeed())
 
-			By("verifying podinfo-2 deployment exists")
-			// Just verify it exists, don't wait for Available since it might be slower
-			Eventually(func() error {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "deployment.apps/"+example.Name()+"-podinfo-2", "-n", "default")
-				_, err := utils.Run(cmd)
-				return err
-			}, timeout).Should(Succeed(), "podinfo-2 deployment should exist")
+			name = "deployment.apps/" + example.Name() + "-podinfo-2"
+			By("waiting for the second deployment to be ready")
+			Expect(utils.WaitForResource(ctx, "create", timeout, name)).To(Succeed())
+			Expect(utils.WaitForResource(ctx, "condition=Available", timeout, name)).To(Succeed())
+			Expect(utils.WaitForResource(
+				ctx, "condition=Ready=true",
+				timeout,
+				"pod", "-l", "app.kubernetes.io/name="+example.Name()+"-podinfo",
+			)).To(Succeed())
 
 			By("verifying ApplySet labels and annotations on the deployer")
 			verifyDeployerApplySetLabelsAndAnnotations(ctx, example.Name())
@@ -253,16 +285,29 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			// Create v2 component
 			Expect(utils.PrepareOCMComponent(
 				ctx,
-				example.Name()+"-v2",
-				filepath.Join(examplesDir, example.Name(), "component-constructor-v2.yaml"),
+				example.Name()+"-2",
+				filepath.Join(examplesDir, example.Name(), "component-constructor-2.yaml"),
 				imageRegistry,
 				"", // No signing
 			)).To(Succeed())
 
+			// inline update semver of
+			// kubectl patch component applyset-pruning-component \
+			//  --type merge \
+			//  -p '{"spec":{"semver":"2.0.0"}}'
+			execCmd := exec.CommandContext(ctx, "kubectl", "patch",
+				"component.delivery.ocm.software/"+example.Name()+"-component",
+				"--type", "merge",
+				"-p", `{"spec":{"semver":"2.0.0"}}`,
+				"-n", "default",
+			)
+			_, err := utils.Run(execCmd)
+			Expect(err).NotTo(HaveOccurred(), "Patching Component semver should succeed")
+
 			By("waiting for the Component to update to v2.0.0")
 			componentName := "component.delivery.ocm.software/" + example.Name() + "-component"
 			Eventually(func() string {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", componentName, "-n", "default", "-o", "jsonpath={.status.componentDescriptor.componentDescriptorRef.version}")
+				cmd := exec.CommandContext(ctx, "kubectl", "get", componentName, "-n", "default", "-o", "{.status.component.version}")
 				output, err := utils.Run(cmd)
 				if err != nil {
 					return ""
@@ -273,9 +318,6 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			By("waiting for the Resource to update")
 			resourceName := "resource.delivery.ocm.software/" + example.Name() + "-resource"
 			Expect(utils.WaitForResource(ctx, "condition=Ready=true", timeout, resourceName)).To(Succeed())
-
-			By("waiting for the deployer to reconcile the updated version")
-			Expect(utils.WaitForResource(ctx, "condition=Ready=true", timeout, deployerName)).To(Succeed())
 
 			By("verifying that podinfo-2 deployment has been pruned")
 			// podinfo-2 should no longer exist - check using label selector

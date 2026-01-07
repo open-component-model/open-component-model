@@ -54,6 +54,9 @@ type ToolingID struct {
 	Version string
 }
 
+// TODO check for managed fields, error out in that case
+// reuse object, prt - maybe use the ocm obj instead
+
 func (t ToolingID) String() string {
 	return fmt.Sprintf("%s/%s", t.Name, t.Version)
 }
@@ -339,6 +342,8 @@ func (a *applySet) Add(ctx context.Context, obj *unstructured.Unstructured) (*un
 		}
 	}
 
+	// remove managed fields from obj
+	obj = obj.DeepCopy()
 	a.desiredObjects = append(a.desiredObjects, obj)
 	logger.Info("added object to applyset")
 
@@ -432,6 +437,7 @@ func (a *applySet) applyAndPrune(ctx context.Context, prune bool, dryRun bool) (
 	// Apply all desired objects
 	logger.Info("applying objects", "count", len(a.desiredObjects))
 	if err := a.apply(ctx, result, dryRun); err != nil {
+		logger.Error("error during apply", "error", err)
 		return result, err
 	}
 
@@ -439,12 +445,14 @@ func (a *applySet) applyAndPrune(ctx context.Context, prune bool, dryRun bool) (
 	if prune {
 		logger.Info("pruning objects")
 		if err := a.prune(ctx, result, dryRun); err != nil {
+			logger.Error("error during prune", "error", err)
 			return result, err
 		}
 
 		// Update parent with only the current set after pruning
 		if !dryRun {
 			if err := a.updateParentLabelsAndAnnotations(ctx, false); err != nil {
+				logger.Error("error updating parent after prune", "error", err)
 				return result, fmt.Errorf("unable to update parent after pruning: %w", err)
 			}
 		}
@@ -469,7 +477,15 @@ func (a *applySet) apply(ctx context.Context, result *Result, dryRun bool) error
 
 	for _, obj := range a.desiredObjects {
 		eg.Go(func() error {
+			logger := slogcontext.FromCtx(ctx).With("name", obj.GetName(),
+				"namespace", obj.GetNamespace(),
+				"gvk", obj.GetObjectKind().GroupVersionKind().String(),
+			)
+
 			applied, err := a.applyObject(egctx, obj, dryRun)
+			if err != nil {
+				logger.Error("error applying object", "error", err)
+			}
 			result.recordApplied(applied, err)
 			return nil // Don't stop on individual errors
 		})
@@ -520,7 +536,7 @@ func (a *applySet) prune(ctx context.Context, result *Result, dryRun bool) error
 
 	logger.Info("found objects to prune", "count", len(pruneObjects))
 
-	deleteOptions := []client.DeleteOption{}
+	var deleteOptions []client.DeleteOption
 	if dryRun {
 		deleteOptions = append(deleteOptions, client.DryRunAll)
 	}
@@ -532,21 +548,25 @@ func (a *applySet) prune(ctx context.Context, result *Result, dryRun bool) error
 		deleteObj.SetName(obj.Name)
 		deleteObj.SetNamespace(obj.Namespace)
 
-		err := a.k8sClient.Delete(ctx, deleteObj, deleteOptions...)
+		logger = logger.With(
+			"name", obj.Name,
+			"namespace", obj.Namespace,
+			"gvk", obj.GVK.String(),
+		)
 
+		err := a.k8sClient.Delete(ctx, deleteObj, deleteOptions...)
+		if err != nil && !apierrors.IsNotFound(err) {
+			logger.Error("failed to delete object",
+				"error", err,
+			)
+		}
 		result.recordPruned(obj, err)
 
 		if err != nil && !apierrors.IsNotFound(err) {
 			logger.Error("failed to prune object",
-				"name", obj.Name,
-				"namespace", obj.Namespace,
-				"gvk", obj.GVK.String(),
 				"error", err)
 		} else {
-			logger.Info("pruned object",
-				"name", obj.Name,
-				"namespace", obj.Namespace,
-				"gvk", obj.GVK.String())
+			logger.Info("pruned object")
 		}
 	}
 

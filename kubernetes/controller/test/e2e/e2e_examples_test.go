@@ -25,10 +25,6 @@ const (
 var _ = Describe("controller", func() {
 	Context("examples", func() {
 		for _, example := range examples {
-			// do not test applyset in here
-			if example.Name() == "applyset-pruning" {
-				continue
-			}
 			fInfo, err := os.Stat(filepath.Join(examplesDir, example.Name()))
 			Expect(err).NotTo(HaveOccurred())
 			if !fInfo.IsDir() {

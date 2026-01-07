@@ -102,7 +102,26 @@ spec:
       volumes:
         - emptyDir: {}
           name: data
-
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: podinfo-2
+  labels:
+    app: applyset-pruning-podinfo-2
+spec:
+  ports:
+    - name: http
+      port: 9898
+      protocol: TCP
+      targetPort: http
+    - name: grpc
+      port: 9999
+      protocol: TCP
+      targetPort: grpc
+  selector:
+    app: applyset-pruning-podinfo-2
+  type: ClusterIP
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -154,7 +173,7 @@ spec:
                 - localhost:9898/healthz
             initialDelaySeconds: 5
             timeoutSeconds: 5
-          name: podinfod-2
+          name: podinfod
           ports:
             - containerPort: 9898
               name: http
