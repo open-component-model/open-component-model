@@ -1,4 +1,4 @@
-package applyset
+package applyset_test
 
 import (
 	"testing"
@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -274,7 +275,7 @@ func Test_ComputeID(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			id := ComputeID(tc.parent)
+			id := applyset.ComputeID(tc.parent)
 			assert.Equal(t, tc.expectedID, id)
 
 			// Verify the ID format
@@ -304,8 +305,8 @@ func Test_ComputeID_Consistency(t *testing.T) {
 	parent1 := createParent()
 	parent2 := createParent()
 
-	id1 := ComputeID(parent1)
-	id2 := ComputeID(parent2)
+	id1 := applyset.ComputeID(parent1)
+	id2 := applyset.ComputeID(parent2)
 
 	assert.Equal(t, id1, id2, "Same parent configuration should produce the same ID")
 }
@@ -357,7 +358,7 @@ func Test_ComputeID_Uniqueness(t *testing.T) {
 
 	ids := make(map[string]bool)
 	for i, parent := range parents {
-		id := ComputeID(parent)
+		id := applyset.ComputeID(parent)
 		require.NotEmpty(t, id, "ID should not be empty for parent %d", i)
 
 		if ids[id] {
@@ -383,7 +384,7 @@ func Test_ComputeID_Format(t *testing.T) {
 		Kind:    "ConfigMap",
 	})
 
-	id := ComputeID(cm)
+	id := applyset.ComputeID(cm)
 
 	// Verify format: applyset-<base64-encoded-sha256>
 	assert.True(t, len(id) > len("applyset-"), "ID should have content after prefix")
@@ -429,8 +430,8 @@ func Test_ComputeID_EmptyNamespace(t *testing.T) {
 		Kind:    "Namespace",
 	})
 
-	id1 := ComputeID(ns1)
-	id2 := ComputeID(ns2)
+	id1 := applyset.ComputeID(ns1)
+	id2 := applyset.ComputeID(ns2)
 
 	assert.Equal(t, id1, id2, "Explicit and implicit empty namespace should produce same ID")
 	assert.NotEmpty(t, id1, "ID should not be empty for cluster-scoped resource")
