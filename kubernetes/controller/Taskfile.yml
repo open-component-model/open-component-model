@@ -51,6 +51,8 @@ tasks:
 
   test:
     deps: [manifests, generate, envtest]
+    env:
+      ENVTEST_K8S_VERSION: '{{.ENVTEST_K8S_VERSION}}'
     cmds:
       - |
         KUBEBUILDER_ASSETS=$({{ .ENVTEST }} use {{ .ENVTEST_K8S_VERSION }} --bin-dir {{.LOCALBIN}} -p path)
