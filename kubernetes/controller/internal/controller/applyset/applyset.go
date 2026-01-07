@@ -98,7 +98,7 @@ type Set interface {
 // Result contains the outcome of an Apply or DryRun operation.
 type Result struct {
 	// Applied contains the successfully applied objects.
-	Applied []AppliedObject
+	Applied []object
 
 	// Pruned contains the successfully pruned (deleted) objects.
 	Pruned []PrunedObject
@@ -109,8 +109,8 @@ type Result struct {
 	mu sync.Mutex
 }
 
-// AppliedObject represents an object that was applied.
-type AppliedObject struct {
+// object represents an object that was applied.
+type object struct {
 	Object *unstructured.Unstructured
 	Error  error
 }
@@ -127,7 +127,7 @@ type PrunedObject struct {
 func (r *Result) recordApplied(obj *unstructured.Unstructured, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.Applied = append(r.Applied, AppliedObject{Object: obj, Error: err})
+	r.Applied = append(r.Applied, object{Object: obj, Error: err})
 	if err != nil {
 		r.Errors = append(r.Errors, err)
 	}
@@ -417,7 +417,7 @@ func (a *applySet) applyAndPrune(ctx context.Context, prune bool, dryRun bool) (
 	logger := slogcontext.FromCtx(ctx).With("operation", "apply", "dryRun", dryRun, "prune", prune)
 
 	result := &Result{
-		Applied: make([]AppliedObject, 0, len(a.desiredObjects)),
+		Applied: make([]object, 0, len(a.desiredObjects)),
 		Pruned:  make([]PrunedObject, 0),
 		Errors:  make([]error, 0),
 	}
@@ -499,17 +499,14 @@ func (a *applySet) applyObject(
 		patchOptions = append(patchOptions, client.DryRunAll)
 	}
 
-	// Make a copy to apply
-	appliedObj := obj.DeepCopy()
-
-	err := a.k8sClient.Patch(ctx, appliedObj, client.Apply, patchOptions...)
+	err := a.k8sClient.Patch(ctx, obj, client.Apply, patchOptions...)
 	if err != nil {
 		logger.Error("failed to apply object", "error", err)
 		return nil, err
 	}
 
-	logger.Info("applied object", "resourceVersion", appliedObj.GetResourceVersion())
-	return appliedObj, nil
+	logger.Info("applied object", "resourceVersion", obj.GetResourceVersion())
+	return obj, nil
 }
 
 func (a *applySet) prune(ctx context.Context, result *Result, dryRun bool) error {
