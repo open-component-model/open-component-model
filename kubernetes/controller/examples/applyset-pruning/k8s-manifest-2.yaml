@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: podinfo-2
+  name: podinfo
   labels:
-    app: applyset-pruning-podinfo-2
+    app: applyset-pruning-podinfo
 spec:
   ports:
     - name: http
@@ -16,22 +16,22 @@ spec:
       protocol: TCP
       targetPort: grpc
   selector:
-    app: applyset-pruning-podinfo-2
+    app: applyset-pruning-podinfo
   type: ClusterIP
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: applyset-pruning-podinfo-2
+  name: applyset-pruning-podinfo
   labels:
-    app: podinfo-2
+    app: podinfo
 spec:
   minReadySeconds: 3
   progressDeadlineSeconds: 60
   revisionHistoryLimit: 5
   selector:
     matchLabels:
-      app: podinfo-2
+      app: podinfo
   strategy:
     rollingUpdate:
       maxUnavailable: 0
@@ -42,8 +42,8 @@ spec:
         prometheus.io/port: "9797"
         prometheus.io/scrape: "true"
       labels:
-        app: podinfo-2
-        app.kubernetes.io/name: applyset-pruning-podinfo-2
+        app: podinfo
+        app.kubernetes.io/name: applyset-pruning-podinfo
     spec:
       containers:
         - command:
@@ -69,7 +69,7 @@ spec:
                 - localhost:9898/healthz
             initialDelaySeconds: 5
             timeoutSeconds: 5
-          name: podinfod-2
+          name: podinfod
           ports:
             - containerPort: 9898
               name: http
@@ -100,5 +100,5 @@ spec:
             - mountPath: /data
               name: data
       volumes:
-        - emptyDir: {}
+        - emptyDir: { }
           name: data

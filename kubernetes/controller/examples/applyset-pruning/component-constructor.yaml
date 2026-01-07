@@ -4,15 +4,9 @@ components:
     provider:
       name: ocm.software
     resources:
-      - name: k8s-manifest-resource
+      - name: applyset-pruning-resource
         type: blob
         version: "1.0.0"
         input:
           type: file
           path: ./k8s-manifest.yaml
-      - name: k8s-manifest-resource-2
-        type: blob
-        version: "1.0.0"
-        input:
-          type: file
-          path: ./k8s-manifest-2.yaml
