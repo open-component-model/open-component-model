@@ -328,6 +328,9 @@ func (a *applySet) Add(ctx context.Context, obj *unstructured.Unstructured) (*un
 			ns = metav1.NamespaceDefault
 		}
 	}
+	if ns != obj.GetNamespace() {
+		obj.SetNamespace(ns)
+	}
 
 	err = a.k8sClient.Get(ctx, client.ObjectKey{
 		Name:      obj.GetName(),
