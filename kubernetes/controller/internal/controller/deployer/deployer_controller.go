@@ -295,7 +295,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to download resource from OCM or retrieve it from the cache: %w", err)
 	}
 
-	// TODO If needed in the future, we can make pruning configurable via the deployer spec.
+	// TODO(matthiasbruns)
+	// If needed in the future, we can make pruning configurable via the deployer spec.
 	const enablePruning = true
 
 	if err = r.applyWithApplySet(ctx, resource, deployer, objs, enablePruning); err != nil {
@@ -588,17 +589,6 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 		Concurrency: runtime.NumCPU(),
 	}
 
-	// client -> client / go / client
-
-	// REMOVE -> Upstream Lib (K8s):
-	// Dynamic Client: https://caiorcferreira.github.io/post/the-kubernetes-dynamic-client/
-	// https://pkg.go.dev/k8s.io/client-go/dynamic
-
-	// USE -> Controller Runtime (our operator):
-	// manager.Client: https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/client
-	// caiorcferreira.github.io
-	// The Kubernetes dynamic client
-	// A dive into a hidden tool to build Controllers and Operators
 	set, err := applyset.New(ctx, deployer, r.Client, r.resourceRESTMapper, applySetConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create ApplySet: %w", err)
@@ -608,26 +598,23 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 
 	// Add all objects to the ApplySet
 	for _, obj := range objs {
-		// Clone the object to avoid modifying the original
-		objCopy := obj.DeepCopy()
-
 		// Set ownership labels and annotations (preserving existing behavior)
-		setOwnershipLabels(objCopy, resource, deployer)
-		setOwnershipAnnotations(objCopy, resource)
+		setOwnershipLabels(obj, resource, deployer)
+		setOwnershipAnnotations(obj, resource)
 
 		// Set controller reference
-		if err := controllerutil.SetControllerReference(deployer, objCopy, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference on object %s/%s: %w", objCopy.GetNamespace(), objCopy.GetName(), err)
+		if err := controllerutil.SetControllerReference(deployer, obj, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
 		}
 
 		// Default namespace and apiVersion if needed
-		if err := r.defaultObj(ctx, resource, objCopy); err != nil {
-			return fmt.Errorf("failed to default object %s/%s: %w", objCopy.GetNamespace(), objCopy.GetName(), err)
+		if err := r.defaultObj(ctx, resource, obj); err != nil {
+			return fmt.Errorf("failed to default object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
 		}
 
 		// Add to the ApplySet
-		if _, err := set.Add(ctx, objCopy); err != nil {
-			return fmt.Errorf("failed to add object %s/%s to ApplySet: %w", objCopy.GetNamespace(), objCopy.GetName(), err)
+		if _, err := set.Add(ctx, obj); err != nil {
+			return fmt.Errorf("failed to add object %s/%s to ApplySet: %w", obj.GetNamespace(), obj.GetName(), err)
 		}
 	}
 
