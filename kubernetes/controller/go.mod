@@ -38,15 +38,15 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260102115023-ca7c68fe3c03
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260102115023-ca7c68fe3c03
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260107082047-3b8abf72f590
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260107082047-3b8abf72f590
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha6
 	ocm.software/open-component-model/bindings/go/oci v0.0.24
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260102115023-ca7c68fe3c03
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260107082047-3b8abf72f590
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260102115023-ca7c68fe3c03
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260107082047-3b8abf72f590
 )
 
 require (
@@ -255,7 +255,7 @@ require (
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinburke/ssh_config v1.4.0 // indirect
-	github.com/klauspost/compress v1.18.1 // indirect
+	github.com/klauspost/compress v1.18.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
@@ -428,7 +428,5 @@ replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59
 
 // TODO: remove once mandelsoft utils no longer has an unreleased version of vfs as dep
 replace github.com/mandelsoft/vfs => github.com/mandelsoft/vfs v0.4.4
-
-replace github.com/klauspost/compress => github.com/klauspost/compress v1.18.0
 
 replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.0
