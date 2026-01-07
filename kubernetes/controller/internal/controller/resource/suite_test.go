@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -28,8 +28,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
@@ -126,28 +124,7 @@ var _ = BeforeSuite(func() {
 
 	// Setup plugin manager for new architecture
 	pm := manager.NewPluginManager(ctx)
-	pluginScheme := ocmruntime.NewScheme()
-	pluginScheme.MustRegisterWithAlias(&ociv1.Repository{},
-		ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.Type),
-		ocmruntime.NewVersionedType(ociv1.ShortType, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.ShortType),
-		ocmruntime.NewVersionedType(ociv1.ShortType2, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.ShortType2),
-		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType),
-		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType2, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType2),
-	)
-	pluginScheme.MustRegisterWithAlias(&ctfv1.Repository{},
-		ocmruntime.NewVersionedType(ctfv1.Type, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.Type),
-		ocmruntime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.ShortType),
-		ocmruntime.NewVersionedType(ctfv1.ShortType2, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.ShortType2),
-	)
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(pluginScheme))
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(repository.Scheme))
 	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
 	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
 	Expect(err).ToNot(HaveOccurred())
