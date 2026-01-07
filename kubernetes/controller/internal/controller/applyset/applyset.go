@@ -54,9 +54,6 @@ type ToolingID struct {
 	Version string
 }
 
-// TODO check for managed fields, error out in that case
-// reuse object, prt - maybe use the ocm obj instead
-
 func (t ToolingID) String() string {
 	return fmt.Sprintf("%s/%s", t.Name, t.Version)
 }
@@ -604,9 +601,13 @@ func (a *applySet) findObjectsToPrune(ctx context.Context, appliedUIDs sets.Set[
 
 	var pruneObjects []PrunableObject
 	var mu sync.Mutex
-
 	eg, egctx := errgroup.WithContext(ctx)
-	eg.SetLimit(10) // Limit concurrent list operations
+
+	concurrency := a.concurrency
+	if concurrency <= 0 {
+		concurrency = 10
+	}
+	eg.SetLimit(concurrency) // Limit concurrent list operations
 
 	for _, gkStr := range gks {
 		eg.Go(func() error {
@@ -838,7 +839,7 @@ func (a *applySet) desiredParentAnnotations(useSuperset bool) (map[string]string
 		}
 	}
 
-	// Remove the parent's namespace from the list (it's implicit)
+	// Remove the parent's namespace from the list
 	if a.parent.GetNamespace() != "" {
 		nss.Delete(a.parent.GetNamespace())
 	}
