@@ -553,7 +553,9 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 	for _, obj := range objs {
 		// Set ownership labels and annotations (preserving existing behavior)
 		setOwnershipLabels(obj, resource, deployer)
+		logger.Info("set ownership labels", "labels", obj.GetLabels())
 		setOwnershipAnnotations(obj, resource)
+		logger.Info("set ownership annotations", "annotations", obj.GetAnnotations())
 
 		// Set controller reference
 		if err := controllerutil.SetControllerReference(deployer, obj, r.Scheme); err != nil {
