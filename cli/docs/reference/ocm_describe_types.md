@@ -25,8 +25,11 @@ ocm describe types [subsystem [type]] [flags]
 ### Options
 
 ```
-  -h, --help            help for types
-  -o, --output string   Output format (text, jsonschema). (default "text")
+  -h, --help               help for types
+  -o, --output enum        Output format (text, markdown, html).
+                           (must be one of [html jsonschema markdown text]) (default text)
+      --table-style enum   table output style
+                           (must be one of [StyleColoredBright StyleColoredDark StyleDefault]) (default StyleColoredDark)
 ```
 
 ### Options inherited from parent commands

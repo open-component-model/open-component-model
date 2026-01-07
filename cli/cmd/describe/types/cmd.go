@@ -3,24 +3,34 @@ package types
 import (
 	"bytes"
 	"fmt"
+	"maps"
+	"os"
 	"slices"
-	"sort"
+	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
+	"ocm.software/open-component-model/cli/internal/flags/enum"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/subsystem"
 )
 
+var styles = map[string]table.Style{
+	table.StyleDefault.Name:       table.StyleDefault,
+	table.StyleColoredDark.Name:   table.StyleColoredDark,
+	table.StyleColoredBright.Name: table.StyleColoredBright,
+}
+
 // New represents the command to describe OCM types.
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "types [subsystem [type]]",
-		Aliases: []string{"get"},
+		Aliases: []string{"type"},
 		Short:   "Describe OCM types and their configuration schema",
 		Long: `Describe OCM types registered in various subsystems.
 If no subsystem is specified, it lists all available subsystems.
@@ -31,7 +41,8 @@ If both subsystem and type are specified, it shows detailed documentation for th
 		},
 	}
 
-	cmd.Flags().StringP("output", "o", "text", "Output format (text, markdown, html).")
+	enum.VarP(cmd.Flags(), "output", "o", []string{"text", "markdown", "html", "jsonschema"}, "Output format (text, markdown, html).")
+	enum.Var(cmd.Flags(), "table-style", []string{table.StyleColoredDark.Name, table.StyleColoredBright.Name, table.StyleDefault.Name}, "table output style")
 	return cmd
 }
 
@@ -52,31 +63,25 @@ func run(cmd *cobra.Command, args []string) error {
 	return describeType(cmd, sub, args[1:])
 }
 
-const colorFmt = "\033[1;36m%s\033[0m"
-
 func listSubsystems(cmd *cobra.Command) error {
 	w := table.NewWriter()
-	w.SetOutputMirror(cmd.OutOrStdout())
-	style := table.StyleDefault
-	style.Box.PaddingLeft = ""
-	style.Options.DrawBorder = false
-	style.Options.SeparateRows = false
-	style.Options.SeparateColumns = true
-	style.Options.SeparateHeader = true
 
 	subsystems := subsystem.List()
-	sort.Slice(subsystems, func(i, j int) bool { return subsystems[i].Name < subsystems[j].Name })
 
-	w.AppendHeader(table.Row{fmt.Sprintf(colorFmt, "SUBSYSTEM"), fmt.Sprintf(colorFmt, "TYPES")})
+	w.SetTitle("Available Subsystems")
+	w.AppendHeader(table.Row{"subsystem", "types", "alias"})
 	w.SetColumnConfigs([]table.ColumnConfig{
 		{Number: 1, AutoMerge: true},
+		{Number: 2, AutoMerge: true},
+		{Number: 3},
 	})
 	for _, s := range subsystems {
-		rows := make([]table.Row, 0, len(s.Scheme.GetTypes()))
-		for typ, aliases := range s.Scheme.GetTypes() {
-			rows = append(rows, table.Row{s.Name, fmt.Sprintf("%s (%d aliases)", typ, len(aliases))})
+		typs := s.Scheme.GetTypes()
+		for _, typ := range slices.SortedFunc(maps.Keys(typs), runtimeSort) {
+			for _, alias := range slices.SortedFunc(slices.Values(typs[typ]), runtimeSort) {
+				w.AppendRow(table.Row{s.Name, typ, alias})
+			}
 		}
-		w.AppendRows(rows)
 		w.AppendSeparator()
 	}
 
@@ -84,23 +89,22 @@ func listSubsystems(cmd *cobra.Command) error {
 }
 
 func listTypes(cmd *cobra.Command, s *subsystem.Subsystem) error {
-
 	w := table.NewWriter()
-	w.SetOutputMirror(cmd.OutOrStdout())
-	w.Style().Title.Align = text.AlignCenter
-	w.SetTitle(fmt.Sprintf(colorFmt, s.Name) + "\n" + s.Title)
-	w.AppendHeader(table.Row{fmt.Sprintf(colorFmt, "TYPE"), fmt.Sprintf(colorFmt, "ALIAS")})
+	w.SetTitle(s.Description)
+	w.AppendHeader(table.Row{"type", "alias"})
 	w.SetColumnConfigs([]table.ColumnConfig{
 		{Number: 1, AutoMerge: true},
 	})
-	for typ, aliases := range s.Scheme.GetTypes() {
-		for _, alias := range aliases {
+	typs := s.Scheme.GetTypes()
+
+	for _, typ := range slices.SortedFunc(maps.Keys(typs), runtimeSort) {
+		for _, alias := range slices.SortedFunc(slices.Values(typs[typ]), runtimeSort) {
 			w.AppendRow(table.Row{typ, alias})
 		}
 	}
 
 	if related := subsystem.FindLinkedCommands(cmd, s.Name); len(related) > 0 {
-		w.AppendFooter(table.Row{"RELATED COMMANDS"})
+		w.AppendFooter(table.Row{"related commands"})
 		for _, related := range subsystem.FindLinkedCommands(cmd, s.Name) {
 			w.AppendRow(table.Row{related})
 		}
@@ -109,43 +113,24 @@ func listTypes(cmd *cobra.Command, s *subsystem.Subsystem) error {
 	return renderTable(cmd, w)
 }
 
-func renderTable(cmd *cobra.Command, w table.Writer) error {
-	switch outFormat, _ := cmd.Flags().GetString("output"); outFormat {
-	case "html":
-		w.RenderHTML()
-	case "markdown":
-		w.RenderMarkdown()
-	case "text":
-		w.Render()
-	default:
-		return fmt.Errorf("unknown output format: %s", outFormat)
-	}
-	return nil
-}
-
 func describeType(cmd *cobra.Command, s *subsystem.Subsystem, args []string) error {
 	if len(args) < 1 || len(args) > 2 {
 		return fmt.Errorf("expected exactly one type name and one optional field path, got: %s", args)
 	}
 	typeName := args[0]
 
-	var path fieldpath.Path
-	if len(args) == 2 {
-		var err error
-		path, err = fieldpath.Parse(args[1])
-		if err != nil {
-			return fmt.Errorf("parsing field path %q failed: %w", args[1], err)
-		}
-	}
-
 	typ, err := runtime.TypeFromString(typeName)
 	if err != nil {
 		return fmt.Errorf("invalid type name %s: %w", typeName, err)
 	}
 
+	if !s.Scheme.IsRegistered(typ) {
+		return fmt.Errorf("type %s is not registered in subsystem %s", typ, s.Name)
+	}
+
 	obj, err := s.Scheme.NewObject(typ)
 	if err != nil {
-		return fmt.Errorf("failed to create object for type %s: %w", typ, err)
+		return err
 	}
 
 	introspectable, ok := obj.(runtime.JSONSchemaIntrospectable)
@@ -154,9 +139,6 @@ func describeType(cmd *cobra.Command, s *subsystem.Subsystem, args []string) err
 	}
 
 	schema := introspectable.JSONSchema()
-
-	tw := table.NewWriter()
-	tw.SetOutputMirror(cmd.OutOrStdout())
 
 	unmarshaled, err := jsonschema.UnmarshalJSON(bytes.NewReader(schema))
 	if err != nil {
@@ -173,8 +155,21 @@ func describeType(cmd *cobra.Command, s *subsystem.Subsystem, args []string) err
 		return fmt.Errorf("failed to compile schema: %w", err)
 	}
 
+	if format, err := enum.Get(cmd.Flags(), "output"); err == nil && format == "jsonschema" {
+		_, err := cmd.OutOrStdout().Write(schema)
+		return fmt.Errorf("failed to render JSON schema: %w", err)
+	}
+
 	current := compiled
 
+	var path fieldpath.Path
+	if len(args) == 2 {
+		var err error
+		path, err = fieldpath.Parse(args[1])
+		if err != nil {
+			return fmt.Errorf("parsing field path %q failed: %w", args[1], err)
+		}
+	}
 	if len(path) > 0 {
 		for _, segment := range path {
 			if segment.Index != nil {
@@ -196,32 +191,58 @@ func describeType(cmd *cobra.Command, s *subsystem.Subsystem, args []string) err
 	} else {
 		title = typ.String()
 	}
-	title = fmt.Sprintf(colorFmt, title)
 	if current.Description != "" {
 		title += "\n" + current.Description
 	}
 
+	tw := table.NewWriter()
 	tw.SetTitle(title)
 
-	tw.AppendHeader(table.Row{"Field Name", "Type", "Required", "Description"})
+	tw.AppendHeader(table.Row{"field name", "type", "required", "description"})
+	tw.SetColumnConfigs([]table.ColumnConfig{
+		{Number: 1, AutoMerge: true},
+		{Number: 2},
+		{Number: 3},
+		{Number: 4, WidthMax: 100},
+	})
 	for id, prop := range current.Properties {
 		ts := ""
 		if typ := prop.Types; typ != nil {
 			ts = typ.String()
 		}
+		if ts == "" && prop.Ref != nil && prop.Ref.Types != nil {
+			ts = prop.Ref.Types.String()
+		}
 
 		desc := prop.Description
+		if desc == "" && prop.Ref != nil {
+			desc = prop.Ref.Description
+		}
 
-		if prop.Enum != nil {
+		enum := prop.Enum
+		if enum == nil && prop.Ref != nil {
+			enum = prop.Ref.Enum
+		}
+		if enum != nil {
 			desc += "\nPossible values: " + fmt.Sprintf("%v", prop.Enum.Values)
 		}
+
+		var oneOfDesc []string
 		if prop.OneOf != nil {
-			var oneOfDesc []string
 			for _, of := range prop.OneOf {
 				if of.Const != nil {
 					oneOfDesc = append(oneOfDesc, fmt.Sprintf("%v", *of.Const))
 				}
 			}
+		}
+		if prop.Ref != nil && prop.Ref.OneOf != nil {
+			for _, of := range prop.Ref.OneOf {
+				if of.Const != nil {
+					oneOfDesc = append(oneOfDesc, fmt.Sprintf("%v", *of.Const))
+				}
+			}
+		}
+		if len(oneOfDesc) > 0 {
 			desc += "\nPossible values: " + fmt.Sprintf("%v", oneOfDesc)
 		}
 
@@ -229,4 +250,55 @@ func describeType(cmd *cobra.Command, s *subsystem.Subsystem, args []string) err
 	}
 
 	return renderTable(cmd, tw)
+}
+
+func renderTable(cmd *cobra.Command, w table.Writer) error {
+	styleString, err := enum.Get(cmd.Flags(), "table-style")
+	if err != nil {
+		return err
+	}
+	style := styles[styleString]
+	style.Format.Header = text.FormatUpper
+	style.Format.Footer = text.FormatUpper
+
+	w.SetStyle(style)
+	if adjustStyleToCMD(cmd, &style) != nil {
+		return fmt.Errorf("failed to set max width for table")
+	}
+	w.SetStyle(style)
+
+	format, err := enum.Get(cmd.Flags(), "output")
+	if err != nil {
+		return err
+	}
+
+	var out string
+	switch format {
+	case "html":
+		out = w.RenderHTML()
+	case "markdown":
+		out = w.RenderMarkdown()
+	case "text":
+		out = w.Render()
+	default:
+		return fmt.Errorf("unknown output format: %s", format)
+	}
+	_, err = cmd.OutOrStdout().Write([]byte(out))
+	return err
+}
+
+func adjustStyleToCMD(cmd *cobra.Command, style *table.Style) error {
+	if f, ok := cmd.OutOrStdout().(*os.File); ok {
+		width, _, err := term.GetSize(int(f.Fd()))
+		if err != nil {
+			return fmt.Errorf("failed to get terminal size: %w", err)
+		}
+		style.Size.WidthMax = width
+		style.Size.WidthMin = width
+	}
+	return nil
+}
+
+var runtimeSort = func(a, b runtime.Type) int {
+	return strings.Compare(a.String(), b.String())
 }

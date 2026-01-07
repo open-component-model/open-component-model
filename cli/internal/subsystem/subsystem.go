@@ -1,6 +1,7 @@
 package subsystem
 
 import (
+	"sort"
 	"strings"
 	"sync"
 
@@ -9,10 +10,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func NewSubsystem(name, title, description string) *Subsystem {
+func NewSubsystem(name, description string) *Subsystem {
 	return &Subsystem{
 		Name:        name,
-		Title:       title,
 		Description: description,
 		Scheme:      runtime.NewScheme(),
 	}
@@ -22,8 +22,6 @@ func NewSubsystem(name, title, description string) *Subsystem {
 type Subsystem struct {
 	// Name is a computer-readable ID (e.g., "ocm-repository").
 	Name string
-	// Title is a human-readable title for the subsystem.
-	Title string
 	// Description is a high-level summary of the subsystem's purpose.
 	Description string
 	// Scheme is the runtime scheme providing the types for this subsystem.
@@ -88,7 +86,9 @@ func Get(name string) *Subsystem {
 
 // List returns all subsystems in the GlobalRegistry.
 func List() []*Subsystem {
-	return GlobalRegistry.List()
+	subsystems := GlobalRegistry.List()
+	sort.Slice(subsystems, func(i, j int) bool { return subsystems[i].Name < subsystems[j].Name })
+	return subsystems
 }
 
 // FindLinkedCommands searches the command tree for all commands that are linked to the given subsystem name.
