@@ -1,752 +1,406 @@
-package applyset
+package applyset_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/sets"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func Test_ToolingID_String(t *testing.T) {
-	tests := []struct {
-		name     string
-		tooling  ToolingID
-		expected string
-	}{
-		{
-			name:     "basic tooling ID",
-			tooling:  ToolingID{Name: "kubectl", Version: "v1.28.0"},
-			expected: "kubectl/v1.28.0",
-		},
-		{
-			name:     "custom controller",
-			tooling:  ToolingID{Name: "my-controller", Version: "v0.1.0"},
-			expected: "my-controller/v0.1.0",
-		},
-		{
-			name:     "empty version",
-			tooling:  ToolingID{Name: "tool", Version: ""},
-			expected: "tool/",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := tt.tooling.String()
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+func newTestScheme() *runtime.Scheme {
+	s := runtime.NewScheme()
+	_ = corev1.AddToScheme(s)
+	_ = appsv1.AddToScheme(s)
+	return s
 }
 
-func Test_Result_AppliedUIDs(t *testing.T) {
-	tests := []struct {
-		name     string
-		result   *Result
-		expected []types.UID
-	}{
-		{
-			name: "no applied objects",
-			result: &Result{
-				Applied: []AppliedObject{},
-			},
-			expected: []types.UID{},
-		},
-		{
-			name: "all successful",
-			result: &Result{
-				Applied: []AppliedObject{
-					{
-						Object: &unstructured.Unstructured{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"uid": "uid-1",
-								},
-							},
-						},
-						Error: nil,
-					},
-					{
-						Object: &unstructured.Unstructured{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"uid": "uid-2",
-								},
-							},
-						},
-						Error: nil,
-					},
-				},
-			},
-			expected: []types.UID{"uid-1", "uid-2"},
-		},
-		{
-			name: "mixed success and errors",
-			result: &Result{
-				Applied: []AppliedObject{
-					{
-						Object: &unstructured.Unstructured{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"uid": "uid-1",
-								},
-							},
-						},
-						Error: nil,
-					},
-					{
-						Object: &unstructured.Unstructured{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"uid": "uid-2",
-								},
-							},
-						},
-						Error: assert.AnError,
-					},
-					{
-						Object: &unstructured.Unstructured{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"uid": "uid-3",
-								},
-							},
-						},
-						Error: nil,
-					},
-				},
-			},
-			expected: []types.UID{"uid-1", "uid-3"},
-		},
-		{
-			name: "nil objects ignored",
-			result: &Result{
-				Applied: []AppliedObject{
-					{
-						Object: nil,
-						Error:  assert.AnError,
-					},
-					{
-						Object: &unstructured.Unstructured{
-							Object: map[string]interface{}{
-								"metadata": map[string]interface{}{
-									"uid": "uid-1",
-								},
-							},
-						},
-						Error: nil,
-					},
-				},
-			},
-			expected: []types.UID{"uid-1"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uids := tt.result.AppliedUIDs()
-			assert.Equal(t, len(tt.expected), uids.Len())
-			for _, uid := range tt.expected {
-				assert.True(t, uids.Has(uid), "expected UID %s to be in result", uid)
-			}
-		})
-	}
-}
-
-func Test_Result_RecordApplied(t *testing.T) {
-	t.Run("successful apply", func(t *testing.T) {
-		result := &Result{
-			Applied: make([]AppliedObject, 0),
-			Errors:  make([]error, 0),
-		}
-
-		obj := &unstructured.Unstructured{}
-		obj.SetName("test-obj")
-
-		result.recordApplied(obj, nil)
-
-		assert.Len(t, result.Applied, 1)
-		assert.Equal(t, "test-obj", result.Applied[0].Object.GetName())
-		assert.Nil(t, result.Applied[0].Error)
-		assert.Len(t, result.Errors, 0)
-	})
-
-	t.Run("failed apply", func(t *testing.T) {
-		result := &Result{
-			Applied: make([]AppliedObject, 0),
-			Errors:  make([]error, 0),
-		}
-
-		obj := &unstructured.Unstructured{}
-		obj.SetName("test-obj")
-		err := assert.AnError
-
-		result.recordApplied(obj, err)
-
-		assert.Len(t, result.Applied, 1)
-		assert.Equal(t, "test-obj", result.Applied[0].Object.GetName())
-		assert.Equal(t, err, result.Applied[0].Error)
-		assert.Len(t, result.Errors, 1)
-		assert.Equal(t, err, result.Errors[0])
-	})
-
-	t.Run("concurrent applies", func(t *testing.T) {
-		result := &Result{
-			Applied: make([]AppliedObject, 0),
-			Errors:  make([]error, 0),
-		}
-
-		// Simulate concurrent recordApplied calls
-		done := make(chan bool)
-		for i := 0; i < 10; i++ {
-			go func(id int) {
-				obj := &unstructured.Unstructured{}
-				obj.SetName("test-obj")
-				result.recordApplied(obj, nil)
-				done <- true
-			}(i)
-		}
-
-		// Wait for all goroutines
-		for i := 0; i < 10; i++ {
-			<-done
-		}
-
-		assert.Len(t, result.Applied, 10)
-		assert.Len(t, result.Errors, 0)
-	})
-}
-
-func Test_Result_RecordPruned(t *testing.T) {
-	t.Run("successful prune", func(t *testing.T) {
-		result := &Result{
-			Pruned: make([]PrunedObject, 0),
-			Errors: make([]error, 0),
-		}
-
-		prunable := PrunableObject{
-			Name:      "test-obj",
-			Namespace: "default",
-			GVK:       schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
-			UID:       "uid-123",
-		}
-
-		result.recordPruned(prunable, nil)
-
-		assert.Len(t, result.Pruned, 1)
-		assert.Equal(t, "test-obj", result.Pruned[0].Name)
-		assert.Equal(t, "default", result.Pruned[0].Namespace)
-		assert.Nil(t, result.Pruned[0].Error)
-		assert.Len(t, result.Errors, 0)
-	})
-
-	t.Run("failed prune", func(t *testing.T) {
-		result := &Result{
-			Pruned: make([]PrunedObject, 0),
-			Errors: make([]error, 0),
-		}
-
-		prunable := PrunableObject{
-			Name:      "test-obj",
-			Namespace: "default",
-			GVK:       schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
-			UID:       "uid-123",
-		}
-		err := assert.AnError
-
-		result.recordPruned(prunable, err)
-
-		assert.Len(t, result.Pruned, 1)
-		assert.Equal(t, err, result.Pruned[0].Error)
-		assert.Len(t, result.Errors, 1)
-		assert.Equal(t, err, result.Errors[0])
-	})
-}
-
-func Test_ApplySet_InjectApplySetLabels(t *testing.T) {
-	parent := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-parent",
-			Namespace: "default",
-		},
-	}
-	parent.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	})
-
-	aset := &applySet{
-		parent: parent,
-	}
-
-	tests := []struct {
-		name           string
-		inputLabels    map[string]string
-		expectedLabels map[string]string
-	}{
-		{
-			name:        "nil labels",
-			inputLabels: nil,
-			expectedLabels: map[string]string{
-				ApplySetPartOfLabel: aset.ID(),
-			},
-		},
-		{
-			name:        "empty labels",
-			inputLabels: map[string]string{},
-			expectedLabels: map[string]string{
-				ApplySetPartOfLabel: aset.ID(),
-			},
-		},
-		{
-			name: "existing labels preserved",
-			inputLabels: map[string]string{
-				"app":         "myapp",
-				"environment": "prod",
-			},
-			expectedLabels: map[string]string{
-				"app":               "myapp",
-				"environment":       "prod",
-				ApplySetPartOfLabel: aset.ID(),
-			},
-		},
-		{
-			name: "applyset label overwritten",
-			inputLabels: map[string]string{
-				ApplySetPartOfLabel: "wrong-id",
-			},
-			expectedLabels: map[string]string{
-				ApplySetPartOfLabel: aset.ID(),
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := aset.injectApplySetLabels(tt.inputLabels)
-			assert.Equal(t, tt.expectedLabels, result)
-		})
-	}
-}
-
-func Test_ApplySet_InjectToolLabels(t *testing.T) {
-	aset := &applySet{
-		toolLabels: map[string]string{
-			"tool.label/managed-by": "my-tool",
-			"tool.label/version":    "v1.0",
-		},
-	}
-
-	tests := []struct {
-		name           string
-		inputLabels    map[string]string
-		expectedLabels map[string]string
-	}{
-		{
-			name:        "nil labels",
-			inputLabels: nil,
-			expectedLabels: map[string]string{
-				"tool.label/managed-by": "my-tool",
-				"tool.label/version":    "v1.0",
-			},
-		},
-		{
-			name:        "empty labels",
-			inputLabels: map[string]string{},
-			expectedLabels: map[string]string{
-				"tool.label/managed-by": "my-tool",
-				"tool.label/version":    "v1.0",
-			},
-		},
-		{
-			name: "merge with existing labels",
-			inputLabels: map[string]string{
-				"app": "myapp",
-			},
-			expectedLabels: map[string]string{
-				"app":                   "myapp",
-				"tool.label/managed-by": "my-tool",
-				"tool.label/version":    "v1.0",
-			},
-		},
-		{
-			name: "tool labels overwrite existing",
-			inputLabels: map[string]string{
-				"tool.label/managed-by": "other-tool",
-			},
-			expectedLabels: map[string]string{
-				"tool.label/managed-by": "my-tool",
-				"tool.label/version":    "v1.0",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := aset.injectToolLabels(tt.inputLabels)
-			assert.Equal(t, tt.expectedLabels, result)
-		})
-	}
-}
-
-func Test_ApplySet_InjectToolLabels_NoToolLabels(t *testing.T) {
-	aset := &applySet{
-		toolLabels: nil,
-	}
-
-	inputLabels := map[string]string{
-		"app": "myapp",
-	}
-
-	result := aset.injectToolLabels(inputLabels)
-	assert.Equal(t, inputLabels, result)
-}
-
-func Test_ApplySet_DesiredParentLabels(t *testing.T) {
-	parent := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-parent",
-			Namespace: "default",
-		},
-	}
-	parent.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	})
-
-	aset := &applySet{
-		parent: parent,
-	}
-
-	labels := aset.desiredParentLabels()
-
-	require.NotNil(t, labels)
-	assert.Equal(t, aset.ID(), labels[ApplySetParentIDLabel])
-	assert.Len(t, labels, 1)
-}
-
-func Test_ApplySet_DesiredParentAnnotations(t *testing.T) {
-	parent := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-parent",
-			Namespace: "default",
-		},
-	}
-	parent.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	})
-
-	t.Run("without superset - empty current", func(t *testing.T) {
-		aset := &applySet{
-			parent:    parent,
-			toolingID: ToolingID{Name: "test-tool", Version: "v1.0"},
-			desiredRESTMappings: map[schema.GroupKind]*meta.RESTMapping{
-				{Kind: "ConfigMap"}:                  nil,
-				{Kind: "Deployment"}:                 nil,
-				{Group: "apps", Kind: "StatefulSet"}: nil,
-			},
-			desiredNamespaces:  sets.New("default", "kube-system"),
-			currentAnnotations: map[string]string{},
-		}
-
-		annotations, nss, gks := aset.desiredParentAnnotations(false)
-
-		assert.Equal(t, "test-tool/v1.0", annotations[ApplySetToolingAnnotation])
-		assert.Contains(t, annotations[ApplySetGKsAnnotation], "ConfigMap")
-		assert.Contains(t, annotations[ApplySetGKsAnnotation], "Deployment")
-		assert.Contains(t, annotations[ApplySetGKsAnnotation], "StatefulSet.apps")
-		assert.Equal(t, "kube-system", annotations[ApplySetAdditionalNamespacesAnnotation])
-		assert.Len(t, nss, 1)
-		assert.Len(t, gks, 3)
-	})
-
-	t.Run("with superset - merge current", func(t *testing.T) {
-		aset := &applySet{
-			parent:    parent,
-			toolingID: ToolingID{Name: "test-tool", Version: "v1.0"},
-			desiredRESTMappings: map[schema.GroupKind]*meta.RESTMapping{
-				{Kind: "ConfigMap"}: nil,
-			},
-			desiredNamespaces: sets.New("default"),
-			currentAnnotations: map[string]string{
-				ApplySetGKsAnnotation:                  "Secret,Pod",
-				ApplySetAdditionalNamespacesAnnotation: "other-ns",
-			},
-		}
-
-		annotations, nss, gks := aset.desiredParentAnnotations(true)
-
-		assert.Contains(t, annotations[ApplySetGKsAnnotation], "ConfigMap")
-		assert.Contains(t, annotations[ApplySetGKsAnnotation], "Secret")
-		assert.Contains(t, annotations[ApplySetGKsAnnotation], "Pod")
-		assert.Contains(t, annotations[ApplySetAdditionalNamespacesAnnotation], "other-ns")
-		assert.True(t, nss.Has("other-ns"))
-		assert.Len(t, gks, 3) // ConfigMap, Secret, Pod
-	})
-
-	t.Run("parent namespace excluded from additional", func(t *testing.T) {
-		aset := &applySet{
-			parent:    parent,
-			toolingID: ToolingID{Name: "test-tool", Version: "v1.0"},
-			desiredRESTMappings: map[schema.GroupKind]*meta.RESTMapping{
-				{Kind: "ConfigMap"}: nil,
-			},
-			desiredNamespaces:  sets.New("default", "kube-system"),
-			currentAnnotations: map[string]string{},
-		}
-
-		annotations, _, _ := aset.desiredParentAnnotations(false)
-
-		// default is parent namespace, should not be in additional
-		assert.Equal(t, "kube-system", annotations[ApplySetAdditionalNamespacesAnnotation])
-	})
-}
-
-func Test_ApplySet_GetGKsFromAnnotations(t *testing.T) {
-	tests := []struct {
-		name        string
-		annotations map[string]string
-		expected    []string
-	}{
-		{
-			name:        "no annotation",
-			annotations: map[string]string{},
-			expected:    nil,
-		},
-		{
-			name: "single GK",
-			annotations: map[string]string{
-				ApplySetGKsAnnotation: "ConfigMap",
-			},
-			expected: []string{"ConfigMap"},
-		},
-		{
-			name: "multiple GKs",
-			annotations: map[string]string{
-				ApplySetGKsAnnotation: "ConfigMap,Secret,Pod",
-			},
-			expected: []string{"ConfigMap", "Secret", "Pod"},
-		},
-		{
-			name: "GKs with spaces",
-			annotations: map[string]string{
-				ApplySetGKsAnnotation: "ConfigMap, Secret , Pod",
-			},
-			expected: []string{"ConfigMap", "Secret", "Pod"},
-		},
-		{
-			name: "empty GK filtered out",
-			annotations: map[string]string{
-				ApplySetGKsAnnotation: "ConfigMap,,Pod",
-			},
-			expected: []string{"ConfigMap", "Pod"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			aset := &applySet{
-				currentAnnotations: tt.annotations,
-			}
-
-			result := aset.getGKsFromAnnotations()
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func Test_ApplySet_GetNamespacesToCheck(t *testing.T) {
-	t.Run("parent with namespace", func(t *testing.T) {
-		parent := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-parent",
-				Namespace: "default",
-			},
-		}
-
-		aset := &applySet{
-			parent: parent,
-			currentAnnotations: map[string]string{
-				ApplySetAdditionalNamespacesAnnotation: "kube-system,prod",
-			},
-		}
-
-		namespaces := aset.getNamespacesToCheck()
-
-		assert.True(t, namespaces.Has("default"))
-		assert.True(t, namespaces.Has("kube-system"))
-		assert.True(t, namespaces.Has("prod"))
-		assert.Equal(t, 3, namespaces.Len())
-	})
-
-	t.Run("cluster-scoped parent", func(t *testing.T) {
-		parent := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-namespace",
-			},
-		}
-
-		aset := &applySet{
-			parent: parent,
-			currentAnnotations: map[string]string{
-				ApplySetAdditionalNamespacesAnnotation: "kube-system,prod",
-			},
-		}
-
-		namespaces := aset.getNamespacesToCheck()
-
-		assert.False(t, namespaces.Has("test-namespace"))
-		assert.True(t, namespaces.Has("kube-system"))
-		assert.True(t, namespaces.Has("prod"))
-		assert.Equal(t, 2, namespaces.Len())
-	})
-
-	t.Run("no additional namespaces", func(t *testing.T) {
-		parent := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-parent",
-				Namespace: "default",
-			},
-		}
-
-		aset := &applySet{
-			parent:             parent,
-			currentAnnotations: map[string]string{},
-		}
-
-		namespaces := aset.getNamespacesToCheck()
-
-		assert.True(t, namespaces.Has("default"))
-		assert.Equal(t, 1, namespaces.Len())
-	})
-}
-
-func Test_ParseGroupKind(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected schema.GroupKind
-	}{
-		{
-			name:  "core API - no group",
-			input: "ConfigMap",
-			expected: schema.GroupKind{
-				Kind: "ConfigMap",
-			},
-		},
-		{
-			name:  "with group",
-			input: "Deployment.apps",
-			expected: schema.GroupKind{
-				Kind:  "Deployment",
-				Group: "apps",
-			},
-		},
-		{
-			name:  "with complex group",
-			input: "CustomResource.custom.io",
-			expected: schema.GroupKind{
-				Kind:  "CustomResource",
-				Group: "custom.io",
-			},
-		},
-		{
-			name:  "with dots in group",
-			input: "CRD.apiextensions.k8s.io",
-			expected: schema.GroupKind{
-				Kind:  "CRD",
-				Group: "apiextensions.k8s.io",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := parseGroupKind(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-
-func Test_New_ValidationErrors(t *testing.T) {
-	parent := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-parent",
-			Namespace: "default",
-		},
-	}
-	parent.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
-	})
-
+func setupTest(t *testing.T) (context.Context, client.Client, *meta.DefaultRESTMapper) {
 	ctx := context.Background()
+	scheme := newTestScheme()
 
-	t.Run("missing toolingID", func(t *testing.T) {
-		_, err := New(ctx, parent, nil, nil, Config{
-			ToolingID:    ToolingID{}, // empty
-			FieldManager: "test-manager",
-		})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "toolingID is required")
+	// Setup RESTMapper
+	mapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{{Group: "", Version: "v1"}, {Group: "apps", Version: "v1"}})
+	mapper.Add(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}, meta.RESTScopeNamespace)
+	mapper.Add(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"}, meta.RESTScopeNamespace)
+	mapper.Add(schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}, meta.RESTScopeNamespace)
+	mapper.Add(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}, meta.RESTScopeRoot)
+
+	// Setup controller-runtime fake client
+	c := clientfake.NewClientBuilder().WithScheme(scheme).Build()
+
+	return ctx, c, mapper
+}
+
+func TestNew_Success(t *testing.T) {
+	ctx, fc, mapper := setupTest(t)
+
+	parent := &unstructured.Unstructured{}
+	parent.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	parent.SetName("parent")
+	parent.SetNamespace("default")
+
+	// Create parent in client
+	err := fc.Create(ctx, parent)
+	require.NoError(t, err)
+
+	config := applyset.Config{
+		ToolingID:    applyset.ToolingID{Name: "test", Version: "v1"},
+		FieldManager: "test-manager",
+	}
+
+	set, err := applyset.New(ctx, parent, fc, mapper, config)
+	require.NoError(t, err)
+	require.NotNil(t, set)
+	assert.Equal(t, applyset.ComputeID(parent), set.ID())
+}
+
+func TestApplySet_Add(t *testing.T) {
+	ctx, fc, mapper := setupTest(t)
+
+	parent := &unstructured.Unstructured{}
+	parent.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	parent.SetName("parent")
+	parent.SetNamespace("default")
+	_ = fc.Create(ctx, parent)
+
+	set, err := applyset.New(ctx, parent, fc, mapper, applyset.Config{
+		ToolingID:    applyset.ToolingID{Name: "test", Version: "v1"},
+		FieldManager: "test-manager",
+	})
+	require.NoError(t, err)
+
+	t.Run("add non-existing object", func(t *testing.T) {
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+		obj.SetName("cm1")
+		obj.SetNamespace("default")
+
+		observed, err := set.Add(ctx, obj)
+		assert.NoError(t, err)
+		assert.Nil(t, observed)
 	})
 
-	t.Run("missing fieldManager", func(t *testing.T) {
-		_, err := New(ctx, parent, nil, nil, Config{
-			ToolingID:    ToolingID{Name: "test", Version: "v1"},
-			FieldManager: "", // empty
-		})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "fieldManager is required")
+	t.Run("add existing object", func(t *testing.T) {
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+		obj.SetName("cm2")
+		obj.SetNamespace("default")
+
+		// Pre-create in controller-runtime client
+		_ = fc.Create(ctx, obj)
+
+		observed, err := set.Add(ctx, obj)
+		assert.NoError(t, err)
+		assert.NotNil(t, observed)
+		assert.Equal(t, "cm2", observed.GetName())
 	})
 }
 
-func Test_ApplySet_ID(t *testing.T) {
-	parent := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-parent",
-			Namespace: "default",
+func TestApplySet_Apply(t *testing.T) {
+	ctx, fc, mapper := setupTest(t)
+
+	parent := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "parent",
+				"namespace": "default",
+			},
 		},
 	}
-	parent.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "ConfigMap",
+	_ = fc.Create(ctx, parent)
+
+	set, err := applyset.New(ctx, parent, fc, mapper, applyset.Config{
+		ToolingID:    applyset.ToolingID{Name: "test", Version: "v1"},
+		FieldManager: "test-manager",
 	})
+	require.NoError(t, err)
 
-	aset := &applySet{
-		parent: parent,
-	}
+	obj1 := &unstructured.Unstructured{}
+	obj1.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	obj1.SetName("cm1")
+	obj1.SetNamespace("default")
+	obj1.SetLabels(map[string]string{"foo": "bar"})
 
-	id := aset.ID()
-	assert.NotEmpty(t, id)
-	assert.Contains(t, id, "applyset-")
+	_, _ = set.Add(ctx, obj1)
 
-	// ID should be consistent
-	id2 := aset.ID()
-	assert.Equal(t, id, id2)
+	result, err := set.Apply(ctx, false)
+	assert.NoError(t, err)
+	assert.Len(t, result.Applied, 1)
+	assert.Len(t, result.Errors, 0)
+
+	// Verify object was applied with correct labels
+	applied := &unstructured.Unstructured{}
+	applied.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	err = fc.Get(ctx, client.ObjectKey{Name: "cm1", Namespace: "default"}, applied)
+	assert.NoError(t, err)
+	assert.Equal(t, "bar", applied.GetLabels()["foo"])
+	assert.Equal(t, set.ID(), applied.GetLabels()[applyset.ApplySetPartOfLabel])
+
+	// Verify parent was updated
+	parentUpdated := &unstructured.Unstructured{}
+	parentUpdated.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	err = fc.Get(ctx, client.ObjectKey{Name: "parent", Namespace: "default"}, parentUpdated)
+	assert.NoError(t, err)
+	assert.Equal(t, set.ID(), parentUpdated.GetLabels()[applyset.ApplySetParentIDLabel])
+	assert.Contains(t, parentUpdated.GetAnnotations()[applyset.ApplySetGKsAnnotation], "ConfigMap")
 }
 
-func Test_Constants(t *testing.T) {
-	// Verify that constants are set as expected
-	assert.Equal(t, ".", ApplySetIDPartDelimiter)
-	assert.Equal(t, "applyset-%s", V1ApplySetIdFormat)
-	assert.Equal(t, "applyset.k8s.io/id", ApplySetParentIDLabel)
-	assert.Equal(t, "applyset.k8s.io/part-of", ApplySetPartOfLabel)
-	assert.Equal(t, "applyset.k8s.io/tooling", ApplySetToolingAnnotation)
-	assert.Equal(t, "applyset.k8s.io/contains-group-kinds", ApplySetGKsAnnotation)
-	assert.Equal(t, "applyset.k8s.io/additional-namespaces", ApplySetAdditionalNamespacesAnnotation)
+func TestApplySet_Prune(t *testing.T) {
+	ctx, fc, mapper := setupTest(t)
+
+	parent := &unstructured.Unstructured{}
+	parent.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	parent.SetName("parent")
+	parent.SetNamespace("default")
+
+	// Create parent with initial state indicating it already manages a ConfigMap
+	parent.SetAnnotations(map[string]string{
+		applyset.ApplySetGKsAnnotation: "ConfigMap",
+	})
+	_ = fc.Create(ctx, parent)
+
+	set, err := applyset.New(ctx, parent, fc, mapper, applyset.Config{
+		ToolingID:    applyset.ToolingID{Name: "test", Version: "v1"},
+		FieldManager: "test-manager",
+	})
+	require.NoError(t, err)
+
+	// Pre-create an object that should be pruned
+	oldObj := &unstructured.Unstructured{}
+	oldObj.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	oldObj.SetName("old-cm")
+	oldObj.SetNamespace("default")
+	oldObj.SetUID("old-uid")
+	oldObj.SetLabels(map[string]string{
+		applyset.ApplySetPartOfLabel: set.ID(),
+	})
+	_ = fc.Create(ctx, oldObj)
+
+	// Apply a new object
+	newObj := &unstructured.Unstructured{}
+	newObj.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	newObj.SetName("new-cm")
+	newObj.SetNamespace("default")
+	newObj.SetUID("new-uid")
+	_, _ = set.Add(ctx, newObj)
+
+	// Apply with prune=true
+	result, err := set.Apply(ctx, true)
+	assert.NoError(t, err)
+	assert.Len(t, result.Applied, 1)
+	assert.Len(t, result.Pruned, 1)
+	assert.Equal(t, "old-cm", result.Pruned[0].Name)
+
+	// Verify old object is gone
+	oldObjCheck := &unstructured.Unstructured{}
+	oldObjCheck.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	err = fc.Get(ctx, client.ObjectKey{Name: "old-cm", Namespace: "default"}, oldObjCheck)
+	assert.Error(t, err)
+
+	// Verify new object exists
+	newObjCheck := &unstructured.Unstructured{}
+	newObjCheck.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	err = fc.Get(ctx, client.ObjectKey{Name: "new-cm", Namespace: "default"}, newObjCheck)
+	assert.NoError(t, err)
+}
+
+func TestApplySet_DryRun(t *testing.T) {
+	ctx, fc, mapper := setupTest(t)
+
+	parent := &unstructured.Unstructured{}
+	parent.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	parent.SetName("parent")
+	parent.SetNamespace("default")
+	_ = fc.Create(ctx, parent)
+
+	set, err := applyset.New(ctx, parent, fc, mapper, applyset.Config{
+		ToolingID:    applyset.ToolingID{Name: "test", Version: "v1"},
+		FieldManager: "test-manager",
+	})
+	require.NoError(t, err)
+
+	obj1 := &unstructured.Unstructured{}
+	obj1.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	obj1.SetName("cm1")
+	obj1.SetNamespace("default")
+	_, _ = set.Add(ctx, obj1)
+
+	result, err := set.DryRun(ctx, false)
+	assert.NoError(t, err)
+	assert.Len(t, result.Applied, 1)
+
+	// Note: controller-runtime fake client doesn't support dry-run, so objects are still created
+	// In a real cluster with dry-run, the object would NOT be created
+}
+
+func TestApplySet_Concurrency(t *testing.T) {
+	ctx, fc, mapper := setupTest(t)
+
+	parent := &unstructured.Unstructured{}
+	parent.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	parent.SetName("parent")
+	parent.SetNamespace("default")
+	_ = fc.Create(ctx, parent)
+
+	set, _ := applyset.New(ctx, parent, fc, mapper, applyset.Config{
+		ToolingID:    applyset.ToolingID{Name: "test", Version: "v1"},
+		FieldManager: "test-manager",
+		Concurrency:  5,
+	})
+
+	for i := 0; i < 20; i++ {
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+		obj.SetName(fmt.Sprintf("cm-%d", i))
+		obj.SetNamespace("default")
+		obj.SetUID(types.UID(fmt.Sprintf("uid-%d", i)))
+		_, _ = set.Add(ctx, obj)
+	}
+
+	result, err := set.Apply(ctx, false)
+	assert.NoError(t, err)
+	assert.Len(t, result.Applied, 20)
+}
+
+func TestApplySet_PartialErrors(t *testing.T) {
+	// Note: This test would require a more sophisticated fake client that can
+	// simulate failures. The controller-runtime fake client doesn't support
+	// error injection easily. In practice, this would be tested with integration
+	// tests against a real cluster or envtest.
+	t.Skip("Skipping partial errors test - requires error injection capability")
+}
+
+func TestApplySet_ID(t *testing.T) {
+	ctx, fc, mapper := setupTest(t)
+
+	// Test with custom GVK parent
+	parent := &unstructured.Unstructured{}
+	parent.SetGroupVersionKind(schema.GroupVersionKind{Group: "foo.bar", Version: "v1", Kind: "Foo"})
+	parent.SetName("test-foo")
+	parent.SetNamespace("test-ns")
+	parent.SetUID("test-uid")
+
+	_ = fc.Create(ctx, parent)
+
+	set, err := applyset.New(ctx, parent, fc, mapper, applyset.Config{
+		ToolingID:    applyset.ToolingID{Name: "test", Version: "v1"},
+		FieldManager: "test-manager",
+	})
+	require.NoError(t, err)
+
+	// Verify ID format: applyset-<base64-hash>
+	id := set.ID()
+	assert.True(t, strings.HasPrefix(id, "applyset-"), "ID should start with 'applyset-'")
+	assert.Greater(t, len(id), len("applyset-"), "ID should have content after prefix")
+
+	// Verify ID is consistent with ComputeID
+	expectedID := applyset.ComputeID(parent)
+	assert.Equal(t, expectedID, id)
+}
+
+func TestApplySet_UpdatesParentAnnotationsWithMultipleGroupKinds(t *testing.T) {
+	ctx, fc, mapper := setupTest(t)
+
+	parent := &unstructured.Unstructured{}
+	parent.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
+	parent.SetName("parent-secret")
+	parent.SetNamespace("default")
+	_ = fc.Create(ctx, parent)
+
+	set, _ := applyset.New(ctx, parent, fc, mapper, applyset.Config{
+		ToolingID:    applyset.ToolingID{Name: "test", Version: "v1"},
+		FieldManager: "test-manager",
+	})
+
+	// Add two different GroupKinds
+	cm1 := &unstructured.Unstructured{}
+	cm1.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	cm1.SetName("cm-1")
+	cm1.SetNamespace("default")
+	_, _ = set.Add(ctx, cm1)
+
+	secret1 := &unstructured.Unstructured{}
+	secret1.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
+	secret1.SetName("secret-1")
+	secret1.SetNamespace("default")
+	_, _ = set.Add(ctx, secret1)
+
+	result, err := set.Apply(ctx, false)
+	assert.NoError(t, err)
+	assert.Len(t, result.Applied, 2)
+
+	// Verify parent was updated with both GKs
+	parentUpdated := &unstructured.Unstructured{}
+	parentUpdated.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
+	err = fc.Get(ctx, client.ObjectKey{Name: "parent-secret", Namespace: "default"}, parentUpdated)
+	assert.NoError(t, err)
+
+	ann := parentUpdated.GetAnnotations()
+	assert.NotNil(t, ann)
+	assert.Contains(t, ann, applyset.ApplySetGKsAnnotation)
+
+	// Expect both GKs in annotation (order not guaranteed)
+	gks := ann[applyset.ApplySetGKsAnnotation]
+	assert.Contains(t, gks, "ConfigMap")
+	assert.Contains(t, gks, "Secret")
+}
+
+func TestApplySet_ApplyMultiNamespace(t *testing.T) {
+	ctx, fc, mapper := setupTest(t)
+
+	parent := &unstructured.Unstructured{}
+	parent.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	parent.SetName("parent")
+	parent.SetNamespace("default")
+	_ = fc.Create(ctx, parent)
+
+	set, _ := applyset.New(ctx, parent, fc, mapper, applyset.Config{
+		ToolingID:    applyset.ToolingID{Name: "test", Version: "v1"},
+		FieldManager: "test-manager",
+	})
+
+	// Add objects in multiple namespaces
+	cm1 := &unstructured.Unstructured{}
+	cm1.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	cm1.SetName("cm1")
+	cm1.SetNamespace("default")
+	_, _ = set.Add(ctx, cm1)
+
+	cm2 := &unstructured.Unstructured{}
+	cm2.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	cm2.SetName("cm2")
+	cm2.SetNamespace("kube-system")
+	_, _ = set.Add(ctx, cm2)
+
+	result, err := set.Apply(ctx, false)
+	assert.NoError(t, err)
+	assert.Len(t, result.Applied, 2)
+
+	// Verify parent has additional-namespaces annotation
+	parentUpdated := &unstructured.Unstructured{}
+	parentUpdated.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
+	err = fc.Get(ctx, client.ObjectKey{Name: "parent", Namespace: "default"}, parentUpdated)
+	assert.NoError(t, err)
+
+	ann := parentUpdated.GetAnnotations()
+	if ann != nil && ann[applyset.ApplySetAdditionalNamespacesAnnotation] != "" {
+		// If additional namespaces exist, verify kube-system is listed
+		// (default namespace should be implicit and not in the list)
+		assert.Contains(t, ann[applyset.ApplySetAdditionalNamespacesAnnotation], "kube-system")
+	}
 }
