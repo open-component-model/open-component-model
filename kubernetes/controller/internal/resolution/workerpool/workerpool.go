@@ -263,7 +263,7 @@ func (wp *WorkerPool) worker(ctx context.Context, id int) {
 	for {
 		select {
 		case <-ctx.Done():
-			logger.V(1).Error(ctx.Err(), "worker stopped due to context cancellation")
+			logger.V(1).Info("worker stopped due to context cancellation")
 			return
 		case item := <-wp.workQueue:
 			QueueSizeGauge.Set(float64(len(wp.workQueue)))
