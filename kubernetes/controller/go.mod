@@ -429,6 +429,4 @@ replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59
 // TODO: remove once mandelsoft utils no longer has an unreleased version of vfs as dep
 replace github.com/mandelsoft/vfs => github.com/mandelsoft/vfs v0.4.4
 
-replace github.com/klauspost/compress => github.com/klauspost/compress v1.18.2
-
 replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.0
