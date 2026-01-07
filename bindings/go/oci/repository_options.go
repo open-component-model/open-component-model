@@ -58,6 +58,10 @@ type RepositoryOptions struct {
 
 	// DescriptorEncodingMediaType is the media type of the descriptor encoding used for component versions.
 	DescriptorEncodingMediaType string
+
+	// DescriptorUnmarshalFunc is used to unmarshal descriptors from OCI stores.
+	// If not provided, DefaultDescriptorUnmarshalFunc will be used.
+	DescriptorUnmarshalFunc descriptor.UnmarshalFunc
 }
 
 // ReferrerTrackingPolicy defines how OCI referrers are used in the repository.
@@ -148,6 +152,13 @@ func WithTempDir(tempDir string) RepositoryOption {
 	}
 }
 
+// WithDescriptorUnmarshalFunc sets the function used to unmarshal a descriptor in the RepositoryOptions.
+func WithDescriptorUnmarshalFunc(unmarshal descriptor.UnmarshalFunc) RepositoryOption {
+	return func(o *RepositoryOptions) {
+		o.DescriptorUnmarshalFunc = unmarshal
+	}
+}
+
 // NewRepository creates a new Repository instance with the given options.
 func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	options := &RepositoryOptions{}
@@ -182,6 +193,10 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		options.DescriptorEncodingMediaType = descriptor.MediaTypeComponentDescriptorJSON
 	}
 
+	if options.DescriptorUnmarshalFunc == nil {
+		options.DescriptorUnmarshalFunc = descriptor.DefaultDescriptorUnmarshalFunc
+	}
+
 	if options.ResourceCopyOptions == nil {
 		options.ResourceCopyOptions = &oras.CopyOptions{
 			CopyGraphOptions: oras.CopyGraphOptions{
@@ -212,5 +227,6 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		referrerTrackingPolicy:      options.ReferrerTrackingPolicy,
 		descriptorEncodingMediaType: options.DescriptorEncodingMediaType,
 		logger:                      options.Logger,
+		unmarshalDescriptorFunc:     options.DescriptorUnmarshalFunc,
 	}, nil
 }

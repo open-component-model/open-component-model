@@ -82,6 +82,9 @@ type Repository struct {
 	// the media type of the descriptor encoding used for component versions.
 	// this is used to determine the media type of the component descriptor when adding new component versions.
 	descriptorEncodingMediaType string
+
+	// unmarshalDescriptorFunc is used to unmarshal descriptors from OCI stores.
+	unmarshalDescriptorFunc descriptor2.UnmarshalFunc
 }
 
 // AddComponentVersion adds a new component version to the repository.
@@ -180,7 +183,7 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 		return nil, err
 	}
 
-	desc, _, _, err = getDescriptorFromStore(ctx, store, reference)
+	desc, _, _, err = getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
 	if errors.Is(err, errdef.ErrNotFound) {
 		return desc, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
 	}
@@ -394,7 +397,7 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	if err != nil {
 		return nil, nil, err
 	}
-	desc, manifest, index, err := getDescriptorFromStore(ctx, store, reference)
+	desc, manifest, index, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get component version: %w", err)
 	}
