@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"slices"
@@ -15,6 +16,7 @@ import (
 	"golang.org/x/term"
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
+	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/subsystem"
@@ -41,8 +43,9 @@ If both subsystem and type are specified, it shows detailed documentation for th
 		},
 	}
 
-	enum.VarP(cmd.Flags(), "output", "o", []string{"text", "markdown", "html", "jsonschema"}, "Output format (text, markdown, html).")
+	enum.VarP(cmd.Flags(), "output", "o", []string{"text", "markdown", "html", "jsonschema", "examples"}, "Output format (text, markdown, html are supported for all command combinations, jsonschema is only supported for type descriptions).")
 	enum.Var(cmd.Flags(), "table-style", []string{table.StyleColoredDark.Name, table.StyleColoredBright.Name, table.StyleDefault.Name}, "table output style")
+	cmd.Flags().Bool("example", false, "shows an example for the given type and schema. if multiple examples are defined, all are shown")
 	return cmd
 }
 
@@ -156,8 +159,10 @@ func describeType(cmd *cobra.Command, s *subsystem.Subsystem, args []string) err
 	}
 
 	if format, err := enum.Get(cmd.Flags(), "output"); err == nil && format == "jsonschema" {
-		_, err := cmd.OutOrStdout().Write(schema)
-		return fmt.Errorf("failed to render JSON schema: %w", err)
+		if _, err := cmd.OutOrStdout().Write(schema); err != nil {
+			return fmt.Errorf("failed to render JSON schema: %w", err)
+		}
+		return nil
 	}
 
 	current := compiled
@@ -185,6 +190,28 @@ func describeType(cmd *cobra.Command, s *subsystem.Subsystem, args []string) err
 		}
 	}
 
+	if showExamples, _ := cmd.Flags().GetBool("example"); showExamples {
+		if len(current.Examples) == 0 {
+			return fmt.Errorf("no examples available for type %s", typ)
+		}
+		var data []byte
+		for i, example := range current.Examples {
+			if i > 0 {
+				if _, err = cmd.OutOrStdout().Write([]byte("---\n")); err != nil {
+					return fmt.Errorf("failed to write separator: %w", err)
+				}
+			}
+			data, err = yaml.Marshal(example)
+			if err != nil {
+				return fmt.Errorf("failed to marshal example: %w", err)
+			}
+			if _, err = cmd.OutOrStdout().Write(data); err != nil {
+				return fmt.Errorf("failed to write example: %w", err)
+			}
+		}
+		return nil
+	}
+
 	var title string
 	if current.Title != "" {
 		title = current.Title + fmt.Sprintf(" (%s)", typ.String())
@@ -205,7 +232,8 @@ func describeType(cmd *cobra.Command, s *subsystem.Subsystem, args []string) err
 		{Number: 3},
 		{Number: 4, WidthMax: 100},
 	})
-	for id, prop := range current.Properties {
+	for _, id := range slices.Sorted(maps.Keys(current.Properties)) {
+		prop := current.Properties[id]
 		ts := ""
 		if typ := prop.Types; typ != nil {
 			ts = typ.String()
@@ -262,8 +290,11 @@ func renderTable(cmd *cobra.Command, w table.Writer) error {
 	style.Format.Footer = text.FormatUpper
 
 	w.SetStyle(style)
-	if adjustStyleToCMD(cmd, &style) != nil {
-		return fmt.Errorf("failed to set max width for table")
+	if f, ok := cmd.OutOrStdout().(*os.File); ok {
+		if width, _, err := term.GetSize(int(f.Fd())); err == nil {
+			style.Size.WidthMax = width
+			style.Size.WidthMin = width
+		}
 	}
 	w.SetStyle(style)
 
@@ -283,20 +314,8 @@ func renderTable(cmd *cobra.Command, w table.Writer) error {
 	default:
 		return fmt.Errorf("unknown output format: %s", format)
 	}
-	_, err = cmd.OutOrStdout().Write([]byte(out))
+	_, err = io.WriteString(cmd.OutOrStdout(), out)
 	return err
-}
-
-func adjustStyleToCMD(cmd *cobra.Command, style *table.Style) error {
-	if f, ok := cmd.OutOrStdout().(*os.File); ok {
-		width, _, err := term.GetSize(int(f.Fd()))
-		if err != nil {
-			return fmt.Errorf("failed to get terminal size: %w", err)
-		}
-		style.Size.WidthMax = width
-		style.Size.WidthMin = width
-	}
-	return nil
 }
 
 var runtimeSort = func(a, b runtime.Type) int {

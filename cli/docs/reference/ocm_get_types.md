@@ -25,9 +25,10 @@ ocm get types [subsystem [type]] [flags]
 ### Options
 
 ```
+      --examples           show examples for the given type and schema
   -h, --help               help for types
-  -o, --output enum        Output format (text, markdown, html).
-                           (must be one of [html jsonschema markdown text]) (default text)
+  -o, --output enum        Output format (text, markdown, html are supported for all command combinations, jsonschema is only supported for type descriptions).
+                           (must be one of [examples html jsonschema markdown text]) (default text)
       --table-style enum   table output style
                            (must be one of [StyleColoredBright StyleColoredDark StyleDefault]) (default StyleColoredDark)
 ```

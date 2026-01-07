@@ -2,13 +2,16 @@ package jsonschemagen
 
 import (
 	"encoding/json"
+	"errors"
 	"go/ast"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"go.yaml.in/yaml/v3"
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
 
@@ -250,6 +253,42 @@ func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 
 	if len(oneOf) > 0 {
 		s.OneOf = oneOf
+	}
+}
+
+func ApplyExampleMarkers(s *JSONSchemaDraft202012, markers map[string]string, path string) {
+	if s == nil || len(markers) == 0 {
+		return
+	}
+
+	raw, ok := markers["example"]
+	if !ok || strings.TrimSpace(raw) == "" {
+		return
+	}
+
+	basePath := filepath.Dir(path)
+
+	for _, p := range strings.Split(raw, ",") {
+		example, err := os.OpenInRoot(basePath, p)
+		if err != nil {
+			panic(err)
+		}
+		exampleData, err := io.ReadAll(example)
+		if err != nil {
+			panic(errors.Join(err, example.Close()))
+		}
+		var v any
+		switch strings.ToLower(filepath.Ext(p)) {
+		case ".yaml", ".yml":
+			err = yaml.Unmarshal(exampleData, &v)
+		default: // json
+			err = json.Unmarshal(exampleData, &v)
+		}
+		if err := errors.Join(err, example.Close()); err != nil {
+			panic(err)
+		}
+
+		s.Examples = append(s.Examples, v)
 	}
 }
 

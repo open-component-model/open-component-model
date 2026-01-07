@@ -191,6 +191,65 @@
             "sources",
             "componentReferences",
             "resources"
+          ],
+          "examples": [
+            {
+              "labels": [
+                {
+                  "name": "link-to-documentation",
+                  "value": "https://ocm.software/"
+                }
+              ],
+              "name": "github.com/open-component-model/podinfo",
+              "provider": "open-component-model",
+              "repositoryContexts": [
+                {
+                  "baseUrl": "ghcr.io",
+                  "componentNameMapping": "urlPath",
+                  "subPath": "open-component-model/open-component-model",
+                  "type": "OCIRegistry"
+                }
+              ],
+              "resources": [
+                {
+                  "access": {
+                    "imageReference": "ghcr.io/stefanprodan/podinfo:6.8.0",
+                    "type": "ociArtifact"
+                  },
+                  "digest": {
+                    "hashAlgorithm": "SHA-256",
+                    "normalisationAlgorithm": "ociArtifactDigest/v1",
+                    "value": "6c1975b871efb327528c84d46d38e6dd7906eecee6402bc270eeb7f1b1a506df"
+                  },
+                  "name": "podinfo",
+                  "relation": "external",
+                  "srcRefs": [
+                    {
+                      "identitySelector": {
+                        "name": "podinfo",
+                        "version": "6.8.0"
+                      }
+                    }
+                  ],
+                  "type": "ociImage",
+                  "version": "6.8.0"
+                }
+              ],
+              "sources": [
+                {
+                  "access": {
+                    "commit": "b3396adb98a6a0f5eeedd1a600beaf5e954a1f28",
+                    "ref": "refs/tags/v6.8.0",
+                    "repoUrl": "github.com/stefanprodan/podinfo",
+                    "type": "gitHub"
+                  },
+                  "name": "podinfo",
+                  "type": "git",
+                  "version": "6.8.0"
+                }
+              ],
+              "version": "v1.0.0"
+            }
           ]
         },
         "componentName": {
@@ -420,12 +479,24 @@
         "ocmType": {
           "type": "string",
           "description": "Type identifier following the Open Component Model type format",
-          "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?"
+          "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?",
+          "examples": [
+            "ociArtifact",
+            "ociArtifact/v1",
+            "OCIRegistry",
+            "my.custom.type/v1alpha1"
+          ]
         },
         "relaxedSemver": {
           "type": "string",
           "description": "Relaxed Semver version that allows optional leading 'v', major-only, and major.minor only",
-          "pattern": "^[v]?(0|[1-9]\\d*)(?:\\.(0|[1-9]\\d*))?(?:\\.(0|[1-9]\\d*))?(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$"
+          "pattern": "^[v]?(0|[1-9]\\d*)(?:\\.(0|[1-9]\\d*))?(?:\\.(0|[1-9]\\d*))?(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+          "examples": [
+            "v1.0.0",
+            "v1.0",
+            "1.0.0",
+            "1.0"
+          ]
         },
         "repositoryContext": {
           "type": "object",

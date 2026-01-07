@@ -51,7 +51,8 @@ type JSONSchemaDraft202012 struct {
 	OneOf []*JSONSchemaDraft202012          `json:"oneOf,omitempty"`
 	Defs  map[string]*JSONSchemaDraft202012 `json:"$defs,omitempty"`
 
-	Items *JSONSchemaDraft202012 `json:"items,omitempty"`
+	Items    *JSONSchemaDraft202012 `json:"items,omitempty"`
+	Examples []any                  `json:"examples,omitempty"`
 }
 
 type SchemaOrBool struct {
