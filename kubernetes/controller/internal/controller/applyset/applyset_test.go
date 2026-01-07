@@ -277,14 +277,6 @@ func TestApplySet_Concurrency(t *testing.T) {
 	assert.Len(t, result.Applied, 20)
 }
 
-func TestApplySet_PartialErrors(t *testing.T) {
-	// Note: This test would require a more sophisticated fake client that can
-	// simulate failures. The controller-runtime fake client doesn't support
-	// error injection easily. In practice, this would be tested with integration
-	// tests against a real cluster or envtest.
-	t.Skip("Skipping partial errors test - requires error injection capability")
-}
-
 func TestApplySet_ID(t *testing.T) {
 	ctx, fc, mapper := setupTest(t)
 

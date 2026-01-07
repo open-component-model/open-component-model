@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -23,8 +25,8 @@ const (
 )
 
 // verifyDeployerApplySetLabelsAndAnnotations checks that the deployer has the correct ApplySet parent labels and annotations.
-func verifyDeployerApplySetLabelsAndAnnotations(ctx context.Context, exampleName string) {
-	deployerName := "deployer.delivery.ocm.software/" + exampleName + "-deployer"
+func verifyDeployerApplySetLabelsAndAnnotations(ctx context.Context, example string) {
+	deployerName := "deployer.delivery.ocm.software/" + example + "-deployer"
 
 	// Get the deployer resource as JSON
 	cmd := exec.CommandContext(ctx, "kubectl", "get", deployerName, "-n", "default", "-o", "json")
@@ -102,8 +104,8 @@ func verifyDeployerApplySetLabelsAndAnnotations(ctx context.Context, exampleName
 }
 
 // verifyDeployedResourcesApplySetLabels checks that all deployed resources have the correct ApplySet part-of label.
-func verifyDeployedResourcesApplySetLabels(ctx context.Context, exampleName string) {
-	deployerName := "deployer.delivery.ocm.software/" + exampleName + "-deployer"
+func verifyDeployedResourcesApplySetLabels(ctx context.Context, example string) {
+	deployerName := "deployer.delivery.ocm.software/" + example + "-deployer"
 
 	// First, get the ApplySet ID from the deployer
 	cmd := exec.CommandContext(ctx, "kubectl", "get", deployerName, "-n", "default", "-o", "jsonpath={.metadata.labels['"+applySetParentIDLabel+"']}")
@@ -193,31 +195,115 @@ func getGroupFromAPIVersion(apiVersion string) string {
 }
 
 var _ = Describe("ApplySet Pruning Tests", func() {
-	Context("when testing pruning with OCM deployer", func() {
-		It("should verify ApplySet pruning behavior with deployed resources", func(ctx SpecContext) {
-			Skip("ApplySet pruning is automatically tested in the examples tests when resources are deployed")
+	FContext("when testing pruning with OCM deployer", func() {
+		var example os.DirEntry
+		for _, e := range examples {
+			// skip other examples
+			if e.Name() != "applyset-pruning" {
+				continue
+			}
+			fInfo, err := os.Stat(filepath.Join(examplesDir, e.Name()))
+			Expect(err).NotTo(HaveOccurred())
+			if !fInfo.IsDir() {
+				continue
+			}
+			example = e
+		}
 
-			// NOTE: ApplySet pruning is validated through the deployer controller when:
-			// 1. A component version is deployed with resources
-			// 2. The component is updated with fewer resources
-			// 3. The deployer automatically prunes resources no longer in the manifest
-			//
-			// To test pruning in a realistic OCM scenario:
-			// - Deploy an example (e.g., helm-simple)
-			// - Note the deployed resources and their ApplySet labels
-			// - Update the component to remove a resource (e.g., a Service)
-			// - Transfer the updated component
-			// - Verify the removed resource is pruned by the deployer
-			//
-			// This requires:
-			// - Creating test manifests with multiple resources
-			// - Building component versions with different resource sets
-			// - Proper OCM component transfer workflow
-			//
-			// For now, pruning is validated conceptually through:
-			// - ApplySet label verification (done in examples tests)
-			// - Deployer status tracking (done in examples tests)
-			// - Manual verification that resources with matching labels are managed together
+		It("should verify ApplySet labels and pruning behavior", func(ctx SpecContext) {
+			By("creating and transferring the component version")
+			Expect(utils.PrepareOCMComponent(
+				ctx,
+				example.Name(),
+				filepath.Join(examplesDir, example.Name(), ComponentConstructor),
+				imageRegistry,
+				"", // No signing
+			)).To(Succeed())
+
+			By("bootstrapping the example")
+			Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
+
+			By("making service account cluster admin for k8s-manifest deployment")
+			_ = utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")
+			Expect(utils.MakeServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
+
+			By("waiting for the deployer to be ready")
+			deployerName := "deployer.delivery.ocm.software/" + example.Name() + "-deployer"
+			Expect(utils.WaitForResource(ctx, "condition=Ready=true", timeout, deployerName)).To(Succeed())
+
+			By("waiting for the first deployment to be ready")
+			Expect(utils.WaitForResource(ctx, "condition=Available", timeout, "deployment.apps/"+example.Name()+"-podinfo")).To(Succeed())
+
+			By("verifying podinfo-2 deployment exists")
+			// Just verify it exists, don't wait for Available since it might be slower
+			Eventually(func() error {
+				cmd := exec.CommandContext(ctx, "kubectl", "get", "deployment.apps/"+example.Name()+"-podinfo-2", "-n", "default")
+				_, err := utils.Run(cmd)
+				return err
+			}, timeout).Should(Succeed(), "podinfo-2 deployment should exist")
+
+			By("verifying ApplySet labels and annotations on the deployer")
+			verifyDeployerApplySetLabelsAndAnnotations(ctx, example.Name())
+
+			By("verifying ApplySet labels on all deployed resources")
+			verifyDeployedResourcesApplySetLabels(ctx, example.Name())
+
+			By("updating the component version to remove podinfo-2 (testing pruning)")
+
+			// Create v2 component
+			Expect(utils.PrepareOCMComponent(
+				ctx,
+				example.Name()+"-v2",
+				filepath.Join(examplesDir, example.Name(), "component-constructor-v2.yaml"),
+				imageRegistry,
+				"", // No signing
+			)).To(Succeed())
+
+			By("waiting for the Component to update to v2.0.0")
+			componentName := "component.delivery.ocm.software/" + example.Name() + "-component"
+			Eventually(func() string {
+				cmd := exec.CommandContext(ctx, "kubectl", "get", componentName, "-n", "default", "-o", "jsonpath={.status.componentDescriptor.componentDescriptorRef.version}")
+				output, err := utils.Run(cmd)
+				if err != nil {
+					return ""
+				}
+				return strings.TrimSpace(string(output))
+			}, timeout).Should(Equal("2.0.0"), "Component should update to version 2.0.0")
+
+			By("waiting for the Resource to update")
+			resourceName := "resource.delivery.ocm.software/" + example.Name() + "-resource"
+			Expect(utils.WaitForResource(ctx, "condition=Ready=true", timeout, resourceName)).To(Succeed())
+
+			By("waiting for the deployer to reconcile the updated version")
+			Expect(utils.WaitForResource(ctx, "condition=Ready=true", timeout, deployerName)).To(Succeed())
+
+			By("verifying that podinfo-2 deployment has been pruned")
+			// podinfo-2 should no longer exist - check using label selector
+			Eventually(func() int {
+				cmd := exec.CommandContext(ctx, "kubectl", "get", "deployments", "-n", "default", "-l", "app=podinfo-2", "-o", "json")
+				output, err := utils.Run(cmd)
+				if err != nil {
+					return -1
+				}
+				var result map[string]interface{}
+				if err := json.Unmarshal(output, &result); err != nil {
+					return -1
+				}
+				items, ok := result["items"].([]interface{})
+				if !ok {
+					return -1
+				}
+				return len(items)
+			}, "1m").Should(Equal(0), "podinfo-2 deployment should be pruned")
+
+			By("verifying that podinfo deployment still exists")
+			Expect(utils.WaitForResource(ctx, "condition=Available", timeout, "deployment.apps/"+example.Name()+"-podinfo")).To(Succeed())
+
+			By("verifying ApplySet labels still correct after pruning")
+			verifyDeployedResourcesApplySetLabels(ctx, example.Name())
+
+			By("cleaning up service account cluster admin")
+			Expect(utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")).To(Succeed())
 		})
 	})
 })
