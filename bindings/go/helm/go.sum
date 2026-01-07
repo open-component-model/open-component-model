@@ -155,8 +155,8 @@ github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnr
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
-github.com/klauspost/compress v1.18.0 h1:c/Cqfb0r+Yi+JtIEq73FWXVkRonBlf0CRNYc8Zttxdo=
-github.com/klauspost/compress v1.18.0/go.mod h1:2Pp+KzxcywXVXMr50+X0Q/Lsb43OQHYWRCY2AiWywWQ=
+github.com/klauspost/compress v1.18.2 h1:iiPHWW0YrcFgpBYhsA6D1+fqHssJscY/Tm/y2Uqnapk=
+github.com/klauspost/compress v1.18.2/go.mod h1:R0h/fSBs8DE4ENlcrlib3PsXS61voFxhIs2DeRhCvJ4=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
@@ -409,10 +409,10 @@ ocm.software/open-component-model/bindings/go/ctf v0.3.0 h1:u1B26OgUvR+gzTwY0hTV
 ocm.software/open-component-model/bindings/go/ctf v0.3.0/go.mod h1:skMxA1l7rZFhKsjn8CysSVG31zjmV95WaFqMVKRjHug=
 ocm.software/open-component-model/bindings/go/dag v0.0.6 h1:To76QJAmFD88C101oB/HgYvtomp8mm0270ewDLcVncw=
 ocm.software/open-component-model/bindings/go/dag v0.0.6/go.mod h1:mQbO95zYvX59VXNJGer4+wGsKY0BVI4FKwlR5BlPugM=
-ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260102115023-ca7c68fe3c03 h1:iGkZ4HzsP0PSABDmzEE9dAx2VUtV/PTRfbbv/iRHQJw=
-ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260102115023-ca7c68fe3c03/go.mod h1:5odhzti6DOemeBGua6g77LDkvW7crinDsrfP6g7UuMc=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260102115023-ca7c68fe3c03 h1:p66k39E9ccyAGYfbhTfQErFbMgSWheXsYQMlVXwZf4Y=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260102115023-ca7c68fe3c03/go.mod h1:emahiSs5xtdMA1BhFkNcDE+w+tI3fJLnqRktd46PY8A=
+ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260107082047-3b8abf72f590 h1:Sg5KS+2NXslFm1H1DaoAb1JJl9by8D0ZXtcC7F6Gc/c=
+ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260107082047-3b8abf72f590/go.mod h1:w1MNNIiTCNNrcXen1tcPoXbDNriGEI402nIQq3SAEmQ=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260107082047-3b8abf72f590 h1:AL1B+0IYHi0BpgfJd9//2BJJQxdfVpNiUWzQAKSV/14=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260107082047-3b8abf72f590/go.mod h1:qK/lyHWc1p9x/NtVKqYPtAVG3v7vnCRP7KTuyGOQCLA=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha6 h1:koIOiSsRdguhgyNtDkRnwDUVphWKsgAcctBk0a4DPvU=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha6/go.mod h1:ttGvcpH9fCDToSr8az8ol3KVPNMwjvca8GfcduBlDqU=
 ocm.software/open-component-model/bindings/go/oci v0.0.24 h1:OoDDz+fZjzf4/euFJeO6Gl2LJPmDVAFso4wK06wd8m0=
