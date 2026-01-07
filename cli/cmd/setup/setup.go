@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/cli/internal/subsystem"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -80,6 +81,10 @@ func PluginManager(cmd *cobra.Command) error {
 	filesystemConfig := ocmContext.FilesystemConfig()
 	if err := builtin.Register(pluginManager, filesystemConfig, slog.Default()); err != nil {
 		return fmt.Errorf("could not register builtin plugins: %w", err)
+	}
+
+	if err := subsystem.RegisterPluginManager(pluginManager); err != nil {
+		return fmt.Errorf("could not register plugin manager in subsystem registry: %w", err)
 	}
 
 	ctx := ocmctx.WithPluginManager(cmd.Context(), pluginManager)

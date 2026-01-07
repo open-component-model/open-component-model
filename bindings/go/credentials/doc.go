@@ -17,7 +17,7 @@
 // - Caching of resolved credentials for improved performance
 // - Concurrent resolution of repository credentials
 //
-// # Core Concept
+// # Core Tutorial
 //
 // The concept is based on 4 data structures:
 //
