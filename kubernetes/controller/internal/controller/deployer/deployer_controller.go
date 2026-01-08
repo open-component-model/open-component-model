@@ -598,6 +598,9 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 
 	// Add all objects to the ApplySet
 	for _, obj := range objs {
+		// Clone the object to avoid modifying the original
+		obj := obj.DeepCopy()
+
 		// Set ownership labels and annotations (preserving existing behavior)
 		setOwnershipLabels(obj, resource, deployer)
 		logger.Info("set ownership labels", "labels", obj.GetLabels())
