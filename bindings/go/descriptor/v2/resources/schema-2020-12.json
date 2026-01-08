@@ -624,6 +624,7 @@
               "value": "https://ocm.software/"
             }
           ],
+          "componentReferences": [],
           "repositoryContexts": [
             {
               "baseUrl": "ghcr.io",
