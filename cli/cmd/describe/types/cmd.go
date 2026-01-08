@@ -6,8 +6,10 @@ import (
 	"io"
 	"maps"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
@@ -180,13 +182,18 @@ func describeType(cmd *cobra.Command, s *subsystem.Subsystem, args []string) err
 			if segment.Index != nil {
 				return fmt.Errorf("indexing not supported for schema path segments")
 			}
-			if current, ok = current.Properties[segment.Name]; ok {
+			if candidate, ok := current.Properties[segment.Name]; ok {
+				current = candidate
 				continue
 			}
-			if current, ok = current.Ref.Properties[segment.Name]; ok {
-				continue
+			if current.Ref != nil {
+				if candidate, ok := current.Ref.Properties[segment.Name]; ok {
+					current = candidate
+					continue
+				}
 			}
-			return fmt.Errorf("schema path segment %q not found (based on %q)", segment.Name, path)
+
+			return fmt.Errorf("schema path segment %q not found (based on %s)", segment.Name, path)
 		}
 	}
 
@@ -220,6 +227,8 @@ func describeType(cmd *cobra.Command, s *subsystem.Subsystem, args []string) err
 	}
 	if current.Description != "" {
 		title += "\n" + current.Description
+	} else if current.Ref != nil && current.Ref.Description != "" {
+		title += "\n" + current.Ref.Description
 	}
 
 	tw := table.NewWriter()
@@ -289,33 +298,84 @@ func renderTable(cmd *cobra.Command, w table.Writer) error {
 	style.Format.Header = text.FormatUpper
 	style.Format.Footer = text.FormatUpper
 
-	w.SetStyle(style)
-	if f, ok := cmd.OutOrStdout().(*os.File); ok {
+	out := cmd.OutOrStdout()
+
+	if f, ok := out.(*os.File); ok {
 		if width, _, err := term.GetSize(int(f.Fd())); err == nil {
-			style.Size.WidthMax = width
 			style.Size.WidthMin = width
 		}
 	}
-	w.SetStyle(style)
+
+	isTerminal := isTerminal(out)
 
 	format, err := enum.Get(cmd.Flags(), "output")
 	if err != nil {
 		return err
 	}
 
-	var out string
+	w.SetStyle(style)
+	var rendered string
 	switch format {
 	case "html":
-		out = w.RenderHTML()
+		rendered = w.RenderHTML()
 	case "markdown":
-		out = w.RenderMarkdown()
+		rendered = w.RenderMarkdown()
 	case "text":
-		out = w.Render()
+		rendered = w.Render()
 	default:
 		return fmt.Errorf("unknown output format: %s", format)
 	}
-	_, err = io.WriteString(cmd.OutOrStdout(), out)
-	return err
+
+	if !isTerminal {
+		_, err := io.WriteString(out, rendered)
+		return err
+	}
+	return renderWithPager(cmd, rendered)
+}
+
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	return term.IsTerminal(int(f.Fd()))
+}
+
+var pager = sync.OnceValue(func() string {
+	return os.Getenv("PAGER")
+})
+
+func renderWithPager(cmd *cobra.Command, rendered string) error {
+	out := cmd.OutOrStdout()
+
+	if !isTerminal(out) {
+		_, err := io.WriteString(out, rendered)
+		return err
+	}
+
+	pager := pager()
+	if pager == "" {
+		pager = "less"
+	}
+
+	args := strings.Fields(pager)
+	cmdName := args[0]
+
+	if cmdName == "less" {
+		args = append(args, "-R", "-F", "-X")
+	}
+
+	pagerCmd := exec.CommandContext(cmd.Context(), cmdName, args[1:]...)
+	pagerCmd.Stdin = strings.NewReader(rendered)
+	pagerCmd.Stdout = out
+	pagerCmd.Stderr = os.Stderr
+
+	if err := pagerCmd.Start(); err != nil {
+		_, werr := io.WriteString(out, rendered)
+		return werr
+	}
+
+	return pagerCmd.Wait()
 }
 
 var runtimeSort = func(a, b runtime.Type) int {
