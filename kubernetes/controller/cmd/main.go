@@ -31,8 +31,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
@@ -168,51 +167,37 @@ func main() {
 	}
 
 	pm := manager.NewPluginManager(ctx)
-	scheme := ocmruntime.NewScheme()
-	scheme.MustRegisterWithAlias(&ociv1.Repository{},
-		ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.Type),
-		ocmruntime.NewVersionedType(ociv1.ShortType, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.ShortType),
-		ocmruntime.NewVersionedType(ociv1.ShortType2, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.ShortType2),
-		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType),
-		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType2, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType2),
-	)
-	scheme.MustRegisterWithAlias(&ctfv1.Repository{},
-		ocmruntime.NewVersionedType(ctfv1.Type, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.Type),
-		ocmruntime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.ShortType),
-		ocmruntime.NewVersionedType(ctfv1.ShortType2, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.ShortType2),
-	)
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(scheme))
+
+	ocirepository.MustAddLegacyToScheme(ocirepository.Scheme)
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(ocirepository.Scheme))
 	if err := pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider); err != nil {
 		setupLog.Error(err, "failed to register internal component version repository plugin")
 		os.Exit(1)
 	}
+
 	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
 	if err != nil {
 		setupLog.Error(err, "failed to create signing handler")
 		os.Exit(1)
 	}
+
 	if err := pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler); err != nil {
 		setupLog.Error(err, "failed to register internal signing plugin")
 		os.Exit(1)
 	}
+
 	if err := pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{credentials.AnyConsumerIdentityType}); err != nil {
 		setupLog.Error(err, "failed to register internal credential repository plugin")
 		os.Exit(1)
 	}
 
+	// TODO(@frewilhelm): See ../internal/plugins/doc.go
 	ociResourceRepoPlugin := plugins.ResourceRepositoryPlugin{Manifests: inmemory.New(), Layers: inmemory.New(), FilesystemConfig: &filesystemv1alpha1.Config{}}
 	if err := pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(&ociResourceRepoPlugin); err != nil {
 		setupLog.Error(err, "failed to register internal resource repository plugin")
 		os.Exit(1)
 	}
+
 	if err := pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(&ociResourceRepoPlugin); err != nil {
 		setupLog.Error(err, "failed to register internal resource repository plugin")
 		os.Exit(1)
