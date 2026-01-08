@@ -307,7 +307,7 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			By("waiting for the Component to update to v2.0.0")
 			componentName := "component.delivery.ocm.software/" + example.Name() + "-component"
 			Eventually(func() string {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", componentName, "-n", "default", "-o", "{.status.component.version}")
+				cmd := exec.CommandContext(ctx, "kubectl", "get", componentName, "-n", "default", "-o", "jsonpath={.status.component.version}")
 				output, err := utils.Run(cmd)
 				if err != nil {
 					return ""
