@@ -30,6 +30,10 @@ type generation struct {
 func (g *generation) runForRoot(root *universe.TypeInfo) *JSONSchemaDraft202012 {
 	schema := g.buildRootSchema(root)
 
+	// apply markers to root schema
+	typeMarkers := ExtractMarkerMap(root.TypeSpec, root.GenDecl, BaseMarker)
+	ApplyExampleMarkers(schema, typeMarkers, root.FilePath)
+
 	reachable := g.collectReachableQueue(root)
 	defs := map[string]*JSONSchemaDraft202012{}
 
