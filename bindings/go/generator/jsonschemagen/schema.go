@@ -40,10 +40,10 @@ type JSONSchemaDraft202012 struct {
 	MaxItems    *int  `json:"maxItems,omitempty"`
 	UniqueItems *bool `json:"uniqueItems,omitempty"`
 
-	MinProperties *int                              `json:"minProperties,omitempty"`
-	MaxProperties *int                              `json:"maxProperties,omitempty"`
-	Properties    map[string]*JSONSchemaDraft202012 `json:"properties,omitempty"`
-	Enum          []any                             `json:"enum,omitempty"`
+	MinProperties *int                     `json:"minProperties,omitempty"`
+	MaxProperties *int                     `json:"maxProperties,omitempty"`
+	Properties    map[string]*SchemaOrBool `json:"properties,omitempty"`
+	Enum          []any                    `json:"enum,omitempty"`
 
 	Required             []string      `json:"required,omitempty"`
 	AdditionalProperties *SchemaOrBool `json:"additionalProperties,omitempty"`
@@ -232,8 +232,8 @@ func applyMarkers(
 	}
 }
 
-func (g *generation) buildStructProperties(st *ast.StructType, ti *universe.TypeInfo) map[string]*JSONSchemaDraft202012 {
-	props := make(map[string]*JSONSchemaDraft202012)
+func (g *generation) buildStructProperties(st *ast.StructType, ti *universe.TypeInfo) map[string]*SchemaOrBool {
+	props := make(map[string]*SchemaOrBool)
 
 	for _, field := range st.Fields.List {
 		name, opts := parseJSONTagWithFieldNameFallback(field)
@@ -266,7 +266,7 @@ func (g *generation) buildStructProperties(st *ast.StructType, ti *universe.Type
 			sch.Deprecated = Ptr(true)
 		}
 
-		props[name] = sch
+		props[name] = &SchemaOrBool{Schema: sch}
 	}
 	return props
 }
@@ -305,7 +305,7 @@ func unwrapStar(expr ast.Expr) ast.Expr {
 }
 
 func (g *generation) inlineAnonymousStruct(st *ast.StructType, ctx *universe.TypeInfo) *JSONSchemaDraft202012 {
-	props := map[string]*JSONSchemaDraft202012{}
+	props := map[string]*SchemaOrBool{}
 	var req []string
 
 	for _, field := range st.Fields.List {
@@ -328,7 +328,7 @@ func (g *generation) inlineAnonymousStruct(st *ast.StructType, ctx *universe.Typ
 			sch.Deprecated = Ptr(true)
 		}
 
-		props[name] = sch
+		props[name] = &SchemaOrBool{Schema: sch}
 		if !slices.Contains(opts, "omitempty") {
 			req = append(req, name)
 		}

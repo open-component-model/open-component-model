@@ -59,11 +59,18 @@
           ]
         },
         "signatures": {
-          "type": "array",
           "description": "Optional signing information for verifying component validity",
-          "items": {
-            "$ref": "#/$defs/signature"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/signature"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -258,15 +265,15 @@
           "description": "Specification of digest information including hashing algorithm and value",
           "properties": {
             "hashAlgorithm": {
-              "$ref": "#/$defs/nonEmptyString",
+              "type": "string",
               "description": "Algorithm used for hashing"
             },
             "normalisationAlgorithm": {
-              "$ref": "#/$defs/nonEmptyString",
+              "type": "string",
               "description": "Algorithm used for normalizing content before hashing"
             },
             "value": {
-              "$ref": "#/$defs/nonEmptyString",
+              "type": "string",
               "description": "The actual hash value"
             }
           },
@@ -301,21 +308,18 @@
               "type": "boolean",
               "description": "Indicates whether the label should be included in the signature"
             },
-            "value": {
+            "value": true,
+            "version": {
               "oneOf": [
                 {
-                  "$ref": "#/$defs/nonEmptyString",
-                  "description": "Value of the label"
+                  "type": "string",
+                  "description": "Version of the label",
+                  "pattern": "^v[0-9]+$"
                 },
                 {
-                  "type": "object",
-                  "description": "an arbitrarily complex structured value"
+                  "type": "null"
                 }
               ]
-            },
-            "version": {
-              "description": "Version of the label",
-              "pattern": "^v[0-9]+$"
             }
           },
           "required": [

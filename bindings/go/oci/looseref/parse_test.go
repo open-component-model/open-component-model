@@ -116,11 +116,11 @@ func TestLooseParseReference(t *testing.T) {
 	}{
 		{
 			name: "CTF style reference",
-			ref:  "component-descriptors/test-component:v1.0.0",
+			ref:  "component-descriptors/ocm.software/test-component:v1.0.0",
 			wantTemplate: LooseReference{
 				Reference: registry.Reference{
 					Registry:   "component-descriptors",
-					Repository: "test-component",
+					Repository: "ocm.software/test-component",
 					Reference:  "v1.0.0",
 				},
 				Tag: "v1.0.0",
