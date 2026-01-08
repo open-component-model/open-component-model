@@ -343,7 +343,6 @@ func (a *applySet) Add(ctx context.Context, obj *unstructured.Unstructured) (*un
 	}
 
 	// remove managed fields from obj
-	obj = obj.DeepCopy()
 	a.desiredObjects = append(a.desiredObjects, obj)
 	logger.Info("added object to applyset")
 
@@ -555,11 +554,6 @@ func (a *applySet) prune(ctx context.Context, result *Result, dryRun bool) error
 		)
 
 		err := a.k8sClient.Delete(ctx, deleteObj, deleteOptions...)
-		if err != nil && !apierrors.IsNotFound(err) {
-			logger.Error("failed to delete object",
-				"error", err,
-			)
-		}
 		result.recordPruned(obj, err)
 
 		if err != nil && !apierrors.IsNotFound(err) {
