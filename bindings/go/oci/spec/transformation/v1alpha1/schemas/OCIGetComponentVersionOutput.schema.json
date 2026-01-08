@@ -44,11 +44,18 @@
           ]
         },
         "signatures": {
-          "type": "array",
           "description": "Optional signing information for verifying component validity",
-          "items": {
-            "$ref": "#/$defs/signature"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/signature"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -299,8 +306,16 @@
               ]
             },
             "version": {
-              "description": "Version of the label",
-              "pattern": "^v[0-9]+$"
+              "oneOf": [
+                {
+                  "type": "string",
+                  "description": "Version of the label",
+                  "pattern": "^v[0-9]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [

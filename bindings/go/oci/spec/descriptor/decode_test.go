@@ -21,7 +21,7 @@ func createV2DescriptorYAML() []byte {
 		Component: v2.Component{
 			ComponentMeta: v2.ComponentMeta{
 				ObjectMeta: v2.ObjectMeta{
-					Name:    "test-component",
+					Name:    "github.com/ocm/test-component",
 					Version: "1.0.0",
 				},
 			},
@@ -39,7 +39,7 @@ func createV2DescriptorJSON() []byte {
 		Component: v2.Component{
 			ComponentMeta: v2.ComponentMeta{
 				ObjectMeta: v2.ObjectMeta{
-					Name:    "test-component",
+					Name:    "github.com/ocm/test-component",
 					Version: "1.0.0",
 				},
 			},
@@ -131,13 +131,15 @@ func TestSingleFileDecodeDescriptor_AllFormats(t *testing.T) {
 			name:        "unsupported media type",
 			reader:      bytes.NewBufferString("anything"),
 			mediaType:   "application/unknown",
-			expectError: "unsupported descriptor media type",
+			expectError: "unmarshaling component descriptor",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			desc, err := SingleFileDecodeDescriptor(tt.reader, tt.mediaType)
+			desc, err := SingleFileDecodeDescriptor(tt.reader, tt.mediaType, func(mediaType string, bytes []byte, obj interface{}) error {
+				return yaml.Unmarshal(bytes, obj)
+			})
 			if tt.expectError != "" {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectError)
@@ -147,7 +149,7 @@ func TestSingleFileDecodeDescriptor_AllFormats(t *testing.T) {
 
 			require.NoError(t, err)
 			require.NotNil(t, desc)
-			assert.Equal(t, "test-component", desc.Component.ComponentMeta.ObjectMeta.Name)
+			assert.Equal(t, "github.com/ocm/test-component", desc.Component.ComponentMeta.ObjectMeta.Name)
 			assert.Equal(t, "1.0.0", desc.Component.ComponentMeta.ObjectMeta.Version)
 		})
 	}
@@ -175,7 +177,7 @@ func TestDescriptorFileFromTar(t *testing.T) {
 	require.NoError(t, err)
 	var d v2.Descriptor
 	require.NoError(t, yaml.Unmarshal(data, &d))
-	assert.Equal(t, "test-component", d.Component.ComponentMeta.ObjectMeta.Name)
+	assert.Equal(t, "github.com/ocm/test-component", d.Component.ComponentMeta.ObjectMeta.Name)
 }
 
 // Defensive test for empty TAR

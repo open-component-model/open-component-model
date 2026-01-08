@@ -249,7 +249,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		})
 
 		t.Run("basic upload and download of a component version", func(t *testing.T) {
-			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
+			uploadDownloadBarebonesComponentVersion(t, repo, "ocm.software/test-component", "v1.0.0")
 		})
 
 		t.Run("basic upload and download of a component with complex version", func(t *testing.T) {
@@ -263,7 +263,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		t.Run("basic upload and download of a component version (with index based referrer tracking)", func(t *testing.T) {
 			repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithReferrerTrackingPolicy(oci.ReferrerTrackingPolicyByIndexAndSubject), oci.WithTempDir(t.TempDir()))
 			r.NoError(err)
-			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
+			uploadDownloadBarebonesComponentVersion(t, repo, "ocm.software/test-component", "v1.0.0")
 		})
 
 		t.Run("basic upload and download of a barebones resource that is compatible with OCI registries", func(t *testing.T) {
@@ -271,15 +271,15 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		})
 
 		t.Run("local resource blob upload and download", func(t *testing.T) {
-			uploadDownloadLocalResource(t, repo, "test-component", "v1.0.0")
+			uploadDownloadLocalResource(t, repo, "ocm.software/test-component", "v1.0.0")
 		})
 
 		t.Run("local resource oci layout upload and download", func(t *testing.T) {
-			uploadDownloadLocalResourceOCILayout(t, repo, "test-component", "v1.0.0")
+			uploadDownloadLocalResourceOCILayout(t, repo, "ocm.software/test-component", "v1.0.0")
 		})
 
 		t.Run("local source blob upload and download", func(t *testing.T) {
-			uploadDownloadLocalSource(t, repo, "test-component", "v1.0.0")
+			uploadDownloadLocalSource(t, repo, "ocm.software/test-component", "v1.0.0")
 		})
 
 		t.Run("oci image digest processing", func(t *testing.T) {
@@ -312,7 +312,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 			r.NoError(err)
 
 			t.Run("basic upload and download of a component version", func(t *testing.T) {
-				uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
+				uploadDownloadBarebonesComponentVersion(t, repo, "ocm.software/test-component", "v1.0.0")
 			})
 		})
 	})
@@ -329,7 +329,7 @@ func Test_Integration_CTF(t *testing.T) {
 		repo, err := oci.NewRepository(oci.WithResolver(store), oci.WithTempDir(t.TempDir()))
 		require.NoError(t, err)
 		t.Run("basic upload and download of a component version", func(t *testing.T) {
-			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
+			uploadDownloadBarebonesComponentVersion(t, repo, "ocm.software/test-component", "v1.0.0")
 		})
 
 		t.Run("basic upload and download of a component with complex version", func(t *testing.T) {
@@ -345,15 +345,15 @@ func Test_Integration_CTF(t *testing.T) {
 		})
 
 		t.Run("local resource blob upload and download", func(t *testing.T) {
-			uploadDownloadLocalResource(t, repo, "test-component", "v2.0.0")
+			uploadDownloadLocalResource(t, repo, "ocm.software/test-component", "v2.0.0")
 		})
 
 		t.Run("local resource oci layout upload and download", func(t *testing.T) {
-			uploadDownloadLocalResourceOCILayout(t, repo, "test-component", "v3.0.0")
+			uploadDownloadLocalResourceOCILayout(t, repo, "ocm.software/test-component", "v3.0.0")
 		})
 
 		t.Run("local source blob upload and download", func(t *testing.T) {
-			uploadDownloadLocalSource(t, repo, "test-component", "v4.0.0")
+			uploadDownloadLocalSource(t, repo, "ocm.software/test-component", "v4.0.0")
 		})
 
 		t.Run("oci image digest processing", func(t *testing.T) {
@@ -372,7 +372,7 @@ func Test_Integration_CTF(t *testing.T) {
 		r.NoError(err)
 
 		t.Run("basic upload and download of a component version", func(t *testing.T) {
-			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v5.0.0")
+			uploadDownloadBarebonesComponentVersion(t, repo, "ocm.software/test-component", "v5.0.0")
 		})
 	})
 }
