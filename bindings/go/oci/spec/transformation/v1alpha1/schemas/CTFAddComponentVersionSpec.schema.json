@@ -310,9 +310,16 @@
               ]
             },
             "version": {
-              "type": "string",
-              "description": "Version of the label",
-              "pattern": "^v[0-9]+$"
+              "oneOf": [
+                {
+                  "type": "string",
+                  "description": "Version of the label",
+                  "pattern": "^v[0-9]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [

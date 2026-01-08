@@ -50,7 +50,7 @@ func TestReferrerAnnotationVersionResolver(t *testing.T) {
 		},
 		{
 			name:      "missing annotations",
-			component: "test-component",
+			component: "ocm.software/test-component",
 			descriptor: ociImageSpecV1.Descriptor{
 				Annotations: nil,
 			},
@@ -58,7 +58,7 @@ func TestReferrerAnnotationVersionResolver(t *testing.T) {
 		},
 		{
 			name:      "missing component version annotation",
-			component: "test-component",
+			component: "ocm.software/test-component",
 			descriptor: ociImageSpecV1.Descriptor{
 				Annotations: map[string]string{
 					"other-annotation": "value",
@@ -68,7 +68,7 @@ func TestReferrerAnnotationVersionResolver(t *testing.T) {
 		},
 		{
 			name:      "invalid annotation format",
-			component: "test-component",
+			component: "ocm.software/test-component",
 			descriptor: ociImageSpecV1.Descriptor{
 				Annotations: map[string]string{
 					annotations.OCMComponentVersion: "invalid-format",
@@ -78,13 +78,13 @@ func TestReferrerAnnotationVersionResolver(t *testing.T) {
 		},
 		{
 			name:      "component name mismatch",
-			component: "test-component",
+			component: "ocm.software/test-component",
 			descriptor: ociImageSpecV1.Descriptor{
 				Annotations: map[string]string{
 					annotations.OCMComponentVersion: "component-descriptors/other-component:v1.0.0",
 				},
 			},
-			expectedError: fmt.Errorf("component %q from annotation does not match %q: %w", "other-component", "test-component", lister.ErrSkip),
+			expectedError: fmt.Errorf("component %q from annotation does not match %q: %w", "other-component", "ocm.software/test-component", lister.ErrSkip),
 		},
 	}
 
