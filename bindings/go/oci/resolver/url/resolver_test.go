@@ -52,9 +52,9 @@ func TestURLPathResolver_SetClient(t *testing.T) {
 func TestURLPathResolver_ComponentVersionReference(t *testing.T) {
 	resolver, err := url.New(url.WithBaseURL("http://example.com"))
 	assert.NoError(t, err)
-	component := "test-component"
+	component := "ocm.software/test-component"
 	version := "v1.0.0"
-	expected := "http://example.com/component-descriptors/test-component:v1.0.0"
+	expected := "http://example.com/component-descriptors/ocm.software/test-component:v1.0.0"
 	result := resolver.ComponentVersionReference(t.Context(), component, version)
 	assert.Equal(t, expected, result)
 }
@@ -72,25 +72,25 @@ func TestURLPathResolver_ComponentVersionReferenceWithSubPath(t *testing.T) {
 			name:      "with subPath",
 			baseURL:   "http://example.com",
 			subPath:   "my-org/components",
-			component: "test-component",
+			component: "ocm.software/test-component",
 			version:   "v1.0.0",
-			expected:  "http://example.com/my-org/components/component-descriptors/test-component:v1.0.0",
+			expected:  "http://example.com/my-org/components/component-descriptors/ocm.software/test-component:v1.0.0",
 		},
 		{
 			name:      "without subPath",
 			baseURL:   "http://example.com",
 			subPath:   "",
-			component: "test-component",
+			component: "ocm.software/test-component",
 			version:   "v1.0.0",
-			expected:  "http://example.com/component-descriptors/test-component:v1.0.0",
+			expected:  "http://example.com/component-descriptors/ocm.software/test-component:v1.0.0",
 		},
 		{
 			name:      "with nested subPath",
 			baseURL:   "http://example.com",
 			subPath:   "org/team/project",
-			component: "test-component",
+			component: "ocm.software/test-component",
 			version:   "v2.1.0",
-			expected:  "http://example.com/org/team/project/component-descriptors/test-component:v2.1.0",
+			expected:  "http://example.com/org/team/project/component-descriptors/ocm.software/test-component:v2.1.0",
 		},
 	}
 
