@@ -6,6 +6,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 
@@ -180,13 +181,18 @@ func describeType(cmd *cobra.Command, s *subsystem.Subsystem, args []string) err
 			if segment.Index != nil {
 				return fmt.Errorf("indexing not supported for schema path segments")
 			}
-			if current, ok = current.Properties[segment.Name]; ok {
+			if candidate, ok := current.Properties[segment.Name]; ok {
+				current = candidate
 				continue
 			}
-			if current, ok = current.Ref.Properties[segment.Name]; ok {
-				continue
+			if current.Ref != nil {
+				if candidate, ok := current.Ref.Properties[segment.Name]; ok {
+					current = candidate
+					continue
+				}
 			}
-			return fmt.Errorf("schema path segment %q not found (based on %q)", segment.Name, path)
+
+			return fmt.Errorf("schema path segment %q not found (based on %s)", segment.Name, path)
 		}
 	}
 
@@ -289,33 +295,68 @@ func renderTable(cmd *cobra.Command, w table.Writer) error {
 	style.Format.Header = text.FormatUpper
 	style.Format.Footer = text.FormatUpper
 
-	w.SetStyle(style)
-	if f, ok := cmd.OutOrStdout().(*os.File); ok {
+	out := cmd.OutOrStdout()
+
+	if f, ok := out.(*os.File); ok {
 		if width, _, err := term.GetSize(int(f.Fd())); err == nil {
-			style.Size.WidthMax = width
 			style.Size.WidthMin = width
 		}
 	}
-	w.SetStyle(style)
+
+	isTerminal := isTerminal(out)
 
 	format, err := enum.Get(cmd.Flags(), "output")
 	if err != nil {
 		return err
 	}
 
-	var out string
+	w.SetStyle(style)
+	var rendered string
 	switch format {
 	case "html":
-		out = w.RenderHTML()
+		rendered = w.RenderHTML()
 	case "markdown":
-		out = w.RenderMarkdown()
+		rendered = w.RenderMarkdown()
 	case "text":
-		out = w.Render()
+		rendered = w.Render()
 	default:
 		return fmt.Errorf("unknown output format: %s", format)
 	}
-	_, err = io.WriteString(cmd.OutOrStdout(), out)
-	return err
+
+	if !isTerminal {
+		_, err := io.WriteString(out, rendered)
+		return err
+	}
+	return renderWithPager(cmd, rendered)
+}
+
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	return term.IsTerminal(int(f.Fd()))
+}
+
+var pager = os.Getenv("PAGER")
+
+func renderWithPager(cmd *cobra.Command, rendered string) error {
+	out := cmd.OutOrStdout()
+	if pager == "" {
+		pager = "less"
+	}
+	args := strings.Fields(pager)
+
+	if pager == "less" {
+		args = append(args, "--clear-screen")
+	}
+
+	pagerCMD := exec.CommandContext(cmd.Context(), args[0], args[1:]...)
+	pagerCMD.Stdin = strings.NewReader(rendered)
+	pagerCMD.Stdout = out
+	pagerCMD.Stderr = os.Stderr
+
+	return pagerCMD.Run()
 }
 
 var runtimeSort = func(a, b runtime.Type) int {
