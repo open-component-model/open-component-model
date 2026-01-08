@@ -94,6 +94,28 @@ const jsonData = `
         "value": "26468587671bdbd2166cf5f69829f090c10768511b15e804294fcb26e552654316c8f4851ed396f279ec99335e5f4b11cb043feb97f1f9a42115f4fda2d31ae8b481b7303b9a913d3a4b92d446fbee9ed487c93b09e513f3f68355040ec08454675e1f407422062abbd2681f70dd5488ad29020b30cfa7e001455c550458da96166bc3243c8426977d73352aface5323fb2b5a374e9c31b272a59c160b85631231c9fc2f23c032401b80fef937029a39111cee34470c61ae86cd4942553466411a5a116159fdcc10e50fe9360c5184028e72d1fe9c7315f26e15d7b4849f62d197501b8cc6b6f1b1391ecc2fc2fc0c1290d2554594505b25fa8f9bfb28c8df24"
       }
     }
+  ],
+  "nestedDigests": [
+    {
+      "name": "cncf.io/prometheus",
+      "version": "v1.0.0",
+      "digest": {
+        "hashAlgorithm": "SHA-256",
+        "normalisationAlgorithm": "jsonNormalisation/v1",
+        "value": "04eb20b6fd942860325caf7f4415d1acf287a1aabd9e4827719328ba25d6f801"
+      },
+      "resourceDigests": [
+        {
+          "name": "image",
+          "version": "v1.0.0",
+          "digest": {
+            "hashAlgorithm": "SHA-256",
+            "normalisationAlgorithm": "ociArtifactDigest/v1",
+            "value": "efa2b9980ca2de65dc5a0c8cc05638b1a4b4ce8f6972dc08d0e805e5563ba5bb"
+          }
+        }
+      ]
+    }
   ]
 }
 `
@@ -158,6 +180,20 @@ signatures:
       algorithm: RSASSA-PSS
       mediaType: application/vnd.ocm.signature.rsa
       value: 26468587671bdbd2166cf5f69829f090c10768511b15e804294fcb26e552654316c8f4851ed396f279ec99335e5f4b11cb043feb97f1f9a42115f4fda2d31ae8b481b7303b9a913d3a4b92d446fbee9ed487c93b09e513f3f68355040ec08454675e1f407422062abbd2681f70dd5488ad29020b30cfa7e001455c550458da96166bc3243c8426977d73352aface5323fb2b5a374e9c31b272a59c160b85631231c9fc2f23c032401b80fef937029a39111cee34470c61ae86cd4942553466411a5a116159fdcc10e50fe9360c5184028e72d1fe9c7315f26e15d7b4849f62d197501b8cc6b6f1b1391ecc2fc2fc0c1290d2554594505b25fa8f9bfb28c8df24
+nestedDigests:
+  - name: cncf.io/prometheus
+    version: v1.0.0
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: jsonNormalisation/v1
+      value: 04eb20b6fd942860325caf7f4415d1acf287a1aabd9e4827719328ba25d6f801
+    resourceDigests:
+      - name: image
+        version: v1.0.0
+        digest:
+          hashAlgorithm: SHA-256
+          normalisationAlgorithm: ociArtifactDigest/v1
+          value: efa2b9980ca2de65dc5a0c8cc05638b1a4b4ce8f6972dc08d0e805e5563ba5bb
 `
 
 func TestDescriptor_JSON(t *testing.T) {
@@ -655,6 +691,41 @@ func TestSignature_Struct(t *testing.T) {
 	assert.Contains(t, string(jsonData), `"signature":{"algorithm":"RSASSA-PKCS1-V1_5","value":"base64-encoded-signature-value","mediaType":"application/vnd.ocm.signature.rsa","issuer":"Test Issuer"}`)
 }
 
+func TestNestedDigest_Struct(t *testing.T) {
+	// Setup
+	nested := descriptorv2.NestedDigest{
+		Name:    "nested-component",
+		Version: "1.0.0",
+		Digest: &descriptorv2.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "jsonNormalisation/v1",
+			Value:                  "0123456789abcdef",
+		},
+		ResourceDigests: []descriptorv2.ResourceDigest{
+			{
+				Name:    "test-resource",
+				Version: "1.0.0",
+				Digest: &descriptorv2.Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "ociArtifactDigest/v1",
+					Value:                  "abcdef0123456789",
+				},
+			},
+		},
+	}
+
+	// Test
+	jsonData, err := json.Marshal(nested)
+
+	// Assert
+	require.NoError(t, err)
+	assert.Contains(t, string(jsonData), `"name":"nested-component"`)
+	assert.Contains(t, string(jsonData), `"version":"1.0.0"`)
+	assert.Contains(t, string(jsonData), `"digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"jsonNormalisation/v1","value":"0123456789abcdef"}`)
+	assert.Contains(t, string(jsonData), `"resourceDigests":`)
+	assert.Contains(t, string(jsonData), `"name":"test-resource"`)
+}
+
 func TestComponentDeserialization(t *testing.T) {
 	jsonData := `{
 		"meta": {
@@ -694,7 +765,18 @@ func TestComponentDeserialization(t *testing.T) {
 					"componentName": "other-component"
 				}
 			]
-		}
+		},
+		"nestedDigests": [
+			{
+				"name": "other-component",
+				"version": "1.0.0",
+				"digest": {
+					"hashAlgorithm": "SHA-256",
+					"normalisationAlgorithm": "jsonNormalisation/v1",
+					"value": "0123456789abcdef"
+				}
+			}
+		]
 	}`
 
 	var desc descriptorv2.Descriptor
@@ -724,6 +806,12 @@ func TestComponentDeserialization(t *testing.T) {
 	assert.Equal(t, "example-reference", desc.Component.References[0].Name)
 	assert.Equal(t, "1.0.0", desc.Component.References[0].Version)
 	assert.Equal(t, "other-component", desc.Component.References[0].Component)
+
+	// Check nested digests
+	require.Len(t, desc.NestedDigests, 1)
+	assert.Equal(t, "other-component", desc.NestedDigests[0].Name)
+	assert.Equal(t, "1.0.0", desc.NestedDigests[0].Version)
+	assert.Equal(t, "0123456789abcdef", desc.NestedDigests[0].Digest.Value)
 }
 
 func TestSchemaConformance(t *testing.T) {
