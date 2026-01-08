@@ -197,25 +197,25 @@ func TestGenerate_MixedFieldTypes(t *testing.T) {
 	require.Contains(t, props, "opt") // tag name for OmOpt
 
 	// Name is string
-	require.Equal(t, "string", props["Name"].Type)
+	require.Equal(t, "string", props["Name"].Schema.Type)
 
 	// PtrRef should be a $ref to local
-	require.Equal(t, "#/$defs/"+universe.Definition(local.Key), props["PtrRef"].Ref)
+	require.Equal(t, "#/$defs/"+universe.Definition(local.Key), props["PtrRef"].Schema.Ref)
 
 	// SelRef should be a $ref to external
-	require.Equal(t, "#/$defs/"+universe.Definition(external.Key), props["SelRef"].Ref)
+	require.Equal(t, "#/$defs/"+universe.Definition(external.Key), props["SelRef"].Schema.Ref)
 
 	// Arr items integer
-	require.Equal(t, "array", props["Arr"].Type)
-	require.Equal(t, "integer", props["Arr"].Items.Type)
+	require.Equal(t, "array", props["Arr"].Schema.Type)
+	require.Equal(t, "integer", props["Arr"].Schema.Items.Type)
 
 	// M additionalProperties is a $ref to local
-	require.NotNil(t, props["M"].AdditionalProperties)
-	require.Equal(t, "#/$defs/"+universe.Definition(local.Key), props["M"].AdditionalProperties.Schema.Ref)
+	require.NotNil(t, props["M"].Schema.AdditionalProperties)
+	require.Equal(t, "#/$defs/"+universe.Definition(local.Key), props["M"].Schema.AdditionalProperties.Schema.Ref)
 
 	// Inline should be object with property X
-	require.Equal(t, "object", props["Inline"].Type)
-	require.Contains(t, props["Inline"].Properties, "X")
+	require.Equal(t, "object", props["Inline"].Schema.Type)
+	require.Contains(t, props["Inline"].Schema.Properties, "X")
 
 	// Required should include Name, PtrRef, SelRef, Arr, M, Inline but not opt (omitempty) nor Omit
 	req := s.Required
@@ -248,10 +248,10 @@ func TestSelectorResolutionMissingImportFallsBackToAny(t *testing.T) {
 	p, ok := s.Properties["SelRef"]
 	require.True(t, ok)
 	// should be anyObjectSchema fallback
-	require.Equal(t, "object", p.Type)
-	require.NotNil(t, p.AdditionalProperties)
-	require.NotNil(t, p.AdditionalProperties.Bool)
-	require.True(t, *p.AdditionalProperties.Bool)
+	require.Equal(t, "object", p.Schema.Type)
+	require.NotNil(t, p.Schema.AdditionalProperties)
+	require.NotNil(t, p.Schema.AdditionalProperties.Bool)
+	require.True(t, *p.Schema.AdditionalProperties.Bool)
 
 	// defs should NOT contain the external type
 	_, exists := s.Defs[universe.Definition(external.Key)]
@@ -289,7 +289,7 @@ func TestGenerate_CircularReferencesDoesNotLoopAndFlattensDefs(t *testing.T) {
 	require.NotNil(t, bSch)
 	propA, ok := bSch.Properties["A"]
 	require.True(t, ok)
-	require.Equal(t, "#/$defs/"+universe.Definition(A.Key), propA.Ref)
+	require.Equal(t, "#/$defs/"+universe.Definition(A.Key), propA.Schema.Ref)
 }
 
 func TestBuiltinRuntimeSchemas(t *testing.T) {
@@ -310,7 +310,7 @@ func TestBuiltinRuntimeSchemas(t *testing.T) {
 	require.NotNil(t, rawSch.AdditionalProperties.Bool)
 	require.True(t, *rawSch.AdditionalProperties.Bool)
 	require.Contains(t, rawSch.Required, "type")
-	require.Equal(t, "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type", rawSch.Properties["type"].Ref)
+	require.Equal(t, "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type", rawSch.Properties["type"].Schema.Ref)
 
 	// Type
 	typTI := &universe.TypeInfo{

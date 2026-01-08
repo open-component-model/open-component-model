@@ -254,15 +254,15 @@
           "description": "Specification of digest information including hashing algorithm and value",
           "properties": {
             "hashAlgorithm": {
-              "$ref": "#/$defs/nonEmptyString",
+              "type": "string",
               "description": "Algorithm used for hashing"
             },
             "normalisationAlgorithm": {
-              "$ref": "#/$defs/nonEmptyString",
+              "type": "string",
               "description": "Algorithm used for normalizing content before hashing"
             },
             "value": {
-              "$ref": "#/$defs/nonEmptyString",
+              "type": "string",
               "description": "The actual hash value"
             }
           },
@@ -297,18 +297,7 @@
               "type": "boolean",
               "description": "Indicates whether the label should be included in the signature"
             },
-            "value": {
-              "oneOf": [
-                {
-                  "$ref": "#/$defs/nonEmptyString",
-                  "description": "Value of the label"
-                },
-                {
-                  "type": "object",
-                  "description": "an arbitrarily complex structured value"
-                }
-              ]
-            },
+            "value": true,
             "version": {
               "oneOf": [
                 {
