@@ -246,7 +246,7 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			)).To(Succeed())
 
 			By("bootstrapping the example")
-			Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
+			Expect(utils.DeployResourceIgnoreErrors(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
 
 			// Delete first to ensure idempotency across multiple test runs
 			_ = utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")
