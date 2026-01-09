@@ -120,7 +120,7 @@ jobs:
           echo "${{ needs.prepare.outputs.changelog_b64 }}" | base64 --decode > "${{ runner.temp }}/CHANGELOG.md"
 
       - name: Download CLI artifacts
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
