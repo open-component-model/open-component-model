@@ -1,0 +1,36 @@
+components:
+  - name: ocm.software/ocm-k8s-toolkit/examples/helm-configuration-localization-advanced
+    version: "1.0.0"
+    provider:
+      name: ocm.software
+    resources:
+      - name: helm-resource
+        type: helmChart
+        version: "1.0.0"
+        access:
+          type: ociArtifact
+          imageReference: "ghcr.io/stefanprodan/charts/podinfo:6.9.1@sha256:565d310746f1fa4be7f93ba7965bb393153a2d57a15cfe5befc909b790a73f8a"
+      - name: image-resource
+        type: ociImage
+        version: "1.0.0"
+        access:
+          type: ociRegistry
+          imageReference: "ghcr.io/stefanprodan/podinfo:6.9.1@sha256:262578cde928d5c9eba3bce079976444f624c13ed0afb741d90d5423877496cb"
+      - name: kro-rgd
+        type: blob
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./rgd.yaml
+      - name: kro-instance
+        type: blob
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./k8s-manifest.yaml
+      - name: all-in-one
+        type: blob
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./all-in-one.yaml
