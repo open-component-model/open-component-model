@@ -37,8 +37,8 @@ const (
 	// The value matches the ApplySet ID on the parent object.
 	ApplySetPartOfLabel = "applyset.k8s.io/part-of"
 
-	// ApplySetToolingAnnotation is the annotation on the parent object indicating which tool is managing the ApplySet.
-	ApplySetToolingAnnotation = "applyset.k8s.io/tooling"
+	// ApplySetToolingLabel is the label on the parent object indicating which tool is managing the ApplySet.
+	ApplySetToolingLabel = "applyset.k8s.io/tooling"
 
 	// ApplySetGKsAnnotation is an optional "hint" annotation listing all GroupKinds in the ApplySet.
 	// This helps optimize discovery of member objects.
@@ -46,6 +46,8 @@ const (
 
 	// ApplySetAdditionalNamespacesAnnotation extends the scope of an ApplySet to include additional namespaces.
 	ApplySetAdditionalNamespacesAnnotation = "applyset.k8s.io/additional-namespaces"
+
+	maxConcurrency = 10
 )
 
 // ToolingID identifies the tool managing an ApplySet.
@@ -282,7 +284,6 @@ func ComputeID(parent client.Object) string {
 	hashed := sha256.Sum256([]byte(unencoded))
 	b64 := base64.RawURLEncoding.EncodeToString(hashed[:])
 
-	// Label values must start and end with alphanumeric values
 	return fmt.Sprintf(V1ApplySetIdFormat, b64)
 }
 
@@ -342,7 +343,6 @@ func (a *applySet) Add(ctx context.Context, obj *unstructured.Unstructured) (*un
 		}
 	}
 
-	// remove managed fields from obj
 	a.desiredObjects = append(a.desiredObjects, obj)
 	logger.Info("added object to applyset")
 
@@ -469,6 +469,10 @@ func (a *applySet) apply(ctx context.Context, result *Result, dryRun bool) error
 	concurrency := a.concurrency
 	if concurrency <= 0 {
 		concurrency = len(a.desiredObjects)
+	}
+
+	if concurrency > maxConcurrency {
+		concurrency = maxConcurrency
 	}
 
 	eg, egctx := errgroup.WithContext(ctx)
@@ -600,8 +604,12 @@ func (a *applySet) findObjectsToPrune(ctx context.Context, appliedUIDs sets.Set[
 
 	concurrency := a.concurrency
 	if concurrency <= 0 {
-		concurrency = 10
+		concurrency = maxConcurrency
 	}
+	if concurrency > maxConcurrency {
+		concurrency = maxConcurrency
+	}
+
 	eg.SetLimit(concurrency) // Limit concurrent list operations
 
 	for _, gkStr := range gks {
@@ -794,12 +802,16 @@ func (a *applySet) updateParentLabelsAndAnnotations(ctx context.Context, useSupe
 func (a *applySet) desiredParentLabels() map[string]string {
 	labels := make(map[string]string)
 	labels[ApplySetParentIDLabel] = a.ID()
+	toolingID := a.toolingID.String()
+	// deployer.delivery.ocm.software/v1alpha1 would fail due to '/' in the value
+	// convert to deployer.delivery.ocm.software.v1alpha1
+	toolingID = strings.ReplaceAll(toolingID, "/", ".")
+	labels[ApplySetToolingLabel] = toolingID
 	return labels
 }
 
 func (a *applySet) desiredParentAnnotations(useSuperset bool) (map[string]string, sets.Set[string], sets.Set[string]) {
 	annotations := make(map[string]string)
-	annotations[ApplySetToolingAnnotation] = a.toolingID.String()
 
 	// Generate sorted comma-separated list of GKs
 	gks := sets.New[string]()

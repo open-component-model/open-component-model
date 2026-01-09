@@ -20,7 +20,7 @@ const (
 	// ApplySet label and annotation constants from applyset.go
 	applySetParentIDLabel                  = "applyset.k8s.io/id"
 	applySetPartOfLabel                    = "applyset.k8s.io/part-of"
-	applySetToolingAnnotation              = "applyset.k8s.io/tooling"
+	applySetToolingLabel                   = "applyset.k8s.io/tooling"
 	applySetGKsAnnotation                  = "applyset.k8s.io/contains-group-kinds"
 	applySetAdditionalNamespacesAnnotation = "applyset.k8s.io/additional-namespaces"
 )
@@ -78,16 +78,16 @@ func verifyDeployerApplySetLabelsAndAnnotations(ctx context.Context, example str
 		return
 	}
 
-	// Verify ApplySet tooling annotation
-	tooling, ok := annotations[applySetToolingAnnotation].(string)
+	// Verify ApplySet tooling labels
+	tooling, ok := labels[applySetToolingLabel].(string)
 	if ok && tooling != "" {
-		if tooling != "deployer.delivery.ocm.software/v1alpha1" {
-			GinkgoWriter.Printf("⚠ Warning: ApplySet tooling annotation has unexpected value: %s\n", tooling)
+		if tooling != "deployer.delivery.ocm.software.v1alpha1" {
+			GinkgoWriter.Printf("⚠ Warning: ApplySet tooling label has unexpected value: %s\n", tooling)
 		} else {
-			GinkgoWriter.Printf("✓ Deployer has ApplySet tooling annotation: %s=%s\n", applySetToolingAnnotation, tooling)
+			GinkgoWriter.Printf("✓ Deployer has ApplySet tooling label: %s=%s\n", applySetToolingLabel, tooling)
 		}
 	} else {
-		GinkgoWriter.Printf("⚠ Warning: ApplySet tooling annotation %s not found on deployer\n", applySetToolingAnnotation)
+		GinkgoWriter.Printf("⚠ Warning: ApplySet tooling label %s not found on deployer\n", applySetToolingLabel)
 	}
 
 	// Verify ApplySet group-kinds annotation exists
