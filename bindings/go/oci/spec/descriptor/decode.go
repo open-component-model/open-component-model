@@ -14,8 +14,11 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 )
 
+// UnmarshalFunc is a function that unmarshals a descriptor from bytes.
+type UnmarshalFunc func(mediaType string, bytes []byte, obj interface{}) error
+
 // SingleFileDecodeDescriptor decodes a component descriptor from a TAR archive.
-func SingleFileDecodeDescriptor(raw io.Reader, mediaType string) (*descriptor.Descriptor, error) {
+func SingleFileDecodeDescriptor(raw io.Reader, mediaType string, unmarshal UnmarshalFunc) (*descriptor.Descriptor, error) {
 	switch mediaType {
 	case MediaTypeLegacyComponentDescriptorTar,
 		mediaTypeLegacy2ComponentDescriptorTar,
@@ -29,22 +32,7 @@ func SingleFileDecodeDescriptor(raw io.Reader, mediaType string) (*descriptor.De
 			return nil, fmt.Errorf("unable to read component descriptor stream from tar: %w", err)
 		}
 		var v2desc v2.Descriptor
-		if err := yaml.UnmarshalStrict(descriptorYAML, &v2desc); err != nil {
-			return nil, fmt.Errorf("unmarshaling component descriptor: %w", err)
-		}
-		desc, err := descriptor.ConvertFromV2(&v2desc)
-		if err != nil {
-			return nil, fmt.Errorf("converting component descriptor: %w", err)
-		}
-		return desc, nil
-	case MediaTypeComponentDescriptorJSON, MediaTypeLegacyComponentDescriptorJSON,
-		MediaTypeComponentDescriptorYAML, MediaTypeLegacyComponentDescriptorYAML:
-		descriptorYAML, err := io.ReadAll(raw)
-		if err != nil {
-			return nil, fmt.Errorf("unable to read component descriptor stream from descriptor with format %q: %w", mediaType, err)
-		}
-		var v2desc v2.Descriptor
-		if err := yaml.UnmarshalStrict(descriptorYAML, &v2desc); err != nil {
+		if err := unmarshal(MediaTypeLegacyComponentDescriptorYAML, descriptorYAML, &v2desc); err != nil {
 			return nil, fmt.Errorf("unmarshaling component descriptor: %w", err)
 		}
 		desc, err := descriptor.ConvertFromV2(&v2desc)
@@ -53,7 +41,19 @@ func SingleFileDecodeDescriptor(raw io.Reader, mediaType string) (*descriptor.De
 		}
 		return desc, nil
 	default:
-		return nil, fmt.Errorf("unsupported descriptor media type %s", mediaType)
+		descriptorYAML, err := io.ReadAll(raw)
+		if err != nil {
+			return nil, fmt.Errorf("unable to read component descriptor stream from descriptor with format %q: %w", mediaType, err)
+		}
+		var v2desc v2.Descriptor
+		if err := unmarshal(mediaType, descriptorYAML, &v2desc); err != nil {
+			return nil, fmt.Errorf("unmarshaling component descriptor: %w", err)
+		}
+		desc, err := descriptor.ConvertFromV2(&v2desc)
+		if err != nil {
+			return nil, fmt.Errorf("converting component descriptor: %w", err)
+		}
+		return desc, nil
 	}
 }
 
@@ -84,4 +84,25 @@ func descriptorFileFromTar(r io.Reader) (io.Reader, error) {
 			return nil, fmt.Errorf("failed skipping file %s: %w", header.Name, err)
 		}
 	}
+}
+
+// DefaultDescriptorUnmarshalFunc is the default descriptor unmarshal function used by the repository
+// to unmarshal component descriptors from OCI stores.
+//
+// This function supports JSON and YAML encoded component descriptors and will use the well known
+// v2 validation functions to ensure the integrity of the descriptor data.
+func DefaultDescriptorUnmarshalFunc(mediaType string, bytes []byte, obj interface{}) error {
+	var err error
+	switch mediaType {
+	case MediaTypeComponentDescriptorJSON, MediaTypeLegacyComponentDescriptorJSON:
+		err = v2.ValidateRawJSON(bytes)
+	case MediaTypeComponentDescriptorYAML, MediaTypeLegacyComponentDescriptorYAML:
+		err = v2.ValidateRawYAML(bytes)
+	default:
+		return fmt.Errorf("unsupported media type %q", mediaType)
+	}
+	if err != nil {
+		slog.Warn("failed to validate descriptor", slog.String("mediaType", mediaType), slog.String("error", err.Error()))
+	}
+	return yaml.Unmarshal(bytes, obj)
 }

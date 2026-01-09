@@ -17,9 +17,9 @@ func TestNewComponentVersionAnnotation(t *testing.T) {
 	}{
 		{
 			name:      "valid component and version",
-			component: "test-component",
+			component: "ocm.software/test-component",
 			version:   "1.0.0",
-			expected:  "test-component:1.0.0",
+			expected:  "ocm.software/test-component:1.0.0",
 		},
 		{
 			name:      "empty component",
@@ -29,9 +29,9 @@ func TestNewComponentVersionAnnotation(t *testing.T) {
 		},
 		{
 			name:      "empty version",
-			component: "test-component",
+			component: "ocm.software/test-component",
 			version:   "",
-			expected:  "test-component:",
+			expected:  "ocm.software/test-component:",
 		},
 	}
 
@@ -53,14 +53,14 @@ func TestParseComponentVersionAnnotation(t *testing.T) {
 	}{
 		{
 			name:         "valid annotation (prefixed)",
-			annotation:   "component-descriptors/test-component:1.0.0",
-			expectedComp: "test-component",
+			annotation:   "component-descriptors/ocm.software/test-component:1.0.0",
+			expectedComp: "ocm.software/test-component",
 			expectedVer:  "1.0.0",
 		},
 		{
 			name:         "valid annotation",
-			annotation:   "test-component:1.0.0",
-			expectedComp: "test-component",
+			annotation:   "ocm.software/test-component:1.0.0",
+			expectedComp: "ocm.software/test-component",
 			expectedVer:  "1.0.0",
 		},
 		{
@@ -77,8 +77,8 @@ func TestParseComponentVersionAnnotation(t *testing.T) {
 		},
 		{
 			name:          "invalid format - missing colon",
-			annotation:    "component-descriptors/test-component",
-			expectedError: fmt.Sprintf("%q is not considered a valid %q annotation, not exactly 2 parts: [%[1]q]", "test-component", OCMComponentVersion),
+			annotation:    "component-descriptors/ocm.software/test-component",
+			expectedError: fmt.Sprintf("%q is not considered a valid %q annotation, not exactly 2 parts: [%[1]q]", "ocm.software/test-component", OCMComponentVersion),
 		},
 		{
 			name:          "invalid format - empty version",
