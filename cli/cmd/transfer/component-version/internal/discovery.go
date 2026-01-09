@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -29,7 +30,7 @@ func BuildGraphDefinition(
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
 	discoverer := &discoverer{
 		recursive:         recursive,
-		discoveredDigests: make(map[string]descriptorv2.Digest),
+		discoveredDigests: make(map[string]descriptor.Digest),
 	}
 	resolver := &resolver{
 		repoProvider: repoProvider,
@@ -43,7 +44,7 @@ func BuildGraphDefinition(
 			if !ok {
 				return nil
 			}
-			return descriptor.ConvertFromV2Digest(&dig)
+			return &dig
 		},
 	}
 
@@ -85,17 +86,20 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 
 		id := identityToTransformationID(ref.Identity())
 
-		download := transformv1alpha1.GenericTransformation{
-			TransformationMeta: meta.TransformationMeta{
-				Type: ChooseGetType(ref.Repository),
-				ID:   id + "Download",
-			},
-			Spec: &runtime.Unstructured{Data: map[string]interface{}{
-				"repository": AsUnstructured(ref.Repository).Data,
-				"component":  ref.Component,
-				"version":    ref.Version,
-			}},
+		v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), val.Descriptor)
+		if err != nil {
+			return fmt.Errorf("cannot convert to v2: %w", err)
 		}
+		rawV2Desc, err := json.Marshal(v2desc)
+		if err != nil {
+			return fmt.Errorf("cannot marshal v2 descriptor: %w", err)
+		}
+		mapDesc := make(map[string]interface{})
+		if err := json.Unmarshal(rawV2Desc, &mapDesc); err != nil {
+			return fmt.Errorf("cannot unmarshal v2 descriptor: %w", err)
+		}
+
+		tgd.Environment.Data[id] = mapDesc
 
 		upload := transformv1alpha1.GenericTransformation{
 			TransformationMeta: meta.TransformationMeta{
@@ -104,18 +108,18 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 			},
 			Spec: &runtime.Unstructured{Data: map[string]interface{}{
 				"repository": AsUnstructured(toSpec).Data,
-				"descriptor": fmt.Sprintf("${%sDownload.output.descriptor}", id),
+				"descriptor": fmt.Sprintf("${environment.%s}", id),
 			}},
 		}
 
-		tgd.Transformations = append(tgd.Transformations, download, upload)
+		tgd.Transformations = append(tgd.Transformations, upload)
 	}
 	return nil
 }
 
 type discoveryValue struct {
 	Ref        *compref.Ref
-	Descriptor *descriptorv2.Descriptor
+	Descriptor *descriptor.Descriptor
 	Digest     *descriptorv2.Digest
 }
 
@@ -140,11 +144,6 @@ func (r *resolver) Resolve(ctx context.Context, key string) (*discoveryValue, er
 		return nil, fmt.Errorf("failed getting component version %s:%s: %w", ref.Component, ref.Version, err)
 	}
 
-	v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)
-	if err != nil {
-		return nil, fmt.Errorf("failed converting component version to v2: %w", err)
-	}
-
 	if expected := r.expectedDigest(desc.Component.ToIdentity()); expected != nil {
 		if err := signing.VerifyDigestMatchesDescriptor(
 			ctx, desc, descriptor.Signature{Digest: *expected}, slog.Default(),
@@ -155,7 +154,7 @@ func (r *resolver) Resolve(ctx context.Context, key string) (*discoveryValue, er
 
 	return &discoveryValue{
 		Ref:        ref,
-		Descriptor: v2desc,
+		Descriptor: desc,
 	}, nil
 }
 
@@ -163,7 +162,7 @@ type discoverer struct {
 	mu        sync.Mutex
 	recursive bool
 
-	discoveredDigests map[string]descriptorv2.Digest
+	discoveredDigests map[string]descriptor.Digest
 }
 
 func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]string, error) {

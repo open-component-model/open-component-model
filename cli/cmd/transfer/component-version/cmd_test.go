@@ -63,19 +63,19 @@ func createTestDescriptor(name, version string) *descriptor.Descriptor {
 }
 
 // addReference adds a reference to another component to a descriptor
-func addReference(t *testing.T, desc *descriptor.Descriptor, name, refName, version string) {
+func addReference(t *testing.T, parent, child *descriptor.Descriptor, refName string) {
 	t.Helper()
-	dig, err := signing.GenerateDigest(t.Context(), desc, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
+	dig, err := signing.GenerateDigest(t.Context(), child, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
 	require.NoError(t, err)
 
-	desc.Component.References = append(desc.Component.References, descriptor.Reference{
+	parent.Component.References = append(parent.Component.References, descriptor.Reference{
 		ElementMeta: descriptor.ElementMeta{
 			ObjectMeta: descriptor.ObjectMeta{
-				Name:    name,
-				Version: version,
+				Name:    refName,
+				Version: child.Component.Version,
 			},
 		},
-		Component: refName,
+		Component: child.Component.Name,
 		Digest:    *dig,
 	})
 }
@@ -137,7 +137,7 @@ func TestTransferComponentVersion(t *testing.T) {
 func TestTransferComponentVersionRecursive(t *testing.T) {
 	childDesc := createTestDescriptor("ocm.software/child-component", "0.0.1")
 	parentDesc := createTestDescriptor("ocm.software/parent-component", "1.0.0")
-	addReference(t, parentDesc, "child", childDesc.Component.Name, childDesc.Component.Version)
+	addReference(t, parentDesc, childDesc, "child")
 
 	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, childDesc, parentDesc)
 	require.NoError(t, err)
