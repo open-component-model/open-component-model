@@ -44,6 +44,12 @@ const (
 	// resourceWatchFinalizer is the finalizer used to ensure that the resource watch is removed when the deployer is deleted.
 	// It is used by the dynamic informer manager to unregister watches for resources that are referenced by the deployer.
 	resourceWatchFinalizer = "delivery.ocm.software/watch"
+
+	// deployerPruneFinalizer is the finalizer used to ensure that
+	// all resources managed by the deployer are pruned when the deployer is deleted.
+	// It uses the ApplySet mechanism to prune all resources during deletion.
+	deployerPruneFinalizer = "delivery.ocm.software/prune"
+
 	// deployerManager is the label used to identify the deployer as a manager of resources.
 	deployerManager = "deployer.delivery.ocm.software"
 )
@@ -197,6 +203,50 @@ func (r *Reconciler) setupDynamicResourceWatcherWithManager(mgr ctrl.Manager) (*
 	return informerManager, nil
 }
 
+// pruneWithApplySet prunes all resources managed by the deployer using ApplySet.
+// This is called during deletion to clean up all deployed resources.
+// It creates an ApplySet with no objects, which causes all previously managed resources to be pruned.
+func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1alpha1.Deployer) error {
+	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
+	logger.Info("creating ApplySet for pruning all resources")
+
+	// Create ApplySet with the same configuration as during apply
+	applySetConfig := applyset.Config{
+		ToolingID: applyset.ToolingID{
+			Name:    deployerManager,
+			Version: "v1alpha1",
+		},
+		FieldManager: fmt.Sprintf("%s/%s", deployerManager, deployer.UID),
+		ToolLabels: map[string]string{
+			managedByLabel: deployerManager,
+		},
+		Concurrency: runtime.NumCPU(),
+	}
+
+	set, err := applyset.New(ctx, deployer, r.Client, r.resourceRESTMapper, applySetConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create ApplySet for pruning: %w", err)
+	}
+
+	// Apply with no objects and prune=true
+	// This will delete all resources that were previously managed by this deployer
+	logger.Info("applying empty ApplySet with prune=true to delete all managed resources")
+	result, err := set.Apply(ctx, true)
+	if err != nil {
+		return fmt.Errorf("failed to prune resources: %w", err)
+	}
+
+	logger.Info("prune operation complete",
+		"pruned", len(result.Pruned),
+		"errors", len(result.Errors))
+
+	if len(result.Errors) > 0 {
+		return fmt.Errorf("prune completed with errors: %v", result.Errors)
+	}
+
+	return nil
+}
+
 // Untrack removes the deployer from the tracked objects and stops the resource watch if it is still running.
 // It also removes the finalizer from the deployer if there are no more tracked objects.
 func (r *Reconciler) Untrack(ctx context.Context, deployer *deliveryv1alpha1.Deployer) error {
@@ -244,11 +294,26 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	if !deployer.GetDeletionTimestamp().IsZero() {
+		logger.Info("deployer is being deleted, starting cleanup")
+
+		// Step 1: Prune all deployed resources using ApplySet
+		if controllerutil.ContainsFinalizer(deployer, deployerPruneFinalizer) {
+			logger.Info("pruning all resources managed by deployer")
+			if err := r.pruneWithApplySet(ctx, deployer); err != nil {
+				status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.PruneFailedReason, err.Error())
+				return ctrl.Result{}, fmt.Errorf("failed to prune resources: %w", err)
+			}
+			controllerutil.RemoveFinalizer(deployer, deployerPruneFinalizer)
+			logger.Info("successfully pruned all resources, removed prune finalizer")
+		}
+
+		// Step 2: Clean up resource watches (existing logic)
 		if err := r.Untrack(ctx, deployer); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to untrack deployer: %w", err)
 		}
 
-		return ctrl.Result{}, fmt.Errorf("deployer is being deleted, waiting for resource watches to be removed")
+		logger.Info("deployer cleanup complete, allowing deletion")
+		return ctrl.Result{}, nil
 	}
 
 	resourceNamespace := deployer.Spec.ResourceRef.Namespace
@@ -306,7 +371,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	updateDeployedObjectStatusReferences(objs, deployer)
-	// TODO: move finalizer up because removal is anyhow idempotent
+
+	// Add finalizers to ensure proper cleanup on deletion
+	// The prune finalizer ensures all managed resources are deleted
+	// The watch finalizer ensures resource watches are cleaned up
+	controllerutil.AddFinalizer(deployer, deployerPruneFinalizer)
 	controllerutil.AddFinalizer(deployer, resourceWatchFinalizer)
 
 	// TODO: Status propagation of RGD status to deployer

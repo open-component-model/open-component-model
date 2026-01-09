@@ -40,6 +40,9 @@ const (
 	// DeletionFailedReason is used when we fail to delete the resource.
 	DeletionFailedReason = "DeletionFailed"
 
+	// PruneFailedReason is used when we fail to prune managed resources during deletion.
+	PruneFailedReason = "PruneFailed"
+
 	// ResourceNotSynced is used when the referenced resource is not yet synced.
 	ResourceNotSynced = "ResourceNotSynced"
 
