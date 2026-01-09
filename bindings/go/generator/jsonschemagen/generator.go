@@ -30,6 +30,10 @@ type generation struct {
 func (g *generation) runForRoot(root *universe.TypeInfo) *JSONSchemaDraft202012 {
 	schema := g.buildRootSchema(root)
 
+	// apply markers to root schema
+	typeMarkers := ExtractMarkerMap(root.TypeSpec, root.GenDecl, BaseMarker)
+	ApplyExampleMarkers(schema, typeMarkers, root.FilePath)
+
 	reachable := g.collectReachableQueue(root)
 	defs := map[string]*JSONSchemaDraft202012{}
 
@@ -47,12 +51,12 @@ func (g *generation) runForRoot(root *universe.TypeInfo) *JSONSchemaDraft202012 
 		defs[key] = full
 	}
 
-	// merge externals exactly once
-	maps.Copy(defs, g.external)
-
 	for _, def := range defs {
 		def.ID = ""
 	}
+
+	// merge externals exactly once
+	maps.Copy(defs, g.external)
 
 	schema.Defs = defs
 	return schema

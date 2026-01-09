@@ -63,7 +63,7 @@ jobs:
     steps:
       # Checkout only the CLI
       - name: Checkout
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           sparse-checkout: |
@@ -86,7 +86,7 @@ jobs:
 
       # Setup Docker Buildx for multi-arch and advanced image building
       - name: Setup docker/buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       # Compute VERSION from env.REF
       - name: Compute VERSION

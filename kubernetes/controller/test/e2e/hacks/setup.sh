@@ -42,11 +42,13 @@ if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true
     registry:2
 fi
 
+KIND_NODE_IMAGE="kindest/node:v${KIND_NODE_IMAGE_VERSION}"
+
 # Create kind cluster with
 # - Port mappings for additional cluster OCI registries (replication tests).
 # - Containerd config patches to add registry mirrors and configs for the internal registries.
 # - http-alias and insecure_skip_verify.
-cat <<EOF | kind create cluster --config=-
+cat <<EOF | kind create cluster --image="${KIND_NODE_IMAGE}" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:

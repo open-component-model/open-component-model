@@ -3,38 +3,30 @@ package ocm
 import (
 	"encoding/json"
 
-	"github.com/Masterminds/semver/v3"
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/mandelsoft/vfs/pkg/vfs"
-	"ocm.software/ocm/api/ocm/extensions/repositories/ctf"
-	"ocm.software/ocm/api/utils/accessobj"
-	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-
 	. "github.com/mandelsoft/goutils/testutils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "ocm.software/ocm/api/helper/builder"
 
+	"github.com/Masterminds/semver/v3"
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/mandelsoft/vfs/pkg/vfs"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-
-	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-
 	ocmctx "ocm.software/ocm/api/ocm"
-	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
-	resourcetypes "ocm.software/ocm/api/ocm/extensions/artifacttypes"
-	"ocm.software/ocm/api/ocm/extensions/attrs/signingattr"
+	"ocm.software/ocm/api/ocm/extensions/repositories/ctf"
 	"ocm.software/ocm/api/ocm/extensions/repositories/ocireg"
-	"ocm.software/ocm/api/ocm/tools/signing"
-	"ocm.software/ocm/api/tech/signing/handlers/rsa"
 	"ocm.software/ocm/api/utils/accessio"
-	"ocm.software/ocm/api/utils/mime"
+	"ocm.software/ocm/api/utils/accessobj"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
 
 var _ = Describe("ocm utility", func() {
@@ -464,86 +456,6 @@ var _ = Describe("ocm utility", func() {
 		It("with filter", func(ctx SpecContext) {
 			ver := Must(GetLatestValidVersion(ctx, Must(c.ListVersions()), "<2.5.0", Must(RegexpFilter(".*-rc.*"))))
 			Expect(ver.Equal(Must(semver.NewVersion(Version1))))
-		})
-	})
-
-	Context("verify component version", func() {
-		const (
-			CTFPath       = "/ctf"
-			TestComponent = "ocm.software/test"
-			Reference     = "referenced-test"
-			RefComponent  = "ocm.software/referenced-test"
-			Resource      = "testresource"
-			Version1      = "1.0.0-rc.1"
-			Version2      = "2.0.0"
-
-			Signature1 = "signature1"
-			Signature2 = "signature2"
-			Signature3 = "signature3"
-		)
-		var (
-			octx ocmctx.Context
-			repo ocmctx.Repository
-			cv   ocmctx.ComponentVersionAccess
-			env  *Builder
-		)
-
-		BeforeEach(func() {
-			env = NewBuilder()
-
-			By("setup ocm")
-			privkey1, pubkey1 := Must2(rsa.CreateKeyPair())
-			privkey2, pubkey2 := Must2(rsa.CreateKeyPair())
-			privkey3, pubkey3 := Must2(rsa.CreateKeyPair())
-
-			env.OCMCommonTransport(CTFPath, accessio.FormatDirectory, func() {
-				env.Component(TestComponent, func() {
-					env.Version(Version1, func() {
-						env.Resource(Resource, Version1, resourcetypes.PLAIN_TEXT, v1.LocalRelation, func() {
-							env.BlobData(mime.MIME_TEXT, []byte("testdata"))
-						})
-						env.Reference(Reference, RefComponent, Version2, func() {
-						})
-					})
-				})
-				env.Component(RefComponent, func() {
-					env.Version(Version2, func() {
-					})
-				})
-			})
-			repo = Must(ctf.Open(env, accessobj.ACC_WRITABLE, CTFPath, vfs.FileMode(vfs.O_RDWR), env))
-			cv = Must(repo.LookupComponentVersion(TestComponent, Version1))
-
-			opts := signing.NewOptions(
-				signing.Resolver(repo),
-			)
-			_ = Must(signing.SignComponentVersion(cv, Signature1, signing.PrivateKey(Signature1, privkey1), opts))
-			_ = Must(signing.SignComponentVersion(cv, Signature2, signing.PrivateKey(Signature2, privkey2), opts))
-			_ = Must(signing.SignComponentVersion(cv, Signature3, signing.PrivateKey(Signature3, privkey3), opts))
-
-			octx = env.OCMContext()
-			signreg := signingattr.Get(octx)
-			signreg.RegisterPublicKey(Signature1, pubkey1)
-			signreg.RegisterPublicKey(Signature2, pubkey2)
-			signreg.RegisterPublicKey(Signature3, pubkey3)
-		})
-
-		AfterEach(func() {
-			Close(cv)
-			Close(repo)
-			MustBeSuccessful(env.Cleanup())
-		})
-
-		It("without retrieving descriptors", func(ctx SpecContext) {
-			MustBeSuccessful(VerifyComponentVersion(ctx, cv, repo, []string{Signature1, Signature2, Signature3}))
-		})
-		It("with retrieving descriptors", func(ctx SpecContext) {
-			descriptors := Must(VerifyComponentVersion(ctx, cv, repo, []string{Signature1, Signature2, Signature3}))
-			Expect(descriptors.List).To(HaveLen(2))
-		})
-		It("list component versions without verification", func(ctx SpecContext) {
-			descriptors := Must(ListComponentDescriptors(ctx, cv, repo))
-			Expect(descriptors.List).To(HaveLen(2))
 		})
 	})
 

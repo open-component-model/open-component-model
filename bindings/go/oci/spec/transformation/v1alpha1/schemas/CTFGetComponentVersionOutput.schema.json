@@ -17,6 +17,7 @@
   "$defs": {
     "ocm.software.open-component-model.bindings.go.descriptor.v2.Descriptor": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/descriptor/v2/resources/schema-2020-12.json",
       "type": "object",
       "description": "Open Component Model v2 schema",
       "properties": {
@@ -43,11 +44,18 @@
           ]
         },
         "signatures": {
-          "type": "array",
           "description": "Optional signing information for verifying component validity",
-          "items": {
-            "$ref": "#/$defs/signature"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/signature"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -135,11 +143,18 @@
               ]
             },
             "resources": {
-              "type": "array",
               "description": "Resources created by the component or third parties",
-              "items": {
-                "$ref": "#/$defs/resourceDefinition"
-              }
+              "oneOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/resourceDefinition"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "sources": {
               "description": "Sources that produced the component",
@@ -168,6 +183,66 @@
             "sources",
             "componentReferences",
             "resources"
+          ],
+          "examples": [
+            {
+              "componentReferences": [],
+              "labels": [
+                {
+                  "name": "link-to-documentation",
+                  "value": "https://ocm.software/"
+                }
+              ],
+              "name": "github.com/open-component-model/podinfo",
+              "provider": "open-component-model",
+              "repositoryContexts": [
+                {
+                  "baseUrl": "ghcr.io",
+                  "componentNameMapping": "urlPath",
+                  "subPath": "open-component-model/open-component-model",
+                  "type": "OCIRegistry"
+                }
+              ],
+              "resources": [
+                {
+                  "access": {
+                    "imageReference": "ghcr.io/stefanprodan/podinfo:6.8.0",
+                    "type": "ociArtifact"
+                  },
+                  "digest": {
+                    "hashAlgorithm": "SHA-256",
+                    "normalisationAlgorithm": "ociArtifactDigest/v1",
+                    "value": "6c1975b871efb327528c84d46d38e6dd7906eecee6402bc270eeb7f1b1a506df"
+                  },
+                  "name": "podinfo",
+                  "relation": "external",
+                  "srcRefs": [
+                    {
+                      "identitySelector": {
+                        "name": "podinfo",
+                        "version": "6.8.0"
+                      }
+                    }
+                  ],
+                  "type": "ociImage",
+                  "version": "6.8.0"
+                }
+              ],
+              "sources": [
+                {
+                  "access": {
+                    "commit": "b3396adb98a6a0f5eeedd1a600beaf5e954a1f28",
+                    "ref": "refs/tags/v6.8.0",
+                    "repoUrl": "github.com/stefanprodan/podinfo",
+                    "type": "gitHub"
+                  },
+                  "name": "podinfo",
+                  "type": "git",
+                  "version": "6.8.0"
+                }
+              ],
+              "version": "v1.0.0"
+            }
           ]
         },
         "componentName": {
@@ -235,15 +310,15 @@
           "description": "Specification of digest information including hashing algorithm and value",
           "properties": {
             "hashAlgorithm": {
-              "$ref": "#/$defs/nonEmptyString",
+              "type": "string",
               "description": "Algorithm used for hashing"
             },
             "normalisationAlgorithm": {
-              "$ref": "#/$defs/nonEmptyString",
+              "type": "string",
               "description": "Algorithm used for normalizing content before hashing"
             },
             "value": {
-              "$ref": "#/$defs/nonEmptyString",
+              "type": "string",
               "description": "The actual hash value"
             }
           },
@@ -278,21 +353,18 @@
               "type": "boolean",
               "description": "Indicates whether the label should be included in the signature"
             },
-            "value": {
+            "value": true,
+            "version": {
               "oneOf": [
                 {
-                  "$ref": "#/$defs/nonEmptyString",
-                  "description": "Value of the label"
+                  "type": "string",
+                  "description": "Version of the label",
+                  "pattern": "^v[0-9]+$"
                 },
                 {
-                  "type": "object",
-                  "description": "an arbitrarily complex structured value"
+                  "type": "null"
                 }
               ]
-            },
-            "version": {
-              "description": "Version of the label",
-              "pattern": "^v[0-9]+$"
             }
           },
           "required": [
@@ -397,12 +469,24 @@
         "ocmType": {
           "type": "string",
           "description": "Type identifier following the Open Component Model type format",
-          "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?"
+          "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?",
+          "examples": [
+            "ociArtifact",
+            "ociArtifact/v1",
+            "OCIRegistry",
+            "my.custom.type/v1alpha1"
+          ]
         },
         "relaxedSemver": {
           "type": "string",
           "description": "Relaxed Semver version that allows optional leading 'v', major-only, and major.minor only",
-          "pattern": "^[v]?(0|[1-9]\\d*)(?:\\.(0|[1-9]\\d*))?(?:\\.(0|[1-9]\\d*))?(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$"
+          "pattern": "^[v]?(0|[1-9]\\d*)(?:\\.(0|[1-9]\\d*))?(?:\\.(0|[1-9]\\d*))?(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+          "examples": [
+            "v1.0.0",
+            "v1.0",
+            "1.0.0",
+            "1.0"
+          ]
         },
         "repositoryContext": {
           "type": "object",
