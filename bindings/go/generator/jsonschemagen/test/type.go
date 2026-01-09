@@ -7,6 +7,7 @@ import (
 // SampleType is a sample struct that includes a field of type runtime.Type.
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
+// +ocm:jsonschema-gen:example=examples/example-sample-type.yaml
 type SampleType struct {
 	Type runtime.Type `json:"type"`
 	// Comment

@@ -43,18 +43,7 @@
           "description": "Name of the label",
           "$ref": "#/$defs/nonEmptyString"
         },
-        "value": {
-          "oneOf": [
-            {
-              "description": "Value of the label",
-              "$ref": "#/$defs/nonEmptyString"
-            },
-            {
-              "type": "object",
-              "description": "an arbitrarily complex structured value"
-            }
-          ]
-        },
+        "value": true,
         "version": {
           "oneOf": [
             {
@@ -206,15 +195,15 @@
       "properties": {
         "hashAlgorithm": {
           "description": "Algorithm used for hashing",
-          "$ref": "#/$defs/nonEmptyString"
+          "type": "string"
         },
         "normalisationAlgorithm": {
           "description": "Algorithm used for normalizing content before hashing",
-          "$ref": "#/$defs/nonEmptyString"
+          "type": "string"
         },
         "value": {
           "description": "The actual hash value",
-          "$ref": "#/$defs/nonEmptyString"
+          "type": "string"
         }
       }
     },
@@ -624,6 +613,7 @@
               "value": "https://ocm.software/"
             }
           ],
+          "componentReferences": [],
           "repositoryContexts": [
             {
               "baseUrl": "ghcr.io",

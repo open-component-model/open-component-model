@@ -220,6 +220,11 @@ func NewDeclType(s *Schema) *DeclType {
 		return declTypeForSchema(decl.DynType, s)
 	}
 
+	// a true bool schema on schema level is equivalent to the property needing to be present in any form.
+	if s.Schema != nil && s.Schema.Bool != nil && *s.Schema.Bool {
+		return declTypeForSchema(decl.DynType, s)
+	}
+
 	return nil
 }
 
