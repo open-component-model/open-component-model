@@ -47,6 +47,7 @@ require (
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260107082047-3b8abf72f590
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260107082047-3b8abf72f590
+	oras.land/oras-go/v2 v2.6.0
 )
 
 require (
@@ -263,7 +264,6 @@ require (
 	github.com/mailru/easyjson v0.9.1 // indirect
 	github.com/mandelsoft/filepath v0.0.0-20240223090642-3e2777258aa3 // indirect
 	github.com/mandelsoft/logging v0.0.0-20240618075559-fdca28a87b0a // indirect
-	github.com/mandelsoft/spiff v1.7.0-beta-7 // indirect
 	github.com/marstr/guid v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -414,7 +414,6 @@ require (
 	ocm.software/open-component-model/bindings/go/constructor v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.0 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.0 // indirect
