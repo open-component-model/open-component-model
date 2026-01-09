@@ -75,7 +75,7 @@ type LocalResourceRepository interface {
 	// that can have a special meaning.
 	AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error)
 
-	// GetLocalResource retrieves a local [descriptor.Resource] from the repository.
+	// GetLocalResource retrieves and verifies the integrity of a local [descriptor.Resource] from the repository.
 	// The [runtime.Identity] must match a resource in the [descriptor.Descriptor].
 	GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error)
 }
@@ -90,7 +90,7 @@ type LocalSourceRepository interface {
 	// that can have a special meaning.
 	AddLocalSource(ctx context.Context, component, version string, src *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error)
 
-	// GetLocalSource retrieves a local [descriptor.Source] from the repository.
+	// GetLocalSource retrieves and verifies the integrity of a local [descriptor.Source] from the repository.
 	// The [runtime.Identity] must match a source in the [descriptor.Descriptor].
 	GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error)
 }
@@ -103,7 +103,7 @@ type ResourceRepository interface {
 	// The resource must be referenced in the component descriptor.
 	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (resourceAfterUpload *descriptor.Resource, err error)
 
-	// DownloadResource downloads a [descriptor.Resource] from the repository.
+	// DownloadResource downloads and verifies the integrity of a [descriptor.Resource] from the repository.
 	DownloadResource(ctx context.Context, res *descriptor.Resource) (content blob.ReadOnlyBlob, err error)
 }
 
@@ -115,7 +115,7 @@ type SourceRepository interface {
 	// The source must be referenced in the component descriptor.
 	UploadSource(ctx context.Context, targetAccess runtime.Typed, source *descriptor.Source, content blob.ReadOnlyBlob) (sourceAfterUpload *descriptor.Source, err error)
 
-	// DownloadSource downloads a [descriptor.Source] from the repository.
+	// DownloadSource downloads and verifies the integrity of a [descriptor.Source] from the repository.
 	DownloadSource(ctx context.Context, res *descriptor.Source) (content blob.ReadOnlyBlob, err error)
 }
 

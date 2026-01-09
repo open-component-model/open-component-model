@@ -165,5 +165,43 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",
       "description": "Typed is used to hold arbitrary typed objects identified by their Type field"
     }
-  }
+  },
+  "examples": [
+    {
+      "MyStruct": {
+        "myString": "foo"
+      },
+      "inlineField": "inlineValue",
+      "myBool": false,
+      "myFloat": 0,
+      "myInt": 0,
+      "myMap": {
+        "key": "value"
+      },
+      "myRaw": {
+        "myString": "myValue",
+        "type": "test"
+      },
+      "myRuntime": {
+        "myString": "myValue",
+        "type": "test"
+      },
+      "mySlice": [
+        "element"
+      ],
+      "myString": "myValue",
+      "myUnknownMap": {
+        "object": {
+          "key": "value"
+        }
+      },
+      "nested": {
+        "nestedField": "value"
+      },
+      "nestedPointer": {
+        "nestedField": "value"
+      },
+      "type": "test"
+    }
+  ]
 }

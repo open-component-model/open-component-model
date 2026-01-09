@@ -9,23 +9,25 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"ocm.software/ocm/api/ocm/extensions/repositories/ctf"
+	. "ocm.software/ocm/api/helper/builder"
 
 	"github.com/mandelsoft/vfs/pkg/osfs"
 	"github.com/mandelsoft/vfs/pkg/projectionfs"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	. "ocm.software/ocm/api/helper/builder"
 	environment "ocm.software/ocm/api/helper/env"
 	ocmmetav1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	"ocm.software/ocm/api/ocm/extensions/artifacttypes"
+	"ocm.software/ocm/api/ocm/extensions/repositories/ctf"
 	"ocm.software/ocm/api/utils/accessio"
 	"ocm.software/ocm/api/utils/mime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/test"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("Deployer Controller with YAML stream (ConfigMap + Secret)", func() {
@@ -151,7 +153,11 @@ stringData:
 						Type:    resourceType,
 						Version: resourceVersion,
 						Access:  apiextensionsv1.JSON{Raw: []byte("{}")},
-						Digest:  fmt.Sprintf("SHA-256:%s[%s]", hex.EncodeToString(hash[:]), "genericBlobDigest/v1"),
+						Digest: &v2.Digest{
+							HashAlgorithm:          "SHA-256",
+							NormalisationAlgorithm: "genericBlobDigest/v1",
+							Value:                  hex.EncodeToString(hash[:]),
+						},
 					},
 				},
 			)

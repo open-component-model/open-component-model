@@ -444,5 +444,5 @@ func TestGenerate_StructInlineAndExplicitFieldSameName_ExplicitWinsWhenLater(t *
 
 	require.Contains(t, s.Properties, "A")
 	// Explicit field should override inline-provided one if it appears later.
-	require.Equal(t, "integer", s.Properties["A"].Type)
+	require.Equal(t, "integer", s.Properties["A"].Schema.Type)
 }
