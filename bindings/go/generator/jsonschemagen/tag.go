@@ -12,7 +12,7 @@ import (
 // For tag `json:"-"` → ("-", nil)
 // For missing tag → ("", nil)
 func parseJSONTag(f *ast.Field) (string, []string) {
-	if f.Tag == nil {
+	if f == nil || f.Tag == nil {
 		return "", nil
 	}
 
@@ -46,7 +46,7 @@ func parseJSONTag(f *ast.Field) (string, []string) {
 // For missing tag on field Foo → ("Foo", nil)
 func parseJSONTagWithFieldNameFallback(f *ast.Field) (string, []string) {
 	name, opts := parseJSONTag(f)
-	if name == "" {
+	if name == "" && f != nil && len(f.Names) > 0 {
 		return f.Names[0].Name, opts
 	}
 	return name, opts
