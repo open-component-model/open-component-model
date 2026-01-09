@@ -344,6 +344,28 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			By("verifying ApplySet labels still correct after pruning")
 			verifyDeployedResourcesApplySetLabels(ctx, example.Name())
 
+			// delete deployer
+			By("cleaning up the deployer")
+			deployerName := "deployer.delivery.ocm.software/" + example.Name() + "-deployer"
+			Expect(utils.DeleteResource(ctx, timeout, deployerName)).To(Succeed())
+
+			// make sure that the deployer is deleted
+			By("waiting for the deployer to be deleted")
+			Eventually(func() error {
+				cmd := exec.CommandContext(ctx, "kubectl", "get", deployerName, "-n", "default")
+				_, err := utils.Run(cmd)
+				return err
+			}, timeout).Should(HaveOccurred(), "Deployer should be deleted")
+
+			// check that deployed resources are also deleted
+			By("verifying that deployed resources are deleted")
+			res := "deployment.apps/" + example.Name() + "-podinfo"
+			Eventually(func() error {
+				cmd := exec.CommandContext(ctx, "kubectl", "get", res, "-n", "default")
+				_, err := utils.Run(cmd)
+				return err
+			}, timeout).Should(HaveOccurred(), "Deployed resource %s should be deleted", res)
+
 			By("cleaning up service account cluster admin")
 			Expect(utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")).To(Succeed())
 		})

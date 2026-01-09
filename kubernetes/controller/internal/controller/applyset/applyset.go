@@ -484,9 +484,10 @@ func (a *applySet) apply(ctx context.Context, result *Result, dryRun bool) error
 			applied, err := a.applyObject(egctx, obj, dryRun)
 			if err != nil {
 				logger.Error("error applying object", "error", err)
+				return err
 			}
 			result.recordApplied(applied, err)
-			return nil // Don't stop on individual errors
+			return nil
 		})
 	}
 
