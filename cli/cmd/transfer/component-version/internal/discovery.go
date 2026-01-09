@@ -184,7 +184,7 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 		if ref.Digest.Value != "" {
 			d.mu.Lock()
 			// TODO Panic on differing digests
-			d.discoveredDigests[ref.ToIdentity().String()] = ref.Digest
+			d.discoveredDigests[ref.ToComponentIdentity().String()] = ref.Digest
 			d.mu.Unlock()
 		}
 		children = append(children, base)
