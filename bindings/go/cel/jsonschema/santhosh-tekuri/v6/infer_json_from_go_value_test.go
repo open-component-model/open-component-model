@@ -132,9 +132,12 @@ func TestInferFromGoValue(t *testing.T) {
 			expectErr: true,
 		},
 		{
-			name:      "nil_is_unsupported",
+			name:      "nil_is_supported",
 			input:     nil,
-			expectErr: true,
+			expectErr: false,
+			validate: func(t *testing.T, s *jsonschema.Schema) {
+				require.Contains(t, s.Types.ToStrings(), "null")
+			},
 		},
 	}
 
