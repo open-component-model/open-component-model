@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"regexp"
 	"runtime"
 	"slices"
 
@@ -280,7 +279,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	// Download the resource
-	key := resource.Status.Resource.Digest
+	key := resource.Status.Resource.Digest.Value
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
 		return r.DownloadResourceWithOCM(ctx, deployer, resource)
@@ -395,7 +394,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 
 	// Get the manifest and its digest. Compare the digest to the one in the resource to make
 	// sure the resource is up to date.
-	manifest, digest, err := r.getResource(cv, resourceAccess)
+	manifest, digests, err := r.getResource(cv, resourceAccess)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
@@ -405,10 +404,22 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		err = errors.Join(err, manifest.Close())
 	}()
 
-	if resource.Status.Resource.Digest != digest {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, "resource digest mismatch")
+	// TODO: There is room for improvement here but this will be reworked when we migrate to ocm v2 either way
+	// It is possible that the resource status does not have a digest as that digest is derived from the component
+	// descriptor. If a digest is present in the resource status, we verify that it matches one of the digests
+	// calculated for the resource.
+	if resource.Status.Resource.Digest != nil {
+		found := slices.ContainsFunc(digests, func(d ocmv1.DigestSpec) bool {
+			return d.NormalisationAlgorithm == resource.Status.Resource.Digest.NormalisationAlgorithm &&
+				d.HashAlgorithm == resource.Status.Resource.Digest.HashAlgorithm &&
+				d.Value == resource.Status.Resource.Digest.Value
+		})
 
-		return nil, fmt.Errorf("resource digest mismatch: expected %s, got %s", resource.Status.Resource.Digest, digest)
+		if !found {
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, "resource digest mismatch")
+
+			return nil, fmt.Errorf("resource digest mismatch: none of %v matched with %s", digests, resource.Status.Resource.Digest)
+		}
 	}
 
 	if objs, err = decodeObjectsFromManifest(manifest); err != nil {
@@ -444,29 +455,29 @@ func decodeObjectsFromManifest(manifest io.ReadCloser) (_ []*unstructured.Unstru
 }
 
 // getResource returns the resource data as byte-slice and its digest.
-func (r *Reconciler) getResource(cv ocmctx.ComponentVersionAccess, resourceAccess ocmctx.ResourceAccess) (io.ReadCloser, string, error) {
+func (r *Reconciler) getResource(cv ocmctx.ComponentVersionAccess, resourceAccess ocmctx.ResourceAccess) (io.ReadCloser, []ocmv1.DigestSpec, error) {
 	octx := cv.GetContext()
 	cd := cv.GetDescriptor()
 	raw := &cd.Resources[cd.GetResourceIndex(resourceAccess.Meta())]
 
 	if raw.Digest == nil {
-		return nil, "", errors.New("digest not found in resource access")
+		return nil, nil, errors.New("digest not found in resource access")
 	}
 
 	// Check if the resource is signature relevant and calculate digest of resource
 	acc, err := octx.AccessSpecForSpec(raw.Access)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed getting access for resource: %w", err)
+		return nil, nil, fmt.Errorf("failed getting access for resource: %w", err)
 	}
 
 	meth, err := acc.AccessMethod(cv)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed getting access method: %w", err)
+		return nil, nil, fmt.Errorf("failed getting access method: %w", err)
 	}
 
 	accessMethod, err := resourceAccess.AccessMethod()
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to create access method: %w", err)
+		return nil, nil, fmt.Errorf("failed to create access method: %w", err)
 	}
 
 	bAcc := accessMethod.AsBlobAccess()
@@ -480,40 +491,16 @@ func (r *Reconciler) getResource(cv ocmctx.ComponentVersionAccess, resourceAcces
 	hasher := registry.GetHasher(resAccDigestType.HashAlgorithm)
 	digest, err := octx.BlobDigesters().DetermineDigests(raw.Type, hasher, registry, meth, req...)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed determining digest for resource: %w", err)
+		return nil, nil, fmt.Errorf("failed determining digest for resource: %w", err)
 	}
 
 	// Get actual resource data
 	data, err := bAcc.Reader()
 	if err != nil {
-		return nil, "", fmt.Errorf("failed getting resource data: %w", err)
+		return nil, nil, fmt.Errorf("failed getting resource data: %w", err)
 	}
 
-	return data, digest[0].String(), nil
-}
-
-var digestSpecStringPattern = regexp.MustCompile(`^(?P<algo>[\w\-]+):(?P<digest>[a-fA-F0-9]+)\[(?P<norm>[\w\/]+)\]$`)
-
-// TODO(jakobmoellerdev): currently digests are stored as strings in resource status, we should really consider storing them natively...
-func digestSpec(s string) (ocmv1.DigestSpec, error) {
-	matches := digestSpecStringPattern.FindStringSubmatch(s)
-	if expectedMatches := 4; len(matches) != expectedMatches {
-		return ocmv1.DigestSpec{}, fmt.Errorf("invalid digest spec format: %s", s)
-	}
-
-	digestSpec := ocmv1.DigestSpec{}
-	for i, name := range digestSpecStringPattern.SubexpNames() {
-		switch name {
-		case "algo":
-			digestSpec.HashAlgorithm = matches[i]
-		case "digest":
-			digestSpec.Value = matches[i]
-		case "norm":
-			digestSpec.NormalisationAlgorithm = matches[i]
-		}
-	}
-
-	return digestSpec, nil
+	return data, digest, nil
 }
 
 // applyWithApplySet applies the resource objects using ApplySet for proper tracking and pruning.
