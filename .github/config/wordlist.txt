@@ -17,6 +17,7 @@ apeirora
 api
 apis
 applyable
+ApplySet
 approvers
 araise
 architected
@@ -232,6 +233,7 @@ json
 jsonNormalisation
 jsonschema
 kelch
+KEP
 keyless
 keypair
 keyring

@@ -21,7 +21,7 @@ func Run(cmd *exec.Cmd) ([]byte, error) {
 	cmd.Env = append(cmd.Env, "GO110MODULE=on")
 
 	command := strings.Join(cmd.Args, " ")
-	fmt.Fprintf(GinkgoWriter, "running: %s\n", command)
+	_, _ = fmt.Fprintf(GinkgoWriter, "running: %s\n", command)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return output, fmt.Errorf("%s failed with error: (%w) %s", command, err, string(output))
@@ -45,6 +45,10 @@ func DeployAndWaitForResource(ctx context.Context, manifestFilePath, waitingFor,
 	return WaitForResource(ctx, waitingFor, timeout, "-f", manifestFilePath)
 }
 
+type DeployResourceOpts struct {
+	IgnoreCleanupErr bool
+}
+
 // DeployResource takes a manifest file of a k8s resource and deploys it with "kubectl". Correspondingly,
 // a DeferCleanup-handler is created that will delete the resource, when the test-suite ends.
 // In contrast to "DeployAndWaitForResource", this function does not wait for a certain condition to be fulfilled.
@@ -57,9 +61,47 @@ func DeployResource(ctx context.Context, manifestFilePath string) error {
 	DeferCleanup(func(ctx SpecContext) error {
 		cmd = exec.CommandContext(ctx, "kubectl", "delete", "-f", manifestFilePath)
 		_, err := Run(cmd)
+		if err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "warning: could not delete resource from manifest %s: %v\n", manifestFilePath, err)
+		}
 
 		return err
 	})
+
+	return err
+}
+
+// DeployResourceIgnoreErrors takes a manifest file of a k8s resource and deploys it with "kubectl". Correspondingly,
+// a DeferCleanup-handler is created that will delete the resource, when the test-suite ends.
+// Other than "DeployResource", errors during cleanup are ignored.
+// In contrast to "DeployAndWaitForResource", this function does not wait for a certain condition to be fulfilled.
+func DeployResourceIgnoreErrors(ctx context.Context, manifestFilePath string) error {
+	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", manifestFilePath)
+	_, err := Run(cmd)
+	if err != nil {
+		return err
+	}
+	DeferCleanup(func(ctx SpecContext) error {
+		cmd = exec.CommandContext(ctx, "kubectl", "delete", "-f", manifestFilePath)
+		_, err := Run(cmd)
+		if err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "warning: could not delete resource from manifest %s: %v\n", manifestFilePath, err)
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+// DeleteResource deletes one or more k8s resources with "kubectl".
+// The resources to delete are passed as arguments.
+// Additionally, a timeout can be specified, which is passed to "kubectl" as well.
+func DeleteResource(ctx context.Context, timeout string, resource ...string) error {
+	cmdArgs := append([]string{"delete"}, resource...)
+	cmdArgs = append(cmdArgs, "--timeout="+timeout)
+	cmd := exec.CommandContext(ctx, "kubectl", cmdArgs...)
+	_, err := Run(cmd)
 
 	return err
 }
