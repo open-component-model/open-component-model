@@ -3,9 +3,11 @@ package manager
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -14,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	extism "github.com/extism/go-sdk"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	blobtransformerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
@@ -139,19 +143,73 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 		plugin.Config = *conf
 
 		output := bytes.NewBuffer(nil)
-		// TODO(fabianburth): provide developer documentation on how to debug
-		//   plugins.
-		// The commented command below can be used to start the plugin in headless mode with Delve for debugging purposes.
-		// Depending on your IDE, you can create a remote debugging configuration that connects to the specified port.
-		// The execution will wait for a debugger to attach before proceeding.
-		// cmd := exec.CommandContext(ctx, "dlv", "exec", cleanPath(plugin.Path), "--headless=true", "--listen=:40000", "--api-version=2", "--accept-multiclient", "--log", "--log-dest=2", "--", "capabilities")
-		cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint:gosec // G204 does not apply
-		cmd.Stdout = output
-		cmd.Stderr = os.Stderr
 
-		// Use Wait so we get the capabilities and make sure that the command exists and returns the values we need.
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
+		if isWasmPlugin(plugin.Path) {
+			wasmBytes, err := os.ReadFile(plugin.Path)
+			if err != nil {
+				return fmt.Errorf("failed to read wasm file %s: %w", plugin.Path, err)
+			}
+
+			manifestConfig := map[string]string{}
+			if len(plugin.Config.ConfigTypes) > 0 {
+				configJSON, err := json.Marshal(plugin.Config)
+				if err != nil {
+					return fmt.Errorf("failed to marshal plugin config for %s: %w", plugin.ID, err)
+				}
+				manifestConfig["ocm_config"] = string(configJSON)
+			}
+
+			manifest := extism.Manifest{
+				Wasm: []extism.Wasm{
+					extism.WasmData{
+						Data: wasmBytes,
+					},
+				},
+				AllowedHosts: []string{"*"},
+				Config:       manifestConfig,
+			}
+
+			config := extism.PluginConfig{
+				EnableWasi: true,
+			}
+
+			wasmPlugin, err := extism.NewPlugin(ctx, manifest, config, []extism.HostFunction{})
+			if err != nil {
+				return fmt.Errorf("failed to create extism plugin %s: %w", plugin.ID, err)
+			}
+
+			_, capabilitiesOutput, err := wasmPlugin.CallWithContext(ctx, "capabilities", nil)
+			if err != nil {
+				return fmt.Errorf("failed to call capabilities function on wasm plugin %s: %w", plugin.ID, err)
+			}
+
+			if err := wasmPlugin.Close(ctx); err != nil {
+				return fmt.Errorf("failed to close extism plugin %s: %w", plugin.ID, err)
+			}
+
+			// TODO: WHY THE EVER LOVING FUCK IS THIS QUOTED?
+			decoder := base64.NewDecoder(base64.StdEncoding, bytes.NewReader(bytes.Trim(capabilitiesOutput, "\"")))
+			content, err := io.ReadAll(decoder)
+			if err != nil {
+				return fmt.Errorf("failed to read capabilities output %s: %w", string(capabilitiesOutput), err)
+			}
+
+			output.Write(content)
+		} else {
+			// TODO(fabianburth): provide developer documentation on how to debug
+			//   plugins.
+			// The commented command below can be used to start the plugin in headless mode with Delve for debugging purposes.
+			// Depending on your IDE, you can create a remote debugging configuration that connects to the specified port.
+			// The execution will wait for a debugger to attach before proceeding.
+			// cmd := exec.CommandContext(ctx, "dlv", "exec", cleanPath(plugin.Path), "--headless=true", "--listen=:40000", "--api-version=2", "--accept-multiclient", "--log", "--log-dest=2", "--", "capabilities")
+			cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint:gosec // G204 does not apply
+			cmd.Stdout = output
+			cmd.Stderr = os.Stderr
+
+			// Use Wait so we get the capabilities and make sure that the command exists and returns the values we need.
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
+			}
 		}
 
 		if err := pm.addPlugin(pm.baseCtx, defaultOpts.Config, *plugin, output); err != nil {
@@ -164,6 +222,11 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 
 func cleanPath(path string) string {
 	return strings.Trim(path, `,;:'"|&*!@#$`)
+}
+
+// isWasmPlugin checks if the plugin path points to a Wasm file.
+func isWasmPlugin(path string) bool {
+	return filepath.Ext(path) == ".wasm"
 }
 
 // Shutdown is called to terminate all plugins.
@@ -201,9 +264,9 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 			return nil
 		}
 
-		// TODO(Skarlso): Determine plugin extension.
+		// Allow executables (no extension) and .wasm files
 		ext := filepath.Ext(info.Name())
-		if ext != "" {
+		if ext != "" && ext != ".wasm" {
 			return nil
 		}
 
@@ -247,8 +310,9 @@ func init() {
 func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Config, plugin mtypes.Plugin, capabilitiesCommandOutput *bytes.Buffer) error {
 	// Determine Configuration requirements.
 	rawPluginSpec := spec.PluginSpec{}
-	if err := json.Unmarshal(capabilitiesCommandOutput.Bytes(), &rawPluginSpec); err != nil {
-		return fmt.Errorf("failed to unmarshal capabilities: %w", err)
+	capabilities := capabilitiesCommandOutput.Bytes()
+	if err := json.Unmarshal(capabilities, &rawPluginSpec); err != nil {
+		return fmt.Errorf("failed to unmarshal capabilities %q: %w", string(capabilities), err)
 	}
 	pluginSpec, err := pluginruntime.ConvertFromSpec(scheme, &rawPluginSpec)
 	if err != nil {

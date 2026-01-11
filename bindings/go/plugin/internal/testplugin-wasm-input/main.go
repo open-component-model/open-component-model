@@ -1,0 +1,123 @@
+//go:build wasip1
+
+package main
+
+import (
+	"encoding/json"
+	"os"
+
+	"github.com/extism/go-pdk"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
+	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/runtime"
+)
+
+var pluginConfig mtypes.Config
+
+func init() {
+	// we set ocm config for each instance and see if it's there and put it into a package local value.
+	configStr, ok := pdk.GetConfig("ocm_config")
+	if ok && configStr != "" {
+		if err := json.Unmarshal([]byte(configStr), &pluginConfig); err != nil {
+			pdk.Log(pdk.LogError, "failed to unmarshal plugin config: "+err.Error())
+		}
+	}
+}
+
+//go:wasmexport process_resource
+func ProcessResource() int32 {
+	input := pdk.Input()
+
+	var request *v1.ProcessResourceInputRequest
+	if err := json.Unmarshal(input, &request); err != nil {
+		pdk.SetError(err)
+		return 1
+	}
+
+	response := v1.ProcessResourceInputResponse{
+		Resource: &descriptorv2.Resource{
+			ElementMeta: descriptorv2.ElementMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Name:    "test-resource",
+					Version: "v0.0.1",
+				},
+			},
+		},
+		Location: &mtypes.Location{
+			LocationType: "localFile",
+			Value:        "/tmp/wasm-resource-file",
+		},
+	}
+
+	output, err := json.Marshal(response)
+	if err != nil {
+		pdk.SetError(err)
+		return 1
+	}
+
+	pdk.Output(output)
+	return 0
+}
+
+//go:wasmexport process_source
+func ProcessSource() int32 {
+	input := pdk.Input()
+
+	var request v1.ProcessSourceInputRequest
+	if err := json.Unmarshal(input, &request); err != nil {
+		pdk.SetError(err)
+		return 1
+	}
+
+	response := v1.ProcessSourceInputResponse{
+		Source: &descriptorv2.Source{
+			ElementMeta: descriptorv2.ElementMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Name:    "test-source",
+					Version: "v0.0.1",
+				},
+			},
+		},
+		Location: &mtypes.Location{
+			LocationType: "localFile",
+			Value:        "/tmp/wasm-source-file",
+		},
+	}
+
+	output, err := json.Marshal(response)
+	if err != nil {
+		pdk.SetError(err)
+		return 1
+	}
+
+	pdk.Output(output)
+	return 0
+}
+
+//go:wasmexport capabilities
+func Capabilities() int32 {
+	scheme := runtime.NewScheme()
+	dummytype.MustAddToScheme(scheme)
+	// TODO: Since we are using WASM plugins, there is no need to construct handlers at all.
+	// Which means we need a different way to construct the capabilities. For now, just return none.
+	capabilities := endpoints.NewEndpoints(scheme)
+	content, err := capabilities.MarshalJSON()
+	if err != nil {
+		pdk.SetError(err)
+		os.Exit(1)
+	}
+
+	output, err := json.Marshal(content)
+	if err != nil {
+		pdk.SetError(err)
+		return 1
+	}
+
+	pdk.Output(output)
+	return 0
+}
+
+func main() {}
