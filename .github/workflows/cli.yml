@@ -132,7 +132,7 @@ jobs:
       # Upload CLI binaries and OCI layout only if branch is eligible for push
       - name: Upload Artifacts
         if: ${{ steps.branch-check.outputs.should_push_oci_image }}
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         id: upload-artifacts
         with:
           if-no-files-found: 'error'
