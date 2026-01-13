@@ -22,7 +22,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
     - name: Setup JSON Schema
-      uses: sourcemeta/jsonschema@a6a55d7f3a43487503f52defc19f04ff237a036d # v12.10.1
+      uses: sourcemeta/jsonschema@96d8ce7a4e6ddf5ef86b9d90efbb250ed02da76a # v13.0.0
     - name: Lint JSON Schemas
       run: |
         jsonschema lint $(git ls-files '**/schemas/*.schema.json') \
