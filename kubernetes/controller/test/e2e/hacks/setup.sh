@@ -32,6 +32,12 @@ if [ ! -f "${image_registries}" ]; then
   exit 1
 fi
 
+rbac="${script_dir}/rbac.yaml"
+if [ ! -f "${rbac}" ]; then
+  echo "RBAC config file not found: ${rbac}"
+  exit 1
+fi
+
 # Create registry container unless it already exists
 ## Required to store the controller image and have a registry to transfer OCM component versions to test localization.
 reg_name='image-registry'
@@ -96,6 +102,7 @@ fi
 
 # Create private image registries in cluster
 kubectl apply -f "${image_registries}" || exit 1
+kubectl apply -f "${rbac}" || exit 1
 kubectl wait pod -l app=protected-registry1 --for condition=Ready --timeout 5m || exit 1
 kubectl wait pod -l app=protected-registry2 --for condition=Ready --timeout 5m || exit 1
 

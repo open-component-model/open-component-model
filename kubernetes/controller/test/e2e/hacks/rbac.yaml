@@ -1,0 +1,47 @@
+# Role: HACK TO ALLOW APPLY SET TO LIST AND DELETE ALL RESOURCES IN THE DEFAULT NAMESPACE
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ocm-k8s-toolkit-applyset-e2e
+  namespace: default
+rules:
+  - apiGroups: [ "*" ]
+    resources: [ "*" ]
+    verbs: [ "get", "list", "watch","delete" ]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ocm-k8s-toolkit-applyset-e2e
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: ocm-k8s-toolkit-controller-manager
+    namespace: ocm-k8s-toolkit-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ocm-k8s-toolkit-applyset-e2e
+---
+# ClusterRole: HACK TO ALLOW APPLY SET TO LIST AND DELETE ALL RESOURCES IN THE CLUSTER
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ocm-k8s-toolkit-applyset-e2e
+rules:
+  - apiGroups: [ "*" ]
+    resources: [ "*" ]
+    verbs: [ "get", "list", "watch","delete" ]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ocm-k8s-toolkit-applyset-e2e
+subjects:
+  - kind: ServiceAccount
+    name: ocm-k8s-toolkit-controller-manager
+    namespace: ocm-k8s-toolkit-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ocm-k8s-toolkit-applyset-e2e
