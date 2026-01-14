@@ -125,8 +125,8 @@ ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20
 ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260107082047-3b8abf72f590/go.mod h1:w1MNNIiTCNNrcXen1tcPoXbDNriGEI402nIQq3SAEmQ=
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260107082047-3b8abf72f590 h1:AL1B+0IYHi0BpgfJd9//2BJJQxdfVpNiUWzQAKSV/14=
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260107082047-3b8abf72f590/go.mod h1:qK/lyHWc1p9x/NtVKqYPtAVG3v7vnCRP7KTuyGOQCLA=
-ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha7 h1:LZZNmtFY3byeEoL3zlTdaVa/bkcMuNBCQ+9Kiuh8654=
-ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha7/go.mod h1:H0b0ItuHNcECzolAhwN8lIfgYxzwUKDP7mLNv34Va2c=
+ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha8 h1:b0VcjXhkYySvaCIVtm+ghvtheTj5NYTHkfRtArGmBSQ=
+ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha8/go.mod h1:H0b0ItuHNcECzolAhwN8lIfgYxzwUKDP7mLNv34Va2c=
 ocm.software/open-component-model/bindings/go/input/dir v0.0.2 h1:5n9k0J0W5jDWuzf2uhuzQKnNeqMwBDHop0mAfv4naiw=
 ocm.software/open-component-model/bindings/go/input/dir v0.0.2/go.mod h1:3qfxxgMZRSsp6aeiRirkaXSuIZ5oJF1ViUbVGTw1F6U=
 ocm.software/open-component-model/bindings/go/input/file v0.0.3 h1:fOs+mpqEIwCtR8qYGbUQrh4E9m8S47tH9GD6/dPPKO4=
