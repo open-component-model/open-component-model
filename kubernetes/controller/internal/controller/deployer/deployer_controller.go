@@ -47,6 +47,10 @@ const (
 	// resourceWatchFinalizer is the finalizer used to ensure that the resource watch is removed when the deployer is deleted.
 	// It is used by the dynamic informer manager to unregister watches for resources that are referenced by the deployer.
 	resourceWatchFinalizer = "delivery.ocm.software/watch"
+
+	// applySetPruneFinalizer is the finalizer used to ensure that the ApplySet is pruned when the deployer is deleted.
+	applySetPruneFinalizer = "delivery.ocm.software/applyset-prune"
+
 	// deployerManager is the label used to identify the deployer as a manager of resources.
 	deployerManager = "deployer.delivery.ocm.software"
 )
@@ -267,6 +271,11 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 		return fmt.Errorf("ApplySet prune completed with errors: %v", result.Errors)
 	}
 
+	if len(result.Pruned) == 0 {
+		logger.Info("no more resources to prune")
+		controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
+	}
+
 	return nil
 }
 
@@ -358,6 +367,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	updateDeployedObjectStatusReferences(objs, deployer)
 	// TODO: move finalizer up because removal is anyhow idempotent
+	controllerutil.AddFinalizer(deployer, applySetPruneFinalizer)
 	controllerutil.AddFinalizer(deployer, resourceWatchFinalizer)
 
 	// TODO: Status propagation of RGD status to deployer
