@@ -225,6 +225,46 @@ func (r *Reconciler) Untrack(ctx context.Context, deployer *deliveryv1alpha1.Dep
 	return nil
 }
 
+func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1alpha1.Deployer) error {
+	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
+
+	// Use the deployer as the ApplySet parent
+	// This allows us to track all resources deployed by this deployer
+	applySetConfig := applyset.Config{
+		ToolingID: applyset.ToolingID{
+			Name:    deployerManager,
+			Version: "v1alpha1",
+		},
+		FieldManager: fmt.Sprintf("%s/%s", deployerManager, deployer.UID),
+		ToolLabels: map[string]string{
+			// Include the standard managed-by label
+			managedByLabel: deployerManager,
+		},
+		Concurrency: runtime.NumCPU(),
+	}
+
+	set, err := applyset.New(ctx, deployer, r.Client, r.resourceRESTMapper, applySetConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create ApplySet: %w", err)
+	}
+
+	logger.Info("pruning ApplySet")
+	result, err := set.Apply(ctx, true)
+	if err != nil {
+		return fmt.Errorf("failed to prune ApplySet: %w", err)
+	}
+
+	// Log results
+	logger.Info("ApplySet prune operation complete",
+		"pruned", len(result.Pruned),
+		"errors", len(result.Errors))
+	if len(result.Errors) > 0 {
+		return fmt.Errorf("ApplySet prune completed with errors: %v", result.Errors)
+	}
+
+	return nil
+}
+
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
 	logger.Info("starting reconciliation")
@@ -246,6 +286,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	if !deployer.GetDeletionTimestamp().IsZero() {
 		if err := r.Untrack(ctx, deployer); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to untrack deployer: %w", err)
+		}
+
+		if err := r.pruneWithApplySet(ctx, deployer); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to prune resources for deployer: %w", err)
 		}
 
 		return ctrl.Result{}, fmt.Errorf("deployer is being deleted, waiting for resource watches to be removed")
