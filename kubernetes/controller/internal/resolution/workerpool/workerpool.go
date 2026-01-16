@@ -2,7 +2,6 @@ package workerpool
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -67,15 +66,14 @@ type PoolOptions struct {
 // WorkerPool manages a pool of workers that process work items concurrently.
 type WorkerPool struct {
 	PoolOptions
-	workQueue    chan *WorkItem
-	inProgressMu sync.Mutex
+	workQueue     chan *WorkItem
+	inProgressMu  sync.Mutex
+	subscribersMu sync.RWMutex
+	subscribers   []chan []RequesterInfo
 	// tracks all requesters per resolution key to make sure that all objects who request this item will
 	// be notified of any change.
 	inProgress  map[string][]RequesterInfo
 	workersDone sync.WaitGroup
-	// eventChan is a channel for a list of requesters that watch this resolution.
-	// These will be enqueued for reconciliation when the resolution completes.
-	eventChan chan []RequesterInfo
 }
 
 // ErrResolutionInProgress is returned when a component version is being resolved in the background.
@@ -95,14 +93,22 @@ func NewWorkerPool(opts PoolOptions) *WorkerPool {
 		PoolOptions: opts,
 		workQueue:   make(chan *WorkItem, opts.QueueSize),
 		inProgress:  make(map[string][]RequesterInfo),
-		eventChan:   make(chan []RequesterInfo),
+		subscribers: make([]chan []RequesterInfo, 0),
 	}
 }
 
-// EventChannel returns the channel that emits resolution events.
-// Controllers can watch this channel to get notified when resolutions complete.
-func (wp *WorkerPool) EventChannel() <-chan []RequesterInfo {
-	return wp.eventChan
+// Subscribe creates a new event subscription channel and registers it to receive
+// resolution events. Each subscriber gets its own buffered channel to avoid events being
+// consumed by only one listener and controllers stealing events from other controllers.
+// The channel is buffered to prevent blocking workers. If the buffer fills, events are dropped.
+// The returned channel will be closed when the worker pool shuts down.
+func (wp *WorkerPool) Subscribe() <-chan []RequesterInfo {
+	wp.subscribersMu.Lock()
+	defer wp.subscribersMu.Unlock()
+
+	ch := make(chan []RequesterInfo, 10)
+	wp.subscribers = append(wp.subscribers, ch)
+	return ch
 }
 
 // Start begins the worker pool.
@@ -126,7 +132,12 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 
 		// now it's safe to close the channels
 		close(wp.workQueue)
-		close(wp.eventChan)
+
+		wp.subscribersMu.Lock()
+		for _, ch := range wp.subscribers {
+			close(ch)
+		}
+		wp.subscribersMu.Unlock()
 
 		close(done)
 	}()
@@ -252,7 +263,7 @@ func (wp *WorkerPool) worker(ctx context.Context, id int) {
 	for {
 		select {
 		case <-ctx.Done():
-			logger.V(1).Error(ctx.Err(), "worker stopped due to context cancellation")
+			logger.V(1).Info("worker stopped due to context cancellation")
 			return
 		case item := <-wp.workQueue:
 			QueueSizeGauge.Set(float64(len(wp.workQueue)))
@@ -289,21 +300,31 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, i
 	// get all requesters AFTER resolution completes but BEFORE cleanup
 	// ensures we capture all requesters that were added during the resolution and the wait for it to be finished
 	requesters := wp.setResult(item.key, result, err)
-	select {
-	case <-ctx.Done():
-		logger.V(1).Error(ctx.Err(), "worker stopped due to context cancellation")
-		return
-	case wp.eventChan <- requesters:
-		logger.V(1).Info("emitted resolution event",
-			"component", item.Opts.Component,
-			"version", item.Opts.Version,
-			"requesterCount", len(requesters),
-			"requesters", requesters)
-	default:
-		logger.Error(errors.New("failed to send event on requesters channel"), "failed to emit resolution event, requesters will not be notified",
-			"component", item.Opts.Component,
-			"version", item.Opts.Version)
-		EventChannelDropsTotal.WithLabelValues(item.Opts.Component, item.Opts.Version).Inc()
+
+	// notify all subscribers of an event happening.
+	// Uses buffered channels with non-blocking send to avoid worker goroutine overhead.
+	wp.subscribersMu.RLock()
+	subscribers := slices.Clone(wp.subscribers)
+	wp.subscribersMu.RUnlock()
+
+	for _, ch := range subscribers {
+		select {
+		case <-ctx.Done():
+			logger.V(1).Info("context canceled, skipping event broadcast",
+				"component", item.Opts.Component,
+				"version", item.Opts.Version)
+			return
+		case ch <- requesters:
+			logger.V(1).Info("sent resolution event to subscriber",
+				"component", item.Opts.Component,
+				"version", item.Opts.Version,
+				"requesterCount", len(requesters))
+		default:
+			logger.Info("dropped resolution event, subscriber buffer full",
+				"component", item.Opts.Component,
+				"version", item.Opts.Version)
+			EventChannelDropsTotal.WithLabelValues(item.Opts.Component, item.Opts.Version).Inc()
+		}
 	}
 }
 
