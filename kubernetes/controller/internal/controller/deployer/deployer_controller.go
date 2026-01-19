@@ -75,13 +75,7 @@ type Reconciler struct {
 	resourceRESTMapper meta.RESTMapper
 
 	DownloadCache cache.DigestObjectCache[string, []*unstructured.Unstructured]
-
-	// Resolver provides repository resolution and caching for deployer reconciliation.
-	// It ensures that repository access is efficient and consistent during reconciliation operations.
-	Resolver *resolution.Resolver
-
-	// PluginManager manages plugins for resource operations.
-	// It enables dynamic loading and execution of plugins required for resource download.
+	Resolver      *resolution.Resolver
 	PluginManager *manager.PluginManager
 }
 
@@ -292,12 +286,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: %w", err)
 	}
 
-	// Download the resource
 	key := resource.Status.Resource.Digest.Value
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
 		return r.DownloadResourceWithOCM(ctx, deployer, resource)
 	})
+	if errors.Is(err, resolution.ErrResolutionInProgress) {
+		return ctrl.Result{}, nil
+	}
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to download resource from OCM or retrieve it from the cache: %w", err)
 	}
@@ -372,7 +368,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		// resolution is in progress, the controller will be re-triggered via event source when resolution completes
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
 
-		return nil, nil // Return nil error to avoid requeue, wait for event notification
+		return nil, resolution.ErrResolutionInProgress
 	}
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
@@ -405,7 +401,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to load configurations: %w", err)
 	}
 
-	blob, err := r.downloadResourceBlob(ctx, matchedResource, cfg)
+	blob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
@@ -448,31 +444,49 @@ func decodeObjectsFromManifest(manifest io.ReadCloser) (_ []*unstructured.Unstru
 	return objs, nil
 }
 
-// downloadResourceBlob downloads a resource blob using the plugin manager.
+// downloadResourceBlob downloads a resource blob using either the repository (for local blobs)
+// or the plugin manager (for external access types like OCI images).
 func (r *Reconciler) downloadResourceBlob(
 	ctx context.Context,
+	repo *resolution.CacheBackedRepository,
+	componentDescriptor *descriptor.Descriptor,
 	resource *descriptor.Resource,
 	cfg *configuration.Configuration,
 ) (io.ReadCloser, error) {
-	// Get resource plugin for the access type
+	// local access types can be read directly
+	if resource.Access.GetType().Name == descriptor.LocalBlobAccessType {
+		blob, _, err := repo.GetLocalResource(ctx,
+			componentDescriptor.Component.Name,
+			componentDescriptor.Component.Version,
+			resource.ToIdentity())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get local resource: %w", err)
+		}
+
+		reader, err := blob.ReadCloser()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get reader from local blob: %w", err)
+		}
+
+		return reader, nil
+	}
+
+	// non-local access types use the plugin manager
 	resourcePlugin, err := r.PluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, resource.Access)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resource plugin: %w", err)
 	}
 
-	// Resolve credentials if needed
 	creds, err := resolveResourceCredentials(ctx, r.PluginManager, resource, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
 	}
 
-	// Download the blob
 	blob, err := resourcePlugin.DownloadResource(ctx, resource, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download resource: %w", err)
 	}
 
-	// Get a reader from the blob
 	reader, err := blob.ReadCloser()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get reader from blob: %w", err)
