@@ -65,7 +65,7 @@ jobs:
             await script.default({ core });
 
       - name: Setup Go
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
         with:
           go-version-file: bindings/go/helm/go.mod
           cache-dependency-path: bindings/go/helm/go.sum
@@ -110,7 +110,7 @@ jobs:
 
       - name: Upload build artifacts
         if: ${{ steps.branch-check.outputs.should_push_oci_image == 'true' }}
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 #v5
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: helm-plugin-build-artifacts
           path: bindings/go/helm/tmp/
@@ -130,7 +130,7 @@ jobs:
       packages: write
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 #v6
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: helm-plugin-build-artifacts
           path: bindings/go/helm/tmp/
