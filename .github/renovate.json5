@@ -68,19 +68,6 @@
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
     },
-    // Pin golang version used in controller Dockerfile to 1.25.x
-    // PRs show both the patch tag bump and digest change.
-    {
-      matchManagers: ['dockerfile'],
-      matchDatasources: ['docker'],
-      matchPackageNames: ['golang'],
-      matchFileNames: ['kubernetes/controller/Dockerfile'],
-      versioning: 'semver',
-      allowedVersions: '1.25.x',
-      rangeStrategy: 'pin',
-      automerge: false,
-      enabled: true,
-    },
     {
       groupName: 'Golang X Repositories',
       groupSlug: 'golang-x-repos',
