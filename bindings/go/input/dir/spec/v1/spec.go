@@ -10,6 +10,7 @@ import (
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
+// +ocm:jsonschema-gen:example=examples/simple-directory-with-include.yaml
 type Dir struct {
 	// +ocm:jsonschema-gen:enum=dir/v1,Dir/v1
 	// +ocm:jsonschema-gen:enum:deprecated=dir,Dir
