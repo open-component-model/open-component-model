@@ -68,8 +68,8 @@
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
     },
-    // Temporary pin golang Docker image to 1.25.5 (tag + digest)
-    // Keep automerge disabled so PRs show both the patch tag bump and digest change.
+    // Pin golang version used in controller Dockerfile to 1.25.x
+    // PRs show both the patch tag bump and digest change.
     {
       matchManagers: ['dockerfile'],
       matchDatasources: ['docker'],
