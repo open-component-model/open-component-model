@@ -66,6 +66,21 @@ func TestSchemas(t *testing.T) {
 			},
 		},
 		{
+			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/TrueSchema.schema.json",
+			verify: func(t *testing.T, decl *jsonschema.DeclType) {
+				require.True(t, decl.IsObject())
+				sa := decl.Fields["trueProp"]
+				require.Equal(t, "dyn", sa.Type.TypeName())
+			},
+			exprTests: []struct {
+				expr  string
+				parse IssueAssertionFunc
+				check IssueAssertionFunc
+			}{
+				{"instance.trueProp", NoIssues, NoIssues},
+			},
+		},
+		{
 			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/Formats.schema.json",
 			verify: func(t *testing.T, decl *jsonschema.DeclType) {
 				require.True(t, decl.IsObject())

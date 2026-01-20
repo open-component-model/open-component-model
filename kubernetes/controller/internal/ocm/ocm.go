@@ -11,9 +11,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"ocm.software/ocm/api/credentials/extensions/repositories/dockerconfig"
 	"ocm.software/ocm/api/ocm"
-	"ocm.software/ocm/api/ocm/compdesc"
-	utils "ocm.software/ocm/api/ocm/ocmutils"
-	common "ocm.software/ocm/api/utils/misc"
 	"ocm.software/ocm/api/utils/runtime"
 	"ocm.software/ocm/api/utils/semverutils"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
@@ -204,21 +201,6 @@ func GetLatestValidVersion(_ context.Context, versions []string, semvers string,
 	}
 
 	return vers[len(vers)-1], nil
-}
-
-func ListComponentDescriptors(_ context.Context, cv ocm.ComponentVersionAccess, r ocm.ComponentVersionResolver) (*Descriptors, error) {
-	descriptors := &Descriptors{}
-	_, err := utils.Walk(nil, cv, r,
-		func(_ common.WalkingState[*compdesc.ComponentDescriptor, ocm.ComponentVersionAccess], cv ocm.ComponentVersionAccess) (bool, error) {
-			descriptors.List = append(descriptors.List, cv.GetDescriptor())
-
-			return true, nil
-		})
-	if err != nil {
-		return nil, err
-	}
-
-	return descriptors, nil
 }
 
 // IsDowngradable checks whether a component version (currentcv) is downgrabale to another component version (latestcv).

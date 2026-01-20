@@ -24,9 +24,9 @@ require (
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

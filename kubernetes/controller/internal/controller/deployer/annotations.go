@@ -36,14 +36,10 @@ func setOwnershipAnnotations(obj client.Object, resource *deliveryv1alpha1.Resou
 	for key, value := range resource.Status.Resource.ExtraIdentity {
 		anns[annotationResourceIdentityPrefix+key] = value
 	}
-	if resource.Status.Resource.Digest != "" {
-		if spec, err := digestSpec(resource.Status.Resource.Digest); err == nil {
-			anns[annotationResourceDigestPrefix+"value"] = spec.Value
-			anns[annotationResourceDigestPrefix+"hashAlgorithm"] = spec.HashAlgorithm
-			anns[annotationResourceDigestPrefix+"normalisationAlgorithm"] = spec.NormalisationAlgorithm
-		} else {
-			anns[annotationResourceDigestPrefix+"raw"] = resource.Status.Resource.Digest
-		}
+	if resource.Status.Resource.Digest != nil {
+		anns[annotationResourceDigestPrefix+"value"] = resource.Status.Resource.Digest.Value
+		anns[annotationResourceDigestPrefix+"hashAlgorithm"] = resource.Status.Resource.Digest.HashAlgorithm
+		anns[annotationResourceDigestPrefix+"normalisationAlgorithm"] = resource.Status.Resource.Digest.NormalisationAlgorithm
 	}
 	anns[annotationResourceAccess] = string(resource.Status.Resource.Access.Raw)
 	anns[annotationComponentName] = resource.Status.Component.Component

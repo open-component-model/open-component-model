@@ -9,6 +9,9 @@ import (
 	_ "embed"
 )
 
+//go:embed schemas/InlineType.schema.json
+var schemaInlineType []byte
+
 //go:embed schemas/MonoType.schema.json
 var schemaMonoType []byte
 
@@ -17,6 +20,11 @@ var schemaNestedType []byte
 
 //go:embed schemas/SampleType.schema.json
 var schemaSampleType []byte
+
+// JSONSchema returns the JSON Schema for InlineType.
+func (InlineType) JSONSchema() []byte {
+	return schemaInlineType
+}
 
 // JSONSchema returns the JSON Schema for MonoType.
 func (MonoType) JSONSchema() []byte {

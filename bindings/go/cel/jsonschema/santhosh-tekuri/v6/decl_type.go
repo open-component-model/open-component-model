@@ -200,7 +200,7 @@ func NewDeclType(s *Schema) *DeclType {
 	case IntegerType:
 		return declTypeForSchema(decl.IntType, s)
 		// TODO(jakobmoellerdev) figure out what to do here
-		//case NullType:
+		// case NullType:
 		//	return declTypeForSchema(decl.NullType, s)
 	}
 
@@ -220,6 +220,11 @@ func NewDeclType(s *Schema) *DeclType {
 		}
 		// in the future we can think of offering a parameterized union type for all branches of oneOf
 		// for now, we treat as dyn and defer evaluation to the runtime.
+		return declTypeForSchema(decl.DynType, s)
+	}
+
+	// a true bool schema on schema level is equivalent to the property needing to be present in any form.
+	if s.Schema != nil && s.Schema.Bool != nil && *s.Schema.Bool {
 		return declTypeForSchema(decl.DynType, s)
 	}
 
