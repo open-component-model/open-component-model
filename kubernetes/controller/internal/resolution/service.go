@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -83,8 +84,11 @@ func (r *Resolver) createRepository(ctx context.Context, spec runtime.Typed, cfg
 		Registry: r.pluginManager.ComponentVersionRepositoryRegistry,
 		Logger:   r.logger,
 	}
+
+	var credGraph credentials.Resolver
 	if cfg != nil {
-		credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
+		var err error
+		credGraph, err = setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
 			PluginManager: r.pluginManager,
 			Logger:        r.logger,
 		})
@@ -94,6 +98,45 @@ func (r *Resolver) createRepository(ctx context.Context, spec runtime.Typed, cfg
 		r.logger.V(1).Info("resolved credential graph")
 
 		options.CredentialGraph = credGraph
+		resolvers, err := setup.GetResolversV1Alpha1(cfg.Config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract path matcher resolvers: %w", err)
+		}
+
+		if len(resolvers) > 0 {
+			r.logger.V(1).Info("using path matcher resolvers for component resolution", "resolverCount", len(resolvers))
+			if spec != nil {
+				providerOpts := setup.ResolverProviderOptions{
+					Registry:        r.pluginManager.ComponentVersionRepositoryRegistry,
+					CredentialGraph: credGraph,
+					Logger:          r.logger,
+					Resolvers:       resolvers,
+				}
+
+				provider, err := setup.NewResolverProviderWithRepository(ctx, providerOpts, spec, nil)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create resolver provider: %w", err)
+				}
+
+				return newResolverBackedRepository(provider), nil
+			}
+
+			providerOpts := setup.ResolverProviderOptions{
+				Registry:        r.pluginManager.ComponentVersionRepositoryRegistry,
+				CredentialGraph: credGraph,
+				Logger:          r.logger,
+				Resolvers:       resolvers,
+			}
+
+			provider, err := setup.NewResolverProvider(ctx, providerOpts)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create resolver provider: %w", err)
+			}
+
+			return newResolverBackedRepository(provider), nil
+		}
+
+		r.logger.V(1).Info("no path matcher resolvers configured, using direct repository")
 	}
 
 	repo, err := setup.NewRepository(ctx, spec, options)

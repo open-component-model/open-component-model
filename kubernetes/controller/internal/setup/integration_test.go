@@ -80,9 +80,14 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, credGraph)
 
-	// TODO: I haven't configured any resolvers yet, so this is just empty.
+	// Test deprecated fallback resolvers (for backward compatibility)
 	_, err = setup.GetResolvers(cfg.Config)
 	require.NoError(t, err)
+
+	// Test new path matcher resolvers (v1alpha1)
+	resolversV1Alpha1, err := setup.GetResolversV1Alpha1(cfg.Config)
+	require.NoError(t, err)
+	assert.Nil(t, resolversV1Alpha1, "empty config should have no resolvers")
 
 	t.Run("repository creation", func(t *testing.T) {
 		opts := setup.RepositoryOptions{
@@ -311,4 +316,165 @@ func (p *simpleOCIPlugin) GetComponentVersionRepository(
 		component: p.component,
 		version:   p.version,
 	}, nil
+}
+
+// TestIntegration_ResolverProvider tests the new path matcher resolver provider functionality.
+func TestIntegration_ResolverProvider(t *testing.T) {
+	ctx := t.Context()
+	logger := logr.Discard()
+
+	// Create a config with path matcher resolvers
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ocm-config-with-resolvers",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			".ocmconfig": `{
+				"type": "generic.config.ocm.software/v1",
+				"configurations": [
+					{
+						"type": "credentials.config.ocm.software",
+						"repositories": []
+					},
+					{
+						"type": "resolvers.config.ocm.software",
+						"resolvers": [
+							{
+								"componentNamePattern": "github.com/test/*",
+								"repository": {
+									"type": "oci/v1",
+									"baseUrl": "ghcr.io/test-org"
+								}
+							},
+							{
+								"componentNamePattern": "ocm.software/*",
+								"repository": {
+									"type": "oci/v1",
+									"baseUrl": "registry.io/ocm"
+								}
+							}
+						]
+					}
+				]
+			}`,
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, v1alpha1.AddToScheme(scheme))
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(configMap).
+		Build()
+
+	ocmConfigs := []v1alpha1.OCMConfiguration{
+		{
+			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				Kind: "ConfigMap",
+				Name: "ocm-config-with-resolvers",
+			},
+		},
+	}
+
+	cfg, err := configuration.LoadConfigurations(ctx, k8sClient, "default", ocmConfigs)
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	pm := manager.NewPluginManager(t.Context())
+	t.Cleanup(func() {
+		require.NoError(t, pm.Shutdown(t.Context()))
+	})
+
+	registerOCIPlugin(t, pm, "github.com/test/myrepo", "v1.0.0")
+
+	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
+		PluginManager: pm,
+		Logger:        &logger,
+	})
+	require.NoError(t, err)
+
+	t.Run("use path matcher resolvers from config", func(t *testing.T) {
+		// Extract resolvers from config
+		resolvers, err := setup.GetResolversV1Alpha1(cfg.Config)
+		require.NoError(t, err)
+		require.NotNil(t, resolvers)
+		require.Len(t, resolvers, 2)
+
+		// Create resolver provider
+		opts := setup.ResolverProviderOptions{
+			Registry:        pm.ComponentVersionRepositoryRegistry,
+			CredentialGraph: credGraph,
+			Logger:          &logger,
+			Resolvers:       resolvers,
+		}
+
+		provider, err := setup.NewResolverProvider(ctx, opts)
+		require.NoError(t, err)
+		require.NotNil(t, provider)
+
+		// Get repository for a component that matches first pattern
+		repo, err := provider.GetComponentVersionRepositoryForComponent(ctx, "github.com/test/myrepo", "v1.0.0")
+		require.NoError(t, err)
+		require.NotNil(t, repo)
+
+		// Verify we can get component version
+		cv, err := repo.GetComponentVersion(ctx, "github.com/test/myrepo", "v1.0.0")
+		require.NoError(t, err)
+		assert.Equal(t, "github.com/test/myrepo", cv.Component.Name)
+	})
+
+	t.Run("use simple resolver provider with wildcard", func(t *testing.T) {
+		repoSpec := &ociv1.Repository{
+			Type:    ocmruntime.Type{Name: "oci", Version: "v1"},
+			BaseUrl: "localhost:5000/simple",
+		}
+
+		opts := setup.ResolverProviderOptions{
+			Registry:        pm.ComponentVersionRepositoryRegistry,
+			CredentialGraph: credGraph,
+			Logger:          &logger,
+		}
+
+		provider, err := setup.NewSimpleResolverProvider(ctx, opts, repoSpec)
+		require.NoError(t, err)
+		require.NotNil(t, provider)
+
+		// Should work for any component name
+		repo, err := provider.GetComponentVersionRepositoryForComponent(ctx, "github.com/test/myrepo", "v1.0.0")
+		require.NoError(t, err)
+		require.NotNil(t, repo)
+	})
+
+	t.Run("use resolver provider with repository and patterns", func(t *testing.T) {
+		repoSpec := &ociv1.Repository{
+			Type:    ocmruntime.Type{Name: "oci", Version: "v1"},
+			BaseUrl: "localhost:5000/priority",
+		}
+
+		// Extract config resolvers
+		configResolvers, err := setup.GetResolversV1Alpha1(cfg.Config)
+		require.NoError(t, err)
+
+		opts := setup.ResolverProviderOptions{
+			Registry:        pm.ComponentVersionRepositoryRegistry,
+			CredentialGraph: credGraph,
+			Logger:          &logger,
+			Resolvers:       configResolvers,
+		}
+
+		// Component patterns have highest priority
+		componentPatterns := []string{"priority.io/*"}
+
+		provider, err := setup.NewResolverProviderWithRepository(ctx, opts, repoSpec, componentPatterns)
+		require.NoError(t, err)
+		require.NotNil(t, provider)
+
+		// Should use the repository for any component
+		repo, err := provider.GetComponentVersionRepositoryForComponent(ctx, "github.com/test/myrepo", "v1.0.0")
+		require.NoError(t, err)
+		require.NotNil(t, repo)
+	})
 }

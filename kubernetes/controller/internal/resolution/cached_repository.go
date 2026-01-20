@@ -123,15 +123,24 @@ func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
 // buildCacheKey generates a cache key from the configuration hash, repository spec, component, and version.
 // It canonicalizes the repository spec using JCS (RFC 8785) before hashing to ensure consistent keys
 // regardless of field ordering in the JSON representation.
+// If repoSpec is nil (when using resolvers), the component name is used as the repository identifier.
 func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string) (string, error) {
-	repoJSON, err := json.Marshal(repoSpec)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal repository spec: %w", err)
-	}
+	var canonicalJSON []byte
 
-	canonicalJSON, err := jsoncanonicalizer.Transform(repoJSON)
-	if err != nil {
-		return "", fmt.Errorf("failed to canonicalize repository spec: %w", err)
+	if repoSpec != nil {
+		repoJSON, err := json.Marshal(repoSpec)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal repository spec: %w", err)
+		}
+
+		canonicalJSON, err = jsoncanonicalizer.Transform(repoJSON)
+		if err != nil {
+			return "", fmt.Errorf("failed to canonicalize repository spec: %w", err)
+		}
+	} else {
+		// When repoSpec is nil (resolver-backed repository), use the component name
+		// as part of the cache key since different components may resolve to different repositories
+		canonicalJSON = []byte(component)
 	}
 
 	hasher := fnv.New64a()
