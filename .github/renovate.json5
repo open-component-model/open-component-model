@@ -68,6 +68,13 @@
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
     },
+    // Temporary pin Golang Docker image digest
+    {
+      matchDatasources: ['docker'],
+      matchPackageNames: ['golang'],
+      matchCurrentDigest: 'sha256:6cc2338c038bc20f96ab32848da2b5c0641bb9bb5363f2c33e9b7c8838f9a208',
+      enabled: false,
+    },
     {
       groupName: 'Golang X Repositories',
       groupSlug: 'golang-x-repos',
