@@ -125,9 +125,6 @@ func CredentialGraph(cmd *cobra.Command) error {
 	} else if credCfg, err = credentialsConfig.LookupCredentialConfiguration(cfg); err != nil {
 		return fmt.Errorf("could not get credential configuration: %w", err)
 	}
-	if credCfg == nil {
-		credCfg = &credentialsRuntime.Config{}
-	}
 
 	if credCfg == nil {
 		credCfg = &credentialsRuntime.Config{}

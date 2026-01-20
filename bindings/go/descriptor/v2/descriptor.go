@@ -42,6 +42,11 @@ type Descriptor struct {
 	Component Component `json:"component"`
 	// Signatures contains optional signing information.
 	Signatures []Signature `json:"signatures,omitempty"`
+
+	// NestedDigests describe calculated resource digests for aggregated
+	// component versions, which might not be persisted, but incorporated
+	// into signatures of the actual component version
+	NestedDigests []NestedDigest `json:"nestedDigests,omitempty"`
 }
 
 func (d *Descriptor) String() string {
@@ -92,7 +97,7 @@ type Resource struct {
 	// SourceRefs defines a list of source names.
 	// These entries reference the sources defined in the
 	// component.sources.
-	SourceRefs []SourceRef `json:"sourceRefs,omitempty"`
+	SourceRefs []SourceRef `json:"srcRefs,omitempty"`
 	// Type describes the type of the object.
 	Type string `json:"type"`
 	// Relation describes the relation of the resource to the component.
@@ -102,8 +107,6 @@ type Resource struct {
 	Access *runtime.Raw `json:"access"`
 	// Digest is the optional digest of the referenced resource.
 	Digest *Digest `json:"digest,omitempty"`
-	// CreationTime of the resource.
-	CreationTime *Timestamp `json:"creationTime,omitempty"`
 }
 
 // A Source is an artifact which describes the sources that were used to generate one or more of the resources.
@@ -467,4 +470,23 @@ func (t *Timestamp) UnmarshalJSON(data []byte) error {
 		NewTime(tt.UTC().Round(time.Second)),
 	}
 	return err
+}
+
+// NestedDigest defines digest information for a component embedded within a Descriptor.
+// This can be used to store digest information for nested references that cannot be touched themselves.
+// +k8s:deepcopy-gen=true
+type NestedDigest struct {
+	Name            string           `json:"name"`
+	Version         string           `json:"version"`
+	Digest          *Digest          `json:"digest,omitempty"`
+	ResourceDigests []ResourceDigest `json:"resourceDigests,omitempty"`
+}
+
+// ResourceDigest defines artefact digest information for resources aggregated within NestedDigest.
+// +k8s:deepcopy-gen=true
+type ResourceDigest struct {
+	Name          string           `json:"name"`
+	Version       string           `json:"version"`
+	ExtraIdentity runtime.Identity `json:"extraIdentity,omitempty"`
+	Digest        *Digest          `json:"digest"`
 }

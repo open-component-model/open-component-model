@@ -43,21 +43,18 @@
           "description": "Name of the label",
           "$ref": "#/$defs/nonEmptyString"
         },
-        "value": {
+        "value": true,
+        "version": {
           "oneOf": [
             {
-              "description": "Value of the label",
-              "$ref": "#/$defs/nonEmptyString"
+              "type": "string",
+              "description": "Version of the label",
+              "pattern": "^v[0-9]+$"
             },
             {
-              "type": "object",
-              "description": "an arbitrarily complex structured value"
+              "type": "null"
             }
           ]
-        },
-        "version": {
-          "description": "Version of the label",
-          "pattern": "^v[0-9]+$"
         },
         "signing": {
           "description": "Indicates whether the label should be included in the signature",
@@ -138,7 +135,8 @@
           "description": "Type of the access method",
           "$ref": "#/$defs/ocmType"
         }
-      }
+      },
+      "additionalProperties": true
     },
     "sourceDefinition": {
       "type": "object",
@@ -198,15 +196,15 @@
       "properties": {
         "hashAlgorithm": {
           "description": "Algorithm used for hashing",
-          "$ref": "#/$defs/nonEmptyString"
+          "type": "string"
         },
         "normalisationAlgorithm": {
           "description": "Algorithm used for normalizing content before hashing",
-          "$ref": "#/$defs/nonEmptyString"
+          "type": "string"
         },
         "value": {
           "description": "The actual hash value",
-          "$ref": "#/$defs/nonEmptyString"
+          "type": "string"
         }
       }
     },
@@ -616,6 +614,7 @@
               "value": "https://ocm.software/"
             }
           ],
+          "componentReferences": [],
           "repositoryContexts": [
             {
               "baseUrl": "ghcr.io",
@@ -682,10 +681,17 @@
     },
     "signatures": {
       "description": "Optional signing information for verifying component validity",
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/signature"
-      }
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signature"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "nestedDigests": {
       "description": "Digest information for nested components",

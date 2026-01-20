@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/descriptor/v2
 
-go 1.25.4
+go 1.25.5
 
 require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
@@ -15,6 +15,6 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

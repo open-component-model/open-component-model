@@ -40,10 +40,10 @@ type JSONSchemaDraft202012 struct {
 	MaxItems    *int  `json:"maxItems,omitempty"`
 	UniqueItems *bool `json:"uniqueItems,omitempty"`
 
-	MinProperties *int                              `json:"minProperties,omitempty"`
-	MaxProperties *int                              `json:"maxProperties,omitempty"`
-	Properties    map[string]*JSONSchemaDraft202012 `json:"properties,omitempty"`
-	Enum          []any                             `json:"enum,omitempty"`
+	MinProperties *int                     `json:"minProperties,omitempty"`
+	MaxProperties *int                     `json:"maxProperties,omitempty"`
+	Properties    map[string]*SchemaOrBool `json:"properties,omitempty"`
+	Enum          []any                    `json:"enum,omitempty"`
 
 	Required             []string      `json:"required,omitempty"`
 	AdditionalProperties *SchemaOrBool `json:"additionalProperties,omitempty"`
@@ -105,7 +105,7 @@ func (g *generation) buildRootSchema(ti *universe.TypeInfo) *JSONSchemaDraft2020
 			Description:          desc,
 			Type:                 "object",
 			Properties:           g.buildStructProperties(ti.Struct, ti),
-			Required:             g.buildStructRequired(ti.Struct),
+			Required:             g.buildStructRequired(ti.Struct, ti),
 			AdditionalProperties: &SchemaOrBool{Bool: Ptr(false)},
 		}
 		if deprecated {
@@ -233,16 +233,27 @@ func applyMarkers(
 	}
 }
 
-func (g *generation) buildStructProperties(st *ast.StructType, ti *universe.TypeInfo) map[string]*JSONSchemaDraft202012 {
-	props := make(map[string]*JSONSchemaDraft202012)
+func (g *generation) buildStructProperties(st *ast.StructType, ti *universe.TypeInfo) map[string]*SchemaOrBool {
+	props := make(map[string]*SchemaOrBool)
 
 	for _, field := range st.Fields.List {
-		if len(field.Names) == 0 {
+		name, opts := parseJSONTagWithFieldNameFallback(field)
+		if slices.Contains(opts, "inline") {
+			expr := unwrapStar(field.Type)
+
+			ti, ok := g.U.ResolveExpr(ti.Pkg.TypesInfo, ti.Key.PkgPath, expr)
+			if !ok || ti.Struct == nil {
+				continue
+			}
+
+			inlineSchema := g.buildStructProperties(ti.Struct, ti)
+			for key, prop := range inlineSchema {
+				props[key] = prop
+			}
 			continue
 		}
-
-		name, _ := parseJSONTagWithFieldNameFallback(field)
-		if name == "-" {
+		// existing logic
+		if name == "-" || name == "" {
 			continue
 		}
 
@@ -256,18 +267,26 @@ func (g *generation) buildStructProperties(st *ast.StructType, ti *universe.Type
 			sch.Deprecated = Ptr(true)
 		}
 
-		props[name] = sch
+		props[name] = &SchemaOrBool{Schema: sch}
 	}
 	return props
 }
 
-func (g *generation) buildStructRequired(st *ast.StructType) []string {
+func (g *generation) buildStructRequired(st *ast.StructType, ti *universe.TypeInfo) []string {
 	var req []string
-	for _, f := range st.Fields.List {
-		if len(f.Names) == 0 {
+	for _, field := range st.Fields.List {
+		name, opts := parseJSONTagWithFieldNameFallback(field)
+		if slices.Contains(opts, "inline") {
+			expr := unwrapStar(field.Type)
+
+			ti, ok := g.U.ResolveExpr(ti.Pkg.TypesInfo, ti.Key.PkgPath, expr)
+			if !ok || ti.Struct == nil {
+				continue
+			}
+
+			req = append(req, g.buildStructRequired(ti.Struct, ti)...)
 			continue
 		}
-		name, opts := parseJSONTagWithFieldNameFallback(f)
 		if name == "-" || slices.Contains(opts, "omitempty") {
 			continue
 		}
@@ -276,8 +295,18 @@ func (g *generation) buildStructRequired(st *ast.StructType) []string {
 	return req
 }
 
+func unwrapStar(expr ast.Expr) ast.Expr {
+	for {
+		if star, ok := expr.(*ast.StarExpr); ok {
+			expr = star.X
+			continue
+		}
+		return expr
+	}
+}
+
 func (g *generation) inlineAnonymousStruct(st *ast.StructType, ctx *universe.TypeInfo) *JSONSchemaDraft202012 {
-	props := map[string]*JSONSchemaDraft202012{}
+	props := map[string]*SchemaOrBool{}
 	var req []string
 
 	for _, field := range st.Fields.List {
@@ -300,7 +329,7 @@ func (g *generation) inlineAnonymousStruct(st *ast.StructType, ctx *universe.Typ
 			sch.Deprecated = Ptr(true)
 		}
 
-		props[name] = sch
+		props[name] = &SchemaOrBool{Schema: sch}
 		if !slices.Contains(opts, "omitempty") {
 			req = append(req, name)
 		}

@@ -37,7 +37,7 @@ jobs:
             Taskfile.yml
 
       - name: Setup Go (required for CLI build)
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
         with:
           go-version-file: kubernetes/controller/go.mod
           cache: false
@@ -49,7 +49,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up docker
-        uses: docker/setup-docker-action@e61617a16c407a86262fb923c35a616ddbe070b3 # v4
+        uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4 # v4
 
       - name: Setup ocm
         uses: open-component-model/ocm-setup-action@655f3525fd283ca7d22e6b2ceec42324331df401 # v1.0.0

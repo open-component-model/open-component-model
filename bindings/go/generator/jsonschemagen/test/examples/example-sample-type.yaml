@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=../schemas/SampleType.schema.json
+MyStruct:
+  myString: "foo"
+type: test
+myString: myValue
+myInt: 0
+myBool: false
+myFloat: 0
+mySlice:
+  - element
+myMap:
+  key: value
+myUnknownMap:
+  object:
+    key: value
+myRuntime:
+  type: test
+  myString: myValue
+myRaw:
+  type: test
+  myString: myValue
+nested:
+  nestedField: value
+nestedPointer:
+  nestedField: value
+inlineField: inlineValue

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"go.yaml.in/yaml/v3"
+
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
 
@@ -54,12 +55,17 @@ func ExtractMarkerMapFromField(cg *ast.Field, base string) map[string]string {
 
 func ExtractMarkerMap(ts *ast.TypeSpec, gd *ast.GenDecl, base string) map[string]string {
 	out := map[string]string{}
-	for k, v := range ExtractMarkers(ts.Doc, base) {
-		out[k] = v
+	if ts != nil && ts.Doc != nil {
+		for k, v := range ExtractMarkers(ts.Doc, base) {
+			out[k] = v
+		}
 	}
-	for k, v := range ExtractMarkers(gd.Doc, base) {
-		out[k] = v
+	if gd != nil && gd.Doc != nil {
+		for k, v := range ExtractMarkers(gd.Doc, base) {
+			out[k] = v
+		}
 	}
+
 	return out
 }
 

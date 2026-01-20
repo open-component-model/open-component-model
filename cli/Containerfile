@@ -1,6 +1,6 @@
 # Use multi-stage builds to copy certs from a minimal base image.
 # Debian uses the Mozilla CA bundle which contains a maximum number of trusted CAs.
-FROM --platform=$BUILDPLATFORM debian:bookworm-slim@sha256:b4aa902587c2e61ce789849cb54c332b0400fe27b1ee33af4669e1f7e7c3e22f AS certs
+FROM --platform=$BUILDPLATFORM debian:bookworm-slim@sha256:56ff6d36d4eb3db13a741b342ec466f121480b5edded42e4b7ee850ce7a418ee AS certs
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && update-ca-certificates \

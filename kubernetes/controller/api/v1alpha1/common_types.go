@@ -4,9 +4,9 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	ocmv1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type ConfigurationPolicy string
@@ -71,8 +71,8 @@ type ResourceID struct {
 // For more details see dedicated guide in the Specification:
 // https://github.com/open-component-model/ocm-spec/blob/main/doc/05-guidelines/03-references.md#references
 type ResourceReference struct {
-	Resource      ocmv1.Identity   `json:"resource"`
-	ReferencePath []ocmv1.Identity `json:"referencePath,omitempty"`
+	Resource      runtime.Identity   `json:"resource"`
+	ReferencePath []runtime.Identity `json:"referencePath,omitempty"`
 }
 
 type ComponentInfo struct {
@@ -101,8 +101,8 @@ type ResourceInfo struct {
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:validation:Type=object
 	Access apiextensionsv1.JSON `json:"access,omitempty"`
-	// +required
-	Digest string `json:"digest,omitempty"`
+	// +optional
+	Digest *v2.Digest `json:"digest,omitempty"`
 	// +optional
 	Labels []Label `json:"labels,omitempty"`
 }

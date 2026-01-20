@@ -6,17 +6,21 @@ env:
 vars:
   GOBIN:
     sh: 'go env GOBIN || echo $(go env GOPATH)/bin'
-  
-  # Tool versions from central .env file using source method
+  PROJECT_ROOT:
+    sh: 'git rev-parse --show-toplevel'
+
+  # Tool versions: load from project root, then override with local .env if set
   KUSTOMIZE_VERSION:
-    sh: 'source ../../.env && echo "$KUSTOMIZE_VERSION"'
+    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$KUSTOMIZE_VERSION"'
   CONTROLLER_TOOLS_VERSION:
-    sh: 'source ../../.env && echo "$CONTROLLER_TOOLS_VERSION"'
+    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$CONTROLLER_TOOLS_VERSION"'
   ENVTEST_VERSION:
-    sh: 'source ../../.env && echo "$ENVTEST_VERSION"'
+    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$ENVTEST_VERSION"'
   ENVTEST_K8S_VERSION:
-    sh: 'source ../../.env && echo "$ENVTEST_K8S_VERSION"'
-  
+    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$ENVTEST_K8S_VERSION"'
+  KIND_NODE_IMAGE_VERSION:
+    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$KIND_NODE_IMAGE_VERSION"'
+
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
   LOCALBIN: '{{.TASKFILE_DIR}}/bin'
   KUBECTL: '{{.KUBECTL | default "kubectl"}}'
@@ -47,6 +51,8 @@ tasks:
 
   test:
     deps: [manifests, generate, envtest]
+    env:
+      ENVTEST_K8S_VERSION: '{{.ENVTEST_K8S_VERSION}}'
     cmds:
       - |
         KUBEBUILDER_ASSETS=$({{ .ENVTEST }} use {{ .ENVTEST_K8S_VERSION }} --bin-dir {{.LOCALBIN}} -p path)
@@ -61,7 +67,7 @@ tasks:
         vars:
           LOAD: "true"
     cmds:
-      - 'bash test/e2e/hacks/setup.sh'
+      - 'KIND_NODE_IMAGE_VERSION={{.KIND_NODE_IMAGE_VERSION}} bash test/e2e/hacks/setup.sh'
       - 'kind load docker-image {{.CONTROLLER_IMG}}'
   test/e2e:
     dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']

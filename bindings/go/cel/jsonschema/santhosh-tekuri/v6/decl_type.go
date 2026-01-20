@@ -199,6 +199,9 @@ func NewDeclType(s *Schema) *DeclType {
 		return declTypeForSchema(decl.DoubleType, s)
 	case IntegerType:
 		return declTypeForSchema(decl.IntType, s)
+		// TODO(jakobmoellerdev) figure out what to do here
+		// case NullType:
+		//	return declTypeForSchema(decl.NullType, s)
 	}
 
 	// Ref-only schemas
@@ -220,6 +223,11 @@ func NewDeclType(s *Schema) *DeclType {
 		return declTypeForSchema(decl.DynType, s)
 	}
 
+	// a true bool schema on schema level is equivalent to the property needing to be present in any form.
+	if s.Schema != nil && s.Schema.Bool != nil && *s.Schema.Bool {
+		return declTypeForSchema(decl.DynType, s)
+	}
+
 	return nil
 }
 
@@ -230,7 +238,7 @@ func declTypeAsOptionalSchema(s *Schema) (*DeclType, bool) {
 	nonNullIdx := -1
 	hasNull := false
 	for i, br := range s.OneOf() {
-		if br.Type() == "null" {
+		if br.Type() == NullType {
 			hasNull = true
 		} else {
 			nonNullIdx = i
