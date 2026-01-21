@@ -48,6 +48,7 @@ KIND_NODE_IMAGE="kindest/node:v${KIND_NODE_IMAGE_VERSION}"
 # - Port mappings for additional cluster OCI registries (replication tests).
 # - Containerd config patches to add registry mirrors and configs for the internal registries.
 # - http-alias and insecure_skip_verify.
+CONTAINERD_CONFIG_PATH="/etc/containerd/certs.d"
 cat <<EOF | kind create cluster --image="${KIND_NODE_IMAGE}" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
@@ -60,22 +61,26 @@ nodes:
         hostPort: 31003
   - role: worker
 containerdConfigPatches:
-  - |-
-    [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
-      [plugins."io.containerd.grpc.v1.cri".registry.mirrors."${reg_name}:${reg_port}"]
-        endpoint = ["http://${reg_name}:${reg_port}"]
-      [plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry-internal.default.svc.cluster.local:5002"]
-        endpoint = ["http://localhost:31002"]
-      [plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry-internal.default.svc.cluster.local:5003"]
-        endpoint = ["http://localhost:31003"]
-    [plugins."io.containerd.grpc.v1.cri".registry.configs]
-      [plugins."io.containerd.grpc.v1.cri".registry.configs."${reg_name}:${reg_port}".tls]
-        insecure_skip_verify = true
-      [plugins."io.containerd.grpc.v1.cri".registry.configs."registry-internal.default.svc.cluster.local:5002".tls]
-        insecure_skip_verify = true
-      [plugins."io.containerd.grpc.v1.cri".registry.configs."registry-internal.default.svc.cluster.local:5003".tls]
-        insecure_skip_verify = true
+- |-
+ [plugins."io.containerd.grpc.v1.cri".registry]
+   config_path = "${CONTAINERD_CONFIG_PATH}"
 EOF
+
+# Add registry configs to nodes
+add_hosts_toml() {
+  local node="$1" path="$2" host="$3"
+  docker exec "${node}" mkdir -p "${path}"
+  cat <<EOF | docker exec -i "${node}" cp /dev/stdin "${path}/hosts.toml"
+[host."${host}"]
+  skip_verify = true
+EOF
+}
+
+for node in $(kind get nodes); do
+  add_hosts_toml "${node}" "${CONTAINERD_CONFIG_PATH}/${reg_name}:${reg_port}" "http://${reg_name}:${reg_port}"
+  add_hosts_toml "${node}" "${CONTAINERD_CONFIG_PATH}/localhost:31002" "registry-internal.default.svc.cluster.local:5002"
+  add_hosts_toml "${node}" "${CONTAINERD_CONFIG_PATH}/localhost:31003" "registry-internal.default.svc.cluster.local:5003"
+done
 
 # Connect the registry to the cluster network if not already connected.
 ## This allows kind to bootstrap the network but ensures they're on the same network.
