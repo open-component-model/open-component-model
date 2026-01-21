@@ -396,58 +396,6 @@ func TestIntegration_ResolverProvider(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	t.Run("use path matcher resolvers from config", func(t *testing.T) {
-		// Extract resolvers from config
-		resolvers, err := setup.GetResolversV1Alpha1(cfg.Config)
-		require.NoError(t, err)
-		require.NotNil(t, resolvers)
-		require.Len(t, resolvers, 2)
-
-		// Create resolver provider
-		opts := setup.ResolverProviderOptions{
-			Registry:        pm.ComponentVersionRepositoryRegistry,
-			CredentialGraph: credGraph,
-			Logger:          &logger,
-			Resolvers:       resolvers,
-		}
-
-		provider, err := setup.NewResolverProvider(ctx, opts)
-		require.NoError(t, err)
-		require.NotNil(t, provider)
-
-		// Get repository for a component that matches first pattern
-		repo, err := provider.GetComponentVersionRepositoryForComponent(ctx, "github.com/test/myrepo", "v1.0.0")
-		require.NoError(t, err)
-		require.NotNil(t, repo)
-
-		// Verify we can get component version
-		cv, err := repo.GetComponentVersion(ctx, "github.com/test/myrepo", "v1.0.0")
-		require.NoError(t, err)
-		assert.Equal(t, "github.com/test/myrepo", cv.Component.Name)
-	})
-
-	t.Run("use simple resolver provider with wildcard", func(t *testing.T) {
-		repoSpec := &ociv1.Repository{
-			Type:    ocmruntime.Type{Name: "oci", Version: "v1"},
-			BaseUrl: "localhost:5000/simple",
-		}
-
-		opts := setup.ResolverProviderOptions{
-			Registry:        pm.ComponentVersionRepositoryRegistry,
-			CredentialGraph: credGraph,
-			Logger:          &logger,
-		}
-
-		provider, err := setup.NewSimpleResolverProvider(ctx, opts, repoSpec)
-		require.NoError(t, err)
-		require.NotNil(t, provider)
-
-		// Should work for any component name
-		repo, err := provider.GetComponentVersionRepositoryForComponent(ctx, "github.com/test/myrepo", "v1.0.0")
-		require.NoError(t, err)
-		require.NotNil(t, repo)
-	})
-
 	t.Run("use resolver provider with repository and patterns", func(t *testing.T) {
 		repoSpec := &ociv1.Repository{
 			Type:    ocmruntime.Type{Name: "oci", Version: "v1"},
@@ -466,9 +414,9 @@ func TestIntegration_ResolverProvider(t *testing.T) {
 		}
 
 		// Component patterns have highest priority
-		componentPatterns := []string{"priority.io/*"}
+		//componentPatterns := []string{"priority.io/*"}
 
-		provider, err := setup.NewResolverProviderWithRepository(ctx, opts, repoSpec, componentPatterns)
+		provider, err := setup.NewResolverProviderWithRepository(ctx, opts, repoSpec)
 		require.NoError(t, err)
 		require.NotNil(t, provider)
 

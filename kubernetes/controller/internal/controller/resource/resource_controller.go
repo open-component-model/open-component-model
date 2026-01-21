@@ -314,8 +314,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
 	}
 
-	fmt.Println("KURVA: ", referencedDescriptor)
-
 	startRetrievingResource := time.Now()
 	logger.V(1).Info("resolving reference path", "referencePath", resource.Spec.Resource.ByReference.ReferencePath)
 	resourceDescriptor, resourceRepoSpec, err := r.resolveReferencePath(
@@ -344,7 +342,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	resourceIdentity := resource.Spec.Resource.ByReference.Resource
-	fmt.Println("FUCK YOU: ", resourceDescriptor)
 	logger.Info("resolving reference path", "referencePath", resourceDescriptor)
 	var matchedResource *descriptor.Resource
 	for i, res := range resourceDescriptor.Component.Resources {
@@ -450,18 +447,10 @@ func (r *Reconciler) resolveReferencePath(
 		}
 
 		// Create repository for resolving the referenced component.
-		// When OCM configs are provided, pass nil for RepositorySpec to allow
-		// the resolution service to use resolvers (if configured) for routing.
-		// If no configs, use the current repository spec as fallback.
-		var refRepoSpec runtime.Typed
-		if len(configs) == 0 {
-			// No OCM configs means no resolvers, use the repository spec from component descriptor
-			refRepoSpec = currentRepoSpec
-		}
-		// else: refRepoSpec is nil, let resolution service check for resolvers
-
+		// Resolvers (if configured) take priority over the repository spec.
+		// The spec serves as a fallback if no resolver pattern matches.
 		refRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-			RepositorySpec:    refRepoSpec,
+			RepositorySpec:    currentRepoSpec,
 			OCMConfigurations: configs,
 			Namespace:         reqInfo.NamespacedName.Namespace,
 			RequesterFunc: func() workerpool.RequesterInfo {
