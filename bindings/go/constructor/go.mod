@@ -12,8 +12,8 @@ require (
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260107082047-3b8abf72f590
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260107082047-3b8abf72f590
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha8
-	ocm.software/open-component-model/bindings/go/oci v0.0.25
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
+	ocm.software/open-component-model/bindings/go/oci v0.0.26
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	sigs.k8s.io/yaml v1.6.0
