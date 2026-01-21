@@ -271,6 +271,24 @@ func Test_ComputeID(t *testing.T) {
 			}(),
 			expectedID: "applyset-1qQlFek9WdzcYX9dXUgCX0MzYBq6EC4RtggasIfVtaI",
 		},
+		{
+			name: "should never exceed length limits",
+			parent: func() client.Object {
+				cm := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "very-long-configmap-name-to-test-the-maximum-length-of-the-computed-id-in-the-applyset-controller",
+						Namespace: "very-long-namespace-name-to-test-the-maximum-length-of-the-computed-id-in-the-applyset-controller",
+					},
+				}
+				cm.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "ocm.software.longgroupname",
+					Version: "v1alpha1beta2",
+					Kind:    "ConfigMap",
+				})
+				return cm
+			}(),
+			expectedID: "applyset-1UQZMIgIAU1QpDpAO_EsOHlbgmhG1NX8q4FhlZ-KGfI",
+		},
 	}
 
 	for _, tc := range cases {
