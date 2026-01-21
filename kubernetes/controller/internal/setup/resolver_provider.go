@@ -4,14 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/go-logr/logr"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
+	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -95,6 +98,35 @@ func (r *resolverProvider) GetComponentVersionRepositoryForComponent(ctx context
 	return repo, nil
 }
 
+// fallbackProvider provides a [repository.ComponentVersionRepository] based on deprecated fallback resolvers.
+// This is kept for backward compatibility with the deprecated "ocm.config.ocm.software/v1" config type.
+//
+//nolint:staticcheck // compatibility mode for deprecated resolvers
+type fallbackProvider struct {
+	repoProvider repository.ComponentVersionRepositoryProvider
+	graph        credentials.Resolver
+	resolvers    []*resolverruntime.Resolver
+	baseRepo     runtime.Typed
+	logger       *logr.Logger
+}
+
+// GetRepositorySpecForComponent returns the base repository spec for fallback providers.
+// Fallback resolvers don't use pattern matching, so we return the base repo spec for cache key consistency.
+func (f *fallbackProvider) GetRepositorySpecForComponent(_ context.Context, _, _ string) (runtime.Typed, error) {
+	return f.baseRepo, nil
+}
+
+// GetComponentVersionRepositoryForComponent returns a FallbackRepository that handles priority-based resolution.
+//
+//nolint:staticcheck // compatibility mode for deprecated resolvers
+func (f *fallbackProvider) GetComponentVersionRepositoryForComponent(ctx context.Context, _, _ string) (repository.ComponentVersionRepository, error) {
+	repo, err := fallback.NewFallbackRepository(ctx, f.repoProvider, f.graph, f.resolvers)
+	if err != nil {
+		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
+	}
+	return repo, nil
+}
+
 // GetResolversV1Alpha1 extracts a list of path matcher resolvers from a generic configuration.
 // It filters the configuration for entries of type [resolverspec.Config] and aggregates
 // all resolvers defined in these entries into a single list.
@@ -129,12 +161,23 @@ type ResolverProviderOptions struct {
 	CredentialGraph credentials.Resolver
 	// Logger is used for logging resolver operations
 	Logger *logr.Logger
-	// Resolvers is the list of path matcher resolvers to use
+	// Resolvers is the list of path matcher resolvers (v1alpha1) to use
 	Resolvers []*resolverspec.Resolver
+	// FallbackResolvers is the list of deprecated fallback resolvers (v1) to use.
+	// Only one of Resolvers or FallbackResolvers should be set.
+	//
+	//nolint:staticcheck // compatibility mode for deprecated resolvers
+	FallbackResolvers []*resolverruntime.Resolver
 }
 
-// NewResolverProviderWithRepository creates a resolver provider with a base repository
-// and optional component patterns.
+// NewResolverProviderWithRepository creates a resolver provider with a base repository.
+// It supports two resolver types (mutually exclusive):
+//  1. Path matcher resolvers (v1alpha1) - pattern-based component name matching
+//  2. Fallback resolvers (v1, deprecated) - priority-based resolution without pattern matching
+//
+// Returns an error if both resolver types are configured.
+//
+//nolint:staticcheck // compatibility mode for deprecated resolvers
 func NewResolverProviderWithRepository(
 	ctx context.Context,
 	opts ResolverProviderOptions,
@@ -148,45 +191,63 @@ func NewResolverProviderWithRepository(
 		return nil, fmt.Errorf("base repository is required")
 	}
 
+	if len(opts.Resolvers) > 0 && len(opts.FallbackResolvers) > 0 {
+		return nil, fmt.Errorf("both path matcher and fallback resolvers are configured, only one type is allowed")
+	}
+
+	if len(opts.FallbackResolvers) > 0 {
+		if opts.Logger != nil {
+			opts.Logger.Info("using deprecated fallback resolvers, consider switching to path matcher resolvers")
+		}
+		return createFallbackProvider(opts, baseRepo)
+	}
+
+	return createPathMatcherProvider(ctx, opts, baseRepo)
+}
+
+// createFallbackProvider creates a provider using deprecated fallback resolvers.
+//
+//nolint:staticcheck // compatibility mode for deprecated resolvers
+func createFallbackProvider(opts ResolverProviderOptions, baseRepo runtime.Typed) (ComponentVersionRepositoryForComponentProvider, error) {
+	var finalResolvers []*resolverruntime.Resolver
+	finalResolvers = append(finalResolvers, &resolverruntime.Resolver{
+		Repository: baseRepo,
+		Priority:   math.MaxInt,
+	})
+	finalResolvers = append(finalResolvers, opts.FallbackResolvers...)
+
+	if opts.Logger != nil {
+		opts.Logger.V(1).Info("creating fallback provider",
+			"baseRepository", baseRepo,
+			"fallbackResolverCount", len(opts.FallbackResolvers))
+	}
+
+	return &fallbackProvider{
+		repoProvider: opts.Registry,
+		graph:        opts.CredentialGraph,
+		resolvers:    finalResolvers,
+		baseRepo:     baseRepo,
+		logger:       opts.Logger,
+	}, nil
+}
+
+// createPathMatcherProvider creates a provider using path matcher resolvers.
+func createPathMatcherProvider(ctx context.Context, opts ResolverProviderOptions, baseRepo runtime.Typed) (ComponentVersionRepositoryForComponentProvider, error) {
 	raw := runtime.Raw{}
 	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
 	if err := scheme.Convert(baseRepo, &raw); err != nil {
 		return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
 	}
 
-	// A combination of provided resolvers and the final catch-all parent repo spec.
 	var finalResolvers []*resolverspec.Resolver
-
-	// TODO: I don't think we need this since unlike in the cli we don't parse compref. Discuss.
-	// Add component-specific patterns at the beginning (highest priority)
-	// if len(componentPatterns) > 0 {
-	//	for _, pattern := range componentPatterns {
-	//		finalResolvers = append(finalResolvers, &resolverspec.Resolver{
-	//			Repository:           &raw,
-	//			ComponentNamePattern: pattern,
-	//		})
-	//	}
-	// } else {
-	// No specific patterns - add baseRepo wildcard first so explicit repositoryRef wins
-	// finalResolvers = append(finalResolvers, &resolverspec.Resolver{
-	//	 Repository:           &raw,
-	//	 ComponentNamePattern: "*",
-	// })
-	// }
-
-	// Configured resolvers should always take precedence as opposed to GIVEN repository spec that for the controller
-	// is something that is always provided because the controllers always have a repository spec. Either from the
-	// Repository object or from a config.
 	finalResolvers = append(finalResolvers, opts.Resolvers...)
-
-	// Finally, add our repositorySpec as last match all so all components will match the provider repository
-	// spec in the end, closing the chain.
 	finalResolvers = append(finalResolvers, &resolverspec.Resolver{
 		Repository:           &raw,
 		ComponentNamePattern: "*",
 	})
+
 	if opts.Logger != nil {
-		opts.Logger.V(1).Info("creating resolver provider with repository and patterns",
+		opts.Logger.V(1).Info("creating path matcher provider",
 			"baseRepository", baseRepo,
 			"configResolverCount", len(opts.Resolvers),
 			"finalResolverCount", len(finalResolvers))

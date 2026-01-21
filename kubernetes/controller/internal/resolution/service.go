@@ -107,8 +107,17 @@ func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *
 		}
 		providerOpts.Resolvers = resolvers
 
+		fallbackResolvers, err := setup.GetResolvers(cfg.Config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract fallback resolvers: %w", err)
+		}
+		providerOpts.FallbackResolvers = fallbackResolvers
+
 		if len(resolvers) > 0 {
 			r.logger.V(1).Info("using path matcher resolvers for component resolution", "resolverCount", len(resolvers))
+		}
+		if len(fallbackResolvers) > 0 {
+			r.logger.V(1).Info("using deprecated fallback resolvers for component resolution", "resolverCount", len(fallbackResolvers))
 		}
 	}
 
