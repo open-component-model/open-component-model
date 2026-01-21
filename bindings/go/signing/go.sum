@@ -29,10 +29,10 @@ gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntN
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
-ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260107082047-3b8abf72f590 h1:Sg5KS+2NXslFm1H1DaoAb1JJl9by8D0ZXtcC7F6Gc/c=
-ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260107082047-3b8abf72f590/go.mod h1:w1MNNIiTCNNrcXen1tcPoXbDNriGEI402nIQq3SAEmQ=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260107082047-3b8abf72f590 h1:AL1B+0IYHi0BpgfJd9//2BJJQxdfVpNiUWzQAKSV/14=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260107082047-3b8abf72f590/go.mod h1:qK/lyHWc1p9x/NtVKqYPtAVG3v7vnCRP7KTuyGOQCLA=
+ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260121092455-5a30258635be h1:9ASkgANLtyF7xuRqW4HoN73AB0Nu2Z7X/PvwQXkzE9c=
+ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260121092455-5a30258635be/go.mod h1:WGOkrj9m8/q+C8amNLOCh9mvUquTskXoy9R2noLn+sI=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260121092455-5a30258635be h1:JpHB30446DSoeaFCwpx/B5+ujjHJOlkPlgkalWAq7WI=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260121092455-5a30258635be/go.mod h1:qaxJ9XJGmR+/Lqv9XMKP0UI4HnhFHDgVQlGXU2eYpcI=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 h1:SdQm6w7Lj0g+d+MaNXQQkpKUqOhFwUSzoUjzRyeKL0I=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9/go.mod h1:5ES8RkuCdrbqiG56WJE40qhFoC4QHAQn8BasL5aKlvM=
 ocm.software/open-component-model/bindings/go/runtime v0.0.5 h1:z/gU2EMKZc8nPziSReG/KHtRTZJBkoOlR+B+XsaAmZ4=
