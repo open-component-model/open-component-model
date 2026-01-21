@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
+	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -101,6 +102,10 @@ func (r *resolverProvider) GetComponentVersionRepositoryForComponent(ctx context
 // fallbackProvider provides a [repository.ComponentVersionRepository] based on deprecated fallback resolvers.
 // This is kept for backward compatibility with the deprecated "ocm.config.ocm.software/v1" config type.
 //
+// Deprecated: Resolvers are deprecated and are only added for backwards
+// compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
+//
 //nolint:staticcheck // compatibility mode for deprecated resolvers
 type fallbackProvider struct {
 	repoProvider repository.ComponentVersionRepositoryProvider
@@ -176,8 +181,6 @@ type ResolverProviderOptions struct {
 //  2. Fallback resolvers (v1, deprecated) - priority-based resolution without pattern matching
 //
 // Returns an error if both resolver types are configured.
-//
-//nolint:staticcheck // compatibility mode for deprecated resolvers
 func NewResolverProviderWithRepository(
 	ctx context.Context,
 	opts ResolverProviderOptions,

@@ -81,6 +81,8 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 
 // createProvider creates a ComponentVersionRepositoryForComponentProvider based on the configuration.
 // The provider handles resolving the appropriate repository for each component.
+//
+//nolint:staticcheck // compatibility mode for deprecated resolvers
 func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (setup.ComponentVersionRepositoryForComponentProvider, error) {
 	if spec == nil {
 		return nil, fmt.Errorf("repository spec is required")

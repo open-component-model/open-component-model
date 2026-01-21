@@ -13,10 +13,10 @@ import (
 // Resolvers specify fallback repositories for component references.
 //
 // Deprecated: This function extracts deprecated fallback resolvers. Use GetResolversV1Alpha1
-// to get the modern path matcher resolvers instead. Fallback resolvers are kept for backward
-// compatibility but will be removed in a future version.
+// to get the modern path matcher resolvers instead.
 //
-//nolint:staticcheck // compatibility mode for deprecated resolvers
+// Fallback resolvers are kept for backward
+// compatibility but will be removed in a future version.
 func GetResolvers(config *genericv1.Config) ([]*resolverruntime.Resolver, error) {
 	if config == nil || len(config.Configurations) == 0 {
 		return nil, nil
