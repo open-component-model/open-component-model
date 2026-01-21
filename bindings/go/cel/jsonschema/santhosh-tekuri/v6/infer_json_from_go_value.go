@@ -58,6 +58,10 @@ func InferFromGoValue(goRuntimeVal interface{}) (*jsonschema.Schema, error) {
 		return inferArraySchema(typed)
 	case map[string]interface{}:
 		return inferObjectSchema(typed)
+	case nil:
+		return &jsonschema.Schema{
+			Types: TypeForSchema(NullType),
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported type: %T", goRuntimeVal)
 	}

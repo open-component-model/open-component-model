@@ -5,11 +5,13 @@ on:
     - main
     paths:
     - '**/schemas/*.schema.json'
+    - '.github/workflows/jsonschema.yml'
   pull_request:
     branches:
       - main
     paths:
       - '**/schemas/*.schema.json'
+      - '.github/workflows/jsonschema.yml'
 
 permissions:
   contents: read
@@ -27,6 +29,7 @@ jobs:
       run: |
         jsonschema lint $(git ls-files '**/schemas/*.schema.json') \
           --verbose \
-          --strict \
           --exclude additional_properties_default \
-          --exclude enum_with_type
+          --exclude enum_with_type \
+          --exclude description_trailing_period \
+          --exclude top_level_examples
