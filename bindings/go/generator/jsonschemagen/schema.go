@@ -105,7 +105,7 @@ func (g *generation) buildRootSchema(ti *universe.TypeInfo) *JSONSchemaDraft2020
 			Description:          desc,
 			Type:                 "object",
 			Properties:           g.buildStructProperties(ti.Struct, ti),
-			Required:             g.buildStructRequired(ti.Struct),
+			Required:             g.buildStructRequired(ti.Struct, ti),
 			AdditionalProperties: &SchemaOrBool{Bool: Ptr(false)},
 		}
 		if deprecated {
@@ -237,12 +237,23 @@ func (g *generation) buildStructProperties(st *ast.StructType, ti *universe.Type
 	props := make(map[string]*SchemaOrBool)
 
 	for _, field := range st.Fields.List {
-		if len(field.Names) == 0 {
+		name, opts := parseJSONTagWithFieldNameFallback(field)
+		if slices.Contains(opts, "inline") {
+			expr := unwrapStar(field.Type)
+
+			ti, ok := g.U.ResolveExpr(ti.Pkg.TypesInfo, ti.Key.PkgPath, expr)
+			if !ok || ti.Struct == nil {
+				continue
+			}
+
+			inlineSchema := g.buildStructProperties(ti.Struct, ti)
+			for key, prop := range inlineSchema {
+				props[key] = prop
+			}
 			continue
 		}
-
-		name, _ := parseJSONTagWithFieldNameFallback(field)
-		if name == "-" {
+		// existing logic
+		if name == "-" || name == "" {
 			continue
 		}
 
@@ -261,19 +272,37 @@ func (g *generation) buildStructProperties(st *ast.StructType, ti *universe.Type
 	return props
 }
 
-func (g *generation) buildStructRequired(st *ast.StructType) []string {
+func (g *generation) buildStructRequired(st *ast.StructType, ti *universe.TypeInfo) []string {
 	var req []string
-	for _, f := range st.Fields.List {
-		if len(f.Names) == 0 {
+	for _, field := range st.Fields.List {
+		name, opts := parseJSONTagWithFieldNameFallback(field)
+		if slices.Contains(opts, "inline") {
+			expr := unwrapStar(field.Type)
+
+			ti, ok := g.U.ResolveExpr(ti.Pkg.TypesInfo, ti.Key.PkgPath, expr)
+			if !ok || ti.Struct == nil {
+				continue
+			}
+
+			req = append(req, g.buildStructRequired(ti.Struct, ti)...)
 			continue
 		}
-		name, opts := parseJSONTagWithFieldNameFallback(f)
 		if name == "-" || slices.Contains(opts, "omitempty") {
 			continue
 		}
 		req = append(req, name)
 	}
 	return req
+}
+
+func unwrapStar(expr ast.Expr) ast.Expr {
+	for {
+		if star, ok := expr.(*ast.StarExpr); ok {
+			expr = star.X
+			continue
+		}
+		return expr
+	}
 }
 
 func (g *generation) inlineAnonymousStruct(st *ast.StructType, ctx *universe.TypeInfo) *JSONSchemaDraft202012 {

@@ -89,7 +89,8 @@
           },
           "required": [
             "type"
-          ]
+          ],
+          "additionalProperties": true
         },
         "component": {
           "type": "object",
