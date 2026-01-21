@@ -135,7 +135,8 @@
           "description": "Type of the access method",
           "$ref": "#/$defs/ocmType"
         }
-      }
+      },
+      "additionalProperties": true
     },
     "sourceDefinition": {
       "type": "object",
