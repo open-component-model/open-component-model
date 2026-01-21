@@ -85,6 +85,15 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=kro.run,resources=resourcegraphdefinitions,verbs=get;list;watch;create;update;patch
 
+// ApplySet requires broad permissions to list and manage resources cluster-wide
+// This is sub-optimal in terms of security, but to prevent bloating the current PR, we will take care of this in a later step.
+// TODO(matthiasbruns): https://github.com/open-component-model/ocm-project/issues/820
+// These permissions are needed for:
+// - Listing resources by label selector to find all resources in an ApplySet
+// - Deleting resources during pruning operations
+// - Getting resources to check their current state
+// +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;delete
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	informerManager, err := r.setupDynamicResourceWatcherWithManager(mgr)

@@ -28,6 +28,15 @@ rules:
   verbs:
   - create
 - apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
   - delivery.ocm.software
   resources:
   - components
