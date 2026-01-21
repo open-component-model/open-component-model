@@ -154,9 +154,7 @@ func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
 	// if any of the underlying repos do. This is a limitation but acceptable for health checks.
 	repo, err := c.provider.GetComponentVersionRepositoryForComponent(ctx, "health-check", "v0.0.0")
 	if err != nil {
-		// If we can't get a repository, we can't check health
-		c.logger.V(1).Info("could not get repository for health check", "error", err)
-		return nil
+		return fmt.Errorf("failed to get repository for health check: %w", err)
 	}
 
 	checkable, ok := repo.(repository.HealthCheckable)
