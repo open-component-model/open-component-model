@@ -16,7 +16,8 @@ import (
 // to get the modern path matcher resolvers instead. Fallback resolvers are kept for backward
 // compatibility but will be removed in a future version.
 //
-//nolint:staticcheck // deprecated fallback resolvers, kept for backward compatibility
+// TODO: Question. This is now unused because I don't support the old repo matching, should we or
+// should we say the new controllers only follow the new resolvers?
 func GetResolvers(config *genericv1.Config) ([]*resolverruntime.Resolver, error) {
 	if config == nil || len(config.Configurations) == 0 {
 		return nil, nil

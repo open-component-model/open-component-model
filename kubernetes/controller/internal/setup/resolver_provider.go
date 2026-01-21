@@ -25,7 +25,7 @@ type ComponentVersionRepositoryForComponentProvider interface {
 	GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error)
 
 	// GetRepositorySpecForComponent returns the resolved repository specification for the given component and version.
-	// This is useful for cache key generation when the actual spec depends on resolver pattern matching.
+	// It is used during cache key generation when the actual spec depends on resolver pattern matching.
 	GetRepositorySpecForComponent(ctx context.Context, component, version string) (runtime.Typed, error)
 }
 
@@ -133,38 +133,6 @@ type ResolverProviderOptions struct {
 	Resolvers []*resolverspec.Resolver
 }
 
-//// NewResolverProvider creates a new resolver provider using path matcher resolvers.
-//// The provider uses the configured resolvers to match component names against patterns
-//// and determine which repository specification to use for resolving component versions.
-//func NewResolverProvider(ctx context.Context, opts ResolverProviderOptions) (ComponentVersionRepositoryForComponentProvider, error) {
-//	if opts.Registry == nil {
-//		return nil, fmt.Errorf("component version registry is required")
-//	}
-//
-//	if len(opts.Resolvers) == 0 {
-//		return nil, fmt.Errorf("at least one resolver must be provided")
-//	}
-//
-//	// Log resolver configuration
-//	if opts.Logger != nil {
-//		opts.Logger.V(1).Info("creating resolver provider with path matcher resolvers",
-//			"resolverCount", len(opts.Resolvers))
-//		for i, resolver := range opts.Resolvers {
-//			opts.Logger.V(2).Info("resolver configuration",
-//				"index", i,
-//				"pattern", resolver.ComponentNamePattern,
-//				"repositoryType", resolver.Repository.Name)
-//		}
-//	}
-//
-//	return &resolverProvider{
-//		repoProvider: opts.Registry,
-//		graph:        opts.CredentialGraph,
-//		provider:     pathmatcher.NewSpecProvider(ctx, opts.Resolvers),
-//		logger:       opts.Logger,
-//	}, nil
-//}
-
 // NewResolverProviderWithRepository creates a resolver provider with a base repository
 // and optional component patterns.
 func NewResolverProviderWithRepository(
@@ -191,20 +159,20 @@ func NewResolverProviderWithRepository(
 
 	// TODO: I don't think we need this since unlike in the cli we don't parse compref. Discuss.
 	// Add component-specific patterns at the beginning (highest priority)
-	//if len(componentPatterns) > 0 {
+	// if len(componentPatterns) > 0 {
 	//	for _, pattern := range componentPatterns {
 	//		finalResolvers = append(finalResolvers, &resolverspec.Resolver{
 	//			Repository:           &raw,
 	//			ComponentNamePattern: pattern,
 	//		})
 	//	}
-	//} else {
+	// } else {
 	// No specific patterns - add baseRepo wildcard first so explicit repositoryRef wins
-	//finalResolvers = append(finalResolvers, &resolverspec.Resolver{
-	//	Repository:           &raw,
-	//	ComponentNamePattern: "*",
-	//})
-	//}
+	// finalResolvers = append(finalResolvers, &resolverspec.Resolver{
+	//	 Repository:           &raw,
+	//	 ComponentNamePattern: "*",
+	// })
+	// }
 
 	// Configured resolvers should always take precedence as opposed to GIVEN repository spec that for the controller
 	// is something that is always provided because the controllers always have a repository spec. Either from the
@@ -231,44 +199,3 @@ func NewResolverProviderWithRepository(
 		logger:       opts.Logger,
 	}, nil
 }
-
-// NewSimpleResolverProvider creates a resolver provider with a single wildcard matcher
-// for the given repository. This is the simplest form of resolver that matches all components.
-//func NewSimpleResolverProvider(
-//	ctx context.Context,
-//	opts ResolverProviderOptions,
-//	repository runtime.Typed,
-//) (ComponentVersionRepositoryForComponentProvider, error) {
-//	if opts.Registry == nil {
-//		return nil, fmt.Errorf("component version registry is required")
-//	}
-//
-//	if repository == nil {
-//		return nil, fmt.Errorf("repository is required")
-//	}
-//
-//	raw := runtime.Raw{}
-//	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
-//	if err := scheme.Convert(repository, &raw); err != nil {
-//		return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
-//	}
-//
-//	resolvers := []*resolverspec.Resolver{
-//		{
-//			Repository:           &raw,
-//			ComponentNamePattern: "*",
-//		},
-//	}
-//
-//	if opts.Logger != nil {
-//		opts.Logger.V(1).Info("creating simple resolver provider with wildcard matcher",
-//			"repository", repository)
-//	}
-//
-//	return &resolverProvider{
-//		repoProvider: opts.Registry,
-//		graph:        opts.CredentialGraph,
-//		provider:     pathmatcher.NewSpecProvider(ctx, resolvers),
-//		logger:       opts.Logger,
-//	}, nil
-//}

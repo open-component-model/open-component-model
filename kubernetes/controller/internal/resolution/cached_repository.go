@@ -65,7 +65,6 @@ func (c *CacheBackedRepository) AddComponentVersion(ctx context.Context, desc *d
 // This function is async. First call to this function will return a resolution.ErrResolutionInProgress error.
 // Second call, once the resolution succeeds, will return a cached result with a default TTL.
 func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
-	// Get the resolved repository spec for cache key generation
 	resolvedSpec, err := c.provider.GetRepositorySpecForComponent(ctx, component, version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve repository spec for component %s:%s: %w", component, version, err)
@@ -76,12 +75,10 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 		configHash = c.cfg.Hash
 	}
 
-	// Create cache key using the resolved spec
 	keyFunc := func() (string, error) {
 		return buildCacheKey(configHash, resolvedSpec, component, version)
 	}
 
-	// Get the actual repository for this component
 	repo, err := c.provider.GetComponentVersionRepositoryForComponent(ctx, component, version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository for component %s:%s: %w", component, version, err)

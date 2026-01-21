@@ -80,10 +80,6 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, credGraph)
 
-	// Test deprecated fallback resolvers (for backward compatibility)
-	_, err = setup.GetResolvers(cfg.Config)
-	require.NoError(t, err)
-
 	// Test new path matcher resolvers (v1alpha1)
 	resolversV1Alpha1, err := setup.GetResolversV1Alpha1(cfg.Config)
 	require.NoError(t, err)
@@ -424,5 +420,7 @@ func TestIntegration_ResolverProvider(t *testing.T) {
 		repo, err := provider.GetComponentVersionRepositoryForComponent(ctx, "github.com/test/myrepo", "v1.0.0")
 		require.NoError(t, err)
 		require.NotNil(t, repo)
+
+		// TODO: Extend this if possible with actually trying to get the component.
 	})
 }

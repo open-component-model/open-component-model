@@ -342,7 +342,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	resourceIdentity := resource.Spec.Resource.ByReference.Resource
-	logger.Info("resolving reference path", "referencePath", resourceDescriptor)
 	var matchedResource *descriptor.Resource
 	for i, res := range resourceDescriptor.Component.Resources {
 		resIdentity := res.ToIdentity()
@@ -446,9 +445,6 @@ func (r *Reconciler) resolveReferencePath(
 				refIdentity, currentDesc.Component.Name, currentDesc.Component.Version, i+1)
 		}
 
-		// Create repository for resolving the referenced component.
-		// Resolvers (if configured) take priority over the repository spec.
-		// The spec serves as a fallback if no resolver pattern matches.
 		refRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
 			RepositorySpec:    currentRepoSpec,
 			OCMConfigurations: configs,

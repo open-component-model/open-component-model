@@ -59,7 +59,6 @@ type RepositoryOptions struct {
 // 1. Path matcher resolvers from OCM configuration (if configured)
 // 2. The provided RepositorySpec as a fallback
 func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *RepositoryOptions) (*CacheBackedRepository, error) {
-	// Load OCM configurations
 	cfg, err := configuration.LoadConfigurations(ctx, r.client, opts.Namespace, opts.OCMConfigurations)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load OCM configurations: %w", err)
@@ -113,18 +112,5 @@ func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *
 		}
 	}
 
-	// determine which resolver to use.
-	//switch {
-	//case len(providerOpts.Resolvers) > 0 && spec != nil:
 	return setup.NewResolverProviderWithRepository(ctx, providerOpts, spec)
-	//case len(providerOpts.Resolvers) > 0:
-	//	r.logger.V(1).Info("creating resolver provider without fallback")
-	//	return setup.NewResolverProvider(ctx, providerOpts)
-	//case spec != nil:
-	//	r.logger.V(1).Info("creating simple resolver provider with wildcard matcher")
-	//	return setup.NewSimpleResolverProvider(ctx, providerOpts, spec)
-
-	//default:
-	//	return nil, fmt.Errorf("no repository specification provided and no resolvers configured")
-	//}
 }
