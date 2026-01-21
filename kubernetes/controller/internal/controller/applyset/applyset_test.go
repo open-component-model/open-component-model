@@ -143,7 +143,7 @@ func TestApplySet_Apply(t *testing.T) {
 	assert.Len(t, result.Applied, 1)
 	assert.Len(t, result.Errors, 0)
 
-	// Verify object was applied with correct labels
+	// Verify appliedObject was applied with correct labels
 	applied := &unstructured.Unstructured{}
 	applied.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
 	err = fc.Get(ctx, client.ObjectKey{Name: "cm1", Namespace: "default"}, applied)
@@ -180,7 +180,7 @@ func TestApplySet_Prune(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Pre-create an object that should be pruned
+	// Pre-create an appliedObject that should be pruned
 	oldObj := &unstructured.Unstructured{}
 	oldObj.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
 	oldObj.SetName("old-cm")
@@ -191,7 +191,7 @@ func TestApplySet_Prune(t *testing.T) {
 	})
 	_ = fc.Create(ctx, oldObj)
 
-	// Apply a new object
+	// Apply a new appliedObject
 	newObj := &unstructured.Unstructured{}
 	newObj.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
 	newObj.SetName("new-cm")
@@ -206,13 +206,13 @@ func TestApplySet_Prune(t *testing.T) {
 	assert.Len(t, result.Pruned, 1)
 	assert.Equal(t, "old-cm", result.Pruned[0].Name)
 
-	// Verify old object is gone
+	// Verify old appliedObject is gone
 	oldObjCheck := &unstructured.Unstructured{}
 	oldObjCheck.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
 	err = fc.Get(ctx, client.ObjectKey{Name: "old-cm", Namespace: "default"}, oldObjCheck)
 	assert.Error(t, err)
 
-	// Verify new object exists
+	// Verify new appliedObject exists
 	newObjCheck := &unstructured.Unstructured{}
 	newObjCheck.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
 	err = fc.Get(ctx, client.ObjectKey{Name: "new-cm", Namespace: "default"}, newObjCheck)
@@ -245,7 +245,7 @@ func TestApplySet_DryRun(t *testing.T) {
 	assert.Len(t, result.Applied, 1)
 
 	// Note: controller-runtime fake client doesn't support dry-run, so objects are still created
-	// In a real cluster with dry-run, the object would NOT be created
+	// In a real cluster with dry-run, the appliedObject would NOT be created
 }
 
 func TestApplySet_Concurrency(t *testing.T) {

@@ -18,11 +18,11 @@ import (
 
 const (
 	// ApplySet label and annotation constants from applyset.go
-	applySetParentIDLabel                  = "applyset.k8s.io/id"
-	applySetPartOfLabel                    = "applyset.k8s.io/part-of"
-	applySetToolingLabel                   = "applyset.k8s.io/tooling"
-	applySetGKsAnnotation                  = "applyset.k8s.io/contains-group-kinds"
-	applySetAdditionalNamespacesAnnotation = "applyset.k8s.io/additional-namespaces"
+	applySetParentIDLabel                  = "applyset.kubernetes.io/id"
+	applySetPartOfLabel                    = "applyset.kubernetes.io/part-of"
+	applySetToolingLabel                   = "applyset.kubernetes.io/tooling"
+	applySetGKsAnnotation                  = "applyset.kubernetes.io/contains-group-kinds"
+	applySetAdditionalNamespacesAnnotation = "applyset.kubernetes.io/additional-namespaces"
 )
 
 // verifyDeployerApplySetLabelsAndAnnotations checks that the deployer has the correct ApplySet parent labels and annotations.
