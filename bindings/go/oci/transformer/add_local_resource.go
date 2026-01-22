@@ -10,6 +10,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -113,8 +114,7 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 			runtimeResource.Name, component, version, err)
 	}
 
-	// Convert updated resource back to v2 format
-	v2UpdatedResource, err := descriptor.ConvertToV2Resource(t.Scheme, updatedResource)
+	v2UpdatedResource, err := descriptor.ConvertToV2Resource(oci.DefaultRepositoryScheme, updatedResource)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting updated resource to v2 format: %w", err)
 	}

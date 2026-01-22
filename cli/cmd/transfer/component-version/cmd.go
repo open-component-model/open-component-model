@@ -168,11 +168,27 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		CredentialProvider: credentialProvider,
 	}
 
+	// Resource transformers
+	ociGetResource := &transformer.GetLocalResource{
+		Scheme:             transformerScheme,
+		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
+		CredentialProvider: credentialProvider,
+	}
+	ociAddResource := &transformer.AddLocalResource{
+		Scheme:             transformerScheme,
+		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
+		CredentialProvider: credentialProvider,
+	}
+
 	return builder.NewBuilder(transformerScheme).
 		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
 		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
 		WithTransformer(&ociv1alpha1.CTFGetComponentVersion{}, ociGet).
-		WithTransformer(&ociv1alpha1.CTFAddComponentVersion{}, ociAdd)
+		WithTransformer(&ociv1alpha1.CTFAddComponentVersion{}, ociAdd).
+		WithTransformer(&ociv1alpha1.OCIGetLocalResource{}, ociGetResource).
+		WithTransformer(&ociv1alpha1.OCIAddLocalResource{}, ociAddResource).
+		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
+		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource)
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {

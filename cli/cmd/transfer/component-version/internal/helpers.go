@@ -42,3 +42,25 @@ func ChooseAddType(repo runtime.Typed) runtime.Type {
 		panic(fmt.Sprintf("unknown repository type %T", repo))
 	}
 }
+
+func ChooseGetLocalResourceType(repo runtime.Typed) runtime.Type {
+	switch repo.(type) {
+	case *oci.Repository:
+		return ociv1alpha1.OCIGetLocalResourceV1alpha1
+	case *ctfv1.Repository:
+		return ociv1alpha1.CTFGetLocalResourceV1alpha1
+	default:
+		panic(fmt.Sprintf("unknown repository type %T", repo))
+	}
+}
+
+func ChooseAddLocalResourceType(repo runtime.Typed) runtime.Type {
+	switch repo.(type) {
+	case *oci.Repository:
+		return ociv1alpha1.OCIAddLocalResourceV1alpha1
+	case *ctfv1.Repository:
+		return ociv1alpha1.CTFAddLocalResourceV1alpha1
+	default:
+		panic(fmt.Sprintf("unknown repository type %T", repo))
+	}
+}
