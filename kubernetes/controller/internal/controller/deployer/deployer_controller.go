@@ -244,36 +244,33 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 	// Use the deployer as the ApplySet parent
 	// This allows us to track all resources deployed by this deployer
 	applySetConfig := applyset.Config{
-		ToolingID: applyset.ToolingID{
-			Name:    deployerManager,
-			Version: "v1alpha1",
-		},
-		FieldManager: fmt.Sprintf("%s/%s", deployerManager, deployer.UID),
-		ToolLabels: map[string]string{
-			// Include the standard managed-by label
-			managedByLabel: deployerManager,
-		},
-		Concurrency: runtime.NumCPU(),
+		Client:          r.Client,
+		RESTMapper:      r.resourceRESTMapper,
+		Log:             logger,
+		ParentNamespace: deployer.Namespace,
 	}
 
-	set, err := applyset.New(ctx, deployer, r.Client, r.resourceRESTMapper, applySetConfig)
+	set := applyset.New(applySetConfig, deployer)
+
+	logger.Info("applying ApplySet")
+	_, metaData, err := set.Apply(ctx, nil, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
 	if err != nil {
-		return fmt.Errorf("failed to create ApplySet: %w", err)
+		return fmt.Errorf("failed to apply ApplySet: %w", err)
 	}
 
 	logger.Info("pruning ApplySet")
-	result, err := set.Apply(ctx, true)
+	result, err := set.Prune(ctx, applyset.PruneOptions{
+		KeepUIDs:    nil,
+		Scope:       metaData.PruneScope(),
+		Concurrency: runtime.NumCPU(),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to prune ApplySet: %w", err)
 	}
 
 	// Log results
 	logger.Info("ApplySet prune operation complete",
-		"pruned", len(result.Pruned),
-		"errors", len(result.Errors))
-	if len(result.Errors) > 0 {
-		return fmt.Errorf("ApplySet prune completed with errors: %v", result.Errors)
-	}
+		"pruned", len(result.Pruned))
 
 	if len(result.Pruned) == 0 {
 		logger.Info("no more resources to prune")
@@ -580,25 +577,17 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 	// Use the deployer as the ApplySet parent
 	// This allows us to track all resources deployed by this deployer
 	applySetConfig := applyset.Config{
-		ToolingID: applyset.ToolingID{
-			Name:    deployerManager,
-			Version: "v1alpha1",
-		},
-		FieldManager: fmt.Sprintf("%s/%s", deployerManager, deployer.UID),
-		ToolLabels: map[string]string{
-			// Include the standard managed-by label
-			managedByLabel: deployerManager,
-		},
-		Concurrency: runtime.NumCPU(),
+		Client:          r.Client,
+		RESTMapper:      r.resourceRESTMapper,
+		Log:             logger,
+		ParentNamespace: deployer.Namespace,
 	}
 
-	set, err := applyset.New(ctx, deployer, r.Client, r.resourceRESTMapper, applySetConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create ApplySet: %w", err)
-	}
+	set := applyset.New(applySetConfig, deployer)
 
 	logger.Info("adding objects to ApplySet", "count", len(objs))
 
+	resourcesToAdd := make([]applyset.Resource, 0, len(objs))
 	// Add all objects to the ApplySet
 	for _, obj := range objs {
 		// Clone the object to avoid modifying the original
@@ -620,28 +609,34 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 			return fmt.Errorf("failed to default object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
 		}
 
-		// Add to the ApplySet
-		if _, err := set.Add(ctx, obj); err != nil {
-			return fmt.Errorf("failed to add object %s/%s to ApplySet: %w", obj.GetNamespace(), obj.GetName(), err)
-		}
+		resourcesToAdd = append(resourcesToAdd, applyset.Resource{
+			ID:              obj.GetName(),
+			Object:          obj,
+			CurrentRevision: "",
+			SkipApply:       false,
+		})
 	}
 
-	// Apply all objects (and prune if requested)
-	logger.Info("applying ApplySet", "prune", prune)
-	result, err := set.Apply(ctx, prune)
+	logger.Info("applying ApplySet")
+	applyResult, metaData, err := set.Apply(ctx, resourcesToAdd, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
 	if err != nil {
 		return fmt.Errorf("failed to apply ApplySet: %w", err)
 	}
 
 	// Log results
-	logger.Info("ApplySet operation complete",
-		"applied", len(result.Applied),
-		"pruned", len(result.Pruned),
-		"errors", len(result.Errors))
+	logger.Info("ApplySet operation complete", "applied", len(applyResult.Applied))
 
-	if len(result.Errors) > 0 {
-		return fmt.Errorf("ApplySet completed with errors: %v", result.Errors)
+	pruneResult, err := set.Prune(ctx, applyset.PruneOptions{
+		KeepUIDs:    nil,
+		Scope:       metaData.PruneScope(),
+		Concurrency: runtime.NumCPU(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to prune ApplySet: %w", err)
 	}
+
+	// Log prune results
+	logger.Info("ApplySet prune operation complete", "pruned", len(pruneResult.Pruned))
 
 	return nil
 }
