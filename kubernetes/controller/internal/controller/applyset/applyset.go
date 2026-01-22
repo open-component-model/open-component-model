@@ -16,10 +16,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Compile-time check that ApplySet implements Interface.
@@ -147,7 +148,7 @@ func (m Metadata) PruneScope() *PruneScope {
 
 // Config for creating an ApplySet.
 type Config struct {
-	Client          dynamic.Interface
+	Client          client.Client
 	RESTMapper      meta.RESTMapper
 	Log             logr.Logger
 	ParentNamespace string // fallback namespace for namespaced resources without namespace set
@@ -174,7 +175,7 @@ func New(cfg Config, parent interface {
 
 // ApplySet implements Interface for server-side apply with membership tracking.
 type ApplySet struct {
-	client            dynamic.Interface
+	client            client.Client
 	restMapper        meta.RESTMapper
 	log               logr.Logger
 	applySetID        string
@@ -345,12 +346,21 @@ func (a *ApplySet) applyResource(
 	labels[ApplysetPartOfLabel] = a.applySetID
 	r.Object.SetLabels(labels)
 
-	// Desired reflects what we're actually sending (with label injected)
-	item.Desired = r.Object
+	// Set namespace for namespaced resources
+	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+		r.Object.SetNamespace(a.resolveNamespace(r.Object.GetNamespace()))
+	}
 
-	// Apply (no GET - use CurrentRevision from Resource for change detection)
-	dynResource := a.resourceClient(mapping, r.Object.GetNamespace())
-	applied, err := dynResource.Apply(ctx, r.Object.GetName(), r.Object, options)
+	// Desired reflects what we're actually sending (with label injected)
+	item.Desired = r.Object.DeepCopy()
+
+	// Apply using controller-runtime client with Server-Side Apply
+	patchOptions := []client.PatchOption{
+		client.ForceOwnership,
+		client.FieldOwner(options.FieldManager),
+	}
+
+	err := a.client.Patch(ctx, r.Object, client.Apply, patchOptions...)
 	if err != nil {
 		item.Error = err
 		a.log.V(2).Info("apply failed",
@@ -364,9 +374,9 @@ func (a *ApplySet) applyResource(
 		return item
 	}
 
-	item.Observed = applied
+	item.Observed = r.Object
 	// Compare with revision passed by controller (from their GET for CEL evaluation)
-	item.Changed = r.CurrentRevision == "" || applied.GetResourceVersion() != r.CurrentRevision
+	item.Changed = r.CurrentRevision == "" || r.Object.GetResourceVersion() != r.CurrentRevision
 
 	a.log.V(2).Info("applied resource",
 		"id", r.ID,
@@ -377,14 +387,6 @@ func (a *ApplySet) applyResource(
 	)
 
 	return item
-}
-
-func (a *ApplySet) resourceClient(mapping *meta.RESTMapping, namespace string) dynamic.ResourceInterface {
-	dynResource := a.client.Resource(mapping.Resource)
-	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-		return dynResource.Namespace(a.resolveNamespace(namespace))
-	}
-	return dynResource
 }
 
 func (a *ApplySet) resolvedNamespace(mapping *meta.RESTMapping, obj *unstructured.Unstructured) (string, bool) {
@@ -411,27 +413,26 @@ func (a *ApplySet) prune(
 	keepUIDs sets.Set[types.UID],
 	concurrency int,
 ) ([]PruneResultItem, error) {
-	// Track candidates with their GVR for deletion
+	// Track candidates for deletion
 	type pruneCandidate struct {
 		obj *unstructured.Unstructured
-		gvr schema.GroupVersionResource
 	}
 
 	// Build list tasks
 	type listTask struct {
-		gvr       schema.GroupVersionResource
+		gvk       schema.GroupVersionKind
 		namespace string // empty for cluster-scoped
 		scoped    bool
 	}
 	var tasks []listTask
 	for _, mapping := range mappings {
-		gvr := mapping.Resource
+		gvk := mapping.GroupVersionKind
 		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
 			for ns := range namespaces {
-				tasks = append(tasks, listTask{gvr: gvr, namespace: ns, scoped: true})
+				tasks = append(tasks, listTask{gvk: gvk, namespace: ns, scoped: true})
 			}
 		} else {
-			tasks = append(tasks, listTask{gvr: gvr, scoped: false})
+			tasks = append(tasks, listTask{gvk: gvk, scoped: false})
 		}
 	}
 
@@ -443,31 +444,38 @@ func (a *ApplySet) prune(
 	if concurrency > 0 {
 		listGroup.SetLimit(concurrency)
 	}
+
+	// Parse label selector
+	labelSelector, err := labels.Parse(a.labelSelector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse label selector: %w", err)
+	}
+
 	for _, task := range tasks {
 		listGroup.Go(func() error {
-			var list *unstructured.UnstructuredList
-			var err error
+			list := &unstructured.UnstructuredList{}
+			list.SetGroupVersionKind(task.gvk)
+
+			listOpts := &client.ListOptions{
+				LabelSelector: labelSelector,
+			}
 			if task.scoped {
-				list, err = a.client.Resource(task.gvr).Namespace(task.namespace).List(listCtx, metav1.ListOptions{
-					LabelSelector: a.labelSelector,
-				})
-				if err != nil {
-					return fmt.Errorf("list %v in %s: %w", task.gvr, task.namespace, err)
+				listOpts.Namespace = task.namespace
+			}
+
+			err := a.client.List(listCtx, list, listOpts)
+			if err != nil {
+				if task.scoped {
+					return fmt.Errorf("list %v in %s: %w", task.gvk, task.namespace, err)
 				}
-			} else {
-				list, err = a.client.Resource(task.gvr).List(listCtx, metav1.ListOptions{
-					LabelSelector: a.labelSelector,
-				})
-				if err != nil {
-					return fmt.Errorf("list %v: %w", task.gvr, err)
-				}
+				return fmt.Errorf("list %v: %w", task.gvk, err)
 			}
 
 			var local []pruneCandidate
 			for i := range list.Items {
 				obj := &list.Items[i]
 				if !keepUIDs.Has(obj.GetUID()) {
-					local = append(local, pruneCandidate{obj: obj, gvr: task.gvr})
+					local = append(local, pruneCandidate{obj: obj})
 				}
 			}
 
@@ -497,13 +505,7 @@ func (a *ApplySet) prune(
 
 	for _, c := range candidates {
 		eg.Go(func() error {
-			var err error
-			if c.obj.GetNamespace() != "" {
-				err = a.client.Resource(c.gvr).Namespace(c.obj.GetNamespace()).Delete(egCtx, c.obj.GetName(), metav1.DeleteOptions{})
-			} else {
-				err = a.client.Resource(c.gvr).Delete(egCtx, c.obj.GetName(), metav1.DeleteOptions{})
-			}
-
+			err := a.client.Delete(egCtx, c.obj)
 			if err != nil && !apierrors.IsNotFound(err) {
 				return fmt.Errorf("delete %s/%s: %w", c.obj.GetNamespace(), c.obj.GetName(), err)
 			}
@@ -515,7 +517,7 @@ func (a *ApplySet) prune(
 			a.log.V(2).Info("pruned resource",
 				"name", c.obj.GetName(),
 				"namespace", c.obj.GetNamespace(),
-				"gvr", c.gvr.String(),
+				"gvk", c.obj.GroupVersionKind().String(),
 			)
 			return nil
 		})
