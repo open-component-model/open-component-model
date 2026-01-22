@@ -35,7 +35,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return cm
 			}(),
-			expectedID: "applyset-WMpXSab3F471pG8yj3lUlnLzJlsAUO3Y1u0xyU39H8o",
+			expectedID: "applyset-WMpXSab3F471pG8yj3lUlnLzJlsAUO3Y1u0xyU39H8o-v1",
 		},
 		{
 			name: "namespaced ConfigMap in kube-system namespace",
@@ -53,7 +53,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return cm
 			}(),
-			expectedID: "applyset-jmaR-_71xlQkLbPr1uahJhyO41_HAk_6TL5nfwnaA7w",
+			expectedID: "applyset-jmaR-_71xlQkLbPr1uahJhyO41_HAk_6TL5nfwnaA7w-v1",
 		},
 		{
 			name: "cluster-scoped Namespace",
@@ -70,7 +70,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return ns
 			}(),
-			expectedID: "applyset-6h7Khpy4q5bwx-r6uEd1CVAqfsDwoua515LWGYfBvZs",
+			expectedID: "applyset-6h7Khpy4q5bwx-r6uEd1CVAqfsDwoua515LWGYfBvZs-v1",
 		},
 		{
 			name: "namespaced Secret in default namespace",
@@ -88,7 +88,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return secret
 			}(),
-			expectedID: "applyset-oSiAHx7f15nv1BdrRJdV6Bqk-qPZ7z0LkS_OxKu43rQ",
+			expectedID: "applyset-oSiAHx7f15nv1BdrRJdV6Bqk-qPZ7z0LkS_OxKu43rQ-v1",
 		},
 		{
 			name: "custom resource with group",
@@ -103,7 +103,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return obj
 			}(),
-			expectedID: "applyset-D77EJtZgpU1950wAGLHuiE172RQcNwtcLfGHcoG0Ydg",
+			expectedID: "applyset-D77EJtZgpU1950wAGLHuiE172RQcNwtcLfGHcoG0Ydg-v1",
 		},
 		{
 			name: "custom resource in different namespace",
@@ -118,7 +118,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return obj
 			}(),
-			expectedID: "applyset-i47kAg3-o6Rs1IVLnhxSkr_wpJhPWMZNBPdeT-L7_Pk",
+			expectedID: "applyset-i47kAg3-o6Rs1IVLnhxSkr_wpJhPWMZNBPdeT-L7_Pk-v1",
 		},
 		{
 			name: "same name different namespace produces different ID",
@@ -136,7 +136,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return cm
 			}(),
-			expectedID: "applyset-hA8A-ACIxRpv-tLSrlWg4RveZ90SucKzxGln3KSSnn4",
+			expectedID: "applyset-hA8A-ACIxRpv-tLSrlWg4RveZ90SucKzxGln3KSSnn4-v1",
 		},
 		{
 			name: "same namespace different name produces different ID",
@@ -154,7 +154,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return cm
 			}(),
-			expectedID: "applyset-qOnMjK6UMfG9m5jEyXQhY-q8YaNg4TS40pMMynRV3zw",
+			expectedID: "applyset-qOnMjK6UMfG9m5jEyXQhY-q8YaNg4TS40pMMynRV3zw-v1",
 		},
 		{
 			name: "same name and namespace but different kind produces different ID",
@@ -172,7 +172,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return secret
 			}(),
-			expectedID: "applyset-IsPfNLnDhmAttrRpUQeluhpLLVFO8qgGevAOm2BMiBg",
+			expectedID: "applyset-IsPfNLnDhmAttrRpUQeluhpLLVFO8qgGevAOm2BMiBg-v1",
 		},
 		{
 			name: "name with special characters",
@@ -190,7 +190,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return cm
 			}(),
-			expectedID: "applyset-35AvIRO2A_CZkp2pOtGKwHyBGLoQ2QEh_6cZSCh2l3E",
+			expectedID: "applyset-35AvIRO2A_CZkp2pOtGKwHyBGLoQ2QEh_6cZSCh2l3E-v1",
 		},
 		{
 			name: "namespace with special characters",
@@ -208,7 +208,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return cm
 			}(),
-			expectedID: "applyset-X0V9kZ3qdnKY5VMz0swyxmGHZ7VBrdLFsJvqYSwvVtE",
+			expectedID: "applyset-X0V9kZ3qdnKY5VMz0swyxmGHZ7VBrdLFsJvqYSwvVtE-v1",
 		},
 		{
 			name: "cluster-scoped custom resource",
@@ -222,7 +222,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return obj
 			}(),
-			expectedID: "applyset-kcCIqkAMghVlPk4HvUDMoRKEjf3YhUZAebnRnarqfvY",
+			expectedID: "applyset-kcCIqkAMghVlPk4HvUDMoRKEjf3YhUZAebnRnarqfvY-v1",
 		},
 		{
 			name: "object with long name",
@@ -240,7 +240,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return cm
 			}(),
-			expectedID: "applyset-2GIdv55R8n2hnKaS6vqTu62XzIAhxLK0_jA-vWTTo3o",
+			expectedID: "applyset-2GIdv55R8n2hnKaS6vqTu62XzIAhxLK0_jA-vWTTo3o-v1",
 		},
 		{
 			name: "apiextensions.k8s.io group",
@@ -254,7 +254,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return obj
 			}(),
-			expectedID: "applyset-kcFVkXqLW-12N-Hv_C5VVBBp2MGNj21dHFsuaQ3Ih-M",
+			expectedID: "applyset-kcFVkXqLW-12N-Hv_C5VVBBp2MGNj21dHFsuaQ3Ih-M-v1",
 		},
 		{
 			name: "rbac.authorization.k8s.io group",
@@ -269,7 +269,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return obj
 			}(),
-			expectedID: "applyset-1qQlFek9WdzcYX9dXUgCX0MzYBq6EC4RtggasIfVtaI",
+			expectedID: "applyset-1qQlFek9WdzcYX9dXUgCX0MzYBq6EC4RtggasIfVtaI-v1",
 		},
 		{
 			name: "should never exceed length limits",
@@ -287,7 +287,7 @@ func Test_ComputeID(t *testing.T) {
 				})
 				return cm
 			}(),
-			expectedID: "applyset-1UQZMIgIAU1QpDpAO_EsOHlbgmhG1NX8q4FhlZ-KGfI",
+			expectedID: "applyset-1UQZMIgIAU1QpDpAO_EsOHlbgmhG1NX8q4FhlZ-KGfI-v1",
 		},
 	}
 
