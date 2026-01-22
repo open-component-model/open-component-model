@@ -8,6 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository/component/provider"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
@@ -79,18 +80,15 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 	return newCacheBackedRepository(r.logger, provider, cfg, r.workerPool, requesterFunc), nil
 }
 
-// createProvider creates a ComponentVersionRepositoryForComponentProvider based on the configuration.
+// createProvider creates a provider based on the configuration.
 // The provider handles resolving the appropriate repository for each component.
-//
-//nolint:staticcheck // compatibility mode for deprecated resolvers
-func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (setup.ComponentVersionRepositoryForComponentProvider, error) {
+func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (provider.SpecResolvingProvider, error) {
 	if spec == nil {
 		return nil, fmt.Errorf("repository spec is required")
 	}
 
-	providerOpts := setup.ResolverProviderOptions{
-		Registry: r.pluginManager.ComponentVersionRepositoryRegistry,
-		Logger:   r.logger,
+	opts := provider.Options{
+		RepoProvider: r.pluginManager.ComponentVersionRepositoryRegistry,
 	}
 
 	if cfg != nil {
@@ -102,26 +100,15 @@ func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *
 			return nil, fmt.Errorf("failed to create credential graph: %w", err)
 		}
 		r.logger.V(1).Info("resolved credential graph")
-		providerOpts.CredentialGraph = credGraph
-		resolvers, err := setup.GetResolversV1Alpha1(cfg.Config)
-		if err != nil {
-			return nil, fmt.Errorf("failed to extract path matcher resolvers: %w", err)
-		}
-		providerOpts.Resolvers = resolvers
+		opts.CredentialGraph = credGraph
 
-		fallbackResolvers, err := setup.GetResolvers(cfg.Config)
+		fallbackResolvers, pathMatchers, err := provider.ExtractResolvers(cfg.Config)
 		if err != nil {
-			return nil, fmt.Errorf("failed to extract fallback resolvers: %w", err)
+			return nil, err
 		}
-		providerOpts.FallbackResolvers = fallbackResolvers
-
-		if len(resolvers) > 0 {
-			r.logger.V(1).Info("using path matcher resolvers for component resolution", "resolverCount", len(resolvers))
-		}
-		if len(fallbackResolvers) > 0 {
-			r.logger.V(1).Info("using deprecated fallback resolvers for component resolution", "resolverCount", len(fallbackResolvers))
-		}
+		opts.FallbackResolvers = fallbackResolvers
+		opts.PathMatchers = pathMatchers
 	}
 
-	return setup.NewResolverProviderWithRepository(ctx, providerOpts, spec)
+	return provider.New(ctx, opts, spec)
 }

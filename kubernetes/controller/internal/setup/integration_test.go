@@ -21,6 +21,7 @@ import (
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository/component/provider"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
@@ -81,7 +82,7 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 	require.NotNil(t, credGraph)
 
 	// Test new path matcher resolvers (v1alpha1)
-	resolversV1Alpha1, err := setup.GetResolversV1Alpha1(cfg.Config)
+	resolversV1Alpha1, err := provider.PathMatcherResolversFromConfig(cfg.Config)
 	require.NoError(t, err)
 	assert.Nil(t, resolversV1Alpha1, "empty config should have no resolvers")
 
@@ -398,26 +399,20 @@ func TestIntegration_ResolverProvider(t *testing.T) {
 			BaseUrl: "localhost:5000/priority",
 		}
 
-		// Extract config resolvers
-		configResolvers, err := setup.GetResolversV1Alpha1(cfg.Config)
+		configResolvers, err := provider.PathMatcherResolversFromConfig(cfg.Config)
 		require.NoError(t, err)
 
-		opts := setup.ResolverProviderOptions{
-			Registry:        pm.ComponentVersionRepositoryRegistry,
+		opts := provider.Options{
+			RepoProvider:    pm.ComponentVersionRepositoryRegistry,
 			CredentialGraph: credGraph,
-			Logger:          &logger,
-			Resolvers:       configResolvers,
+			PathMatchers:    configResolvers,
 		}
 
-		// Component patterns have highest priority
-		//componentPatterns := []string{"priority.io/*"}
-
-		provider, err := setup.NewResolverProviderWithRepository(ctx, opts, repoSpec)
+		p, err := provider.New(ctx, opts, repoSpec)
 		require.NoError(t, err)
-		require.NotNil(t, provider)
+		require.NotNil(t, p)
 
-		// Should use the repository for any component
-		repo, err := provider.GetComponentVersionRepositoryForComponent(ctx, "github.com/test/myrepo", "v1.0.0")
+		repo, err := p.GetComponentVersionRepositoryForComponent(ctx, "github.com/test/myrepo", "v1.0.0")
 		require.NoError(t, err)
 		require.NotNil(t, repo)
 

@@ -12,10 +12,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository/component/provider"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
-	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 )
 
 // CacheBackedRepository provides a cache-backed implementation of repository.ComponentVersionRepository.
@@ -23,7 +23,7 @@ import (
 // routing where different components can be served by different repositories.
 // This is a READ-ONLY cache. Writing operations are delegated directly to the resolved repository.
 type CacheBackedRepository struct {
-	provider   setup.ComponentVersionRepositoryForComponentProvider
+	provider   provider.SpecResolvingProvider
 	cfg        *configuration.Configuration
 	workerPool *workerpool.WorkerPool
 	logger     *logr.Logger
@@ -38,7 +38,7 @@ var _ repository.ComponentVersionRepository = (*CacheBackedRepository)(nil)
 // newCacheBackedRepository creates a new CacheBackedRepository instance.
 func newCacheBackedRepository(
 	logger *logr.Logger,
-	provider setup.ComponentVersionRepositoryForComponentProvider,
+	provider provider.SpecResolvingProvider,
 	cfg *configuration.Configuration,
 	wp *workerpool.WorkerPool,
 	requesterFunc func() workerpool.RequesterInfo,

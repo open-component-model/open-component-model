@@ -20,6 +20,7 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository/component/provider"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -230,7 +231,7 @@ func processComponentReference(cmd *cobra.Command,
 	return nil
 }
 
-func renderComponents(cmd *cobra.Command, repoProvider ocm.ComponentVersionRepositoryForComponentProvider, roots []string, format string, mode string, recursive int) error {
+func renderComponents(cmd *cobra.Command, repoProvider provider.ComponentVersionRepositoryForComponentProvider, roots []string, format string, mode string, recursive int) error {
 	resAndDis := resolverAndDiscoverer{
 		repositoryProvider: repoProvider,
 		recursive:          recursive,
@@ -343,7 +344,7 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 }
 
 type resolverAndDiscoverer struct {
-	repositoryProvider ocm.ComponentVersionRepositoryForComponentProvider
+	repositoryProvider provider.ComponentVersionRepositoryForComponentProvider
 	recursive          int
 }
 
