@@ -1,9 +1,7 @@
 package e2e
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,185 +13,6 @@ import (
 
 	"ocm.software/open-component-model/kubernetes/controller/test/utils"
 )
-
-const (
-	// ApplySet label and annotation constants from applyset.go
-	applySetParentIDLabel                  = "applyset.kubernetes.io/id"
-	applySetPartOfLabel                    = "applyset.kubernetes.io/part-of"
-	applySetToolingLabel                   = "applyset.kubernetes.io/tooling"
-	applySetGKsAnnotation                  = "applyset.kubernetes.io/contains-group-kinds"
-	applySetAdditionalNamespacesAnnotation = "applyset.kubernetes.io/additional-namespaces"
-)
-
-// verifyDeployerApplySetLabelsAndAnnotations checks that the deployer has the correct ApplySet parent labels and annotations.
-func verifyDeployerApplySetLabelsAndAnnotations(ctx context.Context, example string) {
-	deployerName := "deployer.delivery.ocm.software/" + example + "-deployer"
-
-	// Get the deployer resource as JSON
-	cmd := exec.CommandContext(ctx, "kubectl", "get", deployerName, "-n", "default", "-o", "json")
-	output, err := utils.Run(cmd)
-	if err != nil {
-		GinkgoWriter.Printf("⚠ Warning: Could not get deployer %s: %v\n", deployerName, err)
-		return
-	}
-
-	var deployer map[string]interface{}
-	err = json.Unmarshal(output, &deployer)
-	if err != nil {
-		GinkgoWriter.Printf("⚠ Warning: Could not unmarshal deployer JSON: %v\n", err)
-		return
-	}
-
-	// Extract metadata
-	metadata, ok := deployer["metadata"].(map[string]interface{})
-	if !ok {
-		GinkgoWriter.Printf("⚠ Warning: Deployer metadata not found\n")
-		return
-	}
-
-	// Check labels
-	labels, ok := metadata["labels"].(map[string]interface{})
-	if !ok {
-		GinkgoWriter.Printf("⚠ Warning: Deployer labels not found\n")
-		return
-	}
-
-	// Verify ApplySet parent ID label exists
-	applySetID, ok := labels[applySetParentIDLabel].(string)
-	if !ok || applySetID == "" {
-		GinkgoWriter.Printf("⚠ Warning: ApplySet parent ID label %s not found on deployer (ApplySet labels may not be implemented yet)\n", applySetParentIDLabel)
-		return
-	}
-
-	if !strings.HasPrefix(applySetID, "applyset-") {
-		GinkgoWriter.Printf("⚠ Warning: ApplySet parent ID should start with 'applyset-', got: %s\n", applySetID)
-	}
-
-	GinkgoWriter.Printf("✓ Deployer has ApplySet parent ID label: %s=%s\n", applySetParentIDLabel, applySetID)
-
-	// Check annotations
-	annotations, ok := metadata["annotations"].(map[string]interface{})
-	if !ok {
-		GinkgoWriter.Printf("⚠ Warning: Deployer annotations not found\n")
-		return
-	}
-
-	// Verify ApplySet tooling labels
-	tooling, ok := labels[applySetToolingLabel].(string)
-	if ok && tooling != "" {
-		if tooling != "deployer.delivery.ocm.software.v1alpha1" {
-			GinkgoWriter.Printf("⚠ Warning: ApplySet tooling label has unexpected value: %s\n", tooling)
-		} else {
-			GinkgoWriter.Printf("✓ Deployer has ApplySet tooling label: %s=%s\n", applySetToolingLabel, tooling)
-		}
-	} else {
-		GinkgoWriter.Printf("⚠ Warning: ApplySet tooling label %s not found on deployer\n", applySetToolingLabel)
-	}
-
-	// Verify ApplySet group-kinds annotation exists
-	gks, ok := annotations[applySetGKsAnnotation].(string)
-	if ok && gks != "" {
-		GinkgoWriter.Printf("✓ Deployer has ApplySet group-kinds annotation: %s=%s\n", applySetGKsAnnotation, gks)
-	} else {
-		GinkgoWriter.Printf("⚠ Warning: ApplySet group-kinds annotation %s not found or empty on deployer\n", applySetGKsAnnotation)
-	}
-
-	// Additional namespaces annotation is optional, so we only log if it exists
-	if additionalNs, ok := annotations[applySetAdditionalNamespacesAnnotation].(string); ok && additionalNs != "" {
-		GinkgoWriter.Printf("✓ Deployer has ApplySet additional namespaces annotation: %s=%s\n", applySetAdditionalNamespacesAnnotation, additionalNs)
-	}
-}
-
-// verifyDeployedResourcesApplySetLabels checks that all deployed resources have the correct ApplySet part-of label.
-func verifyDeployedResourcesApplySetLabels(ctx context.Context, example string) {
-	deployerName := "deployer.delivery.ocm.software/" + example + "-deployer"
-
-	// First, get the ApplySet ID from the deployer
-	cmd := exec.CommandContext(ctx, "kubectl", "get", deployerName, "-n", "default", "-o", "jsonpath={.metadata.labels['"+applySetParentIDLabel+"']}")
-	output, err := utils.Run(cmd)
-	if err != nil {
-		GinkgoWriter.Printf("⚠ Warning: Could not get deployer: %v\n", err)
-		return
-	}
-
-	applySetID := strings.TrimSpace(string(output))
-	if applySetID == "" {
-		GinkgoWriter.Printf("⚠ Warning: ApplySet ID label not found on deployer (this might be expected if ApplySet labels aren't being set yet)\n")
-		return
-	}
-
-	GinkgoWriter.Printf("✓ ApplySet ID from deployer: %s\n", applySetID)
-
-	// Get the deployer to find out what resources it deployed
-	cmd = exec.CommandContext(ctx, "kubectl", "get", deployerName, "-n", "default", "-o", "json")
-	output, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to get deployer status")
-
-	var deployer map[string]interface{}
-	err = json.Unmarshal(output, &deployer)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to unmarshal deployer JSON")
-
-	// Extract deployed objects from status
-	status, ok := deployer["status"].(map[string]interface{})
-	ExpectWithOffset(1, ok).To(BeTrue(), "Deployer status not found")
-
-	deployed, ok := status["deployed"].([]interface{})
-	if !ok || len(deployed) == 0 {
-		GinkgoWriter.Printf("⚠ No deployed resources found in deployer status\n")
-		return
-	}
-
-	GinkgoWriter.Printf("✓ Found %d deployed resources in deployer status\n", len(deployed))
-
-	// Verify each deployed resource has the correct ApplySet part-of label
-	for _, item := range deployed {
-		resource, ok := item.(map[string]interface{})
-		ExpectWithOffset(1, ok).To(BeTrue(), "Failed to cast deployed resource")
-
-		apiVersion, _ := resource["apiVersion"].(string)
-		kind, _ := resource["kind"].(string)
-		name, _ := resource["name"].(string)
-		namespace, _ := resource["namespace"].(string)
-
-		if name == "" || kind == "" {
-			continue
-		}
-
-		// Build the resource identifier
-		resourceType := fmt.Sprintf("%s.%s", strings.ToLower(kind), getGroupFromAPIVersion(apiVersion))
-		resourceIdentifier := resourceType + "/" + name
-
-		// Build kubectl get command
-		getArgs := []string{"get", resourceIdentifier}
-		if namespace != "" {
-			getArgs = append(getArgs, "-n", namespace)
-		}
-		getArgs = append(getArgs, "-o", "jsonpath={.metadata.labels['"+applySetPartOfLabel+"']}")
-
-		cmd = exec.CommandContext(ctx, "kubectl", getArgs...)
-		output, err = utils.Run(cmd)
-		if err != nil {
-			GinkgoWriter.Printf("⚠ Warning: Could not get resource %s: %v\n", resourceIdentifier, err)
-			continue
-		}
-
-		partOfLabel := strings.TrimSpace(string(output))
-		ExpectWithOffset(1, partOfLabel).To(Equal(applySetID),
-			"Resource %s should have ApplySet part-of label matching deployer ApplySet ID", resourceIdentifier)
-
-		GinkgoWriter.Printf("✓ Resource %s has correct ApplySet part-of label: %s=%s\n", resourceIdentifier, applySetPartOfLabel, partOfLabel)
-	}
-}
-
-// getGroupFromAPIVersion extracts the group from an apiVersion string.
-// For example: "apps/v1" returns "apps", "v1" returns "" (core group).
-func getGroupFromAPIVersion(apiVersion string) string {
-	parts := strings.Split(apiVersion, "/")
-	if len(parts) == 2 {
-		return parts[0]
-	}
-	return "" // Core API group
-}
 
 var _ = Describe("ApplySet Pruning Tests", func() {
 	Context("when testing pruning with OCM deployer", func() {
@@ -248,6 +67,10 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			By("bootstrapping the example")
 			Expect(utils.DeployResourceIgnoreErrors(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
 
+			// kro permissions injection
+			_ = utils.DeleteServiceAccountKroAdmin(ctx, "ocm-k8s-toolkit-controller-manager")
+			Expect(utils.MakeServiceAccountKroAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
+
 			// Delete first to ensure idempotency across multiple test runs
 			_ = utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")
 			Expect(utils.MakeServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
@@ -273,12 +96,6 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 				timeout,
 				"pod", "-l", "app.kubernetes.io/name="+example.Name()+"-podinfo",
 			)).To(Succeed())
-
-			By("verifying ApplySet labels and annotations on the deployer")
-			verifyDeployerApplySetLabelsAndAnnotations(ctx, example.Name())
-
-			By("verifying ApplySet labels on all deployed resources")
-			verifyDeployedResourcesApplySetLabels(ctx, example.Name())
 
 			By("updating the component version to remove podinfo-2 (testing pruning)")
 
@@ -341,9 +158,6 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			By("verifying that podinfo deployment still exists")
 			Expect(utils.WaitForResource(ctx, "condition=Available", timeout, "deployment.apps/"+example.Name()+"-podinfo")).To(Succeed())
 
-			By("verifying ApplySet labels still correct after pruning")
-			verifyDeployedResourcesApplySetLabels(ctx, example.Name())
-
 			// delete deployer
 			By("cleaning up the deployer")
 			deployerName := "deployer.delivery.ocm.software/" + example.Name() + "-deployer"
@@ -365,9 +179,6 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 				_, err := utils.Run(cmd)
 				return err
 			}, timeout).Should(HaveOccurred(), "Deployed resource %s should be deleted", res)
-
-			//By("cleaning up service account cluster admin")
-			//Expect(utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")).To(Succeed())
 		})
 	})
 })

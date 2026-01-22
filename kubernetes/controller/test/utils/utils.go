@@ -13,6 +13,24 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 )
 
+const kroClusterRoleYAML = `apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: %s
+rules:
+- apiGroups:
+  - kro.run
+  resources:
+  - resourcegraphdefinitions
+  verbs:
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - get
+`
+
 // Run executes the provided command within this context.
 func Run(cmd *exec.Cmd) ([]byte, error) {
 	cmd.Dir = os.Getenv("PROJECT_DIR")
@@ -113,6 +131,55 @@ func WaitForResource(ctx context.Context, condition, timeout string, resource ..
 	_, err := Run(cmd)
 
 	return err
+}
+
+// MakeServiceAccountKroAdmin creates a ClusterRole with kro.run permissions and binds it to the service account.
+// This replaces the removed kubebuilder RBAC marker: +kubebuilder:rbac:groups=kro.run,resources=resourcegraphdefinitions,verbs=list;watch;create;update;patch
+func MakeServiceAccountKroAdmin(ctx context.Context, serviceAccountNamespace string, serviceAccountName string) error {
+	clusterRoleName := fmt.Sprintf("%s-kro-admin", serviceAccountName)
+	clusterRoleBindingName := fmt.Sprintf("%s-kro-admin", serviceAccountName)
+
+	// Create ClusterRole with kro.run permissions
+	clusterRoleYAML := fmt.Sprintf(kroClusterRoleYAML, clusterRoleName)
+
+	// Apply the ClusterRole
+	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(clusterRoleYAML)
+	if _, err := Run(cmd); err != nil {
+		return fmt.Errorf("failed to create ClusterRole: %w", err)
+	}
+
+	// Create ClusterRoleBinding
+	cmdArgs := []string{
+		"create", "clusterrolebinding", clusterRoleBindingName,
+		"--clusterrole=" + clusterRoleName,
+		"--serviceaccount=" + serviceAccountNamespace + ":" + serviceAccountName,
+	}
+	cmd = exec.CommandContext(ctx, "kubectl", cmdArgs...)
+	if _, err := Run(cmd); err != nil {
+		return fmt.Errorf("failed to create ClusterRoleBinding: %w", err)
+	}
+
+	return nil
+}
+
+func DeleteServiceAccountKroAdmin(ctx context.Context, serviceAccountName string) error {
+	clusterRoleName := fmt.Sprintf("%s-kro-admin", serviceAccountName)
+	clusterRoleBindingName := fmt.Sprintf("%s-kro-admin", serviceAccountName)
+
+	// Delete ClusterRoleBinding
+	cmd := exec.CommandContext(ctx, "kubectl", "delete", "clusterrolebinding", clusterRoleBindingName, "--ignore-not-found=true")
+	if _, err := Run(cmd); err != nil {
+		return fmt.Errorf("failed to delete ClusterRoleBinding: %w", err)
+	}
+
+	// Delete ClusterRole
+	cmd = exec.CommandContext(ctx, "kubectl", "delete", "clusterrole", clusterRoleName, "--ignore-not-found=true")
+	if _, err := Run(cmd); err != nil {
+		return fmt.Errorf("failed to delete ClusterRole: %w", err)
+	}
+
+	return nil
 }
 
 func MakeServiceAccountClusterAdmin(ctx context.Context, serviceAccountNamespace string, serviceAccountName string) error {

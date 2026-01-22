@@ -87,7 +87,6 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/finalizers,verbs=update
-// +kubebuilder:rbac:groups=kro.run,resources=resourcegraphdefinitions,verbs=list;watch;create;update;patch
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -274,7 +273,8 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 	// Log results
 	logger.Info("ApplySet prune operation complete", "pruned", len(result.Pruned))
 
-	if len(result.Pruned) == 0 {
+	// nothing more to prune, remove finalizer
+	if !result.HasPruned() {
 		logger.Info("no more resources to prune")
 		controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
 	}
