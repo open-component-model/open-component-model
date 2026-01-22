@@ -160,7 +160,8 @@ type Config struct {
 func New(cfg Config, parent interface {
 	metav1.Object
 	schema.ObjectKind
-}) *ApplySet {
+},
+) *ApplySet {
 	applySetID := ID(parent)
 	return &ApplySet{
 		client:            cfg.Client,
@@ -587,7 +588,8 @@ func (a *ApplySet) buildMetadata(
 func ID(parent interface {
 	metav1.Object
 	schema.ObjectKind
-}) string {
+},
+) string {
 	unencoded := strings.Join([]string{
 		parent.GetName(),
 		parent.GetNamespace(),
