@@ -349,11 +349,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to download resource from OCM or retrieve it from the cache: %w", err)
 	}
 
-	// TODO(matthiasbruns)
-	// If needed in the future, we can make pruning configurable via the deployer spec.
-	const enablePruning = true
-
-	if err = r.applyWithApplySet(ctx, resource, deployer, objs, enablePruning); err != nil {
+	if err = r.applyWithApplySet(ctx, resource, deployer, objs); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ApplyFailed, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to apply resources: %w", err)
@@ -573,7 +569,7 @@ func (r *Reconciler) getResource(cv ocmctx.ComponentVersionAccess, resourceAcces
 // - All deployed resources are labeled with applyset.k8s.io/part-of=<applyset-id>
 // - The deployer carries annotations tracking the GroupKinds and namespaces of managed resources
 // - Pruning automatically removes resources that were previously deployed but are no longer in the manifest
-func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured, prune bool) error {
+func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured) error {
 	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
 
 	// Use the deployer as the ApplySet parent
@@ -623,6 +619,10 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 	applyResult, metaData, err := set.Apply(ctx, resourcesToAdd, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
 	if err != nil {
 		return fmt.Errorf("failed to apply ApplySet: %w", err)
+	}
+
+	if applyResult.Errors() != nil {
+		return fmt.Errorf("errors occurred during ApplySet apply: %v", applyResult.Errors())
 	}
 
 	// Log results
