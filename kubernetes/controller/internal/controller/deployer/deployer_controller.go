@@ -8,6 +8,7 @@ import (
 	"io"
 	"runtime"
 	"slices"
+	"strings"
 
 	"github.com/fluxcd/pkg/runtime/patch"
 	"golang.org/x/sync/errgroup"
@@ -86,16 +87,7 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/finalizers,verbs=update
-// +kubebuilder:rbac:groups=kro.run,resources=resourcegraphdefinitions,verbs=get;list;watch;create;update;patch
-
-// ApplySet requires broad permissions to list and manage resources cluster-wide
-// This is sub-optimal in terms of security, but to prevent bloating the current PR, we will take care of this in a later step.
-// TODO(matthiasbruns): https://github.com/open-component-model/ocm-project/issues/820
-// These permissions are needed for:
-// - Listing resources by label selector to find all resources in an ApplySet
-// - Deleting resources during pruning operations
-// - Getting resources to check their current state
-// +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=kro.run,resources=resourcegraphdefinitions,verbs=list;watch;create;update;patch
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -263,11 +255,15 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 		return fmt.Errorf("failed to apply ApplySet: %w", err)
 	}
 
-	uuids := applied.ObservedUIDs()
+	uuids := applied.ObservedUIDs().UnsortedList()
+	stringUUIds := make([]string, 0, len(uuids))
+	for _, uid := range uuids {
+		stringUUIds = append(stringUUIds, string(uid))
+	}
 
-	logger.Info("pruning ApplySet", "keepUIDs", len(uuids))
+	logger.Info("pruning ApplySet", "uuids to be pruned", strings.Join(stringUUIds, ","))
 	result, err := set.Prune(ctx, applyset.PruneOptions{
-		KeepUIDs:    uuids,
+		KeepUIDs:    nil,
 		Scope:       metaData.PruneScope(),
 		Concurrency: runtime.NumCPU(),
 	})
@@ -276,8 +272,7 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 	}
 
 	// Log results
-	logger.Info("ApplySet prune operation complete",
-		"pruned", len(result.Pruned))
+	logger.Info("ApplySet prune operation complete", "pruned", len(result.Pruned))
 
 	if len(result.Pruned) == 0 {
 		logger.Info("no more resources to prune")
@@ -648,9 +643,6 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 	resourcesToAdd := make([]applyset.Resource, 0, len(objs))
 	// Add all objects to the ApplySet
 	for _, obj := range objs {
-		// Clone the object to avoid modifying the original
-		obj := obj.DeepCopy()
-
 		// Set ownership labels and annotations (preserving existing behavior)
 		setOwnershipLabels(obj, resource, deployer)
 		logger.Info("set ownership labels", "labels", obj.GetLabels())
@@ -668,10 +660,9 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 		}
 
 		resourcesToAdd = append(resourcesToAdd, applyset.Resource{
-			ID:              obj.GetName(),
-			Object:          obj,
-			CurrentRevision: "",
-			SkipApply:       false,
+			ID:        obj.GetName(),
+			Object:    obj,
+			SkipApply: false,
 		})
 	}
 
