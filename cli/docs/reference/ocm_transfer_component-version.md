@@ -33,6 +33,7 @@ ocm transfer component-version {reference} {target} [flags]
   -h, --help          help for component-version
   -o, --output enum   output format of the component descriptors
                       (must be one of [json ndjson yaml]) (default yaml)
+  -r, --recursive     recursively discover and transfer component versions
 ```
 
 ### Options inherited from parent commands

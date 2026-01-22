@@ -605,3 +605,69 @@ func TestParseRepositoryErrorCases(t *testing.T) {
 		})
 	}
 }
+func Test_Ref_String(t *testing.T) {
+	tests := []struct {
+		name     string
+		ref      Ref
+		expected string
+	}{
+		{
+			name: "OCI repository with SubPath, Prefix and Version",
+			ref: Ref{
+				Type: "oci",
+				Repository: &ociv1.Repository{
+					BaseUrl: "ghcr.io",
+					SubPath: "open-component-model/ocm",
+				},
+				Prefix:    "component-descriptors",
+				Component: "ocm.software/cli",
+				Version:   "1.0.0",
+			},
+			expected: "oci::ghcr.io/open-component-model/ocm/component-descriptors/ocm.software/cli:1.0.0",
+		},
+		{
+			name: "OCI repository without SubPath, empty Prefix and Digest",
+			ref: Ref{
+				Type: "oci",
+				Repository: &ociv1.Repository{
+					BaseUrl: "ghcr.io",
+				},
+				Prefix:    "",
+				Component: "ocm.software/cli",
+				Digest:    "sha256:5b0bcabd1ed22e9fb1310cf6c2dec7cdef19f0ad69efa1f392e94a4333501270",
+			},
+			expected: "oci::ghcr.io//ocm.software/cli@sha256:5b0bcabd1ed22e9fb1310cf6c2dec7cdef19f0ad69efa1f392e94a4333501270",
+		},
+		{
+			name: "CTF repository with Version and Digest",
+			ref: Ref{
+				Type: "ctv",
+				Repository: &ctfv1.Repository{
+					FilePath: "./my-archive.tar",
+				},
+				Prefix:    "component-descriptors",
+				Component: "ocm.software/cli",
+				Version:   "1.0.0",
+				Digest:    "sha256:5b0bcabd1ed22e9fb1310cf6c2dec7cdef19f0ad69efa1f392e94a4333501270",
+			},
+			expected: "ctv::./my-archive.tar/component-descriptors/ocm.software/cli:1.0.0@sha256:5b0bcabd1ed22e9fb1310cf6c2dec7cdef19f0ad69efa1f392e94a4333501270",
+		},
+		{
+			name: "No type prefix, empty descriptor prefix, only component",
+			ref: Ref{
+				Repository: &ociv1.Repository{
+					BaseUrl: "localhost:5000",
+				},
+				Prefix:    "",
+				Component: "ocm.software/test",
+			},
+			expected: "localhost:5000//ocm.software/test",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.ref.String())
+		})
+	}
+}
