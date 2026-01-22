@@ -152,6 +152,8 @@ type Reference struct {
 	Digest Digest `json:"-"`
 }
 
+// ToComponentIdentity returns the runtime.Identity that can be used to resolve the reference.
+// It is different from ElementMeta.ToIdentity() in that it doesnt use the reference name but the component name.
 func (r *Reference) ToComponentIdentity() runtime.Identity {
 	if r == nil {
 		return nil
