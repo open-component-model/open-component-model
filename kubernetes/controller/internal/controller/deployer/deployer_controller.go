@@ -258,14 +258,16 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 	set := applyset.New(applySetConfig, deployer)
 
 	logger.Info("applying ApplySet")
-	_, metaData, err := set.Apply(ctx, nil, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
+	applied, metaData, err := set.Apply(ctx, nil, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
 	if err != nil {
 		return fmt.Errorf("failed to apply ApplySet: %w", err)
 	}
 
-	logger.Info("pruning ApplySet")
+	uuids := applied.ObservedUIDs()
+
+	logger.Info("pruning ApplySet", "keepUIDs", len(uuids))
 	result, err := set.Prune(ctx, applyset.PruneOptions{
-		KeepUIDs:    nil,
+		KeepUIDs:    uuids,
 		Scope:       metaData.PruneScope(),
 		Concurrency: runtime.NumCPU(),
 	})
@@ -687,7 +689,7 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 	logger.Info("ApplySet operation complete", "applied", len(applyResult.Applied))
 
 	pruneResult, err := set.Prune(ctx, applyset.PruneOptions{
-		KeepUIDs:    nil,
+		KeepUIDs:    applyResult.ObservedUIDs(),
 		Scope:       metaData.PruneScope(),
 		Concurrency: runtime.NumCPU(),
 	})
