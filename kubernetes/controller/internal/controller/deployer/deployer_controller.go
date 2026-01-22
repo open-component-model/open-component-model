@@ -622,7 +622,7 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 	}
 
 	if applyResult.Errors() != nil {
-		return fmt.Errorf("errors occurred during ApplySet apply: %v", applyResult.Errors())
+		return fmt.Errorf("errors occurred during ApplySet apply: %w", applyResult.Errors())
 	}
 
 	// Log results
