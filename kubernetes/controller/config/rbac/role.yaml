@@ -61,3 +61,13 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - kro.run
+  resources:
+  - resourcegraphdefinitions
+  verbs:
+  - create
+  - list
+  - patch
+  - update
+  - watch

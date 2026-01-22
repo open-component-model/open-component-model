@@ -74,10 +74,6 @@ var _ = Describe("controller", func() {
 				Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
 				name := ""
 
-				// kro permissions injection
-				_ = utils.DeleteServiceAccountKroAdmin(ctx, "ocm-k8s-toolkit-controller-manager")
-				Expect(utils.MakeServiceAccountKroAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
-
 				if slices.Contains(files, K8sManifest) {
 					// Delete first to ensure idempotency across multiple test runs
 					_ = utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")

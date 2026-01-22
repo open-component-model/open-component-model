@@ -67,10 +67,6 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			By("bootstrapping the example")
 			Expect(utils.DeployResourceIgnoreErrors(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
 
-			// kro permissions injection
-			_ = utils.DeleteServiceAccountKroAdmin(ctx, "ocm-k8s-toolkit-controller-manager")
-			Expect(utils.MakeServiceAccountKroAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
-
 			// Delete first to ensure idempotency across multiple test runs
 			_ = utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")
 			Expect(utils.MakeServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
