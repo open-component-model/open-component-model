@@ -50,9 +50,10 @@ type Options struct {
 
 // ArtifactBlob packs a [ociblob.ArtifactBlob] into an OCI Storage
 func ArtifactBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
-	localBlob, ok := b.GetAccess().(*v2.LocalBlob)
-	if !ok {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("artifact access is not a local blob access: %T", b.GetAccess())
+	// Convert access to LocalBlob - this is a no-op if already the correct type
+	localBlob := &v2.LocalBlob{}
+	if err := opts.AccessScheme.Convert(b.GetAccess(), localBlob); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to convert artifact access to local blob: %w", err)
 	}
 	return ResourceLocalBlob(ctx, storage, b, localBlob, opts)
 }
