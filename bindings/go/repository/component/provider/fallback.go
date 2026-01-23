@@ -36,18 +36,3 @@ func (f *fallbackProvider) GetComponentVersionRepositoryForComponent(ctx context
 	}
 	return repo, nil
 }
-
-//nolint:staticcheck // compatibility mode for deprecated resolvers
-func newFallbackProvider(
-	repoProvider repository.ComponentVersionRepositoryProvider,
-	credentialGraph credentials.Resolver,
-	resolvers []*resolverruntime.Resolver,
-	baseRepo runtime.Typed,
-) *fallbackProvider {
-	return &fallbackProvider{
-		repoProvider: repoProvider,
-		graph:        credentialGraph,
-		resolvers:    resolvers,
-		baseRepo:     baseRepo,
-	}
-}

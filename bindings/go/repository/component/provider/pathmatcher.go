@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -57,17 +56,4 @@ func (p *pathMatcherProvider) GetComponentVersionRepositoryForComponent(ctx cont
 	}
 
 	return repo, nil
-}
-
-func newPathMatcherProvider(
-	ctx context.Context,
-	repoProvider repository.ComponentVersionRepositoryProvider,
-	credentialGraph credentials.Resolver,
-	resolvers []*resolverspec.Resolver,
-) *pathMatcherProvider {
-	return &pathMatcherProvider{
-		repoProvider: repoProvider,
-		graph:        credentialGraph,
-		specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
-	}
 }

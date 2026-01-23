@@ -10,6 +10,7 @@ import (
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/repository"
+	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -31,7 +32,7 @@ type Options struct {
 //  1. Path matcher resolvers (v1alpha1) - pattern-based component name matching
 //  2. Fallback resolvers (v1, deprecated) - priority-based resolution
 //
-// If baseRepo is provided, it is used as the catch-all fallback for path matchers
+// If baseRepo is provided, it is used as the catch-all for path matchers
 // or as the highest priority entry for fallback resolvers.
 //
 // Returns an error if both resolver types are configured.
@@ -70,7 +71,12 @@ func newFallbackProviderWithBaseRepo(opts Options, baseRepo runtime.Typed) (Spec
 	}
 	finalResolvers = append(finalResolvers, opts.FallbackResolvers...)
 
-	return newFallbackProvider(opts.RepoProvider, opts.CredentialGraph, finalResolvers, baseRepo), nil
+	return &fallbackProvider{
+		repoProvider: opts.RepoProvider,
+		graph:        opts.CredentialGraph,
+		resolvers:    finalResolvers,
+		baseRepo:     baseRepo,
+	}, nil
 }
 
 func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (SpecResolvingProvider, error) {
@@ -107,5 +113,9 @@ func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseR
 		return nil, nil
 	}
 
-	return newPathMatcherProvider(ctx, opts.RepoProvider, opts.CredentialGraph, finalResolvers), nil
+	return &pathMatcherProvider{
+		repoProvider: opts.RepoProvider,
+		graph:        opts.CredentialGraph,
+		specProvider: pathmatcher.NewSpecProvider(ctx, finalResolvers),
+	}, nil
 }
