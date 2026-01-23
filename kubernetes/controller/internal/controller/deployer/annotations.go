@@ -3,10 +3,10 @@ package deployer
 import (
 	"context"
 
-	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 )
 
 const (
@@ -54,6 +54,6 @@ func (r *Reconciler) setApplySetMetadata(ctx context.Context, obj client.Object,
 	obj.SetAnnotations(meta.Annotations())
 
 	// update object labels and annotations
-	err := r.Client.Update(ctx, obj)
+	err := r.Update(ctx, obj)
 	return err
 }

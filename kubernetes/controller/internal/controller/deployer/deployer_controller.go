@@ -687,6 +687,10 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 
 	logger.Info("projecting ApplySet and set deployer metadata")
 	metaData, err := set.Project(resourcesToAdd)
+	if err != nil {
+		return fmt.Errorf("failed to project ApplySet: %w", err)
+	}
+
 	if err := r.setApplySetMetadata(ctx, deployer, metaData); err != nil {
 		return fmt.Errorf("failed to set ApplySet metadata on deployer: %w", err)
 	}
