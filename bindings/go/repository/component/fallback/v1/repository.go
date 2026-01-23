@@ -357,7 +357,6 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 
 // Deprecated
 //
-//nolint:staticcheck // SA1019: using deprecated type within deprecated c
 //nolint:staticcheck // SA1019: using deprecated type within deprecated code
 func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, index int, resolver *resolverruntime.Resolver) (repository.ComponentVersionRepository, error) {
 	var err error
@@ -380,7 +379,6 @@ func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, index i
 
 // Deprecated
 //
-//nolint:staticcheck // SA1019: using deprecated type within deprecated c
 //nolint:staticcheck // SA1019: using deprecated type within deprecated code
 func deepCopyResolvers(resolvers []*resolverruntime.Resolver) []*resolverruntime.Resolver {
 	if resolvers == nil {
