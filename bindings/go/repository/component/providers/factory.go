@@ -36,8 +36,6 @@ type Options struct {
 // or as the highest priority entry for fallback resolvers.
 //
 // Returns an error if both resolver types are configured.
-//
-//nolint:staticcheck // compatibility mode for deprecated resolvers
 func New(
 	ctx context.Context,
 	opts Options,

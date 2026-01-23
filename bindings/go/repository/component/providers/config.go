@@ -39,8 +39,6 @@ func PathMatcherResolversFromConfig(config *genericv1.Config) ([]*resolverspec.R
 // It filters the configuration for resolver configurations, merges them, and converts them to runtime format.
 //
 // Deprecated: Fallback resolvers are deprecated. Use PathMatcherResolversFromConfig instead.
-//
-//nolint:staticcheck // compatibility mode for deprecated resolvers
 func FallbackResolversFromConfig(config *genericv1.Config, repositoryScheme *runtime.Scheme) ([]*resolverruntime.Resolver, error) {
 	if config == nil || len(config.Configurations) == 0 {
 		return nil, nil
