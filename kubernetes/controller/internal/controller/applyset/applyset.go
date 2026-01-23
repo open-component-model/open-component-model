@@ -90,6 +90,10 @@ type PruneScope struct {
 	Namespaces sets.Set[string] // required for namespace-scoped RBAC compatibility
 }
 
+func (p PruneScope) String() string {
+	return fmt.Sprintf("PruneScope{GroupKinds:%v, Namespaces:%v}", p.GroupKinds.UnsortedList(), p.Namespaces.UnsortedList())
+}
+
 // Metadata contains the computed ApplySet state.
 // Controller decides how to store it (annotations, labels, status, etc).
 type Metadata struct {

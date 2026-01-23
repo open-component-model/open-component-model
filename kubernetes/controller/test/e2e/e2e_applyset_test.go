@@ -14,6 +14,10 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/test/utils"
 )
 
+const (
+	BootstrapDeployer = "bootstrap-deployer.yaml"
+)
+
 var _ = Describe("ApplySet Pruning Tests", func() {
 	Context("when testing pruning with OCM deployer", func() {
 		var example os.DirEntry
@@ -30,7 +34,7 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			example = e
 		}
 
-		reqFiles := []string{ComponentConstructor, Bootstrap}
+		reqFiles := []string{ComponentConstructor, Bootstrap, BootstrapDeployer}
 
 		It("should deploy the example "+example.Name(), func(ctx SpecContext) {
 			By("validating the example directory " + example.Name())
@@ -65,7 +69,8 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			)).To(Succeed())
 
 			By("bootstrapping the example")
-			Expect(utils.DeployResourceIgnoreErrors(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
+			Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
+			Expect(utils.DeployResourceWithoutCleanup(ctx, filepath.Join(examplesDir, example.Name(), BootstrapDeployer))).To(Succeed())
 
 			// Delete first to ensure idempotency across multiple test runs
 			_ = utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")
@@ -175,6 +180,7 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 				_, err := utils.Run(cmd)
 				return err
 			}, timeout).Should(HaveOccurred(), "Deployed resource %s should be deleted", res)
+			Expect(utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")).To(Succeed())
 		})
 	})
 })

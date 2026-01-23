@@ -71,27 +71,15 @@ func DeployResource(ctx context.Context, manifestFilePath string) error {
 	return err
 }
 
-// DeployResourceIgnoreErrors takes a manifest file of a k8s resource and deploys it with "kubectl". Correspondingly,
-// a DeferCleanup-handler is created that will delete the resource, when the test-suite ends.
-// Other than "DeployResource", errors during cleanup are ignored.
-// In contrast to "DeployAndWaitForResource", this function does not wait for a certain condition to be fulfilled.
-func DeployResourceIgnoreErrors(ctx context.Context, manifestFilePath string) error {
+// DeployResourceWithoutCleanup takes a manifest file of a k8s resource and deploys it with "kubectl".
+// In contrast to "DeployResource", no DeferCleanup-handler is created to delete the resource afterwards.
+func DeployResourceWithoutCleanup(ctx context.Context, manifestFilePath string) error {
 	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", manifestFilePath)
 	_, err := Run(cmd)
 	if err != nil {
 		return err
 	}
-	DeferCleanup(func(ctx SpecContext) error {
-		cmd = exec.CommandContext(ctx, "kubectl", "delete", "-f", manifestFilePath)
-		_, err := Run(cmd)
-		if err != nil {
-			_, _ = fmt.Fprintf(GinkgoWriter, "warning: could not delete resource from manifest %s: %v\n", manifestFilePath, err)
-		}
-
-		return nil
-	})
-
-	return err
+	return nil
 }
 
 // DeleteResource deletes one or more k8s resources with "kubectl".

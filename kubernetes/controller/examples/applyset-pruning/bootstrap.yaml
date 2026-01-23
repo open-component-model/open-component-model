@@ -32,12 +32,3 @@ spec:
       resource:
         name: applyset-pruning-resource
   interval: 10m
----
-apiVersion: delivery.ocm.software/v1alpha1
-kind: Deployer
-metadata:
-  name: applyset-pruning-deployer
-spec:
-  resourceRef:
-    name: applyset-pruning-resource
-    namespace: default
