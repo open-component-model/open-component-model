@@ -88,7 +88,7 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/finalizers,verbs=update
 // TODO(matthiasbruns) Remove kro permissions https://github.com/open-component-model/ocm-project/issues/850
-// +kubebuilder:rbac:groups=kro.run,resources=resourcegraphdefinitions,verbs=list;watch;create;update;patch
+// +kubebuilder:rbac:groups=kro.run,resources=resourcegraphdefinitions,verbs=list;watch;create;update;patch;delete
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -284,7 +284,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, nil
 	}
 
-	result, err, needsDeletion := r.reconcileDeletionTimestamp(deployer, logger)
+	result, err, needsDeletion := r.reconcileDeletionTimestamp(ctx, deployer, logger)
 	if needsDeletion {
 		return result, err
 	}
@@ -354,36 +354,34 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	return ctrl.Result{RequeueAfter: resource.GetRequeueAfter()}, nil
 }
 
-func (r *Reconciler) reconcileDeletionTimestamp(deployer *deliveryv1alpha1.Deployer, logger logr.Logger) (ctrl.Result, error, bool) {
+func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *deliveryv1alpha1.Deployer, logger logr.Logger) (ctrl.Result, error, bool) {
 	if !deployer.GetDeletionTimestamp().IsZero() {
-		g, ctx := errgroup.WithContext(context.Background())
+		var errs []error
 
-		g.Go(func() error {
-			if !controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
-				logger.Info("resource watch finalizer already removed, skipping untracking")
-			}
+		if controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
+			logger.Info("untracking resources before removing finalizer")
 			if err := r.Untrack(ctx, deployer); err != nil {
 				logger.Error(err, "waiting for tracked resources to be unregistered before pruning")
-				return err
+				errs = append(errs, err)
+			} else {
+				logger.Info("successfully unregistered all resource watches for deployer")
+				controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
 			}
+		}
 
-			controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
-			return nil
-		})
-		g.Go(func() error {
-			if !controllerutil.ContainsFinalizer(deployer, applySetPruneFinalizer) {
-				logger.Info("apply set prune finalizer already removed, skipping pruning")
-			}
+		if controllerutil.ContainsFinalizer(deployer, applySetPruneFinalizer) {
+			logger.Info("pruning ApplySet before removing finalizer")
 			if err := r.pruneWithApplySet(ctx, deployer); err != nil {
 				logger.Error(err, "waiting for ApplySet to be pruned before removing finalizer")
-				return err
+				errs = append(errs, err)
+			} else {
+				logger.Info("successfully pruned ApplySet for deployer")
+				controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
 			}
-			controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
-			return nil
-		})
+		}
 
-		if err := g.Wait(); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to cleanup deployer before deletion: %w", err), true
+		if len(errs) > 0 {
+			return ctrl.Result{}, fmt.Errorf("failed to cleanup deployer before deletion: %w", errors.Join(errs...)), true
 		}
 
 		logger.Info("successfully cleaned up deployer before deletion")
@@ -665,15 +663,15 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 		obj := obj.DeepCopy()
 
 		// Set ownership labels and annotations (preserving existing behavior)
-		// setOwnershipLabels(obj, resource, deployer)
-		// logger.Info("set ownership labels", "labels", obj.GetLabels())
-		// setOwnershipAnnotations(obj, resource)
-		// logger.Info("set ownership annotations", "annotations", obj.GetAnnotations())
+		setOwnershipLabels(obj, resource, deployer)
+		logger.Info("set ownership labels", "labels", obj.GetLabels())
+		setOwnershipAnnotations(obj, resource)
+		logger.Info("set ownership annotations", "annotations", obj.GetAnnotations())
 
 		// Set controller reference
-		// if err := controllerutil.SetControllerReference(deployer, obj, r.Scheme); err != nil {
-		// 	return fmt.Errorf("failed to set controller reference on object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
-		// }
+		if err := controllerutil.SetControllerReference(deployer, obj, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+		}
 
 		// Default namespace and apiVersion if needed
 		if err := r.defaultObj(ctx, resource, obj); err != nil {

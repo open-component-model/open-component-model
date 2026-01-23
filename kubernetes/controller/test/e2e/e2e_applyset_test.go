@@ -72,8 +72,6 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
 			Expect(utils.DeployResourceWithoutCleanup(ctx, filepath.Join(examplesDir, example.Name(), BootstrapDeployer))).To(Succeed())
 
-			// Delete first to ensure idempotency across multiple test runs
-			_ = utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")
 			Expect(utils.MakeServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
 
 			name := ""
@@ -180,7 +178,6 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 				_, err := utils.Run(cmd)
 				return err
 			}, timeout).Should(HaveOccurred(), "Deployed resource %s should be deleted", res)
-			Expect(utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")).To(Succeed())
 		})
 	})
 })
