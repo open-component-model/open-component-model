@@ -18,7 +18,7 @@ func init() {
 // It filters the configuration for credential entries and merges them into a single config.
 func LookupCredentialConfig(config *genericv1.Config) (*Config, error) {
 	if config == nil || len(config.Configurations) == 0 {
-		return &Config{}, nil
+		return nil, nil
 	}
 
 	filtered, err := genericv1.Filter(config, &genericv1.FilterOptions{
