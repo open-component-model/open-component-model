@@ -11,6 +11,7 @@ var (
 	StringType  = "string"
 	ArrayType   = "array"
 	ObjectType  = "object"
+	NullType    = "null"
 )
 
 func TypeForSchema(typ string) *jsonschema.Types {
