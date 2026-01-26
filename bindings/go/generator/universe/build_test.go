@@ -86,7 +86,7 @@ type B struct{}
 		"p.go": src,
 	})
 
-	u, err := universe.Build(t.Context(), dir)
+	u, err := universe.Build(t.Context(), "+marker", dir)
 	require.NoError(t, err)
 
 	require.NotNil(t, u.LookupType("example.com/testmod", "A"))
