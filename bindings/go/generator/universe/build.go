@@ -96,79 +96,169 @@ func IsRuntimeTyped(ti *TypeInfo) bool {
 	return ti.Key.PkgPath == RuntimePackage && ti.Key.TypeName == "Typed"
 }
 
+const (
+	// LoadTargetTypeModule indicates a filesystem directory target
+	LoadTargetTypeModule = "module"
+	// LoadTargetTypeImport indicates an import path target
+	LoadTargetTypeImport = "import"
+)
+
+// LoadTarget represents something that should be loaded into the universe
+type LoadTarget struct {
+	Type     string // LoadTargetTypeModule or LoadTargetTypeImport
+	Path     string // module directory path or import path
+	Required bool   // whether failure should stop the build
+}
+
+// PackageLoader handles loading packages from various sources with consistent configuration
+type PackageLoader struct {
+	ctx context.Context
+}
+
+// NewPackageLoader creates a new PackageLoader
+func NewPackageLoader(ctx context.Context) *PackageLoader {
+	return &PackageLoader{ctx: ctx}
+}
+
+// LoadTargets loads packages from multiple targets and returns all successfully loaded packages
+func (pl *PackageLoader) LoadTargets(targets []LoadTarget) ([]*packages.Package, error) {
+	var allPkgs []*packages.Package
+	g, ctx := errgroup.WithContext(pl.ctx)
+	var mu sync.Mutex
+
+	for _, target := range targets {
+		g.Go(func() error {
+			pkgs, err := pl.loadTarget(ctx, target)
+			if err != nil {
+				if target.Required {
+					return fmt.Errorf("failed to load required target %s: %w", target.Path, err)
+				}
+				slog.WarnContext(ctx, "failed to load optional target", "path", target.Path, "error", err)
+				return nil
+			}
+
+			mu.Lock()
+			allPkgs = append(allPkgs, pkgs...)
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return allPkgs, nil
+}
+
+// loadTarget loads packages from a single target
+func (pl *PackageLoader) loadTarget(ctx context.Context, target LoadTarget) ([]*packages.Package, error) {
+	cfg := &packages.Config{
+		Context: ctx,
+		Tests:   false,
+		Mode: packages.NeedSyntax |
+			packages.NeedTypes |
+			packages.NeedTypesInfo |
+			packages.NeedFiles |
+			packages.NeedImports,
+	}
+
+	var pkgs []*packages.Package
+	var err error
+
+	switch target.Type {
+	case LoadTargetTypeModule:
+		cfg.Dir = target.Path
+		pkgs, err = packages.Load(cfg, "./...")
+	case LoadTargetTypeImport:
+		pkgs, err = packages.Load(cfg, target.Path)
+	default:
+		return nil, fmt.Errorf("unknown target type: %s", target.Type)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if packages.PrintErrors(pkgs) > 0 {
+		return nil, fmt.Errorf("package load errors in target %s", target.Path)
+	}
+
+	slog.InfoContext(ctx, "loaded packages from target", "type", target.Type, "path", target.Path, "count", len(pkgs))
+	return pkgs, nil
+}
+
 // Build scans all Go modules reachable from roots and builds a Universe.
 // it only considers modules whose files have at least the given marker.
 // this is mainly to reduce build time.
 func Build(ctx context.Context, marker string, roots ...string) (*Universe, error) {
+	// Phase 1: Discovery - Find modules with schema markers
+	targets, err := discoverLoadTargets(ctx, marker, roots...)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(targets) == 0 {
+		slog.InfoContext(ctx, "no modules with schema markers found")
+		return New(), nil
+	}
+
+	// Phase 2: Loading - Load all packages from discovered targets
+	loader := NewPackageLoader(ctx)
+	pkgs, err := loader.LoadTargets(targets)
+	if err != nil {
+		return nil, err
+	}
+
+	// Phase 3: Processing - Build universe from loaded packages
+	universe := buildUniverse(ctx, pkgs)
+	slog.InfoContext(ctx, "universe built", "types", len(universe.Types))
+	return universe, nil
+}
+
+// discoverLoadTargets finds all modules with schema markers and prepares load targets
+func discoverLoadTargets(ctx context.Context, marker string, roots ...string) ([]LoadTarget, error) {
 	modRoots, err := findModuleRoots(roots)
 	if err != nil {
 		return nil, err
 	}
 
-	// Phase 1: Quick scan for packages with schema markers
 	slog.InfoContext(ctx, "scanning for schema markers", "modules", len(modRoots))
 	relevantModules, err := findModulesWithSchemaMarkers(ctx, marker, modRoots)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(relevantModules) == 0 {
-		slog.InfoContext(ctx, "no modules with schema markers found")
-		return New(), nil
-	}
-
 	slog.InfoContext(ctx, "found modules with schema markers", "modules", len(relevantModules), "total", len(modRoots))
 
-	// Phase 2: Load only relevant modules (not individual packages)
-	u := New()
-	g, ctx := errgroup.WithContext(ctx)
-	var mu sync.Mutex
-
-	for _, root := range relevantModules {
-		root := root
-		g.Go(func() error {
-			cfg := &packages.Config{
-				Context: ctx,
-				Dir:     root,
-				Tests:   false,
-				Mode: packages.NeedSyntax |
-					packages.NeedTypes |
-					packages.NeedTypesInfo |
-					packages.NeedFiles |
-					packages.NeedImports,
-			}
-
-			pkgs, err := packages.Load(cfg, "./...")
-			if err != nil {
-				return err
-			}
-
-			if packages.PrintErrors(pkgs) > 0 {
-				return fmt.Errorf("package load errors in module %s", root)
-			}
-
-			mu.Lock()
-			defer mu.Unlock()
-
-			for _, pkg := range pkgs {
-				u.recordImports(pkg)
-				scanPackage(u, pkg)
-			}
-			return nil
+	// Prepare load targets for schema modules
+	var targets []LoadTarget
+	for _, module := range relevantModules {
+		targets = append(targets, LoadTarget{
+			Type:     LoadTargetTypeModule,
+			Path:     module,
+			Required: true,
 		})
 	}
 
-	// Always include the runtime module for external references, even if it doesn't have schema markers
-	g.Go(func() error {
-		return ensureRuntimeModule(ctx, u, &mu)
+	// Always include runtime module for external references
+	targets = append(targets, LoadTarget{
+		Type:     LoadTargetTypeImport,
+		Path:     RuntimePackage,
+		Required: false, // Runtime module is optional to not break builds
 	})
 
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
+	return targets, nil
+}
 
-	slog.InfoContext(ctx, "universe built", "types", len(u.Types))
-	return u, nil
+// buildUniverse processes loaded packages into a Universe
+func buildUniverse(ctx context.Context, pkgs []*packages.Package) *Universe {
+	u := New()
+	for _, pkg := range pkgs {
+		u.recordImports(pkg)
+		scanPackage(u, pkg)
+	}
+	return u
 }
 
 func findModuleRoots(roots []string) ([]string, error) {
@@ -212,7 +302,6 @@ func findModulesWithSchemaMarkers(ctx context.Context, marker string, modRoots [
 	g, ctx := errgroup.WithContext(ctx)
 
 	for _, modRoot := range modRoots {
-		modRoot := modRoot
 		g.Go(func() error {
 			hasMarker, err := moduleHasSchemaMarkers(ctx, modRoot, marker)
 			if err != nil {
@@ -266,119 +355,6 @@ func moduleHasSchemaMarkers(ctx context.Context, modRoot, marker string) (bool, 
 	return false, nil
 }
 
-// findPackagesWithSchemaMarkers quickly scans Go source files for schema markers
-// without doing full package loading. only packages with a file with the given marker are considered
-func findPackagesWithSchemaMarkers(ctx context.Context, marker string, modRoots ...string) ([]string, error) {
-	var relevantPackages []string
-	var mu sync.Mutex
-	g, ctx := errgroup.WithContext(ctx)
-
-	for _, modRoot := range modRoots {
-		g.Go(func() error {
-			foundPackages, err := scanModuleForSchemaMarkers(ctx, modRoot, marker)
-			if err != nil {
-				return err
-			}
-
-			if len(foundPackages) > 0 {
-				mu.Lock()
-				relevantPackages = append(relevantPackages, foundPackages...)
-				mu.Unlock()
-			}
-			return nil
-		})
-	}
-
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
-
-	return relevantPackages, nil
-}
-
-// scanModuleForSchemaMarkers scans a single module for packages containing schema markers.
-// note that only
-func scanModuleForSchemaMarkers(ctx context.Context, modRoot, marker string) ([]string, error) {
-	// First, use go list to discover all packages (much faster than file walking)
-	cfg := &packages.Config{
-		Context: ctx,
-		Dir:     modRoot,
-		Tests:   false,
-		Mode:    packages.NeedName | packages.NeedFiles, // Need name to get proper import paths
-	}
-
-	allPkgs, err := packages.Load(cfg, "./...")
-	if err != nil {
-		return nil, err
-	}
-
-	var relevantPkgs []string
-	for _, pkg := range allPkgs {
-		// Check if any Go files in this package contain schema markers
-		hasMarker := false
-		for _, goFile := range pkg.GoFiles {
-			found, err := fileContainsSchemaMarker(goFile, marker)
-			if err != nil {
-				continue // skip files we can't read
-			}
-			if found {
-				hasMarker = true
-				break
-			}
-		}
-
-		if hasMarker {
-			slog.InfoContext(ctx, "found package with schema marker", "package", pkg.PkgPath)
-			relevantPkgs = append(relevantPkgs, pkg.PkgPath)
-		}
-	}
-
-	return relevantPkgs, nil
-}
-
-// discoverPackageDependencies loads packages with imports to discover their dependencies
-func discoverPackageDependencies(ctx context.Context, packagePaths []string) ([]string, error) {
-	if len(packagePaths) == 0 {
-		return packagePaths, nil
-	}
-
-	// Load packages with minimal info to get import dependencies
-	cfg := &packages.Config{
-		Context: ctx,
-		Tests:   false,
-		Mode:    packages.NeedName | packages.NeedImports,
-	}
-
-	pkgs, err := packages.Load(cfg, packagePaths...)
-	if err != nil {
-		return packagePaths, nil // Return original packages if dependency discovery fails
-	}
-
-	// Collect all dependencies
-	depMap := make(map[string]struct{})
-	for _, pkg := range pkgs {
-		// Add the original package
-		if pkg.PkgPath != "" {
-			depMap[pkg.PkgPath] = struct{}{}
-		}
-
-		// Add its dependencies (but only those within our project)
-		for _, dep := range pkg.Imports {
-			if dep.PkgPath != "" && strings.Contains(dep.PkgPath, "ocm.software/open-component-model") {
-				depMap[dep.PkgPath] = struct{}{}
-			}
-		}
-	}
-
-	// Convert map to slice
-	var allDeps []string
-	for dep := range depMap {
-		allDeps = append(allDeps, dep)
-	}
-
-	return allDeps, nil
-}
-
 // fileContainsSchemaMarker quickly checks if a Go file contains the schema marker
 func fileContainsSchemaMarker(filePath, marker string) (bool, error) {
 	file, err := os.Open(filePath)
@@ -397,93 +373,6 @@ func fileContainsSchemaMarker(filePath, marker string) (bool, error) {
 	}
 
 	return false, scanner.Err()
-}
-
-// loadSpecificPackages loads only the specified packages by their import paths
-// For testing purposes, it can also load packages from directories using "./..." pattern
-func loadSpecificPackages(ctx context.Context, packagePaths []string) ([]*packages.Package, error) {
-	if len(packagePaths) == 0 {
-		return nil, nil
-	}
-
-	// Try to load packages by import path first
-	cfg := &packages.Config{
-		Context: ctx,
-		Tests:   false,
-		Mode: packages.NeedSyntax |
-			packages.NeedTypes |
-			packages.NeedTypesInfo |
-			packages.NeedFiles |
-			packages.NeedImports,
-	}
-
-	pkgs, err := packages.Load(cfg, packagePaths...)
-	if err != nil {
-		// If loading by import path fails, it might be a test scenario with temp modules
-		// Fall back to loading from module directories
-		return loadPackagesFromModuleDirs(ctx, packagePaths)
-	}
-
-	// Check for errors and filter out broken packages
-	var validPkgs []*packages.Package
-	for _, pkg := range pkgs {
-		if len(pkg.Errors) == 0 {
-			validPkgs = append(validPkgs, pkg)
-		}
-	}
-
-	// If no valid packages were loaded, return an error to trigger fallback
-	if len(validPkgs) == 0 {
-		return nil, fmt.Errorf("no valid packages could be loaded from: %s", strings.Join(packagePaths, ", "))
-	}
-
-	return validPkgs, nil
-}
-
-// loadPackagesFromModuleDirs loads packages when import paths fail (e.g., in tests)
-func loadPackagesFromModuleDirs(ctx context.Context, packagePaths []string) ([]*packages.Package, error) {
-	// Extract module directories from package paths and load using "./..."
-	modDirs := make(map[string]struct{})
-
-	for _, pkgPath := range packagePaths {
-		// For runtime package, skip since it might not be available in test scenarios
-		if pkgPath == RuntimePackage {
-			continue
-		}
-
-		// Try to find module root directories from package paths
-		// This is a heuristic for test scenarios
-		if strings.Contains(pkgPath, "example.com/testmod") {
-			// Skip test modules that don't exist
-			continue
-		}
-	}
-
-	// If no valid module directories found, return empty result
-	if len(modDirs) == 0 {
-		return nil, nil
-	}
-
-	var allPkgs []*packages.Package
-	for modDir := range modDirs {
-		cfg := &packages.Config{
-			Context: ctx,
-			Dir:     modDir,
-			Tests:   false,
-			Mode: packages.NeedSyntax |
-				packages.NeedTypes |
-				packages.NeedTypesInfo |
-				packages.NeedFiles |
-				packages.NeedImports,
-		}
-
-		pkgs, err := packages.Load(cfg, "./...")
-		if err == nil {
-			allPkgs = append(allPkgs, pkgs...)
-		}
-	}
-
-	return allPkgs, nil
 }
 
 func scanPackage(u *Universe, pkg *packages.Package) {
@@ -657,53 +546,4 @@ func (u *Universe) resolveSelector(
 	}
 
 	return nil, false
-}
-
-// ensureRuntimeModule loads the runtime module by import path to ensure external references work
-func ensureRuntimeModule(ctx context.Context, u *Universe, mu *sync.Mutex) error {
-	slog.InfoContext(ctx, "loading runtime module for external references", "package", RuntimePackage)
-
-	cfg := &packages.Config{
-		Context: ctx,
-		Tests:   false,
-		Mode: packages.NeedSyntax |
-			packages.NeedTypes |
-			packages.NeedTypesInfo |
-			packages.NeedFiles |
-			packages.NeedImports,
-	}
-
-	pkgs, err := packages.Load(cfg, RuntimePackage)
-	if err != nil {
-		slog.WarnContext(ctx, "failed to load runtime module by import path", "package", RuntimePackage, "error", err)
-		return nil // Don't fail the entire build if runtime module can't be loaded
-	}
-
-	if len(pkgs) == 0 {
-		slog.WarnContext(ctx, "no packages found for runtime module", "package", RuntimePackage)
-		return nil
-	}
-
-	if packages.PrintErrors(pkgs) > 0 {
-		slog.WarnContext(ctx, "package load errors in runtime module", "package", RuntimePackage)
-		return nil
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	for _, pkg := range pkgs {
-		pkgPath := pkg.PkgPath
-		if pkgPath == "" && pkg.Types != nil {
-			pkgPath = pkg.Types.Path()
-		}
-
-		if pkgPath == RuntimePackage {
-			u.recordImports(pkg)
-			scanPackage(u, pkg)
-			slog.InfoContext(ctx, "loaded runtime module successfully", "package", RuntimePackage)
-		}
-	}
-
-	return nil
 }
