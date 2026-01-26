@@ -95,7 +95,7 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	for _, p := range r.constructedPlugins {
 		// The plugins should handle the Interrupt signal for shutdowns.
 		// TODO(Skarlso): Use context to wait for the plugin to actually shut down.
-		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil {
+		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
 			errs = errors.Join(errs, perr)
 		}
 	}
