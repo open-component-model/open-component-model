@@ -48,6 +48,11 @@ func AreTypesStructurallyCompatible(output, expected *cel.Type, provider *provid
 		return AreTypesStructurallyCompatible(output.Parameters()[0], expected, provider)
 	}
 
+	// Unwrap optional expected if available - allows non-optional values to satisfy optional fields
+	if expected.Kind() == cel.OpaqueKind && expected.TypeName() == "optional_type" {
+		return AreTypesStructurallyCompatible(output, expected.Parameters()[0], provider)
+	}
+
 	switch {
 	case expected.Kind() == cel.StructKind && output.Kind() == cel.MapKind:
 		return areMapTypesAssignableToStruct(output, expected, provider)
