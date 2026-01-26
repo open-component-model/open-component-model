@@ -2,12 +2,16 @@ package component_version_test
 
 import (
 	"bytes"
+	"crypto"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	"ocm.software/open-component-model/bindings/go/signing"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -58,6 +62,24 @@ func createTestDescriptor(name, version string) *descriptor.Descriptor {
 	}
 }
 
+// addReference adds a reference to another component to a descriptor
+func addReference(t *testing.T, parent, child *descriptor.Descriptor, refName string) {
+	t.Helper()
+	dig, err := signing.GenerateDigest(t.Context(), child, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
+	require.NoError(t, err)
+
+	parent.Component.References = append(parent.Component.References, descriptor.Reference{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{
+				Name:    refName,
+				Version: child.Component.Version,
+			},
+		},
+		Component: child.Component.Name,
+		Digest:    *dig,
+	})
+}
+
 func TestTransferComponentVersion(t *testing.T) {
 	fromDesc := createTestDescriptor("ocm.software/test-component", "0.0.1")
 	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, fromDesc)
@@ -102,6 +124,65 @@ func TestTransferComponentVersion(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check for specific log message "transfer completed successfully"
+	found := false
+	for _, e := range logEntries {
+		if strings.Contains(fmt.Sprint(e), "transfer completed successfully") {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "expected success log message")
+}
+
+func TestTransferComponentVersionRecursive(t *testing.T) {
+	childDesc := createTestDescriptor("ocm.software/child-component", "0.0.1")
+	parentDesc := createTestDescriptor("ocm.software/parent-component", "1.0.0")
+	addReference(t, parentDesc, childDesc, "child")
+
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, childDesc, parentDesc)
+	require.NoError(t, err)
+
+	toPath := t.TempDir()
+
+	fromRef := compref.Ref{
+		Repository: &ctfv1.Repository{
+			FilePath: fromPath,
+		},
+		Component: parentDesc.Component.Name,
+		Version:   parentDesc.Component.Version,
+	}
+
+	logs := test.NewJSONLogReader()
+	result := new(bytes.Buffer)
+
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	_, err = test.OCM(t, test.WithArgs("transfer", "component-version", fromRef.String(), targetArg, "--recursive"), test.WithOutput(result), test.WithErrorOutput(logs))
+	require.NoError(t, err)
+
+	// Verify existence of BOTH in target
+	fs, err := filesystem.NewFS(toPath, os.O_RDWR)
+	require.NoError(t, err)
+	archive := ctf.NewFileSystemCTF(fs)
+	targetRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	require.NoError(t, err)
+
+	ctx := t.Context()
+
+	// Check parent
+	pDesc, err := targetRepo.GetComponentVersion(ctx, parentDesc.Component.Name, parentDesc.Component.Version)
+	require.NoError(t, err)
+	require.NotNil(t, pDesc)
+
+	// Check child
+	cDesc, err := targetRepo.GetComponentVersion(ctx, childDesc.Component.Name, childDesc.Component.Version)
+	require.NoError(t, err)
+	require.NotNil(t, cDesc)
+
+	logEntries, err := logs.List()
+	require.NoError(t, err)
+
+	// Check for success log
 	found := false
 	for _, e := range logEntries {
 		if strings.Contains(fmt.Sprint(e), "transfer completed successfully") {

@@ -49,7 +49,6 @@ const DefaultFileMediaType = "application/octet-stream"
 // Paths and patterns are normalized to use forward slashes (`/`) as separators for matching
 // and have any leading `./` or `/` removed.
 // Symlinks are not supported so far and will result in an error.
-
 func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.ReadOnlyBlob, error) {
 	// Validate the input path
 	if path == "" {

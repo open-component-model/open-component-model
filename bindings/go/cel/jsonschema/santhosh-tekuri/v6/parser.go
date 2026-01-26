@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 
 	"github.com/google/cel-go/cel"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -132,6 +133,13 @@ func suppressErrors(err *jsonschema.ValidationError, exprPaths map[string]struct
 		return true
 	}
 
+	// Check if this error is a container-level type error caused by child expressions
+	// e.g., array of CEL expressions fails "got array, want null" type check
+	if _, isTypeErr := err.ErrorKind.(*kind.Type); isTypeErr && hasChildExpressions(err.InstanceLocation, exprPaths) {
+		// This is a type error at a container whose children are expressions
+		return true
+	}
+
 	// Recurse into causes and keep only those that should not be suppressed.
 	cleaned := make([]*jsonschema.ValidationError, 0, len(err.Causes))
 	for _, c := range err.Causes {
@@ -157,10 +165,63 @@ func suppressErrors(err *jsonschema.ValidationError, exprPaths map[string]struct
 	return false
 }
 
+// hasChildExpressions checks if any expression paths are children of the given location
+func hasChildExpressions(parentLoc []string, exprPaths map[string]struct{}) bool {
+	parentPath := instanceLocationToString(parentLoc)
+	// Handle empty path
+	if parentPath == "" {
+		return false
+	}
+
+	parentFP, err := fieldpath.Parse(parentPath)
+	if err != nil {
+		// If we can't parse the parent path, assume no children
+		return false
+	}
+
+	for exprPathStr := range exprPaths {
+		if exprPathStr == "" {
+			continue
+		}
+		exprFP, err := fieldpath.Parse(exprPathStr)
+		if err != nil {
+			continue
+		}
+
+		// Check if exprFP is a child of parentFP (Path is a []Segment)
+		if len(exprFP) > len(parentFP) {
+			// Check if the parent path segments match
+			matches := true
+			for i := range parentFP {
+				if exprFP[i].Name != parentFP[i].Name {
+					matches = false
+					break
+				}
+				// Also check index if present
+				if parentFP[i].Index != nil && exprFP[i].Index != nil {
+					if *parentFP[i].Index != *exprFP[i].Index {
+						matches = false
+						break
+					}
+				}
+			}
+			if matches {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func instanceLocationToString(loc []string) string {
 	fp := fieldpath.New()
 	for _, l := range loc {
-		fp = fp.AddNamed(l)
+		// Check if this segment is a numeric array index
+		if index, err := strconv.Atoi(l); err == nil {
+			fp = fp.AddIndexed(index)
+		} else {
+			fp = fp.AddNamed(l)
+		}
 	}
 	return fp.String()
 }
