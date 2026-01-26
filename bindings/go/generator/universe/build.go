@@ -1,6 +1,7 @@
 package universe
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"go/ast"
@@ -8,6 +9,7 @@ import (
 	"go/token"
 	"go/types"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -95,37 +97,63 @@ func IsRuntimeTyped(ti *TypeInfo) bool {
 }
 
 // Build scans all Go modules reachable from roots and builds a Universe.
-func Build(ctx context.Context, roots []string) (*Universe, error) {
+// it only considers modules whose files have at least the given marker.
+// this is mainly to reduce build time.
+func Build(ctx context.Context, marker string, roots ...string) (*Universe, error) {
 	modRoots, err := findModuleRoots(roots)
 	if err != nil {
 		return nil, err
 	}
 
-	u := New()
-	g, ctx := errgroup.WithContext(ctx)
-	var mu sync.Mutex
-
-	for _, root := range modRoots {
-		g.Go(func() error {
-			pkgs, err := loadModule(ctx, root)
-			if err != nil {
-				return err
-			}
-
-			mu.Lock()
-			defer mu.Unlock()
-
-			for _, pkg := range pkgs {
-				u.recordImports(pkg)
-				scanPackage(u, pkg)
-			}
-			return nil
-		})
-	}
-
-	if err := g.Wait(); err != nil {
+	// Phase 1: Quick scan for packages with schema markers
+	slog.InfoContext(ctx, "scanning for schema markers", "modules", len(modRoots))
+	relevantPackages, err := findPackagesWithSchemaMarkers(ctx, marker, modRoots...)
+	if err != nil {
 		return nil, err
 	}
+
+	if len(relevantPackages) == 0 {
+		slog.InfoContext(ctx, "no packages with schema markers found")
+		return New(), nil
+	}
+
+	slog.InfoContext(ctx, "found packages with schema markers", "packages", len(relevantPackages))
+
+	// Phase 2: Load only relevant packages + discover their dependencies
+	u := New()
+
+	// Discover dependencies by loading packages with imports enabled
+	slog.InfoContext(ctx, "discovering dependencies", "packages", len(relevantPackages))
+	allDependencies, err := discoverPackageDependencies(ctx, relevantPackages)
+	if err != nil {
+		return nil, err
+	}
+
+	// Always include runtime package for external references
+	allPackagesToLoad := append(allDependencies, RuntimePackage)
+
+	// Remove duplicates
+	seen := make(map[string]struct{})
+	var uniquePackages []string
+	for _, pkg := range allPackagesToLoad {
+		if _, exists := seen[pkg]; !exists && pkg != "" {
+			seen[pkg] = struct{}{}
+			uniquePackages = append(uniquePackages, pkg)
+		}
+	}
+
+	slog.InfoContext(ctx, "loading packages with dependencies", "total", len(uniquePackages))
+
+	pkgs, err := loadSpecificPackages(ctx, uniquePackages)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pkg := range pkgs {
+		u.recordImports(pkg)
+		scanPackage(u, pkg)
+	}
+
 	return u, nil
 }
 
@@ -163,10 +191,147 @@ func findModuleRoots(roots []string) ([]string, error) {
 	return modules, nil
 }
 
-func loadModule(ctx context.Context, modRoot string) ([]*packages.Package, error) {
+// findPackagesWithSchemaMarkers quickly scans Go source files for schema markers
+// without doing full package loading. only packages with a file with the given marker are considered
+func findPackagesWithSchemaMarkers(ctx context.Context, marker string, modRoots ...string) ([]string, error) {
+	var relevantPackages []string
+	var mu sync.Mutex
+	g, ctx := errgroup.WithContext(ctx)
+
+	for _, modRoot := range modRoots {
+		g.Go(func() error {
+			foundPackages, err := scanModuleForSchemaMarkers(ctx, modRoot, marker)
+			if err != nil {
+				return err
+			}
+
+			if len(foundPackages) > 0 {
+				mu.Lock()
+				relevantPackages = append(relevantPackages, foundPackages...)
+				mu.Unlock()
+			}
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return relevantPackages, nil
+}
+
+// scanModuleForSchemaMarkers scans a single module for packages containing schema markers.
+// note that only
+func scanModuleForSchemaMarkers(ctx context.Context, modRoot, marker string) ([]string, error) {
+	// First, use go list to discover all packages (much faster than file walking)
 	cfg := &packages.Config{
 		Context: ctx,
 		Dir:     modRoot,
+		Tests:   false,
+		Mode:    packages.NeedName | packages.NeedFiles, // Need name to get proper import paths
+	}
+
+	allPkgs, err := packages.Load(cfg, "./...")
+	if err != nil {
+		return nil, err
+	}
+
+	var relevantPkgs []string
+	for _, pkg := range allPkgs {
+		// Check if any Go files in this package contain schema markers
+		hasMarker := false
+		for _, goFile := range pkg.GoFiles {
+			found, err := fileContainsSchemaMarker(goFile, marker)
+			if err != nil {
+				continue // skip files we can't read
+			}
+			if found {
+				hasMarker = true
+				break
+			}
+		}
+
+		if hasMarker {
+			slog.InfoContext(ctx, "found package with schema marker", "package", pkg.PkgPath)
+			relevantPkgs = append(relevantPkgs, pkg.PkgPath)
+		}
+	}
+
+	return relevantPkgs, nil
+}
+
+// discoverPackageDependencies loads packages with imports to discover their dependencies
+func discoverPackageDependencies(ctx context.Context, packagePaths []string) ([]string, error) {
+	if len(packagePaths) == 0 {
+		return packagePaths, nil
+	}
+
+	// Load packages with minimal info to get import dependencies
+	cfg := &packages.Config{
+		Context: ctx,
+		Tests:   false,
+		Mode:    packages.NeedName | packages.NeedImports,
+	}
+
+	pkgs, err := packages.Load(cfg, packagePaths...)
+	if err != nil {
+		return packagePaths, nil // Return original packages if dependency discovery fails
+	}
+
+	// Collect all dependencies
+	depMap := make(map[string]struct{})
+	for _, pkg := range pkgs {
+		// Add the original package
+		if pkg.PkgPath != "" {
+			depMap[pkg.PkgPath] = struct{}{}
+		}
+
+		// Add its dependencies (but only those within our project)
+		for _, dep := range pkg.Imports {
+			if dep.PkgPath != "" && strings.Contains(dep.PkgPath, "ocm.software/open-component-model") {
+				depMap[dep.PkgPath] = struct{}{}
+			}
+		}
+	}
+
+	// Convert map to slice
+	var allDeps []string
+	for dep := range depMap {
+		allDeps = append(allDeps, dep)
+	}
+
+	return allDeps, nil
+}
+
+// fileContainsSchemaMarker quickly checks if a Go file contains the schema marker
+func fileContainsSchemaMarker(filePath, marker string) (bool, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return false, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Look for comment lines containing the schema marker
+		if strings.Contains(line, marker) {
+			return true, nil
+		}
+	}
+
+	return false, scanner.Err()
+}
+
+// loadSpecificPackages loads only the specified packages by their import paths
+func loadSpecificPackages(ctx context.Context, packagePaths []string) ([]*packages.Package, error) {
+	if len(packagePaths) == 0 {
+		return nil, nil
+	}
+
+	cfg := &packages.Config{
+		Context: ctx,
 		Tests:   false,
 		Mode: packages.NeedSyntax |
 			packages.NeedTypes |
@@ -175,13 +340,15 @@ func loadModule(ctx context.Context, modRoot string) ([]*packages.Package, error
 			packages.NeedImports,
 	}
 
-	pkgs, err := packages.Load(cfg, "./...")
+	pkgs, err := packages.Load(cfg, packagePaths...)
 	if err != nil {
 		return nil, err
 	}
+
 	if packages.PrintErrors(pkgs) > 0 {
-		return nil, fmt.Errorf("package load errors in module %s", modRoot)
+		return nil, fmt.Errorf("package load errors for selected packages: %s", strings.Join(packagePaths, ", "))
 	}
+
 	return pkgs, nil
 }
 
