@@ -7,8 +7,9 @@ import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/repository/component/provider"
+	"ocm.software/open-component-model/bindings/go/repository/component/providers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
@@ -82,12 +83,12 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 
 // createProvider creates a provider based on the configuration.
 // The provider handles resolving the appropriate repository for each component.
-func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (provider.SpecResolvingProvider, error) {
+func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (providers.SpecResolvingProvider, error) {
 	if spec == nil {
 		return nil, fmt.Errorf("repository spec is required")
 	}
 
-	opts := provider.Options{
+	opts := providers.Options{
 		RepoProvider: r.pluginManager.ComponentVersionRepositoryRegistry,
 	}
 
@@ -102,7 +103,7 @@ func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *
 		r.logger.V(1).Info("resolved credential graph")
 		opts.CredentialGraph = credGraph
 
-		fallbackResolvers, pathMatchers, err := provider.ExtractResolvers(cfg.Config)
+		fallbackResolvers, pathMatchers, err := providers.ExtractResolvers(cfg.Config, ocirepository.Scheme)
 		if err != nil {
 			return nil, err
 		}
@@ -110,5 +111,5 @@ func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *
 		opts.PathMatchers = pathMatchers
 	}
 
-	return provider.New(ctx, opts, spec)
+	return providers.New(ctx, opts, spec)
 }

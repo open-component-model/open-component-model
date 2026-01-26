@@ -26,7 +26,7 @@ func NewCredentialGraph(ctx context.Context, config *genericv1.Config, opts Cred
 		return nil, fmt.Errorf("plugin manager is required for credential graph")
 	}
 
-	credCfg, err := credentialsConfig.ExtractCredentialConfig(config)
+	credCfg, err := credentialsConfig.LookupCredentialConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract credential configuration: %w", err)
 	}

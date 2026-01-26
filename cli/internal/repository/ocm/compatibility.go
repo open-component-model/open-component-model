@@ -5,8 +5,9 @@ import (
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/repository/component/provider"
+	"ocm.software/open-component-model/bindings/go/repository/component/providers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
@@ -34,13 +35,13 @@ func NewComponentRepositoryProvider(
 	repoProvider repository.ComponentVersionRepositoryProvider,
 	credentialGraph credentials.Resolver,
 	opts ...RepositoryResolverOption,
-) (provider.ComponentVersionRepositoryForComponentProvider, error) {
+) (providers.ComponentVersionRepositoryForComponentProvider, error) {
 	options := &RepositoryResolverOptions{}
 	for _, opt := range opts {
 		opt(options)
 	}
 
-	fallbackResolvers, pathMatchers, err := provider.ExtractResolvers(options.config)
+	fallbackResolvers, pathMatchers, err := providers.ExtractResolvers(options.config, ocirepository.Scheme)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +52,7 @@ func NewComponentRepositoryProvider(
 		componentPatterns = []string{"*"}
 	}
 
-	providerOpts := provider.Options{
+	providerOpts := providers.Options{
 		RepoProvider:      repoProvider,
 		CredentialGraph:   credentialGraph,
 		PathMatchers:      pathMatchers,
@@ -59,9 +60,8 @@ func NewComponentRepositoryProvider(
 		ComponentPatterns: componentPatterns,
 	}
 
-	return provider.New(ctx, providerOpts, options.repository)
+	return providers.New(ctx, providerOpts, options.repository)
 }
-
 
 // RepositoryResolverOptions holds configuration for NewComponentRepositoryProvider.
 type RepositoryResolverOptions struct {
@@ -126,6 +126,6 @@ func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 	credentialGraph credentials.Resolver,
 	config *genericv1.Config,
 	ref *compref.Ref,
-) (provider.ComponentVersionRepositoryForComponentProvider, error) {
+) (providers.ComponentVersionRepositoryForComponentProvider, error) {
 	return NewComponentRepositoryProvider(ctx, repoProvider, credentialGraph, WithConfig(config), WithComponentRef(ref))
 }
