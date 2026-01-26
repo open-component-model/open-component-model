@@ -53,7 +53,9 @@ func ArtifactBlob(ctx context.Context, storage content.Storage, b *ociblob.Artif
 	// Convert access to LocalBlob - this is a no-op if already the correct type
 	localBlob := &v2.LocalBlob{}
 	if err := opts.AccessScheme.Convert(b.GetAccess(), localBlob); err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to convert artifact access to local blob: %w", err)
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf(
+			"failed to convert artifact access to local blob "+
+				"(make sure this is a local blob access to prepare it for packing): %w", err)
 	}
 	return ResourceLocalBlob(ctx, storage, b, localBlob, opts)
 }
