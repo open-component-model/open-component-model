@@ -70,7 +70,7 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	if version == "" {
 		return nil, fmt.Errorf("component version is required")
 	}
-	if resourceIdentity == nil || len(resourceIdentity) == 0 {
+	if len(resourceIdentity) == 0 {
 		return nil, fmt.Errorf("resource identity is required")
 	}
 
@@ -109,7 +109,7 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	} else {
 		// Ensure the directory exists
 		dir := filepath.Dir(outputPath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("failed creating output directory: %w", err)
 		}
 	}
