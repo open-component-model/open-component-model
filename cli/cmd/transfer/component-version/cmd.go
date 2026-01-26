@@ -12,23 +12,23 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
+	"ocm.software/open-component-model/cli/cmd/transfer/component-version/internal"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/render"
+	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
 const (
-	FlagDryRun = "dry-run"
-	FlagOutput = "output"
+	FlagDryRun    = "dry-run"
+	FlagOutput    = "output"
+	FlagRecursive = "recursive"
 )
 
 func New() *cobra.Command {
@@ -52,6 +52,7 @@ The graph is validated, and then executed unless --dry-run is set.`,
 
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String()}, "output format of the component descriptors")
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
+	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
 
 	return cmd
 }
@@ -70,6 +71,8 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	octx := ocmctx.FromContext(ctx)
+
+	cfg := octx.Configuration()
 
 	pm := octx.PluginManager()
 	if pm == nil {
@@ -92,6 +95,13 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid source component reference: %w", compErr)
 	}
 
+	repoProvider, err := ocm.NewComponentRepositoryProvider(
+		ctx, pm.ComponentVersionRepositoryRegistry, credGraph, ocm.WithConfig(cfg), ocm.WithComponentRef(fromSpec),
+	)
+	if err != nil {
+		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
+	}
+
 	toSpec, err := compref.ParseRepository(args[1],
 		compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite+"|"+ctfv1.AccessModeCreate),
 	)
@@ -99,8 +109,16 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid target repository spec: %w", err)
 	}
 
+	recursive, err := cmd.Flags().GetBool(FlagRecursive)
+	if err != nil {
+		return fmt.Errorf("getting recursive flag failed: %w", err)
+	}
+
 	// Build TransformationGraphDefinition
-	tgd := buildGraphDefinition(fromSpec.Repository, toSpec, fromSpec.Component, fromSpec.Version)
+	tgd, err := internal.BuildGraphDefinition(ctx, fromSpec, toSpec, repoProvider, recursive)
+	if err != nil {
+		return fmt.Errorf("building graph definition failed: %w", err)
+	}
 
 	// Build transformer builder
 	b := graphBuilder(pm, credGraph)
@@ -135,66 +153,6 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func buildGraphDefinition(
-	from runtime.Typed,
-	to runtime.Typed,
-	component, version string,
-) *transformv1alpha1.TransformationGraphDefinition {
-	return &transformv1alpha1.TransformationGraphDefinition{
-		Environment: &runtime.Unstructured{
-			Data: map[string]interface{}{
-				"from": asUnstructured(from).Data,
-				"to":   asUnstructured(to).Data,
-			},
-		},
-		Transformations: []transformv1alpha1.GenericTransformation{
-			{
-				TransformationMeta: meta.TransformationMeta{
-					Type: chooseGetType(from),
-					ID:   "download",
-				},
-				Spec: &runtime.Unstructured{Data: map[string]interface{}{
-					"repository": asUnstructured(from).Data,
-					"component":  component,
-					"version":    version,
-				}},
-			},
-			{
-				TransformationMeta: meta.TransformationMeta{
-					Type: chooseAddType(to),
-					ID:   "upload",
-				},
-				Spec: &runtime.Unstructured{Data: map[string]interface{}{
-					"repository": asUnstructured(to).Data,
-					"descriptor": "${download.output.descriptor}",
-				}},
-			},
-		},
-	}
-}
-
-func chooseGetType(repo runtime.Typed) runtime.Type {
-	switch repo.(type) {
-	case *oci.Repository:
-		return ociv1alpha1.OCIGetComponentVersionV1alpha1
-	case *ctfv1.Repository:
-		return ociv1alpha1.CTFGetComponentVersionV1alpha1
-	default:
-		panic(fmt.Sprintf("unknown repository type %T", repo))
-	}
-}
-
-func chooseAddType(repo runtime.Typed) runtime.Type {
-	switch repo.(type) {
-	case *oci.Repository:
-		return ociv1alpha1.OCIAddComponentVersionV1alpha1
-	case *ctfv1.Repository:
-		return ociv1alpha1.CTFAddComponentVersionV1alpha1
-	default:
-		panic(fmt.Sprintf("unknown repository type %T", repo))
-	}
-}
-
 // TODO: make this a plugin manager integration.
 func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Resolver) *builder.Builder {
 	transformerScheme := ociv1alpha1.Scheme
@@ -215,18 +173,6 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
 		WithTransformer(&ociv1alpha1.CTFGetComponentVersion{}, ociGet).
 		WithTransformer(&ociv1alpha1.CTFAddComponentVersion{}, ociAdd)
-}
-
-func asUnstructured(typed runtime.Typed) *runtime.Unstructured {
-	var raw runtime.Raw
-	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(typed, &raw); err != nil {
-		panic(fmt.Sprintf("cannot convert to raw: %v", err))
-	}
-	var unstructured runtime.Unstructured
-	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(&raw, &unstructured); err != nil {
-		panic(fmt.Sprintf("cannot convert to unstructured: %v", err))
-	}
-	return &unstructured
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {
