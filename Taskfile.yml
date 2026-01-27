@@ -160,7 +160,7 @@ tasks:
 
   generate:
     desc: "Run all Code Generators in the project"
-    deps:
+    cmds:
       - task: 'bindings/go/generator:ocmtypegen/generate'
       - task: 'bindings/go/generator:jsonschemagen/generate'
       - task: 'tools:deepcopy-gen/generate-deepcopy'
