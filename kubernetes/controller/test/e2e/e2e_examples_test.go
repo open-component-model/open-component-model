@@ -42,7 +42,6 @@ var _ = Describe("controller", func() {
 			reqFiles := []string{ComponentConstructor, Bootstrap}
 
 			It("should deploy the example "+example.Name(), func(ctx SpecContext) {
-
 				By("validating the example directory " + example.Name())
 				var files []string
 				Expect(filepath.WalkDir(
@@ -74,13 +73,13 @@ var _ = Describe("controller", func() {
 					signingKey,
 				)).To(Succeed())
 
-				By("bootstrapping the example")
-				Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
-				name := ""
-
 				if slices.Contains(files, K8sManifest) {
 					Expect(utils.MakeServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
 				}
+
+				By("bootstrapping the example")
+				Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
+				name := ""
 
 				if slices.Contains(files, Rgd) {
 					name = "rgd/" + example.Name()
@@ -140,9 +139,6 @@ var _ = Describe("controller", func() {
 						"'{.items[0].spec.containers[0].env[?(@.name==\"PODINFO_UI_MESSAGE\")].value}'",
 						example.Name(),
 					)).To(Succeed())
-				}
-				if slices.Contains(files, K8sManifest) {
-					Expect(utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")).To(Succeed())
 				}
 			})
 		}
