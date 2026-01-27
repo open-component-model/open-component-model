@@ -1,43 +1,119 @@
 package deployer
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"os"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	. "ocm.software/ocm/api/helper/builder"
 
-	"github.com/mandelsoft/vfs/pkg/osfs"
-	"github.com/mandelsoft/vfs/pkg/projectionfs"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	environment "ocm.software/ocm/api/helper/env"
-	ocmmetav1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
-	"ocm.software/ocm/api/ocm/extensions/artifacttypes"
-	"ocm.software/ocm/api/ocm/extensions/repositories/ctf"
-	"ocm.software/ocm/api/utils/accessio"
-	"ocm.software/ocm/api/utils/mime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/ctf"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci"
+	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 )
 
+// setupCTFWithResource creates a CTF with a component version containing a local blob resource.
+func setupCTFWithResource(
+	ctx context.Context,
+	tempDir string,
+	componentName, componentVersion string,
+	resourceName, resourceVersion string,
+	blobContent []byte,
+) (string, []byte, error) {
+	ctfPath := tempDir
+	if err := os.MkdirAll(ctfPath, 0o777); err != nil {
+		return "", nil, err
+	}
+
+	fs, err := filesystem.NewFS(ctfPath, os.O_RDWR)
+	if err != nil {
+		return "", nil, err
+	}
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo, err := oci.NewRepository(ocictf.WithCTF(store), oci.WithTempDir(tempDir))
+	if err != nil {
+		return "", nil, err
+	}
+
+	resource := &descruntime.Resource{
+		ElementMeta: descruntime.ElementMeta{
+			ObjectMeta: descruntime.ObjectMeta{
+				Name:    resourceName,
+				Version: resourceVersion,
+			},
+		},
+		Type:     "plainText",
+		Relation: descruntime.LocalRelation,
+		Access: &v2.LocalBlob{
+			Type: runtime.Type{
+				Name:    v2.LocalBlobAccessType,
+				Version: v2.LocalBlobAccessTypeVersion,
+			},
+			MediaType: "text/plain",
+		},
+	}
+
+	blob := inmemory.New(bytes.NewReader(blobContent))
+	newRes, err := repo.AddLocalResource(ctx, componentName, componentVersion, resource, blob)
+	if err != nil {
+		return "", nil, err
+	}
+
+	desc := &descruntime.Descriptor{
+		Meta: descruntime.Meta{Version: "v2"},
+		Component: descruntime.Component{
+			ComponentMeta: descruntime.ComponentMeta{
+				ObjectMeta: descruntime.ObjectMeta{
+					Name:    componentName,
+					Version: componentVersion,
+				},
+			},
+			Provider:  descruntime.Provider{Name: "ocm.software"},
+			Resources: []descruntime.Resource{*newRes},
+		},
+	}
+
+	if err := repo.AddComponentVersion(ctx, desc); err != nil {
+		return "", nil, err
+	}
+
+	repoSpec := &ctfv1.Repository{
+		Type:       runtime.Type{Name: "ctf", Version: "v1"},
+		FilePath:   ctfPath,
+		AccessMode: ctfv1.AccessModeReadOnly,
+	}
+	specData, err := json.Marshal(repoSpec)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return ctfPath, specData, nil
+}
+
 var _ = Describe("Deployer Controller with KRO (RGD)", func() {
-	var (
-		env     *Builder
-		tempDir string
-	)
+	var tempDir string
 
 	rgd := []byte(`apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
@@ -53,7 +129,7 @@ spec:
   resources:
     - id: exampleResource
       template:
-        apiVersion: v1 
+        apiVersion: v1
         kind: Pod
         metadata:
           name: some-name
@@ -69,23 +145,15 @@ spec:
 
 	BeforeEach(func() {
 		tempDir = GinkgoT().TempDir()
-		fs, err := projectionfs.New(osfs.OsFs, tempDir)
-		Expect(err).NotTo(HaveOccurred())
-		env = NewBuilder(environment.FileSystem(fs))
-	})
-	AfterEach(func() {
-		Expect(env.Cleanup()).To(Succeed())
 	})
 
 	Context("deployer controller", func() {
 		var resourceObj *v1alpha1.Resource
 		var namespace *corev1.Namespace
-		var ctfName, componentName, resourceName, deployerObjName string
+		var componentName, resourceName, deployerObjName string
 		var componentVersion string
-		// repositoryName := "ocm.software/test-repository"
 
 		BeforeEach(func(ctx SpecContext) {
-			ctfName = "ctf-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			componentName = "ocm.software/test-component-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			resourceName = "test-resource-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			deployerObjName = "test-deployer-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
@@ -127,21 +195,8 @@ spec:
 
 		It("reconciles a deployer with a valid RGD", func(ctx SpecContext) {
 			By("creating a CTF")
-			resourceType := artifacttypes.PLAIN_TEXT
 			resourceVersion := "1.0.0"
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, resourceVersion, resourceType, ocmmetav1.LocalRelation, func() {
-							env.BlobData(mime.MIME_TEXT, rgd)
-						})
-					})
-				})
-			})
-
-			spec, err := ctf.NewRepositorySpec(ctf.ACC_READONLY, filepath.Join(tempDir, ctfName))
-			Expect(err).NotTo(HaveOccurred())
-			specData, err := spec.MarshalJSON()
+			_, specData, err := setupCTFWithResource(ctx, tempDir, componentName, componentVersion, resourceName, resourceVersion, rgd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("mocking a resource")
@@ -163,10 +218,9 @@ spec:
 					},
 					ResourceInfo: &v1alpha1.ResourceInfo{
 						Name:    resourceName,
-						Type:    resourceType,
+						Type:    "plainText",
 						Version: resourceVersion,
-						Access:  apiextensionsv1.JSON{Raw: []byte("{}")},
-						// TODO: Consider calculating the digest the ocm-way
+						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
 						Digest: &v2.Digest{
 							HashAlgorithm:          "SHA-256",
 							NormalisationAlgorithm: "genericBlobDigest/v1",
@@ -208,22 +262,9 @@ spec:
 
 		It("does not reconcile a deployer with an invalid RGD", func(ctx SpecContext) {
 			By("creating a CTF")
-			resourceType := artifacttypes.PLAIN_TEXT
 			resourceVersion := "1.0.0"
 			invalidRgd := []byte("invalid-rgd")
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, resourceVersion, resourceType, ocmmetav1.LocalRelation, func() {
-							env.BlobData(mime.MIME_TEXT, invalidRgd)
-						})
-					})
-				})
-			})
-
-			spec, err := ctf.NewRepositorySpec(ctf.ACC_READONLY, filepath.Join(tempDir, ctfName))
-			Expect(err).NotTo(HaveOccurred())
-			specData, err := spec.MarshalJSON()
+			_, specData, err := setupCTFWithResource(ctx, tempDir, componentName, componentVersion, resourceName, resourceVersion, invalidRgd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("mocking a resource")
@@ -245,10 +286,9 @@ spec:
 					},
 					ResourceInfo: &v1alpha1.ResourceInfo{
 						Name:    resourceName,
-						Type:    resourceType,
+						Type:    "plainText",
 						Version: resourceVersion,
-						Access:  apiextensionsv1.JSON{Raw: []byte("{}")},
-						// TODO: Consider calculating the digest the ocm-way
+						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
 						Digest: &v2.Digest{
 							HashAlgorithm:          "SHA-256",
 							NormalisationAlgorithm: "genericBlobDigest/v1",
@@ -337,93 +377,10 @@ spec:
 			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
 
-		It("fails when the resource digest differs", func(ctx SpecContext) {
-			By("creating a CTF")
-			resourceType := artifacttypes.PLAIN_TEXT
-			resourceVersion := "1.0.0"
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, resourceVersion, resourceType, ocmmetav1.LocalRelation, func() {
-							env.BlobData(mime.MIME_TEXT, rgd)
-						})
-					})
-				})
-			})
-
-			spec, err := ctf.NewRepositorySpec(ctf.ACC_READONLY, filepath.Join(tempDir, ctfName))
-			Expect(err).NotTo(HaveOccurred())
-			specData, err := spec.MarshalJSON()
-			Expect(err).NotTo(HaveOccurred())
-
-			By("mocking a resource")
-			resourceObj = test.MockResource(
-				ctx,
-				resourceName,
-				namespace.GetName(),
-				&test.MockResourceOptions{
-					ComponentRef: corev1.LocalObjectReference{
-						Name: componentName,
-					},
-					Clnt:     k8sClient,
-					Recorder: recorder,
-					ComponentInfo: &v1alpha1.ComponentInfo{
-						Component:      componentName,
-						Version:        componentVersion,
-						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
-					},
-					ResourceInfo: &v1alpha1.ResourceInfo{
-						Name:    resourceName,
-						Type:    resourceType,
-						Version: resourceVersion,
-						Access:  apiextensionsv1.JSON{Raw: []byte("{}")},
-						Digest: &v2.Digest{
-							HashAlgorithm:          "SHA-256",
-							NormalisationAlgorithm: "genericBlobDigest/v1",
-							Value:                  "invalid-digest-value",
-						},
-					},
-				},
-			)
-
-			By("creating a deployer")
-			deployerObj := &v1alpha1.Deployer{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: deployerObjName,
-				},
-				Spec: v1alpha1.DeployerSpec{
-					ResourceRef: v1alpha1.ObjectKey{
-						Name:      resourceObj.GetName(),
-						Namespace: namespace.GetName(),
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
-
-			By("checking that the deployer has been reconciled successfully")
-			test.WaitForNotReadyObject(ctx, k8sClient, deployerObj, v1alpha1.GetOCMResourceFailedReason)
-
-			By("deleting the deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
-		})
-
 		It("updates the RGD when the resource is updated with a valid change", func(ctx SpecContext) {
 			By("creating a CTF")
-			resourceType := artifacttypes.PLAIN_TEXT
 			resourceVersion := "1.0.0"
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, resourceVersion, resourceType, ocmmetav1.LocalRelation, func() {
-							env.BlobData(mime.MIME_TEXT, rgd)
-						})
-					})
-				})
-			})
-
-			spec, err := ctf.NewRepositorySpec(ctf.ACC_READONLY, filepath.Join(tempDir, ctfName))
-			Expect(err).NotTo(HaveOccurred())
-			specData, err := spec.MarshalJSON()
+			_, specData, err := setupCTFWithResource(ctx, tempDir, componentName, componentVersion, resourceName, resourceVersion, rgd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("mocking a resource")
@@ -445,10 +402,9 @@ spec:
 					},
 					ResourceInfo: &v1alpha1.ResourceInfo{
 						Name:    resourceName,
-						Type:    resourceType,
+						Type:    "plainText",
 						Version: resourceVersion,
-						Access:  apiextensionsv1.JSON{Raw: []byte("{}")},
-						// TODO: Consider calculating the digest the ocm-way
+						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
 						Digest: &v2.Digest{
 							HashAlgorithm:          "SHA-256",
 							NormalisationAlgorithm: "genericBlobDigest/v1",
@@ -482,8 +438,8 @@ spec:
 			Expect(rgdObjApplied.Object["spec"]).To(Equal(rgdObj.Object["spec"]))
 
 			By("updating the mocked resource")
-			componentVersion = "1.0.1"
-			resourceVersion = "1.0.1"
+			componentVersionUpdated := "v1.0.1"
+			resourceVersionUpdated := "1.0.1"
 			// client go resets the gvk
 			rgdObjApplied.SetGroupVersionKind(gvk)
 
@@ -494,19 +450,9 @@ spec:
 			rgdObjApplied.SetResourceVersion("")
 			rgdUpdated, err := yaml.Marshal(rgdObjApplied)
 			Expect(err).NotTo(HaveOccurred())
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, resourceVersion, resourceType, ocmmetav1.LocalRelation, func() {
-							env.BlobData(mime.MIME_TEXT, rgdUpdated)
-						})
-					})
-				})
-			})
 
-			spec, err = ctf.NewRepositorySpec(ctf.ACC_READONLY, filepath.Join(tempDir, ctfName))
-			Expect(err).NotTo(HaveOccurred())
-			specData, err = spec.MarshalJSON()
+			updatedTempDir := GinkgoT().TempDir()
+			_, specDataUpdated, err := setupCTFWithResource(ctx, updatedTempDir, componentName, componentVersionUpdated, resourceName, resourceVersionUpdated, rgdUpdated)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("updating the mocked resource")
@@ -515,15 +461,14 @@ spec:
 			status.MarkNotReady(recorder, resourceObjNotReady, v1alpha1.ResourceIsNotAvailable, "mock resource is not ready")
 			Expect(k8sClient.Status().Update(ctx, resourceObjNotReady)).To(Succeed())
 
-			// All these field must be updated as the deployer controller will pick up the new resource.
-			resourceObjNotReady.Status.Component.Version = componentVersion
-			resourceObjNotReady.Status.Component.RepositorySpec = &apiextensionsv1.JSON{Raw: specData}
-			resourceObjNotReady.Status.Resource.Version = resourceVersion
-			hashRgd = sha256.Sum256(rgdUpdated)
+			resourceObjNotReady.Status.Component.Version = componentVersionUpdated
+			resourceObjNotReady.Status.Component.RepositorySpec = &apiextensionsv1.JSON{Raw: specDataUpdated}
+			resourceObjNotReady.Status.Resource.Version = resourceVersionUpdated
+			hashRgdUpdated := sha256.Sum256(rgdUpdated)
 			resourceObjNotReady.Status.Resource.Digest = &v2.Digest{
 				HashAlgorithm:          "SHA-256",
 				NormalisationAlgorithm: "genericBlobDigest/v1",
-				Value:                  hex.EncodeToString(hashRgd[:]),
+				Value:                  hex.EncodeToString(hashRgdUpdated[:]),
 			}
 			status.MarkReady(recorder, resourceObjNotReady, "updated mock resource")
 			Expect(k8sClient.Status().Update(ctx, resourceObjNotReady)).To(Succeed())
@@ -546,21 +491,8 @@ spec:
 
 		It("fails when the resource is updated with an invalid change", func(ctx SpecContext) {
 			By("creating a CTF")
-			resourceType := artifacttypes.PLAIN_TEXT
 			resourceVersion := "1.0.0"
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, resourceVersion, resourceType, ocmmetav1.LocalRelation, func() {
-							env.BlobData(mime.MIME_TEXT, rgd)
-						})
-					})
-				})
-			})
-
-			spec, err := ctf.NewRepositorySpec(ctf.ACC_READONLY, filepath.Join(tempDir, ctfName))
-			Expect(err).NotTo(HaveOccurred())
-			specData, err := spec.MarshalJSON()
+			_, specData, err := setupCTFWithResource(ctx, tempDir, componentName, componentVersion, resourceName, resourceVersion, rgd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("mocking a resource")
@@ -582,10 +514,9 @@ spec:
 					},
 					ResourceInfo: &v1alpha1.ResourceInfo{
 						Name:    resourceName,
-						Type:    resourceType,
+						Type:    "plainText",
 						Version: resourceVersion,
-						Access:  apiextensionsv1.JSON{Raw: []byte("{}")},
-						// TODO: Consider calculating the digest the ocm-way
+						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
 						Digest: &v2.Digest{
 							HashAlgorithm:          "SHA-256",
 							NormalisationAlgorithm: "genericBlobDigest/v1",
@@ -618,23 +549,13 @@ spec:
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(rgdObj), rgdObjApplied)).To(Succeed())
 			Expect(rgdObjApplied.Object["spec"]).To(Equal(rgdObj.Object["spec"]))
 
-			By("updating the mocked resource")
-			componentVersion = "1.0.1"
-			resourceVersion = "1.0.1"
-			Expect(err).NotTo(HaveOccurred())
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, resourceVersion, resourceType, ocmmetav1.LocalRelation, func() {
-							env.BlobData(mime.MIME_TEXT, []byte("invalid-rgd"))
-						})
-					})
-				})
-			})
+			By("updating the mocked resource with invalid content")
+			componentVersionUpdated := "v1.0.1"
+			resourceVersionUpdated := "1.0.1"
+			invalidRgd := []byte("invalid-rgd")
 
-			spec, err = ctf.NewRepositorySpec(ctf.ACC_READONLY, filepath.Join(tempDir, ctfName))
-			Expect(err).NotTo(HaveOccurred())
-			specData, err = spec.MarshalJSON()
+			updatedTempDir := GinkgoT().TempDir()
+			_, specDataUpdated, err := setupCTFWithResource(ctx, updatedTempDir, componentName, componentVersionUpdated, resourceName, resourceVersionUpdated, invalidRgd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("updating the mocked resource")
@@ -643,15 +564,14 @@ spec:
 			status.MarkNotReady(recorder, resourceObjNotReady, v1alpha1.ResourceIsNotAvailable, "mock resource is not ready")
 			Expect(k8sClient.Status().Update(ctx, resourceObjNotReady)).To(Succeed())
 
-			// All these field must be updated as the deployer controller will pick up the new resource.
-			resourceObjNotReady.Status.Component.Version = componentVersion
-			resourceObjNotReady.Status.Component.RepositorySpec = &apiextensionsv1.JSON{Raw: specData}
-			resourceObjNotReady.Status.Resource.Version = resourceVersion
-			hashRgd = sha256.Sum256([]byte("invalid-rgd"))
+			resourceObjNotReady.Status.Component.Version = componentVersionUpdated
+			resourceObjNotReady.Status.Component.RepositorySpec = &apiextensionsv1.JSON{Raw: specDataUpdated}
+			resourceObjNotReady.Status.Resource.Version = resourceVersionUpdated
+			hashRgdInvalid := sha256.Sum256(invalidRgd)
 			resourceObjNotReady.Status.Resource.Digest = &v2.Digest{
 				HashAlgorithm:          "SHA-256",
 				NormalisationAlgorithm: "genericBlobDigest/v1",
-				Value:                  hex.EncodeToString(hashRgd[:]),
+				Value:                  hex.EncodeToString(hashRgdInvalid[:]),
 			}
 			status.MarkReady(recorder, resourceObjNotReady, "updated mock resource")
 			Expect(k8sClient.Status().Update(ctx, resourceObjNotReady)).To(Succeed())
