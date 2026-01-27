@@ -14,7 +14,7 @@ import (
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
-	"helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
 	"oras.land/oras-go/v2"
 	orasoci "oras.land/oras-go/v2/content/oci"
 

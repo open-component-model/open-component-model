@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/jedib0t/go-pretty/v6 v6.7.7
+	github.com/jedib0t/go-pretty/v6 v6.7.8
 	github.com/nlepage/go-tarfs v1.2.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -12,10 +12,10 @@ require (
 	golang.org/x/sync v0.19.0
 	golang.org/x/sys v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
-	ocm.software/open-component-model/bindings/go/blob v0.0.10
+	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/constructor v0.0.5
-	ocm.software/open-component-model/bindings/go/credentials v0.0.5
+	ocm.software/open-component-model/bindings/go/credentials v0.0.6
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260121092455-5a30258635be
@@ -26,7 +26,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260121092455-5a30258635be
 	ocm.software/open-component-model/bindings/go/oci v0.0.26
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
-	ocm.software/open-component-model/bindings/go/repository v0.0.4
+	ocm.software/open-component-model/bindings/go/repository v0.0.5
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260121092455-5a30258635be
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260121092455-5a30258635be

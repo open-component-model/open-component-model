@@ -13,11 +13,11 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/chartutil"
-	"helm.sh/helm/v3/pkg/downloader"
-	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/registry"
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
+	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
+	"helm.sh/helm/v4/pkg/downloader"
+	"helm.sh/helm/v4/pkg/getter"
+	"helm.sh/helm/v4/pkg/registry"
 	"oras.land/oras-go/v2"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -240,6 +240,12 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 
 	opts = append(opts, getter.WithPlainHTTP(plainHTTP))
 
+	// TODO(fabianburth): check whether this needs additional configuration
+	regClient, err := registry.NewClient()
+	if err != nil {
+		return nil, fmt.Errorf("error creating registry client: %w", err)
+	}
+
 	dl := &downloader.ChartDownloader{
 		Out:     os.Stderr,
 		Verify:  verify,
@@ -247,6 +253,8 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 		// set by ocm v1 originally.
 		RepositoryCache:  "/tmp/.helmcache",
 		RepositoryConfig: "/tmp/.helmrepo",
+		ContentCache:     "/tmp/.helmcontent",
+		RegistryClient:   regClient,
 		Options:          opts,
 		Keyring:          keyring,
 	}
