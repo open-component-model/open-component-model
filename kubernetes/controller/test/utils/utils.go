@@ -62,7 +62,7 @@ func DeployResource(ctx context.Context, manifestFilePath string) error {
 		cmd = exec.CommandContext(ctx, "kubectl", "delete", "-f", manifestFilePath)
 		_, err := Run(cmd)
 		if err != nil {
-			_, _ = fmt.Fprintf(GinkgoWriter, "warning: could not delete resource from manifest %s: %v\n", manifestFilePath, err)
+			GinkgoLogr.V(3).Info("WARNING: failed to delete resource", "manifest", manifestFilePath)
 		}
 
 		return err
