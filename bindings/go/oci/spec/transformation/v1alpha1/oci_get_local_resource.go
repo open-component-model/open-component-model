@@ -18,7 +18,7 @@ const OCIGetLocalResourceType = "OCIGetLocalResource"
 type OCIGetLocalResource struct {
 	// +ocm:jsonschema-gen:enum=OCIGetLocalResource/v1alpha1
 	Type   runtime.Type               `json:"type"`
-	ID     string                     `json:"id,omitempty"`
+	ID     string                     `json:"id"`
 	Spec   *OCIGetLocalResourceSpec   `json:"spec"`
 	Output *OCIGetLocalResourceOutput `json:"output,omitempty"`
 }

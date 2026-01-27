@@ -49,7 +49,7 @@ type Options struct {
 }
 
 // ArtifactBlob packs a [ociblob.ArtifactBlob] into an OCI Storage
-func ArtifactBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
+func ArtifactBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
 	// Convert access to LocalBlob - this is a no-op if already the correct type
 	localBlob := &v2.LocalBlob{}
 	if err := opts.AccessScheme.Convert(b.GetAccess(), localBlob); err != nil {

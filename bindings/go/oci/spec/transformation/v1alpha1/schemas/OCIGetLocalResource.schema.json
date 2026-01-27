@@ -26,6 +26,7 @@
   },
   "required": [
     "type",
+    "id",
     "spec"
   ],
   "additionalProperties": false,

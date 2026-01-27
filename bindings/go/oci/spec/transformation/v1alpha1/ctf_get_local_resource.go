@@ -18,7 +18,7 @@ const CTFGetLocalResourceType = "CTFGetLocalResource"
 type CTFGetLocalResource struct {
 	// +ocm:jsonschema-gen:enum=CTFGetLocalResource/v1alpha1
 	Type   runtime.Type               `json:"type"`
-	ID     string                     `json:"id,omitempty"`
+	ID     string                     `json:"id"`
 	Spec   *CTFGetLocalResourceSpec   `json:"spec"`
 	Output *CTFGetLocalResourceOutput `json:"output,omitempty"`
 }

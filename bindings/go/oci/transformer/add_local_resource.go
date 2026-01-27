@@ -76,7 +76,7 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		return nil, fmt.Errorf("resource is required")
 	}
 	if contentSpec.URI == "" {
-		return nil, fmt.Errorf("file URI is required to upload the resource")
+		return nil, fmt.Errorf("file URI is required to access the resource data to be uploaded")
 	}
 
 	// Resolve credentials if provider available

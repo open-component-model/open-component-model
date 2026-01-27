@@ -22,22 +22,11 @@ import (
 
 // mockRepository implements ComponentVersionRepository for testing
 type mockRepository struct {
+	repository.ComponentVersionRepository
 	addedResource *descriptor.Resource
 	addedBlob     blob.ReadOnlyBlob
 	component     string
 	version       string
-}
-
-func (m *mockRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
-	return nil
-}
-
-func (m *mockRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
-	return nil, nil
-}
-
-func (m *mockRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
-	return nil, nil
 }
 
 func (m *mockRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
@@ -60,14 +49,6 @@ func (m *mockRepository) AddLocalResource(ctx context.Context, component, versio
 }
 
 func (m *mockRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
-	return nil, nil, nil
-}
-
-func (m *mockRepository) AddLocalSource(ctx context.Context, component, version string, src *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	return nil, nil
-}
-
-func (m *mockRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
 	return nil, nil, nil
 }
 

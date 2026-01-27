@@ -18,7 +18,7 @@ const CTFAddLocalResourceType = "CTFAddLocalResource"
 type CTFAddLocalResource struct {
 	// +ocm:jsonschema-gen:enum=CTFAddLocalResource/v1alpha1
 	Type   runtime.Type               `json:"type"`
-	ID     string                     `json:"id,omitempty"`
+	ID     string                     `json:"id"`
 	Spec   *CTFAddLocalResourceSpec   `json:"spec"`
 	Output *CTFAddLocalResourceOutput `json:"output,omitempty"`
 }
