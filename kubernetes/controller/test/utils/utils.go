@@ -114,15 +114,10 @@ func MakeServiceAccountClusterAdmin(ctx context.Context, serviceAccountNamespace
 		}
 		return err
 	}
-
-	DeferCleanup(func(ctx SpecContext) error {
-		return deleteServiceAccountClusterAdmin(ctx, serviceAccountNamespace)
-	})
-
 	return err
 }
 
-func deleteServiceAccountClusterAdmin(ctx context.Context, serviceAccountName string) error {
+func DeleteServiceAccountClusterAdmin(ctx context.Context, serviceAccountName string) error {
 	cmdArgs := []string{"delete", "clusterrolebinding", fmt.Sprintf("%s-admin", serviceAccountName), "--ignore-not-found=true"}
 	cmd := exec.CommandContext(ctx, "kubectl", cmdArgs...)
 	_, err := Run(cmd)

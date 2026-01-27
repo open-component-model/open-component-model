@@ -141,6 +141,9 @@ var _ = Describe("controller", func() {
 						example.Name(),
 					)).To(Succeed())
 				}
+				if slices.Contains(files, K8sManifest) {
+					Expect(utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")).To(Succeed())
+				}
 			})
 		}
 	})

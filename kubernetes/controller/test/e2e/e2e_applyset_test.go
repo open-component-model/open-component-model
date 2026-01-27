@@ -178,6 +178,8 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 				_, err := utils.Run(cmd)
 				return err
 			}, timeout).Should(HaveOccurred(), "Deployed resource %s should be deleted", res)
+
+			Expect(utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")).To(Succeed())
 		})
 	})
 })
