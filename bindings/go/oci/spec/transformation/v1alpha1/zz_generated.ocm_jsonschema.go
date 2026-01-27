@@ -18,6 +18,15 @@ var schemaCTFAddComponentVersionOutput []byte
 //go:embed schemas/CTFAddComponentVersionSpec.schema.json
 var schemaCTFAddComponentVersionSpec []byte
 
+//go:embed schemas/CTFAddLocalResource.schema.json
+var schemaCTFAddLocalResource []byte
+
+//go:embed schemas/CTFAddLocalResourceOutput.schema.json
+var schemaCTFAddLocalResourceOutput []byte
+
+//go:embed schemas/CTFAddLocalResourceSpec.schema.json
+var schemaCTFAddLocalResourceSpec []byte
+
 //go:embed schemas/CTFGetComponentVersion.schema.json
 var schemaCTFGetComponentVersion []byte
 
@@ -26,6 +35,15 @@ var schemaCTFGetComponentVersionOutput []byte
 
 //go:embed schemas/CTFGetComponentVersionSpec.schema.json
 var schemaCTFGetComponentVersionSpec []byte
+
+//go:embed schemas/CTFGetLocalResource.schema.json
+var schemaCTFGetLocalResource []byte
+
+//go:embed schemas/CTFGetLocalResourceOutput.schema.json
+var schemaCTFGetLocalResourceOutput []byte
+
+//go:embed schemas/CTFGetLocalResourceSpec.schema.json
+var schemaCTFGetLocalResourceSpec []byte
 
 //go:embed schemas/OCIAddComponentVersion.schema.json
 var schemaOCIAddComponentVersion []byte
@@ -36,6 +54,15 @@ var schemaOCIAddComponentVersionOutput []byte
 //go:embed schemas/OCIAddComponentVersionSpec.schema.json
 var schemaOCIAddComponentVersionSpec []byte
 
+//go:embed schemas/OCIAddLocalResource.schema.json
+var schemaOCIAddLocalResource []byte
+
+//go:embed schemas/OCIAddLocalResourceOutput.schema.json
+var schemaOCIAddLocalResourceOutput []byte
+
+//go:embed schemas/OCIAddLocalResourceSpec.schema.json
+var schemaOCIAddLocalResourceSpec []byte
+
 //go:embed schemas/OCIGetComponentVersion.schema.json
 var schemaOCIGetComponentVersion []byte
 
@@ -44,6 +71,15 @@ var schemaOCIGetComponentVersionOutput []byte
 
 //go:embed schemas/OCIGetComponentVersionSpec.schema.json
 var schemaOCIGetComponentVersionSpec []byte
+
+//go:embed schemas/OCIGetLocalResource.schema.json
+var schemaOCIGetLocalResource []byte
+
+//go:embed schemas/OCIGetLocalResourceOutput.schema.json
+var schemaOCIGetLocalResourceOutput []byte
+
+//go:embed schemas/OCIGetLocalResourceSpec.schema.json
+var schemaOCIGetLocalResourceSpec []byte
 
 // JSONSchema returns the JSON Schema for CTFAddComponentVersion.
 func (CTFAddComponentVersion) JSONSchema() []byte {
@@ -58,6 +94,21 @@ func (CTFAddComponentVersionOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for CTFAddComponentVersionSpec.
 func (CTFAddComponentVersionSpec) JSONSchema() []byte {
 	return schemaCTFAddComponentVersionSpec
+}
+
+// JSONSchema returns the JSON Schema for CTFAddLocalResource.
+func (CTFAddLocalResource) JSONSchema() []byte {
+	return schemaCTFAddLocalResource
+}
+
+// JSONSchema returns the JSON Schema for CTFAddLocalResourceOutput.
+func (CTFAddLocalResourceOutput) JSONSchema() []byte {
+	return schemaCTFAddLocalResourceOutput
+}
+
+// JSONSchema returns the JSON Schema for CTFAddLocalResourceSpec.
+func (CTFAddLocalResourceSpec) JSONSchema() []byte {
+	return schemaCTFAddLocalResourceSpec
 }
 
 // JSONSchema returns the JSON Schema for CTFGetComponentVersion.
@@ -75,6 +126,21 @@ func (CTFGetComponentVersionSpec) JSONSchema() []byte {
 	return schemaCTFGetComponentVersionSpec
 }
 
+// JSONSchema returns the JSON Schema for CTFGetLocalResource.
+func (CTFGetLocalResource) JSONSchema() []byte {
+	return schemaCTFGetLocalResource
+}
+
+// JSONSchema returns the JSON Schema for CTFGetLocalResourceOutput.
+func (CTFGetLocalResourceOutput) JSONSchema() []byte {
+	return schemaCTFGetLocalResourceOutput
+}
+
+// JSONSchema returns the JSON Schema for CTFGetLocalResourceSpec.
+func (CTFGetLocalResourceSpec) JSONSchema() []byte {
+	return schemaCTFGetLocalResourceSpec
+}
+
 // JSONSchema returns the JSON Schema for OCIAddComponentVersion.
 func (OCIAddComponentVersion) JSONSchema() []byte {
 	return schemaOCIAddComponentVersion
@@ -90,6 +156,21 @@ func (OCIAddComponentVersionSpec) JSONSchema() []byte {
 	return schemaOCIAddComponentVersionSpec
 }
 
+// JSONSchema returns the JSON Schema for OCIAddLocalResource.
+func (OCIAddLocalResource) JSONSchema() []byte {
+	return schemaOCIAddLocalResource
+}
+
+// JSONSchema returns the JSON Schema for OCIAddLocalResourceOutput.
+func (OCIAddLocalResourceOutput) JSONSchema() []byte {
+	return schemaOCIAddLocalResourceOutput
+}
+
+// JSONSchema returns the JSON Schema for OCIAddLocalResourceSpec.
+func (OCIAddLocalResourceSpec) JSONSchema() []byte {
+	return schemaOCIAddLocalResourceSpec
+}
+
 // JSONSchema returns the JSON Schema for OCIGetComponentVersion.
 func (OCIGetComponentVersion) JSONSchema() []byte {
 	return schemaOCIGetComponentVersion
@@ -103,4 +184,19 @@ func (OCIGetComponentVersionOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for OCIGetComponentVersionSpec.
 func (OCIGetComponentVersionSpec) JSONSchema() []byte {
 	return schemaOCIGetComponentVersionSpec
+}
+
+// JSONSchema returns the JSON Schema for OCIGetLocalResource.
+func (OCIGetLocalResource) JSONSchema() []byte {
+	return schemaOCIGetLocalResource
+}
+
+// JSONSchema returns the JSON Schema for OCIGetLocalResourceOutput.
+func (OCIGetLocalResourceOutput) JSONSchema() []byte {
+	return schemaOCIGetLocalResourceOutput
+}
+
+// JSONSchema returns the JSON Schema for OCIGetLocalResourceSpec.
+func (OCIGetLocalResourceSpec) JSONSchema() []byte {
+	return schemaOCIGetLocalResourceSpec
 }

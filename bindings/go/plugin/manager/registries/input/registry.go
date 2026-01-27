@@ -248,7 +248,7 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	for _, p := range r.constructedPlugins {
 		eg.Go(func() error {
 			// The plugins should handle the Interrupt signal for shutdowns.
-			if err := p.cmd.Process.Signal(os.Interrupt); err != nil {
+			if err := p.cmd.Process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
 				return fmt.Errorf("failed to send interrupt signal to plugin: %w", errors.Join(err, p.cmd.Process.Kill()))
 			}
 

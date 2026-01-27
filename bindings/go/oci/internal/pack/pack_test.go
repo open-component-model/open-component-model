@@ -375,7 +375,7 @@ func TestResourceBlob(t *testing.T) {
 			opts: Options{
 				AccessScheme: runtime.NewScheme(),
 			},
-			expectedError: "artifact access is not a local blob access",
+			expectedError: "failed to convert artifact access to local blob",
 		},
 	}
 

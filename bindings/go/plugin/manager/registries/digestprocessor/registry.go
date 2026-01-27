@@ -71,7 +71,7 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	defer r.mu.Unlock()
 	var errs error
 	for _, p := range r.constructedPlugins {
-		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil {
+		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
 			errs = errors.Join(errs, perr)
 		}
 	}
