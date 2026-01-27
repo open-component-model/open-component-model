@@ -30,6 +30,9 @@ func NewCredentialGraph(ctx context.Context, config *genericv1.Config, opts Cred
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract credential configuration: %w", err)
 	}
+	if credCfg == nil {
+		credCfg = &credentialsConfig.Config{}
+	}
 
 	credOpts := credentials.Options{
 		RepositoryPluginProvider: opts.PluginManager.CredentialRepositoryRegistry,
