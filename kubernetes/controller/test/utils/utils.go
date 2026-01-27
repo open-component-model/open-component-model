@@ -21,7 +21,7 @@ func Run(cmd *exec.Cmd) ([]byte, error) {
 	cmd.Env = append(cmd.Env, "GO110MODULE=on")
 
 	command := strings.Join(cmd.Args, " ")
-	_, _ = fmt.Fprintf(GinkgoWriter, "running: %s\n", command)
+	GinkgoLogr.Info(fmt.Sprintf("Running: %s", command))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return output, fmt.Errorf("%s failed with error: (%w) %s", command, err, string(output))
