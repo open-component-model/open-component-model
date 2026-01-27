@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"helm.sh/helm/v3/pkg/provenance"
-	"helm.sh/helm/v3/pkg/registry"
+	"helm.sh/helm/v4/pkg/provenance"
+	"helm.sh/helm/v4/pkg/registry"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -151,6 +151,15 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 					require.Len(t, manifest.Layers, 2, "expected two layers for chart and provenance file")
 					require.Equal(t, registry.ProvLayerMediaType, manifest.Layers[1].MediaType, "expected second layer to be provenance file")
 
+					chartLayer, err := store.Fetch(ctx, manifest.Layers[0])
+					require.NoError(t, err)
+					t.Cleanup(func() {
+						require.NoError(t, chartLayer.Close())
+					})
+
+					chartData, err := io.ReadAll(chartLayer)
+					require.NoError(t, err, "failed to read chart layer")
+
 					provLayer, err := store.Fetch(ctx, manifest.Layers[1])
 					require.NoError(t, err)
 					t.Cleanup(func() {
@@ -164,7 +173,7 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 					provFile = filepath.Join(t.TempDir(), "provenance.json")
 					require.NoError(t, os.WriteFile(provFile, provData, 0644))
 
-					_, err = signatory.Verify(tt.path, provFile)
+					_, err = signatory.Verify(chartData, provData, filepath.Base(tt.path))
 					require.NoError(t, err, "failed to verify provenance file")
 				})
 			}

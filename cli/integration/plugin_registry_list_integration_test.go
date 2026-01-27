@@ -23,8 +23,7 @@ import (
 func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 	r := require.New(t)
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
-	defer cancel()
+	ctx := t.Context()
 
 	t.Logf("Starting Integration Test for Plugin Registry Get Command")
 
