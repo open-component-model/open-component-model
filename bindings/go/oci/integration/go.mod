@@ -10,7 +10,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.40.0
 	golang.org/x/crypto v0.46.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.11-0.20260123164636-4d10ccc182e4
+	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260121092455-5a30258635be
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
