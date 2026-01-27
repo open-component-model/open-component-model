@@ -40,7 +40,7 @@ func New(
 	ctx context.Context,
 	opts Options,
 	baseRepo runtime.Typed,
-) (SpecResolvingProvider, error) {
+) (ComponentVersionRepositoryForComponentProvider, error) {
 	if opts.RepoProvider == nil {
 		return nil, fmt.Errorf("repository provider is required")
 	}
@@ -51,14 +51,14 @@ func New(
 
 	if len(opts.FallbackResolvers) > 0 {
 		slog.WarnContext(ctx, "using deprecated fallback resolvers, consider switching to path matcher resolvers")
-		return newFallbackProviderWithBaseRepo(opts, baseRepo)
+		return newFallbackProviderWithBaseRepo(ctx, opts, baseRepo)
 	}
 
 	return newPathMatcherProviderWithBaseRepo(ctx, opts, baseRepo)
 }
 
 //nolint:staticcheck // compatibility mode for deprecated resolvers
-func newFallbackProviderWithBaseRepo(opts Options, baseRepo runtime.Typed) (SpecResolvingProvider, error) {
+func newFallbackProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (ComponentVersionRepositoryForComponentProvider, error) {
 	var finalResolvers []*resolverruntime.Resolver
 
 	if baseRepo != nil {
@@ -77,7 +77,7 @@ func newFallbackProviderWithBaseRepo(opts Options, baseRepo runtime.Typed) (Spec
 	}, nil
 }
 
-func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (SpecResolvingProvider, error) {
+func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (ComponentVersionRepositoryForComponentProvider, error) {
 	var finalResolvers []*resolverspec.Resolver
 
 	if baseRepo != nil {

@@ -3,8 +3,10 @@ package resolution
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
@@ -28,6 +30,7 @@ func NewResolver(client client.Reader, logger *logr.Logger, workerPool *workerpo
 		logger:        logger,
 		workerPool:    workerPool,
 		pluginManager: pluginManager,
+		repoCache:     expirable.NewLRU[string, providers.ComponentVersionRepositoryForComponentProvider](0, nil, time.Minute*30),
 	}
 
 	return resolver
@@ -45,6 +48,7 @@ type Resolver struct {
 	logger        *logr.Logger
 	workerPool    *workerpool.WorkerPool
 	pluginManager *manager.PluginManager
+	repoCache     *expirable.LRU[string, providers.ComponentVersionRepositoryForComponentProvider]
 }
 
 // RepositoryOptions contains all the options the resolution service requires to perform a resolve operation.
@@ -66,24 +70,33 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 		return nil, fmt.Errorf("failed to load OCM configurations: %w", err)
 	}
 
-	provider, err := r.createProvider(ctx, opts.RepositorySpec, cfg)
-	if err != nil {
-		return nil, err
-	}
-
 	requesterFunc := opts.RequesterFunc
 	if requesterFunc == nil {
 		requesterFunc = func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{}
 		}
 	}
+	baseRepoSpec := opts.RepositorySpec
+	var configHash []byte
+	if cfg != nil {
+		configHash = cfg.Hash
+	}
+	cacheKey, err := buildRepoCacheKey(configHash, baseRepoSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build repository cache key: %w", err)
+	}
+	provider, ok := r.repoCache.Get(cacheKey)
+	if !ok {
+		provider, err = r.createProvider(ctx, opts.RepositorySpec, cfg)
+		r.repoCache.Add(cacheKey, provider)
+	}
 
-	return newCacheBackedRepository(r.logger, provider, cfg, r.workerPool, requesterFunc), nil
+	return newCacheBackedRepository(r.logger, provider, cfg, r.workerPool, requesterFunc, baseRepoSpec), nil
 }
 
 // createProvider creates a provider based on the configuration.
 // The provider handles resolving the appropriate repository for each component.
-func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (providers.SpecResolvingProvider, error) {
+func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (providers.ComponentVersionRepositoryForComponentProvider, error) {
 	if spec == nil {
 		return nil, fmt.Errorf("repository spec is required")
 	}

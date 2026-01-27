@@ -8,7 +8,6 @@ import (
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/go-logr/logr"
-
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -23,7 +22,7 @@ import (
 // routing where different components can be served by different repositories.
 // This is a READ-ONLY cache. Writing operations are delegated directly to the resolved repository.
 type CacheBackedRepository struct {
-	provider   providers.SpecResolvingProvider
+	provider   providers.ComponentVersionRepositoryForComponentProvider
 	cfg        *configuration.Configuration
 	workerPool *workerpool.WorkerPool
 	logger     *logr.Logger
@@ -31,6 +30,7 @@ type CacheBackedRepository struct {
 	// that the cache handles. Upon an event (resolution complete regardless of outcome) all objects in this
 	// list are notified which will trigger a new reconcile event.
 	requesterFunc func() workerpool.RequesterInfo
+	baseRepoSpec  runtime.Typed
 }
 
 var _ repository.ComponentVersionRepository = (*CacheBackedRepository)(nil)
@@ -38,10 +38,11 @@ var _ repository.ComponentVersionRepository = (*CacheBackedRepository)(nil)
 // newCacheBackedRepository creates a new CacheBackedRepository instance.
 func newCacheBackedRepository(
 	logger *logr.Logger,
-	provider providers.SpecResolvingProvider,
+	provider providers.ComponentVersionRepositoryForComponentProvider,
 	cfg *configuration.Configuration,
 	wp *workerpool.WorkerPool,
 	requesterFunc func() workerpool.RequesterInfo,
+	baseRepoSpec runtime.Typed,
 ) *CacheBackedRepository {
 	return &CacheBackedRepository{
 		logger:        logger,
@@ -49,6 +50,7 @@ func newCacheBackedRepository(
 		cfg:           cfg,
 		workerPool:    wp,
 		requesterFunc: requesterFunc,
+		baseRepoSpec:  baseRepoSpec,
 	}
 }
 
@@ -65,18 +67,13 @@ func (c *CacheBackedRepository) AddComponentVersion(ctx context.Context, desc *d
 // This function is async. First call to this function will return a resolution.ErrResolutionInProgress error.
 // Second call, once the resolution succeeds, will return a cached result with a default TTL.
 func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
-	resolvedSpec, err := c.provider.GetRepositorySpecForComponent(ctx, component, version)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve repository spec for component %s:%s: %w", component, version, err)
-	}
-
 	var configHash []byte
 	if c.cfg != nil {
 		configHash = c.cfg.Hash
 	}
 
 	keyFunc := func() (string, error) {
-		return buildCacheKey(configHash, resolvedSpec, component, version)
+		return buildCacheKey(configHash, c.baseRepoSpec, component, version)
 	}
 
 	repo, err := c.provider.GetComponentVersionRepositoryForComponent(ctx, component, version)
@@ -186,6 +183,28 @@ func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version
 	_, _ = hasher.Write(canonicalJSON)
 	_, _ = hasher.Write([]byte(component))
 	_, _ = hasher.Write([]byte(version))
+
+	return fmt.Sprintf("%016x", hasher.Sum64()), nil
+}
+
+// buildCacheKey generates a cache key from the configuration hash, repository spec.
+// It canonicalizes the repository spec using JCS (RFC 8785) before hashing to ensure consistent keys
+// regardless of field ordering in the JSON representation.
+func buildRepoCacheKey(configHash []byte, repoSpec runtime.Typed) (string, error) {
+	repoJSON, err := json.Marshal(repoSpec)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal repository spec: %w", err)
+	}
+
+	canonicalJSON, err := jsoncanonicalizer.Transform(repoJSON)
+	if err != nil {
+		return "", fmt.Errorf("failed to canonicalize repository spec: %w", err)
+	}
+
+	hasher := fnv.New64a()
+	// can safely ignore because fnv.Write never actually returns an error
+	_, _ = hasher.Write(configHash)
+	_, _ = hasher.Write(canonicalJSON)
 
 	return fmt.Sprintf("%016x", hasher.Sum64()), nil
 }
