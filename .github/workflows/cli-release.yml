@@ -112,7 +112,9 @@ jobs:
       contents: write
     environment:
       name: cli/release-candidate
-      url: ${{ steps.create_release.outputs.html_url }}
+      # As the environment is calculated on job start, we cannot used output from job steps here.
+      # Thus, we rely on GH variables and information being already created in previous jobs
+      url: ${{ format('{0}/{1}/releases/tag/{2}', github.server_url, github.repository, needs.prepare.outputs.new_tag) }}
     steps:
       # Recreate changelog file from base64 string for release body
       - name: Decode changelog to file
@@ -127,7 +129,6 @@ jobs:
           name: ${{ needs.build.outputs.artifact_name }}
 
       - name: Create Release
-        id: create_release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
         with:
           name: CLI ${{ needs.prepare.outputs.new_version }}
