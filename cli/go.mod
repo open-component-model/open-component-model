@@ -24,7 +24,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260121092455-5a30258635be
-	ocm.software/open-component-model/bindings/go/oci v0.0.26
+	ocm.software/open-component-model/bindings/go/oci v0.0.27
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.5
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260121092455-5a30258635be

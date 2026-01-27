@@ -90,6 +90,62 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 		if err != nil {
 			return fmt.Errorf("cannot convert to v2: %w", err)
 		}
+
+		// Track resource transformation IDs for building descriptor
+		resourceTransformIDs := make(map[int]string) // map[resourceIndex]addTransformID
+
+		// Process local resources
+		for i, resource := range v2desc.Component.Resources {
+			if resource.Relation == descriptorv2.LocalRelation {
+				// Generate transformation IDs
+				resourceIdentity := resource.ToIdentity()
+				resourceID := identityToTransformationID(resourceIdentity)
+				getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
+				addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
+
+				// Convert resourceIdentity to map[string]interface{} for deep copy compatibility
+				resourceIdentityMap := make(map[string]interface{})
+				for k, v := range resourceIdentity {
+					resourceIdentityMap[k] = v
+				}
+
+				// Create GetLocalResource transformation
+				getResourceTransform := transformv1alpha1.GenericTransformation{
+					TransformationMeta: meta.TransformationMeta{
+						Type: ChooseGetLocalResourceType(ref.Repository),
+						ID:   getResourceID,
+					},
+					Spec: &runtime.Unstructured{Data: map[string]interface{}{
+						"repository":       AsUnstructured(ref.Repository).Data,
+						"component":        ref.Component,
+						"version":          ref.Version,
+						"resourceIdentity": resourceIdentityMap,
+					}},
+				}
+				tgd.Transformations = append(tgd.Transformations, getResourceTransform)
+
+				// Create AddLocalResource transformation
+				addResourceTransform := transformv1alpha1.GenericTransformation{
+					TransformationMeta: meta.TransformationMeta{
+						Type: ChooseAddLocalResourceType(toSpec),
+						ID:   addResourceID,
+					},
+					Spec: &runtime.Unstructured{Data: map[string]interface{}{
+						"repository": AsUnstructured(toSpec).Data,
+						"component":  ref.Component,
+						"version":    ref.Version,
+						"resource":   fmt.Sprintf("${%s.output.resource}", getResourceID),
+						"file":       fmt.Sprintf("${%s.output.file}", getResourceID),
+					}},
+				}
+				tgd.Transformations = append(tgd.Transformations, addResourceTransform)
+
+				// Track this resource's transformation
+				resourceTransformIDs[i] = addResourceID
+			}
+		}
+
+		// Marshal original v2 descriptor to environment
 		rawV2Desc, err := json.Marshal(v2desc)
 		if err != nil {
 			return fmt.Errorf("cannot marshal v2 descriptor: %w", err)
@@ -101,6 +157,59 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 
 		tgd.Environment.Data[id] = mapDesc
 
+		// Build upload transformation
+		// If there are local resources, we need to reconstruct the descriptor with updated resources
+		var descriptorSpec interface{}
+		if len(resourceTransformIDs) > 0 {
+			// Build resources array with CEL expressions for updated resources
+			resourcesArray := make([]interface{}, len(v2desc.Component.Resources))
+			for i := range v2desc.Component.Resources {
+				if addID, ok := resourceTransformIDs[i]; ok {
+					// Reference updated resource from AddLocalResource output using CEL
+					resourcesArray[i] = fmt.Sprintf("${%s.output.resource}", addID)
+				} else {
+					// Reference original resource from environment using CEL
+					resourcesArray[i] = fmt.Sprintf("${environment.%s.component.resources[%d]}", id, i)
+				}
+			}
+
+			// Build descriptor with updated resources and all required fields
+			// All fields are required by the schema even if null
+			componentMap := map[string]interface{}{
+				"name":      fmt.Sprintf("${environment.%s.component.name}", id),
+				"version":   fmt.Sprintf("${environment.%s.component.version}", id),
+				"provider":  fmt.Sprintf("${environment.%s.component.provider}", id),
+				"resources": resourcesArray,
+			}
+
+			// Add optional fields - reference from environment if present, otherwise null
+			if v2desc.Component.RepositoryContexts != nil {
+				componentMap["repositoryContexts"] = fmt.Sprintf("${environment.%s.component.repositoryContexts}", id)
+			} else {
+				componentMap["repositoryContexts"] = nil
+			}
+
+			if v2desc.Component.Sources != nil {
+				componentMap["sources"] = fmt.Sprintf("${environment.%s.component.sources}", id)
+			} else {
+				componentMap["sources"] = nil
+			}
+
+			if v2desc.Component.References != nil {
+				componentMap["componentReferences"] = fmt.Sprintf("${environment.%s.component.componentReferences}", id)
+			} else {
+				componentMap["componentReferences"] = nil
+			}
+
+			descriptorSpec = map[string]interface{}{
+				"meta":      fmt.Sprintf("${environment.%s.meta}", id),
+				"component": componentMap,
+			}
+		} else {
+			// No local resources, use original descriptor from environment
+			descriptorSpec = fmt.Sprintf("${environment.%s}", id)
+		}
+
 		upload := transformv1alpha1.GenericTransformation{
 			TransformationMeta: meta.TransformationMeta{
 				Type: ChooseAddType(toSpec),
@@ -108,7 +217,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 			},
 			Spec: &runtime.Unstructured{Data: map[string]interface{}{
 				"repository": AsUnstructured(toSpec).Data,
-				"descriptor": fmt.Sprintf("${environment.%s}", id),
+				"descriptor": descriptorSpec,
 			}},
 		}
 
