@@ -154,8 +154,8 @@ func suppressErrors(err *jsonschema.ValidationError, exprPaths map[string]struct
 		// there may be other kinds that could be added here as needed.
 		// for now we focus on the most common errors that can have leafs:
 		// 1. schema errors, which can encompass N actual errors
-		// 3. reference errors, which can encompass 1 error from the referenced schema
-		// 4. group errors, which can encompass N errors based on each one of group
+		// 2. reference errors, which can encompass 1 error from the referenced schema
+		// 3. group errors, which can encompass N errors based on each one of group
 		//    (generic, allOf, anyOf, oneOf)
 		switch err.ErrorKind.(type) {
 		case *kind.Schema, *kind.Reference,
