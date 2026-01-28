@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/jedib0t/go-pretty/v6 v6.7.7
+	github.com/jedib0t/go-pretty/v6 v6.7.8
 	github.com/nlepage/go-tarfs v1.2.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -18,19 +18,19 @@ require (
 	ocm.software/open-component-model/bindings/go/credentials v0.0.6
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260127115341-537c613eeacb
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260127115341-537c613eeacb
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260127131318-2c2fb62ae8cc
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260127131318-2c2fb62ae8cc
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260127115341-537c613eeacb
-	ocm.software/open-component-model/bindings/go/oci v0.0.27
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260127131318-2c2fb62ae8cc
+	ocm.software/open-component-model/bindings/go/oci v0.0.26
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.5
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260127115341-537c613eeacb
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260127131318-2c2fb62ae8cc
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260127115341-537c613eeacb
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260127115341-537c613eeacb
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260127131318-2c2fb62ae8cc
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260127131318-2c2fb62ae8cc
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -68,5 +68,5 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260127115341-537c613eeacb // indirect
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260127131318-2c2fb62ae8cc // indirect
 )

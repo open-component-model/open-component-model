@@ -65,7 +65,7 @@ func Run(ctx context.Context, roots ...string) error {
 	slog.Info("scanning...", "roots", roots)
 
 	// Build the universe of all discovered types and imports.
-	u, err := universe.Build(ctx, roots)
+	u, err := universe.Build(ctx, jsonschemagen.BaseMarker, roots...)
 	if err != nil {
 		return fmt.Errorf("universe build error: %w", err)
 	}

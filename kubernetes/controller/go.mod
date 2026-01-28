@@ -39,15 +39,15 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.6
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260121092455-5a30258635be
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260121092455-5a30258635be
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260127131318-2c2fb62ae8cc
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260127131318-2c2fb62ae8cc
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/oci v0.0.26
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.5
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260121092455-5a30258635be
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260127131318-2c2fb62ae8cc
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260121092455-5a30258635be
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260127131318-2c2fb62ae8cc
 	oras.land/oras-go/v2 v2.6.0
 )
 
@@ -96,7 +96,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.6 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.6 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.16 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.17 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.18 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.16 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.16 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.4 // indirect
