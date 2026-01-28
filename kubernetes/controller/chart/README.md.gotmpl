@@ -1,0 +1,73 @@
+{{ template "chart.header" . }}
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+## Description
+
+The OCM Kubernetes Toolkit controller manages OCM (Open Component Model) resources in Kubernetes clusters.
+It provides controllers for:
+- **Repository** - OCM repository references
+- **Component** - OCM component version tracking
+- **Resource** - OCM resource extraction
+- **Deployer** - Resource deployment automation
+
+## Installation
+
+```bash
+helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/charts/ocm-k8s-toolkit \
+  --namespace ocm-system \
+  --create-namespace
+```
+
+## Upgrading
+
+```bash
+helm upgrade ocm-k8s-toolkit oci://ghcr.io/open-component-model/charts/ocm-k8s-toolkit \
+  --namespace ocm-system
+```
+
+## Uninstallation
+
+```bash
+helm uninstall ocm-k8s-toolkit --namespace ocm-system
+```
+
+> **Note:** CRDs are kept by default when uninstalling. To remove them:
+> ```bash
+> kubectl delete crd components.delivery.ocm.software deployers.delivery.ocm.software repositories.delivery.ocm.software resources.delivery.ocm.software
+> ```
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+{{ template "chart.valuesSection" . }}
+
+## Development
+
+Run these tasks from the `kubernetes/controller` directory.
+
+### Required tasks before committing
+
+After modifying `values.yaml`, run these tasks to regenerate artifacts:
+
+```bash
+task helm/schema    # Regenerate values.schema.json
+task helm/docs      # Regenerate README.md
+task helm/lint      # Validate chart syntax
+```
+
+### Other useful tasks
+
+```bash
+task helm/template  # Render templates locally
+task helm/install   # Install chart to current cluster
+task helm/uninstall # Remove chart from cluster
+```

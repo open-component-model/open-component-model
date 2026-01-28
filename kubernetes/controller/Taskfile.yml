@@ -80,6 +80,13 @@ tasks:
         vars:
           IGNORE_NOT_FOUND: "true"
 
+  test/e2e/helm:
+    dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
+    cmds:
+      - task: helm/install
+      - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v
+      - task: helm/uninstall
+
   # Build
   build:
     deps: [manifests, generate, fmt, vet]
@@ -204,3 +211,70 @@ tasks:
     internal: true
     dir: config/manager
     cmd: '"{{.KUSTOMIZE}}" edit set image ghcr.io/open-component-model/kubernetes/controller={{.CONTROLLER_IMG}}'
+
+  # Helm chart tasks
+  helm/schema:
+    desc: "Generate JSON schema from chart values.yaml"
+    deps: [helm-schema-plugin]
+    dir: chart
+    cmd: 'helm schema -f values.yaml -o values.schema.json'
+    sources:
+      - chart/values.yaml
+    generates:
+      - chart/values.schema.json
+
+  helm/lint:
+    desc: "Lint the Helm chart"
+    cmd: 'helm lint chart/'
+
+  helm/template:
+    desc: "Render Helm chart templates with test values"
+    cmd: 'helm template ocm-k8s-toolkit chart/ --namespace ocm-k8s-toolkit-system -f chart/test-values.yaml'
+
+  helm/install:
+    desc: "Install the Helm chart"
+    cmds:
+      - |
+        helm install ocm-k8s-toolkit chart/ \
+          -f chart/test-values.yaml \
+          --namespace ocm-k8s-toolkit-system \
+          --create-namespace \
+          --wait \
+          --timeout 120s
+
+  helm/uninstall:
+    desc: "Uninstall the Helm chart"
+    cmd: 'helm uninstall ocm-k8s-toolkit --namespace ocm-k8s-toolkit-system --ignore-not-found'
+
+  helm/docs:
+    desc: "Generate Helm chart documentation"
+    deps: [helm-docs-tool]
+    dir: chart
+    cmd: 'helm-docs'
+    sources:
+      - chart/values.yaml
+      - chart/README.md
+    generates:
+      - chart/README.md
+
+  helm-docs-tool:
+    internal: true
+    silent: true
+    desc: "Install helm-docs if not present"
+    cmd: |
+      if ! command -v helm-docs &> /dev/null; then
+        go install github.com/norwoodj/helm-docs/cmd/helm-docs@latest
+      fi
+    status:
+      - command -v helm-docs
+
+  helm-schema-plugin:
+    internal: true
+    silent: true
+    desc: "Install helm-values-schema-json plugin if not present"
+    cmd: |
+      if ! helm plugin list | grep -q "schema"; then
+        helm plugin install https://github.com/losisin/helm-values-schema-json
+      fi
+    status:
+      - helm plugin list | grep -q "schema"
