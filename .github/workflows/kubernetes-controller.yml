@@ -23,10 +23,50 @@ concurrency:
   group: e2e-${{ github.workflow }}-${{ github.ref }}
 
 jobs:
-  E2E:
-    name: E2E
+  verify-chart:
+    name: Verify Chart
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - name: Setup Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Helm
+        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814 # v4
+        with:
+          version: v3.14.0
+      - name: Generate values schema
+        working-directory: kubernetes/controller
+        run: task helm/schema
+      - name: Generate chart documentation
+        working-directory: kubernetes/controller
+        run: task helm/docs
+      - name: Lint chart
+        working-directory: kubernetes/controller
+        run: task helm/lint
+      - name: Render chart templates
+        working-directory: kubernetes/controller
+        run: task helm/template
+      - name: Verify no uncommitted changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Uncommitted changes detected after running helm tasks"
+            git status
+            git diff
+            exit 1
+          fi
+          echo "No uncommitted changes detected"
+  E2E:
+    name: E2E with Helm
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: verify-chart
     steps:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -35,39 +75,34 @@ jobs:
             kubernetes/controller
             .github/workflows/kubernetes-controller.yml
             Taskfile.yml
-
       - name: Setup Go (required for CLI build)
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
         with:
           go-version-file: kubernetes/controller/go.mod
           cache: false
-
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Set up docker
         uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4 # v4
-
       - name: Setup ocm
         uses: open-component-model/ocm-setup-action@655f3525fd283ca7d22e6b2ceec42324331df401 # v1.0.0
-
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@8454b02a32e48d775b9f563cb51fdcb1787b5b93 # v2.7.5
-
-      - name: Setup Local E2E Test Cluster
+      - name: Install Helm
+        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814 # v4
+        with:
+          version: v3.14.0
+      - name: Create kind cluster with dependencies
         run: task kubernetes/controller:test/e2e/setup/local
-
-      - name: Run
-        run: task kubernetes/controller:test/e2e
-
+      - name: Run E2E tests with Helm chart
+        run: task kubernetes/controller:test/e2e/helm
       - name: Cleanup unused cache
         shell: bash
         run: |
-          docker system prune --force        
-
+          docker system prune --force
   publish_latest:
     name: "Publish Latest Image"
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -109,11 +144,20 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build & Push
+      - name: Build & Push Controller Image
         env:
           # create an additional tag that is easy to pin to and reference
           CONTROLLER_IMG: "ghcr.io/open-component-model/kubernetes/controller:${{ steps.version.outputs.version }} ghcr.io/open-component-model/kubernetes/controller:latest"
         run: task kubernetes/controller:docker-build/multi-arch PUSH=true
+      - name: Install Helm
+        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814 # v4
+        with:
+          version: v3.14.0
+      - name: Package and Push Helm Chart
+        working-directory: kubernetes/controller
+        run: |
+          helm package chart/ --app-version "${{ steps.version.outputs.version }}"
+          helm push ocm-k8s-toolkit-*.tgz oci://ghcr.io/open-component-model/charts
       - name: Cleanup unused cache
         shell: bash
         run: |
