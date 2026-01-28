@@ -73,7 +73,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.healthProbe.bindAddress | string | `":8081"` | Address the health probe endpoint binds to |
 | manager.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
 | manager.image.repository | string | `"ghcr.io/open-component-model/kubernetes/controller"` | Controller image repository |
-| manager.image.tag | string | `"latest"` | Controller image tag |
+| manager.image.tag | string | `""` | Controller image tag (defaults to Chart.AppVersion if empty) |
 | manager.imagePullSecrets | list | `[]` | Image pull secrets for the controller |
 | manager.leaderElection.enabled | bool | `true` | Enable leader election for controller manager |
 | manager.livenessProbe.initialDelaySeconds | int | `15` | Initial delay before starting liveness probes |
@@ -107,15 +107,52 @@ Kubernetes: `>=1.26.0-0`
 
 Run these tasks from the `kubernetes/controller` directory.
 
-### Required tasks before committing
+### Regenerating CRDs and RBAC
 
-After modifying `values.yaml`, run these tasks to regenerate artifacts:
+When API types or RBAC markers change, regenerate the Helm chart manifests:
+
+```bash
+task helm/sync-manifests
+```
+
+This runs `kubebuilder edit --plugins=helm/v2-alpha` which:
+1. Runs `controller-gen` to generate CRDs and RBAC from Go source markers
+2. Converts kustomize manifests to Helm-templated manifests in `chart/templates/`
+
+> **Note:** Only CRDs and RBAC manifests are regenerated automatically. Other templates (e.g., `manager.yaml`, `_helpers.tpl`) are managed manually.
+
+### Validating changes
+
+Before committing, run validation to ensure all generated files are in sync:
+
+```bash
+task helm/validate
+```
+
+This checks:
+- Chart linting passes
+- Templates render successfully
+- CRDs, RBAC, schema, and docs are up to date
+
+### Regenerating artifacts after values.yaml changes
 
 ```bash
 task helm/schema    # Regenerate values.schema.json
 task helm/docs      # Regenerate README.md
-task helm/lint      # Validate chart syntax
 ```
+
+### Packaging the chart
+
+Package the chart for distribution:
+
+```bash
+task helm/package                                    # Use versions from Chart.yaml
+task helm/package VERSION=1.0.0                      # Override chart version
+task helm/package APP_VERSION=1.0.0                  # Override app version (image tag)
+task helm/package VERSION=1.0.0 APP_VERSION=1.0.0   # Override both
+```
+
+The packaged chart is saved to `dist/ocm-k8s-toolkit-<version>.tgz`.
 
 ### Other useful tasks
 
