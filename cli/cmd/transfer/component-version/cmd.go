@@ -3,6 +3,7 @@ package component_version
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -125,7 +126,16 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 
 	graph, err := b.BuildAndCheck(tgd)
 	if err != nil {
-		return fmt.Errorf("graph validation failed: %w", err)
+		reader, rerr := renderTGD(tgd, output)
+		defer func() {
+			_ = reader.Close()
+		}()
+		raw, _ := io.ReadAll(reader)
+		return errors.Join(
+			err,
+			rerr,
+			fmt.Errorf("%s", raw),
+		)
 	}
 
 	if dryRun {

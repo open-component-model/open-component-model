@@ -62,7 +62,7 @@ func BuildGraphDefinition(
 
 	tgd := &transformv1alpha1.TransformationGraphDefinition{
 		Environment: &runtime.Unstructured{
-			Data: map[string]interface{}{
+			Data: map[string]any{
 				"to": AsUnstructured(toSpec).Data,
 			},
 		},
@@ -92,7 +92,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 		}
 
 		// Track resource transformation IDs for building descriptor
-		resourceTransformIDs := make(map[int]string) // map[resourceIndex]addTransformID
+		resourceTransformIDs := make(map[int]string)
 
 		// Process local resources
 		for i, resource := range v2desc.Component.Resources {
@@ -103,8 +103,8 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 				getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
 				addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 
-				// Convert resourceIdentity to map[string]interface{} for deep copy compatibility
-				resourceIdentityMap := make(map[string]interface{})
+				// Convert resourceIdentity to map[string]any for deep copy compatibility
+				resourceIdentityMap := make(map[string]any)
 				for k, v := range resourceIdentity {
 					resourceIdentityMap[k] = v
 				}
@@ -115,7 +115,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 						Type: ChooseGetLocalResourceType(ref.Repository),
 						ID:   getResourceID,
 					},
-					Spec: &runtime.Unstructured{Data: map[string]interface{}{
+					Spec: &runtime.Unstructured{Data: map[string]any{
 						"repository":       AsUnstructured(ref.Repository).Data,
 						"component":        ref.Component,
 						"version":          ref.Version,
@@ -130,7 +130,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 						Type: ChooseAddLocalResourceType(toSpec),
 						ID:   addResourceID,
 					},
-					Spec: &runtime.Unstructured{Data: map[string]interface{}{
+					Spec: &runtime.Unstructured{Data: map[string]any{
 						"repository": AsUnstructured(toSpec).Data,
 						"component":  ref.Component,
 						"version":    ref.Version,
@@ -150,7 +150,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 		if err != nil {
 			return fmt.Errorf("cannot marshal v2 descriptor: %w", err)
 		}
-		mapDesc := make(map[string]interface{})
+		mapDesc := make(map[string]any)
 		if err := json.Unmarshal(rawV2Desc, &mapDesc); err != nil {
 			return fmt.Errorf("cannot unmarshal v2 descriptor: %w", err)
 		}
@@ -159,10 +159,10 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 
 		// Build upload transformation
 		// If there are local resources, we need to reconstruct the descriptor with updated resources
-		var descriptorSpec interface{}
+		var descriptorSpec any
 		if len(resourceTransformIDs) > 0 {
 			// Build resources array with CEL expressions for updated resources
-			resourcesArray := make([]interface{}, len(v2desc.Component.Resources))
+			resourcesArray := make([]any, len(v2desc.Component.Resources))
 			for i := range v2desc.Component.Resources {
 				if addID, ok := resourceTransformIDs[i]; ok {
 					// Reference updated resource from AddLocalResource output using CEL
@@ -175,7 +175,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 
 			// Build descriptor with updated resources and all required fields
 			// All fields are required by the schema even if null
-			componentMap := map[string]interface{}{
+			componentMap := map[string]any{
 				"name":      fmt.Sprintf("${environment.%s.component.name}", id),
 				"version":   fmt.Sprintf("${environment.%s.component.version}", id),
 				"provider":  fmt.Sprintf("${environment.%s.component.provider}", id),
@@ -201,7 +201,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 				componentMap["componentReferences"] = nil
 			}
 
-			descriptorSpec = map[string]interface{}{
+			descriptorSpec = map[string]any{
 				"meta":      fmt.Sprintf("${environment.%s.meta}", id),
 				"component": componentMap,
 			}
@@ -215,7 +215,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 				Type: ChooseAddType(toSpec),
 				ID:   id + "Upload",
 			},
-			Spec: &runtime.Unstructured{Data: map[string]interface{}{
+			Spec: &runtime.Unstructured{Data: map[string]any{
 				"repository": AsUnstructured(toSpec).Data,
 				"descriptor": descriptorSpec,
 			}},
