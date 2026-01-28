@@ -1,8 +1,10 @@
 package v1
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"iter"
@@ -13,6 +15,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -353,6 +356,35 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 		return nil, fmt.Errorf("getting component version repository for %q failed: %w", specification, err)
 	}
 	return repo, nil
+}
+
+func (f *FallbackRepository) GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
+	specdata, err := json.Marshal(specification)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling repository to json failed: %w", err)
+	}
+	specdata, err = jsoncanonicalizer.Transform(specdata)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalizing repository json failed: %w", err)
+	}
+	for _, resolver := range f.resolvers {
+		data, err := json.Marshal(resolver.Repository)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling repository to json failed: %w", err)
+		}
+		data, err = jsoncanonicalizer.Transform(data)
+		if err != nil {
+			return nil, fmt.Errorf("canonicalizing repository json failed: %w", err)
+		}
+		if bytes.Equal(specdata, data) {
+			repo, err := f.getRepositoryFromCache(ctx, 0, resolver)
+			if err != nil {
+				return nil, fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err)
+			}
+			return repo, nil
+		}
+	}
+	return nil, fmt.Errorf("no repository found for specification %v", specification)
 }
 
 // Deprecated

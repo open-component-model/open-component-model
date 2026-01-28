@@ -2,10 +2,7 @@ package providers
 
 import (
 	"context"
-	"fmt"
 
-	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
-	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/repository"
 	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
@@ -17,23 +14,16 @@ import (
 //
 //nolint:staticcheck // compatibility mode for deprecated resolvers
 type fallbackProvider struct {
-	repoProvider repository.ComponentVersionRepositoryProvider
-	graph        credentials.Resolver
-	resolvers    []*resolverruntime.Resolver
-	baseRepo     runtime.Typed
+	repo *fallback.FallbackRepository
 }
 
-var _ SpecResolvingProvider = (*fallbackProvider)(nil)
+var _ ComponentVersionRepositoryForComponentProvider = (*fallbackProvider)(nil)
 
-func (f *fallbackProvider) GetRepositorySpecForComponent(_ context.Context, _, _ string) (runtime.Typed, error) {
-	return f.baseRepo, nil
+func (f *fallbackProvider) GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
+	return f.repo.GetComponentVersionRepositoryForSpecification(ctx, specification)
 }
 
 //nolint:staticcheck // compatibility mode for deprecated resolvers
 func (f *fallbackProvider) GetComponentVersionRepositoryForComponent(ctx context.Context, _, _ string) (repository.ComponentVersionRepository, error) {
-	repo, err := fallback.NewFallbackRepository(ctx, f.repoProvider, f.graph, f.resolvers)
-	if err != nil {
-		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
-	}
-	return repo, nil
+	return f.repo, nil
 }
