@@ -98,7 +98,7 @@ jobs:
       - name: Create kind cluster with dependencies
         run: task kubernetes/controller:test/e2e/setup/local
       - name: Run E2E tests with Helm chart
-        run: task kubernetes/controller:test/e2e/helm
+        run: task kubernetes/controller:test/e2e
       - name: Cleanup unused cache
         shell: bash
         run: |
@@ -156,8 +156,8 @@ jobs:
       - name: Package and Push Helm Chart
         working-directory: kubernetes/controller
         run: |
-          helm package chart/ --app-version "${{ steps.version.outputs.version }}"
-          helm push ocm-k8s-toolkit-*.tgz oci://ghcr.io/open-component-model/charts
+          task helm/package VERSION=${{ steps.version.outputs.version }} APP_VERSION=${{ steps.version.outputs.version }}
+          helm push dist/ocm-k8s-toolkit-*.tgz oci://ghcr.io/open-component-model/charts
       - name: Cleanup unused cache
         shell: bash
         run: |
