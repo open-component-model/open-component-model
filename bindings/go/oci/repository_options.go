@@ -9,8 +9,6 @@ import (
 	"oras.land/oras-go/v2"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci/cache"
-	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
@@ -29,12 +27,6 @@ type RepositoryOptions struct {
 	// Scheme is the runtime scheme used for type conversion.
 	// If not provided, a new scheme will be created with default registrations.
 	Scheme *runtime.Scheme
-	// LocalManifestCache is used to temporarily store local blobs until they are added to a component version.
-	// If not provided, a new memory based cache will be created.
-	LocalManifestCache cache.OCIDescriptorCache
-	// LocalLayerCache is used to temporarily store local blobs until they are added to a component version.
-	// If not provided, a new memory based cache will be created.
-	LocalLayerCache cache.OCIDescriptorCache
 	// Resolver resolves component version references to OCI stores.
 	// This is required and must be provided.
 	Resolver Resolver
@@ -93,20 +85,6 @@ type RepositoryOption func(*RepositoryOptions)
 func WithScheme(scheme *runtime.Scheme) RepositoryOption {
 	return func(o *RepositoryOptions) {
 		o.Scheme = scheme
-	}
-}
-
-// WithManifestCache sets the local oci descriptor cache for manifests.
-func WithManifestCache(memory cache.OCIDescriptorCache) RepositoryOption {
-	return func(o *RepositoryOptions) {
-		o.LocalManifestCache = memory
-	}
-}
-
-// WithLayerCache sets the local oci descriptor cache for the layers.
-func WithLayerCache(memory cache.OCIDescriptorCache) RepositoryOption {
-	return func(o *RepositoryOptions) {
-		o.LocalLayerCache = memory
 	}
 }
 
@@ -174,13 +152,6 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		options.Scheme = DefaultRepositoryScheme
 	}
 
-	if options.LocalManifestCache == nil {
-		options.LocalManifestCache = inmemory.New()
-	}
-	if options.LocalLayerCache == nil {
-		options.LocalLayerCache = inmemory.New()
-	}
-
 	if options.Creator == "" {
 		options.Creator = "Open Component Model Go Reference Library"
 	}
@@ -219,8 +190,6 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 
 	return &Repository{
 		scheme:                      options.Scheme,
-		localArtifactManifestCache:  options.LocalManifestCache,
-		localArtifactLayerCache:     options.LocalLayerCache,
 		resolver:                    options.Resolver,
 		creatorAnnotation:           options.Creator,
 		resourceCopyOptions:         *options.ResourceCopyOptions,
