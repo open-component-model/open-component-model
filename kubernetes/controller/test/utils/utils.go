@@ -45,10 +45,6 @@ func DeployAndWaitForResource(ctx context.Context, manifestFilePath, waitingFor,
 	return WaitForResource(ctx, waitingFor, timeout, "-f", manifestFilePath)
 }
 
-type DeployResourceOpts struct {
-	IgnoreCleanupErr bool
-}
-
 // DeployResource takes a manifest file of a k8s resource and deploys it with "kubectl". Correspondingly,
 // a DeferCleanup-handler is created that will delete the resource, when the test-suite ends.
 // In contrast to "DeployAndWaitForResource", this function does not wait for a certain condition to be fulfilled.
