@@ -8,9 +8,7 @@ import (
 	"testing"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
-	"ocm.software/open-component-model/bindings/go/blob"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -40,34 +38,7 @@ func (m *mockRepoProvider) GetJSONSchemaForRepositorySpecification(typ runtime.T
 // mockRepo implements repository.ComponentVersionRepository for testing
 type mockRepo struct {
 	spec runtime.Typed
-}
-
-func (m *mockRepo) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
-	return fmt.Errorf("not implemented for test")
-}
-
-func (m *mockRepo) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
-	return nil, fmt.Errorf("not implemented for test")
-}
-
-func (m *mockRepo) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
-	return nil, fmt.Errorf("not implemented for test")
-}
-
-func (m *mockRepo) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	return nil, fmt.Errorf("not implemented for test")
-}
-
-func (m *mockRepo) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
-	return nil, nil, fmt.Errorf("not implemented for test")
-}
-
-func (m *mockRepo) AddLocalSource(ctx context.Context, component, version string, src *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	return nil, fmt.Errorf("not implemented for test")
-}
-
-func (m *mockRepo) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
-	return nil, nil, fmt.Errorf("not implemented for test")
+	repository.ComponentVersionRepository
 }
 
 // TestPathMatcherProvider_Caching verifies that repositories are cached

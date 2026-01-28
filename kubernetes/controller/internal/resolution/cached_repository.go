@@ -143,13 +143,10 @@ func (c *CacheBackedRepository) GetLocalSource(ctx context.Context, component, v
 	return repo.GetLocalSource(ctx, component, version, identity)
 }
 
-// CheckHealth calls health check on the underlying repository.
-// Since we use a provider, we get the repository for a placeholder component to check health.
+// CheckHealth calls health check on the underlying base repository.
 // Returns nil if the repository does not support health checking.
 func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
-	// For health check, we use a placeholder - the actual repo returned should support health check
-	// if any of the underlying repos do. This is a limitation but acceptable for health checks.
-	repo, err := c.provider.GetComponentVersionRepositoryForComponent(ctx, "health-check", "v0.0.0")
+	repo, err := c.provider.GetComponentVersionRepositoryForSpecification(ctx, c.baseRepoSpec)
 	if err != nil {
 		return fmt.Errorf("failed to get repository for health check: %w", err)
 	}

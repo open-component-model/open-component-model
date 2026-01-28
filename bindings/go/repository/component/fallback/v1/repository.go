@@ -1,7 +1,6 @@
 package v1
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -60,6 +59,11 @@ type FallbackRepository struct {
 	// resolver slice corresponds to the index of the repository in this slice.
 	repositoriesForResolverCacheMu sync.RWMutex
 	repositoriesForResolverCache   []repository.ComponentVersionRepository
+
+	// Precomputed map of valid repository specifications (canonicalized JSON)
+	// for O(1) lookup in GetComponentVersionRepositoryForSpecification.
+	// Maps canonicalized spec -> resolver index.
+	validSpecs map[string]int
 }
 
 type FallbackRepositoryOption func(*FallbackRepositoryOptions)
@@ -94,6 +98,21 @@ func NewFallbackRepository(_ context.Context, repositoryProvider repository.Comp
 	slices.SortStableFunc(resolvers, func(a, b *resolverruntime.Resolver) int {
 		return cmp.Compare(b.Priority, a.Priority)
 	})
+
+	// Precompute valid specs for O(1) lookup
+	validSpecs := make(map[string]int)
+	for i, resolver := range resolvers {
+		data, err := json.Marshal(resolver.Repository)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling repository to json failed: %w", err)
+		}
+		data, err = jsoncanonicalizer.Transform(data)
+		if err != nil {
+			return nil, fmt.Errorf("canonicalizing repository json failed: %w", err)
+		}
+		validSpecs[string(data)] = i
+	}
+
 	return &FallbackRepository{
 		goRoutineLimit: options.GoRoutineLimit,
 
@@ -102,6 +121,7 @@ func NewFallbackRepository(_ context.Context, repositoryProvider repository.Comp
 
 		resolvers:                    resolvers,
 		repositoriesForResolverCache: make([]repository.ComponentVersionRepository, len(resolvers)),
+		validSpecs:                   validSpecs,
 	}, nil
 }
 
@@ -359,6 +379,7 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 }
 
 func (f *FallbackRepository) GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
+	// Canonicalize the specification to check if it's valid
 	specdata, err := json.Marshal(specification)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling repository to json failed: %w", err)
@@ -367,24 +388,19 @@ func (f *FallbackRepository) GetComponentVersionRepositoryForSpecification(ctx c
 	if err != nil {
 		return nil, fmt.Errorf("canonicalizing repository json failed: %w", err)
 	}
-	for _, resolver := range f.resolvers {
-		data, err := json.Marshal(resolver.Repository)
-		if err != nil {
-			return nil, fmt.Errorf("marshaling repository to json failed: %w", err)
-		}
-		data, err = jsoncanonicalizer.Transform(data)
-		if err != nil {
-			return nil, fmt.Errorf("canonicalizing repository json failed: %w", err)
-		}
-		if bytes.Equal(specdata, data) {
-			repo, err := f.getRepositoryFromCache(ctx, 0, resolver)
-			if err != nil {
-				return nil, fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err)
-			}
-			return repo, nil
-		}
+
+	// O(1) lookup in precomputed validSpecs map
+	index, found := f.validSpecs[string(specdata)]
+	if !found {
+		return nil, fmt.Errorf("no repository found for specification %v", specification)
 	}
-	return nil, fmt.Errorf("no repository found for specification %v", specification)
+
+	// Get repository from cache using the correct index
+	repo, err := f.getRepositoryFromCache(ctx, index, f.resolvers[index])
+	if err != nil {
+		return nil, fmt.Errorf("getting repository for resolver %v failed: %w", f.resolvers[index], err)
+	}
+	return repo, nil
 }
 
 // Deprecated
