@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        control-plane: controller-manager
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+    namespace: {{ .Release.Namespace }}
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            control-plane: controller-manager
+    template:
+        metadata:
+            annotations:
+                kubectl.kubernetes.io/default-container: manager
+            labels:
+                control-plane: controller-manager
+        spec:
+            {{- with .Values.manager.tolerations }}
+            tolerations: {{ toYaml . | nindent 16 }}
+            {{- end }}
+            {{- with .Values.manager.affinity }}
+            affinity: {{ toYaml . | nindent 16 }}
+            {{- end }}
+            {{- with .Values.manager.nodeSelector }}
+            nodeSelector: {{ toYaml . | nindent 16 }}
+            {{- end }}
+            containers:
+                - args:
+                    {{- /* Health probe */}}
+                    - --health-probe-bind-address={{ .Values.manager.healthProbe.bindAddress | default ":8081" }}
+                    {{- /* Metrics */}}
+                    {{- if .Values.manager.metricsServer.bindAddress }}
+                    - --metrics-bind-address={{ .Values.manager.metricsServer.bindAddress }}
+                    {{- end }}
+                    {{- if .Values.manager.metricsServer.secure }}
+                    - --metrics-secure
+                    {{- end }}
+                    {{- if .Values.manager.metricsServer.enableHttp2 }}
+                    - --enable-http2
+                    {{- end }}
+                    {{- /* Leader election */}}
+                    {{- if .Values.manager.leaderElection.enabled }}
+                    - --leader-elect
+                    {{- end }}
+                    {{- /* Concurrency */}}
+                    {{- with .Values.manager.concurrency }}
+                    {{- if .resource }}
+                    - --resource-controller-concurrency={{ .resource }}
+                    {{- end }}
+                    {{- end }}
+                    {{- /* Resolver */}}
+                    {{- with .Values.manager.resolver }}
+                    {{- if .workerCount }}
+                    - --resolver-worker-count={{ .workerCount }}
+                    {{- end }}
+                    {{- if .workerQueueLength }}
+                    - --resolver-worker-queue-length={{ .workerQueueLength }}
+                    {{- end }}
+                    {{- end }}
+                    {{- /* Cache */}}
+                    {{- with .Values.manager.cache }}
+                    {{- if .ocmContextSize }}
+                    - --ocm-context-cache-size={{ .ocmContextSize }}
+                    {{- end }}
+                    {{- if .ocmSessionSize }}
+                    - --ocm-session-cache-size={{ .ocmSessionSize }}
+                    {{- end }}
+                    {{- if .deployerDownloadSize }}
+                    - --deployer-download-cache-size={{ .deployerDownloadSize }}
+                    {{- end }}
+                    {{- end }}
+                    {{- /* Events */}}
+                    {{- if .Values.manager.events.address }}
+                    - --events-addr={{ .Values.manager.events.address }}
+                    {{- end }}
+                    {{- /* Logging */}}
+                    {{- with .Values.manager.logging }}
+                    {{- if .level }}
+                    - --zap-log-level={{ .level }}
+                    {{- end }}
+                    {{- if .development }}
+                    - --zap-devel
+                    {{- end }}
+                    {{- if .encoder }}
+                    - --zap-encoder={{ .encoder }}
+                    {{- end }}
+                    {{- end }}
+                    {{- /* Extra args */}}
+                    {{- range .Values.manager.extraArgs }}
+                    - {{ . }}
+                    {{- end }}
+                  command:
+                    - /manager
+                  image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag }}"
+                  imagePullPolicy: {{ .Values.manager.image.pullPolicy }}
+                  livenessProbe:
+                    httpGet:
+                        path: {{ .Values.manager.livenessProbe.path }}
+                        port: {{ .Values.manager.livenessProbe.port }}
+                    initialDelaySeconds: {{ .Values.manager.livenessProbe.initialDelaySeconds }}
+                    periodSeconds: {{ .Values.manager.livenessProbe.periodSeconds }}
+                  name: manager
+                  ports:
+                    - containerPort: 9090
+                      name: http
+                      protocol: TCP
+                  readinessProbe:
+                    httpGet:
+                        path: {{ .Values.manager.readinessProbe.path }}
+                        port: {{ .Values.manager.readinessProbe.port }}
+                    initialDelaySeconds: {{ .Values.manager.readinessProbe.initialDelaySeconds }}
+                    periodSeconds: {{ .Values.manager.readinessProbe.periodSeconds }}
+                  resources:
+                    {{- if .Values.manager.resources }}
+                    {{- toYaml .Values.manager.resources | nindent 20 }}
+                    {{- else }}
+                    {}
+                    {{- end }}
+                  securityContext:
+                    {{- if .Values.manager.securityContext }}
+                    {{- toYaml .Values.manager.securityContext | nindent 20 }}
+                    {{- else }}
+                    {}
+                    {{- end }}
+                  volumeMounts:
+                    - mountPath: /data
+                      name: data
+            securityContext:
+              {{- if .Values.manager.podSecurityContext }}
+              {{- toYaml .Values.manager.podSecurityContext | nindent 14 }}
+              {{- else }}
+              {}
+              {{- end }}
+            serviceAccountName: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+            terminationGracePeriodSeconds: 10
+            volumes:
+                - emptyDir: {}
+                  name: data
