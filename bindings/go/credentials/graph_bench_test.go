@@ -12,7 +12,7 @@ func Benchmark_Perf_Resolve_Direct(b *testing.B) {
 	r := require.New(b)
 	graph, err := GetGraph(b, testYAML)
 	r.NoError(err)
-	var creds map[string]string
+	var creds runtime.Typed
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -30,7 +30,7 @@ func Benchmark_Perf_Resolve_Repository(b *testing.B) {
 	r := require.New(b)
 	graph, err := GetGraph(b, testYAML)
 	r.NoError(err)
-	var creds map[string]string
+	var creds runtime.Typed
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -65,7 +65,7 @@ func Benchmark_Perf_Resolve_Indirect_PartialPath(b *testing.B) {
 	r := require.New(b)
 	graph, err := GetGraph(b, testYAML)
 	r.NoError(err)
-	var creds map[string]string
+	var creds runtime.Typed
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
