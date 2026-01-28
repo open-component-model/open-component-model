@@ -3,10 +3,9 @@ package resolution
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/hashicorp/golang-lru/v2/expirable"
+	"k8s.io/utils/lru"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
@@ -30,7 +29,7 @@ func NewResolver(client client.Reader, logger *logr.Logger, workerPool *workerpo
 		logger:        logger,
 		workerPool:    workerPool,
 		pluginManager: pluginManager,
-		repoCache:     expirable.NewLRU[string, providers.ComponentVersionRepositoryForComponentProvider](0, nil, time.Minute*30),
+		repoCache:     lru.New(100),
 	}
 
 	return resolver
@@ -48,7 +47,7 @@ type Resolver struct {
 	logger        *logr.Logger
 	workerPool    *workerpool.WorkerPool
 	pluginManager *manager.PluginManager
-	repoCache     *expirable.LRU[string, providers.ComponentVersionRepositoryForComponentProvider]
+	repoCache     *lru.Cache
 }
 
 // RepositoryOptions contains all the options the resolution service requires to perform a resolve operation.
@@ -85,9 +84,14 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 	if err != nil {
 		return nil, fmt.Errorf("failed to build repository cache key: %w", err)
 	}
-	provider, ok := r.repoCache.Get(cacheKey)
-	if !ok {
+	var provider providers.ComponentVersionRepositoryForComponentProvider
+	if cached, ok := r.repoCache.Get(cacheKey); ok {
+		provider = cached.(providers.ComponentVersionRepositoryForComponentProvider)
+	} else {
 		provider, err = r.createProvider(ctx, opts.RepositorySpec, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create provider: %w", err)
+		}
 		r.repoCache.Add(cacheKey, provider)
 	}
 
