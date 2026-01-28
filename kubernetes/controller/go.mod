@@ -13,7 +13,7 @@ require (
 	github.com/fluxcd/pkg/runtime v0.92.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/cel-go v0.26.1
-	github.com/mandelsoft/goutils v0.0.0-20250821215621-af06c70600cf
+	github.com/mandelsoft/goutils v0.0.0-20251225170327-b32fc0dd2706
 	github.com/mandelsoft/vfs v0.4.5-0.20250514111339-d7b067920e91
 	github.com/onsi/ginkgo/v2 v2.27.3
 	github.com/onsi/gomega v1.38.3
