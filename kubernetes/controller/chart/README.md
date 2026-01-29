@@ -73,7 +73,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.healthProbe.bindAddress | string | `":8081"` | Address the health probe endpoint binds to |
 | manager.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
 | manager.image.repository | string | `"ghcr.io/open-component-model/kubernetes/controller"` | Controller image repository |
-| manager.image.tag | string | `""` | Controller image tag (defaults to Chart.AppVersion if empty) |
+| manager.image.tag | string | `"1.2.3"` | Controller image tag |
 | manager.imagePullSecrets | list | `[]` | Image pull secrets for the controller |
 | manager.leaderElection.enabled | bool | `true` | Enable leader election for controller manager |
 | manager.livenessProbe.initialDelaySeconds | int | `15` | Initial delay before starting liveness probes |

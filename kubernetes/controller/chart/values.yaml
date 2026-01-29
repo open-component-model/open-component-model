@@ -11,7 +11,7 @@ manager:
   image:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
-    # -- Controller image tag (defaults to Chart.AppVersion if empty)
+    # -- Controller image tag
     tag: "1.2.3"
     # -- Image pull policy
     pullPolicy: IfNotPresent
