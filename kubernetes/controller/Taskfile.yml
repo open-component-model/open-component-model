@@ -24,7 +24,9 @@ vars:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${HELM_DOCS_VERSION:-v1.14.2}"'
   KUBEBUILDER_VERSION:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${KUBEBUILDER_VERSION:-v4.11.1}"'
-
+  YQ_VERSION:
+    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${YQ_VERSION:-v4.49.2}"'
+  
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
   LOCALBIN: '{{.TASKFILE_DIR}}/bin'
   KUBECTL: '{{.KUBECTL | default "kubectl"}}'
@@ -33,6 +35,7 @@ vars:
   ENVTEST: '{{.LOCALBIN}}/setup-envtest-{{.ENVTEST_VERSION}}'
   HELM_DOCS: '{{.LOCALBIN}}/helm-docs-{{.HELM_DOCS_VERSION}}'
   KUBEBUILDER: '{{.LOCALBIN}}/kubebuilder-{{.KUBEBUILDER_VERSION}}'
+  YQ: '{{.LOCALBIN}}/yq-{{.YQ_VERSION}}'
   IGNORE_NOT_FOUND: '{{.IGNORE_NOT_FOUND | default "false"}}'
   PLATFORMS: '{{.PLATFORMS | default "linux/arm64,linux/amd64"}}'
 
@@ -182,8 +185,10 @@ tasks:
 
   helm/package:
     desc: "Package the Helm chart with the specified version"
+    deps: [yq]
     cmds:
       - mkdir -p dist
+      - '{{ if .VERSION }}{{.YQ}} -i ".manager.image.tag = \"{{.VERSION}}\"" chart/values.yaml{{end}}'
       - helm package chart/ --destination dist/ {{if .VERSION}}--version {{.VERSION}}{{end}} {{if .APP_VERSION}}--app-version {{.APP_VERSION}}{{end}}
 
   helm/template:
@@ -243,6 +248,12 @@ tasks:
       - task: go-install-tool
         vars: { TOOL_PATH: '{{.KUBEBUILDER}}', PACKAGE: sigs.k8s.io/kubebuilder/v4, VERSION: '{{.KUBEBUILDER_VERSION}}' }
     generates: [ '{{.KUBEBUILDER}}' ]
+
+  yq:
+    deps:
+      - task: go-install-tool
+        vars: { TOOL_PATH: '{{.YQ}}', PACKAGE: github.com/mikefarah/yq/v4, VERSION: '{{.YQ_VERSION}}' }
+    generates: [ '{{.YQ}}' ]
 
   go-install-tool:
     internal: true
