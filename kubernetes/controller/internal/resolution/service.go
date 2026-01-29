@@ -76,6 +76,9 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 		}
 	}
 	baseRepoSpec := opts.RepositorySpec
+	if baseRepoSpec == nil {
+		return nil, fmt.Errorf("base repository spec is required")
+	}
 	var configHash []byte
 	if cfg != nil {
 		configHash = cfg.Hash

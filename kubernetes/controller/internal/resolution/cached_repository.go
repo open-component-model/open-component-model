@@ -73,6 +73,11 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 	}
 
 	keyFunc := func() (string, error) {
+		// Build cache key based on configuration hash, repository spec, component, and version.
+		// The baseRepoSpec is not necessarily the repository used to resolve the component.
+		// The actual repository is determined by the providers resolver
+		// configuration (which is represented through the config hash) and
+		// the base repository.
 		return buildCacheKey(configHash, c.baseRepoSpec, component, version)
 	}
 
