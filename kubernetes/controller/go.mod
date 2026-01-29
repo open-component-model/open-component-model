@@ -13,7 +13,7 @@ require (
 	github.com/fluxcd/pkg/runtime v0.92.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/cel-go v0.26.1
-	github.com/mandelsoft/goutils v0.0.0-20250821215621-af06c70600cf
+	github.com/mandelsoft/goutils v0.0.0-20251225170327-b32fc0dd2706
 	github.com/mandelsoft/vfs v0.4.5-0.20250514111339-d7b067920e91
 	github.com/onsi/ginkgo/v2 v2.27.3
 	github.com/onsi/gomega v1.38.3
@@ -39,15 +39,15 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.6
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260121092455-5a30258635be
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260126091519-9055050e57aa
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260127131318-2c2fb62ae8cc
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260127131318-2c2fb62ae8cc
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/oci v0.0.26
+	ocm.software/open-component-model/bindings/go/oci v0.0.27
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.5
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260121092455-5a30258635be
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260127131318-2c2fb62ae8cc
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260121092455-5a30258635be
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260127131318-2c2fb62ae8cc
 	oras.land/oras-go/v2 v2.6.0
 )
 
@@ -96,7 +96,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.6 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.6 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.16 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.17 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.18 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.16 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.16 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.4 // indirect
@@ -326,7 +326,7 @@ require (
 	github.com/texttheater/golang-levenshtein v1.0.1 // indirect
 	github.com/thales-e-security/pool v0.0.2 // indirect
 	github.com/theupdateframework/go-tuf v0.7.1-0.20240116141818-3dd2ccac05e1 // indirect
-	github.com/theupdateframework/go-tuf/v2 v2.3.1 // indirect
+	github.com/theupdateframework/go-tuf/v2 v2.4.1 // indirect
 	github.com/titanous/rocacheck v0.0.0-20171023193734-afe73141d399 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/tonglil/buflogr v1.1.1 // indirect

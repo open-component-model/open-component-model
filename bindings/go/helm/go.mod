@@ -10,7 +10,7 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/constructor v0.0.5
-	ocm.software/open-component-model/bindings/go/oci v0.0.26
+	ocm.software/open-component-model/bindings/go/oci v0.0.27
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	oras.land/oras-go/v2 v2.6.0
@@ -102,8 +102,8 @@ require (
 	golang.org/x/term v0.38.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251022142026-3a174f9686a8 // indirect
-	google.golang.org/grpc v1.77.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251029180050-ab9386a59fda // indirect
+	google.golang.org/grpc v1.78.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
@@ -120,8 +120,8 @@ require (
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260121092455-5a30258635be // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260121092455-5a30258635be // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260127131318-2c2fb62ae8cc // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260127131318-2c2fb62ae8cc // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.5 // indirect
 	sigs.k8s.io/controller-runtime v0.22.3 // indirect
