@@ -22,9 +22,17 @@ const (
 	PrivateKey           = "ocm.software"
 )
 
+// ignoreExamples lists examples that are tested elsewhere or should be skipped.
+var ignoreExamples = map[string]struct{}{
+	"applyset-pruning": {}, // tested in e2e_applyset_test.go
+}
+
 var _ = Describe("controller", func() {
 	Context("examples", func() {
 		for _, example := range examples {
+			if _, ok := ignoreExamples[example.Name()]; ok {
+				continue
+			}
 			fInfo, err := os.Stat(filepath.Join(examplesDir, example.Name()))
 			Expect(err).NotTo(HaveOccurred())
 			if !fInfo.IsDir() {
@@ -34,7 +42,6 @@ var _ = Describe("controller", func() {
 			reqFiles := []string{ComponentConstructor, Bootstrap}
 
 			It("should deploy the example "+example.Name(), func(ctx SpecContext) {
-
 				By("validating the example directory " + example.Name())
 				var files []string
 				Expect(filepath.WalkDir(
@@ -66,13 +73,14 @@ var _ = Describe("controller", func() {
 					signingKey,
 				)).To(Succeed())
 
+				if slices.Contains(files, K8sManifest) {
+					Expect(utils.MakeServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
+				}
+
 				By("bootstrapping the example")
 				Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
 				name := ""
 
-				if slices.Contains(files, K8sManifest) {
-					Expect(utils.MakeServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
-				}
 				if slices.Contains(files, Rgd) {
 					name = "rgd/" + example.Name()
 					Expect(utils.WaitForResource(ctx, "create", timeout, name)).To(Succeed())
@@ -131,9 +139,6 @@ var _ = Describe("controller", func() {
 						"'{.items[0].spec.containers[0].env[?(@.name==\"PODINFO_UI_MESSAGE\")].value}'",
 						example.Name(),
 					)).To(Succeed())
-				}
-				if slices.Contains(files, K8sManifest) {
-					Expect(utils.DeleteServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-controller-manager")).To(Succeed())
 				}
 			})
 		}

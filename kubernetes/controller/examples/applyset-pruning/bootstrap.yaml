@@ -1,0 +1,34 @@
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: applyset-pruning-repository
+spec:
+  repositorySpec:
+    # Adjust to your OCM repository
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: applyset-pruning-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/applyset-pruning
+  repositoryRef:
+    name: applyset-pruning-repository
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: applyset-pruning-resource
+spec:
+  componentRef:
+    name: applyset-pruning-component
+  resource:
+    byReference:
+      resource:
+        name: applyset-pruning-resource
+  interval: 10m
