@@ -239,15 +239,15 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 
 	set := r.createApplySet(deployer, logger)
 
-	metaData, err := set.Project(nil)
+	metadata, err := set.Project(nil)
 	if err != nil {
 		return fmt.Errorf("failed to project ApplySet: %w", err)
 	}
 
-	logger.Info("pruning ApplySet", "scope", metaData.PruneScope())
+	logger.Info("pruning ApplySet", "scope", metadata.PruneScope())
 	result, err := set.Prune(ctx, applyset.PruneOptions{
 		KeepUIDs:    nil,
-		Scope:       metaData.PruneScope(),
+		Scope:       metadata.PruneScope(),
 		Concurrency: runtime.NumCPU(),
 	})
 	if err != nil {
@@ -257,12 +257,14 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 	// Log results
 	logger.Info("ApplySet prune operation complete", "pruned", len(result.Pruned))
 
-	// nothing more to prune, remove finalizer
-	if result.HasPruned() {
+	// Prune calls delete on every resource found, even if its already being deleted.
+	// If we were to remove this check, the deployer might be deleted while a child is stuck in terminating state.
+	if !result.HasPruned() {
 		logger.Info("pruned resources, doing one more pruning until nothing more to prune")
 		return fmt.Errorf("waiting for all resources to be pruned")
 	}
 
+	// nothing more to prune, remove finalizer
 	return nil
 }
 
@@ -358,18 +360,9 @@ func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *d
 	if !deployer.GetDeletionTimestamp().IsZero() {
 		var errs []error
 
-		if controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
-			logger.Info("untracking resources before removing finalizer")
-			if err := r.Untrack(ctx, deployer); err != nil {
-				logger.Error(err, "waiting for tracked resources to be unregistered before pruning")
-				errs = append(errs, err)
-			} else {
-				logger.Info("successfully unregistered all resource watches for deployer")
-				controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
-			}
-		}
+		hasPruneSetFinalizer := controllerutil.ContainsFinalizer(deployer, applySetPruneFinalizer)
 
-		if controllerutil.ContainsFinalizer(deployer, applySetPruneFinalizer) {
+		if hasPruneSetFinalizer {
 			logger.Info("pruning ApplySet before removing finalizer")
 			if err := r.pruneWithApplySet(ctx, deployer); err != nil {
 				logger.Error(err, "waiting for ApplySet to be pruned before removing finalizer")
@@ -377,6 +370,15 @@ func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *d
 			} else {
 				logger.Info("successfully pruned ApplySet for deployer")
 				controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
+			}
+		} else if controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
+			logger.Info("untracking resources before removing finalizer")
+			if err := r.Untrack(ctx, deployer); err != nil {
+				logger.Error(err, "waiting for tracked resources to be unregistered before pruning")
+				errs = append(errs, err)
+			} else {
+				logger.Info("successfully unregistered all resource watches for deployer")
+				controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
 			}
 		}
 
@@ -686,17 +688,17 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 	}
 
 	logger.Info("projecting ApplySet and set deployer metadata")
-	metaData, err := set.Project(resourcesToAdd)
+	metadata, err := set.Project(resourcesToAdd)
 	if err != nil {
 		return fmt.Errorf("failed to project ApplySet: %w", err)
 	}
 
-	if err := r.setApplySetMetadata(ctx, deployer, metaData); err != nil {
+	if err := r.setApplySetMetadata(ctx, deployer, metadata); err != nil {
 		return fmt.Errorf("failed to set ApplySet metadata on deployer: %w", err)
 	}
 
 	logger.Info("applying ApplySet")
-	applyResult, metaData, err := set.Apply(ctx, resourcesToAdd, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
+	applyResult, metadata, err := set.Apply(ctx, resourcesToAdd, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
 	if err != nil {
 		return fmt.Errorf("failed to apply ApplySet: %w", err)
 	}
@@ -710,7 +712,7 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 
 	pruneResult, err := set.Prune(ctx, applyset.PruneOptions{
 		KeepUIDs:    applyResult.ObservedUIDs(),
-		Scope:       metaData.PruneScope(),
+		Scope:       metadata.PruneScope(),
 		Concurrency: runtime.NumCPU(),
 	})
 	if err != nil {
