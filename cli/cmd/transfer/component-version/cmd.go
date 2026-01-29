@@ -3,6 +3,7 @@ package component_version
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -125,7 +126,16 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 
 	graph, err := b.BuildAndCheck(tgd)
 	if err != nil {
-		return fmt.Errorf("graph validation failed: %w", err)
+		reader, rerr := renderTGD(tgd, output)
+		defer func() {
+			_ = reader.Close()
+		}()
+		raw, _ := io.ReadAll(reader)
+		return errors.Join(
+			err,
+			rerr,
+			fmt.Errorf("%s", raw),
+		)
 	}
 
 	if dryRun {
@@ -168,11 +178,27 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		CredentialProvider: credentialProvider,
 	}
 
+	// Resource transformers
+	ociGetResource := &transformer.GetLocalResource{
+		Scheme:             transformerScheme,
+		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
+		CredentialProvider: credentialProvider,
+	}
+	ociAddResource := &transformer.AddLocalResource{
+		Scheme:             transformerScheme,
+		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
+		CredentialProvider: credentialProvider,
+	}
+
 	return builder.NewBuilder(transformerScheme).
 		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
 		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
 		WithTransformer(&ociv1alpha1.CTFGetComponentVersion{}, ociGet).
-		WithTransformer(&ociv1alpha1.CTFAddComponentVersion{}, ociAdd)
+		WithTransformer(&ociv1alpha1.CTFAddComponentVersion{}, ociAdd).
+		WithTransformer(&ociv1alpha1.OCIGetLocalResource{}, ociGetResource).
+		WithTransformer(&ociv1alpha1.OCIAddLocalResource{}, ociAddResource).
+		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
+		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource)
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {
