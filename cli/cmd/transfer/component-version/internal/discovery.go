@@ -97,107 +97,9 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 		// Process local resources and OCI artifacts
 		for i, resource := range v2desc.Component.Resources {
 			if resource.Relation == descriptorv2.LocalRelation {
-				// Generate transformation IDs
-				resourceIdentity := resource.ToIdentity()
-				resourceID := identityToTransformationID(resourceIdentity)
-				getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
-				addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
-
-				// Convert resourceIdentity to map[string]any for deep copy compatibility
-				resourceIdentityMap := make(map[string]any)
-				for k, v := range resourceIdentity {
-					resourceIdentityMap[k] = v
-				}
-
-				// Create GetLocalResource transformation
-				getResourceTransform := transformv1alpha1.GenericTransformation{
-					TransformationMeta: meta.TransformationMeta{
-						Type: ChooseGetLocalResourceType(ref.Repository),
-						ID:   getResourceID,
-					},
-					Spec: &runtime.Unstructured{Data: map[string]any{
-						"repository":       AsUnstructured(ref.Repository).Data,
-						"component":        ref.Component,
-						"version":          ref.Version,
-						"resourceIdentity": resourceIdentityMap,
-					}},
-				}
-				tgd.Transformations = append(tgd.Transformations, getResourceTransform)
-
-				// Create AddLocalResource transformation
-				addResourceTransform := transformv1alpha1.GenericTransformation{
-					TransformationMeta: meta.TransformationMeta{
-						Type: ChooseAddLocalResourceType(toSpec),
-						ID:   addResourceID,
-					},
-					Spec: &runtime.Unstructured{Data: map[string]any{
-						"repository": AsUnstructured(toSpec).Data,
-						"component":  ref.Component,
-						"version":    ref.Version,
-						"resource":   fmt.Sprintf("${%s.output.resource}", getResourceID),
-						"file":       fmt.Sprintf("${%s.output.file}", getResourceID),
-					}},
-				}
-				tgd.Transformations = append(tgd.Transformations, addResourceTransform)
-
-				// Track this resource's transformation
-				resourceTransformIDs[i] = addResourceID
+				processLocalRelation(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
 			} else if isOCIArtifactAccess(resource.Access) {
-				// Process OCI artifacts (ociArtifact, ociImage, etc.)
-				resourceIdentity := resource.ToIdentity()
-				resourceID := identityToTransformationID(resourceIdentity)
-				getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
-				addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
-
-				// Convert resourceIdentity to map[string]any for deep copy compatibility
-				resourceIdentityMap := make(map[string]any)
-				for k, v := range resourceIdentity {
-					resourceIdentityMap[k] = v
-				}
-
-				// Create GetOCIArtifact transformation
-				getArtifactTransform := transformv1alpha1.GenericTransformation{
-					TransformationMeta: meta.TransformationMeta{
-						Type: ChooseGetOCIArtifactType(ref.Repository),
-						ID:   getResourceID,
-					},
-					Spec: &runtime.Unstructured{Data: map[string]any{
-						"repository":       AsUnstructured(ref.Repository).Data,
-						"component":        ref.Component,
-						"version":          ref.Version,
-						"resourceIdentity": resourceIdentityMap,
-					}},
-				}
-				tgd.Transformations = append(tgd.Transformations, getArtifactTransform)
-
-				// Generate target reference for OCI repositories
-				// Format: {baseUrl}/{subPath}/{resourceName}:{resourceVersion}
-				targetReference := generateTargetImageReference(toSpec, resource.Name, resource.Version)
-
-				// Create AddOCIArtifact transformation
-				addArtifactSpec := map[string]any{
-					"repository": AsUnstructured(toSpec).Data,
-					"component":  ref.Component,
-					"version":    ref.Version,
-					"resource":   fmt.Sprintf("${%s.output.resource}", getResourceID),
-					"file":       fmt.Sprintf("${%s.output.file}", getResourceID),
-				}
-				// Only add targetReference for OCI repositories (not CTF)
-				if targetReference != "" {
-					addArtifactSpec["targetReference"] = targetReference
-				}
-
-				addArtifactTransform := transformv1alpha1.GenericTransformation{
-					TransformationMeta: meta.TransformationMeta{
-						Type: ChooseAddOCIArtifactType(toSpec),
-						ID:   addResourceID,
-					},
-					Spec: &runtime.Unstructured{Data: addArtifactSpec},
-				}
-				tgd.Transformations = append(tgd.Transformations, addArtifactTransform)
-
-				// Track this resource's transformation
-				resourceTransformIDs[i] = addResourceID
+				processOCIArtifact(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
 			}
 		}
 
@@ -280,6 +182,112 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 		tgd.Transformations = append(tgd.Transformations, upload)
 	}
 	return nil
+}
+
+func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) {
+	// Process OCI artifacts (ociArtifact, ociImage, etc.)
+	resourceIdentity := resource.ToIdentity()
+	resourceID := identityToTransformationID(resourceIdentity)
+	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
+	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
+
+	// Convert resourceIdentity to map[string]any for deep copy compatibility
+	resourceIdentityMap := make(map[string]any)
+	for k, v := range resourceIdentity {
+		resourceIdentityMap[k] = v
+	}
+
+	// Create GetOCIArtifact transformation
+	getArtifactTransform := transformv1alpha1.GenericTransformation{
+		TransformationMeta: meta.TransformationMeta{
+			Type: ChooseGetOCIArtifactType(ref.Repository),
+			ID:   getResourceID,
+		},
+		Spec: &runtime.Unstructured{Data: map[string]any{
+			"repository":       AsUnstructured(ref.Repository).Data,
+			"component":        ref.Component,
+			"version":          ref.Version,
+			"resourceIdentity": resourceIdentityMap,
+		}},
+	}
+	tgd.Transformations = append(tgd.Transformations, getArtifactTransform)
+
+	// Generate target reference for OCI repositories
+	// Format: {baseUrl}/{subPath}/{resourceName}:{resourceVersion}
+	targetReference := generateTargetImageReference(toSpec, resource.Name, resource.Version)
+
+	// Create AddOCIArtifact transformation
+	addArtifactSpec := map[string]any{
+		"repository": AsUnstructured(toSpec).Data,
+		"component":  ref.Component,
+		"version":    ref.Version,
+		"resource":   fmt.Sprintf("${%s.output.resource}", getResourceID),
+		"file":       fmt.Sprintf("${%s.output.file}", getResourceID),
+	}
+	// Only add targetReference for OCI repositories (not CTF)
+	if targetReference != "" {
+		addArtifactSpec["targetReference"] = targetReference
+	}
+
+	addArtifactTransform := transformv1alpha1.GenericTransformation{
+		TransformationMeta: meta.TransformationMeta{
+			Type: ChooseAddOCIArtifactType(toSpec),
+			ID:   addResourceID,
+		},
+		Spec: &runtime.Unstructured{Data: addArtifactSpec},
+	}
+	tgd.Transformations = append(tgd.Transformations, addArtifactTransform)
+
+	// Track this resource's transformation
+	resourceTransformIDs[i] = addResourceID
+}
+
+func processLocalRelation(resource descriptorv2.Resource, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) {
+	// Generate transformation IDs
+	resourceIdentity := resource.ToIdentity()
+	resourceID := identityToTransformationID(resourceIdentity)
+	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
+	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
+
+	// Convert resourceIdentity to map[string]any for deep copy compatibility
+	resourceIdentityMap := make(map[string]any)
+	for k, v := range resourceIdentity {
+		resourceIdentityMap[k] = v
+	}
+
+	// Create GetLocalResource transformation
+	getResourceTransform := transformv1alpha1.GenericTransformation{
+		TransformationMeta: meta.TransformationMeta{
+			Type: ChooseGetLocalResourceType(ref.Repository),
+			ID:   getResourceID,
+		},
+		Spec: &runtime.Unstructured{Data: map[string]any{
+			"repository":       AsUnstructured(ref.Repository).Data,
+			"component":        ref.Component,
+			"version":          ref.Version,
+			"resourceIdentity": resourceIdentityMap,
+		}},
+	}
+	tgd.Transformations = append(tgd.Transformations, getResourceTransform)
+
+	// Create AddLocalResource transformation
+	addResourceTransform := transformv1alpha1.GenericTransformation{
+		TransformationMeta: meta.TransformationMeta{
+			Type: ChooseAddLocalResourceType(toSpec),
+			ID:   addResourceID,
+		},
+		Spec: &runtime.Unstructured{Data: map[string]any{
+			"repository": AsUnstructured(toSpec).Data,
+			"component":  ref.Component,
+			"version":    ref.Version,
+			"resource":   fmt.Sprintf("${%s.output.resource}", getResourceID),
+			"file":       fmt.Sprintf("${%s.output.file}", getResourceID),
+		}},
+	}
+	tgd.Transformations = append(tgd.Transformations, addResourceTransform)
+
+	// Track this resource's transformation
+	resourceTransformIDs[i] = addResourceID
 }
 
 type discoveryValue struct {
