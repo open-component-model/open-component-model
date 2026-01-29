@@ -12,12 +12,5 @@ import (
 // the repository, such as pattern matching or priority-based fallback resolvers.
 type ComponentVersionRepositoryForComponentProvider interface {
 	GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error)
-}
-
-// SpecResolvingProvider extends ComponentVersionRepositoryForComponentProvider with the ability
-// to return the resolved repository specification. This is useful for cache key generation
-// when the actual spec depends on resolver pattern matching.
-type SpecResolvingProvider interface {
-	ComponentVersionRepositoryForComponentProvider
-	GetRepositorySpecForComponent(ctx context.Context, component, version string) (runtime.Typed, error)
+	GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error)
 }
