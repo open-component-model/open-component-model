@@ -190,6 +190,18 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		CredentialProvider: credentialProvider,
 	}
 
+	// OCI Artifact transformers
+	ociGetOCIArtifact := &transformer.GetOCIArtifact{
+		Scheme:             transformerScheme,
+		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
+		CredentialProvider: credentialProvider,
+	}
+	ociAddOCIArtifact := &transformer.AddOCIArtifact{
+		Scheme:             transformerScheme,
+		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
+		CredentialProvider: credentialProvider,
+	}
+
 	return builder.NewBuilder(transformerScheme).
 		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
 		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
@@ -198,7 +210,11 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		WithTransformer(&ociv1alpha1.OCIGetLocalResource{}, ociGetResource).
 		WithTransformer(&ociv1alpha1.OCIAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
-		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource)
+		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
+		WithTransformer(&ociv1alpha1.OCIGetOCIArtifact{}, ociGetOCIArtifact).
+		WithTransformer(&ociv1alpha1.OCIAddOCIArtifact{}, ociAddOCIArtifact).
+		WithTransformer(&ociv1alpha1.CTFGetOCIArtifact{}, ociGetOCIArtifact).
+		WithTransformer(&ociv1alpha1.CTFAddOCIArtifact{}, ociAddOCIArtifact)
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {
