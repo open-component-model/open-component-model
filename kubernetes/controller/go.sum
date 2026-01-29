@@ -656,8 +656,8 @@ github.com/mailru/easyjson v0.9.1 h1:LbtsOm5WAswyWbvTEOqhypdPeZzHavpZx96/n553mR8
 github.com/mailru/easyjson v0.9.1/go.mod h1:1+xMtQp2MRNVL/V1bOzuP3aP8VNwRW55fQUto+XFtTU=
 github.com/mandelsoft/filepath v0.0.0-20240223090642-3e2777258aa3 h1:oo9nIgnyiBgYPbcZslRT4y29siuL5EoNJ/t1tr0xEVQ=
 github.com/mandelsoft/filepath v0.0.0-20240223090642-3e2777258aa3/go.mod h1:LxhqC7khDoRENwooP6f/vWvia9ivj6TqLYrR39zqkN0=
-github.com/mandelsoft/goutils v0.0.0-20250821215621-af06c70600cf h1:o3wFOslrxd8mPeTyBpFnn0iLhnedRZZylyYmBGd6jgc=
-github.com/mandelsoft/goutils v0.0.0-20250821215621-af06c70600cf/go.mod h1:t5rr8w/XVGotn77nOgRjqKy/P5z2ubSi701DhGuCXAc=
+github.com/mandelsoft/goutils v0.0.0-20251225170327-b32fc0dd2706 h1:DvZS608llVbZQYGlwtdlQ42g4BtPAmDjePXPHAneqSg=
+github.com/mandelsoft/goutils v0.0.0-20251225170327-b32fc0dd2706/go.mod h1:fTCyGFCMm+ugUn1FqcHeWelCjoSYtkJaqnJvSmgkx1M=
 github.com/mandelsoft/logging v0.0.0-20240618075559-fdca28a87b0a h1:MAvh0gbP2uwKmf7wWCkYCzrYa6vPjBvYeGhoUlVHwtI=
 github.com/mandelsoft/logging v0.0.0-20240618075559-fdca28a87b0a/go.mod h1:uO460C1lIB3IOOgrbXhAlz3AKsOv4T2K6ALBn3PwuSg=
 github.com/mandelsoft/spiff v1.7.0-beta-7 h1:ow8hgn7A80RlgsN2wjVpwl/7HSObzw3ph3m4vay7KZs=
@@ -1300,8 +1300,8 @@ ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260127
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260127131318-2c2fb62ae8cc/go.mod h1:qaxJ9XJGmR+/Lqv9XMKP0UI4HnhFHDgVQlGXU2eYpcI=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 h1:SdQm6w7Lj0g+d+MaNXQQkpKUqOhFwUSzoUjzRyeKL0I=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9/go.mod h1:5ES8RkuCdrbqiG56WJE40qhFoC4QHAQn8BasL5aKlvM=
-ocm.software/open-component-model/bindings/go/oci v0.0.26 h1:FM9Ij2Ml6kQ7eUbHm3GjZY1wLtnPfo/17aY49W/jk7A=
-ocm.software/open-component-model/bindings/go/oci v0.0.26/go.mod h1:4o/c/Fv66jP8t3pMVvMdRYYU0e/o24Ue/o2pU5CRwP4=
+ocm.software/open-component-model/bindings/go/oci v0.0.27 h1:bMCAKs0KSSn2Qjm22LMTJGFC+aWdFKH84lByCEpWi80=
+ocm.software/open-component-model/bindings/go/oci v0.0.27/go.mod h1:e4/TJC69jtGnRhy8ATLfmnFozZbIta559uG3HKQhMJg=
 ocm.software/open-component-model/bindings/go/plugin v0.0.12 h1:nio+sgQlS/QGHQN0LyLZHagZvkdDEoKukMxR0rZItCk=
 ocm.software/open-component-model/bindings/go/plugin v0.0.12/go.mod h1:lqKv1KelirpYTm36XuUB1QNboMmyD7qb5qPBx0sfid8=
 ocm.software/open-component-model/bindings/go/repository v0.0.5 h1:BfLjojOh37RWtNWrYzV21aRnjcID68w0Wr5zUtkC7lE=
