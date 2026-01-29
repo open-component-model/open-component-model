@@ -29,13 +29,6 @@ type pathMatcherProvider struct {
 
 var _ ComponentVersionRepositoryForComponentProvider = (*pathMatcherProvider)(nil)
 
-func (p *pathMatcherProvider) GetRepositorySpecForComponent(ctx context.Context, component, version string) (runtime.Typed, error) {
-	return p.specProvider.GetRepositorySpec(ctx, runtime.Identity{
-		descruntime.IdentityAttributeName:    component,
-		descruntime.IdentityAttributeVersion: version,
-	})
-}
-
 // getRepository returns a cached repository for the given specification, or creates a new one.
 // It handles credential resolution and caching internally.
 func (p *pathMatcherProvider) getRepository(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
@@ -88,7 +81,10 @@ func (p *pathMatcherProvider) getRepository(ctx context.Context, specification r
 }
 
 func (p *pathMatcherProvider) GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error) {
-	repoSpec, err := p.GetRepositorySpecForComponent(ctx, component, version)
+	repoSpec, err := p.specProvider.GetRepositorySpec(ctx, runtime.Identity{
+		descruntime.IdentityAttributeName:    component,
+		descruntime.IdentityAttributeVersion: version,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("getting repository spec for component %s:%s failed: %w", component, version, err)
 	}
