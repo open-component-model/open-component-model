@@ -5,12 +5,10 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"k8s.io/utils/lru"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/repository/component/providers"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
@@ -29,7 +27,6 @@ func NewResolver(client client.Reader, logger *logr.Logger, workerPool *workerpo
 		logger:        logger,
 		workerPool:    workerPool,
 		pluginManager: pluginManager,
-		repoCache:     lru.New(100),
 	}
 
 	return resolver
@@ -47,7 +44,6 @@ type Resolver struct {
 	logger        *logr.Logger
 	workerPool    *workerpool.WorkerPool
 	pluginManager *manager.PluginManager
-	repoCache     *lru.Cache
 }
 
 // RepositoryOptions contains all the options the resolution service requires to perform a resolve operation.
@@ -60,13 +56,16 @@ type RepositoryOptions struct {
 }
 
 // NewCacheBackedRepository creates a new cache-backed repository wrapper.
-// It creates a provider that resolves the appropriate repository for each component based on:
-// 1. Path matcher resolvers from OCM configuration (if configured)
-// 2. The provided RepositorySpec as a fallback
 func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *RepositoryOptions) (*CacheBackedRepository, error) {
+	// Load OCM configurations
 	cfg, err := configuration.LoadConfigurations(ctx, r.client, opts.Namespace, opts.OCMConfigurations)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load OCM configurations: %w", err)
+	}
+
+	repo, err := r.createRepository(ctx, opts.RepositorySpec, cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	requesterFunc := opts.RequesterFunc
@@ -75,40 +74,15 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 			return workerpool.RequesterInfo{}
 		}
 	}
-	baseRepoSpec := opts.RepositorySpec
-	var configHash []byte
-	if cfg != nil {
-		configHash = cfg.Hash
-	}
-	cacheKey, err := buildRepoCacheKey(configHash, baseRepoSpec)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build repository cache key: %w", err)
-	}
-	var provider providers.ComponentVersionRepositoryForComponentProvider
-	if cached, ok := r.repoCache.Get(cacheKey); ok {
-		provider = cached.(providers.ComponentVersionRepositoryForComponentProvider)
-	} else {
-		provider, err = r.createProvider(ctx, opts.RepositorySpec, cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create provider: %w", err)
-		}
-		r.repoCache.Add(cacheKey, provider)
-	}
 
-	return newCacheBackedRepository(r.logger, provider, cfg, r.workerPool, requesterFunc, baseRepoSpec), nil
+	return newCacheBackedRepository(r.logger, opts.RepositorySpec, cfg, r.workerPool, repo, requesterFunc), nil
 }
 
-// createProvider creates a provider based on the configuration.
-// The provider handles resolving the appropriate repository for each component.
-func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (providers.ComponentVersionRepositoryForComponentProvider, error) {
-	if spec == nil {
-		return nil, fmt.Errorf("repository spec is required")
+func (r *Resolver) createRepository(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (repository.ComponentVersionRepository, error) {
+	options := setup.RepositoryOptions{
+		Registry: r.pluginManager.ComponentVersionRepositoryRegistry,
+		Logger:   r.logger,
 	}
-
-	opts := providers.Options{
-		RepoProvider: r.pluginManager.ComponentVersionRepositoryRegistry,
-	}
-
 	if cfg != nil {
 		credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
 			PluginManager: r.pluginManager,
@@ -118,15 +92,13 @@ func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *
 			return nil, fmt.Errorf("failed to create credential graph: %w", err)
 		}
 		r.logger.V(1).Info("resolved credential graph")
-		opts.CredentialGraph = credGraph
 
-		fallbackResolvers, pathMatchers, err := providers.ExtractResolvers(cfg.Config, ocirepository.Scheme)
-		if err != nil {
-			return nil, err
-		}
-		opts.FallbackResolvers = fallbackResolvers
-		opts.PathMatchers = pathMatchers
+		options.CredentialGraph = credGraph
 	}
 
-	return providers.New(ctx, opts, spec)
+	repo, err := setup.NewRepository(ctx, spec, options)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create repository: %w", err)
+	}
+	return repo, nil
 }

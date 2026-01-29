@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
+
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -37,7 +38,6 @@ func (p *pathMatcherProvider) GetRepositorySpecForComponent(ctx context.Context,
 
 // getRepository returns a cached repository for the given specification, or creates a new one.
 // It handles credential resolution and caching internally.
-// Uses double-checked locking to prevent duplicate repository creation on concurrent cache misses.
 func (p *pathMatcherProvider) getRepository(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
 	// Canonicalize the specification for cache key
 	specdata, err := json.Marshal(specification)

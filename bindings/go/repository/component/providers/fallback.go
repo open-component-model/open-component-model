@@ -11,9 +11,8 @@ import (
 
 // fallbackProvider provides a [repository.ComponentVersionRepository] based on deprecated fallback resolvers.
 // This is kept for backward compatibility with the deprecated "ocm.config.ocm.software/v1" config type.
-//
-//nolint:staticcheck // compatibility mode for deprecated resolvers
 type fallbackProvider struct {
+	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	repo *fallback.FallbackRepository
 }
 
@@ -23,7 +22,6 @@ func (f *fallbackProvider) GetComponentVersionRepositoryForSpecification(ctx con
 	return f.repo.GetComponentVersionRepositoryForSpecification(ctx, specification)
 }
 
-//nolint:staticcheck // compatibility mode for deprecated resolvers
 func (f *fallbackProvider) GetComponentVersionRepositoryForComponent(ctx context.Context, _, _ string) (repository.ComponentVersionRepository, error) {
 	return f.repo, nil
 }

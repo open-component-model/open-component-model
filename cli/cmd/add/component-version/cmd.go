@@ -28,7 +28,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/repository/component/providers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -395,7 +394,7 @@ var (
 type constructorProvider struct {
 	cache              string
 	targetRepoSpec     runtime.Typed
-	repositoryProvider providers.ComponentVersionRepositoryForComponentProvider
+	repositoryProvider ocm.ComponentVersionRepositoryForComponentProvider
 	pluginManager      *manager.PluginManager
 	graph              credentials.Resolver
 }

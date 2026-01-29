@@ -13,19 +13,19 @@ import (
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/repository/component/providers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
+	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
 func BuildGraphDefinition(
 	ctx context.Context,
 	fromSpec *compref.Ref,
 	toSpec runtime.Typed,
-	repoProvider providers.ComponentVersionRepositoryForComponentProvider,
+	repoProvider ocm.ComponentVersionRepositoryForComponentProvider,
 	recursive bool,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
 	discoverer := &discoverer{
@@ -124,7 +124,7 @@ type discoveryValue struct {
 }
 
 type resolver struct {
-	repoProvider   providers.ComponentVersionRepositoryForComponentProvider
+	repoProvider   ocm.ComponentVersionRepositoryForComponentProvider
 	expectedDigest func(id runtime.Identity) *descriptor.Digest
 }
 

@@ -19,6 +19,7 @@ import (
 	"ocm.software/open-component-model/cli/cmd/configuration"
 	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
+	credentialsConfig "ocm.software/open-component-model/cli/internal/credentials"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin"
 	"ocm.software/open-component-model/cli/internal/plugin/spec/config/v2alpha1"
 )
@@ -116,7 +117,7 @@ func CredentialGraph(cmd *cobra.Command) error {
 	var err error
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
 		slog.WarnContext(cmd.Context(), "could not get configuration to initialize credential graph")
-	} else if credCfg, err = credentialsRuntime.LookupCredentialConfig(cfg); err != nil {
+	} else if credCfg, err = credentialsConfig.LookupCredentialConfiguration(cfg); err != nil {
 		return fmt.Errorf("could not get credential configuration: %w", err)
 	}
 

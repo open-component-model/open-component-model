@@ -64,7 +64,6 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 		})
 
 		repoSpec := &ociv1.Repository{
-			Type:    ocmruntime.Type{Name: "oci", Version: "v1"},
 			BaseUrl: "localhost:5000/test",
 		}
 
@@ -133,7 +132,6 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 		})
 
 		repoSpec := &ociv1.Repository{
-			Type:    ocmruntime.Type{Name: "oci", Version: "v1"},
 			BaseUrl: "localhost:5000/test",
 		}
 
@@ -224,7 +222,6 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 		})
 
 		repoSpec := &ociv1.Repository{
-			Type:    ocmruntime.Type{Name: "oci", Version: "v1"},
 			BaseUrl: "localhost:5000/test",
 		}
 
@@ -357,7 +354,6 @@ func TestResolveComponentVersionDeduplication(t *testing.T) {
 		})
 
 		repoSpec := &ociv1.Repository{
-			Type:    ocmruntime.Type{Name: "oci", Version: "v1"},
 			BaseUrl: "localhost:5000/test",
 		}
 

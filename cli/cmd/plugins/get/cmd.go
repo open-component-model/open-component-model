@@ -14,7 +14,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/repository/component/providers"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	"ocm.software/open-component-model/cli/cmd/plugins/list"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -109,7 +108,7 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 	// Get plugin registry descriptor to look for a component references of the passed plugin
 	var plugins []list.PluginInfo
 	// Keep repository providers that contain the requested plugin
-	var repoProviders []providers.ComponentVersionRepositoryForComponentProvider
+	var repoProviders []ocm.ComponentVersionRepositoryForComponentProvider
 	for _, reg := range pluginRegistries {
 		logger.Debug("Getting plugin registry descriptor", "registry", reg)
 
@@ -213,7 +212,7 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 	return render.RenderOnce(cmd.Context(), renderer, render.WithWriter(cmd.OutOrStdout()))
 }
 
-func createDAG(ctx context.Context, plugins []list.PluginInfo, providers []providers.ComponentVersionRepositoryForComponentProvider, cd bool, output string) (*dag.DirectedAcyclicGraph[string], []string, error) {
+func createDAG(ctx context.Context, plugins []list.PluginInfo, providers []ocm.ComponentVersionRepositoryForComponentProvider, cd bool, output string) (*dag.DirectedAcyclicGraph[string], []string, error) {
 	graph := dag.NewDirectedAcyclicGraph[string]()
 	var roots []string
 	for _, plugin := range plugins {

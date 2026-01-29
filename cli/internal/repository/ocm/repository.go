@@ -14,6 +14,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 )
 
+// ComponentVersionRepositoryForComponentProvider provides a [repository.ComponentVersionRepository] based on a given identity.
+// Implementations may use different strategies to resolve the repository, such as using component references,
+// configuration-based resolvers, or other mechanisms.
+type ComponentVersionRepositoryForComponentProvider interface {
+	GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error)
+}
+
 // GetComponentVersionsOptions configures how component versions are retrieved.
 type GetComponentVersionsOptions struct {
 	VersionOptions
