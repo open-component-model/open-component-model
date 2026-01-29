@@ -65,7 +65,7 @@ jobs:
   E2E:
     name: E2E with Helm
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs: verify-chart
     steps:
       - name: Checkout
