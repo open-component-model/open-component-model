@@ -1716,3 +1716,106 @@ func writeCertsPEM(t *testing.T, dir, name string, certs ...*x509.Certificate) s
 	require.NoError(t, os.WriteFile(p, b, 0o600))
 	return p
 }
+
+// Test_Transfer_Component_Version_With_Local_Blob tests transferring a component from source to target
+// repository and verifies that local blob resources are properly transferred and accessible.
+func Test_Transfer_Component_Version_With_Local_Blob(t *testing.T) {
+	r := require.New(t)
+	logs := test.NewJSONLogReader()
+	tmp := t.TempDir()
+
+	// Create a test file to be added as a local blob resource
+	testContent := "Hello, this is a local blob resource that should be transferred!"
+	testFilePath := filepath.Join(tmp, "test-blob.txt")
+	r.NoError(os.WriteFile(testFilePath, []byte(testContent), 0o600), "could not create test file")
+
+	// Create component constructor with local blob resource
+	componentName := "ocm.software/test-transfer-blob"
+	componentVersion := "1.0.0"
+	resourceName := "test-blob-resource"
+
+	constructorYAML := fmt.Sprintf(`
+name: %s
+version: %s
+provider:
+  name: ocm.software
+resources:
+  - name: %s
+    type: blob
+    input:
+      type: file/v1
+      path: %s
+`, componentName, componentVersion, resourceName, testFilePath)
+
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	// Create source repository and add component with local blob
+	sourceArchivePath := filepath.Join(tmp, "source-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", sourceArchivePath,
+	), test.WithErrorOutput(logs))
+	r.NoError(err, "could not construct component version in source repository")
+
+	// Verify source repository setup
+	sourceFS, err := filesystem.NewFS(sourceArchivePath, os.O_RDONLY)
+	r.NoError(err, "could not create source filesystem")
+	sourceArchive := ctf.NewFileSystemCTF(sourceFS)
+	sourceRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(sourceArchive)))
+	r.NoError(err, "could not create source repository")
+
+	sourceDesc, err := sourceRepo.GetComponentVersion(t.Context(), componentName, componentVersion)
+	r.NoError(err, "could not retrieve component version from source repository")
+	r.Len(sourceDesc.Component.Resources, 1, "expected one resource in source component version")
+	r.Equal("localBlob/v1", sourceDesc.Component.Resources[0].Access.GetType().String(), "expected local blob access type")
+
+	// Transfer component version to target repository
+	targetArchivePath := filepath.Join(tmp, "target-archive")
+	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceArchivePath, componentName, componentVersion)
+	targetRef := fmt.Sprintf("ctf::%s", targetArchivePath)
+
+	transferLogs := test.NewJSONLogReader()
+	_, err = test.OCM(t, test.WithArgs("transfer", "component-version", sourceRef, targetRef),
+		test.WithErrorOutput(transferLogs))
+	r.NoError(err, "transfer component version should succeed")
+
+	// Verify transfer success in logs
+	transferLogEntries, err := transferLogs.List()
+	r.NoError(err, "failed to list transfer log entries")
+	found := false
+	for _, entry := range transferLogEntries {
+		if strings.Contains(fmt.Sprint(entry), "transfer completed successfully") {
+			found = true
+			break
+		}
+	}
+	r.True(found, "expected transfer success log message")
+
+	// Verify component version exists in target repository
+	targetFS, err := filesystem.NewFS(targetArchivePath, os.O_RDONLY)
+	r.NoError(err, "could not create target filesystem")
+	targetArchive := ctf.NewFileSystemCTF(targetFS)
+	targetRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(targetArchive)))
+	r.NoError(err, "could not create target repository")
+
+	targetDesc, err := targetRepo.GetComponentVersion(t.Context(), componentName, componentVersion)
+	r.NoError(err, "could not retrieve component version from target repository")
+
+	// Verify component metadata
+	r.Equal(componentName, targetDesc.Component.Name, "expected component name to match")
+	r.Equal(componentVersion, targetDesc.Component.Version, "expected component version to match")
+	r.Len(targetDesc.Component.Resources, 1, "expected one resource in target component version")
+	r.Equal(resourceName, targetDesc.Component.Resources[0].Name, "expected resource name to match")
+	r.Equal("blob", targetDesc.Component.Resources[0].Type, "expected resource type to match")
+	r.Equal("localBlob/v1", targetDesc.Component.Resources[0].Access.GetType().String(), "expected resource access type to match")
+
+	// Verify local blob resource content is accessible from target repository
+	resourceIdentity := targetDesc.Component.Resources[0].ToIdentity()
+	targetBlob, _, err := targetRepo.GetLocalResource(t.Context(), componentName, componentVersion, resourceIdentity)
+	r.NoError(err, "could not retrieve local resource from target repository")
+
+	var targetContent bytes.Buffer
+	r.NoError(blob.Copy(&targetContent, targetBlob))
+	r.Equal(testContent, targetContent.String(), "expected local blob content to match original test file content")
+}
