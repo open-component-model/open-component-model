@@ -8,7 +8,6 @@
 manager:
   # -- Number of controller manager replicas
   replicas: 1
-  
   image:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
@@ -16,19 +15,16 @@ manager:
     tag: latest
     # -- Image pull policy
     pullPolicy: IfNotPresent
-
   ## Controller concurrency settings
   concurrency:
     # -- Number of active resource controller workers
     resource: 4
-
   ## Resolver settings
   resolver:
     # -- Number of active resolver workers
     workerCount: 10
     # -- Maximum work items in queue for component version resolution
     workerQueueLength: 100
-
   ## Cache settings
   cache:
     # -- Maximum number of active OCM contexts kept alive
@@ -37,7 +33,6 @@ manager:
     ocmSessionSize: 100
     # -- Maximum size of the deployer download object LRU cache
     deployerDownloadSize: 1000
-
   ## Logging configuration (zap logger)
   logging:
     # -- Zap log level: 'debug', 'info', 'error', 'panic' or integer > 0
@@ -46,17 +41,14 @@ manager:
     development: false
     # -- Log encoding: 'json' or 'console'
     encoder: "json"
-
   ## Leader election
   leaderElection:
     # -- Enable leader election for controller manager
     enabled: true
-
   ## Health and metrics endpoints
   healthProbe:
     # -- Address the health probe endpoint binds to
     bindAddress: ":8081"
-
   ## Liveness probe configuration
   livenessProbe:
     # -- Path for the liveness probe
@@ -67,7 +59,6 @@ manager:
     initialDelaySeconds: 15
     # -- Period between liveness probes
     periodSeconds: 20
-
   ## Readiness probe configuration
   readinessProbe:
     # -- Path for the readiness probe
@@ -78,7 +69,6 @@ manager:
     initialDelaySeconds: 5
     # -- Period between readiness probes
     periodSeconds: 10
-
   metricsServer:
     # -- Address the metric endpoint binds to. Set to "0" to disable
     bindAddress: "0"
@@ -86,76 +76,60 @@ manager:
     secure: false
     # -- Enable HTTP/2 for metrics and webhook servers
     enableHttp2: false
-
   ## Events
   events:
     # -- Address of the events receiver (optional)
     address: ""
-
   # -- Extra arguments to pass to the controller
   extraArgs: []
-
   # -- Environment variables for the controller
   env: []
-
   # -- Image pull secrets for the controller
   imagePullSecrets: []
-
   # -- Pod-level security context
   podSecurityContext:
     runAsNonRoot: true
-
   # -- Container-level security context
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
-        drop:
-            - ALL
-
+      drop:
+        - ALL
   # -- Resource limits and requests
   resources:
     limits:
-        cpu: 500m
-        memory: 128Mi
+      cpu: 500m
+      memory: 128Mi
     requests:
-        cpu: 10m
-        memory: 64Mi
-
+      cpu: 10m
+      memory: 64Mi
   # -- Pod affinity rules
   affinity: {}
-
   # -- Node selector for pod scheduling
   nodeSelector: {}
-
   # -- Pod tolerations
   tolerations: []
-
 ## Helper RBAC roles for managing custom resources
 rbacHelpers:
   # -- Install convenience admin/editor/viewer roles for CRDs
   enable: false
-
 ## Custom Resource Definitions
 crd:
   # -- Install CRDs with the chart
   enable: true
   # -- Keep CRDs when uninstalling
   keep: true
-
 ## Controller metrics endpoint
 metrics:
   # -- Enable metrics endpoint with RBAC protection
   enable: false
   # -- Metrics server port
   port: 8443
-
 ## Cert-manager integration
 certManager:
   # -- Enable cert-manager for TLS certificates
   enable: false
-
 ## Prometheus ServiceMonitor
 prometheus:
   # -- Enable Prometheus ServiceMonitor (requires prometheus-operator)
   enable: false
-

@@ -23,3 +23,7 @@
 
 # Helm chart artifacts
 dist/chart/*.tgz
+
+README.md.gotmpl
+test-values.yaml
+.helmignore

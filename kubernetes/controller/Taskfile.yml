@@ -20,13 +20,22 @@ vars:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$ENVTEST_K8S_VERSION"'
   KIND_NODE_IMAGE_VERSION:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$KIND_NODE_IMAGE_VERSION"'
-
+  HELM_DOCS_VERSION:
+    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${HELM_DOCS_VERSION:-v1.14.2}"'
+  KUBEBUILDER_VERSION:
+    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${KUBEBUILDER_VERSION:-v4.11.1}"'
+  YQ_VERSION:
+    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${YQ_VERSION:-v4.49.2}"'
+  
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
   LOCALBIN: '{{.TASKFILE_DIR}}/bin'
   KUBECTL: '{{.KUBECTL | default "kubectl"}}'
   KUSTOMIZE: '{{.LOCALBIN}}/kustomize-{{.KUSTOMIZE_VERSION}}'
   CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen-{{.CONTROLLER_TOOLS_VERSION}}'
   ENVTEST: '{{.LOCALBIN}}/setup-envtest-{{.ENVTEST_VERSION}}'
+  HELM_DOCS: '{{.LOCALBIN}}/helm-docs-{{.HELM_DOCS_VERSION}}'
+  KUBEBUILDER: '{{.LOCALBIN}}/kubebuilder-{{.KUBEBUILDER_VERSION}}'
+  YQ: '{{.LOCALBIN}}/yq-{{.YQ_VERSION}}'
   IGNORE_NOT_FOUND: '{{.IGNORE_NOT_FOUND | default "false"}}'
   PLATFORMS: '{{.PLATFORMS | default "linux/arm64,linux/amd64"}}'
 
@@ -69,18 +78,8 @@ tasks:
     cmds:
       - 'KIND_NODE_IMAGE_VERSION={{.KIND_NODE_IMAGE_VERSION}} bash test/e2e/hacks/setup.sh'
       - 'kind load docker-image {{.CONTROLLER_IMG}}'
-  test/e2e:
-    dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
-    cmds:
-      - task: install
-      - task: deploy
-      - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v
-      - task: undeploy
-      - task: uninstall
-        vars:
-          IGNORE_NOT_FOUND: "true"
 
-  test/e2e/helm:
+  test/e2e:
     dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
     cmds:
       - task: helm/install
@@ -142,27 +141,88 @@ tasks:
     deps: [manifests, generate, kustomize]
     cmds:
       - mkdir -p dist
-      - task: set-images
       - '{{.KUSTOMIZE}} build config/default > dist/install.yaml'
 
-  # Deployment
-  install:
-    deps: [manifests, kustomize]
-    cmd: '"{{.KUSTOMIZE}}" build config/crd | {{.KUBECTL}} apply -f -'
 
-  uninstall:
-    deps: [manifests, kustomize]
-    cmd: '{{.KUSTOMIZE}} build config/crd | {{.KUBECTL}} delete --ignore-not-found={{.IGNORE_NOT_FOUND}} -f -'
-
-  deploy:
-    deps: [manifests, kustomize]
+  # Helm chart tasks
+  helm/sync-manifests:
+    desc: "Regenerate CRDs and RBAC for Helm chart"
+    deps: [manifests, kubebuilder]
     cmds:
-      - task: set-images
-      - '"{{.KUSTOMIZE}}" build config/default | {{.KUBECTL}} apply -f -'
+      - '"{{.KUBEBUILDER}}" edit --plugins=helm/v2-alpha --output-dir .'
+      - rm .github/workflows/test-chart.yml # Plugin generates github workflow which we do not need
 
-  undeploy:
-    deps: [kustomize]
-    cmd: '"{{.KUSTOMIZE}}" build config/default | {{.KUBECTL}} delete --ignore-not-found={{.IGNORE_NOT_FOUND}} -f -'
+  helm/schema:
+    desc: "Generate JSON schema from chart values.yaml"
+    silent: true
+    deps: [helm-schema-plugin]
+    dir: chart
+    cmd: 'helm schema -f values.yaml -o values.schema.json'
+    sources:
+      - chart/values.yaml
+    generates:
+      - chart/values.schema.json
+
+  helm/lint:
+    desc: "Lint the Helm chart"
+    cmd: 'helm lint chart/'
+
+  helm/validate:
+    desc: "Validate the Helm chart (lint, template, and verify CRDs/RBAC are in sync)"
+    silent: true
+    cmds:
+      - task: helm/lint
+      - task: helm/template
+      - task: helm/schema
+      - task: helm/docs
+      - task: helm/sync-manifests
+      - |
+        if ! git diff --quiet chart/templates/crd chart/templates/rbac chart/values.schema.json chart/README.md; then
+          echo "ERROR: CRDs, RBAC, schema or docs are out of sync. Run 'task helm/sync-manifests' and commit the changes."
+          git diff chart/templates/crd chart/templates/rbac chart/values.schema.json chart/README.md
+          exit 1
+        fi
+
+  helm/package:
+    desc: "Package the Helm chart with the specified version"
+    deps: [yq]
+    cmds:
+      - mkdir -p dist
+      - '{{ if .VERSION }}{{.YQ}} -i ".manager.image.tag = \"{{.VERSION}}\"" chart/values.yaml{{end}}'
+      - helm package chart/ --destination dist/ {{if .VERSION}}--version {{.VERSION}}{{end}} {{if .APP_VERSION}}--app-version {{.APP_VERSION}}{{end}}
+
+  helm/template:
+    desc: "Render Helm chart templates with test values"
+    silent: true
+    cmds:
+      - mkdir -p dist
+      - helm template ocm-k8s-toolkit chart/ --namespace ocm-k8s-toolkit-system -f chart/test-values.yaml > dist/generated.yaml
+
+  helm/install:
+    desc: "Install the Helm chart"
+    cmds:
+      - |
+        helm install ocm-k8s-toolkit chart/ \
+          -f chart/test-values.yaml \
+          --namespace ocm-k8s-toolkit-system \
+          --create-namespace \
+          --wait \
+          --timeout 120s
+
+  helm/uninstall:
+    desc: "Uninstall the Helm chart"
+    cmd: 'helm uninstall ocm-k8s-toolkit --namespace ocm-k8s-toolkit-system --ignore-not-found'
+
+  helm/docs:
+    desc: "Generate Helm chart documentation"
+    deps: [helm-docs]
+    dir: chart
+    cmd: '"{{.HELM_DOCS}}"'
+    sources:
+      - chart/values.yaml
+      - chart/README.md
+    generates:
+      - chart/README.md
 
   # Tool installers (all via helper)
   kustomize:
@@ -182,6 +242,18 @@ tasks:
       - task: go-install-tool
         vars: { TOOL_PATH: '{{.ENVTEST}}', PACKAGE: sigs.k8s.io/controller-runtime/tools/setup-envtest, VERSION: '{{.ENVTEST_VERSION}}' }
     generates: [ '{{.ENVTEST}}' ]
+
+  kubebuilder:
+    deps:
+      - task: go-install-tool
+        vars: { TOOL_PATH: '{{.KUBEBUILDER}}', PACKAGE: sigs.k8s.io/kubebuilder/v4, VERSION: '{{.KUBEBUILDER_VERSION}}' }
+    generates: [ '{{.KUBEBUILDER}}' ]
+
+  yq:
+    deps:
+      - task: go-install-tool
+        vars: { TOOL_PATH: '{{.YQ}}', PACKAGE: github.com/mikefarah/yq/v4, VERSION: '{{.YQ_VERSION}}' }
+    generates: [ '{{.YQ}}' ]
 
   go-install-tool:
     internal: true
@@ -207,66 +279,11 @@ tasks:
     generates:
       - '{{.TOOL_PATH}}'
 
-  set-images:
-    internal: true
-    dir: config/manager
-    cmd: '"{{.KUSTOMIZE}}" edit set image ghcr.io/open-component-model/kubernetes/controller={{.CONTROLLER_IMG}}'
-
-  # Helm chart tasks
-  helm/schema:
-    desc: "Generate JSON schema from chart values.yaml"
-    deps: [helm-schema-plugin]
-    dir: chart
-    cmd: 'helm schema -f values.yaml -o values.schema.json'
-    sources:
-      - chart/values.yaml
-    generates:
-      - chart/values.schema.json
-
-  helm/lint:
-    desc: "Lint the Helm chart"
-    cmd: 'helm lint chart/'
-
-  helm/template:
-    desc: "Render Helm chart templates with test values"
-    cmd: 'helm template ocm-k8s-toolkit chart/ --namespace ocm-k8s-toolkit-system -f chart/test-values.yaml'
-
-  helm/install:
-    desc: "Install the Helm chart"
-    cmds:
-      - |
-        helm install ocm-k8s-toolkit chart/ \
-          -f chart/test-values.yaml \
-          --namespace ocm-k8s-toolkit-system \
-          --create-namespace \
-          --wait \
-          --timeout 120s
-
-  helm/uninstall:
-    desc: "Uninstall the Helm chart"
-    cmd: 'helm uninstall ocm-k8s-toolkit --namespace ocm-k8s-toolkit-system --ignore-not-found'
-
-  helm/docs:
-    desc: "Generate Helm chart documentation"
-    deps: [helm-docs-tool]
-    dir: chart
-    cmd: 'helm-docs'
-    sources:
-      - chart/values.yaml
-      - chart/README.md
-    generates:
-      - chart/README.md
-
-  helm-docs-tool:
-    internal: true
-    silent: true
-    desc: "Install helm-docs if not present"
-    cmd: |
-      if ! command -v helm-docs &> /dev/null; then
-        go install github.com/norwoodj/helm-docs/cmd/helm-docs@latest
-      fi
-    status:
-      - command -v helm-docs
+  helm-docs:
+    deps:
+      - task: go-install-tool
+        vars: { TOOL_PATH: '{{.HELM_DOCS}}', PACKAGE: github.com/norwoodj/helm-docs/cmd/helm-docs, VERSION: '{{.HELM_DOCS_VERSION}}' }
+    generates: [ '{{.HELM_DOCS}}' ]
 
   helm-schema-plugin:
     internal: true
