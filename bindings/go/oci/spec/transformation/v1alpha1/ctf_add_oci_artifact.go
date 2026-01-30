@@ -10,8 +10,7 @@ import (
 const CTFAddOCIArtifactType = "CTFAddOCIArtifact"
 
 // CTFAddOCIArtifact is a transformer specification to add an OCI artifact
-// to a CTF repository. Since CTF cannot store external OCI references,
-// the artifact is converted to a local blob.
+// to a CTF repository.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true

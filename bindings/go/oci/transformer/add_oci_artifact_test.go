@@ -14,7 +14,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfspec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -58,7 +57,7 @@ func (m *mockRepositoryForAddOCI) UploadResource(ctx context.Context, res *descr
 	if rawAccess, ok := res.Access.(*runtime.Raw); ok {
 		// Parse the imageReference from access data
 		m.uploadedToImage = "parsed-from-access"
-		
+
 		// Return updated resource with ociArtifact access
 		updated := res.DeepCopy()
 		updated.Access = &runtime.Raw{
@@ -123,15 +122,6 @@ func TestAddOCIArtifact_Transform_OCI(t *testing.T) {
 		Type: runtime.NewVersionedType(v1alpha1.OCIAddOCIArtifactType, v1alpha1.Version),
 		ID:   "test-add-oci-transform",
 		Spec: &v1alpha1.OCIAddOCIArtifactSpec{
-			Repository: ocispec.Repository{
-				Type: runtime.Type{
-					Name:    ocispec.Type,
-					Version: "v1",
-				},
-				BaseUrl: "ghcr.io/test/components",
-			},
-			Component:       "ocm.software/test-component",
-			Version:         "1.0.0",
 			TargetReference: "ghcr.io/target/nginx:1.21.0",
 			Resource: &v2.Resource{
 				ElementMeta: v2.ElementMeta{
@@ -270,32 +260,8 @@ func TestAddOCIArtifact_Transform_ValidationErrors(t *testing.T) {
 		expectedErr string
 	}{
 		{
-			name: "missing component",
-			spec: &v1alpha1.OCIAddOCIArtifactSpec{
-				Component:       "",
-				Version:         "1.0.0",
-				Resource:        &v2.Resource{},
-				TargetReference: "ghcr.io/test/image:v1",
-				File:            blobv1alpha1.File{URI: "file:///tmp/test"},
-			},
-			expectedErr: "component name is required",
-		},
-		{
-			name: "missing version",
-			spec: &v1alpha1.OCIAddOCIArtifactSpec{
-				Component:       "test",
-				Version:         "",
-				Resource:        &v2.Resource{},
-				TargetReference: "ghcr.io/test/image:v1",
-				File:            blobv1alpha1.File{URI: "file:///tmp/test"},
-			},
-			expectedErr: "component version is required",
-		},
-		{
 			name: "missing resource",
 			spec: &v1alpha1.OCIAddOCIArtifactSpec{
-				Component:       "test",
-				Version:         "1.0.0",
 				Resource:        nil,
 				TargetReference: "ghcr.io/test/image:v1",
 				File:            blobv1alpha1.File{URI: "file:///tmp/test"},
@@ -305,8 +271,6 @@ func TestAddOCIArtifact_Transform_ValidationErrors(t *testing.T) {
 		{
 			name: "missing file URI",
 			spec: &v1alpha1.OCIAddOCIArtifactSpec{
-				Component:       "test",
-				Version:         "1.0.0",
 				Resource:        &v2.Resource{},
 				TargetReference: "ghcr.io/test/image:v1",
 				File: blobv1alpha1.File{
@@ -318,8 +282,6 @@ func TestAddOCIArtifact_Transform_ValidationErrors(t *testing.T) {
 		{
 			name: "missing target reference for OCI",
 			spec: &v1alpha1.OCIAddOCIArtifactSpec{
-				Component:       "test",
-				Version:         "1.0.0",
 				Resource:        &v2.Resource{},
 				TargetReference: "",
 				File:            blobv1alpha1.File{URI: "file:///tmp/test"},

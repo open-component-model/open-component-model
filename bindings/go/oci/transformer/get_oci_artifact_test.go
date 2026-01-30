@@ -16,7 +16,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfspec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -150,15 +149,6 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 		Type: runtime.NewVersionedType(v1alpha1.OCIGetOCIArtifactType, v1alpha1.Version),
 		ID:   "test-get-oci-transform",
 		Spec: &v1alpha1.OCIGetOCIArtifactSpec{
-			Repository: ocispec.Repository{
-				Type: runtime.Type{
-					Name:    ocispec.Type,
-					Version: "v1",
-				},
-				BaseUrl: "ghcr.io/test/components",
-			},
-			Component: "ocm.software/test-component",
-			Version:   "1.0.0",
 			ResourceIdentity: runtime.Identity{
 				"name":    "nginx-image",
 				"version": "1.21.0",
@@ -303,28 +293,8 @@ func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {
 		expectedErr string
 	}{
 		{
-			name: "missing component",
-			spec: &v1alpha1.OCIGetOCIArtifactSpec{
-				Component:        "",
-				Version:          "1.0.0",
-				ResourceIdentity: runtime.Identity{"name": "test"},
-			},
-			expectedErr: "component name is required",
-		},
-		{
-			name: "missing version",
-			spec: &v1alpha1.OCIGetOCIArtifactSpec{
-				Component:        "test",
-				Version:          "",
-				ResourceIdentity: runtime.Identity{"name": "test"},
-			},
-			expectedErr: "component version is required",
-		},
-		{
 			name: "missing resource identity",
 			spec: &v1alpha1.OCIGetOCIArtifactSpec{
-				Component:        "test",
-				Version:          "1.0.0",
 				ResourceIdentity: nil,
 			},
 			expectedErr: "resource identity is required",
