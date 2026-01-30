@@ -2,8 +2,8 @@ package get
 
 import (
 	"github.com/spf13/cobra"
-	"ocm.software/open-component-model/cli/cmd/describe/types"
 
+	"ocm.software/open-component-model/cli/cmd/describe/types"
 	componentversion "ocm.software/open-component-model/cli/cmd/get/component-version"
 )
 

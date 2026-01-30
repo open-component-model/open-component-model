@@ -41,11 +41,11 @@ var (
 		"Signing handlers are responsible for signing and verification of component versions.",
 	)
 	// TODO: blob transformer registry does not yet expose a scheme
-	//blobTransformerSystem = NewSubsystem(
-	//	"blob-transformer",
-	//	"Blob transformers are responsible for transforming blobs into other formats. They are mainly used for input digestion
-	//	when adding new resources into a component version",
-	//)
+	// blobTransformerSystem = NewSubsystem(
+	// 	"blob-transformer",
+	// 	"Blob transformers are responsible for transforming blobs into other formats. They are mainly used for input digestion
+	// 	when adding new resources into a component version",
+	// )
 
 	// TODO: transformer registry does not yet expose a scheme
 	// graphTransformer = NewSubsystem(
