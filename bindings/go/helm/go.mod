@@ -120,8 +120,8 @@ require (
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260127131318-2c2fb62ae8cc // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260127131318-2c2fb62ae8cc // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260129143850-b9f20b318d3a // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260129143850-b9f20b318d3a // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.5 // indirect
 	sigs.k8s.io/controller-runtime v0.22.3 // indirect
