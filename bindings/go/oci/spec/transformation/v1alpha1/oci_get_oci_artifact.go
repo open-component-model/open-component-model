@@ -3,7 +3,6 @@ package v1alpha1
 import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -39,12 +38,6 @@ type OCIGetOCIArtifactOutput struct {
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type OCIGetOCIArtifactSpec struct {
-	// Repository is the OCI repository specification
-	Repository oci.Repository `json:"repository"`
-	// Component is the component name
-	Component string `json:"component"`
-	// Version is the component version
-	Version string `json:"version"`
 	// ResourceIdentity identifies the resource to retrieve.
 	// Must match a resource in the component descriptor.
 	ResourceIdentity runtime.Identity `json:"resourceIdentity"`
