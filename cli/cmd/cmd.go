@@ -8,6 +8,7 @@ import (
 
 	"ocm.software/open-component-model/cli/cmd/add"
 	"ocm.software/open-component-model/cli/cmd/configuration"
+	"ocm.software/open-component-model/cli/cmd/describe"
 	"ocm.software/open-component-model/cli/cmd/download"
 	"ocm.software/open-component-model/cli/cmd/generate"
 	"ocm.software/open-component-model/cli/cmd/get"
@@ -64,5 +65,6 @@ func New() *cobra.Command {
 	cmd.AddCommand(sign.New())
 	cmd.AddCommand(pluginregistry.New())
 	cmd.AddCommand(transfer.New())
+	cmd.AddCommand(describe.New())
 	return cmd
 }
