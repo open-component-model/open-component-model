@@ -134,19 +134,19 @@ func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 
 		// Create a copy of the resource with updated access pointing to target
 		uploadResource := runtimeResource.DeepCopy()
-		
+
 		// Update the access specification with the target reference
 		// The UploadResource method will handle the actual upload
 		if uploadResource.Access == nil {
 			uploadResource.Access = &runtime.Raw{}
 		}
-		
+
 		// Cast to *runtime.Raw to access Type and Data fields
 		accessRaw, ok := uploadResource.Access.(*runtime.Raw)
 		if !ok {
 			return nil, fmt.Errorf("access is not a *runtime.Raw")
 		}
-		
+
 		// Set the access type to ociArtifact with new imageReference
 		accessData := fmt.Sprintf(`{"type":"ociArtifact","imageReference":"%s"}`, targetReference)
 		accessRaw.Type = runtime.Type{Name: "ociArtifact"}
