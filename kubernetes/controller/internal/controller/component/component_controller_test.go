@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -743,7 +744,7 @@ var _ = Describe("Component Controller", func() {
 					Verify: []v1alpha1.Verification{
 						{
 							Signature: signatureName,
-							Value:     pubKey,
+							Value:     base64.StdEncoding.EncodeToString([]byte(pubKey)),
 						},
 					},
 				},
@@ -916,7 +917,7 @@ var _ = Describe("Component Controller", func() {
 						},
 						{
 							Signature: signatureNameValue,
-							Value:     pubKeyValue,
+							Value:     base64.StdEncoding.EncodeToString([]byte(pubKeyValue)),
 						},
 					},
 				},

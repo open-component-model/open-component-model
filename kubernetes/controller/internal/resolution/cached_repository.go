@@ -3,6 +3,7 @@ package resolution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 
@@ -11,9 +12,11 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
@@ -21,11 +24,13 @@ import (
 // It wraps a real repository and uses a worker pool to handle concurrent access with caching.
 // This is a READ-ONLY cache. Writing operations are not cached.
 type CacheBackedRepository struct {
-	spec       runtime.Typed
-	cfg        *configuration.Configuration
-	workerPool *workerpool.WorkerPool
-	repo       repository.ComponentVersionRepository
-	logger     *logr.Logger
+	spec            runtime.Typed
+	cfg             *configuration.Configuration
+	Verifications   []ocm.Verification
+	SigningRegistry *signinghandler.SigningRegistry
+	workerPool      *workerpool.WorkerPool
+	repo            repository.ComponentVersionRepository
+	logger          *logr.Logger
 	// requesterFunc is used to get a collection of types.NamespacedNames that want to listen to reconcile events
 	// that the cache handles. Upon an event ( resolution complete regardless of outcome ) all objects in this
 	// list are notified which will trigger a new reconcile event.
@@ -66,19 +71,25 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 	}
 
 	wpOpts := workerpool.ResolveOptions{
-		Component:  component,
-		Version:    version,
-		Repository: c.repo,
-		KeyFunc:    keyFunc,
-		Requester:  c.requesterFunc(),
+		Component:       component,
+		Version:         version,
+		Verifications:   c.Verifications,
+		SigningRegistry: c.SigningRegistry,
+		Repository:      c.repo,
+		KeyFunc:         keyFunc,
+		Requester:       c.requesterFunc(),
 	}
 
-	result, err := c.workerPool.GetComponentVersion(ctx, wpOpts)
+	desc, err := c.workerPool.GetComponentVersion(ctx, wpOpts)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, workerpool.ErrNotSafelyDigestible) {
+			return desc, err
+		} else {
+			return nil, err
+		}
 	}
 
-	return result, nil
+	return desc, nil
 }
 
 // ListComponentVersions lists all versions of a component, using the cache when possible.

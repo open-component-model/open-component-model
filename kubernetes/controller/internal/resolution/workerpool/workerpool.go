@@ -2,7 +2,9 @@ package workerpool
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"sync"
 	"time"
@@ -11,9 +13,14 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/repository"
+	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/signing"
+	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 )
 
 // RequesterInfo contains information about the object requesting resolution.
@@ -21,12 +28,16 @@ type RequesterInfo struct {
 	NamespacedName types.NamespacedName
 }
 
+var ErrNotSafelyDigestible = fmt.Errorf("component version is not safely digestible")
+
 // ResolveOptions contains all the options the resolution service requires to perform a resolve operation.
 type ResolveOptions struct {
-	Component  string
-	Version    string
-	Repository repository.ComponentVersionRepository
-	KeyFunc    func() (string, error)
+	Component       string
+	Version         string
+	Repository      repository.ComponentVersionRepository
+	Verifications   []ocm.Verification
+	SigningRegistry *signinghandler.SigningRegistry
+	KeyFunc         func() (string, error)
 	// Requester is the information about the object requesting this resolution.
 	// It will be notified when the resolution completes.
 	Requester RequesterInfo
@@ -183,7 +194,19 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 	if cached, ok := wp.Cache.Get(key); ok {
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 		if cached.Error != nil {
-			// we remove error results so the controller can immediately retry.
+			// In case of an error of type ErrNotSafelyDigestible we return the cached error and value because we want
+			// to pass through the information that this component version is not safely digestible to the controller
+			// but still use the value.
+			if errors.Is(cached.Error, ErrNotSafelyDigestible) {
+				res, ok := cached.Value.(T)
+				if !ok {
+					return result, fmt.Errorf("unable to assert cache value for key %s", key)
+				}
+
+				return res, cached.Error
+			}
+
+			// we remove error results from the cache, so the controller can immediately retry.
 			wp.Cache.Remove(key)
 			return result, cached.Error
 		}
@@ -345,10 +368,66 @@ func (wp *WorkerPool) setResult(key string, result any, err error) []RequesterIn
 
 // getComponentVersion performs the actual component version resolution.
 func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptions) (any, error) {
-	descriptor, err := opts.Repository.GetComponentVersion(ctx, opts.Component, opts.Version)
+	logger := log.FromContext(ctx)
+
+	desc, err := opts.Repository.GetComponentVersion(ctx, opts.Component, opts.Version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get component version %s:%s: %w", opts.Component, opts.Version, err)
 	}
 
-	return descriptor, nil
+	// Early return if no verifications are requested and to prevent returning ErrNotSafelyDigestible if not needed
+	if len(opts.Verifications) == 0 {
+		logger.Info("no verifications requested, skipping signature verification")
+
+		return desc, nil
+	}
+
+	// If verifications are requested, we need to verify that the component version is safely digestible
+	// Anything that comes after this will, in case of an error, always be skipped until cache TTL expires
+	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
+		return desc, ErrNotSafelyDigestible
+	}
+
+	logger.Info("verifying signature", "component", opts.Component, "version", opts.Version)
+
+	for _, verification := range opts.Verifications {
+		var descSig *descriptor.Signature
+		for i := range desc.Signatures {
+			if desc.Signatures[i].Name == verification.Signature {
+				descSig = &desc.Signatures[i]
+				break
+			}
+		}
+
+		if descSig == nil {
+			return nil, fmt.Errorf("signature %s not found in component %s", verification.Signature, opts.Component)
+		}
+
+		if err := signing.VerifyDigestMatchesDescriptor(ctx, desc, *descSig, slog.New(logr.ToSlogHandler(logger))); err != nil {
+			return nil, fmt.Errorf("digest verification failed for signature %q: %w", descSig.Name, err)
+		}
+
+		cfg := &signingv1alpha1.Config{
+			SignatureAlgorithm: signingv1alpha1.SignatureAlgorithm(descSig.Signature.Algorithm),
+		}
+
+		signingHandler, err := opts.SigningRegistry.GetPlugin(ctx, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get signing handler plugin: %w", err)
+		}
+
+		credentials := map[string]string{}
+		switch signingv1alpha1.SignatureAlgorithm(descSig.Signature.Algorithm) {
+		case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
+			credentials["public_key_pem"] = string(verification.PublicKey)
+		default:
+			return nil, fmt.Errorf("unsupported signature algorithm: %q", descSig.Signature.Algorithm)
+		}
+
+		if err := signingHandler.Verify(ctx, *descSig, cfg, credentials); err != nil {
+			return nil, fmt.Errorf("signature verification failed for signature %s: %w", verification.Signature, err)
+		}
+	}
+
+	return desc, nil
 }
