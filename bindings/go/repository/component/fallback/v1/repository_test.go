@@ -237,6 +237,106 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 	}
 }
 
+func Test_GetRepositoryForSpecification(t *testing.T) {
+	ctx := t.Context()
+
+	// Build a base resolver set containing a few repositories.
+	baseResolvers := []*resolverruntime.Resolver{
+		{
+			Repository: NewRepositorySpec("alpha", nil),
+			Prefix:     "",
+			Priority:   1,
+		},
+		{
+			Repository: NewRepositorySpec("beta", nil),
+			Prefix:     "",
+			Priority:   2,
+		},
+		{
+			Repository: NewRepositorySpec("nil-policy", nil, PolicyReturnNilOnGetRepositoryForSpec),
+			Prefix:     "",
+			Priority:   0,
+		},
+	}
+
+	cases := []struct {
+		name      string
+		resolvers []*resolverruntime.Resolver
+		spec      runtime.Typed
+		wantRepo  string // empty means expect nil repo
+		assertErr assert.ErrorAssertionFunc
+	}{
+		{
+			name:      "match existing specification (beta)",
+			resolvers: baseResolvers,
+			spec:      NewRepositorySpec("beta", nil),
+			wantRepo:  "beta",
+			assertErr: assert.NoError,
+		},
+		{
+			name:      "match existing specification (alpha)",
+			resolvers: baseResolvers,
+			spec:      NewRepositorySpec("alpha", nil),
+			wantRepo:  "alpha",
+			assertErr: assert.NoError,
+		},
+		{
+			name:      "unknown specification returns new repository",
+			resolvers: baseResolvers,
+			spec:      NewRepositorySpec("gamma", nil),
+			wantRepo:  "gamma",
+			assertErr: assert.NoError,
+		},
+		{
+			name: "matching specification but provider returns nil",
+			resolvers: []*resolverruntime.Resolver{
+				{
+					Repository: NewRepositorySpec("nil-policy", nil, PolicyReturnNilOnGetRepositoryForSpec),
+					Prefix:     "",
+					Priority:   0,
+				},
+			},
+			spec:      NewRepositorySpec("nil-policy", nil, PolicyReturnNilOnGetRepositoryForSpec),
+			wantRepo:  "", // repo is nil and error is nil
+			assertErr: assert.NoError,
+		},
+		{
+			name: "matching specification but provider errors",
+			resolvers: []*resolverruntime.Resolver{
+				{
+					Repository: NewRepositorySpec("error-policy", nil, PolicyErrorOnGetRepositoryForSpec),
+					Prefix:     "",
+					Priority:   0,
+				},
+			},
+			spec:      NewRepositorySpec("error-policy", nil, PolicyErrorOnGetRepositoryForSpec),
+			wantRepo:  "",
+			assertErr: assert.Error,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+
+			fb, err := fallback.NewFallbackRepository(ctx, MockProvider{}, nil, tc.resolvers)
+			r.NoError(err)
+
+			repo, err := fb.GetComponentVersionRepositoryForSpecification(ctx, tc.spec)
+			if !tc.assertErr(t, err) {
+				return
+			}
+			if tc.wantRepo == "" {
+				assert.Nil(t, repo, "expected repo to be nil")
+				return
+			}
+			require.NotNil(t, repo, "expected non-nil repo")
+			mr := repo.(*MockRepository)
+			assert.Equal(t, tc.wantRepo, mr.Name)
+		})
+	}
+}
+
 var MockType = runtime.NewUnversionedType("mock-repository")
 
 const (
