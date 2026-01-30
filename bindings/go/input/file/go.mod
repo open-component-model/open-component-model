@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	github.com/gabriel-vasile/mimetype v1.4.12
 	github.com/stretchr/testify v1.11.1
-	ocm.software/open-component-model/bindings/go/blob v0.0.10
+	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/constructor v0.0.5
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 )
@@ -20,11 +20,12 @@ require (
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/credentials v0.0.5 // indirect
+	ocm.software/open-component-model/bindings/go/configuration v0.0.9 // indirect
+	ocm.software/open-component-model/bindings/go/credentials v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260107082047-3b8abf72f590 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260107082047-3b8abf72f590 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha8 // indirect
-	ocm.software/open-component-model/bindings/go/repository v0.0.4 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260129143850-b9f20b318d3a // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260129143850-b9f20b318d3a // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 // indirect
+	ocm.software/open-component-model/bindings/go/repository v0.0.5 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )

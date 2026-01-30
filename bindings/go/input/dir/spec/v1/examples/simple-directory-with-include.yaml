@@ -1,6 +1,0 @@
-# yaml-language-server: $schema=../schemas/Dir.schema.json
-type: Dir
-path: ./path/to/dir
-compress: true
-includeFiles:
-  - "*.txt"

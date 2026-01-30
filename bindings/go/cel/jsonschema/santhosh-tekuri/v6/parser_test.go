@@ -732,3 +732,174 @@ func TestArrayExpressionPaths(t *testing.T) {
 		})
 	}
 }
+
+func TestContainerTypeErrorSuppression(t *testing.T) {
+	testCases := []struct {
+		name      string
+		resource  map[string]any
+		schema    *jsonschema.Schema
+		expectErr bool
+		errMsg    string
+	}{
+		{
+			name: "array of expressions causes type error - should be suppressed",
+			resource: map[string]any{
+				"field": []any{
+					"${expr1}",
+					"${expr2}",
+				},
+			},
+			schema: &jsonschema.Schema{
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"field": {
+						Types: stv6jsonschema.TypeForSchema("null"),
+					},
+				},
+			},
+			expectErr: false,
+		},
+		{
+			name: "object with expression child causes type error - should be suppressed",
+			resource: map[string]any{
+				"field": map[string]any{
+					"nested": "${expr.value}",
+				},
+			},
+			schema: &jsonschema.Schema{
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"field": {
+						Types: stv6jsonschema.TypeForSchema("null"),
+					},
+				},
+			},
+			expectErr: false,
+		},
+		{
+			name: "type error without child expressions - should NOT be suppressed",
+			resource: map[string]any{
+				"field": []any{
+					"plain string",
+					"another string",
+				},
+			},
+			schema: &jsonschema.Schema{
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"field": {
+						Types: stv6jsonschema.TypeForSchema("null"),
+					},
+				},
+			},
+			expectErr: true,
+			errMsg:    "jsonschema validation failed with ''\n- at '/field': got array, want null",
+		},
+		{
+			name: "nested object with CEL expression - parent type error suppressed",
+			resource: map[string]any{
+				"parent": map[string]any{
+					"child": "${nested.expr}",
+				},
+			},
+			schema: &jsonschema.Schema{
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"parent": {
+						Types: stv6jsonschema.TypeForSchema("string"),
+					},
+				},
+			},
+			expectErr: true,
+			errMsg:    `failed to resolve CEL type: expression "nested.expr", path "parent.child", root type "object": type <nil> is not resolvable at segment 1`,
+		},
+		{
+			name: "deeply nested array with expressions",
+			resource: map[string]any{
+				"level1": []any{
+					map[string]any{
+						"level2": []any{
+							"${deep.expr}",
+						},
+					},
+				},
+			},
+			schema: &jsonschema.Schema{
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"level1": {
+						Types: stv6jsonschema.TypeForSchema("null"),
+					},
+				},
+			},
+			expectErr: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := stv6jsonschema.ParseResource(tc.resource, tc.schema)
+
+			if tc.expectErr {
+				require.Error(t, err)
+				if tc.errMsg != "" {
+					assert.Equal(t, tc.errMsg, err.Error())
+				}
+			} else {
+				require.NoError(t, err, "expected error to be suppressed for container with child expressions")
+			}
+		})
+	}
+}
+
+func TestErrorFilteringWithMultipleCauses(t *testing.T) {
+	testCases := []struct {
+		name      string
+		resource  map[string]any
+		schema    *jsonschema.Schema
+		expectErr bool
+	}{
+		{
+			name: "all causes are expression-related - error fully suppressed",
+			resource: map[string]any{
+				"field1": "${expr1}",
+				"field2": "${expr2}",
+			},
+			schema: &jsonschema.Schema{
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"field1": {Types: stv6jsonschema.TypeForSchema("null")},
+					"field2": {Types: stv6jsonschema.TypeForSchema("null")},
+				},
+			},
+			expectErr: false,
+		},
+		{
+			name: "some causes are real errors - error not fully suppressed",
+			resource: map[string]any{
+				"expr":  "${some.expr}",
+				"error": "wrong type",
+			},
+			schema: &jsonschema.Schema{
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"expr":  {Types: stv6jsonschema.TypeForSchema("null")},
+					"error": {Types: stv6jsonschema.TypeForSchema("number")},
+				},
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := stv6jsonschema.ParseResource(tc.resource, tc.schema)
+
+			if tc.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

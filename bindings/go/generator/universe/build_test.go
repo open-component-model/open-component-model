@@ -48,6 +48,7 @@ func TestDefinition(t *testing.T) {
 
 func TestConstLiteral(t *testing.T) {
 	src := `
+//+marker
 package p
 
 type T string
@@ -61,7 +62,7 @@ const (
 		"p.go": src,
 	})
 
-	u, err := universe.Build(t.Context(), []string{dir})
+	u, err := universe.Build(t.Context(), "+marker", dir)
 	require.NoError(t, err)
 
 	ti := u.LookupType("example.com/testmod", "T")
@@ -75,6 +76,7 @@ const (
 
 func TestLookupType(t *testing.T) {
 	src := `
+//+marker
 package p
 
 type A struct{}
@@ -84,7 +86,7 @@ type B struct{}
 		"p.go": src,
 	})
 
-	u, err := universe.Build(t.Context(), []string{dir})
+	u, err := universe.Build(t.Context(), "+marker", dir)
 	require.NoError(t, err)
 
 	require.NotNil(t, u.LookupType("example.com/testmod", "A"))
@@ -94,6 +96,7 @@ type B struct{}
 
 func TestResolveExpr_Ident(t *testing.T) {
 	src := `
+//+marker
 package p
 
 type A struct{}
@@ -105,7 +108,7 @@ type B struct {
 		"p.go": src,
 	})
 
-	u, err := universe.Build(t.Context(), []string{dir})
+	u, err := universe.Build(t.Context(), "+marker", dir)
 	require.NoError(t, err)
 
 	fset := token.NewFileSet()
@@ -133,6 +136,7 @@ type B struct {
 
 func TestResolveExpr_Selector(t *testing.T) {
 	src := `
+//+marker
 package p
 
 import "time"
@@ -145,7 +149,7 @@ type A struct {
 		"p.go": src,
 	})
 
-	u, err := universe.Build(t.Context(), []string{dir})
+	u, err := universe.Build(t.Context(), "+marker", dir)
 	require.NoError(t, err)
 
 	// time.Duration should not be resolved (external type)
@@ -171,6 +175,6 @@ type A struct {
 }
 
 func TestFindModuleRoots_NoModule(t *testing.T) {
-	_, err := universe.Build(t.Context(), []string{t.TempDir()})
+	_, err := universe.Build(t.Context(), "+marker", t.TempDir())
 	require.Error(t, err)
 }

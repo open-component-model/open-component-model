@@ -1,59 +1,48 @@
 package deployer
 
 import (
+	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"os"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	. "ocm.software/ocm/api/helper/builder"
 
-	"github.com/mandelsoft/vfs/pkg/osfs"
-	"github.com/mandelsoft/vfs/pkg/projectionfs"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	environment "ocm.software/ocm/api/helper/env"
-	ocmmetav1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
-	"ocm.software/ocm/api/ocm/extensions/artifacttypes"
-	"ocm.software/ocm/api/ocm/extensions/repositories/ctf"
-	"ocm.software/ocm/api/utils/accessio"
-	"ocm.software/ocm/api/utils/mime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/ctf"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci"
+	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 )
 
 var _ = Describe("Deployer Controller with YAML stream (ConfigMap + Secret)", func() {
-	var (
-		env     *Builder
-		tempDir string
-	)
+	var tempDir string
+
 	BeforeEach(func() {
 		tempDir = GinkgoT().TempDir()
-		fs, err := projectionfs.New(osfs.OsFs, tempDir)
-		Expect(err).NotTo(HaveOccurred())
-		env = NewBuilder(environment.FileSystem(fs))
-	})
-
-	AfterEach(func() {
-		Expect(env.Cleanup()).To(Succeed())
 	})
 
 	Context("deployer controller (yaml stream)", func() {
 		var resourceObj *v1alpha1.Resource
 		var namespace *corev1.Namespace
-		var ctfName, componentName, resourceName, deployerObjName string
+		var componentName, resourceName, deployerObjName string
 		var componentVersion string
 
 		BeforeEach(func(ctx SpecContext) {
-			ctfName = "ctf-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			componentName = "ocm.software/test-component-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			resourceName = "test-yamlstream-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			deployerObjName = "test-deployer-yaml-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
@@ -94,12 +83,10 @@ var _ = Describe("Deployer Controller with YAML stream (ConfigMap + Secret)", fu
 
 		It("reconciles a deployer that applies a YAML stream", func(ctx SpecContext) {
 			By("creating a CTF with the YAML stream blob")
-			resourceType := artifacttypes.PLAIN_TEXT
 			resourceVersion := "1.0.0"
 
 			// Multi-doc YAML stream: ConfigMap + Secret
-			yamlStream := []byte(fmt.Sprintf(`
-apiVersion: v1
+			yamlStream := []byte(fmt.Sprintf(`apiVersion: v1
 kind: ConfigMap
 metadata:
   name: sample-cm
@@ -117,24 +104,61 @@ stringData:
   password: s3cr3t
 `, namespace.GetName()))
 
-			env.OCMCommonTransport(ctfName, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersion, func() {
-						env.Resource(resourceName, resourceVersion, resourceType, ocmmetav1.LocalRelation, func() {
-							// Store as text; controller treats it as YAML stream
-							env.BlobData(mime.MIME_YAML, yamlStream)
-						})
-					})
-				})
-			})
+			ctfPath := tempDir
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
 
-			spec, err := ctf.NewRepositorySpec(ctf.ACC_READONLY, filepath.Join(tempDir, ctfName))
+			fs, err := filesystem.NewFS(ctfPath, os.O_RDWR)
 			Expect(err).NotTo(HaveOccurred())
-			specData, err := spec.MarshalJSON()
+			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo, err := oci.NewRepository(ocictf.WithCTF(store), oci.WithTempDir(tempDir))
+			Expect(err).NotTo(HaveOccurred())
+
+			resource := &descruntime.Resource{
+				ElementMeta: descruntime.ElementMeta{
+					ObjectMeta: descruntime.ObjectMeta{
+						Name:    resourceName,
+						Version: resourceVersion,
+					},
+				},
+				Type:     "plainText",
+				Relation: descruntime.LocalRelation,
+				Access: &v2.LocalBlob{
+					Type: runtime.Type{
+						Name:    v2.LocalBlobAccessType,
+						Version: v2.LocalBlobAccessTypeVersion,
+					},
+					MediaType: "application/x-yaml",
+				},
+			}
+
+			blobContent := inmemory.New(bytes.NewReader(yamlStream))
+			newRes, err := repo.AddLocalResource(ctx, componentName, componentVersion, resource, blobContent)
+			Expect(err).NotTo(HaveOccurred())
+
+			desc := &descruntime.Descriptor{
+				Meta: descruntime.Meta{Version: "v2"},
+				Component: descruntime.Component{
+					ComponentMeta: descruntime.ComponentMeta{
+						ObjectMeta: descruntime.ObjectMeta{
+							Name:    componentName,
+							Version: componentVersion,
+						},
+					},
+					Provider:  descruntime.Provider{Name: "ocm.software"},
+					Resources: []descruntime.Resource{*newRes},
+				},
+			}
+
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+			repoSpec := &ctfv1.Repository{
+				Type:       runtime.Type{Name: "ctf", Version: "v1"},
+				FilePath:   ctfPath,
+				AccessMode: ctfv1.AccessModeReadOnly,
+			}
+			specData, err := json.Marshal(repoSpec)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("mocking a Resource that references the YAML stream")
-			hash := sha256.Sum256(yamlStream)
 			resourceObj = test.MockResource(
 				ctx,
 				resourceName,
@@ -150,13 +174,13 @@ stringData:
 					},
 					ResourceInfo: &v1alpha1.ResourceInfo{
 						Name:    resourceName,
-						Type:    resourceType,
+						Type:    "plainText",
 						Version: resourceVersion,
-						Access:  apiextensionsv1.JSON{Raw: []byte("{}")},
+						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
 						Digest: &v2.Digest{
 							HashAlgorithm:          "SHA-256",
 							NormalisationAlgorithm: "genericBlobDigest/v1",
-							Value:                  hex.EncodeToString(hash[:]),
+							Value:                  "test-digest-value",
 						},
 					},
 				},

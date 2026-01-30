@@ -1,6 +1,7 @@
 package deployer
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,22 +9,16 @@ import (
 	"runtime"
 	"slices"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/utils/ptr"
-	ocmctx "ocm.software/ocm/api/ocm"
-	ocmv1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
-	"ocm.software/ocm/api/ocm/extensions/attrs/signingattr"
-	"ocm.software/ocm/api/ocm/selectors/rscsel"
-	"ocm.software/ocm/api/ocm/tools/signing"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,11 +28,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
-	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 )
@@ -46,6 +48,10 @@ const (
 	// resourceWatchFinalizer is the finalizer used to ensure that the resource watch is removed when the deployer is deleted.
 	// It is used by the dynamic informer manager to unregister watches for resources that are referenced by the deployer.
 	resourceWatchFinalizer = "delivery.ocm.software/watch"
+
+	// applySetPruneFinalizer is the finalizer used to ensure that the ApplySet is pruned when the deployer is deleted.
+	applySetPruneFinalizer = "delivery.ocm.software/applyset-prune"
+
 	// deployerManager is the label used to identify the deployer as a manager of resources.
 	deployerManager = "deployer.delivery.ocm.software"
 )
@@ -72,8 +78,8 @@ type Reconciler struct {
 	resourceRESTMapper meta.RESTMapper
 
 	DownloadCache cache.DigestObjectCache[string, []*unstructured.Unstructured]
-
-	OCMContextCache *ocm.ContextCache
+	Resolver      *resolution.Resolver
+	PluginManager *manager.PluginManager
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -81,7 +87,8 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/finalizers,verbs=update
-// +kubebuilder:rbac:groups=kro.run,resources=resourcegraphdefinitions,verbs=list;watch;create;update;patch
+// TODO(matthiasbruns) Remove kro permissions https://github.com/open-component-model/ocm-project/issues/850
+// +kubebuilder:rbac:groups=kro.run,resources=resourcegraphdefinitions,verbs=list;watch;create;update;patch;delete
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -112,8 +119,10 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 		return err
 	}
 
+	eventSource := workerpool.NewEventSource(r.Resolver.WorkerPool())
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&deliveryv1alpha1.Deployer{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		WatchesRawSource(eventSource).
 		WatchesRawSource(informerManager.Source()).
 		// Watch for events from OCM resources that are referenced by the deployer
 		Watches(
@@ -138,7 +147,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 				requests := make([]reconcile.Request, 0, len(list.Items))
 				for _, deployer := range list.Items {
 					requests = append(requests, reconcile.Request{
-						NamespacedName: types.NamespacedName{
+						NamespacedName: k8stypes.NamespacedName{
 							Namespace: deployer.GetNamespace(),
 							Name:      deployer.GetName(),
 						},
@@ -222,8 +231,40 @@ func (r *Reconciler) Untrack(ctx context.Context, deployer *deliveryv1alpha1.Dep
 		return fmt.Errorf("waiting for at least one resource watch to be removed")
 	}
 
-	controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
+	return nil
+}
 
+func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1alpha1.Deployer) error {
+	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
+
+	set := r.createApplySet(deployer, logger)
+
+	metadata, err := set.Project(nil)
+	if err != nil {
+		return fmt.Errorf("failed to project ApplySet: %w", err)
+	}
+
+	logger.Info("pruning ApplySet", "scope", metadata.PruneScope())
+	result, err := set.Prune(ctx, applyset.PruneOptions{
+		KeepUIDs:    nil,
+		Scope:       metadata.PruneScope(),
+		Concurrency: runtime.NumCPU(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to prune ApplySet: %w", err)
+	}
+
+	// Log results
+	logger.Info("ApplySet prune operation complete", "pruned", len(result.Pruned))
+
+	// Prune calls delete on every resource found, even if its already being deleted.
+	// If we were to remove this check, the deployer might be deleted while a child is stuck in terminating state.
+	if !result.HasPruned() {
+		logger.Info("pruned resources, doing one more pruning until nothing more to prune")
+		return fmt.Errorf("waiting for all resources to be pruned")
+	}
+
+	// nothing more to prune, remove finalizer
 	return nil
 }
 
@@ -245,12 +286,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, nil
 	}
 
-	if !deployer.GetDeletionTimestamp().IsZero() {
-		if err := r.Untrack(ctx, deployer); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to untrack deployer: %w", err)
-		}
-
-		return ctrl.Result{}, fmt.Errorf("deployer is being deleted, waiting for resource watches to be removed")
+	result, err, needsDeletion := r.reconcileDeletionTimestamp(ctx, deployer, logger)
+	if needsDeletion {
+		return result, err
 	}
 
 	resourceNamespace := deployer.Spec.ResourceRef.Namespace
@@ -280,22 +318,25 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: %w", err)
 	}
 
-	// Download the resource
 	key := resource.Status.Resource.Digest.Value
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
 		return r.DownloadResourceWithOCM(ctx, deployer, resource)
 	})
+	if errors.Is(err, resolution.ErrResolutionInProgress) {
+		return ctrl.Result{}, nil
+	}
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to download resource from OCM or retrieve it from the cache: %w", err)
 	}
 
-	if err = r.applyConcurrently(ctx, resource, deployer, objs); err != nil {
+	if err = r.applyWithApplySet(ctx, resource, deployer, objs); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ApplyFailed, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to apply resources: %w", err)
 	}
 
+	// Track the applied objects for the dynamic informer manager
 	if err = r.trackConcurrently(ctx, deployer, objs); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceNotSynced, err.Error())
 
@@ -304,6 +345,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	updateDeployedObjectStatusReferences(objs, deployer)
 	// TODO: move finalizer up because removal is anyhow idempotent
+	controllerutil.AddFinalizer(deployer, applySetPruneFinalizer)
 	controllerutil.AddFinalizer(deployer, resourceWatchFinalizer)
 
 	// TODO: Status propagation of RGD status to deployer
@@ -312,6 +354,42 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	// we requeue the deployer after the requeue time specified in the resource.
 	return ctrl.Result{RequeueAfter: resource.GetRequeueAfter()}, nil
+}
+
+func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *deliveryv1alpha1.Deployer, logger logr.Logger) (ctrl.Result, error, bool) {
+	if !deployer.GetDeletionTimestamp().IsZero() {
+		var errs []error
+
+		hasPruneSetFinalizer := controllerutil.ContainsFinalizer(deployer, applySetPruneFinalizer)
+
+		if hasPruneSetFinalizer {
+			logger.Info("pruning ApplySet before removing finalizer")
+			if err := r.pruneWithApplySet(ctx, deployer); err != nil {
+				logger.Error(err, "waiting for ApplySet to be pruned before removing finalizer")
+				errs = append(errs, err)
+			} else {
+				logger.Info("successfully pruned ApplySet for deployer")
+				controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
+			}
+		} else if controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
+			logger.Info("untracking resources before removing finalizer")
+			if err := r.Untrack(ctx, deployer); err != nil {
+				logger.Error(err, "waiting for tracked resources to be unregistered before pruning")
+				errs = append(errs, err)
+			} else {
+				logger.Info("successfully unregistered all resource watches for deployer")
+				controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
+			}
+		}
+
+		if len(errs) > 0 {
+			return ctrl.Result{}, fmt.Errorf("failed to cleanup deployer before deletion: %w", errors.Join(errs...)), true
+		}
+
+		logger.Info("successfully cleaned up deployer before deletion")
+		return ctrl.Result{}, nil, true
+	}
+	return ctrl.Result{}, nil, false
 }
 
 func (r *Reconciler) DownloadResourceWithOCM(
@@ -326,100 +404,85 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to get effective config: %w", err)
 	}
 
-	octx, session, err := r.OCMContextCache.GetSession(&ocm.GetSessionOptions{
-		RepositorySpecification: resource.Status.Component.RepositorySpec,
-		OCMConfigurations:       configs,
+	repoSpec := &ocmruntime.Raw{}
+	if err := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()).Decode(
+		bytes.NewReader(resource.Status.Component.RepositorySpec.Raw), repoSpec); err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
+	}
+
+	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+		RepositorySpec:    repoSpec,
+		OCMConfigurations: configs,
+		Namespace:         deployer.GetNamespace(),
+		RequesterFunc: func() workerpool.RequesterInfo {
+			return workerpool.RequesterInfo{
+				NamespacedName: k8stypes.NamespacedName{
+					Namespace: deployer.GetNamespace(),
+					Name:      deployer.GetName(),
+				},
+			}
+		},
 	})
 	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.ConfigureContextFailedReason, err.Error())
+		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
 
-		return nil, fmt.Errorf("failed to get session: %w", err)
+		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	spec, err := octx.RepositorySpecForConfig(resource.Status.Component.RepositorySpec.Raw, nil)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+	componentDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
+		resource.Status.Component.Component,
+		resource.Status.Component.Version)
+	if errors.Is(err, resolution.ErrResolutionInProgress) {
+		// resolution is in progress, the controller will be re-triggered via event source when resolution completes
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
 
-		return nil, fmt.Errorf("failed to get repository spec: %w", err)
+		return nil, resolution.ErrResolutionInProgress
 	}
-
-	repo, err := session.LookupRepository(octx, spec)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
-
-		return nil, fmt.Errorf("invalid repository spec: %w", err)
-	}
-
-	cv, err := session.LookupComponentVersion(repo, resource.Status.Component.Component, resource.Status.Component.Version)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to get component version: %w", err)
 	}
 
-	// Take the resource reference from the status to ensure we are getting the exact same resource
-	resourceSelector := rscsel.And(
-		rscsel.Name(resource.Status.Resource.Name),
-		rscsel.Version(resource.Status.Resource.Version),
-		rscsel.ExtraIdentity(resource.Status.Resource.ExtraIdentity),
-	)
-
-	resourceAccesses, err := cv.SelectResources(resourceSelector)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
-
-		return nil, fmt.Errorf("failed to get resource access: %w", err)
-	}
-
-	var resourceAccess ocmctx.ResourceAccess
-	switch len(resourceAccesses) {
-	case 0:
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, "resource not found in component version")
-		return nil, fmt.Errorf("resource not found in component version")
-	case 1:
-		resourceAccess = resourceAccesses[0]
-	default:
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, "multiple resources found in component version")
-		return nil, fmt.Errorf("multiple resources found in component version")
-	}
-
-	if err := ocm.VerifyResource(resourceAccess, cv); err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
-
-		return nil, fmt.Errorf("failed to verify resource: %w", err)
-	}
-
-	// Get the manifest and its digest. Compare the digest to the one in the resource to make
-	// sure the resource is up to date.
-	manifest, digests, err := r.getResource(cv, resourceAccess)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
-
-		return nil, fmt.Errorf("failed to get manifest: %w", err)
-	}
-	defer func() {
-		err = errors.Join(err, manifest.Close())
-	}()
-
-	// TODO: There is room for improvement here but this will be reworked when we migrate to ocm v2 either way
-	// It is possible that the resource status does not have a digest as that digest is derived from the component
-	// descriptor. If a digest is present in the resource status, we verify that it matches one of the digests
-	// calculated for the resource.
-	if resource.Status.Resource.Digest != nil {
-		found := slices.ContainsFunc(digests, func(d ocmv1.DigestSpec) bool {
-			return d.NormalisationAlgorithm == resource.Status.Resource.Digest.NormalisationAlgorithm &&
-				d.HashAlgorithm == resource.Status.Resource.Digest.HashAlgorithm &&
-				d.Value == resource.Status.Resource.Digest.Value
-		})
-
-		if !found {
-			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, "resource digest mismatch")
-
-			return nil, fmt.Errorf("resource digest mismatch: none of %v matched with %s", digests, resource.Status.Resource.Digest)
+	resourceIdentity := makeResourceIdentity(resource.Status.Resource)
+	var matchedResource *descriptor.Resource
+	for i, res := range componentDescriptor.Component.Resources {
+		resIdentity := res.ToIdentity()
+		if resourceIdentity.Match(resIdentity, identityFunc()) {
+			matchedResource = &componentDescriptor.Component.Resources[i]
+			break
 		}
 	}
 
-	if objs, err = decodeObjectsFromManifest(manifest); err != nil {
+	if matchedResource == nil {
+		err := fmt.Errorf("resource with identity %v not found in component %s:%s",
+			resourceIdentity, componentDescriptor.Component.Name, componentDescriptor.Component.Version)
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
+		return nil, err
+	}
+
+	cfg, err := configuration.LoadConfigurations(ctx, r.Client, deployer.GetNamespace(), configs)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to load configurations: %w", err)
+	}
+
+	blob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to download resource: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, blob.Close())
+	}()
+
+	// Decode YAML manifests
+	if objs, err = decodeObjectsFromManifest(blob); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.MarshalFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to decode objects: %w", err)
@@ -451,105 +514,213 @@ func decodeObjectsFromManifest(manifest io.ReadCloser) (_ []*unstructured.Unstru
 	return objs, nil
 }
 
-// getResource returns the resource data as byte-slice and its digest.
-func (r *Reconciler) getResource(cv ocmctx.ComponentVersionAccess, resourceAccess ocmctx.ResourceAccess) (io.ReadCloser, []ocmv1.DigestSpec, error) {
-	octx := cv.GetContext()
-	cd := cv.GetDescriptor()
-	raw := &cd.Resources[cd.GetResourceIndex(resourceAccess.Meta())]
+// downloadResourceBlob downloads a resource blob using either the repository (for local blobs)
+// or the plugin manager (for external access types like OCI images).
+func (r *Reconciler) downloadResourceBlob(
+	ctx context.Context,
+	repo *resolution.CacheBackedRepository,
+	componentDescriptor *descriptor.Descriptor,
+	resource *descriptor.Resource,
+	cfg *configuration.Configuration,
+) (io.ReadCloser, error) {
+	// local access types can be read directly
+	if resource.Access.GetType().Name == descriptor.LocalBlobAccessType {
+		blob, _, err := repo.GetLocalResource(ctx,
+			componentDescriptor.Component.Name,
+			componentDescriptor.Component.Version,
+			resource.ToIdentity())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get local resource: %w", err)
+		}
 
-	if raw.Digest == nil {
-		return nil, nil, errors.New("digest not found in resource access")
+		reader, err := blob.ReadCloser()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get reader from local blob: %w", err)
+		}
+
+		return reader, nil
 	}
 
-	// Check if the resource is signature relevant and calculate digest of resource
-	acc, err := octx.AccessSpecForSpec(raw.Access)
+	// non-local access types use the plugin manager
+	resourcePlugin, err := r.PluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, resource.Access)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed getting access for resource: %w", err)
+		return nil, fmt.Errorf("failed to get resource plugin: %w", err)
 	}
 
-	meth, err := acc.AccessMethod(cv)
+	creds, err := resolveResourceCredentials(ctx, r.PluginManager, resource, cfg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed getting access method: %w", err)
+		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
 	}
 
-	accessMethod, err := resourceAccess.AccessMethod()
+	blob, err := resourcePlugin.DownloadResource(ctx, resource, creds)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create access method: %w", err)
+		return nil, fmt.Errorf("failed to download resource: %w", err)
 	}
 
-	bAcc := accessMethod.AsBlobAccess()
-
-	meth = signing.NewRedirectedAccessMethod(meth, bAcc)
-	resAccDigest := raw.Digest
-	resAccDigestType := signing.DigesterType(resAccDigest)
-	req := []ocmctx.DigesterType{resAccDigestType}
-
-	registry := signingattr.Get(octx).HandlerRegistry()
-	hasher := registry.GetHasher(resAccDigestType.HashAlgorithm)
-	digest, err := octx.BlobDigesters().DetermineDigests(raw.Type, hasher, registry, meth, req...)
+	reader, err := blob.ReadCloser()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed determining digest for resource: %w", err)
+		return nil, fmt.Errorf("failed to get reader from blob: %w", err)
 	}
 
-	// Get actual resource data
-	data, err := bAcc.Reader()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed getting resource data: %w", err)
-	}
-
-	return data, digest, nil
+	return reader, nil
 }
 
-// applyConcurrently applies the resource objects to the cluster concurrently.
-//
-// See Apply for more details on how the objects are applied.
-func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured) error {
-	if len(objs) > 1 {
-		// TODO(jakobmoellerdev): remove once https://github.com/open-component-model/ocm-k8s-toolkit/issues/273#issue-3201709052
-		//  is implemented in the deployer controller. We need proper apply detection so we can support pruning diffs.
-		//  Otherwise we can orphan resources.
-		msg := "multiple objects found in manifest," +
-			"the current deployer implementation does not officially support this yet," +
-			"and will not prune diffs properly."
-		event.New(r, deployer, nil, eventv1.EventSeverityInfo, msg)
-		log.FromContext(ctx).Info(msg)
+// resolveResourceCredentials resolves credentials for accessing a resource.
+func resolveResourceCredentials(
+	ctx context.Context,
+	pm *manager.PluginManager,
+	resource *descriptor.Resource,
+	cfg *configuration.Configuration,
+) (map[string]string, error) {
+	if cfg == nil {
+		return nil, nil
 	}
 
-	eg, egctx := errgroup.WithContext(ctx)
+	resourcePlugin, err := pm.ResourcePluginRegistry.GetResourcePlugin(ctx, resource.Access)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resource plugin: %w", err)
+	}
 
-	for i := range objs {
-		eg.Go(func() error {
-			//nolint:forcetypeassert // we know that objs[i] is a client.Object because we just cloned it
-			obj := objs[i].DeepCopyObject().(*unstructured.Unstructured)
+	id, err := resourcePlugin.GetResourceCredentialConsumerIdentity(ctx, resource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resource credential consumer identity: %w", err)
+	}
 
-			return r.apply(egctx, resource, deployer, obj)
+	logger := log.FromContext(ctx)
+	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
+		PluginManager: pm,
+		Logger:        &logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create credential graph: %w", err)
+	}
+
+	creds, err := credGraph.Resolve(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
+	}
+
+	return creds, nil
+}
+
+// makeResourceIdentity creates a runtime.Identity from a ResourceInfo.
+func makeResourceIdentity(info *deliveryv1alpha1.ResourceInfo) ocmruntime.Identity {
+	identity := ocmruntime.Identity{
+		"name": info.Name,
+	}
+
+	if info.Version != "" {
+		identity["version"] = info.Version
+	}
+
+	for k, v := range info.ExtraIdentity {
+		identity[k] = v
+	}
+
+	return identity
+}
+
+// identityFunc is a custom identity matching function that ignores the "version" field if it is not set.
+func identityFunc() ocmruntime.IdentityMatchingChainFn {
+	return func(i, o ocmruntime.Identity) bool {
+		version, ok := i["version"]
+		if !ok || version == "" {
+			delete(o, "version")
+		}
+		return ocmruntime.IdentityEqual(i, o)
+	}
+}
+
+func (r *Reconciler) createApplySet(deployer *deliveryv1alpha1.Deployer, logger logr.Logger) *applyset.ApplySet {
+	cfg := applyset.Config{
+		Client:          r.Client,
+		RESTMapper:      r.resourceRESTMapper,
+		Log:             logger,
+		ParentNamespace: deployer.GetNamespace(),
+	}
+	return applyset.New(cfg, deployer)
+}
+
+// applyWithApplySet applies the resource objects using ApplySet for proper tracking and pruning.
+// This method uses the ApplySet specification (KEP-3659) to manage sets of resources with automatic
+// pruning of orphaned resources.
+//
+// The deployer object itself is used as the ApplySet parent, which means:
+// - All deployed resources are labeled with applyset.k8s.io/part-of=<applyset-id>
+// - The deployer carries annotations tracking the GroupKinds and namespaces of managed resources
+// - Pruning automatically removes resources that were previously deployed but are no longer in the manifest
+func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured) error {
+	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
+
+	// Use the deployer as the ApplySet parent
+	// This allows us to track all resources deployed by this deployer
+	set := r.createApplySet(deployer, logger)
+
+	logger.Info("adding objects to ApplySet", "count", len(objs))
+
+	resourcesToAdd := make([]applyset.Resource, 0, len(objs))
+	// Add all objects to the ApplySet
+	for _, obj := range objs {
+		// Clone the object to avoid modifying the original
+		obj := obj.DeepCopy()
+
+		// Set ownership labels and annotations (preserving existing behavior)
+		setOwnershipLabels(obj, resource, deployer)
+		logger.Info("set ownership labels", "labels", obj.GetLabels())
+		setOwnershipAnnotations(obj, resource)
+		logger.Info("set ownership annotations", "annotations", obj.GetAnnotations())
+
+		// Set controller reference
+		if err := controllerutil.SetControllerReference(deployer, obj, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+		}
+
+		// Default namespace and apiVersion if needed
+		if err := r.defaultObj(ctx, resource, obj); err != nil {
+			return fmt.Errorf("failed to default object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+		}
+
+		resourcesToAdd = append(resourcesToAdd, applyset.Resource{
+			ID:        obj.GetName(),
+			Object:    obj,
+			SkipApply: false,
 		})
 	}
 
-	return eg.Wait()
-}
-
-// apply applies the object to the cluster using Server-Side Apply. It sets the controller reference on the object
-// and patches it with the FieldManager set to the deployer UID. It also updates the deployer status with the
-// applied object reference.
-func (r *Reconciler) apply(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, obj *unstructured.Unstructured) error {
-	setOwnershipLabels(obj, resource, deployer)
-	setOwnershipAnnotations(obj, resource)
-	if err := controllerutil.SetControllerReference(deployer, obj, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set controller reference on object: %w", err)
+	logger.Info("projecting ApplySet and set deployer metadata")
+	metadata, err := set.Project(resourcesToAdd)
+	if err != nil {
+		return fmt.Errorf("failed to project ApplySet: %w", err)
 	}
 
-	if err := r.defaultObj(ctx, resource, obj); err != nil {
-		return err
+	if err := r.setApplySetMetadata(ctx, deployer, metadata); err != nil {
+		return fmt.Errorf("failed to set ApplySet metadata on deployer: %w", err)
 	}
 
-	applyConfig := client.ApplyConfigurationFromUnstructured(obj)
-	if err := r.GetClient().Apply(ctx, applyConfig, &client.ApplyOptions{
-		Force:        ptr.To(true),
-		FieldManager: fmt.Sprintf("%s/%s", deployerManager, deployer.UID),
-	}); err != nil {
-		return fmt.Errorf("failed to apply object: %w", err)
+	logger.Info("applying ApplySet")
+	applyResult, metadata, err := set.Apply(ctx, resourcesToAdd, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
+	if err != nil {
+		return fmt.Errorf("failed to apply ApplySet: %w", err)
 	}
+
+	if applyResult.Errors() != nil {
+		return fmt.Errorf("errors occurred during ApplySet apply: %w", applyResult.Errors())
+	}
+
+	// Log results
+	logger.Info("ApplySet operation complete", "applied", len(applyResult.Applied))
+
+	pruneResult, err := set.Prune(ctx, applyset.PruneOptions{
+		KeepUIDs:    applyResult.ObservedUIDs(),
+		Scope:       metadata.PruneScope(),
+		Concurrency: runtime.NumCPU(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to prune ApplySet: %w", err)
+	}
+
+	// Log prune results
+	logger.Info("ApplySet prune operation complete", "pruned", len(pruneResult.Pruned))
 
 	return nil
 }

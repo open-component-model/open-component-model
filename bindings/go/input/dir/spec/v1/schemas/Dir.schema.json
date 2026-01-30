@@ -78,15 +78,5 @@
       "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
       "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
     }
-  },
-  "examples": [
-    {
-      "compress": true,
-      "includeFiles": [
-        "*.txt"
-      ],
-      "path": "./path/to/dir",
-      "type": "Dir"
-    }
-  ]
+  }
 }

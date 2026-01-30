@@ -1,0 +1,73 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "manager-role" "context" $) }}
+rules:
+    - apiGroups:
+        - ""
+      resources:
+        - configmaps
+        - secrets
+        - serviceaccounts
+      verbs:
+        - get
+        - list
+        - watch
+    - apiGroups:
+        - ""
+      resources:
+        - events
+      verbs:
+        - create
+        - patch
+    - apiGroups:
+        - ""
+      resources:
+        - serviceaccounts/token
+      verbs:
+        - create
+    - apiGroups:
+        - delivery.ocm.software
+      resources:
+        - components
+        - deployers
+        - repositories
+        - resources
+      verbs:
+        - create
+        - delete
+        - get
+        - list
+        - patch
+        - update
+        - watch
+    - apiGroups:
+        - delivery.ocm.software
+      resources:
+        - components/finalizers
+        - deployers/finalizers
+        - repositories/finalizers
+      verbs:
+        - update
+    - apiGroups:
+        - delivery.ocm.software
+      resources:
+        - components/status
+        - deployers/status
+        - repositories/status
+        - resources/status
+      verbs:
+        - get
+        - patch
+        - update
+    - apiGroups:
+        - kro.run
+      resources:
+        - resourcegraphdefinitions
+      verbs:
+        - create
+        - delete
+        - list
+        - patch
+        - update
+        - watch
