@@ -26,7 +26,7 @@ type pathMatcherProvider struct {
 	repoCache map[string]repository.ComponentVersionRepository
 }
 
-var _ ComponentVersionRepositoryForComponentProvider = (*pathMatcherProvider)(nil)
+var _ ComponentVersionRepositoryResolver = (*pathMatcherProvider)(nil)
 
 // getRepository returns a cached repository for the given specification, or creates a new one.
 // It handles credential resolution and caching internally.
@@ -79,7 +79,7 @@ func (p *pathMatcherProvider) getRepository(ctx context.Context, specification r
 	return repo, nil
 }
 
-func (p *pathMatcherProvider) GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error) {
+func (p *pathMatcherProvider) ResolveComponentVersionRepository(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error) {
 	repoSpec, err := p.specProvider.GetRepositorySpec(ctx, runtime.Identity{
 		descruntime.IdentityAttributeName:    component,
 		descruntime.IdentityAttributeVersion: version,

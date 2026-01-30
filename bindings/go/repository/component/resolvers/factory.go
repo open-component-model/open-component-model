@@ -43,7 +43,7 @@ func New(
 	ctx context.Context,
 	opts Options,
 	baseRepo runtime.Typed,
-) (ComponentVersionRepositoryForComponentProvider, error) {
+) (ComponentVersionRepositoryResolver, error) {
 	if opts.RepoProvider == nil {
 		return nil, fmt.Errorf("repository provider is required")
 	}
@@ -61,7 +61,7 @@ func New(
 }
 
 //nolint:staticcheck // compatibility mode for deprecated resolvers
-func newFallbackProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (ComponentVersionRepositoryForComponentProvider, error) {
+func newFallbackProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (ComponentVersionRepositoryResolver, error) {
 	var finalResolvers []*resolverruntime.Resolver
 
 	if baseRepo != nil {
@@ -82,7 +82,7 @@ func newFallbackProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo
 	}, nil
 }
 
-func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (ComponentVersionRepositoryForComponentProvider, error) {
+func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (ComponentVersionRepositoryResolver, error) {
 	var finalResolvers []*resolverspec.Resolver
 
 	if baseRepo != nil {

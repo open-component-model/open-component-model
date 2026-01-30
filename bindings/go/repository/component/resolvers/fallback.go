@@ -16,12 +16,12 @@ type fallbackProvider struct {
 	repo *fallback.FallbackRepository
 }
 
-var _ ComponentVersionRepositoryForComponentProvider = (*fallbackProvider)(nil)
+var _ ComponentVersionRepositoryResolver = (*fallbackProvider)(nil)
 
 func (f *fallbackProvider) GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
 	return f.repo.GetComponentVersionRepositoryForSpecification(ctx, specification)
 }
 
-func (f *fallbackProvider) GetComponentVersionRepositoryForComponent(ctx context.Context, _, _ string) (repository.ComponentVersionRepository, error) {
+func (f *fallbackProvider) ResolveComponentVersionRepository(ctx context.Context, _, _ string) (repository.ComponentVersionRepository, error) {
 	return f.repo, nil
 }

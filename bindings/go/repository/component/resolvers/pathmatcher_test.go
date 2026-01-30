@@ -67,7 +67,7 @@ func TestPathMatcherProvider_Caching(t *testing.T) {
 	}
 
 	// First call - should create repository
-	repo1, err := provider.GetComponentVersionRepositoryForComponent(ctx, "example.com/component", "v1.0.0")
+	repo1, err := provider.ResolveComponentVersionRepository(ctx, "example.com/component", "v1.0.0")
 	if err != nil {
 		t.Fatalf("GetComponentVersionRepositoryForComponent failed: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestPathMatcherProvider_Caching(t *testing.T) {
 	}
 
 	// Second call with same component - should use cache
-	repo2, err := provider.GetComponentVersionRepositoryForComponent(ctx, "example.com/component", "v2.0.0")
+	repo2, err := provider.ResolveComponentVersionRepository(ctx, "example.com/component", "v2.0.0")
 	if err != nil {
 		t.Fatalf("GetComponentVersionRepositoryForComponent failed: %v", err)
 	}
