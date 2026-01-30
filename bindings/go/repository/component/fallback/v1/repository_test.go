@@ -281,11 +281,11 @@ func Test_GetRepositoryForSpecification(t *testing.T) {
 			assertErr: assert.NoError,
 		},
 		{
-			name:      "no matching specification returns error",
+			name:      "unknown specification returns new repository",
 			resolvers: baseResolvers,
 			spec:      NewRepositorySpec("gamma", nil),
-			wantRepo:  "",
-			assertErr: assert.Error,
+			wantRepo:  "gamma",
+			assertErr: assert.NoError,
 		},
 		{
 			name: "matching specification but provider returns nil",

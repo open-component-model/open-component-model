@@ -22,9 +22,8 @@ type pathMatcherProvider struct {
 	graph        credentials.Resolver
 	specProvider *pathmatcher.SpecProvider
 
-	lock       sync.RWMutex
-	repoCache  map[string]repository.ComponentVersionRepository
-	validSpecs map[string]struct{}
+	lock      sync.RWMutex
+	repoCache map[string]repository.ComponentVersionRepository
 }
 
 var _ ComponentVersionRepositoryForComponentProvider = (*pathMatcherProvider)(nil)
@@ -93,24 +92,5 @@ func (p *pathMatcherProvider) GetComponentVersionRepositoryForComponent(ctx cont
 }
 
 func (p *pathMatcherProvider) GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
-	// Canonicalize the specification to check if it's valid
-	specdata, err := json.Marshal(specification)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling repository to json failed: %w", err)
-	}
-	specdata, err = jsoncanonicalizer.Transform(specdata)
-	if err != nil {
-		return nil, fmt.Errorf("canonicalizing repository json failed: %w", err)
-	}
-
-	// Check if this specification is in our validSpecs map (read lock)
-	p.lock.RLock()
-	_, found := p.validSpecs[string(specdata)]
-	p.lock.RUnlock()
-
-	if !found {
-		return nil, fmt.Errorf("repository specification not found in configured resolvers")
-	}
-
 	return p.getRepository(ctx, specification)
 }

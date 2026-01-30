@@ -2,17 +2,15 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
-
-	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/repository"
+
 	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	v1 "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
@@ -123,19 +121,6 @@ func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseR
 		graph:        opts.CredentialGraph,
 		specProvider: pathmatcher.NewSpecProvider(ctx, finalResolvers),
 		repoCache:    make(map[string]repository.ComponentVersionRepository),
-		validSpecs:   make(map[string]struct{}),
-	}
-
-	for _, resolver := range finalResolvers {
-		data, err := json.Marshal(resolver.Repository)
-		if err != nil {
-			return nil, fmt.Errorf("marshaling repository to json failed: %w", err)
-		}
-		data, err = jsoncanonicalizer.Transform(data)
-		if err != nil {
-			return nil, fmt.Errorf("canonicalizing repository json failed: %w", err)
-		}
-		provider.validSpecs[string(data)] = struct{}{}
 	}
 
 	return provider, nil
