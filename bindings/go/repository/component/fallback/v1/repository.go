@@ -57,8 +57,8 @@ type FallbackRepository struct {
 
 	// This cache is based on the canonicalized JSON representation of the
 	// repository specification.
-	repositoriesForResolverCacheMu sync.RWMutex
-	repositoriesForResolverCache   map[string]repository.ComponentVersionRepository
+	repoCacheMu sync.RWMutex
+	repoCache   map[string]repository.ComponentVersionRepository
 }
 
 type FallbackRepositoryOption func(*FallbackRepositoryOptions)
@@ -100,8 +100,8 @@ func NewFallbackRepository(_ context.Context, repositoryProvider repository.Comp
 		repositoryProvider:  repositoryProvider,
 		credentialsResolver: credentialsResolver,
 
-		resolvers:                    resolvers,
-		repositoriesForResolverCache: make(map[string]repository.ComponentVersionRepository),
+		resolvers: resolvers,
+		repoCache: make(map[string]repository.ComponentVersionRepository),
 	}, nil
 }
 
@@ -378,18 +378,18 @@ func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, specifi
 
 	var repo repository.ComponentVersionRepository
 
-	f.repositoriesForResolverCacheMu.RLock()
-	repo = f.repositoriesForResolverCache[key]
-	f.repositoriesForResolverCacheMu.RUnlock()
+	f.repoCacheMu.RLock()
+	repo = f.repoCache[key]
+	f.repoCacheMu.RUnlock()
 
 	if repo == nil {
 		repo, err = f.getRepositoryForSpecification(ctx, specification)
 		if err != nil {
 			return nil, fmt.Errorf("getting repository for spec %v failed: %w", specification, err)
 		}
-		f.repositoriesForResolverCacheMu.Lock()
-		f.repositoriesForResolverCache[key] = repo
-		f.repositoriesForResolverCacheMu.Unlock()
+		f.repoCacheMu.Lock()
+		f.repoCache[key] = repo
+		f.repoCacheMu.Unlock()
 	}
 	return repo, nil
 }
