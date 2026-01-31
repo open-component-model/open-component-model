@@ -82,7 +82,6 @@ var _ = Describe("Repository Controller", func() {
 
 				By("creating a CTF repository with non-existent path")
 				spec := &ctf.Repository{
-					Type:       runtime.NewVersionedType(ctf.Type, "v1"),
 					FilePath:   "/nonexistent/path/that/does/not/exist",
 					AccessMode: ctf.AccessModeReadOnly,
 				}
@@ -114,7 +113,6 @@ var _ = Describe("Repository Controller", func() {
 
 		Context("When incorrect RepositorySpec is provided", func() {
 			It("Validation must fail", func(ctx SpecContext) {
-
 				By("creating a OCI repository from a valid json but invalid RepositorySpec")
 				specdata := []byte(`{"json":"not a valid RepositorySpec"}`)
 				repoName := TestRepositoryObj + "-invalid-spec"

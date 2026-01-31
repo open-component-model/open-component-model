@@ -7,7 +7,6 @@ import (
 
 	"github.com/gobwas/glob"
 	slogcontext "github.com/veqryn/slog-context"
-
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
