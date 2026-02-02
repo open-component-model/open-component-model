@@ -172,7 +172,7 @@ jobs:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
           sparse-checkout: |
-            .github/config/golangci.yml
+            golangci.yml
             .env
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
@@ -208,7 +208,7 @@ jobs:
           ref: ${{ env.REF }}
           sparse-checkout: |
             ${{ matrix.module }}
-            .github/config/golangci.yml
+            golangci.yml
             .env
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
@@ -226,7 +226,7 @@ jobs:
           verify: 'false' # we verify in a separate command ONCE instead of every run on every module
           version: ${{ steps.versions.outputs.golangci_lint }}
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
-          args: --timeout 10m --config=${{ github.workspace }}/.github/config/golangci.yml
+          args: --timeout 10m --config=${{ github.workspace }}/golangci.yml
 
   run_integration_tests:
     name: "Integration Tests"

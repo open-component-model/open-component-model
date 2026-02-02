@@ -1,3 +1,7 @@
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+#
+# This is config for golangci-lint. Do not move this as this is in a canonical location auto-discovered by golangci-lint.
+# see https://golangci-lint.run/docs/configuration/file/
 version: "2"
 run:
   issues-exit-code: 2
