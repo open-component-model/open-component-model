@@ -329,13 +329,13 @@
           "type": "string",
           "description": "OutputPath is the path where the artifact should be buffered.\nIf empty, a temporary file will be created."
         },
-        "resourceIdentity": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",
-          "description": "ResourceIdentity identifies the resource to retrieve.\nMust match a resource in the component descriptor."
+        "resource": {
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Resource",
+          "description": "Resource identifies the oci artifact to retrieve."
         }
       },
       "required": [
-        "resourceIdentity"
+        "resource"
       ],
       "additionalProperties": false
     },
