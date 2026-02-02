@@ -1,9 +1,12 @@
 package deployer
 
 import (
+	"context"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 )
 
 const (
@@ -44,4 +47,31 @@ func setOwnershipAnnotations(obj client.Object, resource *deliveryv1alpha1.Resou
 	anns[annotationResourceAccess] = string(resource.Status.Resource.Access.Raw)
 	anns[annotationComponentName] = resource.Status.Component.Component
 	anns[annotationComponentVersion] = resource.Status.Component.Version
+}
+
+// setApplySetMetadata sets the labels and annotations from the applyset.Metadata
+// onto the given object.
+// It merges existing labels and annotations with those from the metadata.
+func (r *Reconciler) setApplySetMetadata(ctx context.Context, obj client.Object, meta applyset.Metadata) error {
+	labels := map[string]string{}
+	if existing := obj.GetLabels(); existing != nil {
+		labels = existing
+	}
+	for k, v := range meta.Labels() {
+		labels[k] = v
+	}
+	obj.SetLabels(labels)
+
+	annotations := map[string]string{}
+	if existing := obj.GetAnnotations(); existing != nil {
+		annotations = existing
+	}
+	for k, v := range meta.Annotations() {
+		annotations[k] = v
+	}
+	obj.SetAnnotations(annotations)
+
+	// update object labels and annotations
+	err := r.Update(ctx, obj)
+	return err
 }
