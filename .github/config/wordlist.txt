@@ -583,3 +583,8 @@ artifactset
 stackit
 sast
 agentic
+saas
+greenlight
+warroom
+wgs
+kubermatic
