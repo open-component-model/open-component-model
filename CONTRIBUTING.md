@@ -74,6 +74,8 @@ task test
 ## Code Style
 
 - Run `golangci-lint` before committing (CI enforces this)
+  - Convenience task to run over all modules: `task tools:lint`
+  - If you want to apply auto-fixing: `task tools:lint -- --fix`
 - Generated code lives alongside source — run `task generate` if you change schemas
 
 ## Pull Requests
