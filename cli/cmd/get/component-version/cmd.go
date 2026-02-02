@@ -231,9 +231,9 @@ func processComponentReference(cmd *cobra.Command,
 	return nil
 }
 
-func renderComponents(cmd *cobra.Command, repoProvider resolvers.ComponentVersionRepositoryResolver, roots []string, format string, mode string, recursive int) error {
+func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersionRepositoryResolver, roots []string, format string, mode string, recursive int) error {
 	resAndDis := resolverAndDiscoverer{
-		repositoryResolver: repoProvider,
+		repositoryResolver: repoResolver,
 		recursive:          recursive,
 	}
 	discoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *descruntime.Descriptor]{
