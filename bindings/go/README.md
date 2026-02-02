@@ -24,7 +24,7 @@ Go bindings for the Open Component Model.
 | **plugin**                   | Plugin system for extensibility                          |
 | **transform**                | Transformation/localization of component versions        |
 | **helm**                     | Helm chart resource handling                             |
-| **input/***                  | Input sources (file, directory, utf8)                    |
+| **input***                   | Input sources (file, directory, utf8)                    |
 | **generator**                | Code generation tools                                    |
 
 ## Usage
