@@ -373,10 +373,10 @@ ocm.software/open-component-model/bindings/go/ctf v0.3.0 h1:u1B26OgUvR+gzTwY0hTV
 ocm.software/open-component-model/bindings/go/ctf v0.3.0/go.mod h1:skMxA1l7rZFhKsjn8CysSVG31zjmV95WaFqMVKRjHug=
 ocm.software/open-component-model/bindings/go/dag v0.0.6 h1:To76QJAmFD88C101oB/HgYvtomp8mm0270ewDLcVncw=
 ocm.software/open-component-model/bindings/go/dag v0.0.6/go.mod h1:mQbO95zYvX59VXNJGer4+wGsKY0BVI4FKwlR5BlPugM=
-ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260129143850-b9f20b318d3a h1:Jd9OE+ejmb65PErF88tplLsJVBIfH9Dy9h445CNSPec=
-ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260129143850-b9f20b318d3a/go.mod h1:eQlpQPoU/U+ZCMSPyIacK/wycI/PIhXTwmIiT6+jLq8=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260129143850-b9f20b318d3a h1:336/WMvEV35m56u+ONF5wv+4kX1Fz2jCQkSPUQC3qyo=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260129143850-b9f20b318d3a/go.mod h1:qaxJ9XJGmR+/Lqv9XMKP0UI4HnhFHDgVQlGXU2eYpcI=
+ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260202154605-53223b130df9 h1:roHClGkmLDQq7qeki28bYQs7DM6WiI5fuWgT4EYQHCQ=
+ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260202154605-53223b130df9/go.mod h1:c0D9Nmqb0jeXdvJcrUD5emCvZliaIZ8oQmzG1RI656Y=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260202154605-53223b130df9 h1:Ifb4N8Chaxd4nCgTszpE7ksfU4JMLNXec7V4fcp1q8o=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260202154605-53223b130df9/go.mod h1:qaxJ9XJGmR+/Lqv9XMKP0UI4HnhFHDgVQlGXU2eYpcI=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 h1:SdQm6w7Lj0g+d+MaNXQQkpKUqOhFwUSzoUjzRyeKL0I=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9/go.mod h1:5ES8RkuCdrbqiG56WJE40qhFoC4QHAQn8BasL5aKlvM=
 ocm.software/open-component-model/bindings/go/oci v0.0.27 h1:bMCAKs0KSSn2Qjm22LMTJGFC+aWdFKH84lByCEpWi80=
