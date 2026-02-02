@@ -20,7 +20,7 @@
     },
     "resource": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Resource",
-      "description": "Resource is the resource descriptor to add.\nThe access specification will be updated to localBlob type."
+      "description": "Resource is the resource descriptor to add."
     },
     "version": {
       "type": "string",
