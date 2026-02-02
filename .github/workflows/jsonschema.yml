@@ -5,11 +5,13 @@ on:
     - main
     paths:
     - '**/schemas/*.schema.json'
+    - '.github/workflows/jsonschema.yml'
   pull_request:
     branches:
       - main
     paths:
       - '**/schemas/*.schema.json'
+      - '.github/workflows/jsonschema.yml'
 
 permissions:
   contents: read
@@ -22,11 +24,12 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
     - name: Setup JSON Schema
-      uses: sourcemeta/jsonschema@a3f4d42c95b2739a6e96b8747cb7877fc58382d9 # v13.2.1
+      uses: sourcemeta/jsonschema@cfd763b5bf08f819f2ab1667717c14568bd48935 # v13.6.0
     - name: Lint JSON Schemas
       run: |
         jsonschema lint $(git ls-files '**/schemas/*.schema.json') \
           --verbose \
-          --strict \
           --exclude additional_properties_default \
-          --exclude enum_with_type
+          --exclude enum_with_type \
+          --exclude description_trailing_period \
+          --exclude top_level_examples

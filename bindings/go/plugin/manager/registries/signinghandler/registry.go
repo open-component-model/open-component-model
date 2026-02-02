@@ -146,7 +146,7 @@ func (r *SigningRegistry) Shutdown(ctx context.Context) error {
 	var errs error
 	for _, p := range r.constructedPlugins {
 		// The plugins should handle the Interrupt signal for shutdowns.
-		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil {
+		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
 			errs = errors.Join(errs, perr)
 		}
 	}

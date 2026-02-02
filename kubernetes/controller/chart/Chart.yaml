@@ -1,0 +1,19 @@
+apiVersion: v2
+name: ocm-k8s-toolkit
+description: A Helm chart for deploying the OCM Kubernetes Toolkit controller
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.26.0-0"
+home: https://ocm.software
+sources:
+  - https://github.com/open-component-model/open-component-model
+maintainers:
+  - name: OCM Team
+    url: https://github.com/open-component-model
+keywords:
+  - ocm
+  - open-component-model
+  - kubernetes
+  - controller
+  - artifact-management

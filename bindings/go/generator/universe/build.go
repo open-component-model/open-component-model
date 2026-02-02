@@ -1,6 +1,7 @@
 package universe
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"go/ast"
@@ -8,6 +9,7 @@ import (
 	"go/token"
 	"go/types"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -94,31 +96,50 @@ func IsRuntimeTyped(ti *TypeInfo) bool {
 	return ti.Key.PkgPath == RuntimePackage && ti.Key.TypeName == "Typed"
 }
 
-// Build scans all Go modules reachable from roots and builds a Universe.
-func Build(ctx context.Context, roots []string) (*Universe, error) {
-	modRoots, err := findModuleRoots(roots)
-	if err != nil {
-		return nil, err
-	}
+const (
+	// LoadTargetTypeModule indicates a filesystem directory target
+	LoadTargetTypeModule = "module"
+	// LoadTargetTypeImport indicates an import path target
+	LoadTargetTypeImport = "import"
+)
 
-	u := New()
-	g, ctx := errgroup.WithContext(ctx)
+// LoadTarget represents something that should be loaded into the universe
+type LoadTarget struct {
+	Type     string // LoadTargetTypeModule or LoadTargetTypeImport
+	Path     string // module directory path or import path
+	Required bool   // whether failure should stop the build
+}
+
+// PackageLoader handles loading packages from various sources with consistent configuration
+type PackageLoader struct {
+	ctx context.Context
+}
+
+// NewPackageLoader creates a new PackageLoader
+func NewPackageLoader(ctx context.Context) *PackageLoader {
+	return &PackageLoader{ctx: ctx}
+}
+
+// LoadTargets loads packages from multiple targets and returns all successfully loaded packages
+func (pl *PackageLoader) LoadTargets(targets []LoadTarget) ([]*packages.Package, error) {
+	var allPkgs []*packages.Package
+	g, ctx := errgroup.WithContext(pl.ctx)
 	var mu sync.Mutex
 
-	for _, root := range modRoots {
+	for _, target := range targets {
 		g.Go(func() error {
-			pkgs, err := loadModule(ctx, root)
+			pkgs, err := pl.loadTarget(ctx, target)
 			if err != nil {
-				return err
+				if target.Required {
+					return fmt.Errorf("failed to load required target %s: %w", target.Path, err)
+				}
+				slog.WarnContext(ctx, "failed to load optional target", "path", target.Path, "error", err)
+				return nil
 			}
 
 			mu.Lock()
-			defer mu.Unlock()
-
-			for _, pkg := range pkgs {
-				u.recordImports(pkg)
-				scanPackage(u, pkg)
-			}
+			allPkgs = append(allPkgs, pkgs...)
+			mu.Unlock()
 			return nil
 		})
 	}
@@ -126,7 +147,118 @@ func Build(ctx context.Context, roots []string) (*Universe, error) {
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	return u, nil
+
+	return allPkgs, nil
+}
+
+// loadTarget loads packages from a single target
+func (pl *PackageLoader) loadTarget(ctx context.Context, target LoadTarget) ([]*packages.Package, error) {
+	cfg := &packages.Config{
+		Context: ctx,
+		Tests:   false,
+		Mode: packages.NeedSyntax |
+			packages.NeedTypes |
+			packages.NeedTypesInfo |
+			packages.NeedFiles |
+			packages.NeedImports,
+	}
+
+	var pkgs []*packages.Package
+	var err error
+
+	switch target.Type {
+	case LoadTargetTypeModule:
+		cfg.Dir = target.Path
+		pkgs, err = packages.Load(cfg, "./...")
+	case LoadTargetTypeImport:
+		pkgs, err = packages.Load(cfg, target.Path)
+	default:
+		return nil, fmt.Errorf("unknown target type: %s", target.Type)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if packages.PrintErrors(pkgs) > 0 {
+		return nil, fmt.Errorf("package load errors in target %s", target.Path)
+	}
+
+	slog.InfoContext(ctx, "loaded packages from target", "type", target.Type, "path", target.Path, "count", len(pkgs))
+	return pkgs, nil
+}
+
+// Build scans all Go modules reachable from roots and builds a Universe.
+// it only considers modules whose files have at least the given marker.
+// this is mainly to reduce build time.
+func Build(ctx context.Context, marker string, roots ...string) (*Universe, error) {
+	// Phase 1: Discovery - Find modules with schema markers
+	targets, err := discoverLoadTargets(ctx, marker, roots...)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(targets) == 0 {
+		slog.InfoContext(ctx, "no modules with schema markers found")
+		return New(), nil
+	}
+
+	// Phase 2: Loading - Load all packages from discovered targets
+	loader := NewPackageLoader(ctx)
+	pkgs, err := loader.LoadTargets(targets)
+	if err != nil {
+		return nil, err
+	}
+
+	// Phase 3: Processing - Build universe from loaded packages
+	universe := buildUniverse(ctx, pkgs)
+	slog.InfoContext(ctx, "universe built", "types", len(universe.Types))
+	return universe, nil
+}
+
+// discoverLoadTargets finds all modules with schema markers and prepares load targets
+func discoverLoadTargets(ctx context.Context, marker string, roots ...string) ([]LoadTarget, error) {
+	modRoots, err := findModuleRoots(roots)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.InfoContext(ctx, "scanning for schema markers", "modules", len(modRoots))
+	relevantModules, err := findModulesWithSchemaMarkers(ctx, marker, modRoots)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.InfoContext(ctx, "found modules with schema markers", "modules", len(relevantModules), "total", len(modRoots))
+
+	// Prepare load targets for schema modules
+	var targets []LoadTarget
+	for _, module := range relevantModules {
+		targets = append(targets, LoadTarget{
+			Type:     LoadTargetTypeModule,
+			Path:     module,
+			Required: true,
+		})
+	}
+
+	// Always include runtime module for external references
+	targets = append(targets, LoadTarget{
+		Type:     LoadTargetTypeImport,
+		Path:     RuntimePackage,
+		Required: false, // Runtime module is optional to not break builds
+	})
+
+	return targets, nil
+}
+
+// buildUniverse processes loaded packages into a Universe
+func buildUniverse(ctx context.Context, pkgs []*packages.Package) *Universe {
+	u := New()
+	for _, pkg := range pkgs {
+		u.recordImports(pkg)
+		scanPackage(u, pkg)
+	}
+	return u
 }
 
 func findModuleRoots(roots []string) ([]string, error) {
@@ -163,26 +295,84 @@ func findModuleRoots(roots []string) ([]string, error) {
 	return modules, nil
 }
 
-func loadModule(ctx context.Context, modRoot string) ([]*packages.Package, error) {
+// findModulesWithSchemaMarkers scans modules for schema markers and returns only relevant modules
+func findModulesWithSchemaMarkers(ctx context.Context, marker string, modRoots []string) ([]string, error) {
+	var relevantModules []string
+	var mu sync.Mutex
+	g, ctx := errgroup.WithContext(ctx)
+
+	for _, modRoot := range modRoots {
+		g.Go(func() error {
+			hasMarker, err := moduleHasSchemaMarkers(ctx, modRoot, marker)
+			if err != nil {
+				return err
+			}
+
+			if hasMarker {
+				mu.Lock()
+				relevantModules = append(relevantModules, modRoot)
+				mu.Unlock()
+			}
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return relevantModules, nil
+}
+
+// moduleHasSchemaMarkers checks if a module contains any files with schema markers
+func moduleHasSchemaMarkers(ctx context.Context, modRoot, marker string) (bool, error) {
+	// Use go list to discover all packages (much faster than file walking)
 	cfg := &packages.Config{
 		Context: ctx,
 		Dir:     modRoot,
 		Tests:   false,
-		Mode: packages.NeedSyntax |
-			packages.NeedTypes |
-			packages.NeedTypesInfo |
-			packages.NeedFiles |
-			packages.NeedImports,
+		Mode:    packages.NeedFiles, // Only need file paths
 	}
 
-	pkgs, err := packages.Load(cfg, "./...")
+	allPkgs, err := packages.Load(cfg, "./...")
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	if packages.PrintErrors(pkgs) > 0 {
-		return nil, fmt.Errorf("package load errors in module %s", modRoot)
+
+	for _, pkg := range allPkgs {
+		// Check if any Go files in this package contain schema markers
+		for _, goFile := range pkg.GoFiles {
+			found, err := fileContainsSchemaMarker(goFile, marker)
+			if err != nil {
+				continue // skip files we can't read
+			}
+			if found {
+				return true, nil
+			}
+		}
 	}
-	return pkgs, nil
+
+	return false, nil
+}
+
+// fileContainsSchemaMarker quickly checks if a Go file contains the schema marker
+func fileContainsSchemaMarker(filePath, marker string) (bool, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return false, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Look for comment lines containing the schema marker
+		if strings.Contains(line, marker) {
+			return true, nil
+		}
+	}
+
+	return false, scanner.Err()
 }
 
 func scanPackage(u *Universe, pkg *packages.Package) {
