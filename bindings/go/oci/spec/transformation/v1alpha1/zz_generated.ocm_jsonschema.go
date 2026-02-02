@@ -27,15 +27,6 @@ var schemaCTFAddLocalResourceOutput []byte
 //go:embed schemas/CTFAddLocalResourceSpec.schema.json
 var schemaCTFAddLocalResourceSpec []byte
 
-//go:embed schemas/CTFAddOCIArtifact.schema.json
-var schemaCTFAddOCIArtifact []byte
-
-//go:embed schemas/CTFAddOCIArtifactOutput.schema.json
-var schemaCTFAddOCIArtifactOutput []byte
-
-//go:embed schemas/CTFAddOCIArtifactSpec.schema.json
-var schemaCTFAddOCIArtifactSpec []byte
-
 //go:embed schemas/CTFGetComponentVersion.schema.json
 var schemaCTFGetComponentVersion []byte
 
@@ -54,15 +45,6 @@ var schemaCTFGetLocalResourceOutput []byte
 //go:embed schemas/CTFGetLocalResourceSpec.schema.json
 var schemaCTFGetLocalResourceSpec []byte
 
-//go:embed schemas/CTFGetOCIArtifact.schema.json
-var schemaCTFGetOCIArtifact []byte
-
-//go:embed schemas/CTFGetOCIArtifactOutput.schema.json
-var schemaCTFGetOCIArtifactOutput []byte
-
-//go:embed schemas/CTFGetOCIArtifactSpec.schema.json
-var schemaCTFGetOCIArtifactSpec []byte
-
 //go:embed schemas/OCIAddComponentVersion.schema.json
 var schemaOCIAddComponentVersion []byte
 
@@ -80,15 +62,6 @@ var schemaOCIAddLocalResourceOutput []byte
 
 //go:embed schemas/OCIAddLocalResourceSpec.schema.json
 var schemaOCIAddLocalResourceSpec []byte
-
-//go:embed schemas/OCIAddOCIArtifact.schema.json
-var schemaOCIAddOCIArtifact []byte
-
-//go:embed schemas/OCIAddOCIArtifactOutput.schema.json
-var schemaOCIAddOCIArtifactOutput []byte
-
-//go:embed schemas/OCIAddOCIArtifactSpec.schema.json
-var schemaOCIAddOCIArtifactSpec []byte
 
 //go:embed schemas/OCIGetComponentVersion.schema.json
 var schemaOCIGetComponentVersion []byte
@@ -147,21 +120,6 @@ func (CTFAddLocalResourceSpec) JSONSchema() []byte {
 	return schemaCTFAddLocalResourceSpec
 }
 
-// JSONSchema returns the JSON Schema for CTFAddOCIArtifact.
-func (CTFAddOCIArtifact) JSONSchema() []byte {
-	return schemaCTFAddOCIArtifact
-}
-
-// JSONSchema returns the JSON Schema for CTFAddOCIArtifactOutput.
-func (CTFAddOCIArtifactOutput) JSONSchema() []byte {
-	return schemaCTFAddOCIArtifactOutput
-}
-
-// JSONSchema returns the JSON Schema for CTFAddOCIArtifactSpec.
-func (CTFAddOCIArtifactSpec) JSONSchema() []byte {
-	return schemaCTFAddOCIArtifactSpec
-}
-
 // JSONSchema returns the JSON Schema for CTFGetComponentVersion.
 func (CTFGetComponentVersion) JSONSchema() []byte {
 	return schemaCTFGetComponentVersion
@@ -192,21 +150,6 @@ func (CTFGetLocalResourceSpec) JSONSchema() []byte {
 	return schemaCTFGetLocalResourceSpec
 }
 
-// JSONSchema returns the JSON Schema for CTFGetOCIArtifact.
-func (CTFGetOCIArtifact) JSONSchema() []byte {
-	return schemaCTFGetOCIArtifact
-}
-
-// JSONSchema returns the JSON Schema for CTFGetOCIArtifactOutput.
-func (CTFGetOCIArtifactOutput) JSONSchema() []byte {
-	return schemaCTFGetOCIArtifactOutput
-}
-
-// JSONSchema returns the JSON Schema for CTFGetOCIArtifactSpec.
-func (CTFGetOCIArtifactSpec) JSONSchema() []byte {
-	return schemaCTFGetOCIArtifactSpec
-}
-
 // JSONSchema returns the JSON Schema for OCIAddComponentVersion.
 func (OCIAddComponentVersion) JSONSchema() []byte {
 	return schemaOCIAddComponentVersion
@@ -235,21 +178,6 @@ func (OCIAddLocalResourceOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for OCIAddLocalResourceSpec.
 func (OCIAddLocalResourceSpec) JSONSchema() []byte {
 	return schemaOCIAddLocalResourceSpec
-}
-
-// JSONSchema returns the JSON Schema for OCIAddOCIArtifact.
-func (OCIAddOCIArtifact) JSONSchema() []byte {
-	return schemaOCIAddOCIArtifact
-}
-
-// JSONSchema returns the JSON Schema for OCIAddOCIArtifactOutput.
-func (OCIAddOCIArtifactOutput) JSONSchema() []byte {
-	return schemaOCIAddOCIArtifactOutput
-}
-
-// JSONSchema returns the JSON Schema for OCIAddOCIArtifactSpec.
-func (OCIAddOCIArtifactSpec) JSONSchema() []byte {
-	return schemaOCIAddOCIArtifactSpec
 }
 
 // JSONSchema returns the JSON Schema for OCIGetComponentVersion.
