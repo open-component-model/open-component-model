@@ -287,7 +287,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("parsing repository reference %q failed: %w", repositoryRef, err)
 	}
 
-	repoProvider, err := ocm.NewComponentRepositoryResolver(cmd.Context(),
+	repoResolver, err := ocm.NewComponentRepositoryResolver(cmd.Context(),
 		pluginManager.ComponentVersionRepositoryRegistry,
 		credentialGraph,
 		ocm.WithRepository(ref), ocm.WithConfig(config),
@@ -299,7 +299,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	instance := &constructorProvider{
 		cache:              cacheDir,
 		targetRepoSpec:     repoSpec,
-		repositoryResolver: repoProvider,
+		repositoryResolver: repoResolver,
 		pluginManager:      pluginManager,
 		graph:              credentialGraph,
 	}
