@@ -25,7 +25,7 @@ func BuildGraphDefinition(
 	ctx context.Context,
 	fromSpec *compref.Ref,
 	toSpec runtime.Typed,
-	repoProvider resolvers.ComponentVersionRepositoryResolver,
+	repoResolver resolvers.ComponentVersionRepositoryResolver,
 	recursive bool,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
 	discoverer := &discoverer{
@@ -33,7 +33,7 @@ func BuildGraphDefinition(
 		discoveredDigests: make(map[string]descriptor.Digest),
 	}
 	resolver := &resolver{
-		repoResolver: repoProvider,
+		repoResolver: repoResolver,
 		expectedDigest: func(id runtime.Identity) *descriptor.Digest {
 			discoverer.mu.Lock()
 			defer discoverer.mu.Unlock()
