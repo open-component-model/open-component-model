@@ -28,7 +28,7 @@ type CTFAddOCIArtifact struct {
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type CTFAddOCIArtifactOutput struct {
-	// Resource is the updated resource descriptor with localBlob access
+	// Resource is the updated resource descriptor
 	Resource *v2.Resource `json:"resource"`
 }
 
@@ -44,7 +44,6 @@ type CTFAddOCIArtifactSpec struct {
 	// Version is the component version
 	Version string `json:"version"`
 	// Resource is the resource descriptor to add.
-	// The access specification will be updated to localBlob type.
 	Resource *v2.Resource `json:"resource"`
 	// File is the access specification to the file containing the OCI artifact
 	File v1alpha1.File `json:"file"`
