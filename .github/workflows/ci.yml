@@ -172,7 +172,7 @@ jobs:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
           sparse-checkout: |
-            .github/config/golangci.yml
+            .golangci.yml
             .env
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
