@@ -22,7 +22,6 @@ import (
 	credentialsConfig "ocm.software/open-component-model/cli/internal/credentials"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin"
 	"ocm.software/open-component-model/cli/internal/plugin/spec/config/v2alpha1"
-	"ocm.software/open-component-model/cli/internal/subsystem"
 )
 
 func OCMConfig(cmd *cobra.Command) {
@@ -83,11 +82,10 @@ func PluginManager(cmd *cobra.Command) error {
 		return fmt.Errorf("could not register builtin plugins: %w", err)
 	}
 
-	if err := subsystem.RegisterPluginManager(pluginManager); err != nil {
-		return fmt.Errorf("could not register plugin manager in subsystem registry: %w", err)
+	ctx, err := ocmctx.WithPluginManager(cmd.Context(), pluginManager)
+	if err != nil {
+		return fmt.Errorf("could not initialize plugin manager context: %w", err)
 	}
-
-	ctx := ocmctx.WithPluginManager(cmd.Context(), pluginManager)
 	cmd.SetContext(ctx)
 
 	cobra.OnFinalize(func() {

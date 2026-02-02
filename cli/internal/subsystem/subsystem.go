@@ -55,7 +55,7 @@ func (r *Registry) Get(name string) *Subsystem {
 	return r.subsystems[name]
 }
 
-// List returns all registered subsystems.
+// List returns all registered subsystems sorted by name.
 func (r *Registry) List() []*Subsystem {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -63,33 +63,14 @@ func (r *Registry) List() []*Subsystem {
 	for _, s := range r.subsystems {
 		list = append(list, s)
 	}
+	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 	return list
 }
-
-// GlobalRegistry is the default registry instance used by the CLI.
-var GlobalRegistry = NewRegistry()
 
 const (
 	// Annotation is the Cobra command annotation key used to link commands to subsystems.
 	Annotation = "ocm.software/subsystem"
 )
-
-// Register adds a subsystem to the GlobalRegistry.
-func Register(s *Subsystem) {
-	GlobalRegistry.Register(s)
-}
-
-// Get retrieves a subsystem from the GlobalRegistry.
-func Get(name string) *Subsystem {
-	return GlobalRegistry.Get(name)
-}
-
-// List returns all subsystems in the GlobalRegistry.
-func List() []*Subsystem {
-	subsystems := GlobalRegistry.List()
-	sort.Slice(subsystems, func(i, j int) bool { return subsystems[i].Name < subsystems[j].Name })
-	return subsystems
-}
 
 // FindLinkedCommands searches the command tree for all commands that are linked to the given subsystem name.
 func FindLinkedCommands(cmd *cobra.Command, subsystemName string) []*cobra.Command {

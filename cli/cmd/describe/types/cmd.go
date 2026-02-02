@@ -19,6 +19,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/subsystem"
 )
@@ -128,11 +129,16 @@ OUTPUT FORMATS:
 }
 
 func run(cmd *cobra.Command, args []string) error {
+	registry := ocmctx.FromContext(cmd.Context()).SubsystemRegistry()
+	if registry == nil {
+		return fmt.Errorf("subsystem registry not initialized")
+	}
+
 	if len(args) == 0 {
-		return listSubsystems(cmd)
+		return listSubsystems(cmd, registry)
 	}
 	subName := args[0]
-	sub := subsystem.Get(subName)
+	sub := registry.Get(subName)
 	if sub == nil {
 		return fmt.Errorf("unknown subsystem: %s", subName)
 	}
@@ -144,10 +150,10 @@ func run(cmd *cobra.Command, args []string) error {
 	return describeType(cmd, sub, args[1:])
 }
 
-func listSubsystems(cmd *cobra.Command) error {
+func listSubsystems(cmd *cobra.Command, registry *subsystem.Registry) error {
 	w := table.NewWriter()
 
-	subsystems := subsystem.List()
+	subsystems := registry.List()
 
 	w.SetTitle("Available Subsystems")
 	w.AppendHeader(table.Row{"subsystem", "types", "alias"})
