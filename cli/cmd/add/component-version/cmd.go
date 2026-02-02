@@ -28,7 +28,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/repository/component/providers"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -287,7 +287,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("parsing repository reference %q failed: %w", repositoryRef, err)
 	}
 
-	repoProvider, err := ocm.NewComponentRepositoryProvider(cmd.Context(),
+	repoProvider, err := ocm.NewComponentRepositoryResolver(cmd.Context(),
 		pluginManager.ComponentVersionRepositoryRegistry,
 		credentialGraph,
 		ocm.WithRepository(ref), ocm.WithConfig(config),
@@ -299,7 +299,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	instance := &constructorProvider{
 		cache:              cacheDir,
 		targetRepoSpec:     repoSpec,
-		repositoryProvider: repoProvider,
+		repositoryResolver: repoProvider,
 		pluginManager:      pluginManager,
 		graph:              credentialGraph,
 	}
@@ -395,16 +395,16 @@ var (
 type constructorProvider struct {
 	cache              string
 	targetRepoSpec     runtime.Typed
-	repositoryProvider providers.ComponentVersionRepositoryForComponentProvider
+	repositoryResolver resolvers.ComponentVersionRepositoryResolver
 	pluginManager      *manager.PluginManager
 	graph              credentials.Resolver
 }
 
 func (prov *constructorProvider) GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error) {
-	if prov.repositoryProvider == nil {
+	if prov.repositoryResolver == nil {
 		return nil, fmt.Errorf("cannot fetch external component version %s:%s repository provider configured", name, version)
 	}
-	return prov.repositoryProvider.GetComponentVersionRepositoryForComponent(ctx, name, version)
+	return prov.repositoryResolver.GetComponentVersionRepositoryForComponent(ctx, name, version)
 }
 
 func (prov *constructorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (constructor.ResourceDigestProcessor, error) {

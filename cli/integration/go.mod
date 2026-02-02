@@ -16,7 +16,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260129143850-b9f20b318d3a
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/oci v0.0.27
-	ocm.software/open-component-model/bindings/go/repository v0.0.5
+	ocm.software/open-component-model/bindings/go/repository v0.0.6
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	ocm.software/open-component-model/cli v0.0.0-20260129143850-b9f20b318d3a
 	oras.land/oras-go/v2 v2.6.0

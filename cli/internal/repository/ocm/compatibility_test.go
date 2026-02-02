@@ -118,7 +118,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 			provider := &mockRepositoryProvider{}
 			repo := mockRepository()
 
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithRepository(repo),
 			)
 
@@ -145,7 +145,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 			provider := &mockRepositoryProvider{}
 			repo := mockRepository()
 
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithRepository(repo),
 				WithComponentPatterns([]string{"ocm.software/root"}),
 			)
@@ -161,7 +161,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 			ctx := context.Background()
 			provider := &mockRepositoryProvider{}
 
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil)
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil)
 
 			require.NoError(t, err)
 			require.Nil(t, result)
@@ -176,7 +176,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 			provider := &mockRepositoryProvider{}
 			config := createPathMatcherConfig()
 
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithConfig(config),
 			)
 
@@ -192,7 +192,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 			repo := mockRepository()
 			config := createPathMatcherConfig()
 
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithConfig(config),
 				WithRepository(repo),
 				WithComponentPatterns([]string{"ocm.software/root"}),
@@ -214,7 +214,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 				Component:  "ocm.software/mycomponent",
 			}
 
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithComponentRef(ref),
 			)
 
@@ -235,7 +235,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 				Component:  "ocm.software/component-a",
 			}
 
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithConfig(config),
 				WithComponentRef(ref),
 			)
@@ -254,7 +254,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 			config := createPathMatcherConfig()
 
 			patterns := []string{"ocm.software/*", "example.com/*"}
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithConfig(config),
 				WithRepository(repo),
 				WithComponentPatterns(patterns),
@@ -275,7 +275,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 
 			// Component patterns should have highest priority
 			componentPatterns := []string{"priority.test/*"}
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithConfig(config),
 				WithRepository(repo),
 				WithComponentPatterns(componentPatterns),
@@ -295,7 +295,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 
 			// Component pattern that overlaps with config pattern
 			componentPatterns := []string{"my-comp-priority-*"}
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithConfig(config),
 				WithRepository(repo),
 				WithComponentPatterns(componentPatterns),
@@ -317,7 +317,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 			//nolint:staticcheck // testing deprecated feature
 			config := createFallbackResolversConfig()
 
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithConfig(config),
 			)
 
@@ -335,7 +335,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 			//nolint:staticcheck // testing deprecated feature
 			config := createFallbackResolversConfig()
 
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithConfig(config),
 				WithRepository(repo),
 				WithComponentPatterns([]string{"ocm.software/component"}),
@@ -384,7 +384,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 		]
 	}`)
 
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithConfig(config),
 			)
 
@@ -398,7 +398,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 			provider := &mockRepositoryProvider{}
 			config := createPathMatcherConfig() // Only has "my-comp-*" pattern
 
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithConfig(config),
 			)
 
@@ -424,7 +424,7 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 
 			// Test with ONLY component patterns and config (no repository wildcard fallback)
 			patterns := []string{"ocm.software/*", "example.com/*"}
-			result, err := NewComponentRepositoryProvider(ctx, provider, nil,
+			result, err := NewComponentRepositoryResolver(ctx, provider, nil,
 				WithConfig(config),
 				WithComponentPatterns(patterns),
 			)

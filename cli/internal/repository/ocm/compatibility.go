@@ -7,12 +7,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/repository/component/providers"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-// NewComponentRepositoryProvider creates a provider that resolves and returns
+// NewComponentRepositoryResolver creates a provider that resolves and returns
 // the appropriate repository for a given component name.
 //
 // The provider evaluates component names against configured patterns or fallback resolvers to determine
@@ -30,18 +30,18 @@ import (
 //   - WithComponentRef: Convenience option to set repository and component pattern from a component reference
 //
 // Returns an error if both resolver types are configured, or if no repository and no resolvers are provided.
-func NewComponentRepositoryProvider(
+func NewComponentRepositoryResolver(
 	ctx context.Context,
 	repoProvider repository.ComponentVersionRepositoryProvider,
 	credentialGraph credentials.Resolver,
 	opts ...RepositoryResolverOption,
-) (providers.ComponentVersionRepositoryForComponentProvider, error) {
+) (resolvers.ComponentVersionRepositoryResolver, error) {
 	options := &RepositoryResolverOptions{}
 	for _, opt := range opts {
 		opt(options)
 	}
 
-	fallbackResolvers, pathMatchers, err := providers.ExtractResolvers(options.config, ocirepository.Scheme)
+	fallbackResolvers, pathMatchers, err := resolvers.ExtractResolvers(options.config, ocirepository.Scheme)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func NewComponentRepositoryProvider(
 		componentPatterns = []string{"*"}
 	}
 
-	providerOpts := providers.Options{
+	providerOpts := resolvers.Options{
 		RepoProvider:      repoProvider,
 		CredentialGraph:   credentialGraph,
 		PathMatchers:      pathMatchers,
@@ -60,7 +60,7 @@ func NewComponentRepositoryProvider(
 		ComponentPatterns: componentPatterns,
 	}
 
-	return providers.New(ctx, providerOpts, options.repository)
+	return resolvers.New(ctx, providerOpts, options.repository)
 }
 
 // RepositoryResolverOptions holds configuration for NewComponentRepositoryProvider.
@@ -126,6 +126,6 @@ func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 	credentialGraph credentials.Resolver,
 	config *genericv1.Config,
 	ref *compref.Ref,
-) (providers.ComponentVersionRepositoryForComponentProvider, error) {
-	return NewComponentRepositoryProvider(ctx, repoProvider, credentialGraph, WithConfig(config), WithComponentRef(ref))
+) (resolvers.ComponentVersionRepositoryResolver, error) {
+	return NewComponentRepositoryResolver(ctx, repoProvider, credentialGraph, WithConfig(config), WithComponentRef(ref))
 }
