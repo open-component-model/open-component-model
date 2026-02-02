@@ -362,9 +362,6 @@ func (f *FallbackRepository) GetComponentVersionRepositoryForSpecification(ctx c
 	return f.getRepositoryFromCache(ctx, specification)
 }
 
-// Deprecated
-//
-
 func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
 	specdata, err := json.Marshal(specification)
 	if err != nil {
