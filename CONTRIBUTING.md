@@ -6,7 +6,7 @@ Quick guide to get you building and testing the next OCM reference library, cli 
 
 - **Go 1.25+**
 - **[Task](https://taskfile.dev/)** — our build runner
-- **Docker** — for integration tests (testcontainers)
+- **Docker** — for integration tests
 
 ## Setup
 

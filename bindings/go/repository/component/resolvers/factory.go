@@ -1,4 +1,4 @@
-package providers
+package resolvers
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/repository"
+	//nolint:staticcheck // compatibility mode for deprecated resolvers
+	v1 "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -40,7 +42,7 @@ func New(
 	ctx context.Context,
 	opts Options,
 	baseRepo runtime.Typed,
-) (SpecResolvingProvider, error) {
+) (ComponentVersionRepositoryResolver, error) {
 	if opts.RepoProvider == nil {
 		return nil, fmt.Errorf("repository provider is required")
 	}
@@ -51,14 +53,14 @@ func New(
 
 	if len(opts.FallbackResolvers) > 0 {
 		slog.WarnContext(ctx, "using deprecated fallback resolvers, consider switching to path matcher resolvers")
-		return newFallbackProviderWithBaseRepo(opts, baseRepo)
+		return newFallbackProviderWithBaseRepo(ctx, opts, baseRepo)
 	}
 
 	return newPathMatcherProviderWithBaseRepo(ctx, opts, baseRepo)
 }
 
 //nolint:staticcheck // compatibility mode for deprecated resolvers
-func newFallbackProviderWithBaseRepo(opts Options, baseRepo runtime.Typed) (SpecResolvingProvider, error) {
+func newFallbackProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (ComponentVersionRepositoryResolver, error) {
 	var finalResolvers []*resolverruntime.Resolver
 
 	if baseRepo != nil {
@@ -69,15 +71,17 @@ func newFallbackProviderWithBaseRepo(opts Options, baseRepo runtime.Typed) (Spec
 	}
 	finalResolvers = append(finalResolvers, opts.FallbackResolvers...)
 
-	return &fallbackProvider{
-		repoProvider: opts.RepoProvider,
-		graph:        opts.CredentialGraph,
-		resolvers:    finalResolvers,
-		baseRepo:     baseRepo,
+	fallbackRepo, err := v1.NewFallbackRepository(ctx, opts.RepoProvider, opts.CredentialGraph, finalResolvers)
+	if err != nil {
+		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
+	}
+
+	return &fallbackResolver{
+		repo: fallbackRepo,
 	}, nil
 }
 
-func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (SpecResolvingProvider, error) {
+func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (ComponentVersionRepositoryResolver, error) {
 	var finalResolvers []*resolverspec.Resolver
 
 	if baseRepo != nil {
@@ -111,9 +115,12 @@ func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseR
 		return nil, nil
 	}
 
-	return &pathMatcherProvider{
+	provider := &pathMatcherResolver{
 		repoProvider: opts.RepoProvider,
 		graph:        opts.CredentialGraph,
 		specProvider: pathmatcher.NewSpecProvider(ctx, finalResolvers),
-	}, nil
+		repoCache:    make(map[string]repository.ComponentVersionRepository),
+	}
+
+	return provider, nil
 }
