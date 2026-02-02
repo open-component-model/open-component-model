@@ -239,13 +239,18 @@ func describeType(cmd *cobra.Command, s *subsystem.Subsystem, args []string) err
 		return err
 	}
 
-	title := buildSchemaTitle(typ, current, path)
+	info := buildSchemaInfo(typ, current, path)
 
 	if showPaths, _ := cmd.Flags().GetBool("show-paths"); showPaths {
-		return renderFieldPathsTable(cmd, current, title)
+		return renderFieldPathsTable(cmd, current, info)
 	}
 
-	tw := buildSchemaTable(current, title)
+	// If the schema has no properties, render field details directly
+	if !schemaHasProperties(current) {
+		return renderFieldDetails(cmd, current, info)
+	}
+
+	tw := buildSchemaTable(current, info)
 	return renderTable(cmd, tw)
 }
 
@@ -325,14 +330,35 @@ func buildPathNotFoundError(schema *jsonschema.Schema, segmentName string) error
 	return fmt.Errorf("%s", errMsg)
 }
 
-func buildSchemaTitle(typ runtime.Type, schema *jsonschema.Schema, path fieldpath.Path) string {
-	var title string
+// schemaInfo holds the separated components of schema metadata for flexible rendering.
+type schemaInfo struct {
+	Breadcrumb  string // e.g., "file > path" (empty if at root type level)
+	Title       string // e.g., "Path" or "File" (the schema title or type name)
+	Type        string // e.g., "file" (the runtime type string)
+	Description string // the schema description
+	Deprecated  bool
+	FieldCount  int
+	Required    int
+	Optional    int
+}
+
+// buildSchemaInfo extracts schema metadata into separate components.
+func buildSchemaInfo(typ runtime.Type, schema *jsonschema.Schema, path fieldpath.Path) schemaInfo {
+	info := schemaInfo{
+		Type:       typ.String(),
+		FieldCount: len(schema.Properties),
+		Required:   len(schema.Required),
+	}
+	info.Optional = info.FieldCount - info.Required
+
+	// Title from schema or fall back to type
 	if schema.Title != "" {
-		title = schema.Title + fmt.Sprintf(" (%s)", typ.String())
+		info.Title = schema.Title
 	} else {
-		title = typ.String()
+		info.Title = typ.String()
 	}
 
+	// Breadcrumb path
 	if len(path) > 0 {
 		var breadcrumb strings.Builder
 		breadcrumb.WriteString(typ.String())
@@ -340,33 +366,58 @@ func buildSchemaTitle(typ runtime.Type, schema *jsonschema.Schema, path fieldpat
 			breadcrumb.WriteString(" > ")
 			breadcrumb.WriteString(seg.Name)
 		}
-		title = breadcrumb.String() + "\n" + title
+		info.Breadcrumb = breadcrumb.String()
 	}
 
-	if schema.Deprecated || (schema.Ref != nil && schema.Ref.Deprecated) {
-		title += "\n⚠️  WARNING: This type is deprecated"
-	}
+	// Deprecation
+	info.Deprecated = schema.Deprecated || (schema.Ref != nil && schema.Ref.Deprecated)
 
+	// Description
 	if schema.Description != "" {
-		title += "\n" + schema.Description
+		info.Description = schema.Description
 	} else if schema.Ref != nil && schema.Ref.Description != "" {
-		title += "\n" + schema.Ref.Description
+		info.Description = schema.Ref.Description
 	}
 
-	totalFields := len(schema.Properties)
-	requiredCount := len(schema.Required)
-	optionalCount := totalFields - requiredCount
-	if totalFields > 0 {
-		title += fmt.Sprintf("\n%d fields (%d required, %d optional)", totalFields, requiredCount, optionalCount)
-	}
-
-	return title
+	return info
 }
 
-func renderFieldPathsTable(cmd *cobra.Command, schema *jsonschema.Schema, title string) error {
+// formatTableTitle formats schema info as a table title (for types with properties).
+func (s schemaInfo) formatTableTitle() string {
+	var parts []string
+
+	// For table title, show breadcrumb OR title with type, not both redundantly
+	if s.Breadcrumb != "" {
+		parts = append(parts, s.Breadcrumb)
+	}
+
+	// Title with type annotation
+	if s.Title != s.Type {
+		parts = append(parts, fmt.Sprintf("%s (%s)", s.Title, s.Type))
+	} else if s.Breadcrumb == "" {
+		// Only show type if no breadcrumb (root level)
+		parts = append(parts, s.Type)
+	}
+
+	if s.Deprecated {
+		parts = append(parts, "⚠️  WARNING: This type is deprecated")
+	}
+
+	if s.Description != "" {
+		parts = append(parts, s.Description)
+	}
+
+	if s.FieldCount > 0 {
+		parts = append(parts, fmt.Sprintf("%d fields (%d required, %d optional)", s.FieldCount, s.Required, s.Optional))
+	}
+
+	return strings.Join(parts, "\n")
+}
+
+func renderFieldPathsTable(cmd *cobra.Command, schema *jsonschema.Schema, info schemaInfo) error {
 	paths := collectFieldPaths(schema, "", 5)
 	tw := table.NewWriter()
-	tw.SetTitle(title + "\n\nAvailable Field Paths")
+	tw.SetTitle(info.formatTableTitle() + "\n\nAvailable Field Paths")
 	tw.AppendHeader(table.Row{"path", "depth"})
 	for _, path := range paths {
 		depth := strings.Count(path, ".") + 1
@@ -375,9 +426,9 @@ func renderFieldPathsTable(cmd *cobra.Command, schema *jsonschema.Schema, title 
 	return renderTable(cmd, tw)
 }
 
-func buildSchemaTable(schema *jsonschema.Schema, title string) table.Writer {
+func buildSchemaTable(schema *jsonschema.Schema, info schemaInfo) table.Writer {
 	tw := table.NewWriter()
-	tw.SetTitle(title)
+	tw.SetTitle(info.formatTableTitle())
 	tw.AppendHeader(table.Row{"field name", "type", "required", "description"})
 	tw.SetColumnConfigs([]table.ColumnConfig{
 		{Number: 1, AutoMerge: true},
@@ -450,6 +501,103 @@ func getPropertyDescription(prop *jsonschema.Schema) string {
 	}
 
 	return desc
+}
+
+// schemaHasProperties returns true if the schema has any child properties.
+func schemaHasProperties(schema *jsonschema.Schema) bool {
+	if len(schema.Properties) > 0 {
+		return true
+	}
+	if schema.Ref != nil && len(schema.Ref.Properties) > 0 {
+		return true
+	}
+	return false
+}
+
+// renderFieldDetails renders a single field's details directly (for leaf fields without child properties).
+func renderFieldDetails(cmd *cobra.Command, schema *jsonschema.Schema, info schemaInfo) error {
+	var sb strings.Builder
+
+	// Breadcrumb path (if navigated into a field)
+	if info.Breadcrumb != "" {
+		sb.WriteString(info.Breadcrumb)
+		sb.WriteString("\n\n")
+	}
+
+	// Title
+	if info.Title != "" && info.Title != info.Type {
+		sb.WriteString(info.Title)
+		sb.WriteString("\n")
+	}
+
+	// Type
+	typeStr := getPropertyTypeString(schema)
+	if typeStr != "" {
+		sb.WriteString("Type: ")
+		sb.WriteString(typeStr)
+		sb.WriteString("\n")
+	}
+
+	// Deprecation warning
+	if info.Deprecated {
+		sb.WriteString("\n⚠️  WARNING: This field is deprecated\n")
+	}
+
+	// Description
+	if info.Description != "" {
+		sb.WriteString("\n")
+		sb.WriteString(info.Description)
+		sb.WriteString("\n")
+	}
+
+	// Additional constraints (enums, oneOf)
+	constraints := getFieldConstraints(schema)
+	if constraints != "" {
+		sb.WriteString("\n")
+		sb.WriteString(constraints)
+		sb.WriteString("\n")
+	}
+
+	out := cmd.OutOrStdout()
+	if isTerminal(out) {
+		return renderWithPager(cmd, sb.String())
+	}
+	_, err := io.WriteString(out, sb.String())
+	return err
+}
+
+// getFieldConstraints returns only the constraint info (enums, oneOf) without the base description.
+func getFieldConstraints(schema *jsonschema.Schema) string {
+	var parts []string
+
+	propEnum := schema.Enum
+	if propEnum == nil && schema.Ref != nil {
+		propEnum = schema.Ref.Enum
+	}
+	if propEnum != nil {
+		parts = append(parts, "Possible values: "+fmt.Sprintf("%v", propEnum.Values))
+	}
+
+	var oneOfDesc []string
+	if schema.OneOf != nil {
+		for _, of := range schema.OneOf {
+			if of.Const != nil {
+				oneOfDesc = append(oneOfDesc, fmt.Sprintf("%v", *of.Const))
+			}
+		}
+	}
+	if schema.Ref != nil && schema.Ref.OneOf != nil {
+		for _, of := range schema.Ref.OneOf {
+			if of.Const != nil {
+				oneOfDesc = append(oneOfDesc, fmt.Sprintf("%v", *of.Const))
+			}
+		}
+	}
+	if len(oneOfDesc) > 0 {
+		parts = append(parts, "Possible values: "+fmt.Sprintf("%v", oneOfDesc))
+	}
+
+	return strings.Join(parts, "\n")
 }
 
 func renderTable(cmd *cobra.Command, w table.Writer) error {
