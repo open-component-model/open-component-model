@@ -66,6 +66,7 @@ rules:
         - resourcegraphdefinitions
       verbs:
         - create
+        - delete
         - list
         - patch
         - update

@@ -1,17 +1,16 @@
-package providers
+package resolvers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
 
-	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/repository"
+	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	v1 "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -43,7 +42,7 @@ func New(
 	ctx context.Context,
 	opts Options,
 	baseRepo runtime.Typed,
-) (ComponentVersionRepositoryForComponentProvider, error) {
+) (ComponentVersionRepositoryResolver, error) {
 	if opts.RepoProvider == nil {
 		return nil, fmt.Errorf("repository provider is required")
 	}
@@ -61,7 +60,7 @@ func New(
 }
 
 //nolint:staticcheck // compatibility mode for deprecated resolvers
-func newFallbackProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (ComponentVersionRepositoryForComponentProvider, error) {
+func newFallbackProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (ComponentVersionRepositoryResolver, error) {
 	var finalResolvers []*resolverruntime.Resolver
 
 	if baseRepo != nil {
@@ -77,12 +76,12 @@ func newFallbackProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo
 		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
 	}
 
-	return &fallbackProvider{
+	return &fallbackResolver{
 		repo: fallbackRepo,
 	}, nil
 }
 
-func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (ComponentVersionRepositoryForComponentProvider, error) {
+func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo runtime.Typed) (ComponentVersionRepositoryResolver, error) {
 	var finalResolvers []*resolverspec.Resolver
 
 	if baseRepo != nil {
@@ -116,24 +115,11 @@ func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseR
 		return nil, nil
 	}
 
-	provider := &pathMatcherProvider{
+	provider := &pathMatcherResolver{
 		repoProvider: opts.RepoProvider,
 		graph:        opts.CredentialGraph,
 		specProvider: pathmatcher.NewSpecProvider(ctx, finalResolvers),
 		repoCache:    make(map[string]repository.ComponentVersionRepository),
-		validSpecs:   make(map[string]struct{}),
-	}
-
-	for _, resolver := range finalResolvers {
-		data, err := json.Marshal(resolver.Repository)
-		if err != nil {
-			return nil, fmt.Errorf("marshaling repository to json failed: %w", err)
-		}
-		data, err = jsoncanonicalizer.Transform(data)
-		if err != nil {
-			return nil, fmt.Errorf("canonicalizing repository json failed: %w", err)
-		}
-		provider.validSpecs[string(data)] = struct{}{}
 	}
 
 	return provider, nil

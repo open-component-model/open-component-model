@@ -1,4 +1,4 @@
-package providers
+package resolvers
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
+
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -16,29 +17,20 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type pathMatcherProvider struct {
+type pathMatcherResolver struct {
 	repoProvider repository.ComponentVersionRepositoryProvider
 	graph        credentials.Resolver
 	specProvider *pathmatcher.SpecProvider
 
-	lock       sync.RWMutex
-	repoCache  map[string]repository.ComponentVersionRepository
-	validSpecs map[string]struct{}
+	lock      sync.RWMutex
+	repoCache map[string]repository.ComponentVersionRepository
 }
 
-var _ ComponentVersionRepositoryForComponentProvider = (*pathMatcherProvider)(nil)
-
-func (p *pathMatcherProvider) GetRepositorySpecForComponent(ctx context.Context, component, version string) (runtime.Typed, error) {
-	return p.specProvider.GetRepositorySpec(ctx, runtime.Identity{
-		descruntime.IdentityAttributeName:    component,
-		descruntime.IdentityAttributeVersion: version,
-	})
-}
+var _ ComponentVersionRepositoryResolver = (*pathMatcherResolver)(nil)
 
 // getRepository returns a cached repository for the given specification, or creates a new one.
 // It handles credential resolution and caching internally.
-// Uses double-checked locking to prevent duplicate repository creation on concurrent cache misses.
-func (p *pathMatcherProvider) getRepository(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
+func (p *pathMatcherResolver) getRepository(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
 	// Canonicalize the specification for cache key
 	specdata, err := json.Marshal(specification)
 	if err != nil {
@@ -87,8 +79,11 @@ func (p *pathMatcherProvider) getRepository(ctx context.Context, specification r
 	return repo, nil
 }
 
-func (p *pathMatcherProvider) GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error) {
-	repoSpec, err := p.GetRepositorySpecForComponent(ctx, component, version)
+func (p *pathMatcherResolver) GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error) {
+	repoSpec, err := p.specProvider.GetRepositorySpec(ctx, runtime.Identity{
+		descruntime.IdentityAttributeName:    component,
+		descruntime.IdentityAttributeVersion: version,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("getting repository spec for component %s:%s failed: %w", component, version, err)
 	}
@@ -96,25 +91,6 @@ func (p *pathMatcherProvider) GetComponentVersionRepositoryForComponent(ctx cont
 	return p.getRepository(ctx, repoSpec)
 }
 
-func (p *pathMatcherProvider) GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
-	// Canonicalize the specification to check if it's valid
-	specdata, err := json.Marshal(specification)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling repository to json failed: %w", err)
-	}
-	specdata, err = jsoncanonicalizer.Transform(specdata)
-	if err != nil {
-		return nil, fmt.Errorf("canonicalizing repository json failed: %w", err)
-	}
-
-	// Check if this specification is in our validSpecs map (read lock)
-	p.lock.RLock()
-	_, found := p.validSpecs[string(specdata)]
-	p.lock.RUnlock()
-
-	if !found {
-		return nil, fmt.Errorf("repository specification not found in configured resolvers")
-	}
-
+func (p *pathMatcherResolver) GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
 	return p.getRepository(ctx, specification)
 }

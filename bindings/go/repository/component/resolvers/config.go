@@ -1,4 +1,4 @@
-package providers
+package resolvers
 
 import (
 	"fmt"

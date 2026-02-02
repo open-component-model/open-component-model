@@ -1,13 +1,11 @@
-package providers
+package resolvers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
 
-	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/repository"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
@@ -61,18 +59,12 @@ func TestPathMatcherProvider_Caching(t *testing.T) {
 		},
 	}
 
-	provider := &pathMatcherProvider{
+	provider := &pathMatcherResolver{
 		repoProvider: mockProvider,
 		graph:        nil,
 		specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
 		repoCache:    make(map[string]repository.ComponentVersionRepository),
-		validSpecs:   make(map[string]struct{}),
 	}
-
-	// Precompute valid specs
-	data, _ := json.Marshal(repoSpec)
-	data, _ = jsoncanonicalizer.Transform(data)
-	provider.validSpecs[string(data)] = struct{}{}
 
 	// First call - should create repository
 	repo1, err := provider.GetComponentVersionRepositoryForComponent(ctx, "example.com/component", "v1.0.0")
@@ -125,18 +117,12 @@ func TestPathMatcherProvider_GetRepositoryForSpecification_Valid(t *testing.T) {
 		},
 	}
 
-	provider := &pathMatcherProvider{
+	provider := &pathMatcherResolver{
 		repoProvider: mockProvider,
 		graph:        nil,
 		specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
 		repoCache:    make(map[string]repository.ComponentVersionRepository),
-		validSpecs:   make(map[string]struct{}),
 	}
-
-	// Precompute valid specs
-	data, _ := json.Marshal(repoSpec)
-	data, _ = jsoncanonicalizer.Transform(data)
-	provider.validSpecs[string(data)] = struct{}{}
 
 	// Should succeed for valid spec
 	repo, err := provider.GetComponentVersionRepositoryForSpecification(ctx, repoSpec)
@@ -145,52 +131,6 @@ func TestPathMatcherProvider_GetRepositoryForSpecification_Valid(t *testing.T) {
 	}
 	if repo == nil {
 		t.Fatal("Expected repository, got nil")
-	}
-}
-
-// TestPathMatcherProvider_GetRepositoryForSpecification_Invalid verifies invalid spec rejection
-func TestPathMatcherProvider_GetRepositoryForSpecification_Invalid(t *testing.T) {
-	ctx := context.Background()
-
-	repoSpec := &runtime.Raw{
-		Type: runtime.NewUnversionedType("test-repo"),
-		Data: []byte(`{"type":"test-repo","url":"https://example.com/repo"}`),
-	}
-
-	invalidSpec := &runtime.Raw{
-		Type: runtime.NewUnversionedType("invalid-repo"),
-		Data: []byte(`{"type":"invalid-repo","url":"https://invalid.com/repo"}`),
-	}
-
-	mockProvider := &mockRepoProvider{}
-
-	resolvers := []*resolverspec.Resolver{
-		{
-			Repository:           repoSpec,
-			ComponentNamePattern: "*",
-		},
-	}
-
-	provider := &pathMatcherProvider{
-		repoProvider: mockProvider,
-		graph:        nil,
-		specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
-		repoCache:    make(map[string]repository.ComponentVersionRepository),
-		validSpecs:   make(map[string]struct{}),
-	}
-
-	// Precompute valid specs (only repoSpec, not invalidSpec)
-	data, _ := json.Marshal(repoSpec)
-	data, _ = jsoncanonicalizer.Transform(data)
-	provider.validSpecs[string(data)] = struct{}{}
-
-	// Should fail for invalid spec
-	repo, err := provider.GetComponentVersionRepositoryForSpecification(ctx, invalidSpec)
-	if err == nil {
-		t.Fatal("Expected error for invalid spec, got nil")
-	}
-	if repo != nil {
-		t.Fatal("Expected nil repository for invalid spec")
 	}
 }
 
@@ -212,18 +152,12 @@ func TestPathMatcherProvider_GetRepositoryForSpecification_Caching(t *testing.T)
 		},
 	}
 
-	provider := &pathMatcherProvider{
+	provider := &pathMatcherResolver{
 		repoProvider: mockProvider,
 		graph:        nil,
 		specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
 		repoCache:    make(map[string]repository.ComponentVersionRepository),
-		validSpecs:   make(map[string]struct{}),
 	}
-
-	// Precompute valid specs
-	data, _ := json.Marshal(repoSpec)
-	data, _ = jsoncanonicalizer.Transform(data)
-	provider.validSpecs[string(data)] = struct{}{}
 
 	// First call
 	repo1, err := provider.GetComponentVersionRepositoryForSpecification(ctx, repoSpec)
@@ -249,44 +183,5 @@ func TestPathMatcherProvider_GetRepositoryForSpecification_Caching(t *testing.T)
 	// Verify same instance returned
 	if repo1 != repo2 {
 		t.Error("Expected cached repository to be returned")
-	}
-}
-
-// TestPathMatcherProvider_GetRepositorySpecForComponent verifies spec resolution
-func TestPathMatcherProvider_GetRepositorySpecForComponent(t *testing.T) {
-	ctx := context.Background()
-
-	repoSpec := &runtime.Raw{
-		Type: runtime.NewUnversionedType("test-repo"),
-		Data: []byte(`{"type":"test-repo","url":"https://example.com/repo"}`),
-	}
-
-	resolvers := []*resolverspec.Resolver{
-		{
-			Repository:           repoSpec,
-			ComponentNamePattern: "example.com/*",
-		},
-	}
-
-	provider := &pathMatcherProvider{
-		repoProvider: &mockRepoProvider{},
-		graph:        nil,
-		specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
-		repoCache:    make(map[string]repository.ComponentVersionRepository),
-		validSpecs:   make(map[string]struct{}),
-	}
-
-	// Should resolve spec for matching component
-	spec, err := provider.GetRepositorySpecForComponent(ctx, "example.com/component", "v1.0.0")
-	if err != nil {
-		t.Fatalf("GetRepositorySpecForComponent failed: %v", err)
-	}
-	if spec == nil {
-		t.Fatal("Expected spec, got nil")
-	}
-
-	// Verify spec type matches
-	if spec.GetType().String() != "test-repo" {
-		t.Errorf("Expected spec type 'test-repo', got '%s'", spec.GetType().String())
 	}
 }
