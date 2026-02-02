@@ -10,7 +10,7 @@ import (
 
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/repository/component/providers"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
@@ -87,11 +87,11 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 	if err != nil {
 		return nil, fmt.Errorf("failed to build repository cache key: %w", err)
 	}
-	var provider providers.ComponentVersionRepositoryForComponentProvider
+	var provider resolvers.ComponentVersionRepositoryResolver
 	if cached, ok := r.repoCache.Get(cacheKey); ok {
-		provider = cached.(providers.ComponentVersionRepositoryForComponentProvider)
+		provider = cached.(resolvers.ComponentVersionRepositoryResolver)
 	} else {
-		provider, err = r.createProvider(ctx, opts.RepositorySpec, cfg)
+		provider, err = r.createResolver(ctx, opts.RepositorySpec, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create provider: %w", err)
 		}
@@ -101,14 +101,14 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 	return newCacheBackedRepository(r.logger, provider, cfg, r.workerPool, requesterFunc, baseRepoSpec), nil
 }
 
-// createProvider creates a provider based on the configuration.
-// The provider handles resolving the appropriate repository for each component.
-func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (providers.ComponentVersionRepositoryForComponentProvider, error) {
+// createResolver creates a resolver based on the configuration.
+// The resolver handles resolving the appropriate repository for each component.
+func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (resolvers.ComponentVersionRepositoryResolver, error) {
 	if spec == nil {
 		return nil, fmt.Errorf("repository spec is required")
 	}
 
-	opts := providers.Options{
+	opts := resolvers.Options{
 		RepoProvider: r.pluginManager.ComponentVersionRepositoryRegistry,
 	}
 
@@ -123,7 +123,7 @@ func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *
 		r.logger.V(1).Info("resolved credential graph")
 		opts.CredentialGraph = credGraph
 
-		fallbackResolvers, pathMatchers, err := providers.ExtractResolvers(cfg.Config, ocirepository.Scheme)
+		fallbackResolvers, pathMatchers, err := resolvers.ExtractResolvers(cfg.Config, ocirepository.Scheme)
 		if err != nil {
 			return nil, err
 		}
@@ -131,5 +131,5 @@ func (r *Resolver) createProvider(ctx context.Context, spec runtime.Typed, cfg *
 		opts.PathMatchers = pathMatchers
 	}
 
-	return providers.New(ctx, opts, spec)
+	return resolvers.New(ctx, opts, spec)
 }

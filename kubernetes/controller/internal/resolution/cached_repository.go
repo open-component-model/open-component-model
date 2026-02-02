@@ -11,7 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/repository/component/providers"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
@@ -22,7 +22,7 @@ import (
 // routing where different components can be served by different repositories.
 // This is a READ-ONLY cache. Writing operations are delegated directly to the resolved repository.
 type CacheBackedRepository struct {
-	provider   providers.ComponentVersionRepositoryForComponentProvider
+	resolver   resolvers.ComponentVersionRepositoryResolver
 	cfg        *configuration.Configuration
 	workerPool *workerpool.WorkerPool
 	logger     *logr.Logger
@@ -38,7 +38,7 @@ var _ repository.ComponentVersionRepository = (*CacheBackedRepository)(nil)
 // newCacheBackedRepository creates a new CacheBackedRepository instance.
 func newCacheBackedRepository(
 	logger *logr.Logger,
-	provider providers.ComponentVersionRepositoryForComponentProvider,
+	resolver resolvers.ComponentVersionRepositoryResolver,
 	cfg *configuration.Configuration,
 	wp *workerpool.WorkerPool,
 	requesterFunc func() workerpool.RequesterInfo,
@@ -46,7 +46,7 @@ func newCacheBackedRepository(
 ) *CacheBackedRepository {
 	return &CacheBackedRepository{
 		logger:        logger,
-		provider:      provider,
+		resolver:      resolver,
 		cfg:           cfg,
 		workerPool:    wp,
 		requesterFunc: requesterFunc,
@@ -56,7 +56,7 @@ func newCacheBackedRepository(
 
 // AddComponentVersion adds a component version to the underlying repository.
 func (c *CacheBackedRepository) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
-	repo, err := c.provider.GetComponentVersionRepositoryForComponent(ctx, desc.Component.Name, desc.Component.Version)
+	repo, err := c.resolver.GetComponentVersionRepositoryForComponent(ctx, desc.Component.Name, desc.Component.Version)
 	if err != nil {
 		return fmt.Errorf("failed to get repository for component %s:%s: %w", desc.Component.Name, desc.Component.Version, err)
 	}
@@ -81,7 +81,7 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 		return buildCacheKey(configHash, c.baseRepoSpec, component, version)
 	}
 
-	repo, err := c.provider.GetComponentVersionRepositoryForComponent(ctx, component, version)
+	repo, err := c.resolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository for component %s:%s: %w", component, version, err)
 	}
@@ -105,7 +105,7 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 // ListComponentVersions lists all versions of a component.
 // We never cache this call because it needs to return actual, existing versions on each call.
 func (c *CacheBackedRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
-	repo, err := c.provider.GetComponentVersionRepositoryForComponent(ctx, component, "")
+	repo, err := c.resolver.GetComponentVersionRepositoryForComponent(ctx, component, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository for component %s: %w", component, err)
 	}
@@ -114,7 +114,7 @@ func (c *CacheBackedRepository) ListComponentVersions(ctx context.Context, compo
 
 // AddLocalResource adds a local resource to the underlying repository.
 func (c *CacheBackedRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	repo, err := c.provider.GetComponentVersionRepositoryForComponent(ctx, component, version)
+	repo, err := c.resolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository for component %s:%s: %w", component, version, err)
 	}
@@ -123,7 +123,7 @@ func (c *CacheBackedRepository) AddLocalResource(ctx context.Context, component,
 
 // GetLocalResource retrieves a local resource from the underlying repository.
 func (c *CacheBackedRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
-	repo, err := c.provider.GetComponentVersionRepositoryForComponent(ctx, component, version)
+	repo, err := c.resolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get repository for component %s:%s: %w", component, version, err)
 	}
@@ -132,7 +132,7 @@ func (c *CacheBackedRepository) GetLocalResource(ctx context.Context, component,
 
 // AddLocalSource adds a local source to the underlying repository.
 func (c *CacheBackedRepository) AddLocalSource(ctx context.Context, component, version string, src *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	repo, err := c.provider.GetComponentVersionRepositoryForComponent(ctx, component, version)
+	repo, err := c.resolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository for component %s:%s: %w", component, version, err)
 	}
@@ -141,7 +141,7 @@ func (c *CacheBackedRepository) AddLocalSource(ctx context.Context, component, v
 
 // GetLocalSource retrieves a local source from the underlying repository.
 func (c *CacheBackedRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
-	repo, err := c.provider.GetComponentVersionRepositoryForComponent(ctx, component, version)
+	repo, err := c.resolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get repository for component %s:%s: %w", component, version, err)
 	}
@@ -151,7 +151,7 @@ func (c *CacheBackedRepository) GetLocalSource(ctx context.Context, component, v
 // CheckHealth calls health check on the underlying base repository.
 // Returns nil if the repository does not support health checking.
 func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
-	repo, err := c.provider.GetComponentVersionRepositoryForSpecification(ctx, c.baseRepoSpec)
+	repo, err := c.resolver.GetComponentVersionRepositoryForSpecification(ctx, c.baseRepoSpec)
 	if err != nil {
 		return fmt.Errorf("failed to get repository for health check: %w", err)
 	}
