@@ -17,7 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type pathMatcherProvider struct {
+type pathMatcherResolver struct {
 	repoProvider repository.ComponentVersionRepositoryProvider
 	graph        credentials.Resolver
 	specProvider *pathmatcher.SpecProvider
@@ -26,11 +26,11 @@ type pathMatcherProvider struct {
 	repoCache map[string]repository.ComponentVersionRepository
 }
 
-var _ ComponentVersionRepositoryResolver = (*pathMatcherProvider)(nil)
+var _ ComponentVersionRepositoryResolver = (*pathMatcherResolver)(nil)
 
 // getRepository returns a cached repository for the given specification, or creates a new one.
 // It handles credential resolution and caching internally.
-func (p *pathMatcherProvider) getRepository(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
+func (p *pathMatcherResolver) getRepository(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
 	// Canonicalize the specification for cache key
 	specdata, err := json.Marshal(specification)
 	if err != nil {
@@ -79,7 +79,7 @@ func (p *pathMatcherProvider) getRepository(ctx context.Context, specification r
 	return repo, nil
 }
 
-func (p *pathMatcherProvider) ResolveComponentVersionRepository(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error) {
+func (p *pathMatcherResolver) GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error) {
 	repoSpec, err := p.specProvider.GetRepositorySpec(ctx, runtime.Identity{
 		descruntime.IdentityAttributeName:    component,
 		descruntime.IdentityAttributeVersion: version,
@@ -91,6 +91,6 @@ func (p *pathMatcherProvider) ResolveComponentVersionRepository(ctx context.Cont
 	return p.getRepository(ctx, repoSpec)
 }
 
-func (p *pathMatcherProvider) GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
+func (p *pathMatcherResolver) GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
 	return p.getRepository(ctx, specification)
 }

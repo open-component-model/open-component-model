@@ -77,7 +77,7 @@ func newFallbackProviderWithBaseRepo(ctx context.Context, opts Options, baseRepo
 		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
 	}
 
-	return &fallbackProvider{
+	return &fallbackResolver{
 		repo: fallbackRepo,
 	}, nil
 }
@@ -116,7 +116,7 @@ func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseR
 		return nil, nil
 	}
 
-	provider := &pathMatcherProvider{
+	provider := &pathMatcherResolver{
 		repoProvider: opts.RepoProvider,
 		graph:        opts.CredentialGraph,
 		specProvider: pathmatcher.NewSpecProvider(ctx, finalResolvers),
