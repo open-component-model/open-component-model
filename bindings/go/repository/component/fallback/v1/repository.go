@@ -364,7 +364,7 @@ func (f *FallbackRepository) GetComponentVersionRepositoryForSpecification(ctx c
 
 // Deprecated
 //
-//nolint:staticcheck // SA1019: using deprecated type within deprecated code
+
 func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
 	specdata, err := json.Marshal(specification)
 	if err != nil {
