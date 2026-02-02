@@ -10,8 +10,7 @@ import (
 const CTFAddOCIArtifactType = "CTFAddOCIArtifact"
 
 // CTFAddOCIArtifact is a transformer specification to add an OCI artifact
-// to a CTF repository. Since CTF cannot store external OCI references,
-// the artifact is converted to a local blob.
+// to a CTF repository.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
@@ -29,7 +28,7 @@ type CTFAddOCIArtifact struct {
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type CTFAddOCIArtifactOutput struct {
-	// Resource is the updated resource descriptor with localBlob access
+	// Resource is the updated resource descriptor
 	Resource *v2.Resource `json:"resource"`
 }
 
@@ -45,7 +44,6 @@ type CTFAddOCIArtifactSpec struct {
 	// Version is the component version
 	Version string `json:"version"`
 	// Resource is the resource descriptor to add.
-	// The access specification will be updated to localBlob type.
 	Resource *v2.Resource `json:"resource"`
 	// File is the access specification to the file containing the OCI artifact
 	File v1alpha1.File `json:"file"`

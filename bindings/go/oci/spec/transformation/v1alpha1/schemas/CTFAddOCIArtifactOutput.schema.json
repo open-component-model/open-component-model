@@ -8,7 +8,7 @@
   "properties": {
     "resource": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Resource",
-      "description": "Resource is the updated resource descriptor with localBlob access"
+      "description": "Resource is the updated resource descriptor"
     }
   },
   "required": [

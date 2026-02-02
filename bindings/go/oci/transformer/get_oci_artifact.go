@@ -40,9 +40,6 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 
 	switch tr := transformation.(type) {
 	case *v1alpha1.OCIGetOCIArtifact:
-		repoSpec = &tr.Spec.Repository
-		component = tr.Spec.Component
-		version = tr.Spec.Version
 		resourceIdentity = tr.Spec.ResourceIdentity
 		outputPath = tr.Spec.OutputPath
 		if tr.Output == nil {
@@ -59,17 +56,18 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 			tr.Output = &v1alpha1.CTFGetOCIArtifactOutput{}
 		}
 		output = tr.Output
+
+		if component == "" {
+			return nil, fmt.Errorf("component name is required")
+		}
+		if version == "" {
+			return nil, fmt.Errorf("component version is required")
+		}
 	default:
 		return nil, fmt.Errorf("unexpected transformation type: %T", transformation)
 	}
 
 	// Validate inputs
-	if component == "" {
-		return nil, fmt.Errorf("component name is required")
-	}
-	if version == "" {
-		return nil, fmt.Errorf("component version is required")
-	}
 	if len(resourceIdentity) == 0 {
 		return nil, fmt.Errorf("resource identity is required")
 	}
@@ -141,7 +139,7 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 		if err != nil {
 			return nil, fmt.Errorf("failed creating temporary file: %w", err)
 		}
-		tempFile.Close() // Close immediately, BlobToSpec will overwrite it
+		_ = tempFile.Close() // Close immediately, BlobToSpec will overwrite it
 		outputPath = tempFile.Name()
 	} else {
 		// Ensure the directory exists

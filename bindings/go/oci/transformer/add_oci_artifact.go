@@ -44,9 +44,6 @@ func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 
 	switch tr := transformation.(type) {
 	case *v1alpha1.OCIAddOCIArtifact:
-		repoSpec = &tr.Spec.Repository
-		component = tr.Spec.Component
-		version = tr.Spec.Version
 		resource = tr.Spec.Resource
 		contentSpec = tr.Spec.File
 		targetReference = tr.Spec.TargetReference
@@ -67,17 +64,18 @@ func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 		output = tr.Output
 		isCTF = true
 		// CTF doesn't use targetReference - converts to local blob
+
+		if component == "" {
+			return nil, fmt.Errorf("component name is required")
+		}
+		if version == "" {
+			return nil, fmt.Errorf("component version is required")
+		}
 	default:
 		return nil, fmt.Errorf("unexpected transformation type: %T", transformation)
 	}
 
 	// Validate inputs
-	if component == "" {
-		return nil, fmt.Errorf("component name is required")
-	}
-	if version == "" {
-		return nil, fmt.Errorf("component version is required")
-	}
 	if resource == nil {
 		return nil, fmt.Errorf("resource is required")
 	}

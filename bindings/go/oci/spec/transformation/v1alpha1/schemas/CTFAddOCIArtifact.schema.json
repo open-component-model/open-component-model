@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/schemas/CTFAddOCIArtifact.schema.json",
   "title": "CTFAddOCIArtifact",
   "type": "object",
-  "description": "CTFAddOCIArtifact is a transformer specification to add an OCI artifact\nto a CTF repository. Since CTF cannot store external OCI references,\nthe artifact is converted to a local blob.",
+  "description": "CTFAddOCIArtifact is a transformer specification to add an OCI artifact\nto a CTF repository.",
   "properties": {
     "id": {
       "type": "string"
@@ -359,7 +359,7 @@
       "properties": {
         "resource": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Resource",
-          "description": "Resource is the updated resource descriptor with localBlob access"
+          "description": "Resource is the updated resource descriptor"
         }
       },
       "required": [
@@ -388,7 +388,7 @@
         },
         "resource": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Resource",
-          "description": "Resource is the resource descriptor to add.\nThe access specification will be updated to localBlob type."
+          "description": "Resource is the resource descriptor to add."
         },
         "version": {
           "type": "string",
