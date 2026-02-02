@@ -1,4 +1,4 @@
-package providers
+package resolvers
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/repository"
+
 	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	v1 "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"

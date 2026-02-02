@@ -5,4 +5,4 @@
 //  2. Fallback resolvers (v1, deprecated) - priority-based resolution without pattern matching
 //
 // The package consolidates resolver logic used by both the CLI and controller.
-package providers
+package resolvers
