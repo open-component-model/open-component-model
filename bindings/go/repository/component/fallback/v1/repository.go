@@ -3,6 +3,7 @@ package v1
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"iter"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -53,10 +55,10 @@ type FallbackRepository struct {
 	//nolint:staticcheck // SA1019: using deprecated type within deprecated code
 	resolvers []*resolverruntime.Resolver
 
-	// This cache is based on index. So, the index of the resolver in the
-	// resolver slice corresponds to the index of the repository in this slice.
-	repositoriesForResolverCacheMu sync.RWMutex
-	repositoriesForResolverCache   []repository.ComponentVersionRepository
+	// This cache is based on the canonicalized JSON representation of the
+	// repository specification.
+	repoCacheMu sync.RWMutex
+	repoCache   map[string]repository.ComponentVersionRepository
 }
 
 type FallbackRepositoryOption func(*FallbackRepositoryOptions)
@@ -91,14 +93,15 @@ func NewFallbackRepository(_ context.Context, repositoryProvider repository.Comp
 	slices.SortStableFunc(resolvers, func(a, b *resolverruntime.Resolver) int {
 		return cmp.Compare(b.Priority, a.Priority)
 	})
+
 	return &FallbackRepository{
 		goRoutineLimit: options.GoRoutineLimit,
 
 		repositoryProvider:  repositoryProvider,
 		credentialsResolver: credentialsResolver,
 
-		resolvers:                    resolvers,
-		repositoriesForResolverCache: make([]repository.ComponentVersionRepository, len(resolvers)),
+		resolvers: resolvers,
+		repoCache: make(map[string]repository.ComponentVersionRepository),
 	}, nil
 }
 
@@ -299,11 +302,11 @@ func (f *FallbackRepository) GetLocalSource(ctx context.Context, component, vers
 // New concepts will likely be introduced in the future (contributions welcome!).
 func (f *FallbackRepository) RepositoriesForComponentIterator(ctx context.Context, component string) iter.Seq2[repository.ComponentVersionRepository, error] {
 	return func(yield func(repository.ComponentVersionRepository, error) bool) {
-		for index, resolver := range f.resolvers {
+		for _, resolver := range f.resolvers {
 			if resolver.Prefix != "" && resolver.Prefix != component && !strings.HasPrefix(component, strings.TrimSuffix(resolver.Prefix, "/")+"/") {
 				continue
 			}
-			repo, err := f.getRepositoryFromCache(ctx, index, resolver)
+			repo, err := f.getRepositoryFromCache(ctx, resolver.Repository)
 			if err != nil {
 				yield(nil, fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err))
 				return
@@ -355,24 +358,35 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 	return repo, nil
 }
 
-// Deprecated
-//
-//nolint:staticcheck // SA1019: using deprecated type within deprecated code
-func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, index int, resolver *resolverruntime.Resolver) (repository.ComponentVersionRepository, error) {
-	var err error
+func (f *FallbackRepository) GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
+	return f.getRepositoryFromCache(ctx, specification)
+}
 
-	f.repositoriesForResolverCacheMu.RLock()
-	repo := f.repositoriesForResolverCache[index]
-	f.repositoriesForResolverCacheMu.RUnlock()
+func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
+	specdata, err := json.Marshal(specification)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling repository to json failed: %w", err)
+	}
+	specdata, err = jsoncanonicalizer.Transform(specdata)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalizing repository json failed: %w", err)
+	}
+	key := string(specdata)
+
+	var repo repository.ComponentVersionRepository
+
+	f.repoCacheMu.RLock()
+	repo = f.repoCache[key]
+	f.repoCacheMu.RUnlock()
 
 	if repo == nil {
-		repo, err = f.getRepositoryForSpecification(ctx, resolver.Repository)
+		repo, err = f.getRepositoryForSpecification(ctx, specification)
 		if err != nil {
-			return nil, fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err)
+			return nil, fmt.Errorf("getting repository for spec %v failed: %w", specification, err)
 		}
-		f.repositoriesForResolverCacheMu.Lock()
-		f.repositoriesForResolverCache[index] = repo
-		f.repositoriesForResolverCacheMu.Unlock()
+		f.repoCacheMu.Lock()
+		f.repoCache[key] = repo
+		f.repoCacheMu.Unlock()
 	}
 	return repo, nil
 }
