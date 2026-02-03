@@ -184,7 +184,7 @@ func TestGetOCIArtifact_Transform_OCI_WithOutputPath(t *testing.T) {
 	assert.Equal(t, "1.21.0", transformed.Output.Resource.Version)
 }
 
-func TestGetOCIArtifact_Transform_OCI_Should_Fail_MediaType(t *testing.T) {
+func TestGetOCIArtifact_Transform_OCI_Should_Default_No_Ext(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup test data - create a blob that the repository will return (OCI artifact as tar)
@@ -234,9 +234,27 @@ func TestGetOCIArtifact_Transform_OCI_Should_Fail_MediaType(t *testing.T) {
 
 	// Execute transformation
 	result, err := transformer.Transform(ctx, spec)
-	require.Error(t, err)
-	require.ErrorContains(t, err, "unsupported media type")
-	require.Nil(t, result)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify result
+	transformed, ok := result.(*v1alpha1.GetOCIArtifact)
+	require.True(t, ok)
+	require.NotNil(t, transformed.Output)
+	require.NotNil(t, transformed.Output.Resource)
+
+	// Verify file was created
+	osPath := strings.ReplaceAll(transformed.Output.File.URI, "file://", "")
+	assert.FileExists(t, strings.ReplaceAll(osPath, "file://", ""))
+
+	// Verify file content
+	fileContent, err := os.ReadFile(osPath)
+	require.NoError(t, err)
+	assert.Equal(t, testBlobData, fileContent)
+
+	// Verify resource in output
+	assert.Equal(t, "test-image", transformed.Output.Resource.Name)
+	assert.Equal(t, "1.21.0", transformed.Output.Resource.Version)
 }
 
 func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {
