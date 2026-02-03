@@ -1,0 +1,353 @@
+{{- if .Values.crd.enable }}
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+    annotations:
+        controller-gen.kubebuilder.io/version: v0.20.0
+    name: components.delivery.ocm.software
+spec:
+    group: delivery.ocm.software
+    names:
+        kind: Component
+        listKind: ComponentList
+        plural: components
+        singular: component
+    scope: Namespaced
+    versions:
+        - additionalPrinterColumns:
+            - description: Indicates if the Resource is Ready
+              jsonPath: .status.conditions[?(@.type=="Ready")].message
+              name: Ready
+              priority: 1
+              type: string
+            - description: Displays the Age of the Resource
+              jsonPath: .metadata.creationTimestamp
+              name: Age
+              type: date
+          name: v1alpha1
+          schema:
+            openAPIV3Schema:
+                description: Component is the Schema for the components API.
+                properties:
+                    apiVersion:
+                        description: |-
+                            APIVersion defines the versioned schema of this representation of an object.
+                            Servers should convert recognized schemas to the latest internal value, and
+                            may reject unrecognized values.
+                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+                        type: string
+                    kind:
+                        description: |-
+                            Kind is a string value representing the REST resource this object represents.
+                            Servers may infer this from the endpoint the client submits requests to.
+                            Cannot be updated.
+                            In CamelCase.
+                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                        type: string
+                    metadata:
+                        type: object
+                    spec:
+                        description: ComponentSpec defines the desired state of Component.
+                        properties:
+                            component:
+                                description: Component is the name of the ocm component.
+                                type: string
+                            downgradePolicy:
+                                default: Deny
+                                description: |-
+                                    DowngradePolicy specifies whether the component may be
+                                    downgraded. The property is an enum with the 3 states: `Enforce`, `Allow`,
+                                    `Deny`, with `Deny` being the default.
+                                    `Deny` means never allow downgrades (thus, never fetch components with a
+                                    version lower than the version currently deployed).
+                                    `Allow` means that the component will be checked for a label with the
+                                    `ocm.software/ocm-k8s-toolkit/downgradePolicy` which may specify a semver
+                                    constraint down to which version downgrades are allowed.
+                                    `Enforce` means always allow downgrades.
+                                enum:
+                                    - Allow
+                                    - Deny
+                                    - Enforce
+                                type: string
+                            interval:
+                                description: |-
+                                    Interval at which the repository will be checked for new component
+                                    versions.
+                                type: string
+                            ocmConfig:
+                                description: |-
+                                    OCMConfig defines references to secrets, config maps or ocm api
+                                    objects providing configuration data including credentials.
+                                items:
+                                    description: |-
+                                        OCMConfiguration defines a configuration applied to the reconciliation of an
+                                        ocm k8s object as well as the policy for its propagation of this
+                                        configuration.
+                                    properties:
+                                        apiVersion:
+                                            description: API version of the referent, if not specified the Kubernetes preferred version will be used.
+                                            type: string
+                                        kind:
+                                            description: Kind of the referent.
+                                            type: string
+                                        name:
+                                            description: Name of the referent.
+                                            type: string
+                                        namespace:
+                                            description: Namespace of the referent, when not specified it acts as LocalObjectReference.
+                                            type: string
+                                        policy:
+                                            default: Propagate
+                                            description: |-
+                                                Policy affects the propagation behavior of the configuration. If set to
+                                                ConfigurationPolicyPropagate other ocm api objects can reference this
+                                                object to reuse this configuration.
+                                            enum:
+                                                - Propagate
+                                                - DoNotPropagate
+                                            type: string
+                                    required:
+                                        - kind
+                                        - name
+                                        - policy
+                                    type: object
+                                    x-kubernetes-validations:
+                                        - message: apiVersion must be one of "v1" with kind "Secret" or "ConfigMap" or "delivery.ocm.software/v1alpha1" with the kind of an OCM kubernetes object
+                                          rule: ((!has(self.apiVersion) || self.apiVersion == "" || self.apiVersion == "v1") && (self.kind == "Secret" || self.kind == "ConfigMap")) || (self.apiVersion == "delivery.ocm.software/v1alpha1" && (self.kind == "Repository" || self.kind == "Component" || self.kind == "Resource" || self.kind == "Replication"))
+                                type: array
+                            repositoryRef:
+                                description: RepositoryRef is a reference to a Repository.
+                                properties:
+                                    name:
+                                        default: ""
+                                        description: |-
+                                            Name of the referent.
+                                            This field is effectively required, but due to backwards compatibility is
+                                            allowed to be empty. Instances of this type with an empty value here are
+                                            almost certainly wrong.
+                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        type: string
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            semver:
+                                description: Semver defines the constraint of the fetched version. '>=v0.1'.
+                                type: string
+                            semverFilter:
+                                description: |-
+                                    SemverFilter is a regex pattern to filter the versions within the Semver
+                                    range.
+                                type: string
+                            suspend:
+                                description: |-
+                                    Suspend tells the controller to suspend the reconciliation of this
+                                    Component.
+                                type: boolean
+                            verify:
+                                description: |-
+                                    Verify contains a signature name specifying the component signature to be
+                                    verified as well as the trusted public keys (or certificates containing
+                                    the public keys) used to verify the signature.
+                                items:
+                                    properties:
+                                        secretRef:
+                                            description: |-
+                                                Public Key Secret Format
+                                                A secret containing public keys for signature verification is expected to be of the structure:
+
+                                                 Data:
+                                                	  <Signature-Name>: <PublicKey/Certificate>
+
+                                                Additionally, to prepare for a common ocm secret management, it might make sense to introduce a specific secret type
+                                                for these secrets.
+                                            properties:
+                                                name:
+                                                    default: ""
+                                                    description: |-
+                                                        Name of the referent.
+                                                        This field is effectively required, but due to backwards compatibility is
+                                                        allowed to be empty. Instances of this type with an empty value here are
+                                                        almost certainly wrong.
+                                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                    type: string
+                                            type: object
+                                            x-kubernetes-map-type: atomic
+                                        signature:
+                                            type: string
+                                        value:
+                                            description: Value defines a PEM/base64 encoded public key value.
+                                            type: string
+                                    required:
+                                        - signature
+                                    type: object
+                                type: array
+                        required:
+                            - component
+                            - interval
+                            - repositoryRef
+                            - semver
+                        type: object
+                    status:
+                        description: ComponentStatus defines the observed state of Component.
+                        properties:
+                            component:
+                                description: |-
+                                    Component specifies the concrete version of the component that was
+                                    fetched after based on the semver constraints during the last successful
+                                    reconciliation.
+                                properties:
+                                    component:
+                                        type: string
+                                    digest:
+                                        description: Digest information of the Component, if available as per OCM specification.
+                                        properties:
+                                            hashAlgorithm:
+                                                description: |-
+                                                    HashAlgorithm specifies the hashing algorithm applied after normalization.
+                                                    The choice of algorithm impacts compatibility across verifiers.
+
+                                                    See specification reference:
+                                                      - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/digest-algorithms.md
+                                                type: string
+                                            normalisationAlgorithm:
+                                                description: |-
+                                                    NormalisationAlgorithm defines how the component descriptor or artifact
+                                                    is transformed into a stable byte representation before hashing.
+                                                    Normalization ensures reproducibility by excluding volatile fields
+                                                    such as transport-related access specifications.
+
+                                                    See specification references:
+                                                      - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/component-descriptor-normalization-algorithms.md
+                                                      - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/artifact-normalization-types.md
+                                                type: string
+                                            value:
+                                                description: |-
+                                                    Value is the encoded digest result produced from the normalized representation.
+                                                    Typically hex or base64 encoded, depending on the algorithm specification.
+                                                type: string
+                                        required:
+                                            - hashAlgorithm
+                                            - normalisationAlgorithm
+                                            - value
+                                        type: object
+                                    repositorySpec:
+                                        x-kubernetes-preserve-unknown-fields: true
+                                    version:
+                                        type: string
+                                required:
+                                    - component
+                                    - repositorySpec
+                                    - version
+                                type: object
+                            conditions:
+                                description: Conditions holds the conditions for the Component.
+                                items:
+                                    description: Condition contains details for one aspect of the current state of this API Resource.
+                                    properties:
+                                        lastTransitionTime:
+                                            description: |-
+                                                lastTransitionTime is the last time the condition transitioned from one status to another.
+                                                This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                                            format: date-time
+                                            type: string
+                                        message:
+                                            description: |-
+                                                message is a human readable message indicating details about the transition.
+                                                This may be an empty string.
+                                            maxLength: 32768
+                                            type: string
+                                        observedGeneration:
+                                            description: |-
+                                                observedGeneration represents the .metadata.generation that the condition was set based upon.
+                                                For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                                                with respect to the current state of the instance.
+                                            format: int64
+                                            minimum: 0
+                                            type: integer
+                                        reason:
+                                            description: |-
+                                                reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                                                Producers of specific condition types may define expected values and meanings for this field,
+                                                and whether the values are considered a guaranteed API.
+                                                The value should be a CamelCase string.
+                                                This field may not be empty.
+                                            maxLength: 1024
+                                            minLength: 1
+                                            pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                                            type: string
+                                        status:
+                                            description: status of the condition, one of True, False, Unknown.
+                                            enum:
+                                                - "True"
+                                                - "False"
+                                                - Unknown
+                                            type: string
+                                        type:
+                                            description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                                            maxLength: 316
+                                            pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                                            type: string
+                                    required:
+                                        - lastTransitionTime
+                                        - message
+                                        - reason
+                                        - status
+                                        - type
+                                    type: object
+                                type: array
+                            effectiveOCMConfig:
+                                description: |-
+                                    EffectiveOCMConfig specifies the entirety of config maps and secrets
+                                    whose configuration data was applied to the Component reconciliation,
+                                    in the order the configuration data was applied.
+                                items:
+                                    description: |-
+                                        OCMConfiguration defines a configuration applied to the reconciliation of an
+                                        ocm k8s object as well as the policy for its propagation of this
+                                        configuration.
+                                    properties:
+                                        apiVersion:
+                                            description: API version of the referent, if not specified the Kubernetes preferred version will be used.
+                                            type: string
+                                        kind:
+                                            description: Kind of the referent.
+                                            type: string
+                                        name:
+                                            description: Name of the referent.
+                                            type: string
+                                        namespace:
+                                            description: Namespace of the referent, when not specified it acts as LocalObjectReference.
+                                            type: string
+                                        policy:
+                                            default: Propagate
+                                            description: |-
+                                                Policy affects the propagation behavior of the configuration. If set to
+                                                ConfigurationPolicyPropagate other ocm api objects can reference this
+                                                object to reuse this configuration.
+                                            enum:
+                                                - Propagate
+                                                - DoNotPropagate
+                                            type: string
+                                    required:
+                                        - kind
+                                        - name
+                                        - policy
+                                    type: object
+                                    x-kubernetes-validations:
+                                        - message: apiVersion must be one of "v1" with kind "Secret" or "ConfigMap" or "delivery.ocm.software/v1alpha1" with the kind of an OCM kubernetes object
+                                          rule: ((!has(self.apiVersion) || self.apiVersion == "" || self.apiVersion == "v1") && (self.kind == "Secret" || self.kind == "ConfigMap")) || (self.apiVersion == "delivery.ocm.software/v1alpha1" && (self.kind == "Repository" || self.kind == "Component" || self.kind == "Resource" || self.kind == "Replication"))
+                                type: array
+                            observedGeneration:
+                                description: |-
+                                    ObservedGeneration is the last observed generation of the ComponentStatus
+                                    object.
+                                format: int64
+                                type: integer
+                        type: object
+                required:
+                    - spec
+                type: object
+          served: true
+          storage: true
+          subresources:
+            status: {}
+{{- end }}
