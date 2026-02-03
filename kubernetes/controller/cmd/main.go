@@ -63,7 +63,6 @@ func init() {
 
 	dynamic.MustRegisterMetrics(metrics.Registry)
 	cache.MustRegisterMetrics(metrics.Registry)
-	ocm.MustRegisterMetrics(metrics.Registry)
 }
 
 //nolint:funlen,maintidx // the main function is complex enough as it is - we don't want to separate the initialization
@@ -230,12 +229,6 @@ func main() {
 	var eventsRecorder *events.Recorder
 	if eventsRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, "ocm-k8s-toolkit"); err != nil {
 		setupLog.Error(err, "unable to create event recorder")
-		os.Exit(1)
-	}
-
-	ocmContextCache := ocm.NewContextCache("shared_ocm_context_cache", ocmContextCacheSize, ocmSessionCacheSize, mgr.GetClient(), mgr.GetLogger())
-	if err := mgr.Add(ocmContextCache); err != nil {
-		setupLog.Error(err, "unable to create ocm context cache")
 		os.Exit(1)
 	}
 
