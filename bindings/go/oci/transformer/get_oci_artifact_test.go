@@ -36,7 +36,7 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 	// Setup test data - create a blob that the repository will return (OCI artifact as tar)
 	testBlobData := []byte("test oci artifact content as tar archive")
 	testBlob := inmemory.New(bytes.NewReader(testBlobData))
-	testBlob.SetMediaType("application/vnd.oci.image.manifest.v1+tar+gzip")
+	testBlob.SetMediaType("application/vnd.ocm.software.oci.layout.v1+tar+gzip")
 
 	mockRepo := &mockRepositoryForGetOCI{
 		returnBlob: testBlob,
@@ -55,7 +55,7 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 
 	// Create temporary directory for output
 	tempDir := t.TempDir()
-	outputPath := filepath.Join(tempDir, "oci-artifact.tar")
+	outputPath := filepath.Join(tempDir, "oci-artifact.tar.gz")
 
 	// Create transformation spec
 	spec := &v1alpha1.GetOCIArtifact{
@@ -108,6 +108,66 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 	// Verify resource in output
 	assert.Equal(t, "test-image", transformed.Output.Resource.Name)
 	assert.Equal(t, "1.21.0", transformed.Output.Resource.Version)
+}
+
+func TestGetOCIArtifact_Transform_OCI_Should_Fail_MediaType(t *testing.T) {
+	ctx := context.Background()
+
+	// Setup test data - create a blob that the repository will return (OCI artifact as tar)
+	testBlobData := []byte("test oci artifact content as tar archive")
+	testBlob := inmemory.New(bytes.NewReader(testBlobData))
+	testBlob.SetMediaType("application/vnd.ocm.software.oci.image.v1+tar+gzip")
+
+	mockRepo := &mockRepositoryForGetOCI{
+		returnBlob: testBlob,
+	}
+
+	// Create a combined scheme
+	combinedScheme := runtime.NewScheme()
+	v2.MustAddToScheme(combinedScheme)
+	filesystemaccess.MustAddToScheme(combinedScheme)
+	combinedScheme.MustRegisterWithAlias(&v1alpha1.GetOCIArtifact{}, v1alpha1.GetOCIArtifactV1alpha1)
+
+	transformer := &GetOCIArtifact{
+		Scheme:     combinedScheme,
+		Repository: mockRepo,
+	}
+
+	// Create temporary directory for output
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "oci-artifact.tar")
+
+	// Create transformation spec
+	spec := &v1alpha1.GetOCIArtifact{
+		Type: runtime.NewVersionedType(v1alpha1.GetOCIArtifactType, v1alpha1.Version),
+		ID:   "test-get-oci-transform",
+		Spec: &v1alpha1.GetOCIArtifactSpec{
+			Resource: &v2.Resource{
+				ElementMeta: v2.ElementMeta{
+					ObjectMeta: v2.ObjectMeta{
+						Name:    "test-image",
+						Version: "1.21.0",
+					},
+				},
+				Type:     "ociImage",
+				Relation: "external",
+				Access: &runtime.Raw{
+					Type: runtime.Type{
+						Name:    "ociArtifact",
+						Version: "v1",
+					},
+					Data: []byte(`{ "imageReference": "ghcr.io/open-component-model/helmexample/charts/mariadb:12.2.7" }`),
+				},
+			},
+			OutputPath: outputPath,
+		},
+	}
+
+	// Execute transformation
+	result, err := transformer.Transform(ctx, spec)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "unsupported media type")
+	require.Nil(t, result)
 }
 
 func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {

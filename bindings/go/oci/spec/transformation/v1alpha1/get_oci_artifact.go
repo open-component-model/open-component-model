@@ -9,7 +9,7 @@ import (
 const GetOCIArtifactType = "GetOCIArtifact"
 
 // GetOCIArtifact is a transformer specification to get an OCI artifact
-// from a remote OCI registry and download it to a file.
+// from a remote OCI registry and buffer it to a file.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
@@ -40,7 +40,7 @@ type GetOCIArtifactOutput struct {
 type GetOCIArtifactSpec struct {
 	// Resource is the resource descriptor to get the OCI artifact from.
 	Resource *v2.Resource `json:"resource"`
-	// OutputPath is the path where the artifact should be buffered.
+	// OutputPath is the path where the artifact should be downloaded to..
 	// If empty, a temporary file will be created.
 	OutputPath string `json:"outputPath,omitempty"`
 }
