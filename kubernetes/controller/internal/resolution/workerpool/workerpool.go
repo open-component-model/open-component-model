@@ -416,6 +416,8 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 			return nil, fmt.Errorf("failed to get signing handler plugin: %w", err)
 		}
 
+		// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
+		//       reliable currently. This will probably change, when typed credentials are supported.
 		credentials := map[string]string{}
 		switch signingv1alpha1.SignatureAlgorithm(descSig.Signature.Algorithm) {
 		case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
