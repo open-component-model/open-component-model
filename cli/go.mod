@@ -15,7 +15,7 @@ require (
 	golang.org/x/term v0.29.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260129143850-b9f20b318d3a
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260203092920-c2c570fef6e9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/constructor v0.0.5
 	ocm.software/open-component-model/bindings/go/credentials v0.0.6
@@ -70,5 +70,4 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260203092920-c2c570fef6e9 // indirect
 )
