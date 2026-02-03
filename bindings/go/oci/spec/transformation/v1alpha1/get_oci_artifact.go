@@ -6,7 +6,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const OCIGetOCIArtifactType = "GetOCIArtifact"
+const GetOCIArtifactType = "GetOCIArtifact"
 
 // GetOCIArtifact is a transformer specification to get an OCI artifact
 // from a remote OCI registry and buffer it to a file.

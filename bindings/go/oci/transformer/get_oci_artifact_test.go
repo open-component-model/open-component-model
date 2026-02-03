@@ -46,7 +46,7 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 	combinedScheme := runtime.NewScheme()
 	v2.MustAddToScheme(combinedScheme)
 	filesystemaccess.MustAddToScheme(combinedScheme)
-	combinedScheme.MustRegisterWithAlias(&v1alpha1.GetOCIArtifact{}, v1alpha1.OCIGetOCIArtifactV1alpha1)
+	combinedScheme.MustRegisterWithAlias(&v1alpha1.GetOCIArtifact{}, v1alpha1.GetOCIArtifactV1alpha1)
 
 	transformer := &GetOCIArtifact{
 		Scheme:     combinedScheme,
@@ -59,7 +59,7 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 
 	// Create transformation spec
 	spec := &v1alpha1.GetOCIArtifact{
-		Type: runtime.NewVersionedType(v1alpha1.OCIGetOCIArtifactType, v1alpha1.Version),
+		Type: runtime.NewVersionedType(v1alpha1.GetOCIArtifactType, v1alpha1.Version),
 		ID:   "test-get-oci-transform",
 		Spec: &v1alpha1.GetOCIArtifactSpec{
 			Resource: &v2.Resource{
@@ -134,7 +134,7 @@ func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {
 			combinedScheme := runtime.NewScheme()
 			v2.MustAddToScheme(combinedScheme)
 			filesystemaccess.MustAddToScheme(combinedScheme)
-			combinedScheme.MustRegisterWithAlias(&v1alpha1.GetOCIArtifact{}, v1alpha1.OCIGetOCIArtifactV1alpha1)
+			combinedScheme.MustRegisterWithAlias(&v1alpha1.GetOCIArtifact{}, v1alpha1.GetOCIArtifactV1alpha1)
 
 			transformer := &GetOCIArtifact{
 				Scheme:     combinedScheme,
@@ -142,7 +142,7 @@ func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {
 			}
 
 			spec := &v1alpha1.GetOCIArtifact{
-				Type: runtime.NewVersionedType(v1alpha1.OCIGetOCIArtifactType, v1alpha1.Version),
+				Type: runtime.NewVersionedType(v1alpha1.GetOCIArtifactType, v1alpha1.Version),
 				Spec: tt.spec,
 			}
 
