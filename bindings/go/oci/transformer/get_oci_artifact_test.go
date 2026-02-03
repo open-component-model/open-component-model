@@ -9,26 +9,24 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// mockRepositoryForGetOCI implements ComponentVersionRepository and ResourceRepository for testing GetOCIArtifact
+// mockRepositoryForGetOCI implements ResourceRepository for testing GetOCIArtifact
 type mockRepositoryForGetOCI struct {
-	returnBlob       blob.ReadOnlyBlob
-	returnDescriptor *descriptor.Descriptor
+	oci.ResourceRepository
+	returnBlob blob.ReadOnlyBlob
 }
 
-func (m *mockRepositoryForGetOCI) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	return nil, nil
-}
-
-func (m *mockRepositoryForGetOCI) DownloadResource(ctx context.Context, res *descriptor.Resource) (blob.ReadOnlyBlob, error) {
+func (m *mockRepositoryForGetOCI) DownloadResource(_ context.Context, _ *descriptor.Resource) (blob.ReadOnlyBlob, error) {
 	return m.returnBlob, nil
 }
 
@@ -40,50 +38,15 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 	testBlob := inmemory.New(bytes.NewReader(testBlobData))
 	testBlob.SetMediaType("application/vnd.oci.image.manifest.v1+tar+gzip")
 
-	// Create test resource with ociArtifact access
-	testResource := &descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    "test-image",
-				Version: "1.21.0",
-			},
-		},
-		Type:     "ociArtifact",
-		Relation: descriptor.ExternalRelation,
-		Access: &runtime.Raw{
-			Type: runtime.Type{Name: "ociArtifact"},
-			Data: []byte(`{"type":"ociArtifact","imageReference":"ghcr.io/example/test:1.21.0"}`),
-		},
-	}
-
-	// Create descriptor with the test resource
-	testDescriptor := &descriptor.Descriptor{
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    "ocm.software/test-component",
-					Version: "1.0.0",
-				},
-			},
-			Provider: descriptor.Provider{
-				Name: "ocm.software",
-			},
-			Resources: []descriptor.Resource{
-				*testResource,
-			},
-		},
-	}
-
 	mockRepo := &mockRepositoryForGetOCI{
-		returnBlob:       testBlob,
-		returnDescriptor: testDescriptor,
+		returnBlob: testBlob,
 	}
 
 	// Create a combined scheme
 	combinedScheme := runtime.NewScheme()
 	v2.MustAddToScheme(combinedScheme)
 	filesystemaccess.MustAddToScheme(combinedScheme)
-	combinedScheme.MustRegisterWithAlias(&v1alpha1.OCIGetOCIArtifact{}, v1alpha1.OCIGetOCIArtifactV1alpha1)
+	combinedScheme.MustRegisterWithAlias(&v1alpha1.GetOCIArtifact{}, v1alpha1.GetOCIArtifactV1alpha1)
 
 	transformer := &GetOCIArtifact{
 		Scheme:     combinedScheme,
@@ -95,10 +58,10 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 	outputPath := filepath.Join(tempDir, "oci-artifact.tar")
 
 	// Create transformation spec
-	spec := &v1alpha1.OCIGetOCIArtifact{
-		Type: runtime.NewVersionedType(v1alpha1.OCIGetOCIArtifactType, v1alpha1.Version),
+	spec := &v1alpha1.GetOCIArtifact{
+		Type: runtime.NewVersionedType(v1alpha1.GetOCIArtifactType, v1alpha1.Version),
 		ID:   "test-get-oci-transform",
-		Spec: &v1alpha1.OCIGetOCIArtifactSpec{
+		Spec: &v1alpha1.GetOCIArtifactSpec{
 			Resource: &v2.Resource{
 				ElementMeta: v2.ElementMeta{
 					ObjectMeta: v2.ObjectMeta{
@@ -126,7 +89,7 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 	require.NotNil(t, result)
 
 	// Verify result
-	transformed, ok := result.(*v1alpha1.OCIGetOCIArtifact)
+	transformed, ok := result.(*v1alpha1.GetOCIArtifact)
 	require.True(t, ok)
 	require.NotNil(t, transformed.Output)
 	require.NotNil(t, transformed.Output.Resource)
@@ -152,12 +115,12 @@ func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		spec        *v1alpha1.OCIGetOCIArtifactSpec
+		spec        *v1alpha1.GetOCIArtifactSpec
 		expectedErr string
 	}{
 		{
 			name: "missing resource",
-			spec: &v1alpha1.OCIGetOCIArtifactSpec{
+			spec: &v1alpha1.GetOCIArtifactSpec{
 				Resource: nil,
 			},
 			expectedErr: "resource is required",
@@ -171,15 +134,15 @@ func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {
 			combinedScheme := runtime.NewScheme()
 			v2.MustAddToScheme(combinedScheme)
 			filesystemaccess.MustAddToScheme(combinedScheme)
-			combinedScheme.MustRegisterWithAlias(&v1alpha1.OCIGetOCIArtifact{}, v1alpha1.OCIGetOCIArtifactV1alpha1)
+			combinedScheme.MustRegisterWithAlias(&v1alpha1.GetOCIArtifact{}, v1alpha1.GetOCIArtifactV1alpha1)
 
 			transformer := &GetOCIArtifact{
 				Scheme:     combinedScheme,
 				Repository: mockRepo,
 			}
 
-			spec := &v1alpha1.OCIGetOCIArtifact{
-				Type: runtime.NewVersionedType(v1alpha1.OCIGetOCIArtifactType, v1alpha1.Version),
+			spec := &v1alpha1.GetOCIArtifact{
+				Type: runtime.NewVersionedType(v1alpha1.GetOCIArtifactType, v1alpha1.Version),
 				Spec: tt.spec,
 			}
 
