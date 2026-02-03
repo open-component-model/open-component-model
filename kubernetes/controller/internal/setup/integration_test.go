@@ -416,6 +416,9 @@ func TestIntegration_ResolverProvider(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, repo)
 
-		// TODO: Extend this if possible with actually trying to get the component.
+		cv, err := repo.GetComponentVersion(ctx, "github.com/test/myrepo", "v1.0.0")
+		require.NoError(t, err)
+		require.NotNil(t, cv)
+		assert.Equal(t, "github.com/test/myrepo", cv.Component.Name)
 	})
 }
