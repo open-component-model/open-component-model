@@ -3,30 +3,26 @@ package ocm
 import (
 	"encoding/json"
 
-	. "github.com/mandelsoft/goutils/testutils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	. "ocm.software/ocm/api/helper/builder"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/mandelsoft/vfs/pkg/vfs"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	ocmctx "ocm.software/ocm/api/ocm"
-	"ocm.software/ocm/api/ocm/extensions/repositories/ctf"
-	"ocm.software/ocm/api/ocm/extensions/repositories/ocireg"
-	"ocm.software/ocm/api/utils/accessio"
-	"ocm.software/ocm/api/utils/accessobj"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 )
 
 var _ = Describe("ocm utility", func() {
@@ -43,7 +39,7 @@ var _ = Describe("ocm utility", func() {
 		)
 
 		// setup scheme
-		scheme := runtime.NewScheme()
+		scheme := k8sruntime.NewScheme()
 		utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 		utilruntime.Must(v1alpha1.AddToScheme(scheme))
@@ -59,7 +55,12 @@ var _ = Describe("ocm utility", func() {
 		})
 
 		It("no config", func(ctx SpecContext) {
-			specdata, err := ocireg.NewRepositorySpec("ocm.software/mock-repo-spec").MarshalJSON()
+			spec := &ctf.Repository{
+				Type:       runtime.NewVersionedType(ctf.Type, "v1"),
+				FilePath:   "dummy",
+				AccessMode: ctf.AccessModeReadOnly,
+			}
+			specdata, err := json.Marshal(spec)
 			Expect(err).ToNot(HaveOccurred())
 
 			repo := v1alpha1.Repository{
@@ -74,7 +75,12 @@ var _ = Describe("ocm utility", func() {
 		})
 
 		It("duplicate config", func(ctx SpecContext) {
-			specdata, err := ocireg.NewRepositorySpec("ocm.software/mock-repo-spec").MarshalJSON()
+			spec := &ctf.Repository{
+				Type:       runtime.NewVersionedType(ctf.Type, "v1"),
+				FilePath:   "dummy",
+				AccessMode: ctf.AccessModeReadOnly,
+			}
+			specdata, err := json.Marshal(spec)
 			Expect(err).ToNot(HaveOccurred())
 
 			configMap := corev1.ConfigMap{
@@ -213,9 +219,6 @@ var _ = Describe("ocm utility", func() {
 					Namespace: Namespace,
 				},
 			}
-			// do not add the configmap to the client, to check the behaviour
-			// if the referenced configuration object is not found
-			// bldr.WithObjects(&configMap)
 
 			ocmConfig := []v1alpha1.OCMConfiguration{
 				{
@@ -412,50 +415,82 @@ var _ = Describe("ocm utility", func() {
 
 	Context("get latest valid component version and regex filter", func() {
 		const (
-			CTFPath       = "/ctf"
 			TestComponent = "ocm.software/test"
 			Version1      = "1.0.0-rc.1"
 			Version2      = "2.0.0"
 			Version3      = "3.0.0"
 		)
+
 		var (
-			repo ocmctx.Repository
-			c    ocmctx.ComponentAccess
-			env  *Builder
+			repo *oci.Repository
 		)
-		BeforeEach(func() {
-			env = NewBuilder()
 
-			env.OCMCommonTransport(CTFPath, accessio.FormatDirectory, func() {
-				env.Component(TestComponent, func() {
-					env.Version(Version1, func() {
-					})
-				})
-				env.Component(TestComponent, func() {
-					env.Version(Version2, func() {
-					})
-				})
-				env.Component(TestComponent, func() {
-					env.Version(Version3, func() {
-					})
-				})
+		BeforeEach(func(ctx SpecContext) {
+			ctfpath := GinkgoT().TempDir()
+			repo, _ = test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    TestComponent,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    TestComponent,
+								Version: Version2,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    TestComponent,
+								Version: Version3,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
 			})
-			repo = Must(ctf.Open(env, accessobj.ACC_WRITABLE, CTFPath, vfs.FileMode(vfs.O_RDWR), env))
-			c = Must(repo.LookupComponent(TestComponent))
 		})
 
-		AfterEach(func() {
-			Close(c)
-			Close(repo)
-			MustBeSuccessful(env.Cleanup())
-		})
 		It("without filter", func(ctx SpecContext) {
-			ver := Must(GetLatestValidVersion(ctx, Must(c.ListVersions()), "<2.5.0"))
-			Expect(ver.Equal(Must(semver.NewVersion(Version2))))
+			versions, err := repo.ListComponentVersions(ctx, TestComponent)
+			Expect(err).ToNot(HaveOccurred())
+
+			versionLatest, err := GetLatestValidVersion(ctx, versions, "<2.5.0")
+			Expect(err).ToNot(HaveOccurred())
+
+			version2, err := semver.NewVersion(Version2)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(versionLatest.Equal(version2))
 		})
+
 		It("with filter", func(ctx SpecContext) {
-			ver := Must(GetLatestValidVersion(ctx, Must(c.ListVersions()), "<2.5.0", Must(RegexpFilter(".*-rc.*"))))
-			Expect(ver.Equal(Must(semver.NewVersion(Version1))))
+			versions, err := repo.ListComponentVersions(ctx, TestComponent)
+			Expect(err).ToNot(HaveOccurred())
+
+			regexpFilterFn, err := RegexpFilter(".*-rc.*")
+			Expect(err).ToNot(HaveOccurred())
+
+			versionLatest, err := GetLatestValidVersion(ctx, versions, "<2.5.0", regexpFilterFn)
+			Expect(err).ToNot(HaveOccurred())
+
+			version1, err := semver.NewVersion(Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(versionLatest.Equal(version1))
 		})
 	})
 
@@ -510,10 +545,14 @@ var _ = Describe("ocm utility", func() {
 		})
 
 		It("true", func(ctx SpecContext) {
-			Expect(Must(IsDowngradable(ctx, cv1, cv2))).To(BeTrue())
+			ok, err := IsDowngradable(ctx, cv1, cv2)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(ok).To(BeTrue())
 		})
 		It("false", func(ctx SpecContext) {
-			Expect(Must(IsDowngradable(ctx, cv1, cv3))).To(BeFalse())
+			ok, err := IsDowngradable(ctx, cv1, cv3)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(ok).To(BeFalse())
 		})
 	})
 })

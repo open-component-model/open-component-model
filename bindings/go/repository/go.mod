@@ -3,6 +3,7 @@ module ocm.software/open-component-model/bindings/go/repository
 go 1.25.5
 
 require (
+	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/gobwas/glob v0.2.3
 	github.com/stretchr/testify v1.11.1
 	github.com/veqryn/slog-context v0.8.0
@@ -10,12 +11,11 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260129143850-b9f20b318d3a
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260203092920-c2c570fef6e9
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 )
 
 require (
-	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect

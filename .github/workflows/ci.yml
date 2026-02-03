@@ -29,6 +29,7 @@ jobs:
       modules_json: ${{ steps.filtered.outputs.modules_json }}
       integration_test_modules_json: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
       unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
+      env_changed: ${{ steps.env_changes.outputs.env }}
     env:
       DIR: ${{ github.workspace }}
     steps:
@@ -81,6 +82,13 @@ jobs:
         id: changes
         with:
           filters: ${{ steps.discover.outputs.filters }}
+      # Detect .env changes separately to not interfere with module filtering
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: env_changes
+        with:
+          filters: |
+            env:
+              - '.env'
       - name: Filter JSONs Based on Changes
         id: filtered
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
@@ -197,7 +205,8 @@ jobs:
     permissions:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       checks: write
-    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
+    # Run if modules exist OR .env changed as it may affect golangci-lint version
+    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null || needs.discover_modules.outputs.env_changed == 'true' }}
     strategy:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
@@ -320,15 +329,15 @@ jobs:
             .github/workflows/ci.yml
             ${{ matrix.project }}
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@439137e1b50c27ba9e2f9befc93e43091b449c34 # v3
+        uses: github/codeql-action/init@2588666de8825e1e9dc4e2329a4c985457d55b32 # v3
         with:
           languages: go
           queries: security-extended
       - name: Autobuild
-        uses: github/codeql-action/autobuild@439137e1b50c27ba9e2f9befc93e43091b449c34 # v3
+        uses: github/codeql-action/autobuild@2588666de8825e1e9dc4e2329a4c985457d55b32 # v3
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@439137e1b50c27ba9e2f9befc93e43091b449c34 # v3
+        uses: github/codeql-action/analyze@2588666de8825e1e9dc4e2329a4c985457d55b32 # v3
         with:
           category: "/language:go"
 
