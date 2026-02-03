@@ -58,19 +58,20 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 		return nil, fmt.Errorf("failed downloading OCI artifact %v %w", resource.ToIdentity(), err)
 	}
 
-	mediaType := ""
-	switch v := blobContent.(type) {
-	case blob.MediaTypeAware:
-		mediaType, _ = v.MediaType()
-	}
-
-	fileExt, ok := mediaTypExtMap[mediaType]
-	if !ok {
-		return nil, fmt.Errorf("unsupported media type %q for OCI artifact", mediaType)
-	}
-
 	// Determine output path
 	if outputPath == "" {
+		mediaTypeAware, ok := blobContent.(blob.MediaTypeAware)
+		if !ok {
+			return nil, fmt.Errorf("blob does not support media type detection")
+		}
+		mediaType, ok := mediaTypeAware.MediaType()
+		if !ok || mediaType == "" {
+			return nil, fmt.Errorf("blob does not have a media type")
+		}
+		fileExt, ok := mediaTypExtMap[mediaType]
+		if !ok {
+			return nil, fmt.Errorf("unsupported media type %q for OCI artifact", mediaType)
+		}
 		// Create a temporary file
 		tempFile, err := os.CreateTemp("", fmt.Sprintf("oci-artifact-*.%s", fileExt))
 		if err != nil {
