@@ -137,8 +137,8 @@ ocm.software/open-component-model/bindings/go/oci v0.0.27 h1:bMCAKs0KSSn2Qjm22LM
 ocm.software/open-component-model/bindings/go/oci v0.0.27/go.mod h1:e4/TJC69jtGnRhy8ATLfmnFozZbIta559uG3HKQhMJg=
 ocm.software/open-component-model/bindings/go/plugin v0.0.12 h1:nio+sgQlS/QGHQN0LyLZHagZvkdDEoKukMxR0rZItCk=
 ocm.software/open-component-model/bindings/go/plugin v0.0.12/go.mod h1:lqKv1KelirpYTm36XuUB1QNboMmyD7qb5qPBx0sfid8=
-ocm.software/open-component-model/bindings/go/repository v0.0.5 h1:BfLjojOh37RWtNWrYzV21aRnjcID68w0Wr5zUtkC7lE=
-ocm.software/open-component-model/bindings/go/repository v0.0.5/go.mod h1:cGWyXq6j04unybqeAEgXR/r8DDI03p+cO2thH9NktXY=
+ocm.software/open-component-model/bindings/go/repository v0.0.6 h1:+Eq+De7Q2HEpIOtA7FWLUnp2b8dPP+c8g77vB/ELqbc=
+ocm.software/open-component-model/bindings/go/repository v0.0.6/go.mod h1:yHMSLaA6LtSYUtUyoxx4xx623TpJmSniJKcZieaqR3A=
 ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260202154605-53223b130df9 h1:2QB46VLrnwt9s+GuEHIHbLyOQHB4vatc056BqPxduUY=
 ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260202154605-53223b130df9/go.mod h1:+6oIP+YrEfqbcJ1hz4OjFPfR+8cn+ba1Z0qX0YdAULc=
 ocm.software/open-component-model/bindings/go/runtime v0.0.5 h1:z/gU2EMKZc8nPziSReG/KHtRTZJBkoOlR+B+XsaAmZ4=
