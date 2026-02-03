@@ -2,7 +2,6 @@ package ocm
 
 import (
 	"bytes"
-	"crypto"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -11,9 +10,6 @@ import (
 	"slices"
 
 	v1 "k8s.io/api/core/v1"
-	ocmctx "ocm.software/ocm/api/ocm"
-	"ocm.software/ocm/api/ocm/compdesc"
-	ocmv1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -23,67 +19,6 @@ var (
 )
 
 var ErrComponentVersionHashMismatch = errors.New("component version hash mismatch")
-
-// CompareCachedAndLiveHashes compares the normalized hashes of a cached component version
-// and the corresponding live version in the repository.
-//
-// It performs the following steps:
-//  1. Looks up the live component version from the given repository.
-//  2. Computes a normalized hash for both the cached descriptor and the live descriptor
-//     using the specified normalization algorithm and hash function.
-//  3. Compares the two hashes. If they differ, returns ErrComponentVersionHashMismatch.
-//  4. If the component versions are not normalizeable, it collects errors and returns them wrapped in ErrUnstableHash.
-//  5. If they match, returns a DigestSpec with the hash metadata.
-func CompareCachedAndLiveHashes(
-	currentComponentVersion ocmctx.ComponentVersionAccess,
-	liveRepo ocmctx.Repository,
-	component, version string,
-	normAlgo compdesc.NormalisationAlgorithm,
-	hash crypto.Hash,
-) (_ *ocmv1.DigestSpec, err error) {
-	liveCV, err := liveRepo.LookupComponentVersion(component, version)
-	if err != nil {
-		return nil, fmt.Errorf("failed to lookup live component version to compare with current state: %w", err)
-	}
-	defer func() {
-		err = errors.Join(err, liveCV.Close())
-	}()
-
-	var unstableError error
-
-	// cached version from session
-	cachedDesc := currentComponentVersion.GetDescriptor()
-	if err := cachedDesc.IsNormalizeable(); err != nil {
-		unstableError = errors.Join(unstableError, fmt.Errorf("cached %w: %w", ErrComponentVersionIsNotNormalizeable, err))
-	}
-	cachedHash, err := compdesc.Hash(cachedDesc, normAlgo, hash.New())
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash cached component version: %w", err)
-	}
-
-	liveDesc := liveCV.GetDescriptor()
-	if err := liveDesc.IsNormalizeable(); err != nil {
-		unstableError = errors.Join(unstableError, fmt.Errorf("live %w: %w", ErrComponentVersionIsNotNormalizeable, err))
-	}
-	liveHash, err := compdesc.Hash(liveDesc, normAlgo, hash.New())
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash live component version: %w", err)
-	}
-
-	if cachedHash != liveHash {
-		return nil, fmt.Errorf("%w: %s != %s", ErrComponentVersionHashMismatch, hash, liveHash)
-	}
-
-	if unstableError != nil {
-		err = fmt.Errorf("%w: %w", ErrUnstableHash, unstableError)
-	}
-
-	return &ocmv1.DigestSpec{
-		HashAlgorithm:          hash.String(),
-		NormalisationAlgorithm: normAlgo,
-		Value:                  cachedHash,
-	}, err
-}
 
 // GetObjectDataHash returns a stable 64-hex digest for a set of objects.
 // Double-hash scheme:

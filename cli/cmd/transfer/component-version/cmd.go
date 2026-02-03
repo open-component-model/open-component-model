@@ -96,7 +96,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid source component reference: %w", compErr)
 	}
 
-	repoProvider, err := ocm.NewComponentRepositoryProvider(
+	repoProvider, err := ocm.NewComponentRepositoryResolver(
 		ctx, pm.ComponentVersionRepositoryRegistry, credGraph, ocm.WithConfig(cfg), ocm.WithComponentRef(fromSpec),
 	)
 	if err != nil {

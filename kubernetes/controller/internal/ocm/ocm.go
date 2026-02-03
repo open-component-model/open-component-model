@@ -5,99 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/mandelsoft/goutils/matcher"
 	corev1 "k8s.io/api/core/v1"
-	"ocm.software/ocm/api/credentials/extensions/repositories/dockerconfig"
-	"ocm.software/ocm/api/ocm"
-	"ocm.software/ocm/api/utils/runtime"
-	"ocm.software/ocm/api/utils/semverutils"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
-
-// ConfigureContextForSecretOrConfigMap wraps ConfigureContextForSecret and
-// ConfigureContextForConfigMaps to configure the ocm context.
-func ConfigureContextForSecretOrConfigMap(ctx context.Context, octx ocm.Context, obj ctrl.Object) error {
-	var err error
-	switch o := obj.(type) {
-	case *corev1.Secret:
-		err = ConfigureContextForSecret(ctx, octx, o)
-	case *corev1.ConfigMap:
-		err = ConfigureContextForConfigMaps(ctx, octx, o)
-	default:
-		return fmt.Errorf("unsupported configuration object type: %T", obj)
-	}
-	if err != nil {
-		return fmt.Errorf("configure context failed for %s "+
-			"%s/%s: %w", obj.GetObjectKind(), obj.GetNamespace(), obj.GetName(), err)
-	}
-
-	return nil
-}
-
-// ConfigureContextForSecret adds the ocm configuration data as well as
-// credentials in the docker config json format found in the secret to the
-// ocm context.
-func ConfigureContextForSecret(_ context.Context, octx ocm.Context, secret *corev1.Secret) error {
-	if dockerConfigBytes, ok := secret.Data[corev1.DockerConfigJsonKey]; ok {
-		if len(dockerConfigBytes) > 0 {
-			spec := dockerconfig.NewRepositorySpecForConfig(dockerConfigBytes, true)
-
-			if _, err := octx.CredentialsContext().RepositoryForSpec(spec); err != nil {
-				return fmt.Errorf("failed to apply credentials from docker"+
-					"config json in secret %s/%s: %w", secret.Namespace, secret.Name, err)
-			}
-		}
-	}
-
-	if ocmConfigBytes, ok := secret.Data[v1alpha1.OCMConfigKey]; ok {
-		if len(ocmConfigBytes) > 0 {
-			cfg, err := octx.ConfigContext().GetConfigForData(ocmConfigBytes, runtime.DefaultYAMLEncoding)
-			if err != nil {
-				return fmt.Errorf("failed to deserialize ocm config data in secret "+
-					"%s/%s: %w", secret.Namespace, secret.Name, err)
-			}
-
-			err = octx.ConfigContext().ApplyConfig(cfg, fmt.Sprintf("ocm config secret: %s/%s",
-				secret.Namespace, secret.Name))
-			if err != nil {
-				return fmt.Errorf("failed to apply ocm config in secret "+
-					"%s/%s: %w", secret.Namespace, secret.Name, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-// ConfigureContextForConfigMaps adds the ocm configuration data found in the
-// secret to the ocm context.
-func ConfigureContextForConfigMaps(_ context.Context, octx ocm.Context, configmap *corev1.ConfigMap) error {
-	ocmConfigData, ok := configmap.Data[v1alpha1.OCMConfigKey]
-	if !ok {
-		return fmt.Errorf("ocm configuration config map does not contain key \"%s\"",
-			v1alpha1.OCMConfigKey)
-	}
-	if len(ocmConfigData) > 0 {
-		cfg, err := octx.ConfigContext().GetConfigForData([]byte(ocmConfigData), nil)
-		if err != nil {
-			return fmt.Errorf("failed to deserialize ocm config data in config map "+
-				"%s/%s: %w", configmap.Namespace, configmap.Name, err)
-		}
-		err = octx.ConfigContext().ApplyConfig(cfg, fmt.Sprintf("%s/%s",
-			configmap.Namespace, configmap.Name))
-		if err != nil {
-			return fmt.Errorf("failed to apply ocm config in config map "+
-				"%s/%s: %w", configmap.Namespace, configmap.Name, err)
-		}
-	}
-
-	return nil
-}
 
 // GetEffectiveConfig returns the effective configuration for the given config
 // ref provider object. Therefore, references to config maps and secrets (that
@@ -175,7 +93,8 @@ func RegexpFilter(regex string) (matcher.Matcher[string], error) {
 	}, nil
 }
 
-func GetLatestValidVersion(_ context.Context, versions []string, semvers string, filter ...matcher.Matcher[string]) (*semver.Version, error) {
+func GetLatestValidVersion(ctx context.Context, versions []string, semvers string, filter ...matcher.Matcher[string]) (*semver.Version, error) {
+	logger := log.FromContext(ctx)
 	constraint, err := semver.NewConstraint(semvers)
 	if err != nil {
 		return nil, err
@@ -191,16 +110,30 @@ func GetLatestValidVersion(_ context.Context, versions []string, semvers string,
 			}
 		}
 	}
-	vers, err := semverutils.MatchVersionStrings(filtered, constraint)
-	if err != nil {
-		return nil, err
+
+	var validVersions semver.Collection
+	for _, version := range filtered {
+		if v, err := semver.NewVersion(version); err == nil {
+			validVersions = append(validVersions, v)
+		} else {
+			logger.Info(fmt.Sprintf("Invalid version: %s", version))
+		}
 	}
 
-	if len(vers) == 0 {
+	var matchedVersions semver.Collection
+	for _, validVersion := range validVersions {
+		if constraint.Check(validVersion) {
+			matchedVersions = append(matchedVersions, validVersion)
+		}
+	}
+
+	sort.Sort(matchedVersions)
+
+	if len(matchedVersions) == 0 {
 		return nil, fmt.Errorf("no valid versions found for constraint %s", semvers)
 	}
 
-	return vers[len(vers)-1], nil
+	return matchedVersions[len(matchedVersions)-1], nil
 }
 
 // IsDowngradable checks whether a component version (currentcv) is downgrabale to another component version (latestcv).
