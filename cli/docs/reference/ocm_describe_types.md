@@ -97,7 +97,7 @@ ocm describe types [subsystem [type [field-path]]] [flags]
   ocm describe types
 
   # Navigate into nested configuration fields
-  ocm describe types ocm-repository oci/v1 spec
+  ocm describe types ocm-repository oci/v1 baseUrl
 
   # List all available field paths for navigation
   ocm describe types input file/v1 --show-paths

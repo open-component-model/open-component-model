@@ -220,13 +220,10 @@ func renderTable(cmd *cobra.Command, w table.Writer) error {
 		}
 	}
 
-	isTerminal := isTerminal(out)
-
 	format, err := enum.Get(cmd.Flags(), "output")
 	if err != nil {
 		return err
 	}
-
 	w.SetStyle(style)
 	var rendered string
 	switch format {
@@ -240,11 +237,12 @@ func renderTable(cmd *cobra.Command, w table.Writer) error {
 		return fmt.Errorf("unknown output format: %s", format)
 	}
 
-	if !isTerminal {
-		_, err := io.WriteString(out, rendered)
-		return err
+	if isTerminal(out) {
+		return renderWithPager(cmd, rendered)
 	}
-	return renderWithPager(cmd, rendered)
+
+	_, err = io.WriteString(out, rendered)
+	return err
 }
 
 // renderFieldDetails renders a single field's details to the command output.
