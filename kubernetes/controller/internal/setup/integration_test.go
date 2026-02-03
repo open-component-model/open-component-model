@@ -21,6 +21,7 @@ import (
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
@@ -80,9 +81,10 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, credGraph)
 
-	// TODO: I haven't configured any resolvers yet, so this is just empty.
-	_, err = setup.GetResolvers(cfg.Config)
+	// Test new path matcher resolvers (v1alpha1)
+	resolversV1Alpha1, err := resolvers.PathMatcherResolversFromConfig(cfg.Config)
 	require.NoError(t, err)
+	assert.Nil(t, resolversV1Alpha1, "empty config should have no resolvers")
 
 	t.Run("repository creation", func(t *testing.T) {
 		opts := setup.RepositoryOptions{
@@ -311,4 +313,112 @@ func (p *simpleOCIPlugin) GetComponentVersionRepository(
 		component: p.component,
 		version:   p.version,
 	}, nil
+}
+
+// TestIntegration_ResolverProvider tests the new path matcher resolver provider functionality.
+func TestIntegration_ResolverProvider(t *testing.T) {
+	ctx := t.Context()
+	logger := logr.Discard()
+
+	// Create a config with path matcher resolvers
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ocm-config-with-resolvers",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			".ocmconfig": `{
+				"type": "generic.config.ocm.software/v1",
+				"configurations": [
+					{
+						"type": "credentials.config.ocm.software",
+						"repositories": []
+					},
+					{
+						"type": "resolvers.config.ocm.software",
+						"resolvers": [
+							{
+								"componentNamePattern": "github.com/test/*",
+								"repository": {
+									"type": "oci/v1",
+									"baseUrl": "ghcr.io/test-org"
+								}
+							},
+							{
+								"componentNamePattern": "ocm.software/*",
+								"repository": {
+									"type": "oci/v1",
+									"baseUrl": "registry.io/ocm"
+								}
+							}
+						]
+					}
+				]
+			}`,
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, v1alpha1.AddToScheme(scheme))
+
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(configMap).
+		Build()
+
+	ocmConfigs := []v1alpha1.OCMConfiguration{
+		{
+			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				Kind: "ConfigMap",
+				Name: "ocm-config-with-resolvers",
+			},
+		},
+	}
+
+	cfg, err := configuration.LoadConfigurations(ctx, k8sClient, "default", ocmConfigs)
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	pm := manager.NewPluginManager(t.Context())
+	t.Cleanup(func() {
+		require.NoError(t, pm.Shutdown(t.Context()))
+	})
+
+	registerOCIPlugin(t, pm, "github.com/test/myrepo", "v1.0.0")
+
+	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
+		PluginManager: pm,
+		Logger:        &logger,
+	})
+	require.NoError(t, err)
+
+	t.Run("use resolver provider with repository and patterns", func(t *testing.T) {
+		repoSpec := &ociv1.Repository{
+			Type:    ocmruntime.Type{Name: "oci", Version: "v1"},
+			BaseUrl: "localhost:5000/priority",
+		}
+
+		configResolvers, err := resolvers.PathMatcherResolversFromConfig(cfg.Config)
+		require.NoError(t, err)
+
+		opts := resolvers.Options{
+			RepoProvider:    pm.ComponentVersionRepositoryRegistry,
+			CredentialGraph: credGraph,
+			PathMatchers:    configResolvers,
+		}
+
+		p, err := resolvers.New(ctx, opts, repoSpec)
+		require.NoError(t, err)
+		require.NotNil(t, p)
+
+		repo, err := p.GetComponentVersionRepositoryForComponent(ctx, "github.com/test/myrepo", "v1.0.0")
+		require.NoError(t, err)
+		require.NotNil(t, repo)
+
+		cv, err := repo.GetComponentVersion(ctx, "github.com/test/myrepo", "v1.0.0")
+		require.NoError(t, err)
+		require.NotNil(t, cv)
+		assert.Equal(t, "github.com/test/myrepo", cv.Component.Name)
+	})
 }

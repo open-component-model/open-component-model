@@ -13,19 +13,19 @@ import (
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
-	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
 func BuildGraphDefinition(
 	ctx context.Context,
 	fromSpec *compref.Ref,
 	toSpec runtime.Typed,
-	repoProvider ocm.ComponentVersionRepositoryForComponentProvider,
+	repoResolver resolvers.ComponentVersionRepositoryResolver,
 	recursive bool,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
 	discoverer := &discoverer{
@@ -33,7 +33,7 @@ func BuildGraphDefinition(
 		discoveredDigests: make(map[string]descriptor.Digest),
 	}
 	resolver := &resolver{
-		repoProvider: repoProvider,
+		repoResolver: repoResolver,
 		expectedDigest: func(id runtime.Identity) *descriptor.Digest {
 			discoverer.mu.Lock()
 			defer discoverer.mu.Unlock()
@@ -233,7 +233,7 @@ type discoveryValue struct {
 }
 
 type resolver struct {
-	repoProvider   ocm.ComponentVersionRepositoryForComponentProvider
+	repoResolver   resolvers.ComponentVersionRepositoryResolver
 	expectedDigest func(id runtime.Identity) *descriptor.Digest
 }
 
@@ -243,7 +243,7 @@ func (r *resolver) Resolve(ctx context.Context, key string) (*discoveryValue, er
 		return nil, fmt.Errorf("failed to parse reference %q: %w", key, err)
 	}
 
-	repo, err := r.repoProvider.GetComponentVersionRepositoryForComponent(ctx, ref.Component, ref.Version)
+	repo, err := r.repoResolver.GetComponentVersionRepositoryForComponent(ctx, ref.Component, ref.Version)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting component version repository: %w", err)
 	}
