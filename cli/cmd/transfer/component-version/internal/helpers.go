@@ -3,6 +3,7 @@ package internal
 import (
 	"fmt"
 
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -69,19 +70,6 @@ func ChooseGetOCIArtifactType(repo runtime.Typed) runtime.Type {
 	switch repo.(type) {
 	case *oci.Repository:
 		return ociv1alpha1.OCIGetOCIArtifactV1alpha1
-	case *ctfv1.Repository:
-		return ociv1alpha1.CTFGetOCIArtifactV1alpha1
-	default:
-		panic(fmt.Sprintf("unknown repository type %T", repo))
-	}
-}
-
-func ChooseAddOCIArtifactType(repo runtime.Typed) runtime.Type {
-	switch repo.(type) {
-	case *oci.Repository:
-		return ociv1alpha1.OCIAddOCIArtifactV1alpha1
-	case *ctfv1.Repository:
-		return ociv1alpha1.CTFAddOCIArtifactV1alpha1
 	default:
 		panic(fmt.Sprintf("unknown repository type %T", repo))
 	}
@@ -93,10 +81,7 @@ func isOCIArtifactAccess(access *runtime.Raw) bool {
 	if access == nil {
 		return false
 	}
-	return access.Type.Name == "ociArtifact" ||
-		access.Type.Name == "ociImage" ||
-		access.Type.Name == "ociRegistry" ||
-		access.Type.Name == "OCIImage"
+	return access.Type.Name == v1.LegacyType || access.Type.Name == v1.LegacyType2 || access.Type.Name == v1.LegacyType3
 }
 
 // generateTargetImageReference generates the target OCI image reference for a resource.

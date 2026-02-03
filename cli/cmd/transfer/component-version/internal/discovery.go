@@ -14,6 +14,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
+	v2 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -184,17 +185,23 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 	return nil
 }
 
-func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) {
-	// Process OCI artifacts (ociArtifact, ociImage, etc.)
-	resourceIdentity := resource.ToIdentity()
-	resourceID := identityToTransformationID(resourceIdentity)
-	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
-	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
+func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
+	getResourceID := fmt.Sprintf("%sGet%s", id, resource.ToIdentity())
 
-	// Convert resourceIdentity to map[string]any for deep copy compatibility
-	resourceIdentityMap := make(map[string]any)
-	for k, v := range resourceIdentity {
-		resourceIdentityMap[k] = v
+	var ociAccess v2.OCIImage
+	if err := json.Unmarshal(resource.Access.Data, &ociAccess); err != nil {
+		return fmt.Errorf("cannot unmarshal OCI access: %w", err)
+	}
+
+	// e.g. ghcr.io/open-component-model/helmexample/charts/mariadb:12.2.7
+	// strip the domain part and keep the rest
+	var referenceName string
+	if ociAccess.ImageReference != "" {
+		parts := strings.SplitN(ociAccess.ImageReference, "/", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid OCI image reference: %s", ociAccess.ImageReference)
+		}
+		referenceName = parts[1]
 	}
 
 	// Create GetOCIArtifact transformation
@@ -204,42 +211,19 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 			ID:   getResourceID,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
-			"repository":       AsUnstructured(ref.Repository).Data,
-			"component":        ref.Component,
-			"version":          ref.Version,
-			"resourceIdentity": resourceIdentityMap,
+			"repository":    AsUnstructured(ref.Repository).Data,
+			"resource":      resource,
+			"referenceName": referenceName,
 		}},
 	}
 	tgd.Transformations = append(tgd.Transformations, getArtifactTransform)
 
 	// Generate target reference for OCI repositories
 	// Format: {baseUrl}/{subPath}/{resourceName}:{resourceVersion}
-	targetReference := generateTargetImageReference(toSpec, resource.Name, resource.Version)
+	//targetReference := generateTargetImageReference(toSpec, resource.Name, resource.Version)
 
-	// Create AddOCIArtifact transformation
-	addArtifactSpec := map[string]any{
-		"repository": AsUnstructured(toSpec).Data,
-		"component":  ref.Component,
-		"version":    ref.Version,
-		"resource":   fmt.Sprintf("${%s.output.resource}", getResourceID),
-		"file":       fmt.Sprintf("${%s.output.file}", getResourceID),
-	}
-	// Only add targetReference for OCI repositories (not CTF)
-	if targetReference != "" {
-		addArtifactSpec["targetReference"] = targetReference
-	}
-
-	addArtifactTransform := transformv1alpha1.GenericTransformation{
-		TransformationMeta: meta.TransformationMeta{
-			Type: ChooseAddOCIArtifactType(toSpec),
-			ID:   addResourceID,
-		},
-		Spec: &runtime.Unstructured{Data: addArtifactSpec},
-	}
-	tgd.Transformations = append(tgd.Transformations, addArtifactTransform)
-
-	// Track this resource's transformation
-	resourceTransformIDs[i] = addResourceID
+	// TODO add from local
+	return nil
 }
 
 func processLocalRelation(resource descriptorv2.Resource, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) {

@@ -38,10 +38,11 @@ type OCIGetOCIArtifactOutput struct {
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type OCIGetOCIArtifactSpec struct {
-	// ResourceIdentity identifies the resource to retrieve.
-	// Must match a resource in the component descriptor.
-	ResourceIdentity runtime.Identity `json:"resourceIdentity"`
+	// Resource identifies the oci artifact to retrieve.
+	Resource *v2.Resource `json:"resource"`
 	// OutputPath is the path where the artifact should be buffered.
 	// If empty, a temporary file will be created.
 	OutputPath string `json:"outputPath,omitempty"`
+
+	// TODO referenceName must be set in transformer
 }
