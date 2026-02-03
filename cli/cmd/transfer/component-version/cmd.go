@@ -9,12 +9,12 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
