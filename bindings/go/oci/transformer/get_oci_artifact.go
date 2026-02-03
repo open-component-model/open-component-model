@@ -22,11 +22,8 @@ type GetOCIArtifact struct {
 }
 
 func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
-	transformation, err := t.Scheme.NewObject(step.GetType())
-	if err != nil {
-		return nil, fmt.Errorf("failed creating get oci artifact transformation object: %w", err)
-	}
-	if err := t.Scheme.Convert(step, transformation); err != nil {
+	var transformation v1alpha1.GetOCIArtifact
+	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to get oci artifact transformation: %w", err)
 	}
 
@@ -34,17 +31,12 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	var outputPath string
 	var output *v1alpha1.GetOCIArtifactOutput
 
-	switch tr := transformation.(type) {
-	case *v1alpha1.GetOCIArtifact:
-		resource = tr.Spec.Resource
-		outputPath = tr.Spec.OutputPath
-		if tr.Output == nil {
-			tr.Output = &v1alpha1.GetOCIArtifactOutput{}
-		}
-		output = tr.Output
-	default:
-		return nil, fmt.Errorf("unexpected transformation type: %T", transformation)
+	resource = transformation.Spec.Resource
+	outputPath = transformation.Spec.OutputPath
+	if transformation.Output == nil {
+		transformation.Output = &v1alpha1.GetOCIArtifactOutput{}
 	}
+	output = transformation.Output
 
 	// Validate inputs
 	if resource == nil {
@@ -90,5 +82,5 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	output.File = *fileSpec
 	output.Resource = v2Resource
 
-	return transformation, nil
+	return &transformation, nil
 }

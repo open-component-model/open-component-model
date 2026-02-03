@@ -331,7 +331,7 @@
         },
         "resource": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Resource",
-          "description": "Resource identifies the oci artifact to retrieve."
+          "description": "Resource is the resource descriptor to get the OCI artifact from."
         }
       },
       "required": [
