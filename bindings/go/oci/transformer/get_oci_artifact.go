@@ -32,14 +32,14 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 
 	var resource *v2.Resource
 	var outputPath string
-	var output interface{}
+	var output *v1alpha1.GetOCIArtifactOutput
 
 	switch tr := transformation.(type) {
-	case *v1alpha1.OCIGetOCIArtifact:
+	case *v1alpha1.GetOCIArtifact:
 		resource = tr.Spec.Resource
 		outputPath = tr.Spec.OutputPath
 		if tr.Output == nil {
-			tr.Output = &v1alpha1.OCIGetOCIArtifactOutput{}
+			tr.Output = &v1alpha1.GetOCIArtifactOutput{}
 		}
 		output = tr.Output
 	default:
@@ -86,14 +86,9 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 		return nil, fmt.Errorf("failed converting resource to v2 format: %w", err)
 	}
 
-	// Populate output based on type
-	switch out := output.(type) {
-	case *v1alpha1.OCIGetOCIArtifactOutput:
-		out.File = *fileSpec
-		out.Resource = v2Resource
-	default:
-		return nil, fmt.Errorf("unexpected output type: %T", output)
-	}
+	// Populate output
+	output.File = *fileSpec
+	output.Resource = v2Resource
 
 	return transformation, nil
 }

@@ -23,7 +23,7 @@ func init() {
 	Scheme.MustRegisterWithAlias(&OCIAddComponentVersion{}, OCIAddComponentVersionV1alpha1)
 	Scheme.MustRegisterWithAlias(&OCIAddLocalResource{}, OCIAddLocalResourceV1alpha1)
 	Scheme.MustRegisterWithAlias(&OCIGetLocalResource{}, OCIGetLocalResourceV1alpha1)
-	Scheme.MustRegisterWithAlias(&OCIGetOCIArtifact{}, OCIGetOCIArtifactV1alpha1)
+	Scheme.MustRegisterWithAlias(&GetOCIArtifact{}, OCIGetOCIArtifactV1alpha1)
 	Scheme.MustRegisterWithAlias(&CTFGetComponentVersion{}, CTFGetComponentVersionV1alpha1)
 	Scheme.MustRegisterWithAlias(&CTFAddComponentVersion{}, CTFAddComponentVersionV1alpha1)
 	Scheme.MustRegisterWithAlias(&CTFAddLocalResource{}, CTFAddLocalResourceV1alpha1)
