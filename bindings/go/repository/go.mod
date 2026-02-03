@@ -11,7 +11,7 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260202154605-53223b130df9
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260203092920-c2c570fef6e9
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 )
 
