@@ -15,10 +15,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const ociMediaType = "application/vnd.ocm.software.oci.layout.v1+tar+gzip"
+const (
+	ociLayoutMediaType = "application/vnd.ocm.software.oci.layout.v1+tar+gzip"
+)
 
 var mediaTypExtMap = map[string]string{
-	ociMediaType: "tar.gz",
+	ociLayoutMediaType: "tar.gz",
 }
 
 // GetOCIArtifact is a transformer that retrieves OCI artifacts from remote registries
