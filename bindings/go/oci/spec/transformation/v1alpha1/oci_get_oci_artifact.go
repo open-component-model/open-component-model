@@ -44,5 +44,5 @@ type OCIGetOCIArtifactSpec struct {
 	// If empty, a temporary file will be created.
 	OutputPath string `json:"outputPath,omitempty"`
 
-	//TODO referenceName must be set in transformer
+	// TODO referenceName must be set in transformer
 }
