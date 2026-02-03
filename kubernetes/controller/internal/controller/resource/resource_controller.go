@@ -378,7 +378,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			return ctrl.Result{}, fmt.Errorf("failed getting configs: %w", err)
 		}
 
-		matchedResource, err = ocm.VerifyResourceV2(ctx, r.PluginManager, matchedResource, cfg)
+		matchedResource, err = ocm.VerifyResource(ctx, r.PluginManager, matchedResource, cfg)
 		if err != nil {
 			if errors.Is(err, ocm.ErrPluginNotFound) {
 				// TODO(@frewilhelm): For now we skip resource types that do not have a digest processor plugin.
