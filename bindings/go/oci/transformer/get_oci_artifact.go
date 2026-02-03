@@ -10,16 +10,16 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // GetOCIArtifact is a transformer that retrieves OCI artifacts from remote registries
-// (referenced in component versions) and buffers them to files.
+// and buffers them to files.
 type GetOCIArtifact struct {
 	Scheme             *runtime.Scheme
-	RepoProvider       repository.ComponentVersionRepositoryProvider
+	Repository         oci.ResourceRepository
 	CredentialProvider credentials.Resolver
 }
 
@@ -54,10 +54,7 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	}
 	targetResource := descriptor.ConvertFromV2Resource(resource)
 
-	//TODO: get repo
-	var resourceRepo repository.ResourceRepository
-
-	blobContent, err := resourceRepo.DownloadResource(ctx, targetResource)
+	blobContent, err := t.Repository.DownloadResource(ctx, targetResource)
 	if err != nil {
 		return nil, fmt.Errorf("failed downloading OCI artifact %v %w", resource, err)
 	}

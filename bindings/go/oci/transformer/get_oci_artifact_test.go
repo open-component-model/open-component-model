@@ -9,15 +9,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	ctfspec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -27,57 +24,12 @@ type mockRepositoryForGetOCI struct {
 	returnDescriptor *descriptor.Descriptor
 }
 
-func (m *mockRepositoryForGetOCI) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
-	return nil
-}
-
-func (m *mockRepositoryForGetOCI) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
-	return m.returnDescriptor, nil
-}
-
-func (m *mockRepositoryForGetOCI) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
-	return nil, nil
-}
-
-func (m *mockRepositoryForGetOCI) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	return nil, nil
-}
-
-func (m *mockRepositoryForGetOCI) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
-	return nil, nil, nil
-}
-
-func (m *mockRepositoryForGetOCI) AddLocalSource(ctx context.Context, component, version string, src *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	return nil, nil
-}
-
-func (m *mockRepositoryForGetOCI) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
-	return nil, nil, nil
-}
-
 func (m *mockRepositoryForGetOCI) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
 	return nil, nil
 }
 
 func (m *mockRepositoryForGetOCI) DownloadResource(ctx context.Context, res *descriptor.Resource) (blob.ReadOnlyBlob, error) {
 	return m.returnBlob, nil
-}
-
-// mockRepoProviderForGetOCI implements ComponentVersionRepositoryProvider for testing GetOCIArtifact
-type mockRepoProviderForGetOCI struct {
-	repo *mockRepositoryForGetOCI
-}
-
-func (m *mockRepoProviderForGetOCI) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
-	return nil, nil
-}
-
-func (m *mockRepoProviderForGetOCI) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
-	return m.repo, nil
-}
-
-func (m *mockRepoProviderForGetOCI) GetJSONSchemaForRepositorySpecification(typ runtime.Type) ([]byte, error) {
-	return nil, nil
 }
 
 func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
@@ -92,7 +44,7 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 	testResource := &descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{
 			ObjectMeta: descriptor.ObjectMeta{
-				Name:    "nginx-image",
+				Name:    "test-image",
 				Version: "1.21.0",
 			},
 		},
@@ -100,7 +52,7 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 		Relation: descriptor.ExternalRelation,
 		Access: &runtime.Raw{
 			Type: runtime.Type{Name: "ociArtifact"},
-			Data: []byte(`{"type":"ociArtifact","imageReference":"ghcr.io/example/nginx:1.21.0"}`),
+			Data: []byte(`{"type":"ociArtifact","imageReference":"ghcr.io/example/test:1.21.0"}`),
 		},
 	}
 
@@ -126,18 +78,16 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 		returnBlob:       testBlob,
 		returnDescriptor: testDescriptor,
 	}
-	mockProvider := &mockRepoProviderForGetOCI{repo: mockRepo}
 
 	// Create a combined scheme
 	combinedScheme := runtime.NewScheme()
 	v2.MustAddToScheme(combinedScheme)
 	filesystemaccess.MustAddToScheme(combinedScheme)
 	combinedScheme.MustRegisterWithAlias(&v1alpha1.OCIGetOCIArtifact{}, v1alpha1.OCIGetOCIArtifactV1alpha1)
-	combinedScheme.MustRegisterWithAlias(&v1alpha1.CTFGetOCIArtifact{}, v1alpha1.CTFGetOCIArtifactV1alpha1)
 
 	transformer := &GetOCIArtifact{
-		Scheme:       combinedScheme,
-		RepoProvider: mockProvider,
+		Scheme:     combinedScheme,
+		Repository: mockRepo,
 	}
 
 	// Create temporary directory for output
@@ -149,9 +99,22 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 		Type: runtime.NewVersionedType(v1alpha1.OCIGetOCIArtifactType, v1alpha1.Version),
 		ID:   "test-get-oci-transform",
 		Spec: &v1alpha1.OCIGetOCIArtifactSpec{
-			ResourceIdentity: runtime.Identity{
-				"name":    "nginx-image",
-				"version": "1.21.0",
+			Resource: &v2.Resource{
+				ElementMeta: v2.ElementMeta{
+					ObjectMeta: v2.ObjectMeta{
+						Name:    "test-image",
+						Version: "1.21.0",
+					},
+				},
+				Type:     "ociImage",
+				Relation: "external",
+				Access: &runtime.Raw{
+					Type: runtime.Type{
+						Name:    "ociArtifact",
+						Version: "v1",
+					},
+					Data: []byte(`{ "imageReference": "ghcr.io/open-component-model/helmexample/charts/mariadb:12.2.7" }`),
+				},
 			},
 			OutputPath: outputPath,
 		},
@@ -180,108 +143,8 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 	assert.Equal(t, "file://"+outputPath, transformed.Output.File.URI)
 
 	// Verify resource in output
-	assert.Equal(t, "nginx-image", transformed.Output.Resource.Name)
+	assert.Equal(t, "test-image", transformed.Output.Resource.Name)
 	assert.Equal(t, "1.21.0", transformed.Output.Resource.Version)
-}
-
-func TestGetOCIArtifact_Transform_CTF(t *testing.T) {
-	ctx := context.Background()
-
-	// Setup test data - CTF with OCI artifact stored as local blob
-	testBlobData := []byte("test ctf oci artifact content")
-	testBlob := inmemory.New(bytes.NewReader(testBlobData))
-
-	testResource := &descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    "helm-chart",
-				Version: "3.0.0",
-			},
-		},
-		Type:     "helmChart",
-		Relation: descriptor.ExternalRelation,
-		Access: &runtime.Raw{
-			Type: runtime.Type{Name: "ociArtifact"},
-			Data: []byte(`{"type":"ociArtifact","imageReference":"registry.example.com/charts/app:3.0.0"}`),
-		},
-	}
-
-	testDescriptor := &descriptor.Descriptor{
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    "ocm.software/ctf-component",
-					Version: "2.0.0",
-				},
-			},
-			Provider: descriptor.Provider{
-				Name: "ocm.software",
-			},
-			Resources: []descriptor.Resource{
-				*testResource,
-			},
-		},
-	}
-
-	mockRepo := &mockRepositoryForGetOCI{
-		returnBlob:       testBlob,
-		returnDescriptor: testDescriptor,
-	}
-	mockProvider := &mockRepoProviderForGetOCI{repo: mockRepo}
-
-	combinedScheme := runtime.NewScheme()
-	v2.MustAddToScheme(combinedScheme)
-	filesystemaccess.MustAddToScheme(combinedScheme)
-	combinedScheme.MustRegisterWithAlias(&v1alpha1.OCIGetOCIArtifact{}, v1alpha1.OCIGetOCIArtifactV1alpha1)
-	combinedScheme.MustRegisterWithAlias(&v1alpha1.CTFGetOCIArtifact{}, v1alpha1.CTFGetOCIArtifactV1alpha1)
-
-	transformer := &GetOCIArtifact{
-		Scheme:       combinedScheme,
-		RepoProvider: mockProvider,
-	}
-
-	// Create transformation spec without OutputPath (should create temp file)
-	spec := &v1alpha1.CTFGetOCIArtifact{
-		Type: runtime.NewVersionedType(v1alpha1.CTFGetOCIArtifactType, v1alpha1.Version),
-		ID:   "test-ctf-get-oci-transform",
-		Spec: &v1alpha1.CTFGetOCIArtifactSpec{
-			Repository: ctfspec.Repository{
-				Type: runtime.Type{
-					Name:    ctfspec.Type,
-					Version: "v1",
-				},
-				FilePath: "/tmp/test-ctf-archive.tar",
-			},
-			Component: "ocm.software/ctf-component",
-			Version:   "2.0.0",
-			ResourceIdentity: runtime.Identity{
-				"name":    "helm-chart",
-				"version": "3.0.0",
-			},
-			// OutputPath omitted - should create temp file
-		},
-	}
-
-	// Execute transformation
-	result, err := transformer.Transform(ctx, spec)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	// Verify result
-	transformed, ok := result.(*v1alpha1.CTFGetOCIArtifact)
-	require.True(t, ok)
-	require.NotNil(t, transformed.Output)
-
-	// Verify temp file was created
-	outputPath := transformed.Output.File.URI
-	assert.Contains(t, outputPath, "file://")
-	assert.Contains(t, outputPath, "oci-artifact-")
-
-	// Clean up temp file
-	tempPath := outputPath[7:] // Remove "file://" prefix
-	if _, err := os.Stat(tempPath); err == nil {
-		os.Remove(tempPath)
-	}
 }
 
 func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {
@@ -293,18 +156,17 @@ func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {
 		expectedErr string
 	}{
 		{
-			name: "missing resource identity",
+			name: "missing resource",
 			spec: &v1alpha1.OCIGetOCIArtifactSpec{
-				ResourceIdentity: nil,
+				Resource: nil,
 			},
-			expectedErr: "resource identity is required",
+			expectedErr: "resource is required",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockRepo := &mockRepositoryForGetOCI{}
-			mockProvider := &mockRepoProviderForGetOCI{repo: mockRepo}
 
 			combinedScheme := runtime.NewScheme()
 			v2.MustAddToScheme(combinedScheme)
@@ -312,8 +174,8 @@ func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {
 			combinedScheme.MustRegisterWithAlias(&v1alpha1.OCIGetOCIArtifact{}, v1alpha1.OCIGetOCIArtifactV1alpha1)
 
 			transformer := &GetOCIArtifact{
-				Scheme:       combinedScheme,
-				RepoProvider: mockProvider,
+				Scheme:     combinedScheme,
+				Repository: mockRepo,
 			}
 
 			spec := &v1alpha1.OCIGetOCIArtifact{
