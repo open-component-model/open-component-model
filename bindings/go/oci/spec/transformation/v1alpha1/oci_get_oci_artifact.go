@@ -43,6 +43,4 @@ type OCIGetOCIArtifactSpec struct {
 	// OutputPath is the path where the artifact should be buffered.
 	// If empty, a temporary file will be created.
 	OutputPath string `json:"outputPath,omitempty"`
-
-	// TODO referenceName must be set in transformer
 }
