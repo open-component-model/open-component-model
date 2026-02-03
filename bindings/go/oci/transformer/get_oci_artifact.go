@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -18,9 +17,8 @@ import (
 // GetOCIArtifact is a transformer that retrieves OCI artifacts from remote registries
 // and buffers them to files.
 type GetOCIArtifact struct {
-	Scheme             *runtime.Scheme
-	Repository         oci.ResourceRepository
-	CredentialProvider credentials.Resolver
+	Scheme     *runtime.Scheme
+	Repository oci.ResourceRepository
 }
 
 func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
