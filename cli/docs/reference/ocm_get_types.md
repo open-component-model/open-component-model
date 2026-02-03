@@ -82,9 +82,6 @@ ocm get types [subsystem [type [field-path]]] [flags]
   # Step 2: Learn about the OCI repository type
   ocm describe types ocm-repository oci/v1
 
-  # Step 3: Generate example configuration
-  ocm describe types ocm-repository oci/v1 -o examples
-
   # Workflow: Configuring input methods for component creation
   # Step 1: See what input methods are available
   ocm describe types input
