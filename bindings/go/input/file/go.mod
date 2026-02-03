@@ -26,6 +26,6 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260202154605-53223b130df9 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260202154605-53223b130df9 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 // indirect
-	ocm.software/open-component-model/bindings/go/repository v0.0.5 // indirect
+	ocm.software/open-component-model/bindings/go/repository v0.0.6 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
