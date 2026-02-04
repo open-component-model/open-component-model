@@ -16,18 +16,24 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // mockRepositoryForGetOCI implements ResourceRepository for testing GetOCIArtifact
 type mockRepositoryForGetOCI struct {
-	oci.ResourceRepository
 	returnBlob blob.ReadOnlyBlob
 }
 
-func (m *mockRepositoryForGetOCI) DownloadResource(_ context.Context, _ *descriptor.Resource) (blob.ReadOnlyBlob, error) {
+func (m mockRepositoryForGetOCI) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
+	return nil, nil
+}
+
+func (m mockRepositoryForGetOCI) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
+	return nil, nil
+}
+
+func (m mockRepositoryForGetOCI) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	return m.returnBlob, nil
 }
 

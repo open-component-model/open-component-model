@@ -38,7 +38,6 @@ import (
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -310,11 +309,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 			resourceRepo := resource.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
 
 			t.Run("get oci transformation", func(t *testing.T) {
-				credsResolver := mockCredentialsResolver{
-					Username: testUsername,
-					Password: password,
-				}
-				transformGetOCIArtifact(t, resourceRepo, repo, credsResolver, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
+				transformGetOCIArtifact(t, resourceRepo, testUsername, password, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
 			})
 		})
 	})
@@ -979,13 +974,24 @@ func getUsername(t *testing.T, gh string) (string, error) {
 	return structured["login"].(string), nil
 }
 
-func transformGetOCIArtifact(t *testing.T, resourceRepo *resource.ResourceRepository, uploadRepo repository.ResourceRepository, credentialProvider credentials.Resolver, from, to string) {
+func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, username, password, from, to string) {
 	ctx := t.Context()
 	r := require.New(t)
+
+	credsResolver := mockCredentialsResolver{
+		Username: username,
+		Password: password,
+	}
 
 	originalData := []byte("foobar")
 
 	data, access := createSingleLayerOCIImage(t, originalData, from)
+	r.NotNil(access)
+
+	access.Type = ocmruntime.Type{
+		Name:    "ociArtifact",
+		Version: "v1",
+	}
 
 	blob := inmemory.New(bytes.NewReader(data))
 
@@ -1005,7 +1011,11 @@ func transformGetOCIArtifact(t *testing.T, resourceRepo *resource.ResourceReposi
 	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", to)
 	resource.Access = targetAccess
 
-	newRes, err := uploadRepo.UploadResource(ctx, &resource, blob)
+	creds, err := credsResolver.Resolve(ctx, nil)
+	r.NoError(err)
+	r.NotNil(creds)
+
+	newRes, err := repo.UploadResource(ctx, &resource, blob, creds)
 	r.NoError(err)
 	resource = *newRes
 
@@ -1016,8 +1026,8 @@ func transformGetOCIArtifact(t *testing.T, resourceRepo *resource.ResourceReposi
 
 	transform := transformer.GetOCIArtifact{
 		Scheme:             combinedScheme,
-		Repository:         resourceRepo,
-		CredentialProvider: credentialProvider,
+		Repository:         repo,
+		CredentialProvider: credsResolver,
 	}
 
 	v2Resource, err := descriptor.ConvertToV2Resource(ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()), newRes)

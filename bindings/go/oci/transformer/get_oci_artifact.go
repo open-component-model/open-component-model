@@ -12,9 +12,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -26,7 +26,7 @@ var mediaTypExtMap = map[string]string{
 // and buffers them to files.
 type GetOCIArtifact struct {
 	Scheme             *runtime.Scheme
-	Repository         *resource.ResourceRepository
+	Repository         repository.ResourceRepository
 	CredentialProvider credentials.Resolver
 }
 
