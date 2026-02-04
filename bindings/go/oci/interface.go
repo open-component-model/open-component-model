@@ -28,11 +28,12 @@ type ResourceRepository interface {
 	// UploadResource uploads a [descriptor.Resource] to the repository.
 	// Returns the updated resource with repository-specific information.
 	// The resource must be referenced in the component descriptor.
-	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (resourceAfterUpload *descriptor.Resource, err error)
+	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error)
 	// DownloadResource downloads and verifies the integrity of a [descriptor.Resource] from the repository.
 	DownloadResource(ctx context.Context, res *descriptor.Resource) (blob.ReadOnlyBlob, error)
 }
 
+// TODO https://github.com/open-component-model/ocm-project/issues/857 also provide credentials in UploadSource/DownloadSource
 type SourceRepository interface {
 	repository.SourceRepository
 }
