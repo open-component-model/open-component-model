@@ -17,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
+	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/cli/cmd/transfer/component-version/internal"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -124,7 +125,9 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	// Build transformer builder
 	b := graphBuilder(pm, credGraph)
 
-	graph, err := b.BuildAndCheck(tgd)
+	graph, err := b.
+		WithEvents(make(chan graphRuntime.ProgressEvent, 100)).
+		BuildAndCheck(tgd)
 	if err != nil {
 		reader, rerr := renderTGD(tgd, output)
 		defer func() {
@@ -154,12 +157,18 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Create event channel and tracker
+	tracker := newProgressTracker(graph, cmd.OutOrStdout())
+	go tracker.Start(ctx) // Start event processing in a separate goroutine
+
 	// Execute graph
 	if err := graph.Process(ctx); err != nil {
-		return fmt.Errorf("graph execution failed: %w", err)
+		tracker.Summary(err)
+		return fmt.Errorf("graph execution failed")
 	}
+	tracker.Summary(nil)
 
-	slog.InfoContext(ctx, "transfer completed successfully", "component", fromSpec.String())
+	slog.DebugContext(ctx, "transfer completed successfully", "component", fromSpec.String())
 	return nil
 }
 
