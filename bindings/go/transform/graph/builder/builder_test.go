@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph/internal/testutils"
+	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"sigs.k8s.io/yaml"
 )
@@ -411,4 +412,43 @@ transformations:
 			tc.runtimeProcessingErr(t, graph.Process(t.Context()))
 		})
 	}
+}
+
+func TestGraph_WithEvents(t *testing.T) {
+	builder := newTestBuilder(t)
+
+	buildGraph := func(t *testing.T) *Graph {
+		t.Helper()
+		tgd := &v1alpha1.TransformationGraphDefinition{}
+		require.NoError(t, yaml.Unmarshal([]byte(`
+transformations:
+- id: get1
+  type: MockGetObjectTransformer/v1alpha1
+  spec:
+    name: "test"
+    version: "1.0.0"
+`), tgd))
+		graph, err := builder.BuildAndCheck(tgd)
+		require.NoError(t, err)
+		return graph
+	}
+
+	t.Run("channel is closed after Process", func(t *testing.T) {
+		graph := buildGraph(t)
+		events := make(chan graphRuntime.ProgressEvent, 10)
+		graph.WithEvents(events)
+
+		require.NoError(t, graph.Process(t.Context()))
+
+		// Drain and verify closed
+		for range events {
+		}
+		_, open := <-events
+		require.False(t, open, "events channel should be closed")
+	})
+
+	t.Run("no events when WithEvents not called", func(t *testing.T) {
+		graph := buildGraph(t)
+		require.NoError(t, graph.Process(t.Context()))
+	})
 }

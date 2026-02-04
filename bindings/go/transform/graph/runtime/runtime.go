@@ -21,15 +21,50 @@ type Transformer interface {
 	) (runtime.Typed, error)
 }
 
+// State represents the state of a transformation node.
+type State string
+
+const (
+	Running   State = "running"
+	Completed State = "completed"
+	Failed    State = "failed"
+)
+
+// ProgressEvent represents a state change during graph execution.
+type ProgressEvent struct {
+	Transformation *graph.Transformation
+	State          State
+	Err            error
+}
+
 type Runtime struct {
 	Environment              *cel.Env
 	EvaluatedExpressionCache map[string]any
 	EvaluatedTransformations map[string]any
 
 	Transformers map[runtime.Type]Transformer
+	Events       chan<- ProgressEvent
 }
 
 func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transformation) error {
+	t := &transformation
+	if b.Events != nil {
+		b.Events <- ProgressEvent{Transformation: t, State: Running}
+	}
+	if err := b.processTransformation(ctx, transformation); err != nil {
+		if b.Events != nil {
+			b.Events <- ProgressEvent{Transformation: t, State: Failed, Err: err}
+		}
+		return err
+	}
+
+	if b.Events != nil {
+		b.Events <- ProgressEvent{Transformation: t, State: Completed}
+	}
+	return nil
+}
+
+func (b *Runtime) processTransformation(ctx context.Context, transformation graph.Transformation) error {
 	for _, fieldDescriptor := range transformation.FieldDescriptors {
 		for _, expression := range fieldDescriptor.Expressions {
 			if _, found := b.EvaluatedExpressionCache[expression.String()]; found {
