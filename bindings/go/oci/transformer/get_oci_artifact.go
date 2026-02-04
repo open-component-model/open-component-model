@@ -32,9 +32,9 @@ type GetOCIArtifact struct {
 
 func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
 	var transformation v1alpha1.GetOCIArtifact
-	if err := t.Scheme.Convert(step, &transformation); err != nil {
-		return nil, fmt.Errorf("failed converting generic transformation to get oci artifact transformation: %w", err)
-	}
+	// if err := t.Scheme.Convert(step, &transformation); err != nil {
+	// 	return nil, fmt.Errorf("failed converting generic transformation to get oci artifact transformation: %w", err)
+	// }
 
 	var resource *v2.Resource
 	var outputPath string
@@ -114,5 +114,5 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	output.File = *fileSpec
 	output.Resource = v2Resource
 
-	return &transformation, nil
+	return nil, nil
 }
