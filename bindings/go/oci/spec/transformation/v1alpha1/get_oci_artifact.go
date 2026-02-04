@@ -1,23 +1,11 @@
 package v1alpha1
 
 import (
-	"context"
-
-	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-// Repository is a temporary repository interface unti we have the refactoring done
-// TODO(matthiasbruns) remove later and replace with new Repository interface
-type Repository interface {
-	// GetResourceCredentialConsumerIdentity resolves the identity of the given [descriptor.Resource] to use for credential resolution.
-	GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error)
-	// DownloadResource downloads and verifies the integrity of a [descriptor.Resource] from the repository.
-	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error)
-}
 
 const GetOCIArtifactType = "GetOCIArtifact"
 
@@ -56,8 +44,8 @@ type GetOCIArtifactOutput struct {
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type GetOCIArtifactSpec struct {
-	// Repository to download the OCI artifact from with credentials support.
-	Repository Repository `json:"repository"`
+	// Repository to download the OCI artifact from.
+	Repository *resource.ResourceRepository `json:"repository"`
 	// Resource is the resource descriptor to get the OCI artifact from.
 	Resource *v2.Resource `json:"resource"`
 	// OutputPath is the path where the artifact should be downloaded to.
