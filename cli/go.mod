@@ -21,19 +21,19 @@ require (
 	ocm.software/open-component-model/bindings/go/credentials v0.0.6
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260203092920-c2c570fef6e9
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260203092920-c2c570fef6e9
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260204150313-9dc9b3602419
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260204150313-9dc9b3602419
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260203092920-c2c570fef6e9
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260204150313-9dc9b3602419
 	ocm.software/open-component-model/bindings/go/oci v0.0.28
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260203092920-c2c570fef6e9
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260204150313-9dc9b3602419
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260203092920-c2c570fef6e9
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260203092920-c2c570fef6e9
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260204150313-9dc9b3602419
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260204150313-9dc9b3602419
 	sigs.k8s.io/yaml v1.6.0
 )
 
