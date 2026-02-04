@@ -7,6 +7,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
@@ -14,6 +15,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 )
+
+const creator = "Builtin OCI Repository Plugin"
 
 func Register(
 	compverRegistry *componentversionrepository.RepositoryRegistry,
@@ -24,9 +27,9 @@ func Register(
 	filesystemConfig *filesystemv1alpha1.Config,
 	logger *slog.Logger,
 ) error {
-	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithUserAgent(Creator), provider.WithTempDir(filesystemConfig.TempFolder))
+	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithUserAgent(creator), provider.WithTempDir(filesystemConfig.TempFolder))
 
-	resourceRepoPlugin := ResourceRepositoryPlugin{manifests: inmemory.New(), layers: inmemory.New(), filesystemConfig: filesystemConfig}
+	resourceRepoPlugin := ocires.NewResourceRepository(inmemory.New(), inmemory.New(), filesystemConfig, ocires.WithUserAgent(creator))
 	ociBlobTransformerPlugin := transformer.New(logger)
 
 	return errors.Join(
@@ -34,10 +37,10 @@ func Register(
 			CachingComponentVersionRepositoryProvider,
 		),
 		resRegistry.RegisterInternalResourcePlugin(
-			&resourceRepoPlugin,
+			resourceRepoPlugin,
 		),
 		digRegistry.RegisterInternalDigestProcessorPlugin(
-			&resourceRepoPlugin,
+			resourceRepoPlugin,
 		),
 		blobTransformerRegistry.RegisterInternalBlobTransformerPlugin(
 			ociBlobTransformerPlugin,
