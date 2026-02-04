@@ -310,12 +310,12 @@ ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260203
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260203092920-c2c570fef6e9/go.mod h1:qaxJ9XJGmR+/Lqv9XMKP0UI4HnhFHDgVQlGXU2eYpcI=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 h1:SdQm6w7Lj0g+d+MaNXQQkpKUqOhFwUSzoUjzRyeKL0I=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9/go.mod h1:5ES8RkuCdrbqiG56WJE40qhFoC4QHAQn8BasL5aKlvM=
-ocm.software/open-component-model/bindings/go/oci v0.0.27 h1:bMCAKs0KSSn2Qjm22LMTJGFC+aWdFKH84lByCEpWi80=
-ocm.software/open-component-model/bindings/go/oci v0.0.27/go.mod h1:e4/TJC69jtGnRhy8ATLfmnFozZbIta559uG3HKQhMJg=
+ocm.software/open-component-model/bindings/go/oci v0.0.28 h1:5nHqtF4qnvZJaXvERqhIzDYsB70mK/vn6TkTG/EsttU=
+ocm.software/open-component-model/bindings/go/oci v0.0.28/go.mod h1:U0e0z8ZCxchGHK2RPV4eDkBUDVLksaaxpkbnV6UMM7k=
 ocm.software/open-component-model/bindings/go/plugin v0.0.12 h1:nio+sgQlS/QGHQN0LyLZHagZvkdDEoKukMxR0rZItCk=
 ocm.software/open-component-model/bindings/go/plugin v0.0.12/go.mod h1:lqKv1KelirpYTm36XuUB1QNboMmyD7qb5qPBx0sfid8=
-ocm.software/open-component-model/bindings/go/repository v0.0.6 h1:+Eq+De7Q2HEpIOtA7FWLUnp2b8dPP+c8g77vB/ELqbc=
-ocm.software/open-component-model/bindings/go/repository v0.0.6/go.mod h1:yHMSLaA6LtSYUtUyoxx4xx623TpJmSniJKcZieaqR3A=
+ocm.software/open-component-model/bindings/go/repository v0.0.7 h1:YN8Sig6e89ZnxyH7QN87oimy8OnMOJLRTsMhvz2gLYM=
+ocm.software/open-component-model/bindings/go/repository v0.0.7/go.mod h1:bP4e24rYA+plmcVDOwbiMEZrVH5PB2WJnYjn1rlPq+s=
 ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260203092920-c2c570fef6e9 h1:342ypZqCDpnUL59s5Y1jU/20VRGsgprx/4gfcV7Nj/c=
 ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260203092920-c2c570fef6e9/go.mod h1:4X5s9exXZwjNr3lzU8yKwbNKMI5p3H6SRbOUm0WSjd4=
 ocm.software/open-component-model/bindings/go/runtime v0.0.5 h1:z/gU2EMKZc8nPziSReG/KHtRTZJBkoOlR+B+XsaAmZ4=

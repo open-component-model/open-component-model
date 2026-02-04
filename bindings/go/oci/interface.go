@@ -3,6 +3,7 @@ package oci
 import (
 	"context"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
@@ -24,9 +25,17 @@ type ComponentVersionRepository interface {
 // ResourceRepository defines the interface for storing and retrieving OCM resources
 // independently of component versions from a Store Implementation
 type ResourceRepository interface {
-	repository.ResourceRepository
+	// UploadResource uploads a [descriptor.Resource] to the repository.
+	// Returns the updated resource with repository-specific information.
+	// The resource must be referenced in the component descriptor.
+	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error)
+	// DownloadResource downloads and verifies the integrity of a [descriptor.Resource] from the repository.
+	DownloadResource(ctx context.Context, res *descriptor.Resource) (blob.ReadOnlyBlob, error)
 }
 
+// SourceRepository defines the interface for storing and retrieving OCM sources
+// independently of component versions from a store implementation.
+// TODO https://github.com/open-component-model/ocm-project/issues/857 also provide credentials in UploadSource/DownloadSource
 type SourceRepository interface {
 	repository.SourceRepository
 }
