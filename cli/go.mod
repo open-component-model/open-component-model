@@ -24,14 +24,13 @@ require (
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260203092920-c2c570fef6e9
-	ocm.software/open-component-model/bindings/go/oci v0.0.27
+	ocm.software/open-component-model/bindings/go/oci v0.0.28
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
-	ocm.software/open-component-model/bindings/go/repository v0.0.6
+	ocm.software/open-component-model/bindings/go/repository v0.0.7
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260203092920-c2c570fef6e9
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260203092920-c2c570fef6e9
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260203092920-c2c570fef6e9
-	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -69,4 +68,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260203092920-c2c570fef6e9 // indirect
+	oras.land/oras-go/v2 v2.6.0 // indirect
 )

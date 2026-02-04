@@ -40,13 +40,12 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260203092920-c2c570fef6e9
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260203092920-c2c570fef6e9
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/oci v0.0.27
+	ocm.software/open-component-model/bindings/go/oci v0.0.28
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
-	ocm.software/open-component-model/bindings/go/repository v0.0.6
+	ocm.software/open-component-model/bindings/go/repository v0.0.7
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260203092920-c2c570fef6e9
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260203092920-c2c570fef6e9
-	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/release-utils v0.12.3
 )
 
@@ -143,6 +142,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59e963e // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
+	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.1 // indirect
