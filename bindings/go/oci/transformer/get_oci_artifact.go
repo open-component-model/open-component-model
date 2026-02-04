@@ -9,9 +9,10 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -24,8 +25,9 @@ var mediaTypExtMap = map[string]string{
 // GetOCIArtifact is a transformer that retrieves OCI artifacts from remote registries
 // and buffers them to files.
 type GetOCIArtifact struct {
-	Scheme     *runtime.Scheme
-	Repository oci.ResourceRepository
+	Scheme             *runtime.Scheme
+	Repository         *resource.ResourceRepository
+	CredentialProvider credentials.Resolver
 }
 
 func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -51,7 +53,17 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	}
 	targetResource := descriptor.ConvertFromV2Resource(resource)
 
-	blobContent, err := t.Repository.DownloadResource(ctx, targetResource)
+	var creds map[string]string
+	if t.CredentialProvider != nil {
+		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
+			creds, err = t.CredentialProvider.Resolve(ctx, consumerId)
+			if err != nil {
+				return nil, fmt.Errorf("failed resolving credentials: %w", err)
+			}
+		}
+	}
+
+	blobContent, err := t.Repository.DownloadResource(ctx, targetResource, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed downloading OCI artifact %v %w", resource.ToIdentity(), err)
 	}
