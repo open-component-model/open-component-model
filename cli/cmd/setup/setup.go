@@ -81,7 +81,10 @@ func PluginManager(cmd *cobra.Command) error {
 		return fmt.Errorf("could not register builtin plugins: %w", err)
 	}
 
-	ctx := ocmctx.WithPluginManager(cmd.Context(), pluginManager)
+	ctx, err := ocmctx.WithPluginManager(cmd.Context(), pluginManager)
+	if err != nil {
+		return fmt.Errorf("could not initialize plugin manager context: %w", err)
+	}
 	cmd.SetContext(ctx)
 
 	cobra.OnFinalize(func() {

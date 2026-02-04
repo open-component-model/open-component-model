@@ -10,6 +10,7 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/cli/internal/subsystem"
 )
 
 type ctxKey string
@@ -52,6 +53,11 @@ type Context struct {
 	// It defines filesystem-related settings like temporary folder locations
 	// that can be used by plugins and other components.
 	filesystemConfig *filesystemv1alpha1.Config
+
+	// subsystemRegistry is the registry containing all registered subsystems.
+	// Subsystems are logical groupings of OCM types that provide runtime scheme
+	// information for type introspection and documentation.
+	subsystemRegistry *subsystem.Registry
 }
 
 // WithCredentialGraph creates a new context with the given credential graph.
@@ -76,15 +82,24 @@ func WithFilesystemConfig(ctx context.Context, cfg *filesystemv1alpha1.Config) c
 	return ctx
 }
 
-// WithPluginManager creates a new context with the given plugin manager.
-// After this function is called, the plugin manager can be retrieved from the context
-// using [FromContext] and [Context.PluginManager].
-func WithPluginManager(ctx context.Context, pm *manager.PluginManager) context.Context {
+// WithPluginManager creates a new context with the given plugin manager and its
+// associated subsystem registry. The subsystem registry is automatically created
+// from the plugin manager's type schemes.
+// After this function is called, both the plugin manager and subsystem registry
+// can be retrieved from the context using [FromContext] with [Context.PluginManager]
+// and [Context.SubsystemRegistry].
+func WithPluginManager(ctx context.Context, pm *manager.PluginManager) (context.Context, error) {
+	registry, err := subsystem.NewRegistryFromPluginManager(pm)
+	if err != nil {
+		return ctx, err
+	}
+
 	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
 	ocmctx.mu.Lock()
 	defer ocmctx.mu.Unlock()
 	ocmctx.pluginManager = pm
-	return ctx
+	ocmctx.subsystemRegistry = registry
+	return ctx, nil
 }
 
 // WithConfiguration creates a new context with the given configuration.
@@ -143,6 +158,15 @@ func (ctx *Context) FilesystemConfig() *filesystemv1alpha1.Config {
 	ctx.mu.RLock()
 	defer ctx.mu.RUnlock()
 	return ctx.filesystemConfig
+}
+
+func (ctx *Context) SubsystemRegistry() *subsystem.Registry {
+	if ctx == nil {
+		return nil
+	}
+	ctx.mu.RLock()
+	defer ctx.mu.RUnlock()
+	return ctx.subsystemRegistry
 }
 
 // FromContext retrieves the OCM context from the given context.
