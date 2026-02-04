@@ -97,6 +97,10 @@ type LocalSourceRepository interface {
 
 // ResourceRepository defines the interface for storing and retrieving OCM resources
 // independently of component versions from a store implementation.
+// When credentials are required to access the repository, they must be provided
+// and can be retrieved through the credentials.Resolver or passed in directly.
+// You should typically use the credentials.Graph to resolve credentials for a resource
+// by its consumer identity.
 type ResourceRepository interface {
 	// GetResourceCredentialConsumerIdentity resolves the identity of the given [descriptor.Resource] to use for credential resolution.
 	GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error)
