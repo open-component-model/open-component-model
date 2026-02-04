@@ -33,6 +33,8 @@ type ResourceRepository interface {
 	DownloadResource(ctx context.Context, res *descriptor.Resource) (blob.ReadOnlyBlob, error)
 }
 
+// SourceRepository defines the interface for storing and retrieving OCM sources
+// independently of component versions from a store implementation.
 // TODO https://github.com/open-component-model/ocm-project/issues/857 also provide credentials in UploadSource/DownloadSource
 type SourceRepository interface {
 	repository.SourceRepository
