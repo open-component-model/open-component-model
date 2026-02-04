@@ -3,6 +3,7 @@ package transformer
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -11,16 +12,13 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const (
-	ociLayoutMediaType = "application/vnd.ocm.software.oci.layout.v1+tar+gzip"
-)
-
 var mediaTypExtMap = map[string]string{
-	ociLayoutMediaType: "tar.gz",
+	layout.MediaTypeOCIImageLayoutTarGzipV1: "tar.gz",
 }
 
 // GetOCIArtifact is a transformer that retrieves OCI artifacts from remote registries
@@ -58,21 +56,23 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 		return nil, fmt.Errorf("failed downloading OCI artifact %v %w", resource.ToIdentity(), err)
 	}
 
-	mediaType := ""
-	switch v := blobContent.(type) {
-	case blob.MediaTypeAware:
-		mediaType, _ = v.MediaType()
-	}
-
-	fileExt, ok := mediaTypExtMap[mediaType]
-	if !ok {
-		return nil, fmt.Errorf("unsupported media type %q for OCI artifact", mediaType)
-	}
-
 	// Determine output path
 	if outputPath == "" {
+		fileExt := ""
+		if mediaTypeAware, ok := blobContent.(blob.MediaTypeAware); ok {
+			if mediaType, ok := mediaTypeAware.MediaType(); ok {
+				fileExt = mediaTypExtMap[mediaType]
+			}
+		}
+
+		if fileExt == "" {
+			slog.Warn("unable to determine file extension from media type, setting no extension")
+		} else {
+			fileExt = fmt.Sprintf(".%s", fileExt)
+		}
+
 		// Create a temporary file
-		tempFile, err := os.CreateTemp("", fmt.Sprintf("oci-artifact-*.%s", fileExt))
+		tempFile, err := os.CreateTemp("", fmt.Sprintf("oci-artifact-*%s", fileExt))
 		if err != nil {
 			return nil, fmt.Errorf("failed creating temporary file: %w", err)
 		}

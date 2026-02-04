@@ -189,12 +189,11 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
 		CredentialProvider: credentialProvider,
 	}
-
+	pm.ResourcePluginRegistry().GetResourcePlugin()
 	// OCI Artifact transformers
 	ociGetOCIArtifact := &transformer.GetOCIArtifact{
-		Scheme:             transformerScheme,
-		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
-		CredentialProvider: credentialProvider,
+		Scheme:     transformerScheme,
+		Repository: nil, // HOW DO I GET oci.ResourceRepository?
 	}
 
 	return builder.NewBuilder(transformerScheme).
@@ -206,7 +205,7 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		WithTransformer(&ociv1alpha1.OCIAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
 		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
-		WithTransformer(&ociv1alpha1.OCIGetOCIArtifact{}, ociGetOCIArtifact)
+		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact)
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {
