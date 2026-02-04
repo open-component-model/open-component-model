@@ -192,7 +192,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO(@frewilhelm): See ../internal/plugins/doc.go
 	ociResourceRepoPlugin := ocires.NewResourceRepository(inmemory.New(), inmemory.New(), &filesystemv1alpha1.Config{}, ocires.WithUserAgent(creator))
 	if err := pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin); err != nil {
 		setupLog.Error(err, "failed to register internal resource repository plugin")

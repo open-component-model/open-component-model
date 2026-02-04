@@ -103,8 +103,10 @@ type ResourceRepository interface {
 	// UploadResource uploads a [descriptor.Resource] to the repository.
 	// Returns the updated resource with repository-specific information.
 	// The resource must be referenced in the component descriptor.
+	// The credentials map must contain necessary authentication information to access the resource.
 	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (resourceAfterUpload *descriptor.Resource, err error)
 	// DownloadResource downloads and verifies the integrity of a [descriptor.Resource] from the repository.
+	// The credentials map must contain necessary authentication information to access the resource.
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error)
 }
 
