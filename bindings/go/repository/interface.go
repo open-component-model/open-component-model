@@ -98,13 +98,14 @@ type LocalSourceRepository interface {
 // ResourceRepository defines the interface for storing and retrieving OCM resources
 // independently of component versions from a store implementation.
 type ResourceRepository interface {
+	// GetResourceCredentialConsumerIdentity resolves the identity of the given [descriptor.Resource] to use for credential resolution.
+	GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error)
 	// UploadResource uploads a [descriptor.Resource] to the repository.
 	// Returns the updated resource with repository-specific information.
 	// The resource must be referenced in the component descriptor.
-	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (resourceAfterUpload *descriptor.Resource, err error)
-
+	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (resourceAfterUpload *descriptor.Resource, err error)
 	// DownloadResource downloads and verifies the integrity of a [descriptor.Resource] from the repository.
-	DownloadResource(ctx context.Context, res *descriptor.Resource) (content blob.ReadOnlyBlob, err error)
+	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error)
 }
 
 // SourceRepository defines the interface for storing and retrieving OCM sources

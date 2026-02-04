@@ -1,4 +1,4 @@
-package oci
+package resource
 
 import (
 	"testing"
@@ -40,7 +40,7 @@ func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 			manifests := inmemory.New()
 			layers := inmemory.New()
 
-			repo, err := createRepository(spec, credentials, manifests, layers, tt.filesystemConfig)
+			repo, err := createRepository(spec, credentials, manifests, layers, tt.filesystemConfig, "test")
 
 			if tt.expectError {
 				r.Error(err, "expected error")
