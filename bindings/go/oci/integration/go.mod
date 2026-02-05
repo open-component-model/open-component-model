@@ -20,10 +20,7 @@ require (
 	oras.land/oras-go/v2 v2.6.0
 )
 
-replace (
-	ocm.software/open-component-model/bindings/go/oci => ../
-	ocm.software/open-component-model/bindings/go/repository => ../../repository
-)
+replace ocm.software/open-component-model/bindings/go/oci => ../
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
