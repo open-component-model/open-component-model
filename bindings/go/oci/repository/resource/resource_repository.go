@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"ocm.software/open-component-model/bindings/go/repository"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
@@ -45,7 +46,7 @@ type ResourceRepository struct {
 }
 
 // make sure that ResourceRepository implements the oci ResourceRepository interface
-var _ oci.ResourceRepository = (*ResourceRepository)(nil)
+var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
 func NewResourceRepository(manifests, layers cache.OCIDescriptorCache, filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
 	options := &Options{}

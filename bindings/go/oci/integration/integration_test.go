@@ -496,7 +496,7 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 	r.Len(store.Index.Manifests, 1)
 }
 
-func uploadDownloadBarebonesOCIImage(t *testing.T, repo repository.ResourceRepositoryNoCredentials, from, to string) {
+func uploadDownloadBarebonesOCIImage(t *testing.T, repo *oci.Repository, from, to string) {
 	ctx := t.Context()
 	r := require.New(t)
 

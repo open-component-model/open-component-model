@@ -40,14 +40,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var (
-	_ ComponentVersionRepository = (*Repository)(nil)
-	// ensure that Repository implements the ResourceRepository interface without credentials.
-	//
-	// Deprecated: Use ResourceRepository interface directly.
-	// TODO (matthiasbruns): https://github.com/open-component-model/ocm-project/issues/774
-	_ repository.ResourceRepositoryNoCredentials = (*Repository)(nil)
-)
+var _ ComponentVersionRepository = (*Repository)(nil)
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
 // Each component may be stored in a separate OCI repository, but ultimately the storage is determined by the Resolver.
