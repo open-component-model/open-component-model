@@ -51,6 +51,11 @@ func (r *resourcePluginConverter) DownloadResource(ctx context.Context, resource
 	return rBlob, nil
 }
 
+// TODO (matthiasbruns) upload
+func (r *resourcePluginConverter) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (result *descriptor.Resource, err error) {
+	panic("not implemented")
+}
+
 var _ Repository = (*resourcePluginConverter)(nil)
 
 func (r *ResourceRegistry) externalToResourcePluginConverter(plugin v1.ReadWriteResourcePluginContract, scheme *runtime.Scheme) *resourcePluginConverter {

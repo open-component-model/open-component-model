@@ -129,6 +129,8 @@ func (r *ResourceRegistry) RegisterInternalResourcePlugin(plugin BuiltinResource
 	return nil
 }
 
+// TODO: implement repository.ResourceRepository
+
 type constructedPlugin struct {
 	Plugin resourcev1.ReadWriteResourcePluginContract
 	cmd    *exec.Cmd
