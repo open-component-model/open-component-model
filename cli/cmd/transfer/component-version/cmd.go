@@ -1,13 +1,16 @@
 package component_version
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 
 	"github.com/spf13/cobra"
+	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -16,10 +19,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
+	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/cli/cmd/transfer/component-version/internal"
-	graphinternal "ocm.software/open-component-model/cli/cmd/transfer/internal/graph"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
@@ -128,13 +131,13 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build transformer builder
-	b := graphBuilder(pm, credGraph)
+	b := graphBuilder(ctx, pm, credGraph)
 
 	graph, err := b.
 		WithEvents(make(chan graphRuntime.ProgressEvent, eventBufferSize)).
 		BuildAndCheck(tgd)
 	if err != nil {
-		reader, rerr := graphinternal.RenderTGD(tgd, output)
+		reader, rerr := renderTGD(tgd, output)
 		defer func() {
 			_ = reader.Close()
 		}()
@@ -147,7 +150,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	if dryRun {
-		reader, err := graphinternal.RenderTGD(tgd, output)
+		reader, err := renderTGD(tgd, output)
 		if err != nil {
 			return fmt.Errorf("rendering transformation graph failed: %w", err)
 		}
@@ -228,4 +231,34 @@ func graphBuilder(ctx context.Context, pm *manager.PluginManager, credentialProv
 		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
 		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact)
+}
+
+func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {
+	switch format {
+	case render.OutputFormatJSON.String():
+		read, write := io.Pipe()
+		encoder := json.NewEncoder(write)
+		encoder.SetIndent("", "  ")
+		go func() {
+			err := encoder.Encode(tgd)
+			_ = write.CloseWithError(err)
+		}()
+		return read, nil
+	case render.OutputFormatNDJSON.String():
+		read, write := io.Pipe()
+		encoder := json.NewEncoder(write)
+		go func() {
+			err := encoder.Encode(tgd)
+			_ = write.CloseWithError(err)
+		}()
+		return read, nil
+	case render.OutputFormatYAML.String():
+		data, err := yaml.Marshal(tgd)
+		if err != nil {
+			return nil, err
+		}
+		return io.NopCloser(bytes.NewReader(data)), nil
+	default:
+		return nil, fmt.Errorf("invalid output format %q", format)
+	}
 }
