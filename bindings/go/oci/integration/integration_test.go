@@ -3,6 +3,7 @@ package integration_test
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -34,20 +35,26 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
+	ociinmemory "ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -59,6 +66,18 @@ const (
 	charset                   = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}<>?"
 	userAgent                 = "ocm.software"
 )
+
+type mockCredentialsResolver struct {
+	Username string
+	Password string
+}
+
+func (m mockCredentialsResolver) Resolve(ctx context.Context, identity ocmruntime.Identity) (map[string]string, error) {
+	return map[string]string{
+		"username": m.Username,
+		"password": m.Password,
+	}, nil
+}
 
 func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 	if testing.Short() {
@@ -284,6 +303,14 @@ func Test_Integration_OCIRepository(t *testing.T) {
 
 		t.Run("oci image digest processing", func(t *testing.T) {
 			processResourceDigest(t, repo, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
+		})
+
+		t.Run("get oci artifact", func(t *testing.T) {
+			resourceRepo := resource.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
+
+			t.Run("get oci transformation", func(t *testing.T) {
+				transformGetOCIArtifact(t, resourceRepo, testUsername, password, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
+			})
 		})
 	})
 
@@ -945,4 +972,88 @@ func getUsername(t *testing.T, gh string) (string, error) {
 	}
 
 	return structured["login"].(string), nil
+}
+
+func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, username, password, from, to string) {
+	ctx := t.Context()
+	r := require.New(t)
+
+	credsResolver := mockCredentialsResolver{
+		Username: username,
+		Password: password,
+	}
+
+	originalData := []byte("foobar")
+
+	data, access := createSingleLayerOCIImage(t, originalData, from)
+	r.NotNil(access)
+
+	access.Type = ocmruntime.Type{
+		Name:    "ociArtifact",
+		Version: "v1",
+	}
+
+	blob := inmemory.New(bytes.NewReader(data))
+
+	resource := descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{
+				Name:    "test-resource",
+				Version: "v1.0.0",
+			},
+		},
+		Type:         "some-arbitrary-type-packed-in-image",
+		Access:       access,
+		CreationTime: descriptor.CreationTime(time.Now()),
+	}
+
+	targetAccess := resource.Access.DeepCopyTyped()
+	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", to)
+	resource.Access = targetAccess
+
+	creds, err := credsResolver.Resolve(ctx, nil)
+	r.NoError(err)
+	r.NotNil(creds)
+
+	newRes, err := repo.UploadResource(ctx, &resource, blob, creds)
+	r.NoError(err)
+	resource = *newRes
+
+	combinedScheme := ocmruntime.NewScheme()
+	v2.MustAddToScheme(combinedScheme)
+	filesystemaccess.MustAddToScheme(combinedScheme)
+	combinedScheme.MustRegisterWithAlias(&v1alpha1.GetOCIArtifact{}, v1alpha1.GetOCIArtifactV1alpha1)
+
+	transform := transformer.GetOCIArtifact{
+		Scheme:             combinedScheme,
+		Repository:         repo,
+		CredentialProvider: credsResolver,
+	}
+
+	v2Resource, err := descriptor.ConvertToV2Resource(ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()), newRes)
+	r.NoError(err)
+
+	spec := &v1alpha1.GetOCIArtifact{
+		Type: ocmruntime.NewVersionedType(v1alpha1.GetOCIArtifactType, v1alpha1.Version),
+		ID:   "test-get-oci-transform",
+		Spec: &v1alpha1.GetOCIArtifactSpec{
+			Resource: v2Resource,
+		},
+	}
+
+	// Execute transformation
+	result, err := transform.Transform(ctx, spec)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	ociOutput, ok := result.(*v1alpha1.GetOCIArtifact)
+	require.True(t, ok)
+	require.NotNil(t, ociOutput)
+
+	require.NotNil(t, ociOutput.Output.File)
+	require.NotNil(t, ociOutput.Output.File.URI)
+
+	// must match pattern oci-artifact-%s.tar.gz
+	require.Regexp(t, `^oci-artifact-[a-f0-9]+\.tar\.gz$`, filepath.Base(ociOutput.Output.File.URI))
+	require.Equal(t, ociOutput.Output.File.MediaType, "application/vnd.ocm.software.oci.layout.v1+tar+gzip")
 }

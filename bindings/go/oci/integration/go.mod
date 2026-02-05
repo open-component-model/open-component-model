@@ -11,6 +11,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/registry v0.40.0
 	golang.org/x/crypto v0.46.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
+	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260209114331-2c034a9e2912
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
@@ -20,8 +21,6 @@ require (
 	oras.land/oras-go/v2 v2.6.0
 )
 
-// Replace include to make sure we are always testing the current code instead of a version.
-// It is irrelevant for us that integration tests cannot be consumed by other modules.
 replace ocm.software/open-component-model/bindings/go/oci => ../
 
 require (
@@ -82,5 +81,7 @@ require (
 	golang.org/x/text v0.33.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	ocm.software/open-component-model/bindings/go/credentials v0.0.6 // indirect
+	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
