@@ -29,6 +29,11 @@
   separateMultipleMajor: true,
   packageRules: [
     {
+      // TODO: Revert when the release process is in place
+      matchFileNames: ['kubernetes/controller/chart/**'],
+      enabled: false,
+    },
+    {
       matchUpdateTypes: ['minor','patch'],
       automerge: true,
     },
