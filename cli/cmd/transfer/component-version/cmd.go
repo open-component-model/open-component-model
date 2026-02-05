@@ -2,6 +2,7 @@ package component_version
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
@@ -127,7 +129,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build transformer builder
-	b := graphBuilder(pm, credGraph)
+	b := graphBuilder(ctx, pm, credGraph)
 
 	graph, err := b.
 		WithEvents(make(chan graphRuntime.ProgressEvent, eventBufferSize)).
@@ -177,7 +179,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 }
 
 // TODO: make this a plugin manager integration.
-func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Resolver) *builder.Builder {
+func graphBuilder(ctx context.Context, pm *manager.PluginManager, credentialProvider credentials.Resolver) *builder.Builder {
 	transformerScheme := ociv1alpha1.Scheme
 
 	ociGet := &transformer.GetComponentVersion{
@@ -202,11 +204,16 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
 		CredentialProvider: credentialProvider,
 	}
-	pm.ResourcePluginRegistry().GetResourcePlugin()
+
 	// OCI Artifact transformers
+	resourcePlugin, err := pm.ResourcePluginRegistry.GetResourcePlugin(ctx, &v1.OCIImage{})
+	if err != nil {
+		panic(fmt.Sprintf("unable to get OCI resource plugin: %v", err))
+	}
+
 	ociGetOCIArtifact := &transformer.GetOCIArtifact{
 		Scheme:     transformerScheme,
-		Repository: nil, // HOW DO I GET oci.ResourceRepository?
+		Repository: resourcePlugin,
 	}
 
 	return builder.NewBuilder(transformerScheme).
