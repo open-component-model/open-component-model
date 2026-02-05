@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"ocm.software/open-component-model/bindings/go/repository"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
@@ -19,6 +18,7 @@ import (
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -208,12 +208,12 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 
 		b, err := repo.UploadResource(ctx, resource, content)
 		if err != nil {
-			return nil, fmt.Errorf("error downloading resource: %w", err)
+			return nil, fmt.Errorf("error uploading resource: %w", err)
 		}
 
 		return b, nil
 	default:
-		return nil, fmt.Errorf("unsupported type %s for downloading the resource", t)
+		return nil, fmt.Errorf("unsupported type %s for uploading the resource", t)
 	}
 }
 
