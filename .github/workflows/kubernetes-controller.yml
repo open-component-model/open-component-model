@@ -157,7 +157,7 @@ jobs:
         working-directory: kubernetes/controller
         run: |
           task helm/package VERSION=${{ steps.version.outputs.version }} APP_VERSION=${{ steps.version.outputs.version }}
-          helm push dist/ocm-k8s-toolkit-*.tgz oci://ghcr.io/open-component-model/charts
+          helm push dist/ocm-k8s-toolkit-*.tgz oci://ghcr.io/open-component-model/kubernetes/controller/chart
       - name: Cleanup unused cache
         shell: bash
         run: |
