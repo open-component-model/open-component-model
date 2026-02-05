@@ -16,6 +16,7 @@ import (
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	v2 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -239,9 +240,9 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 
 	// Generate target reference for OCI repositories
 	// Format: {baseUrl}/{subPath}/{resourceName}:{resourceVersion}
-	//targetReference := generateTargetImageReference(toSpec, resource.Name, resource.Version)
+	// targetReference := generateTargetImageReference(toSpec, resource.Name, resource.Version)
 
-	// TODO add from local
+	// TODO(matthiasbruns) add localresource transformation
 	return nil
 }
 

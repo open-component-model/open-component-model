@@ -1,16 +1,13 @@
 package component_version
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 
 	"github.com/spf13/cobra"
-	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -22,6 +19,7 @@ import (
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/cli/cmd/transfer/component-version/internal"
+	graphinternal "ocm.software/open-component-model/cli/cmd/transfer/internal/graph"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
@@ -39,6 +37,7 @@ const (
 	eventBufferSize = 16
 )
 
+// TODO --copy-resources
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:        "component-version {reference} {target}",
@@ -129,13 +128,13 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build transformer builder
-	b := graphBuilder(ctx, pm, credGraph)
+	b := graphBuilder(pm, credGraph)
 
 	graph, err := b.
 		WithEvents(make(chan graphRuntime.ProgressEvent, eventBufferSize)).
 		BuildAndCheck(tgd)
 	if err != nil {
-		reader, rerr := renderTGD(tgd, output)
+		reader, rerr := graphinternal.RenderTGD(tgd, output)
 		defer func() {
 			_ = reader.Close()
 		}()
@@ -148,7 +147,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	if dryRun {
-		reader, err := renderTGD(tgd, output)
+		reader, err := graphinternal.RenderTGD(tgd, output)
 		if err != nil {
 			return fmt.Errorf("rendering transformation graph failed: %w", err)
 		}
@@ -211,9 +210,12 @@ func graphBuilder(ctx context.Context, pm *manager.PluginManager, credentialProv
 		panic(fmt.Sprintf("unable to get OCI resource plugin: %v", err))
 	}
 
+	// TODO(matthiasbruns) -- only when --copy-resources flag is set
+	// TODO(matthiasbruns) -- copy-local-resources -> check if local - only transfer local relation
 	ociGetOCIArtifact := &transformer.GetOCIArtifact{
-		Scheme:     transformerScheme,
-		Repository: resourcePlugin,
+		Scheme:             transformerScheme,
+		Repository:         resourcePlugin,
+		CredentialProvider: credentialProvider,
 	}
 
 	return builder.NewBuilder(transformerScheme).
@@ -226,34 +228,4 @@ func graphBuilder(ctx context.Context, pm *manager.PluginManager, credentialProv
 		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
 		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact)
-}
-
-func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {
-	switch format {
-	case render.OutputFormatJSON.String():
-		read, write := io.Pipe()
-		encoder := json.NewEncoder(write)
-		encoder.SetIndent("", "  ")
-		go func() {
-			err := encoder.Encode(tgd)
-			_ = write.CloseWithError(err)
-		}()
-		return read, nil
-	case render.OutputFormatNDJSON.String():
-		read, write := io.Pipe()
-		encoder := json.NewEncoder(write)
-		go func() {
-			err := encoder.Encode(tgd)
-			_ = write.CloseWithError(err)
-		}()
-		return read, nil
-	case render.OutputFormatYAML.String():
-		data, err := yaml.Marshal(tgd)
-		if err != nil {
-			return nil, err
-		}
-		return io.NopCloser(bytes.NewReader(data)), nil
-	default:
-		return nil, fmt.Errorf("invalid output format %q", format)
-	}
 }
