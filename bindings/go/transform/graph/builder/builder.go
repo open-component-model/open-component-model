@@ -17,9 +17,9 @@ import (
 )
 
 type Builder struct {
-	// holds all possible transformations
 	scheme       *runtime.Scheme
 	transformers map[runtime.Type]graphRuntime.Transformer
+	events       chan graphRuntime.ProgressEvent
 }
 
 func NewBuilder(scheme *runtime.Scheme) *Builder {
@@ -82,6 +82,7 @@ func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition
 		env:          env,
 		checked:      g,
 		transformers: b.transformers,
+		events:       b.events,
 	}, nil
 }
 
@@ -134,9 +135,9 @@ func (g *Graph) Process(ctx context.Context) error {
 
 // WithEvents sets the channel where progress events will be sent during Process().
 // This is optional - if not set, no events will be emitted.
-func (g *Graph) WithEvents(events chan graphRuntime.ProgressEvent) *Graph {
-	g.events = events
-	return g
+func (b *Builder) WithEvents(events chan graphRuntime.ProgressEvent) *Builder {
+	b.events = events
+	return b
 }
 
 // Events returns the channel where progress events are sent during Process().

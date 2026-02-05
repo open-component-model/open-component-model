@@ -414,13 +414,9 @@ transformations:
 	}
 }
 
-func TestGraph_WithEvents(t *testing.T) {
-	builder := newTestBuilder(t)
-
-	buildGraph := func(t *testing.T) *Graph {
-		t.Helper()
-		tgd := &v1alpha1.TransformationGraphDefinition{}
-		require.NoError(t, yaml.Unmarshal([]byte(`
+func TestBuilder_WithEvents(t *testing.T) {
+	tgd := &v1alpha1.TransformationGraphDefinition{}
+	require.NoError(t, yaml.Unmarshal([]byte(`
 transformations:
 - id: get1
   type: MockGetObjectTransformer/v1alpha1
@@ -428,15 +424,11 @@ transformations:
     name: "test"
     version: "1.0.0"
 `), tgd))
-		graph, err := builder.BuildAndCheck(tgd)
-		require.NoError(t, err)
-		return graph
-	}
 
 	t.Run("channel is closed after Process", func(t *testing.T) {
-		graph := buildGraph(t)
 		events := make(chan graphRuntime.ProgressEvent, 10)
-		graph.WithEvents(events)
+		graph, err := newTestBuilder(t).WithEvents(events).BuildAndCheck(tgd)
+		require.NoError(t, err)
 
 		require.NoError(t, graph.Process(t.Context()))
 
@@ -448,7 +440,8 @@ transformations:
 	})
 
 	t.Run("no events when WithEvents not called", func(t *testing.T) {
-		graph := buildGraph(t)
+		graph, err := newTestBuilder(t).BuildAndCheck(tgd)
+		require.NoError(t, err)
 		require.NoError(t, graph.Process(t.Context()))
 	})
 }
