@@ -22,12 +22,28 @@ type Transformer interface {
 }
 
 // State represents the state of a transformation node.
-type State string
+type State int
+
+func (s State) String() string {
+	switch s {
+	case Running:
+		return "running"
+	case Completed:
+		return "completed"
+	case Failed:
+		return "failed"
+	default:
+		return fmt.Sprintf("unknown(%d)", s)
+	}
+}
 
 const (
-	Running   State = "running"
-	Completed State = "completed"
-	Failed    State = "failed"
+	// Running means the transformation is currently being processed.
+	Running State = iota
+	// Completed means the transformation completed successfully.
+	Completed
+	// Failed means the transformation failed.
+	Failed
 )
 
 // ProgressEvent represents a state change during graph execution.
