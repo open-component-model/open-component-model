@@ -22,8 +22,6 @@ require (
 	oras.land/oras-go/v2 v2.6.0
 )
 
-// Replace include to make sure we are always testing the current code instead of a version.
-// It is irrelevant for us that integration tests cannot be consumed by other modules.
 replace ocm.software/open-component-model/bindings/go/oci => ../
 
 require (
