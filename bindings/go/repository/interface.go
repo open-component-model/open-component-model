@@ -114,6 +114,19 @@ type ResourceRepository interface {
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error)
 }
 
+// ResourceRepositoryNoCredentials defines the interface for storing and retrieving OCM resources
+// independently of component versions from a store implementation.
+// Deprecated: use ResourceRepository with credentials instead
+// TODO (matthiasbruns): https://github.com/open-component-model/ocm-project/issues/774
+type ResourceRepositoryNoCredentials interface {
+	// UploadResource uploads a [descriptor.Resource] to the repository.
+	// Returns the updated resource with repository-specific information.
+	// The resource must be referenced in the component descriptor.
+	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error)
+	// DownloadResource downloads and verifies the integrity of a [descriptor.Resource] from the repository.
+	DownloadResource(ctx context.Context, res *descriptor.Resource) (blob.ReadOnlyBlob, error)
+}
+
 // SourceRepository defines the interface for storing and retrieving OCM sources
 // independently of component versions from a store implementation.
 // TODO https://github.com/open-component-model/ocm-project/issues/857 also provide credentials in UploadSource/DownloadSource
