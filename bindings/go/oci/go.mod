@@ -22,6 +22,8 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
+replace ocm.software/open-component-model/bindings/go/repository => ../repository
+
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
