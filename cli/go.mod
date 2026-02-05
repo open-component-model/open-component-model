@@ -38,6 +38,8 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
+replace ocm.software/open-component-model/bindings/go/oci => ../bindings/go/oci
+
 require (
 	cel.dev/expr v0.25.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
