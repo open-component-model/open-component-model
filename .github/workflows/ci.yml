@@ -386,7 +386,7 @@ jobs:
       - run_unit_tests
       - run_integration_tests
       - golangci_lint
-    if: failure()
+    if: ${{ failure() && (fromJSON(needs.discover_modules.outputs.modules_json)[0] != null || needs.discover_modules.outputs.env_changed == 'true') }}
     steps:
       - name: Some CI step failed or was cancelled!
         run: exit 1
