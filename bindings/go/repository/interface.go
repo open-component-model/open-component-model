@@ -116,6 +116,7 @@ type ResourceRepository interface {
 
 // ResourceRepositoryNoCredentials defines the interface for storing and retrieving OCM resources
 // independently of component versions from a store implementation.
+//
 // Deprecated: use ResourceRepository with credentials instead
 // TODO (matthiasbruns): https://github.com/open-component-model/ocm-project/issues/774
 type ResourceRepositoryNoCredentials interface {
