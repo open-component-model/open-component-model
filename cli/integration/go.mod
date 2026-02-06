@@ -13,6 +13,7 @@ require (
 	golang.org/x/crypto v0.46.0
 	helm.sh/helm/v4 v4.0.5
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
+	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260206134336-f8a8aaf066c2
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/oci v0.0.28
@@ -124,7 +125,6 @@ require (
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260206134336-f8a8aaf066c2 // indirect
-	ocm.software/open-component-model/bindings/go/configuration v0.0.9 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
