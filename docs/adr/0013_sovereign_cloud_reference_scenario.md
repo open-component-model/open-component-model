@@ -63,11 +63,10 @@ flowchart TB
         
         subgraph kind["kind cluster"]
             controller[OCM Controller]
-            controller --> cv[ComponentVersion]
-            cv --> res[Resources]
-            res --> snap[Snapshots]
-            snap --> deployer[FluxDeployer]
-            
+            controller --> comp[Component]
+            comp --> res[Resources]
+            res --> deployer[Deployer]
+
             subgraph workloads["Workloads"]
                 notes_deploy[sovereign-notes] -->|DATABASE_URL| pg_sts[PostgreSQL]
             end
@@ -1562,7 +1561,264 @@ task demo
 
 ---
 
-## 12. Future Extensibility
+## 12. Platform Mesh Integration (Service Ordering API)
+
+[Platform Mesh](https://platform-mesh.io/) is a Linux Foundation Europe initiative that enables service discovery, ordering, and orchestration across providers using Kubernetes Resource Model (KRM). This integration demonstrates how OCM components can be offered as services in a multi-tenant marketplace.
+
+### 12.1 Architecture Overview
+
+```mermaid
+flowchart TB
+    subgraph provider["Service Provider Control Plane"]
+        ocm_comp[OCM Component]
+        offering[ServiceOffering]
+        export[Export]
+        ocm_comp --> offering
+        offering --> export
+    end
+
+    subgraph mesh["Platform Mesh"]
+        catalog[Service Catalog]
+        binding[ServiceBinding]
+        export --> catalog
+        catalog --> binding
+    end
+
+    subgraph consumer["Consumer Control Plane"]
+        order[ServiceOrder]
+        instance[ServiceInstance]
+        deployer[OCM Deployer]
+        binding --> order
+        order --> instance
+        instance --> deployer
+    end
+
+    deployer --> k8s[Kubernetes Workloads]
+```
+
+### 12.2 Service Provider: Exporting sovereign-notes
+
+The service provider publishes the OCM component as a ServiceOffering:
+
+```yaml
+# platform-mesh/service-offering.yaml
+apiVersion: platform-mesh.io/v1alpha1
+kind: ServiceOffering
+metadata:
+  name: sovereign-notes
+  namespace: service-catalog
+spec:
+  displayName: "Sovereign Notes Service"
+  description: "A minimal notes API backed by PostgreSQL, delivered as OCM components"
+  version: "1.0.0"
+
+  # Reference to the OCM component
+  source:
+    type: ocm
+    ocm:
+      component: acme.org/sovereign/product
+      repository:
+        url: ghcr.io/open-component-model/reference-scenario
+      semver: ">=1.0.0"
+      verify:
+        - signature: acme-signature
+
+  # Service configuration schema (exposed to consumers)
+  schema:
+    type: object
+    properties:
+      replicas:
+        type: integer
+        default: 2
+        minimum: 1
+        maximum: 10
+        description: "Number of application replicas"
+      storage:
+        type: object
+        properties:
+          size:
+            type: string
+            default: "1Gi"
+            description: "PostgreSQL storage size"
+          storageClass:
+            type: string
+            default: ""
+            description: "Storage class for persistence"
+
+  # Dependencies on other services
+  dependencies:
+    - name: postgres
+      serviceRef:
+        name: postgresql
+        namespace: service-catalog
+      optional: false
+---
+# Export the service to the mesh catalog
+apiVersion: platform-mesh.io/v1alpha1
+kind: Export
+metadata:
+  name: sovereign-notes-export
+  namespace: service-catalog
+spec:
+  serviceOfferingRef:
+    name: sovereign-notes
+  visibility: public
+  allowedConsumers:
+    - workspace: "*"  # Available to all workspaces
+```
+
+### 12.3 Service Consumer: Ordering sovereign-notes
+
+Consumers discover and order services from the catalog:
+
+```yaml
+# platform-mesh/service-order.yaml
+apiVersion: platform-mesh.io/v1alpha1
+kind: ServiceOrder
+metadata:
+  name: my-notes-instance
+  namespace: consumer-workspace
+spec:
+  serviceOfferingRef:
+    name: sovereign-notes
+    namespace: service-catalog
+
+  # Consumer-provided configuration
+  parameters:
+    replicas: 3
+    storage:
+      size: "10Gi"
+      storageClass: "fast-ssd"
+
+  # Binding to consumer's namespace
+  targetNamespace: my-application
+---
+# ServiceInstance is created automatically by Platform Mesh
+apiVersion: platform-mesh.io/v1alpha1
+kind: ServiceInstance
+metadata:
+  name: my-notes-instance
+  namespace: consumer-workspace
+status:
+  phase: Running
+  endpoints:
+    - name: api
+      url: "http://sovereign-notes.my-application.svc:8080"
+  credentials:
+    secretRef:
+      name: my-notes-instance-credentials
+```
+
+### 12.4 Dependency Ordering
+
+Platform Mesh handles service dependencies automatically. When `sovereign-notes` is ordered, it:
+
+1. Checks if PostgreSQL dependency is satisfied
+2. If not, automatically orders PostgreSQL first
+3. Waits for PostgreSQL to be `Running`
+4. Then provisions sovereign-notes with DATABASE_URL injected
+
+```yaml
+# platform-mesh/dependency-graph.yaml
+apiVersion: platform-mesh.io/v1alpha1
+kind: ServiceDependencyGraph
+metadata:
+  name: my-notes-dependencies
+  namespace: consumer-workspace
+spec:
+  root: my-notes-instance
+status:
+  dependencies:
+    - name: my-notes-instance
+      status: Running
+      dependsOn:
+        - name: postgres-instance
+          status: Running
+          dependsOn: []
+```
+
+### 12.5 Integration with OCM Controller
+
+Platform Mesh integrates with OCM by creating the necessary CRs when a ServiceOrder is fulfilled:
+
+```yaml
+# Generated by Platform Mesh when ServiceOrder is approved
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: my-notes-instance
+  namespace: consumer-workspace
+  labels:
+    platform-mesh.io/service-instance: my-notes-instance
+spec:
+  component: acme.org/sovereign/product
+  repositoryRef:
+    name: provider-repo  # Created by Platform Mesh binding
+  semver: ">=1.0.0"
+  interval: 10m
+  verify:
+    - signature: acme-signature
+      secretRef:
+        name: provider-signing-key
+---
+# RGD Instance with consumer parameters
+apiVersion: kro.run/v1alpha1
+kind: SovereignProduct
+metadata:
+  name: my-notes-instance
+  namespace: consumer-workspace
+  labels:
+    platform-mesh.io/service-instance: my-notes-instance
+spec:
+  namespace: my-application
+  notes:
+    replicas: 3  # From ServiceOrder parameters
+  postgres:
+    storageSize: "10Gi"
+    storageClass: "fast-ssd"
+```
+
+### 12.6 Multi-Provider Scenarios
+
+Platform Mesh enables cross-provider service composition:
+
+```mermaid
+flowchart LR
+    subgraph provider1["Provider A (Acme)"]
+        notes[sovereign-notes]
+    end
+
+    subgraph provider2["Provider B (DBaaS)"]
+        postgres[Managed PostgreSQL]
+    end
+
+    subgraph mesh["Platform Mesh Catalog"]
+        cat_notes[Notes Offering]
+        cat_pg[PostgreSQL Offering]
+    end
+
+    subgraph consumer["Consumer"]
+        order[ServiceOrder]
+        app[My Application]
+    end
+
+    notes --> cat_notes
+    postgres --> cat_pg
+    cat_notes -.->|depends on| cat_pg
+    order --> cat_notes
+    order --> cat_pg
+    cat_notes --> app
+    cat_pg --> app
+```
+
+This allows consumers to:
+- Use managed PostgreSQL from Provider B instead of self-hosted
+- Mix and match services from different providers
+- Maintain consistent ordering and dependency resolution
+
+---
+
+## 13. Deployment Extensibility
 
 ```mermaid
 flowchart TB
@@ -1609,7 +1865,7 @@ The **component structure remains unchanged** — only the RGD templates vary pe
 
 ---
 
-## 13. Key Design Decisions
+## 14. Key Design Decisions
 
 | Decision                              | Rationale                                                                              |
 |---------------------------------------|----------------------------------------------------------------------------------------|
@@ -1620,3 +1876,4 @@ The **component structure remains unchanged** — only the RGD templates vary pe
 | **kind with local registry**          | Fully reproducible locally, simulates air-gap registry                                 |
 | **semver constraint for upgrades**    | Controller auto-detects new versions without CR changes                                |
 | **additionalStatusFields for images** | CEL expressions extract registry/repo/tag for localization without separate CR         |
+| **Platform Mesh for service ordering**| KRM-based service discovery and ordering; handles dependencies automatically           |
