@@ -17,9 +17,9 @@ import (
 )
 
 type Builder struct {
-	// holds all possible transformations
 	scheme       *runtime.Scheme
 	transformers map[runtime.Type]graphRuntime.Transformer
+	events       chan graphRuntime.ProgressEvent
 }
 
 func NewBuilder(scheme *runtime.Scheme) *Builder {
@@ -82,6 +82,7 @@ func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition
 		env:          env,
 		checked:      g,
 		transformers: b.transformers,
+		events:       b.events,
 	}, nil
 }
 
@@ -108,6 +109,7 @@ type Graph struct {
 	env          *cel.Env
 	checked      *dag.DirectedAcyclicGraph[string]
 	transformers map[runtime.Type]graphRuntime.Transformer
+	events       chan graphRuntime.ProgressEvent
 }
 
 func (g *Graph) Process(ctx context.Context) error {
@@ -118,8 +120,32 @@ func (g *Graph) Process(ctx context.Context) error {
 			Transformers:             g.transformers,
 			EvaluatedExpressionCache: make(map[string]any),
 			EvaluatedTransformations: make(map[string]any),
+			Events:                   g.events,
 		},
 		Concurrency: 1,
 	})
-	return runtimeEvaluationProcessor.Process(ctx)
+
+	err := runtimeEvaluationProcessor.Process(ctx)
+	if g.events != nil {
+		close(g.events)
+	}
+
+	return err
+}
+
+// WithEvents sets the channel where progress events will be sent during Process().
+// This is optional - if not set, no events will be emitted.
+func (b *Builder) WithEvents(events chan graphRuntime.ProgressEvent) *Builder {
+	b.events = events
+	return b
+}
+
+// Events returns the channel where progress events are sent during Process().
+func (g *Graph) Events() <-chan graphRuntime.ProgressEvent {
+	return g.events
+}
+
+// NodeCount returns the total number of nodes in the graph.
+func (g *Graph) NodeCount() int {
+	return len(g.checked.Vertices)
 }
