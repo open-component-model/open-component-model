@@ -37,8 +37,6 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
-replace ocm.software/open-component-model/bindings/go/oci => ../bindings/go/oci
-
 require (
 	cel.dev/expr v0.25.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
