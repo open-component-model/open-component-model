@@ -67,15 +67,6 @@ func ChooseAddLocalResourceType(repo runtime.Typed) runtime.Type {
 	}
 }
 
-func ChooseGetOCIArtifactType(repo runtime.Typed) runtime.Type {
-	switch repo.(type) {
-	case *oci.Repository:
-		return ociv1alpha1.GetOCIArtifactV1alpha1
-	default:
-		panic(fmt.Sprintf("unknown repository type %T", repo))
-	}
-}
-
 func isLocalBlobAccess(access *runtime.Raw) bool {
 	if access == nil {
 		return false
