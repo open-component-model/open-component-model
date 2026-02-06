@@ -3,11 +3,7 @@ package transformer
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"os"
-	"path/filepath"
 
-	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -56,8 +52,7 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	var creds map[string]string
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
-			creds, err = t.CredentialProvider.Resolve(ctx, consumerId)
-			if err != nil {
+			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
 				return nil, fmt.Errorf("failed resolving credentials: %w", err)
 			}
 		}
@@ -69,33 +64,8 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	}
 
 	// Determine output path
-	if outputPath == "" {
-		fileExt := ""
-		if mediaTypeAware, ok := blobContent.(blob.MediaTypeAware); ok {
-			if mediaType, ok := mediaTypeAware.MediaType(); ok {
-				fileExt = mediaTypExtMap[mediaType]
-			}
-		}
-
-		if fileExt == "" {
-			slog.Warn("unable to determine file extension from media type, setting no extension")
-		} else {
-			fileExt = fmt.Sprintf(".%s", fileExt)
-		}
-
-		// Create a temporary file
-		tempFile, err := os.CreateTemp("", fmt.Sprintf("oci-artifact-*%s", fileExt))
-		if err != nil {
-			return nil, fmt.Errorf("failed creating temporary file: %w", err)
-		}
-		_ = tempFile.Close() // Close immediately, BlobToSpec will overwrite it
-		outputPath = tempFile.Name()
-	} else {
-		// Ensure the directory exists
-		dir := filepath.Dir(outputPath)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, fmt.Errorf("failed creating output directory: %w", err)
-		}
+	if outputPath, err = determineOutputPath(outputPath, "oci-artifact", blobContent); err != nil {
+		return nil, fmt.Errorf("failed determining output path: %w", err)
 	}
 
 	// Buffer blob to file
