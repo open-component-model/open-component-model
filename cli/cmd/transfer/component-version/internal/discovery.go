@@ -13,6 +13,7 @@ import (
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
@@ -20,6 +21,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
+
+var Scheme = runtime.NewScheme(runtime.WithAllowUnknown())
+
+func init() {
+	Scheme.MustRegisterScheme(oci.Scheme)
+	Scheme.MustRegisterScheme(descriptorv2.Scheme)
+}
 
 func BuildGraphDefinition(
 	ctx context.Context,
@@ -96,51 +104,62 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 
 		// Process local resources
 		for i, resource := range v2desc.Component.Resources {
-			// Generate transformation IDs
-			resourceIdentity := resource.ToIdentity()
-			resourceID := identityToTransformationID(resourceIdentity)
-			getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
-			addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
-
-			// Convert resourceIdentity to map[string]any for deep copy compatibility
-			resourceIdentityMap := make(map[string]any)
-			for k, v := range resourceIdentity {
-				resourceIdentityMap[k] = v
+			access, err := Scheme.NewObject(resource.Access.Type)
+			if err != nil {
+				return fmt.Errorf("cannot create new object for resource access type %q: %w", resource.Access.Type.String(), err)
 			}
-
-			// Create GetLocalResource transformation
-			getResourceTransform := transformv1alpha1.GenericTransformation{
-				TransformationMeta: meta.TransformationMeta{
-					Type: ChooseGetLocalResourceType(ref.Repository),
-					ID:   getResourceID,
-				},
-				Spec: &runtime.Unstructured{Data: map[string]any{
-					"repository":       AsUnstructured(ref.Repository).Data,
-					"component":        ref.Component,
-					"version":          ref.Version,
-					"resourceIdentity": resourceIdentityMap,
-				}},
+			if err := Scheme.Convert(resource.Access, access); err != nil {
+				return fmt.Errorf("cannot convert resource access to typed object: %w", err)
 			}
-			tgd.Transformations = append(tgd.Transformations, getResourceTransform)
+			switch access.(type) {
+			case *descriptor.LocalBlob:
+				// TODO(fabianburth): should probably be a dedicated function
+				// Generate transformation IDs
+				resourceIdentity := resource.ToIdentity()
+				resourceID := identityToTransformationID(resourceIdentity)
+				getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
+				addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 
-			// Create AddLocalResource transformation
-			addResourceTransform := transformv1alpha1.GenericTransformation{
-				TransformationMeta: meta.TransformationMeta{
-					Type: ChooseAddLocalResourceType(toSpec),
-					ID:   addResourceID,
-				},
-				Spec: &runtime.Unstructured{Data: map[string]any{
-					"repository": AsUnstructured(toSpec).Data,
-					"component":  ref.Component,
-					"version":    ref.Version,
-					"resource":   fmt.Sprintf("${%s.output.resource}", getResourceID),
-					"file":       fmt.Sprintf("${%s.output.file}", getResourceID),
-				}},
+				// Convert resourceIdentity to map[string]any for deep copy compatibility
+				resourceIdentityMap := make(map[string]any)
+				for k, v := range resourceIdentity {
+					resourceIdentityMap[k] = v
+				}
+
+				// Create GetLocalResource transformation
+				getResourceTransform := transformv1alpha1.GenericTransformation{
+					TransformationMeta: meta.TransformationMeta{
+						Type: ChooseGetLocalResourceType(ref.Repository),
+						ID:   getResourceID,
+					},
+					Spec: &runtime.Unstructured{Data: map[string]any{
+						"repository":       AsUnstructured(ref.Repository).Data,
+						"component":        ref.Component,
+						"version":          ref.Version,
+						"resourceIdentity": resourceIdentityMap,
+					}},
+				}
+				tgd.Transformations = append(tgd.Transformations, getResourceTransform)
+
+				// Create AddLocalResource transformation
+				addResourceTransform := transformv1alpha1.GenericTransformation{
+					TransformationMeta: meta.TransformationMeta{
+						Type: ChooseAddLocalResourceType(toSpec),
+						ID:   addResourceID,
+					},
+					Spec: &runtime.Unstructured{Data: map[string]any{
+						"repository": AsUnstructured(toSpec).Data,
+						"component":  ref.Component,
+						"version":    ref.Version,
+						"resource":   fmt.Sprintf("${%s.output.resource}", getResourceID),
+						"file":       fmt.Sprintf("${%s.output.file}", getResourceID),
+					}},
+				}
+				tgd.Transformations = append(tgd.Transformations, addResourceTransform)
+
+				// Track this resource's transformation
+				resourceTransformIDs[i] = addResourceID
 			}
-			tgd.Transformations = append(tgd.Transformations, addResourceTransform)
-
-			// Track this resource's transformation
-			resourceTransformIDs[i] = addResourceID
 		}
 
 		// Marshal original v2 descriptor to environment
