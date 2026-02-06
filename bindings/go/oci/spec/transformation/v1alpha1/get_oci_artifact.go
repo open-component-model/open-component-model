@@ -10,6 +10,11 @@ const GetOCIArtifactType = "GetOCIArtifact"
 
 // GetOCIArtifact is a transformer specification to get an OCI artifact
 // from a remote OCI registry and buffer it to a file.
+// It contains the resource descriptor of the artifact to be retrieved and an optional output path.
+// If no output path is given, a temporary file will be created for buffering the artifact.
+// Spec: GetOCIArtifactSpec - the input specification of the transformation containing the resource descriptor and output path.
+// Output: GetOCIArtifactOutput - the output specification of the transformation containing the file access specification
+// for the downloaded artifact and the resource descriptor from the component.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
