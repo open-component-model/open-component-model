@@ -31,16 +31,17 @@ import (
 )
 
 const (
-	FlagDryRun    = "dry-run"
-	FlagOutput    = "output"
-	FlagRecursive = "recursive"
+	FlagDryRun             = "dry-run"
+	FlagOutput             = "output"
+	FlagRecursive          = "recursive"
+	FlagCopyResources      = "copy-resources"
+	FlagCopyLocalResources = "copy-local-resources"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the renderer consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
 	eventBufferSize = 16
 )
 
-// TODO --copy-resources
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:        "component-version {reference} {target}",
@@ -63,6 +64,8 @@ The graph is validated, and then executed unless --dry-run is set.`,
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String()}, "output format of the component descriptors")
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
+	cmd.Flags().Bool(FlagCopyResources, false, "copy all resources referenced by the component version")
+	cmd.Flags().Bool(FlagCopyLocalResources, false, "copy all resources with local relation referenced by the component version")
 
 	return cmd
 }
@@ -124,14 +127,39 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting recursive flag failed: %w", err)
 	}
 
+	copyResources, err := cmd.Flags().GetBool(FlagCopyResources)
+	if err != nil {
+		return fmt.Errorf("getting copy-resources flag failed: %w", err)
+	}
+
+	copyLocalResources, err := cmd.Flags().GetBool(FlagCopyLocalResources)
+	if err != nil {
+		return fmt.Errorf("getting copy-local-resources flag failed: %w", err)
+	}
+
+	// do not allow both copy-resources and copy-local-resources to be set at the same time, as they are mutually exclusive
+	if copyResources && copyLocalResources {
+		return fmt.Errorf("flags --%s and --%s cannot be set at the same time, as they are mutually exclusive", FlagCopyResources, FlagCopyLocalResources)
+	}
+
+	copyMode := internal.CopyModeDefault
+	if copyResources {
+		copyMode = internal.CopyModeAllResources
+	} else if copyLocalResources {
+		copyMode = internal.CopyModeLocalResources
+	}
+
 	// Build TransformationGraphDefinition
-	tgd, err := internal.BuildGraphDefinition(ctx, fromSpec, toSpec, repoProvider, recursive)
+	tgd, err := internal.BuildGraphDefinition(ctx, fromSpec, toSpec, repoProvider, internal.WithRecursive(recursive), internal.WithCopyMode(copyMode))
 	if err != nil {
 		return fmt.Errorf("building graph definition failed: %w", err)
 	}
 
 	// Build transformer builder
-	b := graphBuilder(ctx, pm, credGraph)
+	b, err := graphBuilder(ctx, pm, credGraph)
+	if err != nil {
+		return fmt.Errorf("building graph builder failed: %w", err)
+	}
 
 	graph, err := b.
 		WithEvents(make(chan graphRuntime.ProgressEvent, eventBufferSize)).
@@ -181,7 +209,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 }
 
 // TODO: make this a plugin manager integration.
-func graphBuilder(ctx context.Context, pm *manager.PluginManager, credentialProvider credentials.Resolver) *builder.Builder {
+func graphBuilder(ctx context.Context, pm *manager.PluginManager, credentialProvider credentials.Resolver) (*builder.Builder, error) {
 	transformerScheme := ociv1alpha1.Scheme
 
 	ociGet := &transformer.GetComponentVersion{
@@ -210,11 +238,9 @@ func graphBuilder(ctx context.Context, pm *manager.PluginManager, credentialProv
 	// OCI Artifact transformers
 	resourcePlugin, err := pm.ResourcePluginRegistry.GetResourcePlugin(ctx, &v1.OCIImage{})
 	if err != nil {
-		panic(fmt.Sprintf("unable to get OCI resource plugin: %v", err))
+		return nil, fmt.Errorf("unable to get OCI resource plugin: %w", err)
 	}
 
-	// TODO(matthiasbruns) -- only when --copy-resources flag is set
-	// TODO(matthiasbruns) -- copy-local-resources -> check if local - only transfer local relation
 	ociGetOCIArtifact := &transformer.GetOCIArtifact{
 		Scheme:             transformerScheme,
 		Repository:         resourcePlugin,
@@ -230,7 +256,7 @@ func graphBuilder(ctx context.Context, pm *manager.PluginManager, credentialProv
 		WithTransformer(&ociv1alpha1.OCIAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
 		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
-		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact)
+		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact), nil
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {

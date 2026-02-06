@@ -24,6 +24,33 @@ import (
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
+type CopyMode int
+
+const (
+	CopyModeDefault CopyMode = iota
+	CopyModeLocalResources
+	CopyModeAllResources
+)
+
+type options struct {
+	copyMode  CopyMode
+	recursive bool
+}
+
+type Option func(*options)
+
+func WithCopyMode(mode CopyMode) func(*options) {
+	return func(o *options) {
+		o.copyMode = mode
+	}
+}
+
+func WithRecursive(recursive bool) func(*options) {
+	return func(o *options) {
+		o.recursive = recursive
+	}
+}
+
 var Scheme = runtime.NewScheme(runtime.WithAllowUnknown())
 
 func init() {
@@ -36,10 +63,15 @@ func BuildGraphDefinition(
 	fromSpec *compref.Ref,
 	toSpec runtime.Typed,
 	repoResolver resolvers.ComponentVersionRepositoryResolver,
-	recursive bool,
+	opts ...Option,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
+	o := options{}
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	discoverer := &discoverer{
-		recursive:         recursive,
+		recursive:         o.recursive,
 		discoveredDigests: make(map[string]descriptor.Digest),
 	}
 	resolver := &resolver{
@@ -80,7 +112,7 @@ func BuildGraphDefinition(
 
 	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(d, toSpec, tgd)
+		return fillGraphDefinitionWithPrefetchedComponents(d, toSpec, tgd, o.copyMode)
 	})
 	if err != nil {
 		return nil, err
@@ -89,7 +121,7 @@ func BuildGraphDefinition(
 	return tgd, nil
 }
 
-func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[string], toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition) error {
+func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[string], toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, copyMode CopyMode) error {
 	for _, v := range d.Vertices {
 		val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
 		ref := val.Ref
@@ -116,8 +148,30 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 
 			switch access.(type) {
 			case *descriptorv2.LocalBlob:
+				if copyMode == CopyModeLocalResources && !isLocalRelation(resource) {
+					slog.Info("Skipping copy of local blob resource as copy mode is local resources only "+
+						"and this resource is not a local relation",
+						"component", ref.Component, "version", ref.Version, "resource", resource.Name)
+					continue
+				}
 				processLocalRelation(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
 			case *v2.OCIImage:
+				switch copyMode {
+				case CopyModeDefault:
+					slog.Info("Skipping copy of OCI artifact resource as copy mode is default which excludes OCI artifacts",
+						"component", ref.Component, "version", ref.Version, "resource", resource.Name)
+					continue
+				case CopyModeLocalResources:
+					// only copy internal/owned by local artifacts
+					if !isLocalRelation(resource) {
+						slog.Info("Skipping copy of OCI artifact resource as copy mode is local resources only "+
+							"and this artifact is not a local relation",
+							"component", ref.Component, "version", ref.Version, "resource", resource.Name)
+						continue
+					}
+				default:
+					// all good, we can copy the oci artifact
+				}
 				processOCIArtifact(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
 			default:
 				// No transformation configured for resource with access types not listed above
@@ -207,6 +261,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 
 func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
 	getResourceID := fmt.Sprintf("%sGet%s", id, resource.ToIdentity())
+	addResourceID := fmt.Sprintf("%sAdd%s", id, resource.ToIdentity())
 
 	var ociAccess v2.OCIImage
 	if err := json.Unmarshal(resource.Access.Data, &ociAccess); err != nil {
@@ -231,18 +286,32 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 			ID:   getResourceID,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
-			"repository":    AsUnstructured(ref.Repository).Data,
-			"resource":      resource,
-			"referenceName": referenceName,
+			"repository": AsUnstructured(ref.Repository).Data,
+			"resource":   resource,
 		}},
 	}
 	tgd.Transformations = append(tgd.Transformations, getArtifactTransform)
 
-	// Generate target reference for OCI repositories
-	// Format: {baseUrl}/{subPath}/{resourceName}:{resourceVersion}
-	// targetReference := generateTargetImageReference(toSpec, resource.Name, resource.Version)
+	// Create AddLocalResource transformation
+	addResourceTransform := transformv1alpha1.GenericTransformation{
+		TransformationMeta: meta.TransformationMeta{
+			Type: ChooseAddLocalResourceType(toSpec),
+			ID:   addResourceID,
+		},
+		Spec: &runtime.Unstructured{Data: map[string]any{
+			"repository":    AsUnstructured(toSpec).Data,
+			"component":     ref.Component,
+			"version":       ref.Version,
+			"resource":      fmt.Sprintf("${%s.output.resource}", getResourceID),
+			"file":          fmt.Sprintf("${%s.output.file}", getResourceID),
+			"referenceName": referenceName,
+		}},
+	}
+	tgd.Transformations = append(tgd.Transformations, addResourceTransform)
 
-	// TODO(matthiasbruns) add localresource transformation
+	// Track this resource's transformation
+	resourceTransformIDs[i] = addResourceID
+
 	return nil
 }
 
