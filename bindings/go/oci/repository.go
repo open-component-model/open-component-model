@@ -279,6 +279,9 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 		pinnedDigest = dig
 	}
 
+	// TODO: fix http scheme digest processing
+	// need issue
+
 	var desc ociImageSpecV1.Descriptor
 	if pinnedDigest.String() == "" {
 		if desc, err = src.Resolve(ctx, resolved.ReferenceOrTag()); err != nil {

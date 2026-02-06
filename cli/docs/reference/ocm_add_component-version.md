@@ -6,6 +6,14 @@ toc: true
 sidebar:
   collapsed: true
 ---
+---
+title: ocm add component-version
+description: Add component version(s) to an OCM Repository based on a "component-constructor" file.
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
 
 ## ocm add component-version
 
