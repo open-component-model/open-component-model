@@ -1,6 +1,6 @@
 # Design: Reference Scenario — Sovereign Cloud Delivery with OCM, ORD, openMCP, Platform Mesh, KRO and Flux
 
-* **Status**: proposed
+* **Status**: draft
 * **Deciders**: TBD
 * **Date**: 2025-02-06
 
@@ -11,9 +11,15 @@
 ## Table of Contents
 
 <!-- TOC -->
-* [Design: Reference Scenario — Sovereign Cloud Delivery](#design-reference-scenario--sovereign-cloud-delivery)
+* [Design: Reference Scenario — Sovereign Cloud Delivery with OCM, ORD, openMCP, Platform Mesh, KRO and Flux](#design-reference-scenario--sovereign-cloud-delivery-with-ocm-ord-openmcp-platform-mesh-kro-and-flux)
   * [Table of Contents](#table-of-contents)
   * [1. Overview](#1-overview)
+    * [1.1 What This Document Covers](#11-what-this-document-covers)
+    * [1.2 How to Read This Document](#12-how-to-read-this-document)
+    * [1.3 Integration Landscape](#13-integration-landscape)
+    * [1.4 Integration Points Explained](#14-integration-points-explained)
+    * [1.5 How the Integrations Work Together](#15-how-the-integrations-work-together)
+    * [1.6 Prerequisites](#16-prerequisites)
   * [2. Architecture Diagram](#2-architecture-diagram)
     * [2.1 End-to-End Flow](#21-end-to-end-flow)
     * [2.2 Controller Reconciliation Detail](#22-controller-reconciliation-detail)
@@ -94,6 +100,8 @@
 
 This document designs a reference scenario demonstrating OCM's core value proposition: **modeling, signing, transporting, and deploying a multi-service product into an air-gapped sovereign cloud environment**.
 
+### 1.1 What This Document Covers
+
 The scenario uses two genuinely interdependent services:
 - **sovereign-notes**: A minimal Go web service that stores notes in PostgreSQL
 - **PostgreSQL**: The official postgres image, deployed via manifests
@@ -106,6 +114,212 @@ Both are packaged as OCM components, signed, transferred through an air-gap via 
 - Signed components with verification on deployment
 - Upgrade flow as first-class concern
 - Fully reproducible on a developer laptop
+
+### 1.2 How to Read This Document
+
+This document is organized in layers, starting with core OCM concepts and building up to enterprise integration scenarios:
+
+| Sections | Focus | Key Technologies | Audience |
+|----------|-------|------------------|----------|
+| **2-4** | Service & Component Design: Architecture, modeling | OCM CLI, component-constructor | All readers — start here |
+| **5** | Security: Signing and verification workflows | RSA/ECDSA, ocm sign/verify | Security Engineers |
+| **6** | Configuration: ResourceGraphDefinitions | **kro**, CEL expressions | Platform Engineers |
+| **7-9** | Build & Deploy: Pipelines, manifests, upgrades | GitHub Actions, **FluxCD**, OCM Controller | DevOps Engineers |
+| **10-11** | Repository layout, testing | Task, Go test | Contributors, Integrators |
+| **12** | ORD Integration: Service discovery & metadata | ORD protocol, OpenAPI | API Platform Teams |
+| **13** | OpenMCP Integration: Multi-control-plane | OpenMCP, Workspaces, MCPs | Platform Architects |
+| **14** | Platform Mesh + External Secrets | Platform Mesh, ESO, Vault | Service Mesh Teams |
+| **15-16** | Extensibility & Design decisions | — | All readers |
+
+**Recommended reading paths:**
+
+- **New to OCM?** Start with sections 1-6 to understand core concepts (components, signing, kro)
+- **Building a platform?** Focus on sections 6-9 (kro + Flux), then 13-14 for multi-tenancy
+- **Integrating with service catalogs?** Jump to sections 12 (ORD) and 14 (Platform Mesh)
+- **Evaluating for sovereign cloud?** Read sections 1-2, 5 (signing), then 13-14
+- **Understanding deployment?** Sections 6 (kro RGDs), 8 (OCM Controller), and 15 (Flux extensibility)
+
+### 1.3 Integration Landscape
+
+This reference scenario demonstrates how OCM integrates with the broader cloud-native ecosystem. The architecture is organized into three layers:
+
+1. **Core Service Architecture (Sections 2-11)**: The foundation — OCM components, signing, transport, and deployment via kro and Flux
+2. **Deployment Infrastructure (kro + Flux)**: Bridges OCM resources to Kubernetes workloads
+3. **Enterprise Integrations (Sections 12-14)**: Service discovery, multi-control-plane, and service catalog capabilities
+
+<details open>
+<summary>Diagram: Integration Landscape</summary>
+
+```mermaid
+flowchart TB
+    subgraph core["Core Service Architecture (Sections 2-11)"]
+        direction TB
+        subgraph modeling["Component Modeling (Sections 3-4)"]
+            services[Service Design]
+            components[OCM Components]
+            services --> components
+        end
+
+        subgraph security["Security (Section 5)"]
+            sign[Signing]
+            verify[Verification]
+        end
+
+        subgraph config["Configuration (Section 6)"]
+            kro[kro RGDs]
+            rgd_instance[RGD Instances]
+            kro --> rgd_instance
+        end
+
+        subgraph pipeline["Build & Deploy (Sections 7-9)"]
+            build[Build Pipeline]
+            transport[CTF Transport]
+            ocm_ctrl[OCM Controller]
+            build --> transport --> ocm_ctrl
+        end
+
+        components --> sign
+        sign --> verify
+        verify --> build
+        rgd_instance --> ocm_ctrl
+    end
+
+    subgraph deploy_infra["Deployment Infrastructure"]
+        subgraph flux["FluxCD"]
+            helm_ctrl[Helm Controller]
+            kustomize_ctrl[Kustomize Controller]
+        end
+        ocm_ctrl --> flux
+        flux --> k8s[Kubernetes Workloads]
+    end
+
+    subgraph integrations["Enterprise Integrations (Sections 12-14)"]
+        direction TB
+
+        subgraph ord["ORD (Section 12)"]
+            ord_desc[Service Discovery]
+            ord_meta[API Metadata]
+        end
+
+        subgraph mcp["OpenMCP (Section 13)"]
+            mcp_global[Global Control Plane]
+            mcp_local[Local Control Planes]
+        end
+
+        subgraph mesh["Platform Mesh (Section 14)"]
+            mesh_cat[Service Catalog]
+            mesh_order[Service Ordering]
+            mesh_deps[Dependency Resolution]
+        end
+
+        subgraph secrets["External Secrets (Section 14)"]
+            eso[External Secrets Operator]
+            vault[Secret Stores]
+        end
+    end
+
+    mesh_order --> mcp_global
+    mcp_global --> transport
+    transport --> mcp_local
+    mcp_local --> ocm_ctrl
+    eso --> k8s
+    ord_desc --> mesh_cat
+```
+
+</details>
+
+### 1.4 Integration Points Explained
+
+Each integration serves a distinct purpose in the sovereign delivery model:
+
+**Core Deployment Infrastructure:**
+
+| Integration | What It Does | Why It Matters |
+|-------------|--------------|----------------|
+| **kro (ResourceGraphDefinitions)** | Defines deployment templates with CEL expressions for image localization and configuration | Strongly-typed configuration schemas; environment-specific values without changing component structure |
+| **FluxCD** | GitOps-based continuous delivery; reconciles Helm releases and Kustomizations | Mature, production-ready deployment; automatic drift detection and remediation |
+| **OCM Controller** | Reconciles OCM CRs (Repository, Component, Resource, Deployer) to Kubernetes | Bridges OCM artifacts to deployment infrastructure; handles signature verification |
+
+**Enterprise Integrations:**
+
+| Integration | What It Does | Why It Matters |
+|-------------|--------------|----------------|
+| **Open Resource Discovery (ORD)** | Enables services to self-describe their APIs, capabilities, and metadata via standard endpoints | Consumers can discover what services offer without reading documentation; enables automated service catalogs |
+| **OpenMCP** | Provides multi-control-plane orchestration with Global (connected) and Local (air-gapped) planes | Separates component management from deployment execution; enables true air-gap scenarios with sovereign control |
+| **Platform Mesh** | Offers a KRM-based service catalog with ordering, dependencies, and multi-provider composition | Enterprises can offer OCM components as self-service products; automatic dependency resolution simplifies consumption |
+| **External Secrets Operator** | Syncs secrets from external stores (Vault, AWS SM, Azure KV) into Kubernetes | Credentials never leave the secure perimeter; decouples secret management from application deployment |
+
+### 1.5 How the Integrations Work Together
+
+The integrations form a cohesive delivery pipeline:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           CONNECTED ENVIRONMENT                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. SERVICE DISCOVERY (ORD)                                                 │
+│     └─► Services expose /.well-known/open-resource-discovery               │
+│     └─► Aggregators collect metadata into searchable catalogs               │
+│                                                                             │
+│  2. SERVICE CATALOG (Platform Mesh)                                         │
+│     └─► ServiceOfferings published from OCM components                      │
+│     └─► Consumers browse catalog and create ServiceOrders                   │
+│     └─► Dependencies (PostgreSQL, External Secrets) auto-resolved           │
+│                                                                             │
+│  3. COMPONENT MANAGEMENT (OpenMCP Global Control Plane)                     │
+│     └─► OCM CRs created from ServiceOrders                                  │
+│     └─► Components signed and verified                                      │
+│     └─► CTF archives prepared for air-gap transfer                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │  AIR-GAP TRANSFER (CTF Archive)
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          SOVEREIGN ENVIRONMENT                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  4. OCM CONTROLLER (Reconciliation)                                         │
+│     └─► CTF imported and signatures verified                                │
+│     └─► Repository CR validates registry connection                         │
+│     └─► Component CR fetches and verifies component version                 │
+│     └─► Resource CR extracts artifacts with CEL expressions                 │
+│                                                                             │
+│  5. KRO (ResourceGraphDefinition)                                           │
+│     └─► RGD templates define deployment structure                           │
+│     └─► RGD instances provide environment-specific values                   │
+│     └─► CEL expressions localize image references to local registry         │
+│                                                                             │
+│  6. SECRET INJECTION (External Secrets Operator)                            │
+│     └─► ExternalSecret CRs sync credentials from local Vault                │
+│     └─► DATABASE_URL injected into sovereign-notes                          │
+│                                                                             │
+│  7. WORKLOAD DEPLOYMENT (FluxCD)                                            │
+│     └─► Helm Controller deploys PostgreSQL chart                            │
+│     └─► Kustomize Controller applies sovereign-notes manifests              │
+│     └─► Automatic drift detection and reconciliation                        │
+│     └─► Service ready for traffic                                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1.6 Prerequisites
+
+To work through this reference scenario, you'll need:
+
+| Tool | Purpose | Installation |
+|------|---------|--------------|
+| `ocm` CLI | Build, sign, transfer components | [ocm.software/docs/cli](https://ocm.software/docs/cli/) |
+| `kind` | Local Kubernetes cluster | [kind.sigs.k8s.io](https://kind.sigs.k8s.io/) |
+| `flux` CLI | GitOps deployment | [fluxcd.io/docs/installation](https://fluxcd.io/docs/installation/) |
+| `task` | Task runner for automation | [taskfile.dev](https://taskfile.dev/) |
+| Docker | Container runtime | [docker.com](https://docker.com/) |
+
+**Optional (for full integration testing):**
+- HashiCorp Vault (for External Secrets)
+- OpenMCP installation (for multi-control-plane)
+- Platform Mesh (for service catalog)
 
 ---
 
@@ -835,6 +1049,14 @@ data:
 ---
 
 ## 6. Configuration via ResourceGraphDefinition
+
+> **Where this fits:** [kro](https://kro.run/) provides the configuration layer between OCM components and Kubernetes workloads. RGDs define *how* components are deployed, while RGD instances provide *environment-specific values*. This separation enables the same component to be deployed differently across sovereign environments.
+
+**Why kro matters for sovereign delivery:**
+- **Strongly-typed configuration**: JSON Schema validates values before deployment
+- **CEL expressions**: Transform image references for local registries without changing components
+- **Environment isolation**: Each sovereign environment gets its own RGD instance with specific settings
+- **Declarative templates**: Infrastructure-as-code approach aligns with GitOps workflows
 
 <details open>
 <summary>Diagram: Configuration Flow</summary>
@@ -1846,7 +2068,15 @@ task demo
 
 ## 12. Open Resource Discovery (ORD) Integration
 
+> **Where this fits:** ORD enables services to self-describe their capabilities. In the sovereign delivery model, ORD metadata feeds into Platform Mesh (Section 14) to populate service catalogs, and helps OpenMCP (Section 13) understand what services are available across control planes.
+
 [Open Resource Discovery (ORD)](https://open-resource-discovery.org/) is a Linux Foundation Europe protocol that enables applications to self-describe their exposed resources and capabilities. This integration demonstrates how sovereign-notes exposes its APIs via ORD for discovery by catalogs and marketplaces.
+
+**Why ORD matters for sovereign delivery:**
+- **Decentralized discovery**: Services describe themselves rather than requiring central documentation
+- **Automated catalogs**: ORD aggregators can automatically populate Platform Mesh service catalogs
+- **Cross-environment visibility**: ORD metadata travels with the OCM component through air-gaps
+- **API contract transparency**: Consumers know exactly what APIs they'll get before ordering
 
 **Reference Implementation:** [ORD Reference Application](https://ord-reference-application.cfapps.sap.hana.ondemand.com/)
 
@@ -2359,7 +2589,15 @@ This enables the sovereign-notes service to be discovered and documented automat
 
 ## 13. OpenMCP Integration (Multi-Control-Plane Deployment)
 
+> **Where this fits:** OpenMCP provides the control plane infrastructure that separates component management (Global) from workload execution (Local). Platform Mesh (Section 14) uses OpenMCP to route service deployments to the correct sovereign environments.
+
 [OpenMCP (Open Managed Control Plane)](https://openmcp-project.github.io/docs/) is part of the [ApeiroRA](https://apeirora.eu/) ecosystem that enables Infrastructure- and Configuration-as-Data capabilities as a Service. This integration demonstrates deploying sovereign-notes across multiple managed control planes for multi-tenant or multi-environment scenarios.
+
+**Why OpenMCP matters for sovereign delivery:**
+- **True air-gap separation**: Global plane never needs network access to local planes
+- **Sovereign control**: Each local control plane is independently operated
+- **Consistent management**: Same OCM CRs work across all control planes
+- **Scalable architecture**: Add new sovereign environments without changing the global plane
 
 **See also:** [Section 14: Platform Mesh Integration](#14-platform-mesh-integration-service-ordering-api) for service ordering and discovery capabilities that build on top of OpenMCP control planes.
 
@@ -3011,7 +3249,15 @@ spec:
 
 ## 14. Platform Mesh Integration (Service Ordering API)
 
+> **Where this fits:** Platform Mesh sits at the top of the stack, providing self-service ordering. It consumes ORD metadata (Section 12) to populate catalogs, and deploys via OpenMCP control planes (Section 13). External Secrets integration (below) handles credential injection.
+
 [Platform Mesh](https://platform-mesh.io/) is a Linux Foundation Europe initiative that enables service discovery, ordering, and orchestration across providers using Kubernetes Resource Model (KRM). This integration demonstrates how OCM components can be offered as services in a multi-tenant marketplace.
+
+**Why Platform Mesh matters for sovereign delivery:**
+- **Self-service consumption**: Developers order services without understanding OCM internals
+- **Automatic dependencies**: PostgreSQL, External Secrets, and other dependencies are resolved automatically
+- **Multi-provider composition**: Mix services from different providers in a single order
+- **Governance and approval**: ServiceOrders can require approval workflows before deployment
 
 **Integration with OpenMCP (Section 13):** Platform Mesh operates at the service ordering layer, while OpenMCP manages the underlying control plane infrastructure. In our sovereign delivery model:
 - **Global Control Plane** hosts the Platform Mesh service catalog and handles service ordering
@@ -3618,6 +3864,15 @@ sequenceDiagram
 
 ## 15. Deployment Extensibility
 
+> **Where this fits:** This section explains how OCM + kro integrates with GitOps tools. FluxCD is the primary deployment target in this reference scenario, but the architecture supports other tools.
+
+**Why FluxCD for sovereign delivery:**
+- **Mature and production-ready**: CNCF graduated project with wide adoption
+- **Native OCI support**: Pulls artifacts directly from OCI registries (no Git required in air-gap)
+- **Drift detection**: Automatically reconciles if workloads diverge from desired state
+- **Multi-tenancy**: Supports multiple environments with different configurations
+- **Helm + Kustomize**: Deploys both Helm charts and raw manifests
+
 <details open>
 <summary>Diagram: Deployment Extensibility</summary>
 
@@ -3659,12 +3914,17 @@ flowchart TB
 
 This design uses **kro ResourceGraphDefinitions** for deployment orchestration, enabling flexible target systems:
 
-| Target            | How it integrates                                                       |
-|-------------------|-------------------------------------------------------------------------|
-| **FluxCD**        | RGD templates create `OCIRepository` + `HelmRelease` or `Kustomization` |
-| **ArgoCD**        | RGD templates create `Application` CRs                                  |
+| Target | How it integrates | Air-Gap Support |
+|--------|-------------------|-----------------|
+| **FluxCD** (default) | RGD templates create `OCIRepository` + `HelmRelease` or `Kustomization` | Excellent — native OCI, no Git needed |
+| **ArgoCD** | RGD templates create `Application` CRs | Good — supports OCI Helm charts |
+| **Helm CLI** | RGD templates output Helm values for manual install | Manual — requires CLI access |
+| **Raw Manifests** | RGD templates output Kubernetes YAML directly | Manual — kubectl apply |
 
-The **component structure remains unchanged** — only the RGD templates vary per deployment target.
+The **component structure remains unchanged** — only the RGD templates vary per deployment target. This means:
+- Same OCM component works with FluxCD in production and ArgoCD in staging
+- Air-gapped environments can use whichever GitOps tool is approved
+- Migration between tools doesn't require component changes
 
 ---
 
