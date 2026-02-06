@@ -189,7 +189,7 @@ components:
 		"--repository", fmt.Sprintf("ctf::%s", sourceCTF),
 		"--constructor", constructorPath,
 		"--config", cfgPath,
-		"--skip-reference-digest-processing",
+		// "--skip-reference-digest-processing",
 	})
 	r.NoError(addCMD.ExecuteContext(t.Context()), "creation of component version should succeed")
 

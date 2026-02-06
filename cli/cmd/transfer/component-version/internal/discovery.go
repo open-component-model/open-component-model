@@ -303,21 +303,30 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 	}
 	tgd.Transformations = append(tgd.Transformations, getArtifactTransform)
 
-	// TODO(matthiasbruns): how to set referenceName in resource.access.referenceName ?
-	slog.Info(referenceName)
-
 	// Create AddLocalResource transformation
 	addResourceTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
 			Type: ChooseAddLocalResourceType(toSpec),
 			ID:   addResourceID,
 		},
+		// fmt.Sprintf("${%s.output.resource.access}", getResourceID),
 		Spec: &runtime.Unstructured{Data: map[string]any{
 			"repository": AsUnstructured(toSpec).Data,
 			"component":  ref.Component,
 			"version":    ref.Version,
-			"resource":   fmt.Sprintf("${%s.output.resource}", getResourceID),
-			"file":       fmt.Sprintf("${%s.output.file}", getResourceID),
+			"resource": map[string]any{
+				// TODO(matthiasbruns): figure out how to not hate yourself doing this
+				"name":     fmt.Sprintf("${%s.output.resource.name}", getResourceID),
+				"version":  fmt.Sprintf("${%s.output.resource.version}", getResourceID),
+				"type":     fmt.Sprintf("${%s.output.resource.type}", getResourceID),
+				"relation": fmt.Sprintf("${%s.output.resource.relation}", getResourceID),
+				"access": map[string]interface{}{
+					"type":          fmt.Sprintf("${%s.output.resource.access.type}", getResourceID),
+					"referenceName": referenceName,
+				},
+				"digest": fmt.Sprintf("${%s.output.resource.digest}", getResourceID),
+			},
+			"file": fmt.Sprintf("${%s.output.file}", getResourceID),
 		}},
 	}
 	tgd.Transformations = append(tgd.Transformations, addResourceTransform)
