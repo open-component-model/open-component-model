@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/schemas/GetOCIArtifact.schema.json",
   "title": "GetOCIArtifact",
   "type": "object",
-  "description": "GetOCIArtifact is a transformer specification to get an OCI artifact\nfrom a remote OCI registry and buffer it to a file.",
+  "description": "GetOCIArtifact is a transformer specification to get an OCI artifact\nfrom a remote OCI registry and buffer it to a file.\nIt contains the resource descriptor of the artifact to be retrieved and an optional output path.\nIf no output path is given, a temporary file will be created for buffering the artifact.\nSpec: GetOCIArtifactSpec - the input specification of the transformation containing the resource descriptor and output path.\nOutput: GetOCIArtifactOutput - the output specification of the transformation containing the file access specification\nfor the downloaded artifact and the resource descriptor from the component.",
   "properties": {
     "id": {
       "type": "string"
