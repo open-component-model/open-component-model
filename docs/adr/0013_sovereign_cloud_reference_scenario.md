@@ -8,6 +8,86 @@
 **Parent Epic:** [ocm-project#424 — OCM Reference Scenario / Golden Path](https://github.com/open-component-model/ocm-project/issues/424)  
 **Related:** [ocm-project#843 — Document and Describe Reference Scenario in "How To's"](https://github.com/open-component-model/ocm-project/issues/843)
 
+## Table of Contents
+
+<!-- TOC -->
+* [Design: Reference Scenario — Sovereign Cloud Delivery](#design-reference-scenario--sovereign-cloud-delivery)
+  * [Table of Contents](#table-of-contents)
+  * [1. Overview](#1-overview)
+  * [2. Architecture Diagram](#2-architecture-diagram)
+    * [2.1 End-to-End Flow](#21-end-to-end-flow)
+    * [2.2 Controller Reconciliation Detail](#22-controller-reconciliation-detail)
+  * [3. Service Design](#3-service-design)
+    * [3.1 sovereign-notes (Web Service)](#31-sovereign-notes-web-service)
+    * [3.2 PostgreSQL (Database)](#32-postgresql-database)
+  * [4. Component Modeling](#4-component-modeling)
+    * [4.0 Component Structure Overview](#40-component-structure-overview)
+    * [4.1 Component: `acme.org/sovereign/notes`](#41-component-acmeorgsovereignnotes)
+    * [4.2 Component: `acme.org/sovereign/postgres`](#42-component-acmeorgsovereignpostgres)
+    * [4.3 Meta Component: `acme.org/sovereign/product`](#43-meta-component-acmeorgsovereignproduct)
+    * [4.4 Settings File](#44-settings-file)
+  * [5. Signing Workflow](#5-signing-workflow)
+    * [5.1 Key Generation (One-time Setup)](#51-key-generation-one-time-setup)
+    * [5.2 Sign During Build](#52-sign-during-build)
+    * [5.3 Verify Before Transfer](#53-verify-before-transfer)
+    * [5.4 Verify on Cluster](#54-verify-on-cluster)
+  * [6. Configuration via ResourceGraphDefinition](#6-configuration-via-resourcegraphdefinition)
+    * [6.1 Resource with Image Extraction](#61-resource-with-image-extraction)
+    * [6.2 ResourceGraphDefinition for Deployment](#62-resourcegraphdefinition-for-deployment)
+    * [6.3 RGD Instance for Environment Configuration](#63-rgd-instance-for-environment-configuration)
+  * [7. Build & Publish Pipeline](#7-build--publish-pipeline)
+    * [7.1 Taskfile (Local Development)](#71-taskfile-local-development)
+    * [7.2 GitHub Actions Pipeline](#72-github-actions-pipeline)
+  * [8. OCM Controller Deployment Manifests](#8-ocm-controller-deployment-manifests)
+    * [8.1 Repository](#81-repository)
+    * [8.2 Components](#82-components)
+    * [8.3 Resources](#83-resources)
+    * [8.4 Deployers](#84-deployers)
+    * [8.5 RGD Instances (Configuration)](#85-rgd-instances-configuration)
+  * [9. Upgrade Scenario](#9-upgrade-scenario)
+    * [9.0 Upgrade Flow Overview](#90-upgrade-flow-overview)
+    * [9.1 Version Bump](#91-version-bump)
+    * [9.2 Release New Version](#92-release-new-version)
+    * [9.3 Automatic Controller Reconciliation](#93-automatic-controller-reconciliation)
+  * [10. Repository Layout](#10-repository-layout)
+  * [11. Integration Points for Upstream Testing](#11-integration-points-for-upstream-testing)
+    * [Test Commands](#test-commands)
+  * [12. Open Resource Discovery (ORD) Integration](#12-open-resource-discovery-ord-integration)
+    * [12.1 Architecture Overview](#121-architecture-overview)
+    * [12.2 ORD Configuration Endpoint](#122-ord-configuration-endpoint)
+    * [12.3 ORD Document: Describing sovereign-notes](#123-ord-document-describing-sovereign-notes)
+    * [12.4 OCM Component with ORD Resource](#124-ocm-component-with-ord-resource)
+    * [12.5 ORD Aggregator Integration](#125-ord-aggregator-integration)
+    * [12.6 Deployment with ORD Metadata](#126-deployment-with-ord-metadata)
+    * [12.7 sovereign-notes ORD Implementation](#127-sovereign-notes-ord-implementation)
+    * [12.8 OpenAPI Specification](#128-openapi-specification)
+    * [12.9 Integration with Service Catalogs](#129-integration-with-service-catalogs)
+  * [13. OpenMCP Integration (Multi-Control-Plane Deployment)](#13-openmcp-integration-multi-control-plane-deployment)
+    * [13.1 Sovereign Delivery Model: Global vs Local Control Planes](#131-sovereign-delivery-model-global-vs-local-control-planes)
+    * [13.2 Architecture Overview](#132-architecture-overview)
+    * [13.3 OpenMCP Resource Hierarchy](#133-openmcp-resource-hierarchy)
+    * [13.4 Global Control Plane Configuration](#134-global-control-plane-configuration)
+    * [13.5 Local Control Plane Configuration (Sovereign/Air-Gapped)](#135-local-control-plane-configuration-sovereignair-gapped)
+    * [13.6 Global Control Plane: Component Management](#136-global-control-plane-component-management)
+    * [13.7 Air-Gap Transfer: Global to Local](#137-air-gap-transfer-global-to-local)
+    * [13.8 Local Control Plane: Deployment](#138-local-control-plane-deployment)
+    * [13.9 Environment-Specific RGD Instances](#139-environment-specific-rgd-instances)
+    * [13.10 Global-to-Local Deployment Flow](#1310-global-to-local-deployment-flow)
+    * [13.11 Cross-MCP Service Discovery (via ORD)](#1311-cross-mcp-service-discovery-via-ord)
+    * [13.12 Benefits of Global/Local Control Plane Architecture](#1312-benefits-of-globallocal-control-plane-architecture)
+    * [13.13 Summary: MCP Mapping to Sovereign Delivery](#1313-summary-mcp-mapping-to-sovereign-delivery)
+  * [14. Platform Mesh Integration (Service Ordering API)](#14-platform-mesh-integration-service-ordering-api)
+    * [14.1 Architecture Overview](#141-architecture-overview)
+    * [14.2 Service Provider: Exporting sovereign-notes](#142-service-provider-exporting-sovereign-notes)
+    * [14.3 Service Consumer: Ordering sovereign-notes](#143-service-consumer-ordering-sovereign-notes)
+    * [14.4 Dependency Ordering](#144-dependency-ordering)
+    * [14.5 Integration with OCM Controller](#145-integration-with-ocm-controller)
+    * [14.6 Multi-Provider Scenarios](#146-multi-provider-scenarios)
+    * [14.7 End-to-End Flow: Platform Mesh → OpenMCP → OCM](#147-end-to-end-flow-platform-mesh--openmcp--ocm)
+  * [15. Deployment Extensibility](#15-deployment-extensibility)
+  * [16. Key Design Decisions](#16-key-design-decisions)
+<!-- TOC -->
+
 ---
 
 ## 1. Overview
@@ -33,6 +113,9 @@ Both are packaged as OCM components, signed, transferred through an air-gap via 
 
 ### 2.1 End-to-End Flow
 
+<details open>
+<summary>Diagram: End-to-End Flow</summary>
+
 ```mermaid
 flowchart TB
     subgraph connected["Connected Environment"]
@@ -41,26 +124,26 @@ flowchart TB
             postgres[postgres]
             product[sovereign-product]
         end
-        
+
         notes --> build
         postgres --> build
         product --> build
-        
+
         build[ocm add cv + sign]
         build --> push[ocm transfer ctf]
         push --> ghcr[(ghcr.io)]
     end
-    
+
     ghcr -->|verify + copy-resources| ctf
-    
+
     ctf[[CTF Archive]]
-    
+
     ctf -->|Air-Gap| airgap
-    
+
     subgraph airgap["Air-Gapped Environment"]
         transfer[ocm transfer ctf]
         transfer --> registry[(Local Registry)]
-        
+
         subgraph kind["kind cluster"]
             controller[OCM Controller]
             controller --> comp[Component]
@@ -71,14 +154,19 @@ flowchart TB
                 notes_deploy[sovereign-notes] -->|DATABASE_URL| pg_sts[PostgreSQL]
             end
         end
-        
+
         registry --> controller
     end
-    
+
     deployer -.-> workloads
 ```
 
+</details>
+
 ### 2.2 Controller Reconciliation Detail
+
+<details open>
+<summary>Diagram: Controller Reconciliation</summary>
 
 ```mermaid
 flowchart LR
@@ -93,6 +181,8 @@ flowchart LR
     Instance -->|values| HelmRelease
     HelmRelease -->|apply| K8s[Kubernetes]
 ```
+
+</details>
 
 ---
 
@@ -114,6 +204,9 @@ A minimal Go HTTP service (~100 LOC) that provides a notes API backed by Postgre
 **Configuration (via environment):**
 - `DATABASE_URL` — PostgreSQL connection string
 - `PORT` — HTTP listen port (default 8080)
+
+<details>
+<summary><code>cmd/sovereign-notes/main.go</code> (sketch)</summary>
 
 ```go
 // cmd/sovereign-notes/main.go (sketch)
@@ -143,7 +236,7 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    
+
     // Auto-create table
     db.Exec(`CREATE TABLE IF NOT EXISTS notes (
         id SERIAL PRIMARY KEY,
@@ -173,6 +266,8 @@ func main() {
 }
 ```
 
+</details>
+
 **Why a custom app:**
 - Genuine PostgreSQL dependency (not contrived)
 - Full control over versioning and behavior
@@ -194,6 +289,9 @@ Uses the **official `postgres:16` image** (not Bitnami). Deployed as a StatefulS
 ## 4. Component Modeling
 
 ### 4.0 Component Structure Overview
+
+<details open>
+<summary>Diagram: Component Structure</summary>
 
 ```mermaid
 flowchart TB
@@ -222,7 +320,12 @@ flowchart TB
     ref_postgres --> postgres
 ```
 
+</details>
+
 ### 4.1 Component: `acme.org/sovereign/notes`
+
+<details>
+<summary><code>components/notes/component-constructor.yaml</code></summary>
 
 ```yaml
 # components/notes/component-constructor.yaml
@@ -259,7 +362,13 @@ components:
           mediaType: application/vnd.cncf.kro.resourcegraphdefinition.v1+yaml
 ```
 
+</details>
+
 **ResourceGraphDefinition (`deploy/rgd.yaml`):**
+
+<details>
+<summary><code>deploy/rgd.yaml</code> — Notes RGD</summary>
+
 ```yaml
 # This RGD defines the schema and templates for deploying notes
 apiVersion: kro.run/v1alpha1
@@ -311,7 +420,12 @@ spec:
             databaseSecretRef: ${schema.spec.databaseSecretRef}
 ```
 
+</details>
+
 ### 4.2 Component: `acme.org/sovereign/postgres`
+
+<details>
+<summary><code>components/postgres/component-constructor.yaml</code></summary>
 
 ```yaml
 # components/postgres/component-constructor.yaml
@@ -347,7 +461,13 @@ components:
           mediaType: application/vnd.cncf.kro.resourcegraphdefinition.v1+yaml
 ```
 
+</details>
+
 **ResourceGraphDefinition (`deploy/rgd.yaml`):**
+
+<details>
+<summary><code>deploy/rgd.yaml</code> — Postgres RGD</summary>
+
 ```yaml
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
@@ -400,7 +520,12 @@ spec:
               storageClass: ${schema.spec.storage.storageClass}
 ```
 
+</details>
+
 ### 4.3 Meta Component: `acme.org/sovereign/product`
+
+<details>
+<summary><code>components/product/component-constructor.yaml</code></summary>
 
 ```yaml
 # components/product/component-constructor.yaml
@@ -441,7 +566,13 @@ components:
     signatures: ...
 ```
 
+</details>
+
 **Base manifests (`deploy/base.yaml`):**
+
+<details>
+<summary><code>deploy/base.yaml</code> — Namespace and Secrets</summary>
+
 ```yaml
 # namespace.yaml
 apiVersion: v1
@@ -463,7 +594,13 @@ stringData:
   DATABASE_URL: "postgres://notes:${DB_PASSWORD}@postgres.sovereign-product.svc:5432/notes?sslmode=disable"
 ```
 
+</details>
+
 **Product RGD (`deploy/rgd.yaml`):**
+
+<details>
+<summary><code>deploy/rgd.yaml</code> — Product Orchestration RGD</summary>
+
 ```yaml
 # Orchestrates deployment order: namespace -> postgres -> notes
 apiVersion: kro.run/v1alpha1
@@ -516,7 +653,12 @@ spec:
           replicas: ${schema.spec.notes.replicas}
 ```
 
+</details>
+
 ### 4.4 Settings File
+
+<details>
+<summary><code>settings.yaml</code></summary>
 
 ```yaml
 # settings.yaml
@@ -524,11 +666,16 @@ VERSION: 1.0.0
 POSTGRES_VERSION: "16-alpine"
 ```
 
+</details>
+
 Note: Environment-specific configuration (replicas, resources, storage) is now defined via RGD instance specs rather than component resources. Database credentials should be managed via Kubernetes secrets (e.g., ExternalSecrets, sealed-secrets) rather than embedded in components.
 
 ---
 
 ## 5. Signing Workflow
+
+<details open>
+<summary>Diagram: Signing Workflow</summary>
 
 ```mermaid
 flowchart LR
@@ -536,14 +683,14 @@ flowchart LR
         ctf[CTF] --> sign[ocm sign]
         sign --> signed[Signed CTF]
     end
-    
+
     subgraph transfer[Transfer]
         signed --> push[ocm transfer ctf]
         push --> ghcr[(ghcr.io)]
         ghcr --> pull[ocm transfer cv --verify]
         pull --> verified[Verified CTF]
     end
-    
+
     subgraph deploy[Deploy]
         verified --> load[ocm transfer ctf]
         load --> local[(localhost:5001)]
@@ -551,13 +698,18 @@ flowchart LR
         controller --> secret[K8s Secret]
         secret -->|verified| reconcile[Reconcile]
     end
-    
+
     privkey[Private Key] -.-> sign
     pubkey[Public Key] -.-> pull
     pubkey -.-> secret
 ```
 
+</details>
+
 ### 5.1 Key Generation (One-time Setup)
+
+<details>
+<summary>Key generation commands</summary>
 
 ```bash
 # Generate RSA key pair for signing
@@ -567,6 +719,11 @@ openssl rsa -pubout -in keys/acme-private.pem -out keys/acme-public.pem
 # Store private key securely (CI secret, HSM, etc.)
 # Public key is bundled in the product component
 ```
+
+</details>
+
+<details>
+<summary>Credential config for signers</summary>
 
 ```yaml
 ## Example Credential Config for signers
@@ -584,6 +741,11 @@ configurations:
         private_key_pem: <PEM>
 ```
 
+</details>
+
+<details>
+<summary>Credential config for verifiers</summary>
+
 ```yaml
 ## Example Credential Config for verifiers
 type: generic.config.ocm.software/v1
@@ -600,16 +762,26 @@ configurations:
         public_key_pem: <PEM>
 ```
 
+</details>
+
 ### 5.2 Sign During Build
+
+<details>
+<summary>Sign command</summary>
 
 ```bash
 # After building CTF, sign all component versions
 ocm sign componentversion
 ```
 
+</details>
+
 ### 5.3 Verify Before Transfer
 
 _NOTE: We can currently only verify signatures for cvs already transferred or in archives. We need a transformer here to bridge this later._
+
+<details>
+<summary>Verify and transfer commands</summary>
 
 ```bash
 # When transferring to air-gap, verify signatures
@@ -621,7 +793,12 @@ ocm transfer cv \
   ./transport-archive
 ```
 
+</details>
+
 ### 5.4 Verify on Cluster
+
+<details>
+<summary><code>deploy/component.yaml</code> — Component with verification</summary>
 
 ```yaml
 # deploy/component.yaml
@@ -653,9 +830,14 @@ data:
     LS0tLS1CRUdJTi...
 ```
 
+</details>
+
 ---
 
 ## 6. Configuration via ResourceGraphDefinition
+
+<details open>
+<summary>Diagram: Configuration Flow</summary>
 
 ```mermaid
 flowchart TB
@@ -693,6 +875,8 @@ flowchart TB
     helm_rel -->|apply| k8s[Kubernetes]
 ```
 
+</details>
+
 The key insight is that **configuration flows through ResourceGraphDefinition (RGD) schemas**, not separate config resources. This enables:
 - Strongly-typed configuration via RGD schema definitions
 - Image localization via `additionalStatusFields` CEL expressions
@@ -700,6 +884,9 @@ The key insight is that **configuration flows through ResourceGraphDefinition (R
 - Air-gap friendly (images referenced through Resource status)
 
 ### 6.1 Resource with Image Extraction
+
+<details>
+<summary><code>deploy/resource-notes-image.yaml</code></summary>
 
 ```yaml
 # deploy/resource-notes-image.yaml
@@ -724,9 +911,14 @@ spec:
     tag: resource.access.imageReference.toOCI().tag
 ```
 
+</details>
+
 ### 6.2 ResourceGraphDefinition for Deployment
 
 The RGD defines a custom schema and templates for FluxCD resources:
+
+<details>
+<summary><code>components/notes/deploy/rgd.yaml</code> — Full RGD</summary>
 
 ```yaml
 # components/notes/deploy/rgd.yaml
@@ -796,7 +988,12 @@ spec:
                 cpu: ${schema.spec.resources.limits.cpu}
 ```
 
+</details>
+
 ### 6.3 RGD Instance for Environment Configuration
+
+<details>
+<summary><code>deploy/notes-instance.yaml</code></summary>
 
 ```yaml
 # deploy/notes-instance.yaml
@@ -818,11 +1015,16 @@ spec:
       cpu: "500m"
 ```
 
+</details>
+
 ---
 
 ## 7. Build & Publish Pipeline
 
 ### 7.1 Taskfile (Local Development)
+
+<details>
+<summary><code>Taskfile.yml</code></summary>
 
 ```yaml
 # Taskfile.yml
@@ -838,51 +1040,51 @@ tasks:
   build:app:
     dir: components/notes
     cmds:
-      - docker buildx build 
-          --platform linux/amd64,linux/arm64 
-          -t acme.org/sovereign/notes:{{.VERSION}} 
+      - docker buildx build
+          --platform linux/amd64,linux/arm64
+          -t acme.org/sovereign/notes:{{.VERSION}}
           --load .
 
   # Build all components into CTF
   build:ctf:
     cmds:
       - rm -rf {{.CTF}}
-      - ocm add cv --create --file {{.CTF}} 
-          --settings settings.yaml 
+      - ocm add cv --create --file {{.CTF}}
+          --settings settings.yaml
           components/notes/component-constructor.yaml
-      - ocm add cv --file {{.CTF}} 
-          --settings settings.yaml 
+      - ocm add cv --file {{.CTF}}
+          --settings settings.yaml
           components/postgres/component-constructor.yaml
-      - ocm add cv --file {{.CTF}} 
-          --settings settings.yaml 
+      - ocm add cv --file {{.CTF}}
+          --settings settings.yaml
           components/product/component-constructor.yaml
 
   # Sign all components
   sign:
     deps: [build:ctf]
     cmds:
-      - ocm sign componentversion 
-          --signature acme-signature 
-          --private-key keys/acme-private.pem 
-          --recursive 
+      - ocm sign componentversion
+          --signature acme-signature
+          --private-key keys/acme-private.pem
+          --recursive
           {{.CTF}}//acme.org/sovereign/product:{{.VERSION}}
 
   # Verify signatures
   verify:
     cmds:
-      - ocm verify componentversion 
-          --signature acme-signature 
-          --public-key keys/acme-public.pem 
+      - ocm verify componentversion
+          --signature acme-signature
+          --public-key keys/acme-public.pem
           {{.CTF}}//acme.org/sovereign/product:{{.VERSION}}
 
   # Push to registry
   push:
     deps: [sign]
     cmds:
-      - ocm transfer ctf 
-          --copy-resources 
-          --enforce 
-          --overwrite 
+      - ocm transfer ctf
+          --copy-resources
+          --enforce
+          --overwrite
           {{.CTF}} {{.OCM_REPO}}
 
   # Full build + sign + push
@@ -892,11 +1094,11 @@ tasks:
   # Transfer to air-gap archive (with verification)
   transfer:airgap:
     cmds:
-      - ocm transfer cv 
-          --recursive 
-          --copy-resources 
-          --verify acme-signature=keys/acme-public.pem 
-          {{.OCM_REPO}}//acme.org/sovereign/product:{{.VERSION}} 
+      - ocm transfer cv
+          --recursive
+          --copy-resources
+          --verify acme-signature=keys/acme-public.pem
+          {{.OCM_REPO}}//acme.org/sovereign/product:{{.VERSION}}
           ./airgap-archive
 
   # Set up local kind cluster
@@ -907,11 +1109,11 @@ tasks:
   # Transfer archive to local registry
   cluster:load:
     cmds:
-      - ocm transfer ctf 
-          --copy-resources 
-          --enforce 
-          --overwrite 
-          ./airgap-archive 
+      - ocm transfer ctf
+          --copy-resources
+          --enforce
+          --overwrite
+          ./airgap-archive
           localhost:5001
 
   # Deploy to cluster
@@ -941,7 +1143,12 @@ tasks:
       - echo "✅ Deployment verified"
 ```
 
+</details>
+
 ### 7.2 GitHub Actions Pipeline
+
+<details>
+<summary><code>.github/workflows/release-reference-scenario.yaml</code></summary>
 
 ```yaml
 # .github/workflows/release-reference-scenario.yaml
@@ -1097,11 +1304,16 @@ jobs:
           curl -f http://localhost:8080/notes
 ```
 
+</details>
+
 ---
 
 ## 8. OCM Controller Deployment Manifests
 
 ### 8.1 Repository
+
+<details>
+<summary><code>deploy/repository.yaml</code></summary>
 
 ```yaml
 # deploy/repository.yaml
@@ -1120,7 +1332,12 @@ spec:
         name: registry-credentials
 ```
 
+</details>
+
 ### 8.2 Components
+
+<details>
+<summary><code>deploy/components.yaml</code></summary>
 
 ```yaml
 # deploy/components.yaml
@@ -1169,7 +1386,12 @@ spec:
   interval: 10m
 ```
 
+</details>
+
 ### 8.3 Resources
+
+<details>
+<summary><code>deploy/resources.yaml</code></summary>
 
 ```yaml
 # deploy/resources.yaml
@@ -1287,7 +1509,12 @@ spec:
         name: rgd
 ```
 
+</details>
+
 ### 8.4 Deployers
+
+<details>
+<summary><code>deploy/deployers.yaml</code></summary>
 
 ```yaml
 # deploy/deployers.yaml
@@ -1313,7 +1540,12 @@ spec:
     namespace: ocm-system
 ```
 
+</details>
+
 ### 8.5 RGD Instances (Configuration)
+
+<details>
+<summary><code>deploy/instances.yaml</code></summary>
 
 ```yaml
 # deploy/instances.yaml
@@ -1359,11 +1591,16 @@ spec:
   databaseSecretRef: db-credentials
 ```
 
+</details>
+
 ---
 
 ## 9. Upgrade Scenario
 
 ### 9.0 Upgrade Flow Overview
+
+<details open>
+<summary>Diagram: Upgrade Sequence</summary>
 
 ```mermaid
 sequenceDiagram
@@ -1377,21 +1614,26 @@ sequenceDiagram
     participant K8s as Kubernetes
 
     Note over Dev,K8s: v1.0.0 already deployed
-    
+
     Dev->>CI: Push v1.1.0 tag
     CI->>CI: Build + Sign
     CI->>GHCR: Transfer CTF
-    
+
     Note over GHCR,CTF: Air-gap transfer
     GHCR->>CTF: Transfer with verify
     CTF-->>Airgap: Physical transfer
-    
+
     Note over Controller,K8s: Auto reconciliation
     Controller->>Airgap: Detect v1.1.0
     Controller->>Controller: Verify signature
     Controller->>Flux: Trigger reconcile
     Flux->>K8s: Rolling update
 ```
+
+</details>
+
+<details open>
+<summary>Diagram: Upgrade Flow</summary>
 
 ```mermaid
 flowchart LR
@@ -1405,7 +1647,12 @@ flowchart LR
     reconcile --> v2[v1.1.0 deployed]
 ```
 
+</details>
+
 ### 9.1 Version Bump
+
+<details>
+<summary><code>settings.yaml</code> (v1.1.0)</summary>
 
 ```yaml
 # settings.yaml (v1.1.0)
@@ -1414,7 +1661,13 @@ POSTGRES_VERSION: "16-alpine"  # unchanged
 DB_PASSWORD: "changeme-in-production"
 ```
 
+</details>
+
 With code changes:
+
+<details>
+<summary>New endpoint in sovereign-notes</summary>
+
 ```go
 // Add a new endpoint in sovereign-notes
 http.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
@@ -1422,7 +1675,12 @@ http.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
 })
 ```
 
+</details>
+
 ### 9.2 Release New Version
+
+<details>
+<summary>Release commands</summary>
 
 ```bash
 # Build, sign, push v1.1.0
@@ -1434,6 +1692,8 @@ VERSION=1.1.0 task transfer:airgap
 # Load into local registry
 task cluster:load
 ```
+
+</details>
 
 ### 9.3 Automatic Controller Reconciliation
 
@@ -1448,6 +1708,10 @@ The `Component` CR has `semver: ">=1.0.0"`, so when `1.1.0` appears in the regis
 7. Kubernetes performs rolling update of Deployments
 
 **Verification:**
+
+<details>
+<summary>Verification commands</summary>
+
 ```bash
 # Watch version transition
 kubectl -n ocm-system get component sovereign-product -w
@@ -1461,9 +1725,14 @@ curl http://localhost:8080/version
 # {"version":"1.1.0"}
 ```
 
+</details>
+
 ---
 
 ## 10. Repository Layout
+
+<details>
+<summary>Repository structure</summary>
 
 ```
 reference-scenario/
@@ -1533,6 +1802,8 @@ reference-scenario/
         └── smoke_test.sh
 ```
 
+</details>
+
 ---
 
 ## 11. Integration Points for Upstream Testing
@@ -1555,6 +1826,9 @@ reference-scenario/
 
 ### Test Commands
 
+<details>
+<summary>Test commands</summary>
+
 ```bash
 # Run unit tests (fast, no cluster needed)
 task test
@@ -1566,6 +1840,8 @@ task test/integration
 task demo
 ```
 
+</details>
+
 ---
 
 ## 12. Open Resource Discovery (ORD) Integration
@@ -1575,6 +1851,9 @@ task demo
 **Reference Implementation:** [ORD Reference Application](https://ord-reference-application.cfapps.sap.hana.ondemand.com/)
 
 ### 12.1 Architecture Overview
+
+<details open>
+<summary>Diagram: ORD Architecture</summary>
 
 ```mermaid
 flowchart TB
@@ -1608,9 +1887,14 @@ flowchart TB
     deploy --> k8s[Kubernetes Workloads]
 ```
 
+</details>
+
 ### 12.2 ORD Configuration Endpoint
 
 The sovereign-notes service exposes an ORD configuration at the well-known endpoint:
+
+<details>
+<summary>ORD configuration response</summary>
 
 ```json
 // GET /.well-known/open-resource-discovery
@@ -1631,9 +1915,14 @@ The sovereign-notes service exposes an ORD configuration at the well-known endpo
 }
 ```
 
+</details>
+
 ### 12.3 ORD Document: Describing sovereign-notes
 
 The ORD document describes the service's APIs, events, and metadata:
+
+<details>
+<summary>ORD document</summary>
 
 ```json
 // GET /open-resource-discovery/v1/documents/1
@@ -1761,9 +2050,14 @@ The ORD document describes the service's APIs, events, and metadata:
 }
 ```
 
+</details>
+
 ### 12.4 OCM Component with ORD Resource
 
 The ORD document is bundled as a resource in the OCM component:
+
+<details>
+<summary><code>component-constructor.yaml</code> — ORD resource</summary>
 
 ```yaml
 # components/notes/component-constructor.yaml (extended)
@@ -1790,9 +2084,14 @@ components:
             value: "system-version"
 ```
 
+</details>
+
 ### 12.5 ORD Aggregator Integration
 
 An ORD aggregator collects metadata from multiple providers:
+
+<details open>
+<summary>Diagram: ORD Aggregator</summary>
 
 ```mermaid
 flowchart LR
@@ -1825,9 +2124,14 @@ flowchart LR
     api --> ide
 ```
 
+</details>
+
 ### 12.6 Deployment with ORD Metadata
 
 The OCM controller can expose ORD metadata from deployed components:
+
+<details>
+<summary><code>deploy/ord-service.yaml</code></summary>
 
 ```yaml
 # deploy/ord-service.yaml
@@ -1850,9 +2154,14 @@ spec:
       targetPort: 8080
 ```
 
+</details>
+
 ### 12.7 sovereign-notes ORD Implementation
 
 Add ORD endpoints to the sovereign-notes application:
+
+<details>
+<summary><code>cmd/sovereign-notes/ord.go</code></summary>
 
 ```go
 // cmd/sovereign-notes/ord.go
@@ -1898,7 +2207,12 @@ func registerORDEndpoints() {
 }
 ```
 
+</details>
+
 ### 12.8 OpenAPI Specification
+
+<details>
+<summary><code>components/notes/deploy/openapi/spec.yaml</code></summary>
 
 ```yaml
 # components/notes/deploy/openapi/spec.yaml
@@ -2026,6 +2340,8 @@ components:
         - content
 ```
 
+</details>
+
 ### 12.9 Integration with Service Catalogs
 
 ORD enables integration with various service discovery systems:
@@ -2041,7 +2357,1050 @@ This enables the sovereign-notes service to be discovered and documented automat
 
 ---
 
-## 13. Deployment Extensibility
+## 13. OpenMCP Integration (Multi-Control-Plane Deployment)
+
+[OpenMCP (Open Managed Control Plane)](https://openmcp-project.github.io/docs/) is part of the [ApeiroRA](https://apeirora.eu/) ecosystem that enables Infrastructure- and Configuration-as-Data capabilities as a Service. This integration demonstrates deploying sovereign-notes across multiple managed control planes for multi-tenant or multi-environment scenarios.
+
+**See also:** [Section 14: Platform Mesh Integration](#14-platform-mesh-integration-service-ordering-api) for service ordering and discovery capabilities that build on top of OpenMCP control planes.
+
+### 13.1 Sovereign Delivery Model: Global vs Local Control Planes
+
+In sovereign cloud scenarios, control planes map to two deployment patterns:
+
+| Control Plane Type | Location | Connectivity | Purpose |
+|--------------------|----------|--------------|---------|
+| **Global Control Plane** | Vendor/Central Data Center | Connected | Component management, signing, orchestration |
+| **Local Control Plane** | Sovereign Environment | Air-gapped | Isolated workload execution, local state |
+
+<details open>
+<summary>Diagram: Global vs Local Control Planes</summary>
+
+```mermaid
+flowchart TB
+    subgraph vendor["Vendor Environment (Connected)"]
+        subgraph global_mcp["Global Control Plane (MCP)"]
+            ocm_global[OCM Controller]
+            comp_mgmt[Component Management]
+            signing[Signing Service]
+            orch[Deployment Orchestration]
+        end
+        registry[(OCM Registry)]
+    end
+
+    subgraph transfer["Air-Gap Transfer"]
+        ctf[(CTF Archive)]
+    end
+
+    subgraph sovereign1["Sovereign Cloud A (Air-Gapped)"]
+        subgraph local_mcp1["Local Control Plane (MCP)"]
+            ocm_local1[OCM Controller]
+            flux1[FluxCD]
+            kro1[kro]
+        end
+        local_reg1[(Local Registry)]
+        workloads1[Workloads]
+    end
+
+    subgraph sovereign2["Sovereign Cloud B (Air-Gapped)"]
+        subgraph local_mcp2["Local Control Plane (MCP)"]
+            ocm_local2[OCM Controller]
+            flux2[FluxCD]
+            kro2[kro]
+        end
+        local_reg2[(Local Registry)]
+        workloads2[Workloads]
+    end
+
+    ocm_global --> registry
+    registry --> ctf
+    ctf --> local_reg1
+    ctf --> local_reg2
+    local_reg1 --> ocm_local1
+    local_reg2 --> ocm_local2
+    ocm_local1 --> flux1 --> workloads1
+    ocm_local2 --> flux2 --> workloads2
+```
+
+</details>
+
+**Global Control Plane Responsibilities:**
+- Maintains authoritative component versions and signatures
+- Orchestrates component builds and releases
+- Prepares CTF archives for air-gap transfer
+- Provides deployment templates (RGDs) for sovereign environments
+
+**Local Control Plane Responsibilities:**
+- Operates fully disconnected from global infrastructure
+- Verifies component signatures using pre-distributed public keys
+- Executes deployments using local registry mirrors
+- Maintains local state and handles upgrades autonomously
+
+### 13.2 Architecture Overview
+
+<details open>
+<summary>Diagram: OpenMCP Architecture</summary>
+
+```mermaid
+flowchart TB
+    subgraph openmcp["OpenMCP Platform"]
+        subgraph project["Project: Acme"]
+            subgraph ws_global["Workspace: Global (Connected)"]
+                mcp_global[ManagedControlPlane: global]
+            end
+            subgraph ws_sovereign_a["Workspace: Sovereign-A"]
+                mcp_sov_a[ManagedControlPlane: sovereign-a]
+            end
+            subgraph ws_sovereign_b["Workspace: Sovereign-B"]
+                mcp_sov_b[ManagedControlPlane: sovereign-b]
+            end
+        end
+    end
+
+    subgraph ocm["OCM Layer (Global)"]
+        repo[Repository]
+        comp[Component]
+        repo --> comp
+    end
+
+    subgraph transfer["Air-Gap Transfer"]
+        ctf_a[(CTF Archive A)]
+        ctf_b[(CTF Archive B)]
+    end
+
+    comp --> ctf_a
+    comp --> ctf_b
+    ctf_a --> mcp_sov_a
+    ctf_b --> mcp_sov_b
+
+    mcp_global --> |orchestrates| ctf_a
+    mcp_global --> |orchestrates| ctf_b
+
+    mcp_sov_a --> workload_a[sovereign-notes A]
+    mcp_sov_b --> workload_b[sovereign-notes B]
+```
+
+</details>
+
+### 13.3 OpenMCP Resource Hierarchy
+
+OpenMCP organizes resources in a hierarchy that maps to the sovereign delivery model:
+
+<details>
+<summary>OpenMCP Project and Workspace definitions</summary>
+
+```yaml
+# Project represents an organization or team
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: Project
+metadata:
+  name: acme
+spec:
+  displayName: "Acme Corporation"
+  description: "Sovereign cloud deployment project"
+---
+# Global Workspace - connected environment for component management
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: Workspace
+metadata:
+  name: global
+  namespace: project-acme
+spec:
+  project: acme
+  displayName: "Global Control Plane (Connected)"
+  labels:
+    delivery.ocm.software/connectivity: connected
+---
+# Sovereign Workspace A - air-gapped environment
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: Workspace
+metadata:
+  name: sovereign-a
+  namespace: project-acme
+spec:
+  project: acme
+  displayName: "Sovereign Cloud A (Air-Gapped)"
+  labels:
+    delivery.ocm.software/connectivity: airgapped
+    delivery.ocm.software/region: eu-central
+---
+# Sovereign Workspace B - air-gapped environment
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: Workspace
+metadata:
+  name: sovereign-b
+  namespace: project-acme
+spec:
+  project: acme
+  displayName: "Sovereign Cloud B (Air-Gapped)"
+  labels:
+    delivery.ocm.software/connectivity: airgapped
+    delivery.ocm.software/region: eu-west
+```
+
+</details>
+
+### 13.4 Global Control Plane Configuration
+
+The **Global Control Plane** runs in a connected environment and manages component lifecycle:
+
+<details>
+<summary><code>openmcp/mcp-global.yaml</code></summary>
+
+```yaml
+# openmcp/mcp-global.yaml
+apiVersion: core.openmcp.cloud/v2alpha1
+kind: ManagedControlPlaneV2
+metadata:
+  name: global-control-plane
+  namespace: workspace-global
+  labels:
+    delivery.ocm.software/role: global
+spec:
+  displayName: "Global Control Plane"
+
+  authentication:
+    oidc:
+      issuerURL: https://auth.acme.org
+      clientID: global-control-plane
+    serviceAccounts:
+      - name: ocm-controller
+        namespace: ocm-system
+
+  authorization:
+    clusterRoleBindings:
+      - roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: cluster-admin
+        subjects:
+          - kind: Group
+            name: acme-platform-team
+            apiGroup: rbac.authorization.k8s.io
+
+  # Global control plane components
+  components:
+    flux:
+      enabled: true
+    kro:
+      enabled: true
+    # OCM controller for component management
+    ocmController:
+      enabled: true
+      config:
+        # Connected to external OCM registry
+        registryUrl: ghcr.io/open-component-model/reference-scenario
+        signing:
+          enabled: true
+          keyRef:
+            secretName: acme-signing-key
+```
+
+</details>
+
+### 13.5 Local Control Plane Configuration (Sovereign/Air-Gapped)
+
+**Local Control Planes** run within each sovereign environment, fully isolated:
+
+<details>
+<summary><code>openmcp/mcp-sovereign-a.yaml</code> and <code>openmcp/mcp-sovereign-b.yaml</code></summary>
+
+```yaml
+# openmcp/mcp-sovereign-a.yaml
+apiVersion: core.openmcp.cloud/v2alpha1
+kind: ManagedControlPlaneV2
+metadata:
+  name: sovereign-a-control-plane
+  namespace: workspace-sovereign-a
+  labels:
+    delivery.ocm.software/role: local
+    delivery.ocm.software/region: eu-central
+spec:
+  displayName: "Sovereign Cloud A - Local Control Plane"
+
+  # Local authentication (sovereign IdP)
+  authentication:
+    oidc:
+      issuerURL: https://auth.sovereign-a.local
+      clientID: sovereign-a-control-plane
+    serviceAccounts:
+      - name: ocm-controller
+        namespace: ocm-system
+
+  authorization:
+    clusterRoleBindings:
+      - roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: cluster-admin
+        subjects:
+          - kind: Group
+            name: sovereign-a-admins
+            apiGroup: rbac.authorization.k8s.io
+
+  # Local control plane components
+  components:
+    flux:
+      enabled: true
+    kro:
+      enabled: true
+    # OCM controller configured for air-gapped operation
+    ocmController:
+      enabled: true
+      config:
+        # Local registry mirror (air-gapped)
+        registryUrl: registry.sovereign-a.local:5000
+        # Signature verification only (no signing)
+        verify:
+          enabled: true
+          publicKeyRef:
+            secretName: acme-public-key
+
+  # Production-grade settings for sovereign environment
+  highAvailability:
+    enabled: true
+    replicas: 3
+
+  # Network isolation
+  networking:
+    isolated: true
+    allowedEgress: []  # No external network access
+---
+# openmcp/mcp-sovereign-b.yaml
+apiVersion: core.openmcp.cloud/v2alpha1
+kind: ManagedControlPlaneV2
+metadata:
+  name: sovereign-b-control-plane
+  namespace: workspace-sovereign-b
+  labels:
+    delivery.ocm.software/role: local
+    delivery.ocm.software/region: eu-west
+spec:
+  displayName: "Sovereign Cloud B - Local Control Plane"
+
+  authentication:
+    oidc:
+      issuerURL: https://auth.sovereign-b.local
+      clientID: sovereign-b-control-plane
+    serviceAccounts:
+      - name: ocm-controller
+        namespace: ocm-system
+
+  authorization:
+    clusterRoleBindings:
+      - roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: cluster-admin
+        subjects:
+          - kind: Group
+            name: sovereign-b-admins
+            apiGroup: rbac.authorization.k8s.io
+
+  components:
+    flux:
+      enabled: true
+    kro:
+      enabled: true
+    ocmController:
+      enabled: true
+      config:
+        registryUrl: registry.sovereign-b.local:5000
+        verify:
+          enabled: true
+          publicKeyRef:
+            secretName: acme-public-key
+
+  highAvailability:
+    enabled: true
+    replicas: 3
+
+  networking:
+    isolated: true
+    allowedEgress: []
+```
+
+</details>
+
+### 13.6 Global Control Plane: Component Management
+
+The **Global Control Plane** manages component lifecycle in the connected environment:
+
+<details>
+<summary><code>deploy/global/repository.yaml</code> and <code>deploy/global/component.yaml</code></summary>
+
+```yaml
+# deploy/global/repository.yaml - Global MCP
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: acme-components
+  namespace: ocm-system
+spec:
+  repositorySpec:
+    baseUrl: ghcr.io/open-component-model/reference-scenario
+    type: OCIRegistry
+  interval: 10m
+---
+# deploy/global/component.yaml - Global MCP
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: sovereign-product
+  namespace: ocm-system
+spec:
+  component: acme.org/sovereign/product
+  repositoryRef:
+    name: acme-components
+  semver: ">=1.0.0"
+  interval: 10m
+  # Sign components for distribution
+  sign:
+    - signature: acme-signature
+      secretRef:
+        name: acme-signing-key
+```
+
+</details>
+
+### 13.7 Air-Gap Transfer: Global to Local
+
+Components are transferred from Global to Local control planes via CTF archives:
+
+<details>
+<summary>Air-gap transfer Job</summary>
+
+```yaml
+# Transfer job executed on Global Control Plane
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: transfer-to-sovereign-a
+  namespace: ocm-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: ocm-transfer
+          image: ghcr.io/open-component-model/ocm-cli:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Export component to CTF archive
+              ocm transfer cv \
+                --recursive \
+                --copy-resources \
+                --verify acme-signature=/keys/acme-public.pem \
+                ghcr.io/open-component-model/reference-scenario//acme.org/sovereign/product:1.0.0 \
+                /export/sovereign-a-ctf
+
+              # Archive is then physically transferred to sovereign environment
+          volumeMounts:
+            - name: export
+              mountPath: /export
+            - name: keys
+              mountPath: /keys
+              readOnly: true
+      volumes:
+        - name: export
+          persistentVolumeClaim:
+            claimName: ctf-export-pvc
+        - name: keys
+          secret:
+            secretName: acme-public-key
+      restartPolicy: OnFailure
+```
+
+</details>
+
+### 13.8 Local Control Plane: Deployment
+
+The **Local Control Plane** deploys components from the local registry mirror:
+
+<details>
+<summary><code>deploy/local/repository.yaml</code> and <code>deploy/local/component.yaml</code></summary>
+
+```yaml
+# deploy/local/repository.yaml - Sovereign-A Local MCP
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: sovereign-repo
+  namespace: ocm-system
+spec:
+  repositorySpec:
+    baseUrl: registry.sovereign-a.local:5000  # Air-gapped registry
+    type: OCIRegistry
+  interval: 10m
+---
+# deploy/local/component.yaml - Sovereign-A Local MCP
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: sovereign-product
+  namespace: ocm-system
+spec:
+  component: acme.org/sovereign/product
+  repositoryRef:
+    name: sovereign-repo
+  semver: ">=1.0.0"
+  interval: 10m
+  # Verify signatures (no signing capability in air-gapped env)
+  verify:
+    - signature: acme-signature
+      secretRef:
+        name: acme-public-key
+```
+
+</details>
+
+### 13.9 Environment-Specific RGD Instances
+
+Configure different values per Local Control Plane:
+
+<details>
+<summary><code>deploy/local/sovereign-a-instance.yaml</code> and <code>deploy/local/sovereign-b-instance.yaml</code></summary>
+
+```yaml
+# deploy/local/sovereign-a-instance.yaml
+apiVersion: kro.run/v1alpha1
+kind: SovereignProduct
+metadata:
+  name: sovereign-product
+  namespace: ocm-system
+  labels:
+    delivery.ocm.software/mcp: sovereign-a-control-plane
+    delivery.ocm.software/role: local
+spec:
+  namespace: sovereign-product
+  notes:
+    replicas: 3  # HA for sovereign environment
+  postgres:
+    storageSize: "50Gi"
+    storageClass: "sovereign-ssd"
+---
+# deploy/local/sovereign-b-instance.yaml
+apiVersion: kro.run/v1alpha1
+kind: SovereignProduct
+metadata:
+  name: sovereign-product
+  namespace: ocm-system
+  labels:
+    delivery.ocm.software/mcp: sovereign-b-control-plane
+    delivery.ocm.software/role: local
+spec:
+  namespace: sovereign-product
+  notes:
+    replicas: 5  # HA for production
+  postgres:
+    storageSize: "100Gi"
+    storageClass: "fast-ssd"
+```
+
+</details>
+
+### 13.10 Global-to-Local Deployment Flow
+
+<details open>
+<summary>Diagram: Global-to-Local Deployment Flow</summary>
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant Global as Global Control Plane
+    participant Registry as OCM Registry
+    participant CTF as CTF Archive
+    participant LocalA as Local MCP: Sovereign-A
+    participant LocalB as Local MCP: Sovereign-B
+
+    Dev->>Global: Push signed component v1.1.0
+    Global->>Registry: Store component + signature
+
+    Note over Global: Prepare for air-gap transfer
+    Global->>CTF: Export component to CTF archive
+    Global->>CTF: Include public key + RGD templates
+
+    Note over CTF: Physical transfer to sovereign environments
+    CTF-->>LocalA: Transfer via secure channel
+    CTF-->>LocalB: Transfer via secure channel
+
+    Note over LocalA: Sovereign-A deployment (air-gapped)
+    LocalA->>LocalA: Import CTF to local registry
+    LocalA->>LocalA: Verify signature with public key
+    LocalA->>LocalA: Deploy via RGD (3 replicas)
+
+    Note over LocalB: Sovereign-B deployment (air-gapped)
+    LocalB->>LocalB: Import CTF to local registry
+    LocalB->>LocalB: Verify signature with public key
+    LocalB->>LocalB: Deploy via RGD (5 replicas)
+```
+
+</details>
+
+### 13.11 Cross-MCP Service Discovery (via ORD)
+
+Services deployed across Local MCPs can be discovered via ORD. Each sovereign environment exposes its own ORD endpoint:
+
+<details>
+<summary>Cross-MCP Service Discovery configuration</summary>
+
+```yaml
+# Sovereign-A: Service with ORD metadata
+apiVersion: v1
+kind: Service
+metadata:
+  name: sovereign-notes
+  namespace: sovereign-product
+  annotations:
+    # Local ORD endpoint (accessible within sovereign environment)
+    open-resource-discovery.org/base-url: "https://notes.sovereign-a.local"
+    delivery.ocm.software/mcp: "sovereign-a-control-plane"
+    delivery.ocm.software/role: "local"
+    delivery.ocm.software/region: "eu-central"
+spec:
+  selector:
+    app: sovereign-notes
+  ports:
+    - port: 8080
+---
+# Sovereign-B: Service with ORD metadata
+apiVersion: v1
+kind: Service
+metadata:
+  name: sovereign-notes
+  namespace: sovereign-product
+  annotations:
+    open-resource-discovery.org/base-url: "https://notes.sovereign-b.local"
+    delivery.ocm.software/mcp: "sovereign-b-control-plane"
+    delivery.ocm.software/role: "local"
+    delivery.ocm.software/region: "eu-west"
+spec:
+  selector:
+    app: sovereign-notes
+  ports:
+    - port: 8080
+```
+
+</details>
+
+### 13.12 Benefits of Global/Local Control Plane Architecture
+
+| Benefit | Global Control Plane | Local Control Plane |
+|---------|---------------------|---------------------|
+| **Connectivity** | Connected to external registries | Fully air-gapped |
+| **Signing** | Creates and manages signatures | Verifies signatures only |
+| **Component Source** | External OCM registry | Local registry mirror |
+| **Orchestration** | Prepares CTF archives for distribution | Executes deployments autonomously |
+| **State** | Authoritative version management | Independent local state |
+| **Updates** | Initiates version updates | Receives updates via CTF transfer |
+| **IdP** | Vendor/central authentication | Sovereign-local authentication |
+
+### 13.13 Summary: MCP Mapping to Sovereign Delivery
+
+| Concept | OpenMCP Resource | Sovereign Delivery Role |
+|---------|------------------|------------------------|
+| Vendor/Central Environment | Global Workspace + MCP | Component management, signing, CTF export |
+| Air-Gapped Environment | Sovereign Workspace + MCP | Isolated deployment, signature verification |
+| Project | Acme Project | Organizational boundary |
+| Workspace (Connected) | `workspace-global` | Houses global control plane |
+| Workspace (Air-Gapped) | `workspace-sovereign-*` | Houses local control planes |
+| MCP (Global) | `global-control-plane` | Manages authoritative component state |
+| MCP (Local) | `sovereign-*-control-plane` | Executes deployments in isolation |
+
+---
+
+## 14. Platform Mesh Integration (Service Ordering API)
+
+[Platform Mesh](https://platform-mesh.io/) is a Linux Foundation Europe initiative that enables service discovery, ordering, and orchestration across providers using Kubernetes Resource Model (KRM). This integration demonstrates how OCM components can be offered as services in a multi-tenant marketplace.
+
+**Integration with OpenMCP (Section 13):** Platform Mesh operates at the service ordering layer, while OpenMCP manages the underlying control plane infrastructure. In our sovereign delivery model:
+- **Global Control Plane** hosts the Platform Mesh service catalog and handles service ordering
+- **Local Control Planes** receive deployed service instances after air-gap transfer
+- Platform Mesh creates OCM CRs (Component, Resource, RGD instances) that flow through the OpenMCP deployment pipeline
+
+### 14.1 Architecture Overview
+
+<details open>
+<summary>Diagram: Platform Mesh with OpenMCP Integration</summary>
+
+```mermaid
+flowchart TB
+    subgraph global["Global Control Plane (OpenMCP)"]
+        subgraph provider["Service Provider"]
+            ocm_comp[OCM Component]
+            offering[ServiceOffering]
+            export[Export]
+            ocm_comp --> offering
+            offering --> export
+        end
+
+        subgraph mesh["Platform Mesh"]
+            catalog[Service Catalog]
+            binding[ServiceBinding]
+            export --> catalog
+            catalog --> binding
+        end
+
+        subgraph consumer["Consumer Workspace"]
+            order[ServiceOrder]
+            instance[ServiceInstance]
+            deployer[OCM Deployer]
+            binding --> order
+            order --> instance
+            instance --> deployer
+        end
+    end
+
+    deployer --> ctf[CTF Archive]
+    ctf -->|Air-Gap| local
+
+    subgraph local["Local Control Plane (Sovereign)"]
+        transfer[ocm transfer]
+        local_reg[(Local Registry)]
+        local_ocm[OCM Controller]
+        k8s[Kubernetes Workloads]
+
+        transfer --> local_reg
+        local_reg --> local_ocm
+        local_ocm --> k8s
+    end
+```
+
+</details>
+
+### 14.2 Service Provider: Exporting sovereign-notes
+
+The service provider publishes the OCM component as a ServiceOffering in the Global Control Plane:
+
+<details>
+<summary>platform-mesh/service-offering.yaml</summary>
+
+```yaml
+# platform-mesh/service-offering.yaml
+apiVersion: platform-mesh.io/v1alpha1
+kind: ServiceOffering
+metadata:
+  name: sovereign-notes
+  namespace: service-catalog
+  labels:
+    openmcp.io/workspace: workspace-global  # OpenMCP workspace label
+spec:
+  displayName: "Sovereign Notes Service"
+  description: "A minimal notes API backed by PostgreSQL, delivered as OCM components"
+  version: "1.0.0"
+
+  # Reference to the OCM component
+  source:
+    type: ocm
+    ocm:
+      component: acme.org/sovereign/product
+      repository:
+        url: ghcr.io/open-component-model/reference-scenario
+      semver: ">=1.0.0"
+      verify:
+        - signature: acme-signature
+
+  # Service configuration schema (exposed to consumers)
+  schema:
+    type: object
+    properties:
+      replicas:
+        type: integer
+        default: 2
+        minimum: 1
+        maximum: 10
+        description: "Number of application replicas"
+      storage:
+        type: object
+        properties:
+          size:
+            type: string
+            default: "1Gi"
+            description: "PostgreSQL storage size"
+          storageClass:
+            type: string
+            default: ""
+            description: "Storage class for persistence"
+
+  # Dependencies on other services
+  dependencies:
+    - name: postgres
+      serviceRef:
+        name: postgresql
+        namespace: service-catalog
+      optional: false
+
+  # Deployment target specification
+  deployment:
+    controlPlaneSelector:
+      matchLabels:
+        openmcp.io/type: sovereign  # Target sovereign control planes
+---
+# Export the service to the mesh catalog
+apiVersion: platform-mesh.io/v1alpha1
+kind: Export
+metadata:
+  name: sovereign-notes-export
+  namespace: service-catalog
+spec:
+  serviceOfferingRef:
+    name: sovereign-notes
+  visibility: public
+  allowedConsumers:
+    - workspace: "*"  # Available to all workspaces
+```
+
+</details>
+
+### 14.3 Service Consumer: Ordering sovereign-notes
+
+Consumers discover and order services from the catalog. The ServiceOrder triggers the complete deployment pipeline:
+
+<details>
+<summary>platform-mesh/service-order.yaml</summary>
+
+```yaml
+# platform-mesh/service-order.yaml
+apiVersion: platform-mesh.io/v1alpha1
+kind: ServiceOrder
+metadata:
+  name: my-notes-instance
+  namespace: consumer-workspace
+  labels:
+    openmcp.io/workspace: workspace-global
+spec:
+  serviceOfferingRef:
+    name: sovereign-notes
+    namespace: service-catalog
+
+  # Consumer-provided configuration
+  parameters:
+    replicas: 3
+    storage:
+      size: "10Gi"
+      storageClass: "fast-ssd"
+
+  # Target deployment environment
+  target:
+    controlPlane: sovereign-germany-control-plane  # OpenMCP target
+    namespace: my-application
+
+  # Air-gap transfer configuration
+  transfer:
+    method: ctf
+    verifySignatures: true
+---
+# ServiceInstance is created automatically by Platform Mesh
+apiVersion: platform-mesh.io/v1alpha1
+kind: ServiceInstance
+metadata:
+  name: my-notes-instance
+  namespace: consumer-workspace
+status:
+  phase: Running
+  controlPlane: sovereign-germany-control-plane
+  endpoints:
+    - name: api
+      url: "http://sovereign-notes.my-application.svc:8080"
+  credentials:
+    secretRef:
+      name: my-notes-instance-credentials
+```
+
+</details>
+
+### 14.4 Dependency Ordering
+
+Platform Mesh handles service dependencies automatically. When `sovereign-notes` is ordered, it:
+
+1. Checks if PostgreSQL dependency is satisfied
+2. If not, automatically orders PostgreSQL first
+3. Waits for PostgreSQL to be `Running`
+4. Then provisions sovereign-notes with DATABASE_URL injected
+
+<details>
+<summary>platform-mesh/dependency-graph.yaml</summary>
+
+```yaml
+# platform-mesh/dependency-graph.yaml
+apiVersion: platform-mesh.io/v1alpha1
+kind: ServiceDependencyGraph
+metadata:
+  name: my-notes-dependencies
+  namespace: consumer-workspace
+spec:
+  root: my-notes-instance
+status:
+  dependencies:
+    - name: my-notes-instance
+      status: Running
+      controlPlane: sovereign-germany-control-plane
+      dependsOn:
+        - name: postgres-instance
+          status: Running
+          controlPlane: sovereign-germany-control-plane
+          dependsOn: []
+```
+
+</details>
+
+### 14.5 Integration with OCM Controller
+
+Platform Mesh integrates with OCM by creating the necessary CRs when a ServiceOrder is fulfilled. These CRs are then synced to the target Local Control Plane via OpenMCP:
+
+<details>
+<summary>Generated OCM Resources</summary>
+
+```yaml
+# Generated by Platform Mesh when ServiceOrder is approved
+# Synced to Local Control Plane via OpenMCP
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: my-notes-instance
+  namespace: consumer-workspace
+  labels:
+    platform-mesh.io/service-instance: my-notes-instance
+    openmcp.io/source-workspace: workspace-global
+    openmcp.io/target-control-plane: sovereign-germany-control-plane
+spec:
+  component: acme.org/sovereign/product
+  repositoryRef:
+    name: provider-repo  # Created by Platform Mesh binding
+  semver: ">=1.0.0"
+  interval: 10m
+  verify:
+    - signature: acme-signature
+      secretRef:
+        name: provider-signing-key
+---
+# RGD Instance with consumer parameters
+apiVersion: kro.run/v1alpha1
+kind: SovereignProduct
+metadata:
+  name: my-notes-instance
+  namespace: consumer-workspace
+  labels:
+    platform-mesh.io/service-instance: my-notes-instance
+spec:
+  namespace: my-application
+  notes:
+    replicas: 3  # From ServiceOrder parameters
+  postgres:
+    storageSize: "10Gi"
+    storageClass: "fast-ssd"
+```
+
+</details>
+
+### 14.6 Multi-Provider Scenarios
+
+Platform Mesh enables cross-provider service composition across multiple OpenMCP workspaces:
+
+<details open>
+<summary>Diagram: Multi-Provider with OpenMCP</summary>
+
+```mermaid
+flowchart LR
+    subgraph global["Global Control Plane"]
+        subgraph provider1["Provider A Workspace"]
+            notes[sovereign-notes]
+        end
+
+        subgraph provider2["Provider B Workspace"]
+            postgres[Managed PostgreSQL]
+        end
+
+        subgraph mesh["Platform Mesh Catalog"]
+            cat_notes[Notes Offering]
+            cat_pg[PostgreSQL Offering]
+        end
+
+        subgraph consumer["Consumer Workspace"]
+            order[ServiceOrder]
+        end
+    end
+
+    notes --> cat_notes
+    postgres --> cat_pg
+    cat_notes -.->|depends on| cat_pg
+    order --> cat_notes
+    order --> cat_pg
+
+    subgraph local["Local Control Planes"]
+        local1[sovereign-germany]
+        local2[sovereign-france]
+    end
+
+    cat_notes --> local1
+    cat_notes --> local2
+    cat_pg --> local1
+    cat_pg --> local2
+```
+
+</details>
+
+This allows consumers to:
+- Use managed PostgreSQL from Provider B instead of self-hosted
+- Mix and match services from different providers
+- Maintain consistent ordering and dependency resolution
+- Deploy to multiple sovereign environments via OpenMCP
+
+### 14.7 End-to-End Flow: Platform Mesh → OpenMCP → OCM
+
+The complete service delivery flow integrates all three systems:
+
+<details open>
+<summary>Diagram: Complete Integration Flow</summary>
+
+```mermaid
+sequenceDiagram
+    participant Consumer
+    participant PlatformMesh as Platform Mesh
+    participant GlobalMCP as Global Control Plane
+    participant CTF as CTF Archive
+    participant LocalMCP as Local Control Plane
+    participant OCM as OCM Controller
+    participant K8s as Kubernetes
+
+    Consumer->>PlatformMesh: Create ServiceOrder
+    PlatformMesh->>PlatformMesh: Resolve dependencies
+    PlatformMesh->>GlobalMCP: Create OCM CRs (Component, RGD)
+    GlobalMCP->>GlobalMCP: Verify signatures
+    GlobalMCP->>CTF: Export to CTF archive
+
+    Note over CTF: Air-Gap Transfer
+
+    CTF->>LocalMCP: Import CTF
+    LocalMCP->>LocalMCP: Verify signatures
+    LocalMCP->>OCM: Sync OCM CRs
+    OCM->>OCM: Reconcile Component
+    OCM->>OCM: Reconcile Resource
+    OCM->>K8s: Deploy via FluxCD
+    K8s-->>Consumer: Service Ready
+```
+
+</details>
+
+| Step | System | Action |
+|------|--------|--------|
+| 1 | Platform Mesh | Consumer creates ServiceOrder with configuration |
+| 2 | Platform Mesh | Resolve service dependencies (e.g., PostgreSQL) |
+| 3 | Platform Mesh | Generate OCM CRs (Component, Resource, RGD Instance) |
+| 4 | Global MCP | Verify component signatures in connected environment |
+| 5 | Global MCP | Export components to CTF archive for air-gap transfer |
+| 6 | Air-Gap | Physical or logical transfer of CTF to sovereign environment |
+| 7 | Local MCP | Import and verify CTF contents |
+| 8 | Local MCP | Sync OCM CRs to local OCM Controller |
+| 9 | OCM Controller | Reconcile Component and Resource CRs |
+| 10 | FluxCD | Deploy workloads to Kubernetes |
+
+---
+
+## 15. Deployment Extensibility
+
+<details open>
+<summary>Diagram: Deployment Extensibility</summary>
 
 ```mermaid
 flowchart TB
@@ -2077,6 +3436,8 @@ flowchart TB
     raw -.-> k8s
 ```
 
+</details>
+
 This design uses **kro ResourceGraphDefinitions** for deployment orchestration, enabling flexible target systems:
 
 | Target            | How it integrates                                                       |
@@ -2088,7 +3449,7 @@ The **component structure remains unchanged** — only the RGD templates vary pe
 
 ---
 
-## 14. Key Design Decisions
+## 16. Key Design Decisions
 
 | Decision                              | Rationale                                                                              |
 |---------------------------------------|----------------------------------------------------------------------------------------|
@@ -2100,3 +3461,5 @@ The **component structure remains unchanged** — only the RGD templates vary pe
 | **semver constraint for upgrades**    | Controller auto-detects new versions without CR changes                                |
 | **additionalStatusFields for images** | CEL expressions extract registry/repo/tag for localization without separate CR         |
 | **ORD for service discovery**         | Decentralized metadata discovery; services self-describe via standard protocol         |
+| **Global/Local Control Planes**       | Global MCP manages components in connected env; Local MCPs deploy in air-gapped isolation |
+| **Platform Mesh for service ordering**| KRM-based service catalog with automatic dependency resolution; integrates with OpenMCP for multi-control-plane delivery |
