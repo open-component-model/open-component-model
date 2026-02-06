@@ -1482,6 +1482,7 @@ reference-scenario/
 │   │   ├── go.mod
 │   │   ├── go.sum
 │   │   ├── main.go
+│   │   ├── ord.go                # ORD endpoint handlers
 │   │   └── deploy/
 │   │       ├── chart/            # Helm chart
 │   │       │   ├── Chart.yaml
@@ -1489,7 +1490,11 @@ reference-scenario/
 │   │       │   └── templates/
 │   │       │       ├── deployment.yaml
 │   │       │       └── service.yaml
-│   │       └── rgd.yaml          # ResourceGraphDefinition
+│   │       ├── rgd.yaml          # ResourceGraphDefinition
+│   │       ├── ord/              # Open Resource Discovery
+│   │       │   └── document.json # ORD metadata document
+│   │       └── openapi/
+│   │           └── spec.yaml     # OpenAPI specification
 │   │
 │   ├── postgres/
 │   │   ├── component-constructor.yaml
@@ -1544,6 +1549,8 @@ reference-scenario/
 | `Resource` CR with `additionalStatusFields` | Integration | CEL expression evaluation for image extraction |
 | `Deployer` CR with RGD | Integration | RGD instantiation and FluxCD resource creation |
 | Upgrade detection (semver constraint) | Integration | Version bump triggers reconciliation |
+| ORD configuration endpoint | Integration | `.well-known/open-resource-discovery` returns valid config |
+| ORD document endpoint | Integration | ORD document describes APIs, events, dependencies |
 | End-to-end air-gap flow | E2E | Full scenario from build to running workload |
 
 ### Test Commands
@@ -1561,260 +1568,476 @@ task demo
 
 ---
 
-## 12. Platform Mesh Integration (Service Ordering API)
+## 12. Open Resource Discovery (ORD) Integration
 
-[Platform Mesh](https://platform-mesh.io/) is a Linux Foundation Europe initiative that enables service discovery, ordering, and orchestration across providers using Kubernetes Resource Model (KRM). This integration demonstrates how OCM components can be offered as services in a multi-tenant marketplace.
+[Open Resource Discovery (ORD)](https://open-resource-discovery.org/) is a Linux Foundation Europe protocol that enables applications to self-describe their exposed resources and capabilities. This integration demonstrates how sovereign-notes exposes its APIs via ORD for discovery by catalogs and marketplaces.
+
+**Reference Implementation:** [ORD Reference Application](https://ord-reference-application.cfapps.sap.hana.ondemand.com/)
 
 ### 12.1 Architecture Overview
 
 ```mermaid
 flowchart TB
-    subgraph provider["Service Provider Control Plane"]
+    subgraph provider["Service Provider"]
+        subgraph app["sovereign-notes"]
+            api[Notes API]
+            ord_config[well-known endpoint]
+            ord_doc[ORD Document]
+            api --> ord_doc
+        end
         ocm_comp[OCM Component]
-        offering[ServiceOffering]
-        export[Export]
-        ocm_comp --> offering
-        offering --> export
+        app --> ocm_comp
     end
 
-    subgraph mesh["Platform Mesh"]
+    subgraph aggregator["ORD Aggregator"]
+        crawler[ORD Crawler]
         catalog[Service Catalog]
-        binding[ServiceBinding]
-        export --> catalog
-        catalog --> binding
-    end
-
-    subgraph consumer["Consumer Control Plane"]
-        order[ServiceOrder]
-        instance[ServiceInstance]
-        deployer[OCM Deployer]
-        binding --> order
-        order --> instance
-        instance --> deployer
-    end
-
-    deployer --> k8s[Kubernetes Workloads]
-```
-
-### 12.2 Service Provider: Exporting sovereign-notes
-
-The service provider publishes the OCM component as a ServiceOffering:
-
-```yaml
-# platform-mesh/service-offering.yaml
-apiVersion: platform-mesh.io/v1alpha1
-kind: ServiceOffering
-metadata:
-  name: sovereign-notes
-  namespace: service-catalog
-spec:
-  displayName: "Sovereign Notes Service"
-  description: "A minimal notes API backed by PostgreSQL, delivered as OCM components"
-  version: "1.0.0"
-
-  # Reference to the OCM component
-  source:
-    type: ocm
-    ocm:
-      component: acme.org/sovereign/product
-      repository:
-        url: ghcr.io/open-component-model/reference-scenario
-      semver: ">=1.0.0"
-      verify:
-        - signature: acme-signature
-
-  # Service configuration schema (exposed to consumers)
-  schema:
-    type: object
-    properties:
-      replicas:
-        type: integer
-        default: 2
-        minimum: 1
-        maximum: 10
-        description: "Number of application replicas"
-      storage:
-        type: object
-        properties:
-          size:
-            type: string
-            default: "1Gi"
-            description: "PostgreSQL storage size"
-          storageClass:
-            type: string
-            default: ""
-            description: "Storage class for persistence"
-
-  # Dependencies on other services
-  dependencies:
-    - name: postgres
-      serviceRef:
-        name: postgresql
-        namespace: service-catalog
-      optional: false
----
-# Export the service to the mesh catalog
-apiVersion: platform-mesh.io/v1alpha1
-kind: Export
-metadata:
-  name: sovereign-notes-export
-  namespace: service-catalog
-spec:
-  serviceOfferingRef:
-    name: sovereign-notes
-  visibility: public
-  allowedConsumers:
-    - workspace: "*"  # Available to all workspaces
-```
-
-### 12.3 Service Consumer: Ordering sovereign-notes
-
-Consumers discover and order services from the catalog:
-
-```yaml
-# platform-mesh/service-order.yaml
-apiVersion: platform-mesh.io/v1alpha1
-kind: ServiceOrder
-metadata:
-  name: my-notes-instance
-  namespace: consumer-workspace
-spec:
-  serviceOfferingRef:
-    name: sovereign-notes
-    namespace: service-catalog
-
-  # Consumer-provided configuration
-  parameters:
-    replicas: 3
-    storage:
-      size: "10Gi"
-      storageClass: "fast-ssd"
-
-  # Binding to consumer's namespace
-  targetNamespace: my-application
----
-# ServiceInstance is created automatically by Platform Mesh
-apiVersion: platform-mesh.io/v1alpha1
-kind: ServiceInstance
-metadata:
-  name: my-notes-instance
-  namespace: consumer-workspace
-status:
-  phase: Running
-  endpoints:
-    - name: api
-      url: "http://sovereign-notes.my-application.svc:8080"
-  credentials:
-    secretRef:
-      name: my-notes-instance-credentials
-```
-
-### 12.4 Dependency Ordering
-
-Platform Mesh handles service dependencies automatically. When `sovereign-notes` is ordered, it:
-
-1. Checks if PostgreSQL dependency is satisfied
-2. If not, automatically orders PostgreSQL first
-3. Waits for PostgreSQL to be `Running`
-4. Then provisions sovereign-notes with DATABASE_URL injected
-
-```yaml
-# platform-mesh/dependency-graph.yaml
-apiVersion: platform-mesh.io/v1alpha1
-kind: ServiceDependencyGraph
-metadata:
-  name: my-notes-dependencies
-  namespace: consumer-workspace
-spec:
-  root: my-notes-instance
-status:
-  dependencies:
-    - name: my-notes-instance
-      status: Running
-      dependsOn:
-        - name: postgres-instance
-          status: Running
-          dependsOn: []
-```
-
-### 12.5 Integration with OCM Controller
-
-Platform Mesh integrates with OCM by creating the necessary CRs when a ServiceOrder is fulfilled:
-
-```yaml
-# Generated by Platform Mesh when ServiceOrder is approved
-apiVersion: delivery.ocm.software/v1alpha1
-kind: Component
-metadata:
-  name: my-notes-instance
-  namespace: consumer-workspace
-  labels:
-    platform-mesh.io/service-instance: my-notes-instance
-spec:
-  component: acme.org/sovereign/product
-  repositoryRef:
-    name: provider-repo  # Created by Platform Mesh binding
-  semver: ">=1.0.0"
-  interval: 10m
-  verify:
-    - signature: acme-signature
-      secretRef:
-        name: provider-signing-key
----
-# RGD Instance with consumer parameters
-apiVersion: kro.run/v1alpha1
-kind: SovereignProduct
-metadata:
-  name: my-notes-instance
-  namespace: consumer-workspace
-  labels:
-    platform-mesh.io/service-instance: my-notes-instance
-spec:
-  namespace: my-application
-  notes:
-    replicas: 3  # From ServiceOrder parameters
-  postgres:
-    storageSize: "10Gi"
-    storageClass: "fast-ssd"
-```
-
-### 12.6 Multi-Provider Scenarios
-
-Platform Mesh enables cross-provider service composition:
-
-```mermaid
-flowchart LR
-    subgraph provider1["Provider A (Acme)"]
-        notes[sovereign-notes]
-    end
-
-    subgraph provider2["Provider B (DBaaS)"]
-        postgres[Managed PostgreSQL]
-    end
-
-    subgraph mesh["Platform Mesh Catalog"]
-        cat_notes[Notes Offering]
-        cat_pg[PostgreSQL Offering]
+        ord_config --> crawler
+        ord_doc --> crawler
+        crawler --> catalog
     end
 
     subgraph consumer["Consumer"]
-        order[ServiceOrder]
-        app[My Application]
+        discovery[Service Discovery]
+        deploy[OCM Deployment]
+        catalog --> discovery
+        discovery --> deploy
+        ocm_comp --> deploy
     end
 
-    notes --> cat_notes
-    postgres --> cat_pg
-    cat_notes -.->|depends on| cat_pg
-    order --> cat_notes
-    order --> cat_pg
-    cat_notes --> app
-    cat_pg --> app
+    deploy --> k8s[Kubernetes Workloads]
 ```
 
-This allows consumers to:
-- Use managed PostgreSQL from Provider B instead of self-hosted
-- Mix and match services from different providers
-- Maintain consistent ordering and dependency resolution
+### 12.2 ORD Configuration Endpoint
+
+The sovereign-notes service exposes an ORD configuration at the well-known endpoint:
+
+```json
+// GET /.well-known/open-resource-discovery
+{
+  "openResourceDiscoveryV1": {
+    "documents": [
+      {
+        "url": "/open-resource-discovery/v1/documents/1",
+        "accessStrategies": [
+          {
+            "type": "open"
+          }
+        ],
+        "perspective": "system-version"
+      }
+    ]
+  }
+}
+```
+
+### 12.3 ORD Document: Describing sovereign-notes
+
+The ORD document describes the service's APIs, events, and metadata:
+
+```json
+// GET /open-resource-discovery/v1/documents/1
+{
+  "$schema": "https://open-resource-discovery.org/spec-v1/interfaces/Document.schema.json",
+  "openResourceDiscovery": "1.9",
+  "policyLevel": "none",
+  "describedSystemVersion": "1.0.0",
+
+  "products": [
+    {
+      "ordId": "acme:product:sovereign-notes:",
+      "title": "Sovereign Notes",
+      "shortDescription": "A minimal notes API backed by PostgreSQL",
+      "vendor": "acme:vendor:Acme:"
+    }
+  ],
+
+  "packages": [
+    {
+      "ordId": "acme:package:sovereign-notes-api:v1",
+      "title": "Sovereign Notes API Package",
+      "version": "1.0.0",
+      "partOfProducts": ["acme:product:sovereign-notes:"],
+      "vendor": "acme:vendor:Acme:",
+      "policyLevel": "none",
+      "labels": {
+        "ocm:component": "acme.org/sovereign/notes",
+        "ocm:version": "1.0.0"
+      }
+    }
+  ],
+
+  "apiResources": [
+    {
+      "ordId": "acme:apiResource:sovereign-notes-api:v1",
+      "title": "Notes REST API",
+      "shortDescription": "CRUD operations for notes",
+      "version": "1.0.0",
+      "visibility": "public",
+      "releaseStatus": "active",
+      "partOfPackage": "acme:package:sovereign-notes-api:v1",
+      "partOfConsumptionBundles": [
+        {
+          "ordId": "acme:consumptionBundle:sovereign-notes-public:v1"
+        }
+      ],
+      "apiProtocol": "rest",
+      "resourceDefinitions": [
+        {
+          "type": "openapi-v3",
+          "mediaType": "application/json",
+          "url": "/api/v1/openapi.json",
+          "accessStrategies": [
+            {
+              "type": "open"
+            }
+          ]
+        }
+      ],
+      "entryPoints": [
+        "/notes"
+      ],
+      "extensible": {
+        "supported": "no"
+      }
+    }
+  ],
+
+  "eventResources": [
+    {
+      "ordId": "acme:eventResource:sovereign-notes-events:v1",
+      "title": "Notes Events",
+      "shortDescription": "Events emitted when notes are created, updated, or deleted",
+      "version": "1.0.0",
+      "releaseStatus": "beta",
+      "partOfPackage": "acme:package:sovereign-notes-api:v1",
+      "resourceDefinitions": [
+        {
+          "type": "asyncapi-v2",
+          "mediaType": "application/json",
+          "url": "/api/v1/asyncapi.json",
+          "accessStrategies": [
+            {
+              "type": "open"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+
+  "consumptionBundles": [
+    {
+      "ordId": "acme:consumptionBundle:sovereign-notes-public:v1",
+      "version": "1.0.0",
+      "title": "Sovereign Notes Public APIs",
+      "shortDescription": "Public APIs for notes management",
+      "credentialExchangeStrategies": [
+        {
+          "type": "custom",
+          "customType": "acme:credential-exchange:api-key:v1",
+          "customDescription": "API key authentication via X-API-Key header"
+        }
+      ]
+    }
+  ],
+
+  "integrationDependencies": [
+    {
+      "ordId": "acme:integrationDependency:postgresql:v1",
+      "title": "PostgreSQL Database",
+      "shortDescription": "Required PostgreSQL database for persistence",
+      "version": "1.0.0",
+      "partOfPackage": "acme:package:sovereign-notes-api:v1",
+      "mandatory": true,
+      "aspects": [
+        {
+          "title": "Database Connection",
+          "description": "PostgreSQL 16+ with notes database"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### 12.4 OCM Component with ORD Resource
+
+The ORD document is bundled as a resource in the OCM component:
+
+```yaml
+# components/notes/component-constructor.yaml (extended)
+components:
+  - name: acme.org/sovereign/notes
+    version: "${VERSION}"
+    provider:
+      name: acme.org
+    resources:
+      # ... existing resources (image, helm-chart, rgd) ...
+
+      # ORD Document for service discovery
+      - name: ord-document
+        type: blob
+        relation: local
+        input:
+          type: file
+          path: ./deploy/ord/document.json
+          mediaType: application/json
+        labels:
+          - name: open-resource-discovery.org/version
+            value: "1.9"
+          - name: open-resource-discovery.org/perspective
+            value: "system-version"
+```
+
+### 12.5 ORD Aggregator Integration
+
+An ORD aggregator collects metadata from multiple providers:
+
+```mermaid
+flowchart LR
+    subgraph providers["ORD Providers"]
+        notes[sovereign-notes]
+        postgres[PostgreSQL]
+        other[Other Services]
+    end
+
+    subgraph aggregator["ORD Aggregator"]
+        crawler[Crawler]
+        store[Metadata Store]
+        api[Catalog API]
+        crawler --> store
+        store --> api
+    end
+
+    notes -->|/.well-known/ord| crawler
+    postgres -->|/.well-known/ord| crawler
+    other -->|/.well-known/ord| crawler
+
+    subgraph consumers["Consumers"]
+        dev[Developer Portal]
+        automation[Automation Tools]
+        ide[IDE Extensions]
+    end
+
+    api --> dev
+    api --> automation
+    api --> ide
+```
+
+### 12.6 Deployment with ORD Metadata
+
+The OCM controller can expose ORD metadata from deployed components:
+
+```yaml
+# deploy/ord-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: sovereign-notes-ord
+  namespace: sovereign-product
+  labels:
+    open-resource-discovery.org/provider: "true"
+  annotations:
+    # ORD aggregators can discover this service
+    open-resource-discovery.org/base-url: "http://sovereign-notes.sovereign-product.svc:8080"
+spec:
+  selector:
+    app: sovereign-notes
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+```
+
+### 12.7 sovereign-notes ORD Implementation
+
+Add ORD endpoints to the sovereign-notes application:
+
+```go
+// cmd/sovereign-notes/ord.go
+package main
+
+import (
+    "encoding/json"
+    "net/http"
+)
+
+func registerORDEndpoints() {
+    // ORD Configuration endpoint
+    http.HandleFunc("/.well-known/open-resource-discovery", func(w http.ResponseWriter, r *http.Request) {
+        config := map[string]interface{}{
+            "openResourceDiscoveryV1": map[string]interface{}{
+                "documents": []map[string]interface{}{
+                    {
+                        "url": "/open-resource-discovery/v1/documents/1",
+                        "accessStrategies": []map[string]string{
+                            {"type": "open"},
+                        },
+                        "perspective": "system-version",
+                    },
+                },
+            },
+        }
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(config)
+    })
+
+    // ORD Document endpoint
+    http.HandleFunc("/open-resource-discovery/v1/documents/1", func(w http.ResponseWriter, r *http.Request) {
+        // Serve the ORD document (loaded from embedded file or generated)
+        w.Header().Set("Content-Type", "application/json")
+        http.ServeFile(w, r, "/etc/ord/document.json")
+    })
+
+    // OpenAPI specification
+    http.HandleFunc("/api/v1/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        http.ServeFile(w, r, "/etc/openapi/spec.json")
+    })
+}
+```
+
+### 12.8 OpenAPI Specification
+
+```yaml
+# components/notes/deploy/openapi/spec.yaml
+openapi: "3.0.3"
+info:
+  title: Sovereign Notes API
+  version: "1.0.0"
+  description: A minimal notes API backed by PostgreSQL
+  contact:
+    name: Acme Corp
+    url: https://acme.org
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: /
+    description: Current instance
+
+paths:
+  /notes:
+    get:
+      summary: List all notes
+      operationId: listNotes
+      responses:
+        "200":
+          description: List of notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Note"
+    post:
+      summary: Create a note
+      operationId: createNote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNote"
+      responses:
+        "201":
+          description: Note created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+
+  /notes/{id}:
+    get:
+      summary: Get a note by ID
+      operationId: getNote
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Note found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "404":
+          description: Note not found
+    delete:
+      summary: Delete a note
+      operationId: deleteNote
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Note deleted
+        "404":
+          description: Note not found
+
+  /healthz:
+    get:
+      summary: Liveness probe
+      operationId: healthz
+      responses:
+        "200":
+          description: Service is alive
+
+  /readyz:
+    get:
+      summary: Readiness probe
+      operationId: readyz
+      responses:
+        "200":
+          description: Service is ready
+        "503":
+          description: Service not ready (database unavailable)
+
+components:
+  schemas:
+    Note:
+      type: object
+      properties:
+        id:
+          type: integer
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - content
+        - created_at
+    CreateNote:
+      type: object
+      properties:
+        content:
+          type: string
+      required:
+        - content
+```
+
+### 12.9 Integration with Service Catalogs
+
+ORD enables integration with various service discovery systems:
+
+| System             | Integration Pattern                               |
+|--------------------|---------------------------------------------------|
+| **Backstage**      | ORD plugin fetches metadata into software catalog |
+| **Port**           | ORD aggregator populates service blueprints       |
+| **OpsLevel**       | Import services via ORD document sync             |
+| **Custom Catalog** | Direct ORD API consumption                        |
+
+This enables the sovereign-notes service to be discovered and documented automatically across enterprise service catalogs without manual registration
 
 ---
 
@@ -1876,4 +2099,4 @@ The **component structure remains unchanged** — only the RGD templates vary pe
 | **kind with local registry**          | Fully reproducible locally, simulates air-gap registry                                 |
 | **semver constraint for upgrades**    | Controller auto-detects new versions without CR changes                                |
 | **additionalStatusFields for images** | CEL expressions extract registry/repo/tag for localization without separate CR         |
-| **Platform Mesh for service ordering**| KRM-based service discovery and ordering; handles dependencies automatically           |
+| **ORD for service discovery**         | Decentralized metadata discovery; services self-describe via standard protocol         |
