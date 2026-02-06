@@ -160,6 +160,8 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 
 				// Track this resource's transformation
 				resourceTransformIDs[i] = addResourceID
+			default:
+				// No transformation configured for resource with access types not listed above
 			}
 		}
 
