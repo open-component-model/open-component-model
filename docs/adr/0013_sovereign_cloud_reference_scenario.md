@@ -1,7 +1,7 @@
-# Design: Reference Scenario — Sovereign Cloud Delivery
+# Design: Reference Scenario — Sovereign Cloud Delivery with OCM, ORD, openMCP, Platform Mesh, KRO and Flux
 
 * **Status**: proposed
-* **Deciders**: Gergely Brautigam, Fabian Burth, Jakob Moeller
+* **Deciders**: TBD
 * **Date**: 2025-02-06
 
 **Issue:** [ocm-project#842](https://github.com/open-component-model/ocm-project/issues/842)  
@@ -3129,6 +3129,12 @@ spec:
         name: postgresql
         namespace: service-catalog
       optional: false
+    - name: secrets
+      serviceRef:
+        name: external-secrets
+        namespace: service-catalog
+      optional: false
+      # Injects DATABASE_URL secret via ExternalSecret CR
 
   # Deployment target specification
   deployment:
@@ -3148,6 +3154,157 @@ spec:
   visibility: public
   allowedConsumers:
     - workspace: "*"  # Available to all workspaces
+```
+
+</details>
+
+<details>
+<summary>platform-mesh/external-secrets-offering.yaml</summary>
+
+```yaml
+# platform-mesh/external-secrets-offering.yaml
+# External Secrets Operator service for injecting secrets from external stores
+apiVersion: platform-mesh.io/v1alpha1
+kind: ServiceOffering
+metadata:
+  name: external-secrets
+  namespace: service-catalog
+  labels:
+    openmcp.io/workspace: workspace-global
+spec:
+  displayName: "External Secrets Operator"
+  description: "Syncs secrets from external secret stores (Vault, AWS SM, Azure KV) into Kubernetes"
+  version: "0.9.0"
+
+  # Reference to the OCM component for ESO
+  source:
+    type: ocm
+    ocm:
+      component: acme.org/sovereign/external-secrets
+      repository:
+        url: ghcr.io/open-component-model/reference-scenario
+      semver: ">=0.9.0"
+      verify:
+        - signature: acme-signature
+
+  # Service configuration schema
+  schema:
+    type: object
+    properties:
+      secretStore:
+        type: object
+        description: "Secret store backend configuration"
+        properties:
+          provider:
+            type: string
+            enum: ["vault", "aws", "azure", "gcp", "fake"]
+            default: "vault"
+            description: "Secret store provider type"
+          vault:
+            type: object
+            properties:
+              server:
+                type: string
+                description: "Vault server URL"
+              path:
+                type: string
+                default: "secret"
+                description: "Vault secrets engine path"
+              auth:
+                type: object
+                properties:
+                  method:
+                    type: string
+                    enum: ["kubernetes", "token", "approle"]
+                    default: "kubernetes"
+      refreshInterval:
+        type: string
+        default: "1h"
+        description: "How often to sync secrets from the external store"
+
+  # No dependencies - ESO is a foundational service
+  dependencies: []
+
+  deployment:
+    controlPlaneSelector:
+      matchLabels:
+        openmcp.io/type: sovereign
+---
+apiVersion: platform-mesh.io/v1alpha1
+kind: Export
+metadata:
+  name: external-secrets-export
+  namespace: service-catalog
+spec:
+  serviceOfferingRef:
+    name: external-secrets
+  visibility: public
+  allowedConsumers:
+    - workspace: "*"
+```
+
+</details>
+
+<details>
+<summary>platform-mesh/postgres-secret-binding.yaml</summary>
+
+```yaml
+# platform-mesh/postgres-secret-binding.yaml
+# Template for ExternalSecret that Platform Mesh generates when sovereign-notes is ordered
+# This syncs the PostgreSQL password from the external secret store
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: postgres-credentials
+  namespace: my-application
+  labels:
+    platform-mesh.io/service-instance: my-notes-instance
+    platform-mesh.io/managed-by: external-secrets
+spec:
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: sovereign-vault-store  # Created by external-secrets ServiceInstance
+    kind: ClusterSecretStore
+
+  target:
+    name: postgres-credentials
+    creationPolicy: Owner
+    template:
+      type: Opaque
+      data:
+        # Construct DATABASE_URL from individual secret fields
+        DATABASE_URL: "postgresql://{{ .username }}:{{ .password }}@postgres.my-application.svc:5432/notes?sslmode=disable"
+
+  data:
+    - secretKey: username
+      remoteRef:
+        key: sovereign-notes/postgres
+        property: username
+    - secretKey: password
+      remoteRef:
+        key: sovereign-notes/postgres
+        property: password
+---
+# ClusterSecretStore created by the external-secrets ServiceInstance
+apiVersion: external-secrets.io/v1beta1
+kind: ClusterSecretStore
+metadata:
+  name: sovereign-vault-store
+  labels:
+    platform-mesh.io/service-instance: external-secrets-instance
+spec:
+  provider:
+    vault:
+      server: "https://vault.sovereign-germany.local:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "external-secrets"
+          serviceAccountRef:
+            name: external-secrets
+            namespace: external-secrets-system
 ```
 
 </details>
@@ -3213,10 +3370,40 @@ status:
 
 Platform Mesh handles service dependencies automatically. When `sovereign-notes` is ordered, it:
 
-1. Checks if PostgreSQL dependency is satisfied
-2. If not, automatically orders PostgreSQL first
-3. Waits for PostgreSQL to be `Running`
-4. Then provisions sovereign-notes with DATABASE_URL injected
+1. Checks if External Secrets Operator dependency is satisfied
+2. If not, automatically orders External Secrets first (foundational service)
+3. Checks if PostgreSQL dependency is satisfied
+4. If not, automatically orders PostgreSQL
+5. Waits for both dependencies to be `Running`
+6. Creates ExternalSecret CR to sync PostgreSQL credentials from Vault
+7. Provisions sovereign-notes with DATABASE_URL injected via the synced secret
+
+<details open>
+<summary>Diagram: Dependency Resolution Flow</summary>
+
+```mermaid
+flowchart TD
+    order[ServiceOrder: sovereign-notes]
+
+    order --> check_eso{External Secrets\nRunning?}
+    check_eso -->|No| order_eso[Order External Secrets]
+    order_eso --> wait_eso[Wait for ESO Ready]
+    wait_eso --> check_pg
+    check_eso -->|Yes| check_pg
+
+    check_pg{PostgreSQL\nRunning?}
+    check_pg -->|No| order_pg[Order PostgreSQL]
+    order_pg --> wait_pg[Wait for PG Ready]
+    wait_pg --> create_secret
+    check_pg -->|Yes| create_secret
+
+    create_secret[Create ExternalSecret CR]
+    create_secret --> sync[ESO Syncs Password from Vault]
+    sync --> inject[Inject DATABASE_URL]
+    inject --> deploy[Deploy sovereign-notes]
+```
+
+</details>
 
 <details>
 <summary>platform-mesh/dependency-graph.yaml</summary>
@@ -3237,6 +3424,14 @@ status:
       controlPlane: sovereign-germany-control-plane
       dependsOn:
         - name: postgres-instance
+          status: Running
+          controlPlane: sovereign-germany-control-plane
+          dependsOn:
+            - name: external-secrets-instance
+              status: Running
+              controlPlane: sovereign-germany-control-plane
+              dependsOn: []
+        - name: external-secrets-instance
           status: Running
           controlPlane: sovereign-germany-control-plane
           dependsOn: []
@@ -3303,17 +3498,24 @@ Platform Mesh enables cross-provider service composition across multiple OpenMCP
 ```mermaid
 flowchart LR
     subgraph global["Global Control Plane"]
-        subgraph provider1["Provider A Workspace"]
+        subgraph provider1["Provider A Workspace (Acme)"]
             notes[sovereign-notes]
         end
 
-        subgraph provider2["Provider B Workspace"]
+        subgraph provider2["Provider B Workspace (DBaaS)"]
             postgres[Managed PostgreSQL]
+        end
+
+        subgraph provider3["Provider C Workspace (Security)"]
+            eso[External Secrets Operator]
+            vault[HashiCorp Vault]
         end
 
         subgraph mesh["Platform Mesh Catalog"]
             cat_notes[Notes Offering]
             cat_pg[PostgreSQL Offering]
+            cat_eso[External Secrets Offering]
+            cat_vault[Vault Offering]
         end
 
         subgraph consumer["Consumer Workspace"]
@@ -3323,9 +3525,14 @@ flowchart LR
 
     notes --> cat_notes
     postgres --> cat_pg
+    eso --> cat_eso
+    vault --> cat_vault
+
     cat_notes -.->|depends on| cat_pg
+    cat_notes -.->|depends on| cat_eso
+    cat_eso -.->|depends on| cat_vault
+
     order --> cat_notes
-    order --> cat_pg
 
     subgraph local["Local Control Planes"]
         local1[sovereign-germany]
@@ -3336,12 +3543,16 @@ flowchart LR
     cat_notes --> local2
     cat_pg --> local1
     cat_pg --> local2
+    cat_eso --> local1
+    cat_eso --> local2
 ```
 
 </details>
 
 This allows consumers to:
 - Use managed PostgreSQL from Provider B instead of self-hosted
+- Use HashiCorp Vault from Provider C for secure secret storage
+- Automatically inject database credentials via External Secrets Operator
 - Mix and match services from different providers
 - Maintain consistent ordering and dependency resolution
 - Deploy to multiple sovereign environments via OpenMCP
@@ -3361,11 +3572,13 @@ sequenceDiagram
     participant CTF as CTF Archive
     participant LocalMCP as Local Control Plane
     participant OCM as OCM Controller
+    participant ESO as External Secrets
+    participant Vault as Vault
     participant K8s as Kubernetes
 
     Consumer->>PlatformMesh: Create ServiceOrder
-    PlatformMesh->>PlatformMesh: Resolve dependencies
-    PlatformMesh->>GlobalMCP: Create OCM CRs (Component, RGD)
+    PlatformMesh->>PlatformMesh: Resolve dependencies (ESO, PostgreSQL)
+    PlatformMesh->>GlobalMCP: Create OCM CRs (Component, RGD, ExternalSecret)
     GlobalMCP->>GlobalMCP: Verify signatures
     GlobalMCP->>CTF: Export to CTF archive
 
@@ -3375,8 +3588,12 @@ sequenceDiagram
     LocalMCP->>LocalMCP: Verify signatures
     LocalMCP->>OCM: Sync OCM CRs
     OCM->>OCM: Reconcile Component
-    OCM->>OCM: Reconcile Resource
-    OCM->>K8s: Deploy via FluxCD
+    OCM->>OCM: Reconcile Resource (ESO, PostgreSQL)
+    OCM->>K8s: Deploy ESO + PostgreSQL
+    ESO->>Vault: Fetch postgres credentials
+    Vault-->>ESO: Return credentials
+    ESO->>K8s: Create postgres-credentials Secret
+    OCM->>K8s: Deploy sovereign-notes with SECRET_REF
     K8s-->>Consumer: Service Ready
 ```
 
@@ -3385,15 +3602,17 @@ sequenceDiagram
 | Step | System | Action |
 |------|--------|--------|
 | 1 | Platform Mesh | Consumer creates ServiceOrder with configuration |
-| 2 | Platform Mesh | Resolve service dependencies (e.g., PostgreSQL) |
-| 3 | Platform Mesh | Generate OCM CRs (Component, Resource, RGD Instance) |
+| 2 | Platform Mesh | Resolve service dependencies (External Secrets, PostgreSQL) |
+| 3 | Platform Mesh | Generate OCM CRs (Component, Resource, RGD Instance, ExternalSecret) |
 | 4 | Global MCP | Verify component signatures in connected environment |
 | 5 | Global MCP | Export components to CTF archive for air-gap transfer |
 | 6 | Air-Gap | Physical or logical transfer of CTF to sovereign environment |
 | 7 | Local MCP | Import and verify CTF contents |
 | 8 | Local MCP | Sync OCM CRs to local OCM Controller |
 | 9 | OCM Controller | Reconcile Component and Resource CRs |
-| 10 | FluxCD | Deploy workloads to Kubernetes |
+| 10 | FluxCD | Deploy External Secrets Operator and PostgreSQL |
+| 11 | ESO | Sync postgres credentials from Vault to Kubernetes Secret |
+| 12 | FluxCD | Deploy sovereign-notes with DATABASE_URL from Secret |
 
 ---
 
@@ -3463,3 +3682,4 @@ The **component structure remains unchanged** — only the RGD templates vary pe
 | **ORD for service discovery**         | Decentralized metadata discovery; services self-describe via standard protocol         |
 | **Global/Local Control Planes**       | Global MCP manages components in connected env; Local MCPs deploy in air-gapped isolation |
 | **Platform Mesh for service ordering**| KRM-based service catalog with automatic dependency resolution; integrates with OpenMCP for multi-control-plane delivery |
+| **External Secrets for credentials**  | Secure secret injection from external stores (Vault); decouples credential management from application deployment |
