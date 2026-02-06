@@ -35,7 +35,7 @@ type mockCredentialsResolver struct {
 	Password string
 }
 
-func (m mockCredentialsResolver) Resolve(ctx context.Context, identity ocmruntime.Identity) (map[string]string, error) {
+func (m *mockCredentialsResolver) Resolve(ctx context.Context, identity ocmruntime.Identity) (map[string]string, error) {
 	return map[string]string{
 		"username": m.Username,
 		"password": m.Password,
@@ -53,9 +53,14 @@ func Test_Integration_Transfer_OCIArtifact(t *testing.T) {
 	password := internal.GenerateRandomPassword(t, 20)
 	htpasswd := internal.GenerateHtpasswd(t, user, password)
 
-	containerName := fmt.Sprintf("transfer-oci-artifact-repository-%d", time.Now().UnixNano())
+	containerName := fmt.Sprintf("source-oci-artifact-repository-%d", time.Now().UnixNano())
 	registryAddress := internal.StartDockerContainerRegistry(t, containerName, htpasswd)
 	host, port, err := net.SplitHostPort(registryAddress)
+	r.NoError(err)
+
+	targetContainerName := fmt.Sprintf("target-oci-artifact-repository-%d", time.Now().UnixNano())
+	targetRegistryAddress := internal.StartDockerContainerRegistry(t, targetContainerName, htpasswd)
+	targetHost, targetPort, err := net.SplitHostPort(targetRegistryAddress)
 	r.NoError(err)
 
 	reference := func(ref string) string {
@@ -79,7 +84,18 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, host, port, user, password)
+  - identity:
+      type: OCIRepository
+      hostname: %[5]q
+      port: %[6]q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[3]q
+        password: %[4]q
+`, host, port, user, password,
+		targetHost, targetPort)
 
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
@@ -89,9 +105,9 @@ configurations:
 	componentVersion := "v1.0.0"
 
 	// Create connection to registry for verification later
-	client := internal.CreateAuthClient(registryAddress, user, password)
+	client := internal.CreateAuthClient(targetRegistryAddress, user, password)
 	resolver, err := urlresolver.New(
-		urlresolver.WithBaseURL(registryAddress),
+		urlresolver.WithBaseURL(targetRegistryAddress),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(client),
 	)
@@ -100,7 +116,6 @@ configurations:
 	r.NoError(err)
 
 	// prepare artifact upload
-
 	credsResolver := mockCredentialsResolver{
 		Username: user,
 		Password: password,
@@ -108,7 +123,7 @@ configurations:
 
 	originalData := []byte("foobar")
 
-	data, access := createSingleLayerOCIImage(t, originalData, "ghcr.io/test:v1.0.0")
+	data, access := createSingleLayerOCIImage(t, originalData, "ghcr.io/test-resource:v1.0.0")
 	r.NotNil(access)
 
 	access.Type = ocmruntime.Type{
@@ -131,7 +146,7 @@ configurations:
 	}
 
 	targetAccess := resource.Access.DeepCopyTyped()
-	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", reference("new-test:v1.0.0"))
+	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", reference("test-resource:v1.0.0"))
 	resource.Access = targetAccess
 
 	creds, err := credsResolver.Resolve(ctx, nil)
@@ -143,18 +158,53 @@ configurations:
 	r.NoError(err)
 	resource = *newRes
 
-	// artifact upload done
+	ociImage, ok := resource.Access.(*v1.OCIImage)
+	r.True(ok, "access should be of type OCIImage", "got %T", resource.Access)
+
+	constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: test-resource
+    version: v1.0.0
+    type: ociArtifact
+    access:
+      type: %s
+      imageReference: %s
+`, componentName, componentVersion, ociImage.Type, ociImage.ImageReference)
+
+	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	sourceCTF := filepath.Join(t.TempDir(), "source-ctf")
+
+	// Create source CTF
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("ctf::%s", sourceCTF),
+		"--constructor", constructorPath,
+		"--config", cfgPath,
+		"--skip-reference-digest-processing",
+	})
+	r.NoError(addCMD.ExecuteContext(t.Context()), "creation of component version should succeed")
+
 	transferCMD := cmd.New()
 
-	sourceRef := fmt.Sprintf("http://%s", reference("new-test:v1.0.0"))
-	targetRef := fmt.Sprintf("http://%s", registryAddress)
+	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion)
+	targetRef := fmt.Sprintf("http://%s", targetRegistryAddress)
 
 	transferCMD.SetArgs([]string{
 		"transfer",
-		"artifacts",
+		"component-version",
 		sourceRef,
 		targetRef,
 		"--config", cfgPath,
+		"--copy-resources", // required, otherwise we wouldn't transfer oci artifacts
 	})
 
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)

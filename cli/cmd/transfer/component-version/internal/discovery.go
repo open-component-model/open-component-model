@@ -16,6 +16,7 @@ import (
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	v2 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
@@ -260,8 +261,10 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 }
 
 func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
-	getResourceID := fmt.Sprintf("%sGet%s", id, resource.ToIdentity())
-	addResourceID := fmt.Sprintf("%sAdd%s", id, resource.ToIdentity())
+	resourceIdentity := resource.ToIdentity()
+	resourceID := identityToTransformationID(resourceIdentity)
+	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
+	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 
 	var ociAccess v2.OCIImage
 	if err := json.Unmarshal(resource.Access.Data, &ociAccess); err != nil {
@@ -279,18 +282,29 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 		referenceName = parts[1]
 	}
 
+	jRes, err := json.Marshal(resource)
+	if err != nil {
+		return fmt.Errorf("cannot marshal resource: %w", err)
+	}
+	var resourceMap map[string]any
+	if err := json.Unmarshal(jRes, &resourceMap); err != nil {
+		return fmt.Errorf("cannot unmarshal resource to map: %w", err)
+	}
+
 	// Create GetOCIArtifact transformation
 	getArtifactTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type: ChooseGetOCIArtifactType(ref.Repository),
+			Type: ociv1alpha1.GetOCIArtifactV1alpha1,
 			ID:   getResourceID,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
-			"repository": AsUnstructured(ref.Repository).Data,
-			"resource":   resource,
+			"resource": resourceMap,
 		}},
 	}
 	tgd.Transformations = append(tgd.Transformations, getArtifactTransform)
+
+	// TODO(matthiasbruns): how to set referenceName in resource.access.referenceName ?
+	slog.Info(referenceName)
 
 	// Create AddLocalResource transformation
 	addResourceTransform := transformv1alpha1.GenericTransformation{
@@ -299,12 +313,11 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 			ID:   addResourceID,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
-			"repository":    AsUnstructured(toSpec).Data,
-			"component":     ref.Component,
-			"version":       ref.Version,
-			"resource":      fmt.Sprintf("${%s.output.resource}", getResourceID),
-			"file":          fmt.Sprintf("${%s.output.file}", getResourceID),
-			"referenceName": referenceName,
+			"repository": AsUnstructured(toSpec).Data,
+			"component":  ref.Component,
+			"version":    ref.Version,
+			"resource":   fmt.Sprintf("${%s.output.resource}", getResourceID),
+			"file":       fmt.Sprintf("${%s.output.file}", getResourceID),
 		}},
 	}
 	tgd.Transformations = append(tgd.Transformations, addResourceTransform)
