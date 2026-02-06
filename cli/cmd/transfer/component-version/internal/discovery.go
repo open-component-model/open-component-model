@@ -111,8 +111,9 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 			if err := Scheme.Convert(resource.Access, access); err != nil {
 				return fmt.Errorf("cannot convert resource access to typed object: %w", err)
 			}
+
 			switch access.(type) {
-			case *descriptor.LocalBlob:
+			case *descriptorv2.LocalBlob:
 				// TODO(fabianburth): should probably be a dedicated function
 				// Generate transformation IDs
 				resourceIdentity := resource.ToIdentity()
