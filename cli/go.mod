@@ -15,25 +15,25 @@ require (
 	golang.org/x/term v0.29.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260205103858-f38d97718935
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260206134336-f8a8aaf066c2
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/constructor v0.0.5
 	ocm.software/open-component-model/bindings/go/credentials v0.0.6
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260205103858-f38d97718935
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260205103858-f38d97718935
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260206134336-f8a8aaf066c2
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260206134336-f8a8aaf066c2
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260205103858-f38d97718935
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260206134336-f8a8aaf066c2
 	ocm.software/open-component-model/bindings/go/oci v0.0.28
 	ocm.software/open-component-model/bindings/go/plugin v0.0.13
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260205103858-f38d97718935
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260206134336-f8a8aaf066c2
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260205103858-f38d97718935
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260205103858-f38d97718935
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260206134336-f8a8aaf066c2
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260206134336-f8a8aaf066c2
 	sigs.k8s.io/yaml v1.6.0
 )
 
