@@ -178,3 +178,7 @@ func (m *mockResourcePlugin) GetResourceCredentialConsumerIdentity(ctx context.C
 func (m *mockResourcePlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	return blob.NewDirectReadOnlyBlob(bytes.NewBufferString("test-resource")), nil
 }
+
+func (m *mockResourcePlugin) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
+	return res, nil
+}
