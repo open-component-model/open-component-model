@@ -50,7 +50,7 @@ func TestStaticCredentialsResolver(t *testing.T) {
 
 	t.Run("concurrent access", func(t *testing.T) {
 		var wg sync.WaitGroup
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 1000; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
