@@ -154,6 +154,7 @@ func (t *Tracker[T, E]) Start(ctx context.Context) {
 }
 
 // interceptSlog redirects the default slog logger to a buffer if the visualizer supports it.
+// Not thread-safe: uses slog.SetDefault, so only one Tracker should be active at a time.
 func (t *Tracker[T, E]) interceptSlog() {
 	if lba, ok := t.visualizer.(LogBufferAware); ok {
 		t.previousLogger = slog.Default()
@@ -165,6 +166,7 @@ func (t *Tracker[T, E]) interceptSlog() {
 
 // Summary waits for all events to be processed, then shows the final summary.
 // Call this after sending all events and closing the channel.
+// Restores the original slog logger (not thread-safe, see interceptSlog).
 func (t *Tracker[T, E]) Summary(err error) {
 	<-t.finished
 	if t.visualizer != nil {

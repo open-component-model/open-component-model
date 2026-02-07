@@ -31,6 +31,10 @@ const (
 	FlagDryRun    = "dry-run"
 	FlagOutput    = "output"
 	FlagRecursive = "recursive"
+
+	// Each node emits 2 events (Running + Completed/Failed) and since the renderer consumes
+	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
+	eventBufferSize = 16
 )
 
 func New() *cobra.Command {
@@ -126,7 +130,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	b := graphBuilder(pm, credGraph)
 
 	graph, err := b.
-		WithEvents(make(chan graphRuntime.ProgressEvent, 100)).
+		WithEvents(make(chan graphRuntime.ProgressEvent, eventBufferSize)).
 		BuildAndCheck(tgd)
 	if err != nil {
 		reader, rerr := renderTGD(tgd, output)
