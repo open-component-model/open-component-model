@@ -1,10 +1,11 @@
 package resource
 
 import (
-	_ "embed"
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	_ "embed"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

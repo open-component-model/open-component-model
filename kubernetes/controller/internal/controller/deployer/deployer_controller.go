@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"slices"
 
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
@@ -36,6 +37,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
+	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
@@ -434,14 +436,17 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	componentDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
 		resource.Status.Component.Component,
 		resource.Status.Component.Version)
-	if errors.Is(err, resolution.ErrResolutionInProgress) {
-		// resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+		status.MarkNotReady(r.EventRecorder, resource, deliveryv1alpha1.ResolutionInProgress, err.Error())
 
-		return nil, resolution.ErrResolutionInProgress
-	}
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+		return nil, workerpool.ErrResolutionInProgress
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, resource, nil, eventv1.EventSeverityInfo, err.Error())
+	case err != nil:
+		status.MarkNotReady(r.EventRecorder, resource, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to get component version: %w", err)
 	}

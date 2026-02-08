@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/google/cel-go/cel"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -30,6 +31,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	ocmcel "ocm.software/open-component-model/kubernetes/controller/internal/cel"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
@@ -299,7 +301,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	referencedDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
 		component.Status.Component.Component,
 		component.Status.Component.Version)
-	if errors.Is(err, resolution.ErrResolutionInProgress) {
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
 		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
 		logger.Info("component version resolution in progress, waiting for event notification",
@@ -307,9 +310,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			"version", component.Status.Component.Version)
 
 		return ctrl.Result{}, nil
-	}
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, component, nil, eventv1.EventSeverityInfo, err.Error())
+	case err != nil:
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
 	}
@@ -329,13 +334,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			},
 		},
 	)
-	if errors.Is(err, resolution.ErrResolutionInProgress) {
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
 		logger.Info("reference path resolution in progress, waiting for event notification")
 
 		return ctrl.Result{}, nil
-	}
-	if err != nil {
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, resource, nil, eventv1.EventSeverityInfo, err.Error())
+	case err != nil:
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to resolve reference path: %w", err)
