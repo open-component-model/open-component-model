@@ -11,6 +11,9 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"ocm.software/open-component-model/bindings/go/blob/direct"
+	"ocm.software/open-component-model/bindings/go/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry/remote"
@@ -71,6 +74,8 @@ func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.
 	switch mediaType {
 	case layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1:
 		return ResourceLocalBlobOCILayout(ctx, storage, b, opts)
+	case ctf.ArtifactSetMediaType:
+		return ResourceLocalBlobArtifactSetConvertedOCILayout(ctx, storage, b, access, opts)
 	default:
 		return ResourceLocalBlobOCILayer(ctx, storage, b, access, opts)
 	}
@@ -99,6 +104,38 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 	}
 
 	return layer, nil
+}
+
+func ResourceLocalBlobArtifactSetConvertedOCILayout(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
+	originalBlob := b.ReadOnlyBlob
+	artifactSet, err := ctf.NewArtifactSetFromBlob(originalBlob)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to read artifact set from blob: %w", err)
+	}
+	r, w := io.Pipe()
+
+	go func() {
+		err := ctf.ConvertToOCIImageLayout(ctx, artifactSet, w, func(ctx context.Context, _ digest.Digest, oldName string) (string, error) {
+			var candidate string
+			if access.ReferenceName != "" {
+				// if we have a reference name, it consists of repository and tag
+				// so we can extract the tag to use it as target.
+				ref, err := looseref.ParseReference(access.ReferenceName)
+				if err != nil {
+					return "", fmt.Errorf("failed to parse referenceName %q: %w", access.ReferenceName, err)
+				}
+				candidate = ref.ReferenceOrTag()
+			} else {
+				// otherwise, we just use the old name that was found in the ref name annotation
+				candidate = oldName
+			}
+			return candidate, nil
+		})
+		w.CloseWithError(err)
+	}()
+	b.ReadOnlyBlob = direct.New(r, direct.WithMediaType(layout.MediaTypeOCIImageLayoutTarV1))
+
+	return ResourceLocalBlobOCILayout(ctx, storage, b, opts)
 }
 
 func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
