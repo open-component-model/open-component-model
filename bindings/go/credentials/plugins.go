@@ -23,7 +23,7 @@ type RepositoryPlugin interface {
 	// Resolve attempts to resolve credentials for a given repository configuration
 	// and consumer identity. The provided credentials map may contain pre-resolved
 	// credentials from the credential graph.
-	Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
+	Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error)
 }
 
 // CredentialPlugin defines the interface for plugins that handle custom credential
@@ -38,7 +38,7 @@ type CredentialPlugin interface {
 	// Resolve attempts to resolve credentials for a given consumer identity.
 	// The provided credentials map may contain pre-resolved credentials from
 	// the credential graph.
-	Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
+	Resolve(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error)
 }
 
 // GetRepositoryPluginFn is a function type that returns a RepositoryPlugin for a given
