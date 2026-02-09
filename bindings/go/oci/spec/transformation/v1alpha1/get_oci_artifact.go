@@ -45,7 +45,7 @@ type GetOCIArtifactOutput struct {
 type GetOCIArtifactSpec struct {
 	// Resource is the resource descriptor to get the OCI artifact from.
 	Resource *v2.Resource `json:"resource"`
-	// OutputPath is the path where the artifact should be downloaded to..
+	// OutputPath is the path where the artifact should be downloaded to.
 	// If empty, a temporary file will be created.
 	OutputPath string `json:"outputPath,omitempty"`
 }

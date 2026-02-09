@@ -327,7 +327,7 @@
       "properties": {
         "outputPath": {
           "type": "string",
-          "description": "OutputPath is the path where the artifact should be downloaded to..\nIf empty, a temporary file will be created."
+          "description": "OutputPath is the path where the artifact should be downloaded to.\nIf empty, a temporary file will be created."
         },
         "resource": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Resource",
