@@ -231,10 +231,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
+	verifications, err := ocm.GetVerifications(ctx, r.Client, component)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
+	}
+
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
 		RepositorySpec:    repoSpec,
 		OCMConfigurations: configs,
 		Namespace:         component.GetNamespace(),
+		Verifications:     verifications,
+		SigningRegistry:   r.PluginManager.SigningRegistry,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: types.NamespacedName{
@@ -255,15 +264,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.CheckVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to determine effective version: %w", err)
-	}
-
-	if verifications, err := ocm.GetVerifications(ctx, r.Client, component); err != nil {
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
-	} else if len(verifications) > 0 {
-		cacheBackedRepo.SigningRegistry = r.PluginManager.SigningRegistry
-		cacheBackedRepo.Verifications = verifications
 	}
 
 	desc, err := cacheBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)

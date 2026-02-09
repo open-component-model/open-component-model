@@ -10,10 +10,12 @@ import (
 
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 )
@@ -57,6 +59,8 @@ type RepositoryOptions struct {
 	OCMConfigurations []v1alpha1.OCMConfiguration
 	Namespace         string
 	RequesterFunc     func() workerpool.RequesterInfo
+	Verifications     []ocm.Verification
+	SigningRegistry   *signinghandler.SigningRegistry
 }
 
 // NewCacheBackedRepository creates a new cache-backed repository wrapper.
@@ -98,7 +102,7 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 		r.repoCache.Add(cacheKey, provider)
 	}
 
-	return newCacheBackedRepository(r.logger, provider, cfg, r.workerPool, requesterFunc, baseRepoSpec), nil
+	return newCacheBackedRepository(r.logger, provider, cfg, r.workerPool, requesterFunc, baseRepoSpec, opts.Verifications, opts.SigningRegistry), nil
 }
 
 // createResolver creates a resolver based on the configuration.

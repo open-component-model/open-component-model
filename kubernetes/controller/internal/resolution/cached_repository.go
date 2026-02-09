@@ -50,14 +50,18 @@ func newCacheBackedRepository(
 	wp *workerpool.WorkerPool,
 	requesterFunc func() workerpool.RequesterInfo,
 	baseRepoSpec runtime.Typed,
+	verifications []ocm.Verification,
+	signingRegistry *signinghandler.SigningRegistry,
 ) *CacheBackedRepository {
 	return &CacheBackedRepository{
-		logger:        logger,
-		resolver:      resolver,
-		cfg:           cfg,
-		workerPool:    wp,
-		requesterFunc: requesterFunc,
-		baseRepoSpec:  baseRepoSpec,
+		logger:          logger,
+		resolver:        resolver,
+		cfg:             cfg,
+		workerPool:      wp,
+		requesterFunc:   requesterFunc,
+		baseRepoSpec:    baseRepoSpec,
+		Verifications:   verifications,
+		SigningRegistry: signingRegistry,
 	}
 }
 
