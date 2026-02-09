@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"sort"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/go-logr/logr"
@@ -79,12 +80,12 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 	}
 
 	keyFunc := func() (string, error) {
-		// Build cache key based on configuration hash, repository spec, component, and version.
+		// Build cache key based on configuration hash, repository spec, component, version and verifications.
 		// The baseRepoSpec is not necessarily the repository used to resolve the component.
 		// The actual repository is determined by the providers resolver
 		// configuration (which is represented through the config hash) and
 		// the base repository.
-		return buildCacheKey(configHash, c.baseRepoSpec, component, version)
+		return buildCacheKey(configHash, c.baseRepoSpec, component, version, c.Verifications)
 	}
 
 	repo, err := c.resolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
@@ -177,26 +178,46 @@ func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
 	return checkable.CheckHealth(ctx)
 }
 
-// buildCacheKey generates a cache key from the configuration hash, repository spec, component, and version.
-// It canonicalizes the repository spec using JCS (RFC 8785) before hashing to ensure consistent keys
+// buildCacheKey generates a cache key from the configuration hash, repository spec, component, version, and verifications.
+// It canonicalizes the repository spec and verifications using JCS (RFC 8785) before hashing to ensure consistent keys
 // regardless of field ordering in the JSON representation.
-func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string) (string, error) {
+func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string, verifications []ocm.Verification) (string, error) {
 	repoJSON, err := json.Marshal(repoSpec)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal repository spec: %w", err)
 	}
 
-	canonicalJSON, err := jsoncanonicalizer.Transform(repoJSON)
+	canonicalRepoJSON, err := jsoncanonicalizer.Transform(repoJSON)
 	if err != nil {
 		return "", fmt.Errorf("failed to canonicalize repository spec: %w", err)
+	}
+
+	// copy verifications to avoid mutating the original slice
+	verificationsCopy := make([]ocm.Verification, len(verifications))
+	copy(verificationsCopy, verifications)
+
+	// sort verifications by signature to ensure deterministic cache key
+	sort.Slice(verificationsCopy, func(i, j int) bool {
+		return verificationsCopy[i].Signature < verificationsCopy[j].Signature
+	})
+
+	verificationsJSON, err := json.Marshal(verificationsCopy)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal verifications: %w", err)
+	}
+
+	canonicalVerificationsJSON, err := jsoncanonicalizer.Transform(verificationsJSON)
+	if err != nil {
+		return "", fmt.Errorf("failed to canonicalize verifications: %w", err)
 	}
 
 	hasher := fnv.New64a()
 	// can safely ignore because fnv.Write never actually returns an error
 	_, _ = hasher.Write(configHash)
-	_, _ = hasher.Write(canonicalJSON)
+	_, _ = hasher.Write(canonicalRepoJSON)
 	_, _ = hasher.Write([]byte(component))
 	_, _ = hasher.Write([]byte(version))
+	_, _ = hasher.Write(canonicalVerificationsJSON)
 
 	return fmt.Sprintf("%016x", hasher.Sum64()), nil
 }

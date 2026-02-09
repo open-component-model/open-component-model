@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 )
 
 func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
@@ -23,10 +24,10 @@ func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
 			BaseUrl: "localhost:5000/test",
 		}
 
-		key1, err := buildCacheKey(configHash, spec1, component, version)
+		key1, err := buildCacheKey(configHash, spec1, component, version, nil)
 		require.NoError(t, err)
 
-		key2, err := buildCacheKey(configHash, spec2, component, version)
+		key2, err := buildCacheKey(configHash, spec2, component, version, nil)
 		require.NoError(t, err)
 
 		assert.Equal(t, key1, key2, "cache keys should be identical for same spec")
@@ -45,10 +46,10 @@ func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
 			BaseUrl: "localhost:5000/test2",
 		}
 
-		key1, err := buildCacheKey(configHash, spec1, component, version)
+		key1, err := buildCacheKey(configHash, spec1, component, version, nil)
 		require.NoError(t, err)
 
-		key2, err := buildCacheKey(configHash, spec2, component, version)
+		key2, err := buildCacheKey(configHash, spec2, component, version, nil)
 		require.NoError(t, err)
 
 		assert.NotEqual(t, key1, key2, "cache keys should differ for different specs")
@@ -60,10 +61,10 @@ func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
 			BaseUrl: "localhost:5000/test",
 		}
 
-		key1, err := buildCacheKey(configHash, spec, "component1", "v1.0.0")
+		key1, err := buildCacheKey(configHash, spec, "component1", "v1.0.0", nil)
 		require.NoError(t, err)
 
-		key2, err := buildCacheKey(configHash, spec, "component2", "v1.0.0")
+		key2, err := buildCacheKey(configHash, spec, "component2", "v1.0.0", nil)
 		require.NoError(t, err)
 
 		assert.NotEqual(t, key1, key2, "cache keys should differ for different components")
@@ -76,10 +77,10 @@ func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
 		}
 		component := "test-component"
 
-		key1, err := buildCacheKey(configHash, spec, component, "v1.0.0")
+		key1, err := buildCacheKey(configHash, spec, component, "v1.0.0", nil)
 		require.NoError(t, err)
 
-		key2, err := buildCacheKey(configHash, spec, component, "v2.0.0")
+		key2, err := buildCacheKey(configHash, spec, component, "v2.0.0", nil)
 		require.NoError(t, err)
 
 		assert.NotEqual(t, key1, key2, "cache keys should differ for different versions")
@@ -92,10 +93,10 @@ func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
 		component := "test-component"
 		version := "v1.0.0"
 
-		key1, err := buildCacheKey([]byte("config1"), spec, component, version)
+		key1, err := buildCacheKey([]byte("config1"), spec, component, version, nil)
 		require.NoError(t, err)
 
-		key2, err := buildCacheKey([]byte("config2"), spec, component, version)
+		key2, err := buildCacheKey([]byte("config2"), spec, component, version, nil)
 		require.NoError(t, err)
 
 		assert.NotEqual(t, key1, key2, "cache keys should differ for different config hashes")
@@ -109,10 +110,60 @@ func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
 		component := "test-component"
 		version := "v1.0.0"
 
-		key, err := buildCacheKey(configHash, spec, component, version)
+		key, err := buildCacheKey(configHash, spec, component, version, nil)
 		require.NoError(t, err)
 
 		assert.Len(t, key, 16, "FNV-1a 64-bit hash should produce 16 hex characters")
 		assert.Regexp(t, "^[0-9a-f]{16}$", key, "key should be 16 lowercase hex characters")
+	})
+
+	t.Run("different keys for different verifications", func(t *testing.T) {
+		configHash := []byte("test-config-hash")
+		spec := &ociv1.Repository{
+			BaseUrl: "localhost:5000/test",
+		}
+		component := "test-component"
+		version := "v1.0.0"
+
+		verifications1 := []ocm.Verification{
+			{Signature: "sig1"},
+		}
+		verifications2 := []ocm.Verification{
+			{Signature: "sig2"},
+		}
+
+		key1, err := buildCacheKey(configHash, spec, component, version, verifications1)
+		require.NoError(t, err)
+
+		key2, err := buildCacheKey(configHash, spec, component, version, verifications2)
+		require.NoError(t, err)
+
+		assert.NotEqual(t, key1, key2, "cache keys should differ for different verifications")
+	})
+
+	t.Run("same key for same verifications in different order", func(t *testing.T) {
+		configHash := []byte("test-config-hash")
+		spec := &ociv1.Repository{
+			BaseUrl: "localhost:5000/test",
+		}
+		component := "test-component"
+		version := "v1.0.0"
+
+		verifications1 := []ocm.Verification{
+			{Signature: "sig1"},
+			{Signature: "sig2"},
+		}
+		verifications2 := []ocm.Verification{
+			{Signature: "sig2"},
+			{Signature: "sig1"},
+		}
+
+		key1, err := buildCacheKey(configHash, spec, component, version, verifications1)
+		require.NoError(t, err)
+
+		key2, err := buildCacheKey(configHash, spec, component, version, verifications2)
+		require.NoError(t, err)
+
+		assert.Equal(t, key1, key2, "cache keys should be same for different order of verifications")
 	})
 }
