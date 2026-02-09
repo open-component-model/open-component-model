@@ -38,7 +38,7 @@ func (m mockRepositoryForGetOCI) DownloadResource(ctx context.Context, res *desc
 }
 
 func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Setup test data - create a blob that the repository will return (OCI artifact as tar)
 	testBlobData := []byte("test oci artifact content as tar archive")
