@@ -111,9 +111,10 @@ func TestContextWithMultipleConfigurations(t *testing.T) {
 	credGraph := &credentials.Graph{}
 	ctx = WithCredentialGraph(ctx, credGraph)
 
-	// Add plugin manager
+	// Add plugin manager (also creates subsystem registry)
 	pluginMgr := manager.NewPluginManager(ctx)
-	ctx = WithPluginManager(ctx, pluginMgr)
+	ctx, err := WithPluginManager(ctx, pluginMgr)
+	r.NoError(err, "WithPluginManager should not return error")
 
 	// Add filesystem config
 	fsConfig := &filesystemv1alpha1.Config{
@@ -128,6 +129,7 @@ func TestContextWithMultipleConfigurations(t *testing.T) {
 	r.Equal(centralConfig, ocmCtx.Configuration(), "central config should be available")
 	r.Equal(credGraph, ocmCtx.CredentialGraph(), "credential graph should be available")
 	r.Equal(pluginMgr, ocmCtx.PluginManager(), "plugin manager should be available")
+	r.NotNil(ocmCtx.SubsystemRegistry(), "subsystem registry should be available")
 
 	retrievedFsConfig := ocmCtx.FilesystemConfig()
 	r.NotNil(retrievedFsConfig, "filesystem config should be available")
@@ -204,4 +206,78 @@ func TestFilesystemConfigIsolation(t *testing.T) {
 	r.Equal("/tmp/ctx1", fsCfg1.TempFolder, "context 1 should have correct config")
 	r.Equal("/tmp/ctx2", fsCfg2.TempFolder, "context 2 should have correct config")
 	r.NotEqual(fsCfg1.TempFolder, fsCfg2.TempFolder, "contexts should be isolated")
+}
+
+func TestWithPluginManager(t *testing.T) {
+	r := require.New(t)
+
+	ctx := context.Background()
+	pluginMgr := manager.NewPluginManager(ctx)
+
+	ctx, err := WithPluginManager(ctx, pluginMgr)
+	r.NoError(err, "WithPluginManager should not return error")
+
+	ocmCtx := FromContext(ctx)
+	r.NotNil(ocmCtx, "OCM context should be available")
+	r.Equal(pluginMgr, ocmCtx.PluginManager(), "plugin manager should match")
+	r.NotNil(ocmCtx.SubsystemRegistry(), "subsystem registry should be automatically created")
+}
+
+func TestSubsystemRegistryFromNilContext(t *testing.T) {
+	r := require.New(t)
+
+	var nilCtx *Context
+	result := nilCtx.SubsystemRegistry()
+	r.Nil(result, "subsystem registry should be nil from nil context")
+}
+
+func TestSubsystemRegistryConcurrentAccess(t *testing.T) {
+	r := require.New(t)
+
+	ctx := context.Background()
+	pluginMgr := manager.NewPluginManager(ctx)
+	ctx, err := WithPluginManager(ctx, pluginMgr)
+	r.NoError(err, "WithPluginManager should not return error")
+
+	done := make(chan bool, 10)
+	for range 10 {
+		go func() {
+			defer func() { done <- true }()
+			ocmCtx := FromContext(ctx)
+			reg := ocmCtx.SubsystemRegistry()
+			r.NotNil(reg, "subsystem registry should be available")
+		}()
+	}
+
+	for range 10 {
+		<-done
+	}
+}
+
+func TestPluginManagerAndSubsystemIsolation(t *testing.T) {
+	r := require.New(t)
+
+	// Create two separate contexts with different plugin managers
+	ctx1 := context.Background()
+	pluginMgr1 := manager.NewPluginManager(ctx1)
+	ctx1, err := WithPluginManager(ctx1, pluginMgr1)
+	r.NoError(err, "WithPluginManager should not return error for ctx1")
+
+	ctx2 := context.Background()
+	pluginMgr2 := manager.NewPluginManager(ctx2)
+	ctx2, err = WithPluginManager(ctx2, pluginMgr2)
+	r.NoError(err, "WithPluginManager should not return error for ctx2")
+
+	ocmCtx1 := FromContext(ctx1)
+	ocmCtx2 := FromContext(ctx2)
+
+	// Verify each context has its own plugin manager (pointer comparison)
+	r.Same(pluginMgr1, ocmCtx1.PluginManager(), "context 1 should have plugin manager 1")
+	r.Same(pluginMgr2, ocmCtx2.PluginManager(), "context 2 should have plugin manager 2")
+	r.NotSame(ocmCtx1.PluginManager(), ocmCtx2.PluginManager(), "plugin managers should be isolated")
+
+	// Verify each context has its own subsystem registry (pointer comparison)
+	r.NotNil(ocmCtx1.SubsystemRegistry(), "context 1 should have subsystem registry")
+	r.NotNil(ocmCtx2.SubsystemRegistry(), "context 2 should have subsystem registry")
+	r.NotSame(ocmCtx1.SubsystemRegistry(), ocmCtx2.SubsystemRegistry(), "subsystem registries should be isolated")
 }

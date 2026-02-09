@@ -1,4 +1,4 @@
-package plugins
+package resource
 
 import (
 	"context"
@@ -13,23 +13,64 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type ResourceRepositoryPlugin struct {
-	Manifests, Layers cache.OCIDescriptorCache
-	FilesystemConfig  *filesystemv1alpha1.Config
+// Options holds configuration options for the OCI resource repository.
+type Options struct {
+	// UserAgent is the User-Agent string to be used in HTTP requests by all the
+	// repositories provided by the provider.
+	UserAgent string
 }
 
-func (p *ResourceRepositoryPlugin) GetResourceRepositoryScheme() *runtime.Scheme {
+type Option func(*Options)
+
+// WithUserAgent sets the user agent option
+func WithUserAgent(userAgent string) Option {
+	return func(o *Options) {
+		o.UserAgent = userAgent
+	}
+}
+
+type ResourceRepository struct {
+	manifests        cache.OCIDescriptorCache
+	layers           cache.OCIDescriptorCache
+	filesystemConfig *filesystemv1alpha1.Config
+	userAgent        string
+}
+
+// make sure that ResourceRepository implements the oci ResourceRepository interface
+var _ repository.ResourceRepository = (*ResourceRepository)(nil)
+
+func NewResourceRepository(manifests, layers cache.OCIDescriptorCache, filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
+	options := &Options{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if options.UserAgent == "" {
+		options.UserAgent = provider.DefaultCreator
+	}
+
+	return &ResourceRepository{
+		manifests:        manifests,
+		layers:           layers,
+		filesystemConfig: filesystemConfig,
+		userAgent:        options.UserAgent,
+	}
+}
+
+func (p *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 	return ociaccess.Scheme
 }
 
-func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
+func (p *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
@@ -41,7 +82,7 @@ func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerI
 	return p.getIdentity(obj)
 }
 
-func (p *ResourceRepositoryPlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
+func (p *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
@@ -53,7 +94,7 @@ func (p *ResourceRepositoryPlugin) GetResourceCredentialConsumerIdentity(ctx con
 	return p.getIdentity(obj)
 }
 
-func (p *ResourceRepositoryPlugin) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
+func (p *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
@@ -90,7 +131,7 @@ func (p *ResourceRepositoryPlugin) ProcessResourceDigest(ctx context.Context, re
 	}
 }
 
-func (p *ResourceRepositoryPlugin) getIdentity(obj runtime.Typed) (runtime.Identity, error) {
+func (p *ResourceRepository) getIdentity(obj runtime.Typed) (runtime.Identity, error) {
 	switch access := obj.(type) {
 	case *v1.OCIImage:
 		baseURL, err := ociImageAccessToBaseURL(access)
@@ -108,7 +149,7 @@ func (p *ResourceRepositoryPlugin) getIdentity(obj runtime.Typed) (runtime.Ident
 	}
 }
 
-func (p *ResourceRepositoryPlugin) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
@@ -142,8 +183,42 @@ func (p *ResourceRepositoryPlugin) DownloadResource(ctx context.Context, resourc
 	}
 }
 
-func (p *ResourceRepositoryPlugin) getRepository(spec *ociv1.Repository, creds map[string]string) (Repository, error) {
-	repo, err := createRepository(spec, creds, p.Manifests, p.Layers, p.FilesystemConfig)
+func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
+	t := resource.Access.GetType()
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	switch access := obj.(type) {
+	case *v1.OCIImage:
+		baseURL, err := ociImageAccessToBaseURL(access)
+		if err != nil {
+			return nil, fmt.Errorf("error creating oci image access: %w", err)
+		}
+
+		repo, err := p.getRepository(&ociv1.Repository{
+			BaseUrl: baseURL,
+		}, credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error creating repository: %w", err)
+		}
+
+		b, err := repo.UploadResource(ctx, resource, content)
+		if err != nil {
+			return nil, fmt.Errorf("error uploading resource: %w", err)
+		}
+
+		return b, nil
+	default:
+		return nil, fmt.Errorf("unsupported type %s for uploading the resource", t)
+	}
+}
+
+func (p *ResourceRepository) getRepository(spec *ociv1.Repository, creds map[string]string) (*oci.Repository, error) {
+	repo, err := createRepository(spec, creds, p.manifests, p.layers, p.filesystemConfig, p.userAgent)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -160,20 +235,14 @@ func ociImageAccessToBaseURL(access *v1.OCIImage) (string, error) {
 	return baseURL, nil
 }
 
-const Creator = "Builtin OCI Repository Plugin"
-
-type Repository interface {
-	oci.ResourceRepository
-	oci.ComponentVersionRepository
-}
-
 func createRepository(
 	spec *ociv1.Repository,
 	credentials map[string]string,
 	manifests cache.OCIDescriptorCache,
 	layers cache.OCIDescriptorCache,
 	filesystemConfig *filesystemv1alpha1.Config,
-) (Repository, error) {
+	userAgent string,
+) (*oci.Repository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL %q: %w", spec.BaseUrl, err)
@@ -185,7 +254,7 @@ func createRepository(
 		urlresolver.WithBaseClient(&auth.Client{
 			Client: retry.DefaultClient,
 			Header: map[string][]string{
-				"User-Agent": {Creator},
+				"User-Agent": {userAgent},
 			},
 			Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
 		}))
@@ -198,7 +267,7 @@ func createRepository(
 	}
 	options := []oci.RepositoryOption{
 		oci.WithResolver(urlResolver),
-		oci.WithCreator(Creator),
+		oci.WithCreator(userAgent),
 		oci.WithManifestCache(manifests),
 		oci.WithLayerCache(layers),
 		oci.WithTempDir(tempDir), // the filesystem config being empty is a valid config

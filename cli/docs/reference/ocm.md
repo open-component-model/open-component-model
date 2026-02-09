@@ -66,6 +66,7 @@ ocm [sub-command] [flags]
 
 * [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
 * [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
+* [ocm describe]({{< relref "ocm_describe.md" >}})	 - Describe OCM entities or metadata
 * [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
 * [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
 * [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM

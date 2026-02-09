@@ -13,6 +13,7 @@ import (
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
@@ -20,6 +21,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
+
+var Scheme = runtime.NewScheme(runtime.WithAllowUnknown())
+
+func init() {
+	Scheme.MustRegisterScheme(oci.Scheme)
+	Scheme.MustRegisterScheme(descriptorv2.Scheme)
+}
 
 func BuildGraphDefinition(
 	ctx context.Context,
@@ -96,7 +104,17 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 
 		// Process local resources
 		for i, resource := range v2desc.Component.Resources {
-			if resource.Relation == descriptorv2.LocalRelation {
+			access, err := Scheme.NewObject(resource.Access.Type)
+			if err != nil {
+				return fmt.Errorf("cannot create new object for resource access type %q: %w", resource.Access.Type.String(), err)
+			}
+			if err := Scheme.Convert(resource.Access, access); err != nil {
+				return fmt.Errorf("cannot convert resource access to typed object: %w", err)
+			}
+
+			switch access.(type) {
+			case *descriptorv2.LocalBlob:
+				// TODO(fabianburth): should probably be a dedicated function
 				// Generate transformation IDs
 				resourceIdentity := resource.ToIdentity()
 				resourceID := identityToTransformationID(resourceIdentity)
@@ -142,6 +160,8 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 
 				// Track this resource's transformation
 				resourceTransformIDs[i] = addResourceID
+			default:
+				// No transformation configured for resource with access types not listed above
 			}
 		}
 

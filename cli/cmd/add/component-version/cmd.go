@@ -40,6 +40,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/render/graph/list"
 	"ocm.software/open-component-model/cli/internal/render/graph/tree"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
+	"ocm.software/open-component-model/cli/internal/subsystem"
 )
 
 const (
@@ -165,6 +166,9 @@ add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.y
 		RunE:              AddComponentVersion,
 		PersistentPreRunE: persistentPreRunE,
 		DisableAutoGenTag: true,
+		Annotations: map[string]string{
+			subsystem.Annotation: "input-method",
+		},
 	}
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum number of component versions that can be constructed concurrently.")

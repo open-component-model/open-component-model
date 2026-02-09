@@ -223,7 +223,6 @@ configurations:
 			r.Equal("foobar", string(layerData))
 		})
 	})
-
 }
 
 func Test_Integration_HelmTransformer(t *testing.T) {
@@ -331,7 +330,7 @@ func uploadComponentVersion(t *testing.T, repo repository.ComponentVersionReposi
 		default:
 			repo, ok := repo.(repository.ResourceRepository)
 			r.True(ok, "repository must implement ResourceRepository to upload global accesses")
-			resource.Resource, err = repo.UploadResource(ctx, resource.Resource, resource.ReadOnlyBlob)
+			resource.Resource, err = repo.UploadResource(ctx, resource.Resource, resource.ReadOnlyBlob, nil)
 		}
 		r.NoError(err)
 		desc.Component.Resources = append(desc.Component.Resources, *resource.Resource)
