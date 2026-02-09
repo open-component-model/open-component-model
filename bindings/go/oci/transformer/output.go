@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 )
 
 // DetermineOutputPath determines the output path for buffering the blob content.
@@ -17,15 +18,15 @@ func DetermineOutputPath(outputPath string, filePrefix string, blobContent blob.
 		fileExt := ""
 		if mediaTypeAware, ok := blobContent.(blob.MediaTypeAware); ok {
 			if mediaType, ok := mediaTypeAware.MediaType(); ok {
-				fileExt = mediaTypExtMap[mediaType]
+				if mediaType == layout.MediaTypeOCIImageLayoutTarGzipV1 {
+					fileExt = ".tar.gz"
+				}
 			}
 		}
 
 		if fileExt == "" {
 			slog.Warn("unable to determine file extension from media type, setting .bin extension")
 			fileExt = ".bin"
-		} else {
-			fileExt = fmt.Sprintf(".%s", fileExt)
 		}
 
 		// Create a temporary file

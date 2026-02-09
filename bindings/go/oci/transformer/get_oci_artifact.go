@@ -8,15 +8,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-var mediaTypExtMap = map[string]string{
-	layout.MediaTypeOCIImageLayoutTarGzipV1: "tar.gz",
-}
 
 // GetOCIArtifact is a transformer that retrieves OCI artifacts from remote registries
 // and buffers them to files.
@@ -30,6 +25,9 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	var transformation v1alpha1.GetOCIArtifact
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to get oci artifact transformation: %w", err)
+	}
+	if transformation.Spec == nil {
+		return nil, fmt.Errorf("spec is required for get oci artifact transformation")
 	}
 
 	var resource *v2.Resource
