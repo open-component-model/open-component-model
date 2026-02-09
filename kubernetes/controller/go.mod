@@ -13,7 +13,6 @@ require (
 	github.com/fluxcd/pkg/runtime v0.94.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/cel-go v0.26.1
-	github.com/mandelsoft/goutils v0.0.0-20251225170327-b32fc0dd2706
 	github.com/onsi/ginkgo/v2 v2.27.3
 	github.com/onsi/gomega v1.39.0
 	github.com/prometheus/client_golang v1.23.2
@@ -150,8 +149,5 @@ require (
 
 // TODO: remove once structured merge diff v6 support lands in k8s upstream
 replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59e963e
-
-// TODO: remove once mandelsoft utils no longer has an unreleased version of vfs as dep
-replace github.com/mandelsoft/vfs => github.com/mandelsoft/vfs v0.4.4
 
 replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.0
