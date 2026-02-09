@@ -15,8 +15,8 @@ import (
 // Verification is an internal representation of v1alpha1.Verification where the public key is already extracted from
 // the value or secret.
 type Verification struct {
-	Signature string
-	PublicKey []byte
+	Signature string `json:"signature"`
+	PublicKey []byte `json:"publicKey"`
 }
 
 func GetVerifications(ctx context.Context, client ctrl.Reader,
