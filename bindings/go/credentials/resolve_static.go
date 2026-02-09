@@ -36,5 +36,12 @@ func (s *StaticCredentialsResolver) Resolve(ctx context.Context, identity runtim
 	if !ok {
 		return nil, ErrNotFound
 	}
-	return creds, nil
+
+	// clone the credentials map to prevent external modification
+	clonedCreds := make(map[string]string)
+	for k, v := range creds {
+		clonedCreds[k] = v
+	}
+
+	return clonedCreds, nil
 }

@@ -65,4 +65,21 @@ func TestStaticCredentialsResolver(t *testing.T) {
 		}
 		wg.Wait()
 	})
+
+	t.Run("cloned credentials are independent", func(t *testing.T) {
+		identity := runtime.Identity{
+			"type":     "OCIRegistry",
+			"hostname": "docker.io",
+		}
+		creds, err := resolver.Resolve(context.Background(), identity)
+		r.NoError(err)
+
+		// Modify the returned credentials map
+		creds["username"] = "modifieduser"
+
+		// Resolve again to check if the original credentials are unaffected
+		creds2, err := resolver.Resolve(context.Background(), identity)
+		r.NoError(err)
+		r.Equal("testuser", creds2["username"])
+	})
 }
