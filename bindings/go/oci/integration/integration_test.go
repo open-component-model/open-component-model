@@ -3,7 +3,6 @@ package integration_test
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -38,6 +37,7 @@ import (
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -427,18 +427,6 @@ func Test_Integration_CTF_Lister(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, expectedList, result)
-}
-
-type mockCredentialsResolver struct {
-	Username string
-	Password string
-}
-
-func (m mockCredentialsResolver) Resolve(ctx context.Context, identity ocmruntime.Identity) (map[string]string, error) {
-	return map[string]string{
-		"username": m.Username,
-		"password": m.Password,
-	}, nil
 }
 
 // Test_Integration_Transformers needs a different setup than the other tests.
@@ -1021,9 +1009,14 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 	ctx := t.Context()
 	r := require.New(t)
 
-	credsResolver := mockCredentialsResolver{
-		Username: username,
-		Password: password,
+	url, err := ocmruntime.ParseURLAndAllowNoScheme(to)
+	r.NoError(err)
+
+	toIdentity := ocmruntime.Identity{
+		"scheme":   "http",
+		"hostname": url.Hostname(),
+		"port":     url.Port(),
+		"type":     "OCIRepository",
 	}
 
 	originalData := []byte("foobar")
@@ -1054,8 +1047,14 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", to)
 	resource.Access = targetAccess
 
-	creds, err := credsResolver.Resolve(ctx, nil)
-	r.NoError(err)
+	credsMap := map[string]map[string]string{
+		toIdentity.String(): {
+			"username": username,
+			"password": password,
+		},
+	}
+	credsResolver := credentials.NewStaticCredentialsResolver(credsMap)
+	creds := credsMap[toIdentity.String()]
 	r.NotNil(creds)
 
 	newRes, err := repo.UploadResource(ctx, &resource, blob, creds)
