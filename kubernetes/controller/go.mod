@@ -9,8 +9,8 @@ replace github.com/opencontainers/go-digest => github.com/opencontainers/go-dige
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/fluxcd/pkg/apis/event v0.21.0
-	github.com/fluxcd/pkg/apis/meta v1.23.0
-	github.com/fluxcd/pkg/runtime v0.92.0
+	github.com/fluxcd/pkg/apis/meta v1.24.0
+	github.com/fluxcd/pkg/runtime v0.94.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/cel-go v0.26.1
 	github.com/mandelsoft/goutils v0.0.0-20251225170327-b32fc0dd2706
