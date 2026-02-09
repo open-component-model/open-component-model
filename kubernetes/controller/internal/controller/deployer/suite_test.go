@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -32,6 +33,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
@@ -40,7 +42,6 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
@@ -50,12 +51,14 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-var k8sClient client.Client
-var k8sManager ctrl.Manager
-var testEnv *envtest.Environment
-var recorder record.EventRecorder
-var ctx context.Context
-var cancel context.CancelFunc
+var (
+	k8sClient  client.Client
+	k8sManager ctrl.Manager
+	testEnv    *envtest.Environment
+	recorder   record.EventRecorder
+	ctx        context.Context
+	cancel     context.CancelFunc
+)
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -149,9 +152,9 @@ var _ = BeforeSuite(func() {
 	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
 	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{credentials.AnyConsumerIdentityType}))
 
-	ociResourceRepoPlugin := plugins.ResourceRepositoryPlugin{Manifests: inmemory.New(), Layers: inmemory.New(), FilesystemConfig: &filesystemv1alpha1.Config{}}
-	Expect(pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(&ociResourceRepoPlugin)).To(Succeed())
-	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(&ociResourceRepoPlugin)).To(Succeed())
+	ociResourceRepoPlugin := ocires.NewResourceRepository(inmemory.New(), inmemory.New(), &filesystemv1alpha1.Config{})
+	Expect(pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin)).To(Succeed())
+	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(ociResourceRepoPlugin)).To(Succeed())
 
 	const unlimited = 0
 	ttl := time.Minute * 30
