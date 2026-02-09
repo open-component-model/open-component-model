@@ -67,18 +67,6 @@ const (
 	userAgent                 = "ocm.software"
 )
 
-type mockCredentialsResolver struct {
-	Username string
-	Password string
-}
-
-func (m mockCredentialsResolver) Resolve(ctx context.Context, identity ocmruntime.Identity) (map[string]string, error) {
-	return map[string]string{
-		"username": m.Username,
-		"password": m.Password,
-	}, nil
-}
-
 func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 	if testing.Short() {
 		t.Skipf("skipping integration test as downloading from ghcr.io is taking too long!")
@@ -304,14 +292,6 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		t.Run("oci image digest processing", func(t *testing.T) {
 			processResourceDigest(t, repo, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
 		})
-
-		t.Run("get oci artifact", func(t *testing.T) {
-			resourceRepo := resource.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
-
-			t.Run("get oci transformation", func(t *testing.T) {
-				transformGetOCIArtifact(t, resourceRepo, testUsername, password, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
-			})
-		})
 	})
 
 	t.Run("specification-based", func(t *testing.T) {
@@ -447,6 +427,64 @@ func Test_Integration_CTF_Lister(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, expectedList, result)
+}
+
+type mockCredentialsResolver struct {
+	Username string
+	Password string
+}
+
+func (m mockCredentialsResolver) Resolve(ctx context.Context, identity ocmruntime.Identity) (map[string]string, error) {
+	return map[string]string{
+		"username": m.Username,
+		"password": m.Password,
+	}, nil
+}
+
+func Test_Integration_Transformers(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	t.Logf("Starting transformers integration test")
+
+	// Setup credentials and htpasswd
+	password := generateRandomPassword(t, passwordLength)
+	htpasswd := generateHtpasswd(t, testUsername, password)
+
+	// Start containerized registry
+	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
+	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
+		registry.WithHtpasswd(htpasswd),
+		testcontainers.WithEnv(map[string]string{
+			"REGISTRY_VALIDATION_DISABLED": "true",
+			"REGISTRY_LOG_LEVEL":           "debug",
+		}),
+		testcontainers.WithLogger(log.TestLogger(t)),
+	)
+	r := require.New(t)
+	r.NoError(err)
+	t.Cleanup(func() {
+		r.NoError(testcontainers.TerminateContainer(registryContainer))
+	})
+	t.Logf("Test registry started")
+
+	t.Run("ociArtifact", func(t *testing.T) {
+		r := require.New(t)
+		registryAddress, err := registryContainer.HostAddress(ctx)
+		r.NoError(err)
+
+		reference := func(ref string) string {
+			return fmt.Sprintf("%s/%s", registryAddress, ref)
+		}
+
+		t.Run("get oci artifact", func(t *testing.T) {
+			resourceRepo := resource.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
+
+			t.Run("get oci transformation", func(t *testing.T) {
+				transformGetOCIArtifact(t, resourceRepo, testUsername, password, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
+			})
+		})
+	})
 }
 
 func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, component string, version string) {
