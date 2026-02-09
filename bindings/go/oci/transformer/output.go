@@ -9,10 +9,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 )
 
-// determineOutputPath determines the output path for buffering the blob content.
+// DetermineOutputPath determines the output path for buffering the blob content.
 // If the outputPath is empty, it creates a temporary file with an appropriate extension based on the media type of the blob content.
 // If the outputPath is provided, it ensures that the directory exists.
-func determineOutputPath(outputPath string, filePrefix string, blobContent blob.ReadOnlyBlob) (string, error) {
+func DetermineOutputPath(outputPath string, filePrefix string, blobContent blob.ReadOnlyBlob) (string, error) {
 	if outputPath == "" {
 		fileExt := ""
 		if mediaTypeAware, ok := blobContent.(blob.MediaTypeAware); ok {

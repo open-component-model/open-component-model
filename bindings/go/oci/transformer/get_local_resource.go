@@ -96,7 +96,7 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	}
 
 	// Determine output path
-	if outputPath, err = determineOutputPath(outputPath, "resource", blobContent); err != nil {
+	if outputPath, err = DetermineOutputPath(outputPath, "resource", blobContent); err != nil {
 		return nil, fmt.Errorf("failed determining output path: %w", err)
 	}
 
