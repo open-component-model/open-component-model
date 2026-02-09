@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
@@ -17,20 +18,14 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // mockRepositoryForGetOCI implements ResourceRepository for testing GetOCIArtifact
 type mockRepositoryForGetOCI struct {
+	repository.ResourceRepository
 	returnBlob blob.ReadOnlyBlob
-}
-
-func (m mockRepositoryForGetOCI) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
-	return nil, nil
-}
-
-func (m mockRepositoryForGetOCI) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
-	return nil, nil
 }
 
 func (m mockRepositoryForGetOCI) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
@@ -111,7 +106,7 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 }
 
 func TestGetOCIArtifact_Transform_OCI_WithOutputPath(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Setup test data - create a blob that the repository will return (OCI artifact as tar)
 	testBlobData := []byte("test oci artifact content as tar archive")
@@ -191,12 +186,12 @@ func TestGetOCIArtifact_Transform_OCI_WithOutputPath(t *testing.T) {
 }
 
 func TestGetOCIArtifact_Transform_OCI_Should_Default_No_Ext(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Setup test data - create a blob that the repository will return (OCI artifact as tar)
 	testBlobData := []byte("test oci artifact content as tar archive")
 	testBlob := inmemory.New(bytes.NewReader(testBlobData))
-	testBlob.SetMediaType("application/vnd.ocm.software.oci.image.v1+tar+gzip")
+	testBlob.SetMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)
 
 	mockRepo := &mockRepositoryForGetOCI{
 		returnBlob: testBlob,
@@ -264,7 +259,7 @@ func TestGetOCIArtifact_Transform_OCI_Should_Default_No_Ext(t *testing.T) {
 }
 
 func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tests := []struct {
 		name        string
