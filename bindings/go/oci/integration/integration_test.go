@@ -441,6 +441,11 @@ func (m mockCredentialsResolver) Resolve(ctx context.Context, identity ocmruntim
 	}, nil
 }
 
+// Test_Integration_Transformers needs a different setup than the other tests.
+// Reason being that transformer.GetOCIArtifact requires repository.ResourceRepository.
+// Since oci.Repository does not implement repository.ResourceRepository yet, we could not reuse the setup with
+// urlresolver.Resolver. We will be able to unify the testing setup once we refactored the oci Repositories
+// https://github.com/open-component-model/ocm-project/issues/774
 func Test_Integration_Transformers(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
