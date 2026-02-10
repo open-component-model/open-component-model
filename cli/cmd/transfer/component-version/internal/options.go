@@ -13,8 +13,8 @@ const (
 )
 
 type options struct {
-	copyMode  CopyMode
-	recursive bool
+	CopyMode  CopyMode
+	Recursive bool
 }
 
 type Option func(*options)
@@ -23,12 +23,12 @@ type Option func(*options)
 // The default copy mode (CopyModeDefault) does not download remote references like OCI artifacts, but copies local resources and component references.
 func WithCopyMode(mode CopyMode) func(*options) {
 	return func(o *options) {
-		o.copyMode = mode
+		o.CopyMode = mode
 	}
 }
 
 func WithRecursive(recursive bool) func(*options) {
 	return func(o *options) {
-		o.recursive = recursive
+		o.Recursive = recursive
 	}
 }

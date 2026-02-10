@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -44,7 +45,7 @@ func BuildGraphDefinition(
 	}
 
 	discoverer := &discoverer{
-		recursive:         o.recursive,
+		recursive:         o.Recursive,
 		discoveredDigests: make(map[string]descriptor.Digest),
 	}
 	resolver := &resolver{
@@ -72,7 +73,7 @@ func BuildGraphDefinition(
 	})
 
 	if err := dr.Discover(ctx); err != nil {
-		return nil, fmt.Errorf("recursive discovery failed: %w", err)
+		return nil, fmt.Errorf("Recursive discovery failed: %w", err)
 	}
 
 	tgd := &transformv1alpha1.TransformationGraphDefinition{
@@ -85,7 +86,7 @@ func BuildGraphDefinition(
 
 	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(d, toSpec, tgd, o.copyMode)
+		return fillGraphDefinitionWithPrefetchedComponents(d, toSpec, tgd, o.CopyMode)
 	})
 	if err != nil {
 		return nil, err
@@ -121,7 +122,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 
 			switch access.(type) {
 			case *descriptorv2.LocalBlob:
-				processLocalRelation(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
+				processLocalBlob(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
 			case *v2.OCIImage:
 				switch copyMode {
 				case CopyModeDefault:
@@ -244,11 +245,11 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 	// strip the domain part and keep the rest
 	var referenceName string
 	if ociAccess.ImageReference != "" {
-		parts := strings.SplitN(ociAccess.ImageReference, "/", 2)
-		if len(parts) != 2 {
+		u, err := url.Parse(ociAccess.ImageReference)
+		if err != nil {
 			return fmt.Errorf("invalid OCI image reference: %s", ociAccess.ImageReference)
 		}
-		referenceName = parts[1]
+		referenceName = u.Path
 	}
 
 	jRes, err := json.Marshal(resource)
@@ -305,7 +306,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 	return nil
 }
 
-func processLocalRelation(resource descriptorv2.Resource, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) {
+func processLocalBlob(resource descriptorv2.Resource, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) {
 	// Generate transformation IDs
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
