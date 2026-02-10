@@ -78,8 +78,6 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 		return nil, fmt.Errorf("failed converting resource to v2 format: %w", err)
 	}
 
-	// maybe add referenceName here?
-
 	// Populate output
 	output.File = *fileSpec
 	output.Resource = v2Resource
