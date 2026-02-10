@@ -14,7 +14,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	v2 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
@@ -173,7 +172,10 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 				default:
 					// all good, we can copy the oci artifact
 				}
-				processOCIArtifact(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
+				err := processOCIArtifact(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
+				if err != nil {
+					return fmt.Errorf("cannot process OCI artifact resource: %w", err)
+				}
 			default:
 				// No transformation configured for resource with access types not listed above
 			}

@@ -23,17 +23,6 @@ func AsUnstructured(typed runtime.Typed) *runtime.Unstructured {
 	return &unstructured
 }
 
-func ChooseGetType(repo runtime.Typed) runtime.Type {
-	switch repo.(type) {
-	case *oci.Repository:
-		return ociv1alpha1.OCIGetComponentVersionV1alpha1
-	case *ctfv1.Repository:
-		return ociv1alpha1.CTFGetComponentVersionV1alpha1
-	default:
-		panic(fmt.Sprintf("unknown repository type %T", repo))
-	}
-}
-
 func ChooseAddType(repo runtime.Typed) runtime.Type {
 	switch repo.(type) {
 	case *oci.Repository:
