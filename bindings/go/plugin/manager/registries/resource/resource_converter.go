@@ -8,7 +8,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
@@ -17,9 +16,8 @@ import (
 )
 
 type resourcePluginConverter struct {
-	externalPlugin   v1.ReadWriteResourcePluginContract
-	scheme           *runtime.Scheme
-	filesystemConfig *filesystemv1alpha1.Config
+	externalPlugin v1.ReadWriteResourcePluginContract
+	scheme         *runtime.Scheme
 }
 
 func (r *resourcePluginConverter) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
@@ -63,7 +61,7 @@ func (r *resourcePluginConverter) UploadResource(ctx context.Context, resource *
 		return nil, fmt.Errorf("failed to convert resource: %w", err)
 	}
 
-	tmp, err := r.createTemp("resource")
+	tmp, err := os.CreateTemp("", "resource")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -90,25 +88,11 @@ func (r *resourcePluginConverter) UploadResource(ctx context.Context, resource *
 	return descriptor.ConvertFromV2Resource(res.Resource), nil
 }
 
-func (r *resourcePluginConverter) createTemp(pattern string) (*os.File, error) {
-	tmpDir := ""
-	if r.filesystemConfig != nil {
-		tmpDir = r.filesystemConfig.TempFolder
-	}
-
-	return os.CreateTemp(tmpDir, pattern)
-}
-
 var _ Repository = (*resourcePluginConverter)(nil)
 
-func (r *ResourceRegistry) externalToResourcePluginConverter(plugin v1.ReadWriteResourcePluginContract, scheme *runtime.Scheme, opts ...Option) *resourcePluginConverter {
-	opt := &options{}
-	for _, o := range opts {
-		o(opt)
-	}
+func (r *ResourceRegistry) externalToResourcePluginConverter(plugin v1.ReadWriteResourcePluginContract, scheme *runtime.Scheme) *resourcePluginConverter {
 	return &resourcePluginConverter{
-		externalPlugin:   plugin,
-		scheme:           scheme,
-		filesystemConfig: opt.filesystemConfig,
+		externalPlugin: plugin,
+		scheme:         scheme,
 	}
 }
