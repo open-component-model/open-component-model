@@ -24,33 +24,6 @@ import (
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-type CopyMode int
-
-const (
-	CopyModeDefault CopyMode = iota
-	CopyModeLocalResources
-	CopyModeAllResources
-)
-
-type options struct {
-	copyMode  CopyMode
-	recursive bool
-}
-
-type Option func(*options)
-
-func WithCopyMode(mode CopyMode) func(*options) {
-	return func(o *options) {
-		o.copyMode = mode
-	}
-}
-
-func WithRecursive(recursive bool) func(*options) {
-	return func(o *options) {
-		o.recursive = recursive
-	}
-}
-
 var Scheme = runtime.NewScheme(runtime.WithAllowUnknown())
 
 func init() {
