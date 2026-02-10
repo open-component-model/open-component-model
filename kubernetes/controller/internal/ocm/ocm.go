@@ -22,11 +22,15 @@ import (
 // Furthermore, references to other ocm objects are resolved and their effective
 // configuration (so again, config map and secret references) with policy
 // propagate are returned.
-func GetEffectiveConfig(ctx context.Context, client ctrl.Client, obj v1alpha1.ConfigRefProvider) ([]v1alpha1.OCMConfiguration, error) {
+func GetEffectiveConfig(ctx context.Context, client ctrl.Client, obj v1alpha1.ConfigRefProvider, parent v1alpha1.ConfigRefProvider) ([]v1alpha1.OCMConfiguration, error) {
 	configs := obj.GetSpecifiedOCMConfig()
 
-	if len(configs) == 0 {
-		return nil, nil
+	if len(configs) == 0 && parent != nil {
+		for _, ref := range parent.GetEffectiveOCMConfig() {
+			if ref.Policy == v1alpha1.ConfigurationPolicyPropagate {
+				configs = append(configs, ref)
+			}
+		}
 	}
 
 	var refs []v1alpha1.OCMConfiguration
