@@ -278,7 +278,6 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 			Type: ChooseAddLocalResourceType(toSpec),
 			ID:   addResourceID,
 		},
-		// fmt.Sprintf("${%s.output.resource.access}", getResourceID),
 		Spec: &runtime.Unstructured{Data: map[string]any{
 			"repository": AsUnstructured(toSpec).Data,
 			"component":  ref.Component,
