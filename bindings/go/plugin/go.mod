@@ -11,11 +11,11 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/constructor v0.0.5
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260209114331-2c034a9e2912
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260210065627-2b87daf2cb8a
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260209114331-2c034a9e2912
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260210065627-2b87daf2cb8a
 )
 
 require (
@@ -31,6 +31,6 @@ require (
 	golang.org/x/text v0.33.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260209114331-2c034a9e2912 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260210065627-2b87daf2cb8a // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
