@@ -318,14 +318,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: %w", err)
 	}
 
-	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
-	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.ConfigureContextFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
-	}
-	deployer.Status.EffectiveOCMConfig = configs
-
 	key := resource.Status.Resource.Digest.Value
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
@@ -405,7 +397,13 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	deployer *deliveryv1alpha1.Deployer,
 	resource *deliveryv1alpha1.Resource,
 ) (objs []*unstructured.Unstructured, err error) {
-	configs := deployer.Status.EffectiveOCMConfig
+	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
+	if err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.ConfigureContextFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to get effective config: %w", err)
+	}
+	deployer.Status.EffectiveOCMConfig = configs
 
 	repoSpec := &ocmruntime.Raw{}
 	if err := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()).Decode(
