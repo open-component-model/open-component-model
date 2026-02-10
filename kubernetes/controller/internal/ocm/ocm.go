@@ -26,11 +26,13 @@ func GetEffectiveConfig(ctx context.Context, client ctrl.Client, obj v1alpha1.Co
 	configs := obj.GetSpecifiedOCMConfig()
 
 	if len(configs) == 0 && parent != nil {
+		var refs []v1alpha1.OCMConfiguration
 		for _, ref := range parent.GetEffectiveOCMConfig() {
 			if ref.Policy == v1alpha1.ConfigurationPolicyPropagate {
-				configs = append(configs, ref)
+				refs = append(refs, ref)
 			}
 		}
+		return refs, nil
 	}
 
 	var refs []v1alpha1.OCMConfiguration
