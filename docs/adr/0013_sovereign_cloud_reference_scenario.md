@@ -1,4 +1,4 @@
-# Design: Reference Scenario — Sovereign Cloud Delivery with Open ComponentModel
+# Design: Reference Scenario — Sovereign Cloud Delivery with Open Component Model
 
 * **Status**: draft
 * **Deciders**: TBD
@@ -11,7 +11,7 @@
 ## Table of Contents
 
 <!-- TOC -->
-* [Design: Reference Scenario — Sovereign Cloud Delivery with Open ComponentModel](#design-reference-scenario--sovereign-cloud-delivery-with-open-componentmodel)
+* [Design: Reference Scenario — Sovereign Cloud Delivery with Open Component Model](#design-reference-scenario--sovereign-cloud-delivery-with-open-component-model)
   * [Table of Contents](#table-of-contents)
   * [1. Overview](#1-overview)
     * [1.1 What This Document Covers](#11-what-this-document-covers)
@@ -199,13 +199,13 @@ The integrations form a cohesive delivery pipeline:
 
 To work through this reference scenario, you'll need:
 
-| Tool       | Purpose                          | Installation                                                        |
-|------------|----------------------------------|---------------------------------------------------------------------|
-| `ocm` CLI  | Build, sign, transfer components | [ocm.software/docs/cli](https://ocm.software/docs/cli/)             |
-| `kind`     | Local Kubernetes cluster         | [kind.sigs.k8s.io](https://kind.sigs.k8s.io/)                       |
-| `flux` CLI | GitOps deployment                | [fluxcd.io/docs/installation](https://fluxcd.io/docs/installation/) |
-| `task`     | Task runner for automation       | [taskfile.dev](https://taskfile.dev/)                               |
-| Docker     | Container runtime                | [docker.com](https://docker.com/)                                   |
+| Tool       | Purpose                          | Installation                                                                       |
+|------------|----------------------------------|------------------------------------------------------------------------------------|
+| `ocm` CLI  | Build, sign, transfer components | [ocm.software](https://ocm.software/dev/docs/getting-started/install-the-ocm-cli/) |
+| `kind`     | Local Kubernetes cluster         | [kind.sigs.k8s.io](https://kind.sigs.k8s.io/)                                      |
+| `flux` CLI | GitOps deployment                | [fluxcd.io/docs/installation](https://fluxcd.io/docs/installation/)                |
+| `task`     | Task runner for automation       | [taskfile.dev](https://taskfile.dev/)                                              |
+| Docker     | Container runtime                | [docker.com](https://docker.com/)                                                  |
 
 **Optional (for full integration testing):**
 

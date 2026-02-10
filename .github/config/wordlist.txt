@@ -589,3 +589,13 @@ warroom
 wgs
 kubermatic
 baseUrl
+krm
+kv
+ord
+openmcp
+resourcegraphdefinitions
+rgds
+kustomizations
+ecdsa
+integrators
+taskfile
