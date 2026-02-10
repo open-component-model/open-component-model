@@ -72,7 +72,7 @@ func (r *ResourceRegistry) AddPlugin(plugin types.Plugin, spec runtime.Typed) er
 }
 
 // GetResourcePlugin returns Resource plugins for a specific type.
-func (r *ResourceRegistry) GetResourcePlugin(ctx context.Context, spec runtime.Typed, opts ...Option) (Repository, error) {
+func (r *ResourceRegistry) GetResourcePlugin(ctx context.Context, spec runtime.Typed) (Repository, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -94,7 +94,7 @@ func (r *ResourceRegistry) GetResourcePlugin(ctx context.Context, spec runtime.T
 		return nil, err
 	}
 
-	return r.externalToResourcePluginConverter(plugin, r.scheme, opts...), nil
+	return r.externalToResourcePluginConverter(plugin, r.scheme), nil
 }
 
 // getPlugin returns a Resource plugin for a given type using a specific plugin storage map. It will also first look
@@ -130,8 +130,6 @@ func (r *ResourceRegistry) RegisterInternalResourcePlugin(plugin BuiltinResource
 
 	return nil
 }
-
-// TODO: implement repository.ResourceRepository
 
 type constructedPlugin struct {
 	Plugin resourcev1.ReadWriteResourcePluginContract
