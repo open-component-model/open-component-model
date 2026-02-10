@@ -2,7 +2,6 @@ package component_version
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -157,11 +156,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build transformer builder
-	b, err := graphBuilder(ctx, pm, credGraph)
-	if err != nil {
-		return fmt.Errorf("building graph builder failed: %w", err)
-	}
-
+	b := graphBuilder(pm, credGraph)
 	graph, err := b.
 		WithEvents(make(chan graphRuntime.ProgressEvent, eventBufferSize)).
 		BuildAndCheck(tgd)
@@ -210,7 +205,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 }
 
 // TODO: make this a plugin manager integration.
-func graphBuilder(ctx context.Context, pm *manager.PluginManager, credentialProvider credentials.Resolver) (*builder.Builder, error) {
+func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Resolver) *builder.Builder {
 	transformerScheme := ociv1alpha1.Scheme
 
 	ociGet := &transformer.GetComponentVersion{
@@ -252,7 +247,7 @@ func graphBuilder(ctx context.Context, pm *manager.PluginManager, credentialProv
 		WithTransformer(&ociv1alpha1.OCIAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
 		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
-		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact), nil
+		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact)
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {

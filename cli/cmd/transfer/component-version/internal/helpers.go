@@ -61,7 +61,7 @@ func isLocalRelation(resource v2.Resource) bool {
 	return resource.Relation == v2.LocalRelation
 }
 
-func GetImageReference(ociImage v1.OCIImage) (string, error) {
+func GetReferenceName(ociImage v1.OCIImage) (string, error) {
 	var referenceName string
 	if ociImage.ImageReference != "" {
 		u, err := url.Parse(ociImage.ImageReference)
