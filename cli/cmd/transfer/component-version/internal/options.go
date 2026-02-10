@@ -4,7 +4,7 @@ type CopyMode int
 
 const (
 	// CopyModeDefault is the default copy mode, which does not download remote references like oci artifacts,
-	// but copies local resources and component references.
+	// but copies local resources.
 	CopyModeDefault CopyMode = iota
 	// CopyModeLocalResources only copies all resources with a local relation, including oci artifacts.
 	CopyModeLocalResources
