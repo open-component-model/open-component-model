@@ -201,4 +201,3 @@ func (r *ResourceRegistry) DownloadResource(ctx context.Context, res *descriptor
 
 	return plugin.DownloadResource(ctx, res, credentials)
 }
-
