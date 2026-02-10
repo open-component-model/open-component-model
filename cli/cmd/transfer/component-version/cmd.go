@@ -13,7 +13,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
@@ -137,9 +136,11 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting copy-local-resources flag failed: %w", err)
 	}
 
-	// do not allow both copy-resources and copy-local-resources to be set at the same time, as they are mutually exclusive
+	// If both copyResources and copyLocalResources are set, we prioritize copyResources and ignore copyLocalResources.
+	// We align here with old ocm for downward compatibility
+	// https://github.com/open-component-model/ocm/blob/main/api/ocm/tools/transfer/transferhandler/standard/handler.go#L64
 	if copyResources && copyLocalResources {
-		return fmt.Errorf("flags --%s and --%s cannot be set at the same time, as they are mutually exclusive", FlagCopyResources, FlagCopyLocalResources)
+		copyResources = false
 	}
 
 	copyMode := internal.CopyModeDefault
@@ -236,14 +237,9 @@ func graphBuilder(ctx context.Context, pm *manager.PluginManager, credentialProv
 	}
 
 	// OCI Artifact transformers
-	resourcePlugin, err := pm.ResourcePluginRegistry.GetResourcePlugin(ctx, &v1.OCIImage{})
-	if err != nil {
-		return nil, fmt.Errorf("unable to get OCI resource plugin: %w", err)
-	}
-
 	ociGetOCIArtifact := &transformer.GetOCIArtifact{
 		Scheme:             transformerScheme,
-		Repository:         resourcePlugin,
+		Repository:         pm.ResourcePluginRegistry,
 		CredentialProvider: credentialProvider,
 	}
 
