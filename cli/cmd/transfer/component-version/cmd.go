@@ -53,6 +53,7 @@ a target repository using an internally generated transformation graph.
 This command constructs a TransformationGraphDefinition consisting of:
   1. CTFGetComponentVersion / OCIGetComponentVersion
   2. CTFAddComponentVersion / OCIAddComponentVersion
+  3. GetOCIArtifact / OCIAddLocalResource
 
 The graph is validated, and then executed unless --dry-run is set.`,
 		Args:              cobra.ExactArgs(2),
@@ -63,7 +64,7 @@ The graph is validated, and then executed unless --dry-run is set.`,
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String()}, "output format of the component descriptors")
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
-	cmd.Flags().Bool(FlagCopyResources, false, "copy all resources referenced by the component version")
+	cmd.Flags().Bool(FlagCopyResources, false, "copy all resources, independent by their relation, referenced by the component version")
 	cmd.Flags().Bool(FlagCopyLocalResources, false, "copy all resources with local relation referenced by the component version")
 
 	return cmd
