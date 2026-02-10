@@ -21,7 +21,7 @@ require (
 	golang.org/x/text v0.33.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9 // indirect
-	ocm.software/open-component-model/bindings/go/credentials v0.0.6 // indirect
+	ocm.software/open-component-model/bindings/go/credentials v0.0.7 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260209114331-2c034a9e2912 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260209114331-2c034a9e2912 // indirect

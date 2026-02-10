@@ -117,7 +117,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59e963e // indirect
 	k8s.io/kubectl v0.35.0 // indirect
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570 // indirect
-	ocm.software/open-component-model/bindings/go/credentials v0.0.6 // indirect
+	ocm.software/open-component-model/bindings/go/credentials v0.0.7 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260209114331-2c034a9e2912 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260209114331-2c034a9e2912 // indirect
