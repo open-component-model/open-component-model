@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"sync"
 
+	"ocm.software/open-component-model/bindings/go/blob"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -172,3 +174,31 @@ func startAndReturnPlugin(ctx context.Context, r *ResourceRegistry, plugin *type
 
 	return resourcePlugin, nil
 }
+
+func (r *ResourceRegistry) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
+	plugin, err := r.GetResourcePlugin(ctx, resource.GetAccess())
+	if err != nil {
+		return runtime.Identity{}, fmt.Errorf("failed to get plugin for resource: %w", err)
+	}
+
+	return plugin.GetResourceCredentialConsumerIdentity(ctx, resource)
+}
+
+func (r *ResourceRegistry) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
+	plugin, err := r.GetResourcePlugin(ctx, res.GetAccess())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugin for resource: %w", err)
+	}
+
+	return plugin.UploadResource(ctx, res, content, credentials)
+}
+
+func (r *ResourceRegistry) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+	plugin, err := r.GetResourcePlugin(ctx, res.GetAccess())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugin for resource: %w", err)
+	}
+
+	return plugin.DownloadResource(ctx, res, credentials)
+}
+
