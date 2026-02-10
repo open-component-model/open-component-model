@@ -28,6 +28,8 @@ var _ = Describe("Credentials E2E Tests", func() {
 			By("Bootstrapping the example " + testName)
 			Expect(utils.DeployResource(ctx, filepath.Join(testdata, testName, Bootstrap))).To(Succeed())
 
+			Expect(utils.MakeServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
+
 			rgdName := "rgd/" + testName
 			Expect(utils.WaitForResource(ctx, "create", timeout, rgdName)).To(Succeed())
 
