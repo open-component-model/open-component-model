@@ -13,6 +13,10 @@ import (
 type Repository interface {
 	// GetResourceCredentialConsumerIdentity resolves the identity of the given [descriptor.Resource] to use for credential resolution.
 	GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error)
+	// UploadResource uploads a [descriptor.Resource] to the repository.
+	// Returns the updated resource with repository-specific access information.
+	// The credentials map must contain necessary authentication information to access the resource.
+	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error)
 	// DownloadResource downloads and verifies the integrity of a [descriptor.Resource] from the repository.
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error)
 }
