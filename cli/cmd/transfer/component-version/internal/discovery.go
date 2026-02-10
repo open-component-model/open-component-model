@@ -121,12 +121,6 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 
 			switch access.(type) {
 			case *descriptorv2.LocalBlob:
-				if copyMode == CopyModeLocalResources && !isLocalRelation(resource) {
-					slog.Info("Skipping copy of local blob resource as copy mode is local resources only "+
-						"and this resource is not a local relation",
-						"component", ref.Component, "version", ref.Version, "resource", resource.Name)
-					continue
-				}
 				processLocalRelation(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
 			case *v2.OCIImage:
 				switch copyMode {
