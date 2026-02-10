@@ -6,7 +6,7 @@
 
 **Issue:** [ocm-project#842](https://github.com/open-component-model/ocm-project/issues/842)  
 **Parent Epic:** [ocm-project#424 — OCM Reference Scenario / Golden Path](https://github.com/open-component-model/ocm-project/issues/424)  
-**Related:** [ocm-project#843 — Document and Describe Reference Scenario in "How To's"](https://github.com/open-component-model/ocm-project/issues/843)
+**Related:** [ocm-project#843 — Document and Describe Reference Scenario](https://github.com/open-component-model/ocm-project/issues/843)
 
 ## Table of Contents
 
@@ -74,7 +74,7 @@
 
 ## 1. Overview
 
-This document designs a reference scenario demonstrating OCM's core value proposition: **modeling, signing, transporting, and deploying a multi-service product into an air-gapped sovereign cloud environment**.
+This document designs a reference scenario demonstrating one of our our core value propositioning statements: **modeling, signing, transporting, and deploying a multi-service product into an air-gapped sovereign cloud environment**.
 
 ### 1.1 What This Document Covers
 
