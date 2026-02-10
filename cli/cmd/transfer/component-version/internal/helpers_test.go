@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 )
 
-func TestGetImageReference(t *testing.T) {
+func TestGetReferenceName(t *testing.T) {
 	tests := []struct {
 		name          string
 		ociImage      v1.OCIImage
@@ -140,27 +141,27 @@ func TestGetImageReference(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
 
-			gotReference, gotErr := GetImageReference(tt.ociImage)
+			gotReference, gotErr := GetReferenceName(tt.ociImage)
 
 			if tt.wantErr {
-				r.Error(gotErr, "GetImageReference() should return an error")
+				r.Error(gotErr, "GetReferenceName() should return an error")
 				if tt.errContains != "" {
 					r.ErrorContains(gotErr, tt.errContains, "error message should contain expected text")
 				}
 			} else {
-				r.NoError(gotErr, "GetImageReference() should not return an error")
+				r.NoError(gotErr, "GetReferenceName() should not return an error")
 			}
 
-			r.Equal(tt.wantReference, gotReference, "GetImageReference() returned unexpected reference")
+			r.Equal(tt.wantReference, gotReference, "GetReferenceName() returned unexpected reference")
 		})
 	}
 }
 
-func TestGetImageReference_ExtractsPathCorrectly(t *testing.T) {
+func TestGetReferenceName_ExtractsPathCorrectly(t *testing.T) {
 	tests := []struct {
-		name          string
-		imageRef      string
-		expectedPath  string
+		name         string
+		imageRef     string
+		expectedPath string
 	}{
 		{
 			name:         "extracts path from full OCI URL",
@@ -192,7 +193,7 @@ func TestGetImageReference_ExtractsPathCorrectly(t *testing.T) {
 				ImageReference: tt.imageRef,
 			}
 
-			gotPath, err := GetImageReference(ociImage)
+			gotPath, err := GetReferenceName(ociImage)
 			r.NoError(err)
 			r.Equal(tt.expectedPath, gotPath)
 		})
