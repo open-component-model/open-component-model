@@ -73,7 +73,7 @@ func BuildGraphDefinition(
 	})
 
 	if err := dr.Discover(ctx); err != nil {
-		return nil, fmt.Errorf("Recursive discovery failed: %w", err)
+		return nil, fmt.Errorf("recursive discovery failed: %w", err)
 	}
 
 	tgd := &transformv1alpha1.TransformationGraphDefinition{
