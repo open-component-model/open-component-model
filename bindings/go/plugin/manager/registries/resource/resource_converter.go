@@ -2,12 +2,16 @@ package resource
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -49,6 +53,39 @@ func (r *resourcePluginConverter) DownloadResource(ctx context.Context, resource
 	}
 
 	return rBlob, nil
+}
+
+func (r *resourcePluginConverter) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (result *descriptor.Resource, err error) {
+	resources, err := descriptor.ConvertToV2Resources(r.scheme, []descriptor.Resource{*resource})
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert resource: %w", err)
+	}
+
+	tmp, err := os.CreateTemp("", "resource")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, tmp.Close())
+	}()
+
+	if err := filesystem.CopyBlobToOSPath(content, tmp.Name()); err != nil {
+		return nil, fmt.Errorf("failed to copy blob to OS path: %w", err)
+	}
+
+	request := &v1.AddGlobalResourceRequest{
+		Resource: &resources[0],
+		ResourceLocation: types.Location{
+			LocationType: types.LocationTypeLocalFile,
+			Value:        tmp.Name(),
+		},
+	}
+	res, err := r.externalPlugin.AddGlobalResource(ctx, request, credentials)
+	if err != nil {
+		return nil, err
+	}
+
+	return descriptor.ConvertFromV2Resource(res.Resource), nil
 }
 
 var _ Repository = (*resourcePluginConverter)(nil)
