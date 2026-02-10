@@ -95,9 +95,9 @@ func TestPluginFlow(t *testing.T) {
 	require.NoError(t, err)
 	reader, err := resource.ReadCloser()
 	require.NoError(t, err)
-	defer func(reader io.ReadCloser) {
+	defer func() {
 		_ = reader.Close()
-	}(reader)
+	}()
 	content, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	require.Equal(t, "test-resource", string(content))
