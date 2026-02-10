@@ -9,3 +9,4 @@ config:
     maximum: 2 # cobra generates 2 blank lines between sections at times
   MD040: false  # fenced code blocks are used by the cli without language specification
   MD046: false # cobra uses both fenced and indented code block styles in different sections
+  MD032: false

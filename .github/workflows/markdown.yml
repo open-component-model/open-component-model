@@ -31,4 +31,15 @@ jobs:
         with:
           config_path: .github/config/spellcheck.yml
           task_name: Markdown
-
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: 3.x
+      - name: Run linter
+        run: task tools:markdownlint

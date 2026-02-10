@@ -4,10 +4,10 @@
 
 We have the following governance documents:
 
-| Governance Document  | Purpose  |
-|---|---|
-| [OWNERS.md](./OWNERS.md)  | Maintainers & Technical Steering Committee Members  |
-| [Project Charter](./CHARTER.md)  |  Structure, purpose and organization of project |
+| Governance Document             | Purpose                                            |
+|---------------------------------|----------------------------------------------------|
+| [OWNERS.md](./OWNERS.md)        | Maintainers & Technical Steering Committee Members |
+| [Project Charter](./CHARTER.md) | Structure, purpose and organization of project     |
 
 ## Repository Guidelines
 
