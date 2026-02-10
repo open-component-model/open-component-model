@@ -30,18 +30,6 @@ import (
 	"ocm.software/open-component-model/cli/integration/internal"
 )
 
-type mockCredentialsResolver struct {
-	Username string
-	Password string
-}
-
-func (m *mockCredentialsResolver) Resolve(ctx context.Context, identity ocmruntime.Identity) (map[string]string, error) {
-	return map[string]string{
-		"username": m.Username,
-		"password": m.Password,
-	}, nil
-}
-
 func Test_Integration_Transfer_OCIArtifact(t *testing.T) {
 	ctx := t.Context()
 	r := require.New(t)
@@ -116,11 +104,6 @@ configurations:
 	r.NoError(err)
 
 	// prepare artifact upload
-	credsResolver := mockCredentialsResolver{
-		Username: user,
-		Password: password,
-	}
-
 	originalData := []byte("foobar")
 
 	data, access := createSingleLayerOCIImage(t, originalData, "ghcr.io/test-resource:v1.0.0")
@@ -149,12 +132,11 @@ configurations:
 	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", reference("test-resource:v1.0.0"))
 	resource.Access = targetAccess
 
-	creds, err := credsResolver.Resolve(ctx, nil)
-	r.NoError(err)
-	r.NotNil(creds)
-
 	resourceRepo := ocires.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
-	newRes, err := resourceRepo.UploadResource(ctx, &resource, blob, creds)
+	newRes, err := resourceRepo.UploadResource(ctx, &resource, blob, map[string]string{
+		"username": user,
+		"password": password,
+	})
 	r.NoError(err)
 	resource = *newRes
 
