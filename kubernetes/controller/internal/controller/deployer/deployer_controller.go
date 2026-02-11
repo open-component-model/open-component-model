@@ -395,12 +395,13 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	deployer *deliveryv1alpha1.Deployer,
 	resource *deliveryv1alpha1.Resource,
 ) (objs []*unstructured.Unstructured, err error) {
-	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer)
+	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.ConfigureContextFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to get effective config: %w", err)
 	}
+	deployer.Status.EffectiveOCMConfig = configs
 
 	repoSpec := &ocmruntime.Raw{}
 	if err := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()).Decode(
