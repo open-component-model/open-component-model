@@ -21,16 +21,18 @@ The controller uses [server-side apply](https://kubernetes.io/docs/reference/usi
 and manage the resources defined in your `Deployer` specs. If a `Deployer` targets a custom resource type, the
 controller needs RBAC permissions for that resource's API group.
 
-Common examples:
+This applies to both custom resources and standard Kubernetes resources. Common examples:
 
 - **kro** `ResourceGraphDefinitions` (`kro.run`)
-- Any other CRD-based resource your deployers create
+- `Deployments` (`apps`) and `Services` (core) when using the ApplySet deployer
+- Any other resource type your deployers create
 
 ## Create a ClusterRole and ClusterRoleBinding
 
 Create a `ClusterRole` with the permissions your deployers require, then bind it to the controller's service account.
 
-Below is an example granting permissions for kro `ResourceGraphDefinitions`:
+Below is an example granting permissions for kro `ResourceGraphDefinitions` and the Kubernetes resources
+that the ApplySet deployer manages:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -45,6 +47,30 @@ rules:
     verbs:
       - create
       - delete
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - create
+      - delete
+      - get
       - list
       - patch
       - update
