@@ -37,18 +37,3 @@ subjects:
   - kind: ServiceAccount
     name: ocm-k8s-toolkit-controller-manager
     namespace: ocm-k8s-toolkit-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  labels:
-    app.kubernetes.io/name: ocm-k8s-toolkit
-  name: manager-rolebinding-e2e
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: manager-role-e2e
-subjects:
-  - kind: ServiceAccount
-    name: controller-manager
-    namespace: system
