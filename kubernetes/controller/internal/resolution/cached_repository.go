@@ -13,6 +13,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
@@ -30,6 +31,7 @@ type CacheBackedRepository struct {
 	resolver        resolvers.ComponentVersionRepositoryResolver
 	cfg             *configuration.Configuration
 	Verifications   []ocm.Verification
+	Digest          *v2.Digest
 	SigningRegistry *signinghandler.SigningRegistry
 	workerPool      *workerpool.WorkerPool
 	logger          *logr.Logger
@@ -51,6 +53,7 @@ func newCacheBackedRepository(
 	requesterFunc func() workerpool.RequesterInfo,
 	baseRepoSpec runtime.Typed,
 	verifications []ocm.Verification,
+	digest *v2.Digest,
 	signingRegistry *signinghandler.SigningRegistry,
 ) *CacheBackedRepository {
 	return &CacheBackedRepository{
@@ -61,6 +64,7 @@ func newCacheBackedRepository(
 		requesterFunc:   requesterFunc,
 		baseRepoSpec:    baseRepoSpec,
 		Verifications:   verifications,
+		Digest:          digest,
 		SigningRegistry: signingRegistry,
 	}
 }
@@ -89,7 +93,7 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 		// The actual repository is determined by the providers resolver
 		// configuration (which is represented through the config hash) and
 		// the base repository.
-		return buildCacheKey(configHash, c.baseRepoSpec, component, version, c.Verifications)
+		return buildCacheKey(configHash, c.baseRepoSpec, component, version, c.Verifications, c.Digest)
 	}
 
 	repo, err := c.resolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
@@ -182,10 +186,11 @@ func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
 	return checkable.CheckHealth(ctx)
 }
 
-// buildCacheKey generates a cache key from the configuration hash, repository spec, component, version, and verifications.
+// buildCacheKey generates a cache key from the configuration hash, repository spec, component, version, verifications,
+// and a digest spec.
 // It canonicalizes the repository spec and verifications using JCS (RFC 8785) before hashing to ensure consistent keys
 // regardless of field ordering in the JSON representation.
-func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string, verifications []ocm.Verification) (string, error) {
+func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string, verifications []ocm.Verification, digestSpec *v2.Digest) (string, error) {
 	repoJSON, err := json.Marshal(repoSpec)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal repository spec: %w", err)
@@ -215,6 +220,11 @@ func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version
 		return "", fmt.Errorf("failed to canonicalize verifications: %w", err)
 	}
 
+	digestJson, err := json.Marshal(digestSpec)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal digest spec: %w", err)
+	}
+
 	hasher := fnv.New64a()
 	// can safely ignore because fnv.Write never actually returns an error
 	_, _ = hasher.Write(configHash)
@@ -222,6 +232,7 @@ func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version
 	_, _ = hasher.Write([]byte(component))
 	_, _ = hasher.Write([]byte(version))
 	_, _ = hasher.Write(canonicalVerificationsJSON)
+	_, _ = hasher.Write(digestJson)
 
 	return fmt.Sprintf("%016x", hasher.Sum64()), nil
 }
