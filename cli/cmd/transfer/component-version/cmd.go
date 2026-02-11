@@ -28,10 +28,10 @@ import (
 )
 
 const (
-	FlagDryRun     = "dry-run"
-	FlagOutput     = "output"
-	FlagRecursive  = "recursive"
-	FlagCopyPolicy = "copy-resources"
+	FlagDryRun        = "dry-run"
+	FlagOutput        = "output"
+	FlagRecursive     = "recursive"
+	FlagCopyResources = "copy-resources"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the renderer consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -61,7 +61,7 @@ The graph is validated, and then executed unless --dry-run is set.`,
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String()}, "output format of the component descriptors")
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
-	cmd.Flags().Bool(FlagCopyPolicy, false, "copy all resources in the component version")
+	cmd.Flags().Bool(FlagCopyResources, false, "copy all resources in the component version")
 
 	return cmd
 }
@@ -123,7 +123,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting recursive flag failed: %w", err)
 	}
 
-	copyResources, err := cmd.Flags().GetBool(FlagCopyPolicy)
+	copyResources, err := cmd.Flags().GetBool(FlagCopyResources)
 	if err != nil {
 		return fmt.Errorf("getting copy-resources flag failed: %w", err)
 	}
