@@ -58,6 +58,8 @@ cliconfig
 clis
 closable
 closeable
+ClusterRole
+ClusterRoleBinding
 cmds
 cncf
 coc
@@ -395,6 +397,7 @@ resolvefromcomponentversion
 resolvers
 resourceconfig
 resourcegraphdefinition
+ResourceGraphDefinitions
 resourceref
 resourcereference
 retrigger
