@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
@@ -524,8 +525,13 @@ func (r *Reconciler) downloadResourceBlob(
 	resource *descriptor.Resource,
 	cfg *configuration.Configuration,
 ) (io.ReadCloser, error) {
-	// local access types can be read directly
-	if resource.Access.GetType().Name == descriptor.LocalBlobAccessType {
+	typed, err := v2.Scheme.NewObject(resource.Access.GetType())
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve access type: %w", err)
+	}
+
+	switch typed.(type) { //nolint:gocritic // no, I like switch for types better
+	case *v2.LocalBlob:
 		blob, _, err := repo.GetLocalResource(ctx,
 			componentDescriptor.Component.Name,
 			componentDescriptor.Component.Version,
