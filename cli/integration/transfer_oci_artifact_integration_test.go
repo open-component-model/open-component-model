@@ -15,6 +15,7 @@ import (
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -203,6 +204,9 @@ components:
 	r.Equal(componentVersion, desc.Component.Version)
 	r.Len(desc.Component.Resources, 1)
 	r.Equal("test-resource", desc.Component.Resources[0].Name)
+	var localBlobAccess v2.LocalBlob
+	r.NoError(v2.Scheme.Convert(desc.Component.Resources[0].Access, &localBlobAccess))
+	r.Equal("test-resource:v1.0.0", localBlobAccess.ReferenceName)
 }
 
 func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte, *v1.OCIImage) {
