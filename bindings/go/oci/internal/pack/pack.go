@@ -227,8 +227,12 @@ func updateArtifactAccess(artifact descriptor.Artifact, access *v2.LocalBlob, de
 		return errors.New("artifact must not be nil")
 	}
 
+	typ := access.Type
+	if typ.IsEmpty() {
+		typ = runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion)
+	}
 	localBlob := &descriptor.LocalBlob{
-		Type:           access.Type,
+		Type:           typ,
 		LocalReference: desc.Digest.String(),
 		MediaType:      desc.MediaType,
 		ReferenceName:  access.ReferenceName,
