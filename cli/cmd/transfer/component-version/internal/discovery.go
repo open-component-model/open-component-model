@@ -22,6 +22,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/signing"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
+	"ocm.software/open-component-model/cli/cmd/download/shared"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
@@ -39,7 +40,7 @@ func BuildGraphDefinition(
 	repoResolver resolvers.ComponentVersionRepositoryResolver,
 	opts ...Option,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
-	o := options{}
+	o := Options{}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -120,32 +121,24 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 				return fmt.Errorf("cannot convert resource access to typed object: %w", err)
 			}
 
+			if copyMode == CopyModeLocalBlobResources && !shared.IsLocal(access) {
+				slog.Info("Skipping copy of resource as copy mode is local blob resources only",
+					"component", ref.Component, "version", ref.Version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
+				continue
+			}
+
 			switch access.(type) {
 			case *descriptorv2.LocalBlob:
 				processLocalBlob(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
 			case *v2.OCIImage:
-				switch copyMode {
-				case CopyModeDefault:
-					slog.Info("Skipping copy of OCI artifact resource as copy mode is default which excludes OCI artifacts",
-						"component", ref.Component, "version", ref.Version, "resource", resource.Name)
-					continue
-				case CopyModeLocalResources:
-					// only copy internal/owned by local artifacts
-					if !isLocalRelation(resource) {
-						slog.Info("Skipping copy of OCI artifact resource as copy mode is local resources only "+
-							"and this artifact is not a local relation",
-							"component", ref.Component, "version", ref.Version, "resource", resource.Name)
-						continue
-					}
-				default:
-					// all good, we can copy the oci artifact
-				}
 				err := processOCIArtifact(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
 				if err != nil {
 					return fmt.Errorf("cannot process OCI artifact resource: %w", err)
 				}
 			default:
 				// No transformation configured for resource with access types not listed above
+				slog.Info("No copy of resource even though copy mode is copy all resources, because access type is not supported for copying",
+					"component", ref.Component, "version", ref.Version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 			}
 		}
 
