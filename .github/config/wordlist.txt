@@ -58,6 +58,8 @@ cliconfig
 clis
 closable
 closeable
+ClusterRole
+ClusterRoleBinding
 cmds
 cncf
 coc
