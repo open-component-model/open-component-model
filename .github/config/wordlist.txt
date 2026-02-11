@@ -397,6 +397,7 @@ resolvefromcomponentversion
 resolvers
 resourceconfig
 resourcegraphdefinition
+ResourceGraphDefinitions
 resourceref
 resourcereference
 retrigger
