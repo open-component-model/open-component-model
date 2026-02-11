@@ -15,7 +15,7 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260210065627-2b87daf2cb8a
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/oci v0.0.28
+	ocm.software/open-component-model/bindings/go/oci v0.0.29
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	ocm.software/open-component-model/cli v0.0.0-20260210065627-2b87daf2cb8a
@@ -131,7 +131,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260210065627-2b87daf2cb8a // indirect
-	ocm.software/open-component-model/bindings/go/plugin v0.0.13 // indirect
+	ocm.software/open-component-model/bindings/go/plugin v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260210065627-2b87daf2cb8a // indirect
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260210065627-2b87daf2cb8a // indirect
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260210065627-2b87daf2cb8a // indirect
