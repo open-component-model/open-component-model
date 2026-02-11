@@ -70,7 +70,7 @@ func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.
 
 	switch mediaType {
 	case layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1:
-		return ResourceLocalBlobOCILayout(ctx, storage, b, opts)
+		return ResourceLocalBlobOCILayout(ctx, storage, b, access, opts)
 	default:
 		return ResourceLocalBlobOCILayer(ctx, storage, b, access, opts)
 	}
@@ -94,14 +94,14 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 
 	global := backedByGlobalStore(storage) || opts.EnforceGlobalAccess
 
-	if err := updateArtifactAccess(b.Artifact, layer, updateAccessOptions{opts, global}); err != nil {
+	if err := updateArtifactAccess(b.Artifact, access, layer, updateAccessOptions{opts, global}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 
 	return layer, nil
 }
 
-func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
+func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
 	index, err := tar.CopyOCILayoutWithIndex(ctx, storage, b, tar.CopyOCILayoutWithIndexOptions{
 		CopyGraphOptions: opts.CopyGraphOptions,
 		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
@@ -112,7 +112,7 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy OCI layout: %w", err)
 	}
 	global := backedByGlobalStore(storage)
-	if err := updateArtifactAccess(b.Artifact, index, updateAccessOptions{opts, global}); err != nil {
+	if err := updateArtifactAccess(b.Artifact, access, index, updateAccessOptions{opts, global}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 	return index, nil
@@ -222,15 +222,16 @@ type updateAccessOptions struct {
 // <repository> or <repository>:<tag>, as the digest is added to pin the descriptor reference.
 // Note that a global reference is only set if the resource is backed by a globally reachable store,
 // as otherwise the reference would not be valid, e.g. in a CTF. See backedByGlobalStore for more information.
-func updateArtifactAccess(artifact descriptor.Artifact, desc ociImageSpecV1.Descriptor, opts updateAccessOptions) error {
+func updateArtifactAccess(artifact descriptor.Artifact, access *v2.LocalBlob, desc ociImageSpecV1.Descriptor, opts updateAccessOptions) error {
 	if artifact == nil {
 		return errors.New("artifact must not be nil")
 	}
 
 	localBlob := &descriptor.LocalBlob{
-		Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+		Type:           access.Type,
 		LocalReference: desc.Digest.String(),
 		MediaType:      desc.MediaType,
+		ReferenceName:  access.ReferenceName,
 	}
 
 	if opts.BackedByGlobalStore {
