@@ -31,8 +31,7 @@ This applies to both custom resources and standard Kubernetes resources. Common 
 
 Create a `ClusterRole` with the permissions your deployers require, then bind it to the controller's service account.
 
-Below is an example granting permissions for kro `ResourceGraphDefinitions` and the Kubernetes resources
-that the ApplySet deployer manages:
+Below is an example granting permissions for kro `ResourceGraphDefinitions` and the Kubernetes resources that the deployer manages:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
