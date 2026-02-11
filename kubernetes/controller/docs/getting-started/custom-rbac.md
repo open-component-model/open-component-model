@@ -24,7 +24,7 @@ controller needs RBAC permissions for that resource's API group.
 This applies to both custom resources and standard Kubernetes resources. Common examples:
 
 - **kro** `ResourceGraphDefinitions` (`kro.run`)
-- `Deployments` (`apps`) and `Services` (core)
+- `Deployments` (`apps`) and `Services` (`core`)
 - Any other resource type your deployers create
 
 ## Create a ClusterRole and ClusterRoleBinding
