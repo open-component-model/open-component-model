@@ -278,7 +278,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 				"type":     fmt.Sprintf("${%s.output.resource.type}", getResourceID),
 				"relation": fmt.Sprintf("${%s.output.resource.relation}", getResourceID),
 				"access": map[string]interface{}{
-					"type":          fmt.Sprintf("${%s.output.resource.access.type}", getResourceID),
+					"type":          descriptor.GetLocalBlobAccessType().String(),
 					"referenceName": referenceName,
 				},
 				"digest": fmt.Sprintf("${%s.output.resource.digest}", getResourceID),
