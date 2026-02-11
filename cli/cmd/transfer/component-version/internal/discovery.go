@@ -14,7 +14,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	v2 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -129,7 +129,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 			switch access.(type) {
 			case *descriptorv2.LocalBlob:
 				processLocalBlob(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
-			case *v2.OCIImage:
+			case *ociv1.OCIImage:
 				err := processOCIArtifact(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
 				if err != nil {
 					return fmt.Errorf("cannot process OCI artifact resource: %w", err)
@@ -228,7 +228,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
 	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 
-	var ociAccess v2.OCIImage
+	var ociAccess ociv1.OCIImage
 	if err := json.Unmarshal(resource.Access.Data, &ociAccess); err != nil {
 		return fmt.Errorf("cannot unmarshal OCI access: %w", err)
 	}
