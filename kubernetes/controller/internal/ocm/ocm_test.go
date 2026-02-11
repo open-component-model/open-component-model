@@ -69,9 +69,138 @@ var _ = Describe("ocm utility", func() {
 				},
 			}
 
-			config, err := GetEffectiveConfig(ctx, nil, &repo)
+			config, err := GetEffectiveConfig(ctx, nil, &repo, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(config).To(BeEmpty())
+		})
+
+		It("no config inherits propagate entries from parent", func(ctx SpecContext) {
+			parent := &v1alpha1.Repository{
+				Status: v1alpha1.RepositoryStatus{
+					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
+						{
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								APIVersion: corev1.SchemeGroupVersion.String(),
+								Kind:       "Secret",
+								Name:       Secret,
+								Namespace:  Namespace,
+							},
+							Policy: v1alpha1.ConfigurationPolicyPropagate,
+						},
+					},
+				},
+			}
+
+			child := &v1alpha1.Component{
+				Spec: v1alpha1.ComponentSpec{},
+			}
+
+			config, err := GetEffectiveConfig(ctx, nil, child, parent)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(config).To(Equal(parent.Status.EffectiveOCMConfig))
+		})
+
+		It("no config does not inherit do-not-propagate entries from parent", func(ctx SpecContext) {
+			parent := &v1alpha1.Repository{
+				Status: v1alpha1.RepositoryStatus{
+					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
+						{
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								APIVersion: corev1.SchemeGroupVersion.String(),
+								Kind:       "Secret",
+								Name:       Secret,
+								Namespace:  Namespace,
+							},
+							Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
+						},
+					},
+				},
+			}
+
+			child := &v1alpha1.Component{
+				Spec: v1alpha1.ComponentSpec{},
+			}
+
+			config, err := GetEffectiveConfig(ctx, nil, child, parent)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(config).To(BeEmpty())
+		})
+
+		It("no config inherits only propagate entries from parent with mixed policies", func(ctx SpecContext) {
+			propagateEntry := v1alpha1.OCMConfiguration{
+				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					APIVersion: corev1.SchemeGroupVersion.String(),
+					Kind:       "Secret",
+					Name:       Secret,
+					Namespace:  Namespace,
+				},
+				Policy: v1alpha1.ConfigurationPolicyPropagate,
+			}
+			doNotPropagateEntry := v1alpha1.OCMConfiguration{
+				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					APIVersion: corev1.SchemeGroupVersion.String(),
+					Kind:       "ConfigMap",
+					Name:       ConfigMap,
+					Namespace:  Namespace,
+				},
+				Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
+			}
+
+			parent := &v1alpha1.Repository{
+				Status: v1alpha1.RepositoryStatus{
+					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
+						propagateEntry,
+						doNotPropagateEntry,
+					},
+				},
+			}
+
+			child := &v1alpha1.Component{
+				Spec: v1alpha1.ComponentSpec{},
+			}
+
+			config, err := GetEffectiveConfig(ctx, nil, child, parent)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(config).To(Equal([]v1alpha1.OCMConfiguration{propagateEntry}))
+		})
+
+		It("explicit config takes precedence over parent", func(ctx SpecContext) {
+			parent := &v1alpha1.Repository{
+				Status: v1alpha1.RepositoryStatus{
+					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
+						{
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								APIVersion: corev1.SchemeGroupVersion.String(),
+								Kind:       "Secret",
+								Name:       "parent-secret",
+								Namespace:  Namespace,
+							},
+							Policy: v1alpha1.ConfigurationPolicyPropagate,
+						},
+					},
+				},
+			}
+
+			childConfig := []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						APIVersion: corev1.SchemeGroupVersion.String(),
+						Kind:       "Secret",
+						Name:       Secret,
+						Namespace:  Namespace,
+					},
+					Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
+				},
+			}
+			child := &v1alpha1.Component{
+				Spec: v1alpha1.ComponentSpec{
+					OCMConfig: childConfig,
+				},
+			}
+
+			config, err := GetEffectiveConfig(ctx, nil, child, parent)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(config).To(Equal(childConfig))
 		})
 
 		It("duplicate config", func(ctx SpecContext) {
@@ -121,7 +250,7 @@ var _ = Describe("ocm utility", func() {
 				},
 			}
 
-			config, err := GetEffectiveConfig(ctx, nil, &repo)
+			config, err := GetEffectiveConfig(ctx, nil, &repo, nil)
 			Expect(err).ToNot(HaveOccurred())
 			// Equal instead of consists of because the order of the
 			// configuration is important
@@ -143,7 +272,7 @@ var _ = Describe("ocm utility", func() {
 				},
 			}
 
-			config, err := GetEffectiveConfig(ctx, nil, &repo)
+			config, err := GetEffectiveConfig(ctx, nil, &repo, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(config[0].APIVersion).To(Equal(corev1.SchemeGroupVersion.String()))
 		})
@@ -163,7 +292,7 @@ var _ = Describe("ocm utility", func() {
 				},
 			}
 
-			config, err := GetEffectiveConfig(ctx, nil, &repo)
+			config, err := GetEffectiveConfig(ctx, nil, &repo, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(config[0].APIVersion).To(Equal(corev1.SchemeGroupVersion.String()))
 		})
@@ -183,7 +312,7 @@ var _ = Describe("ocm utility", func() {
 				},
 			}
 
-			config, err := GetEffectiveConfig(ctx, nil, &repo)
+			config, err := GetEffectiveConfig(ctx, nil, &repo, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(config).To(BeNil())
 		})
@@ -203,7 +332,7 @@ var _ = Describe("ocm utility", func() {
 				},
 			}
 
-			config, err := GetEffectiveConfig(ctx, nil, &repo)
+			config, err := GetEffectiveConfig(ctx, nil, &repo, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(config).To(BeNil())
 		})
@@ -269,7 +398,7 @@ var _ = Describe("ocm utility", func() {
 			bldr.WithObjects(&comp)
 
 			clnt = bldr.Build()
-			config, err := GetEffectiveConfig(ctx, clnt, &comp)
+			config, err := GetEffectiveConfig(ctx, clnt, &comp, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(config).To(BeEmpty())
 		})
@@ -336,7 +465,7 @@ var _ = Describe("ocm utility", func() {
 			bldr.WithObjects(&comp)
 
 			clnt = bldr.Build()
-			config, err := GetEffectiveConfig(ctx, clnt, &comp)
+			config, err := GetEffectiveConfig(ctx, clnt, &comp, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(config).To(BeEmpty())
 		})
@@ -404,7 +533,7 @@ var _ = Describe("ocm utility", func() {
 			bldr.WithObjects(&comp)
 
 			clnt = bldr.Build()
-			config, err := GetEffectiveConfig(ctx, clnt, &comp)
+			config, err := GetEffectiveConfig(ctx, clnt, &comp, nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			// the propagation policy (here, set in repository) is not inherited

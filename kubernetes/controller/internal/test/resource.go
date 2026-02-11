@@ -18,9 +18,10 @@ import (
 )
 
 type MockResourceOptions struct {
-	ComponentRef  corev1.LocalObjectReference
-	ComponentInfo *v1alpha1.ComponentInfo
-	ResourceInfo  *v1alpha1.ResourceInfo
+	ComponentRef       corev1.LocalObjectReference
+	ComponentInfo      *v1alpha1.ComponentInfo
+	ResourceInfo       *v1alpha1.ResourceInfo
+	EffectiveOCMConfig []v1alpha1.OCMConfiguration
 
 	Clnt     client.Client
 	Recorder record.EventRecorder
@@ -51,6 +52,7 @@ func MockResource(
 
 	resource.Status.Component = options.ComponentInfo
 	resource.Status.Resource = options.ResourceInfo
+	resource.Status.EffectiveOCMConfig = options.EffectiveOCMConfig
 
 	Eventually(func(ctx context.Context) error {
 		status.MarkReady(options.Recorder, resource, "applied mock resource")
