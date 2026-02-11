@@ -28,11 +28,10 @@ import (
 )
 
 const (
-	FlagDryRun             = "dry-run"
-	FlagOutput             = "output"
-	FlagRecursive          = "recursive"
-	FlagCopyResources      = "copy-resources"
-	FlagCopyLocalResources = "copy-local-resources"
+	FlagDryRun     = "dry-run"
+	FlagOutput     = "output"
+	FlagRecursive  = "recursive"
+	FlagCopyPolicy = "copy-resources"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the renderer consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -62,8 +61,7 @@ The graph is validated, and then executed unless --dry-run is set.`,
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String()}, "output format of the component descriptors")
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
-	cmd.Flags().Bool(FlagCopyResources, false, "copy all resources, independent by their relation, referenced by the component version")
-	cmd.Flags().Bool(FlagCopyLocalResources, false, "copy all resources with local relation referenced by the component version")
+	cmd.Flags().Bool(FlagCopyPolicy, false, "copy all resources in the component version")
 
 	return cmd
 }
@@ -125,28 +123,14 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting recursive flag failed: %w", err)
 	}
 
-	copyResources, err := cmd.Flags().GetBool(FlagCopyResources)
+	copyResources, err := cmd.Flags().GetBool(FlagCopyPolicy)
 	if err != nil {
 		return fmt.Errorf("getting copy-resources flag failed: %w", err)
 	}
 
-	copyLocalResources, err := cmd.Flags().GetBool(FlagCopyLocalResources)
-	if err != nil {
-		return fmt.Errorf("getting copy-local-resources flag failed: %w", err)
-	}
-
-	// If both copyResources and copyLocalResources are set, we prioritize copyResources and ignore copyLocalResources.
-	// We align here with old ocm for downward compatibility
-	// https://github.com/open-component-model/ocm/blob/main/api/ocm/tools/transfer/transferhandler/standard/handler.go#L64
-	if copyResources && copyLocalResources {
-		copyResources = false
-	}
-
-	copyMode := internal.CopyModeDefault
+	copyMode := internal.CopyModeLocalBlobResources
 	if copyResources {
 		copyMode = internal.CopyModeAllResources
-	} else if copyLocalResources {
-		copyMode = internal.CopyModeLocalResources
 	}
 
 	// Build TransformationGraphDefinition

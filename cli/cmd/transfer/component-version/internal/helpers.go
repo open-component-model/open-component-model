@@ -2,10 +2,7 @@ package internal
 
 import (
 	"fmt"
-	"net/url"
 
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -55,20 +52,4 @@ func ChooseAddLocalResourceType(repo runtime.Typed) runtime.Type {
 	default:
 		panic(fmt.Sprintf("unknown repository type %T", repo))
 	}
-}
-
-func isLocalRelation(resource v2.Resource) bool {
-	return resource.Relation == v2.LocalRelation
-}
-
-func GetReferenceName(ociImage v1.OCIImage) (string, error) {
-	var referenceName string
-	if ociImage.ImageReference != "" {
-		u, err := url.Parse(ociImage.ImageReference)
-		if err != nil {
-			return "", fmt.Errorf("invalid OCI image reference: %s", ociImage.ImageReference)
-		}
-		referenceName = u.Path
-	}
-	return referenceName, nil
 }
