@@ -18,9 +18,10 @@ const (
 // +ocm:jsonschema-gen=true
 type AddOCIArtifact struct {
 	// +ocm:jsonschema-gen:enum=AddOCIArtifact/v1alpha1
-	Type   runtime.Type
-	Spec   *AddOCIArtifactSpec
-	Output *AddOCIArtifactOutput
+	Type   runtime.Type          `json:"type"`
+	ID     string                `json:"id"`
+	Spec   *AddOCIArtifactSpec   `json:"spec"`
+	Output *AddOCIArtifactOutput `json:"output,omitempty"`
 }
 
 // AddOCIArtifactSpec is the input specification for the
@@ -43,5 +44,5 @@ type AddOCIArtifactSpec struct {
 // +ocm:jsonschema-gen=true
 type AddOCIArtifactOutput struct {
 	// Resource is the updated resource descriptor with complete oci image reference
-	Resource *v2.Resource
+	Resource *v2.Resource `json:"resource"`
 }

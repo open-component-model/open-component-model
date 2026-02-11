@@ -6,13 +6,13 @@
   "type": "object",
   "description": "AddOCIArtifactOutput is the output specification for the\nAddOCIArtifact transformation.",
   "properties": {
-    "Resource": {
+    "resource": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Resource",
       "description": "Resource is the updated resource descriptor with complete oci image reference"
     }
   },
   "required": [
-    "Resource"
+    "resource"
   ],
   "additionalProperties": false,
   "$defs": {

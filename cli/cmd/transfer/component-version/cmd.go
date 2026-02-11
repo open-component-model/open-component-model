@@ -12,10 +12,12 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -28,10 +30,11 @@ import (
 )
 
 const (
-	FlagDryRun        = "dry-run"
-	FlagOutput        = "output"
-	FlagRecursive     = "recursive"
-	FlagCopyResources = "copy-resources"
+	FlagDryRun              = "dry-run"
+	FlagOutput              = "output"
+	FlagRecursive           = "recursive"
+	FlagCopyResources       = "copy-resources"
+	FlagUploadAsOCIArtifact = "upload-as-oci-artifact"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the renderer consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -62,6 +65,7 @@ The graph is validated, and then executed unless --dry-run is set.`,
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
 	cmd.Flags().Bool(FlagCopyResources, false, "copy all resources in the component version")
+	cmd.Flags().Bool(FlagUploadAsOCIArtifact, false, "upload OCI artifacts as OCI artifacts instead of local blobs")
 
 	return cmd
 }
@@ -133,8 +137,21 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		copyMode = internal.CopyModeAllResources
 	}
 
+	uploadAsOCIArtifact, err := cmd.Flags().GetBool(FlagUploadAsOCIArtifact)
+	if err != nil {
+		return fmt.Errorf("getting upload-as-oci-artifact flag failed: %w", err)
+	}
+
 	// Build TransformationGraphDefinition
-	tgd, err := internal.BuildGraphDefinition(ctx, fromSpec, toSpec, repoProvider, internal.WithRecursive(recursive), internal.WithCopyMode(copyMode))
+	tgd, err := internal.BuildGraphDefinition(
+		ctx,
+		fromSpec,
+		toSpec,
+		repoProvider,
+		internal.WithRecursive(recursive),
+		internal.WithCopyMode(copyMode),
+		internal.WithUploadAsOCIArtifact(uploadAsOCIArtifact),
+	)
 	if err != nil {
 		return fmt.Errorf("building graph definition failed: %w", err)
 	}
@@ -190,7 +207,9 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 
 // TODO: make this a plugin manager integration.
 func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Resolver) *builder.Builder {
-	transformerScheme := ociv1alpha1.Scheme
+	transformerScheme := runtime.NewScheme()
+	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
+	transformerScheme.MustRegisterScheme(ociaccess.Scheme)
 
 	ociGet := &transformer.GetComponentVersion{
 		Scheme:             transformerScheme,
@@ -222,6 +241,12 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		CredentialProvider: credentialProvider,
 	}
 
+	ociAddOCIArtifact := &transformer.AddOCIArtifact{
+		Scheme:             transformerScheme,
+		Repository:         pm.ResourcePluginRegistry,
+		CredentialProvider: credentialProvider,
+	}
+
 	return builder.NewBuilder(transformerScheme).
 		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
 		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
@@ -231,7 +256,8 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		WithTransformer(&ociv1alpha1.OCIAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
 		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
-		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact)
+		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact).
+		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact)
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {

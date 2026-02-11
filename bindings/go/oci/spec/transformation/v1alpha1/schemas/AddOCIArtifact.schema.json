@@ -6,13 +6,16 @@
   "type": "object",
   "description": "AddOCIArtifact is a transformation that uploads OCI artifacts to remote oci registries.",
   "properties": {
-    "Output": {
+    "id": {
+      "type": "string"
+    },
+    "output": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.transformation.v1alpha1.AddOCIArtifactOutput"
     },
-    "Spec": {
+    "spec": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.transformation.v1alpha1.AddOCIArtifactSpec"
     },
-    "Type": {
+    "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "oneOf": [
         {
@@ -22,9 +25,9 @@
     }
   },
   "required": [
-    "Type",
-    "Spec",
-    "Output"
+    "type",
+    "id",
+    "spec"
   ],
   "additionalProperties": false,
   "$defs": {
@@ -300,13 +303,13 @@
       "type": "object",
       "description": "AddOCIArtifactOutput is the output specification for the\nAddOCIArtifact transformation.",
       "properties": {
-        "Resource": {
+        "resource": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Resource",
           "description": "Resource is the updated resource descriptor with complete oci image reference"
         }
       },
       "required": [
-        "Resource"
+        "resource"
       ],
       "additionalProperties": false
     },
