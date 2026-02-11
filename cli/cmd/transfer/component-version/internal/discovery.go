@@ -13,7 +13,6 @@ import (
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v2 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -236,13 +235,9 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 
 	// e.g. ghcr.io/open-component-model/helmexample/charts/mariadb:12.2.7
 	// strip the domain part and keep the rest
-	var referenceName string
-	if ociAccess.ImageReference != "" {
-		imageRef, err := looseref.ParseReference(ociAccess.ImageReference)
-		if err != nil {
-			return fmt.Errorf("invalid OCI image reference: %s", ociAccess.ImageReference)
-		}
-		referenceName = imageRef.ReferenceOrDefault()
+	referenceName, err := GetReferenceName(ociAccess)
+	if err != nil {
+		return fmt.Errorf("cannot get reference name: %w", err)
 	}
 
 	jRes, err := json.Marshal(resource)
