@@ -9,7 +9,7 @@ replace github.com/opencontainers/go-digest => github.com/opencontainers/go-dige
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/fluxcd/pkg/apis/event v0.21.0
-	github.com/fluxcd/pkg/apis/meta v1.24.0
+	github.com/fluxcd/pkg/apis/meta v1.25.0
 	github.com/fluxcd/pkg/runtime v0.94.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/cel-go v0.26.1
@@ -34,17 +34,17 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
-	ocm.software/open-component-model/bindings/go/credentials v0.0.6
+	ocm.software/open-component-model/bindings/go/credentials v0.0.7
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260206134336-f8a8aaf066c2
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260206134336-f8a8aaf066c2
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260211083249-c6c993e6d7a3
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260211083249-c6c993e6d7a3
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/oci v0.0.28
-	ocm.software/open-component-model/bindings/go/plugin v0.0.13
+	ocm.software/open-component-model/bindings/go/oci v0.0.29
+	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260206134336-f8a8aaf066c2
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260211083249-c6c993e6d7a3
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260206134336-f8a8aaf066c2
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260211083249-c6c993e6d7a3
 	sigs.k8s.io/release-utils v0.12.3
 )
 
@@ -122,7 +122,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/mod v0.32.0 // indirect
-	golang.org/x/net v0.48.0 // indirect
+	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/term v0.39.0 // indirect

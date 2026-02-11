@@ -1208,6 +1208,130 @@ var _ = Describe("Component Controller", func() {
 			By("delete resources manually")
 			test.DeleteObject(ctx, k8sClient, component)
 		})
+
+		It("component without ocmConfig inherits propagate entries from repository", func(ctx SpecContext) {
+			By("creating a component without ocmConfig")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    "1.0.0",
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
+				"Status.Component.Version": "1.0.0",
+			})
+
+			By("checking component inherited only propagate entries from repository")
+			Eventually(komega.Object(component), "15s").Should(
+				HaveField("Status.EffectiveOCMConfig", ConsistOf(
+					v1alpha1.OCMConfiguration{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							APIVersion: corev1.SchemeGroupVersion.String(),
+							Kind:       "Secret",
+							Name:       secrets[0].Name,
+							Namespace:  secrets[0].Namespace,
+						},
+						Policy: v1alpha1.ConfigurationPolicyPropagate,
+					},
+					v1alpha1.OCMConfiguration{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							APIVersion: corev1.SchemeGroupVersion.String(),
+							Kind:       "Secret",
+							Name:       secrets[2].Name,
+							Namespace:  secrets[2].Namespace,
+						},
+						Policy: v1alpha1.ConfigurationPolicyPropagate,
+					},
+					v1alpha1.OCMConfiguration{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							APIVersion: corev1.SchemeGroupVersion.String(),
+							Kind:       "ConfigMap",
+							Name:       configs[0].Name,
+							Namespace:  configs[1].Namespace,
+						},
+						Policy: v1alpha1.ConfigurationPolicyPropagate,
+					},
+					v1alpha1.OCMConfiguration{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							APIVersion: corev1.SchemeGroupVersion.String(),
+							Kind:       "ConfigMap",
+							Name:       configs[2].Name,
+							Namespace:  configs[2].Namespace,
+						},
+						Policy: v1alpha1.ConfigurationPolicyPropagate,
+					},
+				)),
+			)
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
+
+		It("component with explicit ocmConfig ignores parent repository config", func(ctx SpecContext) {
+			By("creating a component with its own ocmConfig pointing directly at a secret")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    "1.0.0",
+					OCMConfig: []v1alpha1.OCMConfiguration{
+						{
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								APIVersion: corev1.SchemeGroupVersion.String(),
+								Kind:       "Secret",
+								Name:       secrets[1].Name,
+								Namespace:  secrets[1].Namespace,
+							},
+							Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
+						},
+					},
+					Interval: metav1.Duration{Duration: time.Minute * 10},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
+				"Status.Component.Version": "1.0.0",
+			})
+
+			By("checking component uses only its own config, not the parent's")
+			Eventually(komega.Object(component), "15s").Should(
+				HaveField("Status.EffectiveOCMConfig", ConsistOf(
+					v1alpha1.OCMConfiguration{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							APIVersion: corev1.SchemeGroupVersion.String(),
+							Kind:       "Secret",
+							Name:       secrets[1].Name,
+							Namespace:  secrets[1].Namespace,
+						},
+						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
+					},
+				)),
+			)
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
 	})
 })
 

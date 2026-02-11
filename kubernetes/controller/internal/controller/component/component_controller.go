@@ -217,7 +217,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	logger.Info("reconciling component")
-	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), component)
+	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), component, repo)
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
 

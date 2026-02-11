@@ -10,10 +10,12 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -1181,6 +1183,350 @@ var _ = Describe("Resource Controller", func() {
 			})
 		})
 
+	})
+
+	Context("ocm config propagation from component to resource", func() {
+		var componentName, componentObjName, resourceName, componentVersion string
+		repositoryName := "ocm.software/test-repository"
+
+		BeforeEach(func(ctx SpecContext) {
+			componentObjName = test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
+			componentName = "ocm.software/test-component-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
+			resourceName = "test-resource-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
+			componentVersion = "v1.0.0"
+
+			namespace := test.NamespaceForTest(ctx)
+			Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+
+			DeferCleanup(func(ctx SpecContext) {
+				resources := &v1alpha1.ResourceList{}
+				Expect(k8sClient.List(ctx, resources, client.InNamespace(namespace.GetName()))).To(Succeed())
+				Expect(resources.Items).To(BeEmpty())
+			})
+		})
+
+		It("resource without ocmConfig inherits propagate entries from component", func(ctx SpecContext) {
+			By("creating a CTF")
+			ctfPath := filepath.Join(tempDir, "res-inherit-config")
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersion,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.0",
+									},
+								},
+								Type:     "plainText",
+								Relation: descruntime.LocalRelation,
+								Access: &v2.LocalBlob{
+									Type: runtime.Type{
+										Name:    v2.LocalBlobAccessType,
+										Version: v2.LocalBlobAccessTypeVersion,
+									},
+									LocalReference: "sha256:1234567890",
+									MediaType:      "text/plain",
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			namespace := test.NamespaceForTest(ctx)
+
+			By("creating a credential secret")
+			credSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      "cred-secret",
+				},
+				Data: map[string][]byte{
+					v1alpha1.OCMConfigKey: []byte(`
+type: credentials.config.ocm.software
+consumers:
+- identity:
+    type: MavenRepository
+    hostname: example.com
+  credentials:
+  - type: Credentials
+    properties:
+      username: testuser
+      password: testpassword
+`),
+				},
+			}
+			Expect(k8sClient.Create(ctx, credSecret)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				_ = k8sClient.Delete(ctx, credSecret)
+			})
+
+			By("mocking a component with EffectiveOCMConfig")
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+					Repository: repositoryName,
+					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
+						{
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								APIVersion: corev1.SchemeGroupVersion.String(),
+								Kind:       "Secret",
+								Name:       credSecret.Name,
+								Namespace:  credSecret.Namespace,
+							},
+							Policy: v1alpha1.ConfigurationPolicyPropagate,
+						},
+						{
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								APIVersion: corev1.SchemeGroupVersion.String(),
+								Kind:       "Secret",
+								Name:       "do-not-propagate-secret",
+								Namespace:  namespace.GetName(),
+							},
+							Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
+						},
+					},
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
+			By("creating a resource without ocmConfig")
+			resourceObj := &v1alpha1.Resource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: namespace.GetName(),
+				},
+				Spec: v1alpha1.ResourceSpec{
+					ComponentRef: corev1.LocalObjectReference{
+						Name: componentObj.GetName(),
+					},
+					Resource: v1alpha1.ResourceID{
+						ByReference: v1alpha1.ResourceReference{
+							Resource: runtime.Identity{"name": resourceName},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
+
+			By("checking that the resource has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
+				"Status.Component.Component": componentName,
+			})
+
+			By("checking resource inherited only propagate entries from component")
+			Eventually(komega.Object(resourceObj), "15s").Should(
+				HaveField("Status.EffectiveOCMConfig", ConsistOf(
+					v1alpha1.OCMConfiguration{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							APIVersion: corev1.SchemeGroupVersion.String(),
+							Kind:       "Secret",
+							Name:       credSecret.Name,
+							Namespace:  credSecret.Namespace,
+						},
+						Policy: v1alpha1.ConfigurationPolicyPropagate,
+					},
+				)),
+			)
+		})
+
+		It("resource with explicit ocmConfig ignores parent component config", func(ctx SpecContext) {
+			By("creating a CTF")
+			ctfPath := filepath.Join(tempDir, "res-explicit-config")
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersion,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.0",
+									},
+								},
+								Type:     "plainText",
+								Relation: descruntime.LocalRelation,
+								Access: &v2.LocalBlob{
+									Type: runtime.Type{
+										Name:    v2.LocalBlobAccessType,
+										Version: v2.LocalBlobAccessTypeVersion,
+									},
+									LocalReference: "sha256:1234567890",
+									MediaType:      "text/plain",
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			namespace := test.NamespaceForTest(ctx)
+
+			By("creating secrets")
+			parentSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      "parent-cred-secret",
+				},
+				Data: map[string][]byte{
+					v1alpha1.OCMConfigKey: []byte(`
+type: credentials.config.ocm.software
+consumers:
+- identity:
+    type: MavenRepository
+    hostname: parent.example.com
+  credentials:
+  - type: Credentials
+    properties:
+      username: parentuser
+      password: parentpass
+`),
+				},
+			}
+			Expect(k8sClient.Create(ctx, parentSecret)).To(Succeed())
+
+			resourceSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      "resource-own-secret",
+				},
+				Data: map[string][]byte{
+					v1alpha1.OCMConfigKey: []byte(`
+type: credentials.config.ocm.software
+consumers:
+- identity:
+    type: MavenRepository
+    hostname: resource.example.com
+  credentials:
+  - type: Credentials
+    properties:
+      username: resourceuser
+      password: resourcepass
+`),
+				},
+			}
+			Expect(k8sClient.Create(ctx, resourceSecret)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				_ = k8sClient.Delete(ctx, parentSecret)
+				_ = k8sClient.Delete(ctx, resourceSecret)
+			})
+
+			By("mocking a component with EffectiveOCMConfig")
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+					Repository: repositoryName,
+					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
+						{
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								APIVersion: corev1.SchemeGroupVersion.String(),
+								Kind:       "Secret",
+								Name:       parentSecret.Name,
+								Namespace:  parentSecret.Namespace,
+							},
+							Policy: v1alpha1.ConfigurationPolicyPropagate,
+						},
+					},
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
+			By("creating a resource with its own ocmConfig")
+			resourceObj := &v1alpha1.Resource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: namespace.GetName(),
+				},
+				Spec: v1alpha1.ResourceSpec{
+					ComponentRef: corev1.LocalObjectReference{
+						Name: componentObj.GetName(),
+					},
+					Resource: v1alpha1.ResourceID{
+						ByReference: v1alpha1.ResourceReference{
+							Resource: runtime.Identity{"name": resourceName},
+						},
+					},
+					OCMConfig: []v1alpha1.OCMConfiguration{
+						{
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								APIVersion: corev1.SchemeGroupVersion.String(),
+								Kind:       "Secret",
+								Name:       resourceSecret.Name,
+								Namespace:  resourceSecret.Namespace,
+							},
+							Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
+
+			By("checking that the resource has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
+				"Status.Component.Component": componentName,
+			})
+
+			By("checking resource uses only its own config, not the parent's")
+			Eventually(komega.Object(resourceObj), "15s").Should(
+				HaveField("Status.EffectiveOCMConfig", ConsistOf(
+					v1alpha1.OCMConfiguration{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							APIVersion: corev1.SchemeGroupVersion.String(),
+							Kind:       "Secret",
+							Name:       resourceSecret.Name,
+							Namespace:  resourceSecret.Namespace,
+						},
+						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
+					},
+				)),
+			)
+		})
 	})
 })
 
