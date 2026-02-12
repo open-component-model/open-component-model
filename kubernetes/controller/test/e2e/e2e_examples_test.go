@@ -73,10 +73,6 @@ var _ = Describe("controller", func() {
 					signingKey,
 				)).To(Succeed())
 
-				if slices.Contains(files, K8sManifest) {
-					Expect(utils.MakeServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
-				}
-
 				By("bootstrapping the example")
 				Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
 				name := ""
