@@ -826,7 +826,7 @@ resources:
 		r.Equal("my-file", desc.Component.Resources[0].Name, "expected resource name to match")
 		r.Equal("blob", desc.Component.Resources[0].Type, "expected resource type to match")
 		r.NotNil(desc.Component.Resources[0].Access, "expected resource access to be set")
-		r.Equal("localBlob", desc.Component.Resources[0].Access.GetType().String(), "expected resource access type to match")
+		r.Equal("localBlob/v1", desc.Component.Resources[0].Access.GetType().String(), "expected resource access type to match")
 
 		blb, _, err := helperRepo.GetLocalResource(t.Context(), desc.Component.Name, desc.Component.Version, desc.Component.Resources[0].ToIdentity())
 		r.NoError(err, "could not retrieve local resource from test repository")
@@ -1232,7 +1232,7 @@ func Test_Add_Component_Version_Formats(t *testing.T) {
     - access:
         localReference: sha256:c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2
         mediaType: text/plain; charset=utf-8
-        type: localBlob
+        type: localBlob/v1
       digest:
         hashAlgorithm: SHA-256
         normalisationAlgorithm: genericBlobDigest/v1
@@ -1345,7 +1345,7 @@ resources:
 									"value":                  "c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2",
 								},
 								"access": map[string]any{
-									"type":           "localBlob",
+									"type":           "localBlob/v1",
 									"mediaType":      "text/plain; charset=utf-8",
 									"localReference": "sha256:c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2",
 								},
@@ -1769,7 +1769,7 @@ resources:
 	sourceDesc, err := sourceRepo.GetComponentVersion(t.Context(), componentName, componentVersion)
 	r.NoError(err, "could not retrieve component version from source repository")
 	r.Len(sourceDesc.Component.Resources, 1, "expected one resource in source component version")
-	r.Equal("localBlob", sourceDesc.Component.Resources[0].Access.GetType().String(), "expected local blob access type")
+	r.Equal("localBlob/v1", sourceDesc.Component.Resources[0].Access.GetType().String(), "expected local blob access type")
 
 	// Transfer component version to target repository
 	targetArchivePath := filepath.Join(tmp, "target-archive")
@@ -1809,7 +1809,7 @@ resources:
 	r.Len(targetDesc.Component.Resources, 1, "expected one resource in target component version")
 	r.Equal(resourceName, targetDesc.Component.Resources[0].Name, "expected resource name to match")
 	r.Equal("blob", targetDesc.Component.Resources[0].Type, "expected resource type to match")
-	r.Equal("localBlob", targetDesc.Component.Resources[0].Access.GetType().String(), "expected resource access type to match")
+	r.Equal("localBlob/v1", targetDesc.Component.Resources[0].Access.GetType().String(), "expected resource access type to match")
 
 	// Verify local blob resource content is accessible from target repository
 	resourceIdentity := targetDesc.Component.Resources[0].ToIdentity()
