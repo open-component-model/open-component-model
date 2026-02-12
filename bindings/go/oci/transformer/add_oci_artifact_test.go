@@ -86,7 +86,7 @@ func TestAddOCIArtifact_Transform(t *testing.T) {
 	combinedScheme := runtime.NewScheme()
 	v2.MustAddToScheme(combinedScheme)
 	// Register AddOCIArtifact
-	combinedScheme.MustRegisterWithAlias(&v1alpha1.AddOCIArtifact{}, runtime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.AddOCIArtifactVersion))
+	combinedScheme.MustRegisterWithAlias(&v1alpha1.AddOCIArtifact{}, runtime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.Version))
 
 	transformer := &AddOCIArtifact{
 		Scheme:             combinedScheme,
@@ -96,7 +96,7 @@ func TestAddOCIArtifact_Transform(t *testing.T) {
 
 	// Create transformation spec
 	spec := &v1alpha1.AddOCIArtifact{
-		Type: runtime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.AddOCIArtifactVersion),
+		Type: runtime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.Version),
 		Spec: &v1alpha1.AddOCIArtifactSpec{
 			Resource: &v2.Resource{
 				ElementMeta: v2.ElementMeta{
@@ -194,7 +194,7 @@ func TestAddOCIArtifact_ValidationErrors(t *testing.T) {
 
 			combinedScheme := runtime.NewScheme()
 			v2.MustAddToScheme(combinedScheme)
-			combinedScheme.MustRegisterWithAlias(&v1alpha1.AddOCIArtifact{}, runtime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.AddOCIArtifactVersion))
+			combinedScheme.MustRegisterWithAlias(&v1alpha1.AddOCIArtifact{}, runtime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.Version))
 
 			transformer := &AddOCIArtifact{
 				Scheme:     combinedScheme,
@@ -202,7 +202,7 @@ func TestAddOCIArtifact_ValidationErrors(t *testing.T) {
 			}
 
 			spec := &v1alpha1.AddOCIArtifact{
-				Type: runtime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.AddOCIArtifactVersion),
+				Type: runtime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.Version),
 				Spec: tt.spec,
 			}
 

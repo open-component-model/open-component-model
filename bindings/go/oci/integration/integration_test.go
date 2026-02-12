@@ -1136,7 +1136,7 @@ func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 
 	// Write OCI image data to a temp file
 	tmpFile := filepath.Join(t.TempDir(), "oci-artifact.tar")
-	r.NoError(os.WriteFile(tmpFile, data, 0644))
+	r.NoError(os.WriteFile(tmpFile, data, 0o644))
 
 	resource := descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{
@@ -1175,7 +1175,7 @@ func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 	}
 
 	spec := &v1alpha1.AddOCIArtifact{
-		Type: ocmruntime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.AddOCIArtifactVersion),
+		Type: ocmruntime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.Version),
 		ID:   "test-add-oci-transform",
 		Spec: &v1alpha1.AddOCIArtifactSpec{
 			Resource: v2Resource,
@@ -1200,4 +1200,18 @@ func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 	// Verify the output resource has the correct name and version
 	r.Equal("test-resource-add", addOutput.Output.Resource.Name)
 	r.Equal("v1.0.0", addOutput.Output.Resource.Version)
+
+	// Check Access Spec
+	rawAccess := addOutput.Output.Resource.Access
+	s := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown())
+
+	var resultAccess v1.OCIImage
+	err = s.Convert(rawAccess, &resultAccess)
+	r.NoError(err)
+	r.NotNil(resultAccess)
+
+	r.Equal(fmt.Sprintf("http://%s", to), resultAccess.ImageReference)
+	r.Equal("ociArtifact", resultAccess.Type.Name)
+	r.Equal("v1", resultAccess.Type.Version)
+	r.Equal(fmt.Sprintf("http://%s", to), resultAccess.ImageReference)
 }

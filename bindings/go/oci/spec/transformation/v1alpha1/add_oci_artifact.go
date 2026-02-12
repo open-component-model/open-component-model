@@ -6,10 +6,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const (
-	AddOCIArtifactType    = "AddOCIArtifact"
-	AddOCIArtifactVersion = "v1alpha1"
-)
+const AddOCIArtifactType = "AddOCIArtifact"
 
 // AddOCIArtifact is a transformation that uploads OCI artifacts to remote oci registries.
 // Spec: AddOCIArtifactSpec - the input specification of the transformation containing the resource descriptor

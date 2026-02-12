@@ -16,7 +16,7 @@ var (
 	CTFAddComponentVersionV1alpha1 = runtime.NewVersionedType(CTFAddComponentVersionType, Version)
 	CTFAddLocalResourceV1alpha1    = runtime.NewVersionedType(CTFAddLocalResourceType, Version)
 	CTFGetLocalResourceV1alpha1    = runtime.NewVersionedType(CTFGetLocalResourceType, Version)
-	AddOCIArtifactV1alpha1         = runtime.NewVersionedType(AddOCIArtifactType, AddOCIArtifactVersion)
+	AddOCIArtifactV1alpha1         = runtime.NewVersionedType(AddOCIArtifactType, Version)
 )
 
 func init() {
