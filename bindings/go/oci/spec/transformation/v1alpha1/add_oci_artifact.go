@@ -12,6 +12,9 @@ const (
 )
 
 // AddOCIArtifact is a transformation that uploads OCI artifacts to remote oci registries.
+// Spec: AddOCIArtifactSpec - the input specification of the transformation containing the resource descriptor
+// as well as the file to be added to a OCIRepository.
+// Output: AddOCIArtifactOutput - the output specification of the transformation containing the new Resource descriptor.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true

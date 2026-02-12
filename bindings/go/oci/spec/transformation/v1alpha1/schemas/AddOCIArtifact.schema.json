@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/schemas/AddOCIArtifact.schema.json",
   "title": "AddOCIArtifact",
   "type": "object",
-  "description": "AddOCIArtifact is a transformation that uploads OCI artifacts to remote oci registries.",
+  "description": "AddOCIArtifact is a transformation that uploads OCI artifacts to remote oci registries.\nSpec: AddOCIArtifactSpec - the input specification of the transformation containing the resource descriptor\nas well as the file to be added to a OCIRepository.\nOutput: AddOCIArtifactOutput - the output specification of the transformation containing the new Resource descriptor.",
   "properties": {
     "id": {
       "type": "string"
