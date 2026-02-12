@@ -44,6 +44,7 @@ spec:
       resource:
         name: kro-rgd
       referencePath:
+        - name: nested-signed-extended
         - name: nested-signed-rgd
   interval: 10m
 ---
