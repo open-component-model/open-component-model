@@ -281,6 +281,10 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 					"referenceName": referenceName,
 				},
 				"digest": fmt.Sprintf("${%s.output.resource.digest}", getResourceID),
+				// TODO(matthiasbruns): Add tests
+				"labels":        fmt.Sprintf("${has(%s.output.resource.labels) ? %s.output.resource.labels  : []}", getResourceID, getResourceID),
+				"extraIdentity": fmt.Sprintf("${has(%s.output.resource.extraIdentity) ? %s.output.resource.extraIdentity  : {}}", getResourceID, getResourceID),
+				"srcRefs":       fmt.Sprintf("${has(%s.output.resource.srcRefs) ? %s.output.resource.srcRefs  : []}", getResourceID, getResourceID),
 			},
 			"file": fmt.Sprintf("${%s.output.file}", getResourceID),
 		}},
