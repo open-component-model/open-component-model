@@ -136,7 +136,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 				}
 			default:
 				// No transformation configured for resource with access types not listed above
-				slog.Info("No copy of resource even though copy mode is copy all resources, because access type is not supported for copying",
+				slog.Info("Unsupported resource access type, skipping resource. Only local blob and OCI artifact resources are supported for transformation.",
 					"component", ref.Component, "version", ref.Version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 			}
 		}
@@ -272,7 +272,6 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 			"component":  ref.Component,
 			"version":    ref.Version,
 			"resource": map[string]any{
-				// TODO(matthiasbruns): figure out how to not hate yourself doing this
 				"name":     fmt.Sprintf("${%s.output.resource.name}", getResourceID),
 				"version":  fmt.Sprintf("${%s.output.resource.version}", getResourceID),
 				"type":     fmt.Sprintf("${%s.output.resource.type}", getResourceID),
