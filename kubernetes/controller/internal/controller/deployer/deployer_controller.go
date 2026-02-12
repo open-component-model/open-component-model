@@ -433,6 +433,41 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
+	// Add verifications from the component to the cache-backed repository to make sure they are included in the
+	// cache key and used for verification.
+	component, err := util.GetReadyObject[deliveryv1alpha1.Component, *deliveryv1alpha1.Component](ctx, r.Client, client.ObjectKey{
+		Namespace: resource.GetNamespace(),
+		Name:      resource.Spec.ComponentRef.Name,
+	})
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, resource, deliveryv1alpha1.ResourceIsNotAvailable, err.Error())
+
+		return nil, fmt.Errorf("failed to get ready component: %w", err)
+	}
+
+	// The resource controller resolves component reference paths. Accordingly, the component referenced by the
+	// resource might not be the component that actually contains our resource (that is referenced in the resources
+	// status).
+	// If the component from the resource-spec and -status differs, we know that the digest spec from the component
+	// reference was used.
+	// If the component does not differ, we can use the verifications from the referenced component
+	// TODO(@frewilhelm): Fix this comparison
+	if component.Status.Component.Digest == resource.Status.Component.Digest {
+		verifications, err := ocm.GetVerifications(ctx, r.Client, component)
+		if err != nil {
+			status.MarkNotReady(r.EventRecorder, component, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+
+			return nil, fmt.Errorf("failed to get verifications: %w", err)
+		}
+		cacheBackedRepo.Verifications = verifications
+	} else {
+		// TODO(frewilhelm): But which component reference should we take?
+		//   https://github.com/open-component-model/ocm-project/issues/787#issuecomment-3891360440
+		// If we have a component reference path > 1, we don't know from which component reference in the parent
+		// component the digest was taken from
+		log.FromContext(ctx).Info("satisfy linter until we have a solution")
+	}
+
 	componentDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
 		resource.Status.Component.Component,
 		resource.Status.Component.Version)

@@ -41,11 +41,12 @@ var _ = Describe("Deployer Controller with YAML stream (ConfigMap + Secret)", fu
 	Context("deployer controller (yaml stream)", func() {
 		var resourceObj *v1alpha1.Resource
 		var namespace *corev1.Namespace
-		var componentName, resourceName, deployerObjName string
+		var componentName, componentObjName, resourceName, deployerObjName string
 		var componentVersion string
 
 		BeforeEach(func(ctx SpecContext) {
 			componentName = "ocm.software/test-component-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
+			componentObjName = test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			resourceName = "test-yamlstream-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			deployerObjName = "test-deployer-yaml-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			componentVersion = "v1.0.0"
@@ -160,13 +161,32 @@ stringData:
 			specData, err := json.Marshal(repoSpec)
 			Expect(err).NotTo(HaveOccurred())
 
+			By("mocking a component")
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
 			By("mocking a Resource that references the YAML stream")
 			resourceObj = test.MockResource(
 				ctx,
 				resourceName,
 				namespace.GetName(),
 				&test.MockResourceOptions{
-					ComponentRef: corev1.LocalObjectReference{Name: componentName},
+					ComponentRef: corev1.LocalObjectReference{Name: componentObjName},
 					Clnt:         k8sClient,
 					Recorder:     recorder,
 					ComponentInfo: &v1alpha1.ComponentInfo{
@@ -229,15 +249,16 @@ stringData:
 
 	Context("ocm config propagation from resource to deployer", func() {
 		var (
-			resourceObj *v1alpha1.Resource
-			namespace *corev1.Namespace
-			componentName, resourceName, componentVersion string
-			specData []byte
-			credentialSecret *corev1.Secret
+			resourceObj                                                     *v1alpha1.Resource
+			namespace                                                       *corev1.Namespace
+			componentName, componentObjName, resourceName, componentVersion string
+			specData                                                        []byte
+			credentialSecret                                                *corev1.Secret
 		)
 
 		BeforeEach(func(ctx SpecContext) {
 			componentName = "ocm.software/test-component-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
+			componentObjName = test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			resourceName = "test-yamlstream-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			componentVersion = "v1.0.0"
 
@@ -359,13 +380,32 @@ data:
 			deployerObjName := "test-deployer-inherit-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			resourceVersion := "1.0.0"
 
+			By("mocking a component")
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
 			By("mocking a Resource with EffectiveOCMConfig containing propagate entries")
 			resourceObj = test.MockResource(
 				ctx,
 				resourceName,
 				namespace.GetName(),
 				&test.MockResourceOptions{
-					ComponentRef: corev1.LocalObjectReference{Name: componentName},
+					ComponentRef: corev1.LocalObjectReference{Name: componentObjName},
 					Clnt:         k8sClient,
 					Recorder:     recorder,
 					ComponentInfo: &v1alpha1.ComponentInfo{
@@ -469,13 +509,32 @@ consumers:
 			}
 			Expect(k8sClient.Create(ctx, deployerSecret)).To(Succeed())
 
+			By("mocking a component")
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
 			By("mocking a Resource with EffectiveOCMConfig containing propagate entries")
 			resourceObj = test.MockResource(
 				ctx,
 				resourceName,
 				namespace.GetName(),
 				&test.MockResourceOptions{
-					ComponentRef: corev1.LocalObjectReference{Name: componentName},
+					ComponentRef: corev1.LocalObjectReference{Name: componentObjName},
 					Clnt:         k8sClient,
 					Recorder:     recorder,
 					ComponentInfo: &v1alpha1.ComponentInfo{
