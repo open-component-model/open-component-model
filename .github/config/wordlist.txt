@@ -168,7 +168,6 @@ gc
 gerald
 gergely
 getinexpensivecontentversionidentity
-GetOCIArtifact
 getresourcesbyname
 getter
 ghcr
@@ -325,7 +324,6 @@ ocireg
 ociregistry
 ocirepository
 OCIAddComponentVersion
-OCIAddLocalResource
 OCIGetComponentVersion
 ocm
 ocmbot

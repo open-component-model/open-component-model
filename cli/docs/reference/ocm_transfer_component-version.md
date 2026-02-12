@@ -19,7 +19,6 @@ a target repository using an internally generated transformation graph.
 This command constructs a TransformationGraphDefinition consisting of:
   1. CTFGetComponentVersion / OCIGetComponentVersion
   2. CTFAddComponentVersion / OCIAddComponentVersion
-  3. GetOCIArtifact / OCIAddLocalResource
 
 The graph is validated, and then executed unless --dry-run is set.
 
@@ -30,13 +29,11 @@ ocm transfer component-version {reference} {target} [flags]
 ### Options
 
 ```
-      --copy-resources           copy all resources in the component version
-      --dry-run                  build and validate the graph but do not execute
-  -h, --help                     help for component-version
-  -o, --output enum              output format of the component descriptors
-                                 (must be one of [json ndjson yaml]) (default yaml)
-  -r, --recursive                recursively discover and transfer component versions
-      --upload-as-oci-artifact   upload OCI artifacts as OCI artifacts instead of local blobs
+      --dry-run       build and validate the graph but do not execute
+  -h, --help          help for component-version
+  -o, --output enum   output format of the component descriptors
+                      (must be one of [json ndjson yaml]) (default yaml)
+  -r, --recursive     recursively discover and transfer component versions
 ```
 
 ### Options inherited from parent commands
