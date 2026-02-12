@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -28,6 +30,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	ocmcel "ocm.software/open-component-model/kubernetes/controller/internal/cel"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
@@ -470,6 +473,25 @@ func (r *Reconciler) resolveReferencePath(
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get referenced component version %s:%s: %w",
 				matchedRef.Component, matchedRef.Version, err)
+		}
+
+		// Digest integrity check for the referenced component version
+		// TODO: Recheck if check is feasible
+		if matchedRef.Digest.Value != "" {
+			logger.Info("verifying digest for referenced component version", "parent component", fmt.Sprintf("%s:%s", matchedRef.Component, matchedRef.Version), "child component", fmt.Sprintf("%s:%s", refDesc.Component.Name, refDesc.Component.Version))
+
+			childDigest, err := signing.GenerateDigest(ctx, refDesc, slog.New(logr.ToSlogHandler(logger)), matchedRef.Digest.NormalisationAlgorithm, matchedRef.Digest.HashAlgorithm)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to generate digest for referenced component version %s:%s: %w",
+					matchedRef.Component, matchedRef.Version, err)
+			}
+
+			if matchedRef.Digest.Value != childDigest.Value {
+				return nil, nil, fmt.Errorf("digest mismatch for referenced component version %s:%s: expected %s but got %s",
+					matchedRef.Component, matchedRef.Version, matchedRef.Digest.Value, childDigest.Value)
+			}
+
+			logger.Info("digest successfully verified", "parent component", fmt.Sprintf("%s:%s", matchedRef.Component, matchedRef.Version), "child component", fmt.Sprintf("%s:%s", refDesc.Component.Name, refDesc.Component.Version))
 		}
 
 		currentDesc = refDesc
