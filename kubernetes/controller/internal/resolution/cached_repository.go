@@ -106,6 +106,7 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 		Version:         version,
 		Verifications:   c.Verifications,
 		SigningRegistry: c.SigningRegistry,
+		Digest:          c.Digest,
 		Repository:      repo,
 		KeyFunc:         keyFunc,
 		Requester:       c.requesterFunc(),

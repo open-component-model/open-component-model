@@ -418,6 +418,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		RepositorySpec:    repoSpec,
 		OCMConfigurations: configs,
 		Namespace:         deployer.GetNamespace(),
+		SigningRegistry:   r.PluginManager.SigningRegistry,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: k8stypes.NamespacedName{
@@ -433,57 +434,11 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	// Add verifications from the component to the cache-backed repository to make sure they are included in the
-	// cache key and used for verification.
-	component, err := util.GetReadyObject[deliveryv1alpha1.Component, *deliveryv1alpha1.Component](ctx, r.Client, client.ObjectKey{
-		Namespace: resource.GetNamespace(),
-		Name:      resource.Spec.ComponentRef.Name,
-	})
+	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, cacheBackedRepo, deployer, resource, configs)
 	if err != nil {
-		status.MarkNotReady(r.EventRecorder, resource, deliveryv1alpha1.ResourceIsNotAvailable, err.Error())
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
 
-		return nil, fmt.Errorf("failed to get ready component: %w", err)
-	}
-
-	// The resource controller resolves component reference paths. Accordingly, the component referenced by the
-	// resource might not be the component that actually contains our resource (that is referenced in the resources
-	// status).
-	// If the component from the resource-spec and -status differs, we know that the digest spec from the component
-	// reference was used.
-	// If the component does not differ, we can use the verifications from the referenced component
-	// TODO(@frewilhelm): Fix this comparison
-	if component.Status.Component.Digest == resource.Status.Component.Digest {
-		verifications, err := ocm.GetVerifications(ctx, r.Client, component)
-		if err != nil {
-			status.MarkNotReady(r.EventRecorder, component, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
-
-			return nil, fmt.Errorf("failed to get verifications: %w", err)
-		}
-		cacheBackedRepo.Verifications = verifications
-	} else {
-		// TODO(frewilhelm): But which component reference should we take?
-		//   https://github.com/open-component-model/ocm-project/issues/787#issuecomment-3891360440
-		// If we have a component reference path > 1, we don't know from which component reference in the parent
-		// component the digest was taken from
-		log.FromContext(ctx).Info("satisfy linter until we have a solution")
-	}
-
-	componentDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
-		resource.Status.Component.Component,
-		resource.Status.Component.Version)
-	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, resource, deliveryv1alpha1.ResolutionInProgress, err.Error())
-
-		return nil, workerpool.ErrResolutionInProgress
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
-		// Ignore error, but log event
-		event.New(r.EventRecorder, resource, nil, eventv1.EventSeverityInfo, err.Error())
-	case err != nil:
-		status.MarkNotReady(r.EventRecorder, resource, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
-
-		return nil, fmt.Errorf("failed to get component version: %w", err)
+		return nil, fmt.Errorf("failed to get effective component descriptor: %w", err)
 	}
 
 	resourceIdentity := makeResourceIdentity(resource.Status.Resource)
@@ -840,6 +795,184 @@ func (r *Reconciler) track(ctx context.Context, deployer *deliveryv1alpha1.Deplo
 	}
 
 	return nil
+}
+
+// getEffectiveComponentDescriptor retrieves the effective component descriptor for the resource.
+// The resource status tells us which component version was resolved for the resource. However, making sure the
+// integrity of that component version is still intact is tricky.
+//
+//   - If the resource is from an unverified component version, we can return the component descriptor for the
+//     component version referenced in the resource status.
+//   - If the resource is from an unverified component version that was resolved via reference path(s), we can return
+//     the component descriptor for the component version referenced in the resource status.
+//   - If the resource is from a verified component version, we need to make sure that we get the verified component
+//     descriptor by adding the verifications from the component CR to the cache-backed repository.
+//   - If the resource is from a verified component version that was resolved via reference path(s), we need to get the
+//     verified parent component descriptor because the digest specification from the component reference leading to the
+//     resolved component version is used create the cache key to maintain the integrity chain.
+func (r *Reconciler) getEffectiveComponentDescriptor(
+	ctx context.Context,
+	repoResource *resolution.CacheBackedRepository,
+	deployer *deliveryv1alpha1.Deployer,
+	resource *deliveryv1alpha1.Resource,
+	configs []deliveryv1alpha1.OCMConfiguration,
+) (*descriptor.Descriptor, error) {
+	// If the component version name in the resource spec and status are the same, we know that the component version
+	// was not resolved through a reference path. We can add verifications from the component CR to the cache-backed
+	// repository of the resource and get the component descriptor directly.
+	component, err := util.GetReadyObject[deliveryv1alpha1.Component, *deliveryv1alpha1.Component](ctx, r.Client, client.ObjectKey{
+		Namespace: resource.GetNamespace(),
+		Name:      resource.Spec.ComponentRef.Name,
+	})
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, err.Error())
+
+		return nil, fmt.Errorf("failed to get ready component: %w", err)
+	}
+
+	if component.Status.Component.Component == resource.Status.Component.Component {
+		verifications, err := ocm.GetVerifications(ctx, r.Client, component)
+		if err != nil {
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+
+			return nil, fmt.Errorf("failed to get verifications: %w", err)
+		}
+		repoResource.Verifications = verifications
+		repoResource.SigningRegistry = r.PluginManager.SigningRegistry
+
+		componentDescriptor, err := repoResource.GetComponentVersion(ctx,
+			resource.Status.Component.Component,
+			resource.Status.Component.Version)
+		switch {
+		case errors.Is(err, workerpool.ErrResolutionInProgress):
+			// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
+
+			return nil, workerpool.ErrResolutionInProgress
+		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+			// Ignore error, but log event
+			event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityInfo, err.Error())
+		case err != nil:
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+
+			return nil, fmt.Errorf("failed to get component version: %w", err)
+		}
+
+		return componentDescriptor, nil
+	}
+
+	// If the component name from the component and resource status differ, we know that the component version from the
+	// resource status is resolved through a reference path.
+	if len(resource.Spec.Resource.ByReference.ReferencePath) == 0 {
+		return nil, fmt.Errorf("expected a reference path, but got none")
+	}
+
+	// If the component version was resolved through a reference path, we need to make sure getting a component version
+	// which integrity chain is intact if the parent component version was verified.
+	// To do so, we need to get the parent component version containing the component references. We will use the
+	// components repository spec making sure to get the same component version.
+	repoComponentSpec := &ocmruntime.Raw{}
+	if err := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()).Decode(
+		bytes.NewReader(component.Status.Component.RepositorySpec.Raw), repoComponentSpec); err != nil {
+		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
+	}
+
+	componentRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+		RepositorySpec:    repoComponentSpec,
+		OCMConfigurations: configs,
+		Namespace:         deployer.GetNamespace(),
+		SigningRegistry:   r.PluginManager.SigningRegistry,
+		RequesterFunc: func() workerpool.RequesterInfo {
+			return workerpool.RequesterInfo{
+				NamespacedName: k8stypes.NamespacedName{
+					Namespace: deployer.GetNamespace(),
+					Name:      deployer.GetName(),
+				},
+			}
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cache-backed repository for component: %w", err)
+	}
+
+	// Add verifications from the component to the cache-backed repository to make sure they are included in the
+	// cache key and used for verification (if any).
+	verifications, err := ocm.GetVerifications(ctx, r.Client, component)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to get verifications: %w", err)
+	}
+	componentRepo.Verifications = verifications
+
+	componentDescriptor, err := componentRepo.GetComponentVersion(ctx,
+		component.Status.Component.Component,
+		component.Status.Component.Version)
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
+
+		return nil, workerpool.ErrResolutionInProgress
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityInfo, err.Error())
+	case err != nil:
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to get component version: %w", err)
+	}
+
+	// We need to find the matching reference in the parent component descriptor to get the digest specification used
+	// for the cache key. We look for the first reference from the resources reference path as this needs to match one
+	// reference in the parent component descriptor for the integrity chain to be intact.
+	// (The digest spec from the component reference is used to create the cache key for the resolved component version)
+	var matchedRef *descriptor.Reference
+	for _, parentRef := range componentDescriptor.Component.References {
+		parentRefIdentity := parentRef.ToIdentity()
+
+		// The first reference in the reference path needs to match a reference from the parent component.
+		if resource.Spec.Resource.ByReference.ReferencePath[0].Match(parentRefIdentity, identityFunc()) {
+			matchedRef = &parentRef
+			break
+		}
+	}
+
+	if matchedRef == nil {
+		return nil, fmt.Errorf("cannot find matching reference in parent component descriptor for reference path %v",
+			resource.Spec.Resource.ByReference.ReferencePath)
+	}
+
+	// If the reference has a digest, we need to add it to the repoResource to make sure the cache key is correct and
+	// the integrity chain is intact.
+	if matchedRef.Digest.Value != "" {
+		repoResource.Digest = &v2.Digest{
+			HashAlgorithm:          matchedRef.Digest.HashAlgorithm,
+			Value:                  matchedRef.Digest.Value,
+			NormalisationAlgorithm: matchedRef.Digest.NormalisationAlgorithm,
+		}
+		repoResource.SigningRegistry = r.PluginManager.SigningRegistry
+	}
+
+	componentDescriptor, err = repoResource.GetComponentVersion(ctx,
+		resource.Status.Component.Component,
+		resource.Status.Component.Version)
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
+
+		return nil, workerpool.ErrResolutionInProgress
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityInfo, err.Error())
+	case err != nil:
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to get component version: %w", err)
+	}
+
+	return componentDescriptor, nil
 }
 
 func updateDeployedObjectStatusReferences[T client.Object](objs []T, deployer *deliveryv1alpha1.Deployer) {

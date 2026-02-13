@@ -287,6 +287,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		RepositorySpec:    repoSpec,
 		OCMConfigurations: configs,
 		Namespace:         resource.GetNamespace(),
+		SigningRegistry:   r.PluginManager.SigningRegistry,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: k8stypes.NamespacedName{
@@ -451,8 +452,8 @@ func (r *Reconciler) resolveReferencePath(
 
 	currentDesc := parentDesc
 	currentRepoSpec := parentRepoSpec
-	// parentReferenceDigest stores the component reference digest spec from the parent component.
-	var parentReferenceDigest *v2.Digest
+	// referenceDigestFromParent stores the component reference digest spec from the parent component.
+	var referenceDigestFromParent *v2.Digest
 
 	for i, refIdentity := range referencePath {
 		logger.V(1).Info("resolving reference", "step", i+1, "identity", refIdentity)
@@ -471,23 +472,11 @@ func (r *Reconciler) resolveReferencePath(
 				refIdentity, currentDesc.Component.Name, currentDesc.Component.Version, i+1)
 		}
 
-		// Check if the reference contains a digest spec and use it for integrity check
-		// TODO(@frewilhelm): Are we sure that only verified component versions have a digest spec in their references?
-		if matchedRef.Digest.Value != "" {
-			// Only store parent reference digest if its from the (original) parent component version.
-			if currentDesc.Component.Name == parentDesc.Component.Name && currentDesc.Component.Version == parentDesc.Component.Version {
-				parentReferenceDigest = &v2.Digest{
-					HashAlgorithm:          matchedRef.Digest.HashAlgorithm,
-					Value:                  matchedRef.Digest.Value,
-					NormalisationAlgorithm: matchedRef.Digest.NormalisationAlgorithm,
-				}
-			}
-		}
-
 		refRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
 			RepositorySpec:    currentRepoSpec,
 			OCMConfigurations: configs,
 			Namespace:         reqInfo.NamespacedName.Namespace,
+			SigningRegistry:   r.PluginManager.SigningRegistry,
 			RequesterFunc: func() workerpool.RequesterInfo {
 				return reqInfo
 			},
@@ -496,12 +485,28 @@ func (r *Reconciler) resolveReferencePath(
 			return nil, nil, fmt.Errorf("failed to create cache-backed repository for reference: %w", err)
 		}
 
+		// TODO(@frewilhelm): Are we sure that only verified component versions have a digest spec in their references?
+		var referenceDigest *v2.Digest
+		if matchedRef.Digest.Value != "" {
+			referenceDigest = &v2.Digest{
+				HashAlgorithm:          matchedRef.Digest.HashAlgorithm,
+				Value:                  matchedRef.Digest.Value,
+				NormalisationAlgorithm: matchedRef.Digest.NormalisationAlgorithm,
+			}
+
+			// Only set component reference digest if the matched reference is from the (original) parent component version (i == 0)
+			if currentDesc.Component.Name == parentDesc.Component.Name &&
+				currentDesc.Component.Version == parentDesc.Component.Version {
+				referenceDigestFromParent = referenceDigest
+			}
+		}
+
 		// If the reference provides a digest spec, we set it in the repository to make sure the component version we
 		// get is stored with a cache key containing the digest information.
 		// We need to use the digest spec from the parent component descriptor as this will be the only information
 		// available in the deployer controller to retrieve the respective cache-key to the verified component
 		// version.
-		refRepo.Digest = parentReferenceDigest
+		refRepo.Digest = referenceDigestFromParent
 
 		refDesc, err := refRepo.GetComponentVersion(ctx, matchedRef.Component, matchedRef.Version)
 		if err != nil {
@@ -509,13 +514,14 @@ func (r *Reconciler) resolveReferencePath(
 				matchedRef.Component, matchedRef.Version, err)
 		}
 
-		// Digest integrity check for the referenced component version
-		if refRepo.Digest != nil {
+		// Digest integrity check for the referenced component version if reference contains a digest
+		if matchedRef.Digest.Value != "" {
 			logger.Info("verifying digest for referenced component version", "parent component",
 				fmt.Sprintf("%s:%s", matchedRef.Component, matchedRef.Version), "child component",
 				fmt.Sprintf("%s:%s", refDesc.Component.Name, refDesc.Component.Version))
 
-			childDigest, err := signing.GenerateDigest(ctx, refDesc, slog.New(logr.ToSlogHandler(logger)), matchedRef.Digest.NormalisationAlgorithm, matchedRef.Digest.HashAlgorithm)
+			childDigest, err := signing.GenerateDigest(ctx, refDesc, slog.New(logr.ToSlogHandler(logger)),
+				matchedRef.Digest.NormalisationAlgorithm, matchedRef.Digest.HashAlgorithm)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to generate digest for referenced component version %s:%s: %w",
 					matchedRef.Component, matchedRef.Version, err)

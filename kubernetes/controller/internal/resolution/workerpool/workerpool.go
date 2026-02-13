@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/repository"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
@@ -36,6 +37,7 @@ type ResolveOptions struct {
 	Version         string
 	Repository      repository.ComponentVersionRepository
 	Verifications   []ocm.Verification
+	Digest          *v2.Digest
 	SigningRegistry *signinghandler.SigningRegistry
 	KeyFunc         func() (string, error)
 	// Requester is the information about the object requesting this resolution.
@@ -192,7 +194,7 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 	// With this, it returns, releases in-progress mutex, defer in handleWorkItem continues and removes the
 	// InProgress key.
 	if cached, ok := wp.Cache.Get(key); ok {
-		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
+		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version, isVerified(opts.Verifications, opts.Digest)).Inc()
 		if cached.Error != nil {
 			// In case of an error of type ErrNotSafelyDigestible we return the cached error and value because we want
 			// to pass through the information that this component version is not safely digestible to the controller
@@ -219,7 +221,7 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 		return res, nil
 	}
 
-	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
+	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version, isVerified(opts.Verifications, opts.Digest)).Inc()
 
 	// check if already/still in progress
 	if requesters, exists := wp.inProgress[key]; exists {
@@ -306,7 +308,7 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, i
 	duration := time.Since(start).Seconds()
 
 	// Track metrics
-	ResolutionDurationHistogram.WithLabelValues(item.Opts.Component, item.Opts.Version).Observe(duration)
+	ResolutionDurationHistogram.WithLabelValues(item.Opts.Component, item.Opts.Version, isVerified(item.Opts.Verifications, item.Opts.Digest)).Observe(duration)
 
 	if err != nil {
 		logger.Error(err, "failed to process work item",
@@ -346,7 +348,7 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, i
 			logger.Info("dropped resolution event, subscriber buffer full",
 				"component", item.Opts.Component,
 				"version", item.Opts.Version)
-			EventChannelDropsTotal.WithLabelValues(item.Opts.Component, item.Opts.Version).Inc()
+			EventChannelDropsTotal.WithLabelValues(item.Opts.Component, item.Opts.Version, isVerified(item.Opts.Verifications, item.Opts.Digest)).Inc()
 		}
 	}
 }
@@ -432,4 +434,16 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 	}
 
 	return desc, nil
+}
+
+func isVerified(verifications []ocm.Verification, digest *v2.Digest) string {
+	if len(verifications) != 0 && digest != nil {
+		return "unknown"
+	}
+
+	if len(verifications) == 0 && digest == nil {
+		return "unverified"
+	}
+
+	return "verified"
 }
