@@ -54,6 +54,7 @@ type ComponentSpec struct {
 	// Verify contains a signature name specifying the component signature to be
 	// verified as well as the trusted public keys (or certificates containing
 	// the public keys) used to verify the signature.
+	// TODO: remove in favor of config https://github.com/open-component-model/ocm-project/issues/866
 	// +optional
 	Verify []Verification `json:"verify,omitempty"`
 

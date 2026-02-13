@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -25,11 +28,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	ocmcel "ocm.software/open-component-model/kubernetes/controller/internal/cel"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
@@ -281,6 +287,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		RepositorySpec:    repoSpec,
 		OCMConfigurations: configs,
 		Namespace:         resource.GetNamespace(),
+		SigningRegistry:   r.PluginManager.SigningRegistry,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: k8stypes.NamespacedName{
@@ -296,10 +303,21 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
+	// Add verifications from the component to the cache-backed repository to make sure they are included in the
+	// cache key and used for verification.
+	verifications, err := ocm.GetVerifications(ctx, r.Client, component)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
+	}
+	cacheBackedRepo.Verifications = verifications
+
 	referencedDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
 		component.Status.Component.Component,
 		component.Status.Component.Version)
-	if errors.Is(err, resolution.ErrResolutionInProgress) {
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
 		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
 		logger.Info("component version resolution in progress, waiting for event notification",
@@ -307,9 +325,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			"version", component.Status.Component.Version)
 
 		return ctrl.Result{}, nil
-	}
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, component, nil, eventv1.EventSeverityInfo, err.Error())
+	case err != nil:
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
 	}
@@ -329,13 +349,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			},
 		},
 	)
-	if errors.Is(err, resolution.ErrResolutionInProgress) {
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
 		logger.Info("reference path resolution in progress, waiting for event notification")
 
 		return ctrl.Result{}, nil
-	}
-	if err != nil {
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, resource, nil, eventv1.EventSeverityInfo, err.Error())
+	case err != nil:
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to resolve reference path: %w", err)
@@ -428,9 +452,12 @@ func (r *Reconciler) resolveReferencePath(
 
 	currentDesc := parentDesc
 	currentRepoSpec := parentRepoSpec
+	// referenceDigestFromParent stores the component reference digest spec from the parent component.
+	var referenceDigestFromParent *v2.Digest
 
 	for i, refIdentity := range referencePath {
 		logger.V(1).Info("resolving reference", "step", i+1, "identity", refIdentity)
+
 		var matchedRef *descriptor.Reference
 		for j, ref := range currentDesc.Component.References {
 			refIdent := ref.ToIdentity()
@@ -449,6 +476,7 @@ func (r *Reconciler) resolveReferencePath(
 			RepositorySpec:    currentRepoSpec,
 			OCMConfigurations: configs,
 			Namespace:         reqInfo.NamespacedName.Namespace,
+			SigningRegistry:   r.PluginManager.SigningRegistry,
 			RequesterFunc: func() workerpool.RequesterInfo {
 				return reqInfo
 			},
@@ -457,10 +485,56 @@ func (r *Reconciler) resolveReferencePath(
 			return nil, nil, fmt.Errorf("failed to create cache-backed repository for reference: %w", err)
 		}
 
+		// TODO(@frewilhelm): Are we sure that only verified component versions have a digest spec in their references?
+		var referenceDigest *v2.Digest
+		if matchedRef.Digest.Value != "" {
+			referenceDigest = &v2.Digest{
+				HashAlgorithm:          matchedRef.Digest.HashAlgorithm,
+				Value:                  matchedRef.Digest.Value,
+				NormalisationAlgorithm: matchedRef.Digest.NormalisationAlgorithm,
+			}
+
+			// Only set component reference digest if the matched reference is from the (original) parent component version (i == 0)
+			if currentDesc.Component.Name == parentDesc.Component.Name &&
+				currentDesc.Component.Version == parentDesc.Component.Version {
+				referenceDigestFromParent = referenceDigest
+			}
+		}
+
+		// If the reference provides a digest spec, we set it in the repository to make sure the component version we
+		// get is stored with a cache key containing the digest information.
+		// We need to use the digest spec from the parent component descriptor as this will be the only information
+		// available in the deployer controller to retrieve the respective cache-key to the verified component
+		// version.
+		refRepo.Digest = referenceDigestFromParent
+
 		refDesc, err := refRepo.GetComponentVersion(ctx, matchedRef.Component, matchedRef.Version)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get referenced component version %s:%s: %w",
 				matchedRef.Component, matchedRef.Version, err)
+		}
+
+		// Digest integrity check for the referenced component version if reference contains a digest
+		if matchedRef.Digest.Value != "" {
+			logger.Info("verifying digest for referenced component version", "parent component",
+				fmt.Sprintf("%s:%s", matchedRef.Component, matchedRef.Version), "child component",
+				fmt.Sprintf("%s:%s", refDesc.Component.Name, refDesc.Component.Version))
+
+			childDigest, err := signing.GenerateDigest(ctx, refDesc, slog.New(logr.ToSlogHandler(logger)),
+				matchedRef.Digest.NormalisationAlgorithm, matchedRef.Digest.HashAlgorithm)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to generate digest for referenced component version %s:%s: %w",
+					matchedRef.Component, matchedRef.Version, err)
+			}
+
+			if matchedRef.Digest.Value != childDigest.Value {
+				return nil, nil, fmt.Errorf("digest mismatch for referenced component version %s:%s: expected %s but got %s",
+					matchedRef.Component, matchedRef.Version, matchedRef.Digest.Value, childDigest.Value)
+			}
+
+			logger.Info("digest successfully verified", "parent component",
+				fmt.Sprintf("%s:%s", matchedRef.Component, matchedRef.Version), "child component",
+				fmt.Sprintf("%s:%s", refDesc.Component.Name, refDesc.Component.Version))
 		}
 
 		currentDesc = refDesc

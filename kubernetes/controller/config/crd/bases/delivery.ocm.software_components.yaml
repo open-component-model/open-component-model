@@ -177,6 +177,8 @@ spec:
                       type: object
                       x-kubernetes-map-type: atomic
                     signature:
+                      description: Signature defines the name of the signature to
+                        be verified in the component version.
                       type: string
                     value:
                       description: Value defines a PEM/base64 encoded public key value.
