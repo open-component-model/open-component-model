@@ -3,7 +3,6 @@ package internal
 import (
 	"fmt"
 
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -73,16 +72,4 @@ func GetReferenceName(ociAccess ociv1.OCIImage) (string, error) {
 		referenceName += ":" + imageRef.Tag
 	}
 	return referenceName, nil
-}
-
-// isLocalBlob checks if access method is a v2.LocalBlob
-func isLocalBlob(access runtime.Typed) bool {
-	if access == nil {
-		return false
-	}
-	var local v2.LocalBlob
-	if err := v2.Scheme.Convert(access, &local); err != nil {
-		return false
-	}
-	return true
 }

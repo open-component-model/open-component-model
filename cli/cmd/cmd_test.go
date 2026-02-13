@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	ocmctx "ocm.software/open-component-model/cli/internal/context"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -27,10 +29,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	componentversion "ocm.software/open-component-model/cli/cmd/add/component-version"
 	"ocm.software/open-component-model/cli/cmd/internal/test"
-	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
@@ -1304,11 +1304,9 @@ resources:
 			r := require.New(t)
 			logs := test.NewJSONLogReader()
 			result := new(bytes.Buffer)
-			args := []string{
-				"add", "cv",
+			args := []string{"add", "cv",
 				"--constructor", constructorYAMLFilePath,
-				"--repository", archiveFilePath,
-			}
+				"--repository", archiveFilePath}
 			if tt.outputArg != "" {
 				args = append(args, tt.outputArg)
 			}
