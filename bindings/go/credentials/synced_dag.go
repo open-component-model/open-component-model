@@ -47,16 +47,16 @@ func (g *syncedDag) getIdentity(id string) (runtime.Identity, bool) {
 	return identity, ok
 }
 
-func (g *syncedDag) getCredentials(id string) (map[string]string, bool) {
+func (g *syncedDag) getCredentials(id string) (runtime.Typed, bool) {
 	v, ok := g.getVertex(id)
 	if !ok {
 		return nil, false
 	}
-	credentials, ok := v.Attributes[attributeCredentials].(map[string]string)
+	credentials, ok := v.Attributes[attributeCredentials].(runtime.Typed)
 	return credentials, ok
 }
 
-func (g *syncedDag) setCredentials(id string, credentials map[string]string) {
+func (g *syncedDag) setCredentials(id string, credentials runtime.Typed) {
 	g.dagMu.Lock()
 	defer g.dagMu.Unlock()
 	v, ok := g.dag.Vertices[id]
