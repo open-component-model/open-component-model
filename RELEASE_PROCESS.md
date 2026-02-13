@@ -41,6 +41,28 @@ Quick links:
 - [Promote RC to Final Release (CLI + Controller)](#3-promote-rc-to-final-release-cli--controller)
 - [Create a patch release (if needed)](#4-create-a-patch-release-if-needed)
 
+### Release Checklist
+
+Copy to your "Sprint Responsible" issue:
+
+```markdown
+- [ ] Release branch created (`releases/v0.X`)
+- [ ] CLI RC created and verified
+- [ ] Controller RC created and verified
+- [ ] (wait 1 sprint for testing)
+- [ ] CLI Final promoted
+- [ ] Controller Final promoted
+- [ ] Both releases visible on GitHub Releases page
+```
+
+### Timeline
+
+| When | Action |
+|------|--------|
+| Sprint Start | Create RCs for both components |
+| Sprint End | Assign next release responsible |
+| Next Sprint Start | Promote previous RCs to Final |
+
 ### Guardrails
 
 - Release branch cut-off starts when the release branch is created.
@@ -117,9 +139,12 @@ This step marks the cut-off for that minor release line.
 
 1. Run workflow **[CLI Release](./.github/workflows/cli-release.yml)** with:
    - `release_candidate = true`
-   - `dry_run = false` (after optional dry-run)
+   - `dry_run = true` first to validate
+   - `dry_run = false` for actual release
 2. Run workflow **[Controller Release](./.github/workflows/controller-release.yml)** with equivalent RC inputs.
 3. Verify both pre-releases were created successfully.
+
+> ⚠️ **Always do a dry-run first** before the actual release to catch configuration issues early.
 
 > CLI and Controller are released together. Do not release only one of them.
 >
@@ -143,9 +168,14 @@ This step marks the cut-off for that minor release line.
 
 1. Run workflow **[CLI Release](./.github/workflows/cli-release.yml)** with:
    - `release_candidate = false`
-   - `dry_run = false` (after optional dry-run)
+   - `dry_run = true` first to validate
+   - `dry_run = false` for actual promotion
 2. Run workflow **[Controller Release](./.github/workflows/controller-release.yml)** with equivalent final inputs.
 3. Verify both final releases are published.
+
+> ⚠️ **Always do a dry-run first** before the actual promotion.
+
+> 🔐 **Security:** The final promotion automatically verifies all attestations from the RC release before proceeding. If verification fails, the promotion is aborted.
 
 <details>
 <summary>What happens in the background?</summary>
@@ -153,6 +183,7 @@ This step marks the cut-off for that minor release line.
 - **CLI path (`cli-release.yml`)**
   - `prepare`: resolve latest RC and target final version.
   - `validate_final`: ensure promotable RC exists.
+  - `verify_attestations`: verify all attestation bundles from RC release.
   - `tag_final`: create immutable final tag from RC source.
   - `promote_image`: promote OCI tags (version + latest).
   - `release_final`: publish final GitHub release from RC artifacts.
@@ -220,7 +251,7 @@ flowchart TD
 
 ## Release notes
 
-- Release notes are generated automatically by the release workflows.
+- Release notes are generated automatically by the release workflows (using [git-cliff](https://git-cliff.org)).
 - The release responsible does not need to manually compose notes for normal RC/final runs.
 
 ---
@@ -242,3 +273,8 @@ flowchart TD
 ### Final release exists for one component but not the other
 - Check: status of both workflow runs and release pages.
 - Action: complete or rerun the missing component release immediately.
+
+### Attestation verification failed
+- Check: RC release assets include `attestations-index.json` and `attestation-*.jsonl` bundles.
+- Check: the OCI image digest in the index matches the actual image.
+- Action: if assets are missing, create a new RC. If digest mismatch, investigate image tampering.
