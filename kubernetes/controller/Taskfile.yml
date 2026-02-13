@@ -83,8 +83,8 @@ tasks:
     dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
     cmds:
       - task: helm/install
+      - defer: { task: helm/uninstall }
       - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v
-      - task: helm/uninstall
 
   # Build
   build:
