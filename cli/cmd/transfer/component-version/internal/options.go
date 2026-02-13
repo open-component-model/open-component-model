@@ -11,8 +11,9 @@ const (
 )
 
 type Options struct {
-	CopyMode  CopyMode
-	Recursive bool
+	CopyMode            CopyMode
+	Recursive           bool
+	UploadAsOCIArtifact bool
 }
 
 type Option func(*Options)
@@ -28,5 +29,11 @@ func WithCopyMode(mode CopyMode) func(*Options) {
 func WithRecursive(recursive bool) func(*Options) {
 	return func(o *Options) {
 		o.Recursive = recursive
+	}
+}
+
+func WithUploadAsOCIArtifact(upload bool) func(*Options) {
+	return func(o *Options) {
+		o.UploadAsOCIArtifact = upload
 	}
 }

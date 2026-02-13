@@ -15,6 +15,7 @@ import (
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ocirepo "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -44,8 +45,9 @@ func BuildGraphDefinition(
 	}
 
 	discoverer := &discoverer{
-		recursive:         o.Recursive,
-		discoveredDigests: make(map[string]descriptor.Digest),
+		recursive:           o.Recursive,
+		uploadAsOCIArtifact: o.UploadAsOCIArtifact,
+		discoveredDigests:   make(map[string]descriptor.Digest),
 	}
 	resolver := &resolver{
 		repoResolver: repoResolver,
@@ -61,6 +63,7 @@ func BuildGraphDefinition(
 			}
 			return &dig
 		},
+		uploadAsOCIArtifact: o.UploadAsOCIArtifact,
 	}
 
 	root := fromSpec.String()
@@ -85,7 +88,7 @@ func BuildGraphDefinition(
 
 	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(d, toSpec, tgd, o.CopyMode)
+		return fillGraphDefinitionWithPrefetchedComponents(d, toSpec, tgd, o.CopyMode, o.UploadAsOCIArtifact)
 	})
 	if err != nil {
 		return nil, err
@@ -94,7 +97,7 @@ func BuildGraphDefinition(
 	return tgd, nil
 }
 
-func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[string], toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, copyMode CopyMode) error {
+func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[string], toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, copyMode CopyMode, uploadAsOCIArtifact bool) error {
 	for _, v := range d.Vertices {
 		val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
 		ref := val.Ref
@@ -129,7 +132,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 			case *descriptorv2.LocalBlob:
 				processLocalBlob(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
 			case *ociv1.OCIImage:
-				err := processOCIArtifact(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
+				err := processOCIArtifact(resource, id, ref, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact)
 				if err != nil {
 					return fmt.Errorf("cannot process OCI artifact resource: %w", err)
 				}
@@ -221,7 +224,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 	return nil
 }
 
-func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
+func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
@@ -261,31 +264,77 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 	tgd.Transformations = append(tgd.Transformations, getArtifactTransform)
 
 	// Create AddLocalResource transformation
-	addResourceTransform := transformv1alpha1.GenericTransformation{
-		TransformationMeta: meta.TransformationMeta{
-			Type: ChooseAddLocalResourceType(toSpec),
-			ID:   addResourceID,
-		},
-		Spec: &runtime.Unstructured{Data: map[string]any{
-			"repository": AsUnstructured(toSpec).Data,
-			"component":  ref.Component,
-			"version":    ref.Version,
-			"resource": map[string]any{
-				"name":     fmt.Sprintf("${%s.output.resource.name}", getResourceID),
-				"version":  fmt.Sprintf("${%s.output.resource.version}", getResourceID),
-				"type":     fmt.Sprintf("${%s.output.resource.type}", getResourceID),
-				"relation": fmt.Sprintf("${%s.output.resource.relation}", getResourceID),
-				"access": map[string]interface{}{
-					"type":          descriptor.GetLocalBlobAccessType().String(),
-					"referenceName": referenceName,
-				},
-				"digest":        fmt.Sprintf("${%s.output.resource.digest}", getResourceID),
-				"labels":        fmt.Sprintf("${has(%s.output.resource.labels) ? %s.output.resource.labels  : []}", getResourceID, getResourceID),
-				"extraIdentity": fmt.Sprintf("${has(%s.output.resource.extraIdentity) ? %s.output.resource.extraIdentity  : {}}", getResourceID, getResourceID),
-				"srcRefs":       fmt.Sprintf("${has(%s.output.resource.srcRefs) ? %s.output.resource.srcRefs  : []}", getResourceID, getResourceID),
+	var addResourceTransform transformv1alpha1.GenericTransformation
+	if uploadAsOCIArtifact {
+		// Construct target Image Reference from toSpec and referenceName
+		var targetImageRef string
+		// Default to referenceName if we can't determine the target repo
+		targetImageRef = referenceName
+
+		if toSpec != nil {
+			raw, err := json.Marshal(toSpec)
+			if err == nil {
+				var repoSpec ocirepo.Repository
+				if err := json.Unmarshal(raw, &repoSpec); err == nil && repoSpec.BaseUrl != "" {
+					targetRepoURL := repoSpec.BaseUrl
+					if repoSpec.SubPath != "" {
+						targetRepoURL = targetRepoURL + "/" + repoSpec.SubPath
+					}
+					targetImageRef = fmt.Sprintf("%s/%s", strings.TrimRight(targetRepoURL, "/"), strings.TrimLeft(referenceName, "/"))
+				}
+			}
+		}
+
+		addResourceTransform = transformv1alpha1.GenericTransformation{
+			TransformationMeta: meta.TransformationMeta{
+				Type: runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version),
+				ID:   addResourceID,
 			},
-			"file": fmt.Sprintf("${%s.output.file}", getResourceID),
-		}},
+			Spec: &runtime.Unstructured{Data: map[string]any{
+				// "repository": AsUnstructured(toSpec).Data, // AddOCIArtifact uses repository from environment/context? No, it uses ResourceRepository which is global in transformer
+				"resource": map[string]any{
+					"name":     fmt.Sprintf("${%s.output.resource.name}", getResourceID),
+					"version":  fmt.Sprintf("${%s.output.resource.version}", getResourceID),
+					"type":     fmt.Sprintf("${%s.output.resource.type}", getResourceID),
+					"relation": fmt.Sprintf("${%s.output.resource.relation}", getResourceID),
+					"access": map[string]interface{}{
+						"type":           runtime.NewVersionedType(ociv1.LegacyType, ociv1.LegacyTypeVersion).String(),
+						"imageReference": targetImageRef,
+						"labels":         fmt.Sprintf("${has(%s.output.resource.labels) ? %s.output.resource.labels  : []}", getResourceID, getResourceID),
+						"extraIdentity":  fmt.Sprintf("${has(%s.output.resource.extraIdentity) ? %s.output.resource.extraIdentity  : {}}", getResourceID, getResourceID),
+						"srcRefs":        fmt.Sprintf("${has(%s.output.resource.srcRefs) ? %s.output.resource.srcRefs  : []}", getResourceID, getResourceID),
+					},
+				},
+				"file": fmt.Sprintf("${%s.output.file}", getResourceID),
+			}},
+		}
+	} else {
+		addResourceTransform = transformv1alpha1.GenericTransformation{
+			TransformationMeta: meta.TransformationMeta{
+				Type: ChooseAddLocalResourceType(toSpec),
+				ID:   addResourceID,
+			},
+			Spec: &runtime.Unstructured{Data: map[string]any{
+				"repository": AsUnstructured(toSpec).Data,
+				"component":  ref.Component,
+				"version":    ref.Version,
+				"resource": map[string]any{
+					"name":     fmt.Sprintf("${%s.output.resource.name}", getResourceID),
+					"version":  fmt.Sprintf("${%s.output.resource.version}", getResourceID),
+					"type":     fmt.Sprintf("${%s.output.resource.type}", getResourceID),
+					"relation": fmt.Sprintf("${%s.output.resource.relation}", getResourceID),
+					"access": map[string]interface{}{
+						"type":          descriptor.GetLocalBlobAccessType().String(),
+						"referenceName": referenceName,
+						"labels":        fmt.Sprintf("${has(%s.output.resource.labels) ? %s.output.resource.labels  : []}", getResourceID, getResourceID),
+						"extraIdentity": fmt.Sprintf("${has(%s.output.resource.extraIdentity) ? %s.output.resource.extraIdentity  : {}}", getResourceID, getResourceID),
+						"srcRefs":       fmt.Sprintf("${has(%s.output.resource.srcRefs) ? %s.output.resource.srcRefs  : []}", getResourceID, getResourceID),
+					},
+					"digest": fmt.Sprintf("${%s.output.resource.digest}", getResourceID),
+				},
+				"file": fmt.Sprintf("${%s.output.file}", getResourceID),
+			}},
+		}
 	}
 	tgd.Transformations = append(tgd.Transformations, addResourceTransform)
 
@@ -350,8 +399,9 @@ type discoveryValue struct {
 }
 
 type resolver struct {
-	repoResolver   resolvers.ComponentVersionRepositoryResolver
-	expectedDigest func(id runtime.Identity) *descriptor.Digest
+	repoResolver        resolvers.ComponentVersionRepositoryResolver
+	expectedDigest      func(id runtime.Identity) *descriptor.Digest
+	uploadAsOCIArtifact bool
 }
 
 func (r *resolver) Resolve(ctx context.Context, key string) (*discoveryValue, error) {
@@ -385,8 +435,9 @@ func (r *resolver) Resolve(ctx context.Context, key string) (*discoveryValue, er
 }
 
 type discoverer struct {
-	mu        sync.Mutex
-	recursive bool
+	mu                  sync.Mutex
+	recursive           bool
+	uploadAsOCIArtifact bool
 
 	discoveredDigests map[string]descriptor.Digest
 }
