@@ -75,7 +75,6 @@ func GetReferenceName(ociAccess ociv1.OCIImage) (string, error) {
 	return referenceName, nil
 }
 
-
 // isLocalBlob checks if access method is a v2.LocalBlob
 func isLocalBlob(access runtime.Typed) bool {
 	if access == nil {
