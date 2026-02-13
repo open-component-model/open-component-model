@@ -9,6 +9,15 @@ import (
 	_ "embed"
 )
 
+//go:embed schemas/AddOCIArtifact.schema.json
+var schemaAddOCIArtifact []byte
+
+//go:embed schemas/AddOCIArtifactOutput.schema.json
+var schemaAddOCIArtifactOutput []byte
+
+//go:embed schemas/AddOCIArtifactSpec.schema.json
+var schemaAddOCIArtifactSpec []byte
+
 //go:embed schemas/CTFAddComponentVersion.schema.json
 var schemaCTFAddComponentVersion []byte
 
@@ -89,6 +98,21 @@ var schemaOCIGetLocalResourceOutput []byte
 
 //go:embed schemas/OCIGetLocalResourceSpec.schema.json
 var schemaOCIGetLocalResourceSpec []byte
+
+// JSONSchema returns the JSON Schema for AddOCIArtifact.
+func (AddOCIArtifact) JSONSchema() []byte {
+	return schemaAddOCIArtifact
+}
+
+// JSONSchema returns the JSON Schema for AddOCIArtifactOutput.
+func (AddOCIArtifactOutput) JSONSchema() []byte {
+	return schemaAddOCIArtifactOutput
+}
+
+// JSONSchema returns the JSON Schema for AddOCIArtifactSpec.
+func (AddOCIArtifactSpec) JSONSchema() []byte {
+	return schemaAddOCIArtifactSpec
+}
 
 // JSONSchema returns the JSON Schema for CTFAddComponentVersion.
 func (CTFAddComponentVersion) JSONSchema() []byte {
