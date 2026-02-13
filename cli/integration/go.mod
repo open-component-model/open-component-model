@@ -170,7 +170,7 @@ require (
 	k8s.io/kubectl v0.35.0 // indirect
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570 // indirect
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260212155305-86f8891d890c // indirect
-	ocm.software/open-component-model/bindings/go/configuration v0.0.9 // indirect
+	ocm.software/open-component-model/bindings/go/configuration v0.0.10 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
