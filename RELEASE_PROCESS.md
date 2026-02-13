@@ -141,7 +141,7 @@ This step marks the cut-off for that minor release line.
    - `release_candidate = true`
    - `dry_run = true` first to validate
    - `dry_run = false` for actual release
-2. Run workflow **[Controller Release](./.github/workflows/controller-release.yml)** with equivalent RC inputs.
+2. Run workflow **Controller Release** (once available, currently in development) with equivalent RC inputs.
 3. Verify both pre-releases were created successfully.
 
 > ⚠️ **Always do a dry-run first** before the actual release to catch configuration issues early.
@@ -170,7 +170,7 @@ This step marks the cut-off for that minor release line.
    - `release_candidate = false`
    - `dry_run = true` first to validate
    - `dry_run = false` for actual promotion
-2. Run workflow **[Controller Release](./.github/workflows/controller-release.yml)** with equivalent final inputs.
+2. Run workflow **Controller Release** (once available, currently in development) with equivalent final inputs.
 3. Verify both final releases are published.
 
 > ⚠️ **Always do a dry-run first** before the actual promotion.
