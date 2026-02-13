@@ -21,7 +21,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/signing"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
-	"ocm.software/open-component-model/cli/cmd/download/shared"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
@@ -120,8 +119,8 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 				return fmt.Errorf("cannot convert resource access to typed object: %w", err)
 			}
 
-			if copyMode == CopyModeLocalBlobResources && !shared.IsLocal(access) {
-				slog.Info("Skipping copy of resource as copy mode is local blob resources only",
+			if copyMode == CopyModeLocalBlobResources && !isLocalBlob(access) {
+				slog.Info("Skipping copy of resource since its access type is not a local blob. Only resources with local blob access are copied when CopyModeLocalBlobResources is set.",
 					"component", ref.Component, "version", ref.Version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 				continue
 			}

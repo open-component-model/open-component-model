@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
@@ -52,7 +53,23 @@ This command constructs a TransformationGraphDefinition consisting of:
   2. CTFAddComponentVersion / OCIAddComponentVersion
   3. GetOCIArtifact / OCIAddLocalResource
 
+We support OCI and CTF repositories as source and target, and the graph is built accordingly based on the provided references. 
+By default, only the component version itself is transferred, but with --copy-resources, all resources are also copied and transformed if necessary.
+
 The graph is validated, and then executed unless --dry-run is set.`,
+		Example: strings.TrimSpace(`
+# Transfer a component version from a CTF archive to an OCI registry
+transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm
+
+# Transfer from one OCI registry to another
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
+
+# Transfer including all resources (e.g. OCI artifacts)
+transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm --copy-resources
+
+# Recursively transfer a component version and all its references
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm -r --copy-resources
+`),
 		Args:              cobra.ExactArgs(2),
 		RunE:              TransferComponentVersion,
 		DisableAutoGenTag: true,
