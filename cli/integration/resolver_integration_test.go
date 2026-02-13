@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os"
@@ -151,7 +152,9 @@ components:
 	})
 	r.NoError(addA.ExecuteContext(t.Context()))
 
+	output := new(bytes.Buffer)
 	getCMD := cmd.New()
+	getCMD.SetOut(output)
 	getCMD.SetArgs([]string{
 		"get", "component-version",
 		fmt.Sprintf("http://%s//%s:%s", registryA, componentA, version),
@@ -162,4 +165,10 @@ components:
 
 	r.NoError(getCMD.ExecuteContext(t.Context()),
 		"get cv --recursive should succeed when resolver config correctly routes component-b to registry-b")
+
+	strOutput := output.String()
+	r.Contains(strOutput, "ocm.software/resolver-test/component-a", "output should contain resource from component-a")
+	r.Contains(strOutput, "ocm.software/resolver-test/component-b", "output should contain resource from component-b")
+	r.Contains(strOutput, fmt.Sprintf("%s/component-descriptors/ocm.software/resolver-test/component-a:v1.0.0", registryA), "output should contain reference to component-a in registry-a")
+	r.Contains(strOutput, fmt.Sprintf("%s/component-descriptors/ocm.software/resolver-test/component-b:v1.0.0", registryB), "output should contain reference to component-b in registry-b")
 }
