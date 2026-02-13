@@ -43,7 +43,7 @@ Quick links:
 
 ### Release Checklist
 
-Copy to your "Sprint Responsible" issue:
+Copy the following TODOs to your "Sprint Responsible" issue:
 
 ```markdown
 - [ ] Release branch created (`releases/v0.X`)
