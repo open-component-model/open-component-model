@@ -21,7 +21,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
-	"ocm.software/open-component-model/bindings/go/oci/cache"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
@@ -45,22 +44,15 @@ var _ ComponentVersionRepository = (*Repository)(nil)
 // Repository implements the ComponentVersionRepository interface using OCI registries.
 // Each component may be stored in a separate OCI repository, but ultimately the storage is determined by the Resolver.
 //
-// This Repository implementation synchronizes OCI Manifests through the concepts of LocalManifestCache.
-// Through this any local blob added with AddLocalResource will be added to the memory until
-// AddComponentVersion is called with a reference to that resource.
-// This allows the repository to associate newly added blobs with the component version and still upload them
-// when AddLocalResource is called.
+// This Repository implementation validates local blob references by scanning component descriptors
+// for LocalBlob access specifications and ensuring the referenced blobs exist in the OCI store.
+// Local blobs uploaded via AddLocalResource must exist before calling AddComponentVersion.
 //
 // Note: Store implementations are expected to either allow orphaned local resources or
 // regularly issue an async garbage collection to remove them due to this behavior.
 // This however should not be an issue since all OCI registries implement such a garbage collection mechanism.
 type Repository struct {
 	scheme *runtime.Scheme
-
-	// localArtifactManifestCache temporarily stores manifests for local artifacts until they are added to a component version.
-	localArtifactManifestCache cache.OCIDescriptorCache
-	// localArtifactLayerCache temporarily stores layers for local artifacts until they are added to a component version.
-	localArtifactLayerCache cache.OCIDescriptorCache
 
 	// resolver resolves component version references to OCI stores.
 	resolver Resolver
@@ -101,11 +93,23 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return err
 	}
 
+	// Scan component descriptor for local blob references
+	localBlobDigests, err := scanLocalBlobDigests(descriptor)
+	if err != nil {
+		return fmt.Errorf("failed to scan local blob digests: %w", err)
+	}
+
+	// Validate that all referenced local blobs exist in the store
+	additionalManifests, additionalLayers, err := validateLocalBlobsExist(ctx, store, localBlobDigests)
+	if err != nil {
+		return fmt.Errorf("failed to validate local blobs: %w", err)
+	}
+
 	manifest, err := AddDescriptorToStore(ctx, store, descriptor, AddDescriptorOptions{
 		Scheme:                        repo.scheme,
 		Author:                        repo.creatorAnnotation,
-		AdditionalDescriptorManifests: repo.localArtifactManifestCache.Get(reference),
-		AdditionalLayers:              repo.localArtifactLayerCache.Get(reference),
+		AdditionalDescriptorManifests: additionalManifests,
+		AdditionalLayers:              additionalLayers,
 		ReferrerTrackingPolicy:        repo.referrerTrackingPolicy,
 		DescriptorEncodingMediaType:   repo.descriptorEncodingMediaType,
 	})
@@ -116,9 +120,6 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 	if err := store.Tag(ctx, *manifest, reference); err != nil {
 		return fmt.Errorf("failed to tag manifest: %w", err)
 	}
-	// Cleanup local blob memory as all layers have been pushed
-	repo.localArtifactManifestCache.Delete(reference)
-	repo.localArtifactLayerCache.Delete(reference)
 
 	return nil
 }
@@ -314,6 +315,61 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 	return res, nil
 }
 
+// scanLocalBlobDigests scans the component descriptor for all LocalBlob access specifications
+// and extracts their digests. These digests represent blobs that should already exist in the OCI store.
+func scanLocalBlobDigests(desc *descriptor.Descriptor) ([]digest.Digest, error) {
+	var digests []digest.Digest
+
+	// Scan resources for LocalBlob access specs
+	for i := range desc.Component.Resources {
+		resource := &desc.Component.Resources[i]
+		if localBlob, ok := resource.Access.(*v2.LocalBlob); ok {
+			dig, err := digest.Parse(localBlob.LocalReference)
+			if err != nil {
+				return nil, fmt.Errorf("invalid digest in resource %s LocalBlob access: %w", resource.ToIdentity(), err)
+			}
+			digests = append(digests, dig)
+		}
+	}
+
+	// Scan sources for LocalBlob access specs
+	for i := range desc.Component.Sources {
+		source := &desc.Component.Sources[i]
+		if localBlob, ok := source.Access.(*v2.LocalBlob); ok {
+			dig, err := digest.Parse(localBlob.LocalReference)
+			if err != nil {
+				return nil, fmt.Errorf("invalid digest in source %s LocalBlob access: %w", source.ToIdentity(), err)
+			}
+			digests = append(digests, dig)
+		}
+	}
+
+	return digests, nil
+}
+
+// validateLocalBlobsExist validates that all provided digests exist in the OCI store
+// and returns their descriptors categorized as manifests and layers.
+func validateLocalBlobsExist(ctx context.Context, store oras.Target, digests []digest.Digest) (manifests []ociImageSpecV1.Descriptor, layers []ociImageSpecV1.Descriptor, err error) {
+	for _, dig := range digests {
+		desc, err := store.Resolve(ctx, dig.String())
+		if err != nil {
+			if errors.Is(err, errdef.ErrNotFound) {
+				return nil, nil, fmt.Errorf("local blob %s referenced in component descriptor was not found in store - ensure AddLocalResource was called for this blob first", dig)
+			}
+			return nil, nil, fmt.Errorf("failed to resolve local blob %s: %w", dig, err)
+		}
+
+		// Categorize descriptor based on whether it's an OCI-compliant manifest or a layer
+		if introspection.IsOCICompliantManifest(desc) {
+			manifests = append(manifests, desc)
+		} else {
+			layers = append(layers, desc)
+		}
+	}
+
+	return manifests, layers, nil
+}
+
 func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, component string, version string, artifact descriptor.Artifact, b blob.ReadOnlyBlob) error {
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
@@ -329,19 +385,13 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, compon
 		return fmt.Errorf("failed to create resource blob: %w", err)
 	}
 
-	desc, err := pack.ArtifactBlob(ctx, store, artifactBlob, pack.Options{
+	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, pack.Options{
 		AccessScheme:     repo.scheme,
 		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
 		BaseReference:    reference,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to pack resource blob: %w", err)
-	}
-
-	if introspection.IsOCICompliantManifest(desc) {
-		repo.localArtifactManifestCache.Add(reference, desc)
-	} else {
-		repo.localArtifactLayerCache.Add(reference, desc)
 	}
 
 	return nil
