@@ -3,6 +3,7 @@ version: '3'
 vars:
   DEEPCOPY_GEN_TARGET_VERSION: '${DEEPCOPY_GEN_VERSION}'
   GOLANGCI_LINT_TARGET_VERSION: '${GOLANGCI_LINT_VERSION}'
+  MARKDOWNLINT_CLI2_TARGET_VERSION: '${MARKDOWNLINT_CLI2_VERSION}'
 
 tasks:
   deepcopy-gen/generate-deepcopy:
@@ -103,3 +104,26 @@ tasks:
     cmd: |
       {{ .GOLANGCI_LINT }} config verify \
         --config={{ .GOLANGCI_LINT_CONFIG }}
+
+  markdownlint:
+    desc: "Run markdownlint-cli2 on all markdown files (add -- --fix to fix automatically)"
+    deps: [markdownlint/install]
+    vars:
+      MARKDOWNLINT_CLI2_CONFIG: '{{ .ROOT_DIR }}/.github/config/.markdownlint-cli2.yaml'
+    cmd: |
+      {{ .ROOT_DIR }}/tmp/node_modules/.bin/markdownlint-cli2 \
+        --config {{ .MARKDOWNLINT_CLI2_CONFIG }} \
+        {{ .CLI_ARGS }} '{{ .ROOT_DIR }}/**/*.md'
+
+  markdownlint/install:
+    desc: "Install markdownlint-cli2 {{ .MARKDOWNLINT_CLI2_TARGET_VERSION }} into {{ .ROOT_DIR }}/tmp if needed"
+    vars:
+      BIN: '{{ .ROOT_DIR }}/tmp/node_modules/.bin/markdownlint-cli2'
+      CURRENT_VERSION:
+        sh: 'if [ -x {{ .BIN }} ]; then {{ .BIN }} --version 2>/dev/null || echo "absent"; else echo "absent"; fi'
+    status:
+      - 'test -x {{ .BIN }}'
+      - '[ "{{ .CURRENT_VERSION }}" = "{{ .MARKDOWNLINT_CLI2_TARGET_VERSION }}" ]'
+    cmds:
+      - mkdir -p {{ .ROOT_DIR }}/tmp
+      - npm install --prefix {{ .ROOT_DIR }}/tmp markdownlint-cli2@{{ .MARKDOWNLINT_CLI2_TARGET_VERSION }}

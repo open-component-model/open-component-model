@@ -10,3 +10,4 @@ config:
   MD004: false #Unordered list style
   MD031: false #Fenced code blocks should be surrounded by blank lines
   MD036: false #No emphasis added
+  MD060: false #Table column style is not that important to us
