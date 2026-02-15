@@ -34,6 +34,12 @@ on:
       artifact_id:
         description: "The artifact id that was built."
         value: ${{ jobs.build.outputs.artifact_id }}
+      image_digest:
+        description: "The pushed OCI image digest (sha256:...)."
+        value: ${{ jobs.publish.outputs.digest }}
+      image_tag:
+        description: "The OCI image tag that was pushed."
+        value: ${{ jobs.publish.outputs.tag }}
 
 env:
   LOCATION: "cli"                       # Folder containing the CLI source
@@ -148,6 +154,9 @@ jobs:
     needs: build
     if: ${{ needs.build.outputs.should_push_oci_image == 'true' }}  # Skip unless we should push
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
+      tag: ${{ steps.set-tag.outputs.tag }}
     permissions:
       actions: read           # Needed for artifact download
       packages: write         # Needed for pushing OCI images and provenance layers
@@ -173,7 +182,11 @@ jobs:
 
       # use discovered tag from layout
       - name: Set TAG
-        run: echo "TAG=$(oras repo tags --oci-layout ${LAYOUT} | head -n 1)" >> "$GITHUB_ENV"
+        id: set-tag
+        run: |
+          TAG=$(oras repo tags --oci-layout ${LAYOUT} | head -n 1)
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3

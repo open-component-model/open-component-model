@@ -31,12 +31,19 @@ assert.deepStrictEqual(v1, {
     rcVersion: "0.1.1-rc.1",
 }, "RC version should be bumped when starting from a stable version");
 
-// 2. New RC from existing RC (RC increments)
+// 2. Stable + RC on same base => start next minor RC line
 const v2 = computeNextVersions("0.1", "cli/v0.1.1", "cli/v0.1.1-rc.4", false);
 assert.deepStrictEqual(v2, {
     baseVersion: "0.1.2",
     rcVersion: "0.1.2-rc.1",
-}, "RC version should be incremented when starting from an existing RC");
+}, "When stable exists for the same base as latest RC, start next minor RC line");
+
+// 2b. No stable yet for current line + existing RC => continue same RC line
+const v2b = computeNextVersions("0.4", "", "cli/v0.4.0-rc.3", false);
+assert.deepStrictEqual(v2b, {
+    baseVersion: "0.4.0",
+    rcVersion: "0.4.0-rc.4",
+}, "Without a stable tag, RC line must continue on the same base");
 
 // 3. Same base between stable and RC with minor version bump
 const v3 = computeNextVersions("0.1", "cli/v0.1.0", "cli/v0.1.0-rc.4", true);

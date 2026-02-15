@@ -1,6 +1,6 @@
 name: CLI Release
 
-run-name: CLI Release based on ${{ github.event.inputs.branch }}${{ github.event.inputs.dry_run == 'true' && '(dry-run)' || '' }}
+run-name: CLI ${{ github.event.inputs.release_candidate == 'true' && 'RC' || 'Final' }} Release based on ${{ github.event.inputs.branch }}${{ github.event.inputs.dry_run == 'true' && '(dry-run)' || '' }}
 
 on:
   workflow_dispatch:
@@ -9,8 +9,13 @@ on:
         description: "Branch to cut to, must match regex releases/v0.[0-9]+"
         required: true
         type: string
+      release_candidate:
+        description: "If set, create a release candidate. If not set, promote latest RC on branch to final."
+        required: false
+        default: true
+        type: boolean
       dry_run:
-        description: "Perform dry run without pushing tags"
+        description: "Perform dry run without pushing tags."
         required: false
         default: true
         type: boolean
@@ -25,50 +30,54 @@ concurrency:
 
 jobs:
   # --------------------------------------------------------
-  # 1. Prepare: release candidate version
+  # 1. Prepare: release metadata
   # --------------------------------------------------------
   prepare:
-    name: Prepare Release Candidate Version
+    name: Prepare Release Metadata
     uses: ./.github/workflows/release-candidate-version.yml
     with:
       branch: ${{ github.event.inputs.branch }}
       component_path: cli # cannot use env here
+      # Reusable workflow expects a boolean; `github.event.inputs.*` is stringly typed.
+      release_candidate: ${{ fromJSON(github.event.inputs.release_candidate) }}
     secrets: inherit
 
   # --------------------------------------------------------
-  # 2. Tag: Create and push RC tag (skipped on dry-run)
+  # 2. Tag RC: Create and push RC tag (skipped on dry-run)
   # --------------------------------------------------------
-  tag:
-    name: Create and Push Tag
+  tag_rc:
+    name: Create and Push RC Tag
     runs-on: ubuntu-latest
     needs: [prepare]
-    if: ${{ github.event.inputs.dry_run == 'false' }}
+    if: ${{ github.event.inputs.release_candidate == 'true' && github.event.inputs.dry_run == 'false' }}
     permissions:
       contents: write
     outputs:
       pushed: ${{ steps.tag.outputs.pushed }}
     steps:
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          permission-contents: write
+          # Required for pushing tags that reference commits touching workflow files under .github/workflows.
+          permission-workflows: write
+
       # Checkout repository for tagging
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           sparse-checkout: ${{ env.COMPONENT_PATH }}
           ref: ${{ github.event.inputs.branch }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Determine committer and set up git identity
-      - id: committer
-        name: Determine Committer used for pushing Tag
-        run: |
-          echo "name=${{ github.actor }}" >> "$GITHUB_OUTPUT" 
-          echo "email=${{ github.actor }}@users.noreply.github.com" >> "$GITHUB_OUTPUT"
+          token: ${{ steps.get_token.outputs.token }}
 
       - name: Setup git config
         run: |
-          git config --global user.name "${{ steps.committer.outputs.name }}" 
-          git config --global user.email "${{ steps.committer.outputs.email }}"
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
 
-      # Create and push tag if not existing
       - name: Create ${{ needs.prepare.outputs.new_tag }}
         id: tag
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
@@ -76,7 +85,7 @@ jobs:
           TAG: ${{ needs.prepare.outputs.new_tag }}
           CHANGELOG_B64: ${{ needs.prepare.outputs.changelog_b64 }}
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.get_token.outputs.token }}
           script: |
             const { execSync } = require("child_process");
             const tag = process.env.TAG;
@@ -93,26 +102,26 @@ jobs:
   # --------------------------------------------------------
   build:
     name: Build CLI for ${{ needs.prepare.outputs.new_tag }}
-    if: ${{ needs.tag.outputs.pushed == 'true' }}
-    needs: [prepare, tag]
+    if: ${{ needs.tag_rc.outputs.pushed == 'true' }}
+    needs: [prepare, tag_rc]
     uses: ./.github/workflows/cli.yml
     secrets: inherit
     with:
       ref: ${{ needs.prepare.outputs.new_tag }}
 
 
-  # --------------------------------------------------------
-  # 4. Release: Create GitHub pre-release if tag was pushed
-  # --------------------------------------------------------
-  release:
+  # ---------------------------------------------------------------
+  # 4. Release RC: Create GitHub pre-release if RC tag was pushed
+  # ---------------------------------------------------------------
+  release_rc:
     name: Create Pre-Release
-    needs: [prepare, tag, build]
+    if: ${{ needs.tag_rc.outputs.pushed == 'true' }}
+    needs: [prepare, tag_rc, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     environment:
       name: cli/release-candidate
-      url: ${{ steps.release.outputs.html_url }}
     steps:
       # Recreate changelog file from base64 string for release body
       - name: Decode changelog to file
@@ -125,8 +134,33 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
           name: ${{ needs.build.outputs.artifact_name }}
+          path: ${{ runner.temp }}/rc-build-assets
 
-      - name: Create Release
+      - name: Checkout scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: 'false'
+
+      - name: Export attestation bundles and index
+        id: export_attestations
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSETS_DIR: ${{ runner.temp }}/rc-build-assets
+          ASSET_PATTERNS: '["bin/ocm-*"]'
+          IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
+          IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+          TARGET_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli
+          OUTPUT_DIR: ${{ runner.temp }}/attestation-bundles
+          REPOSITORY: ${{ github.repository }}
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/export-attestations.js');
+            await script.default({ core });
+
+      - name: Create RC Release
+        id: create_rc_release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
         with:
           name: CLI ${{ needs.prepare.outputs.new_version }}
@@ -136,17 +170,338 @@ jobs:
           overwrite_files: 'true'
           prerelease: true
           files: |
-            ${{ github.workspace }}/bin/ocm-*    
-            ${{ github.workspace }}/oci/*
+            ${{ runner.temp }}/rc-build-assets/bin/ocm-*
+            ${{ runner.temp }}/rc-build-assets/oci/*
+            ${{ runner.temp }}/attestation-bundles/*.jsonl
+            ${{ runner.temp }}/attestation-bundles/attestations-index.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Summarize RC release
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const release = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: process.env.RC_TAG,
+            });
+            const releaseUrl = release.data.html_url;
+            const assetsCount = Array.isArray(release.data.assets) ? release.data.assets.length : 0;
+
+            await core.summary
+              .addHeading('RC Release Published')
+              .addTable([
+                [{ data: 'Field', header: true }, { data: 'Value', header: true }],
+                ['RC Tag', process.env.RC_TAG],
+                ['RC Version', process.env.RC_VERSION],
+                ['Uploaded Assets', String(assetsCount)],
+              ])
+              .addEOL()
+              .addLink(releaseUrl, releaseUrl)
+              .addEOL()
+              .write();
+
+
+  # ----------------------------------------------------------------
+  # 5. Validate Final: Validate latest RC exists for final release
+  # ----------------------------------------------------------------
+  validate_final:
+    name: Validate Final Promotion Source
+    if: ${{ github.event.inputs.release_candidate == 'false' }}
+    needs: [prepare]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure latest RC exists on release branch
+        env:
+          LATEST_RC_TAG: ${{ needs.prepare.outputs.latest_rc_tag }}
+          LATEST_PROMOTION_TAG: ${{ needs.prepare.outputs.latest_promotion_tag }}
+        run: |
+          if [ -z "$LATEST_RC_TAG" ]; then
+            echo "::error::No RC tag found for branch '${{ github.event.inputs.branch }}'. Final release requires existing RC."
+            exit 1
+          fi
+          if [ -z "$LATEST_PROMOTION_TAG" ]; then
+            echo "::error::Missing latest_promotion_tag output"
+            exit 1
+          fi
+          echo "✅ Found RC tag: $LATEST_RC_TAG -> $LATEST_PROMOTION_TAG"
 
   # --------------------------------------------------------
-  # 5. Promote: TODO(jakobmoellerdev): https://github.com/open-component-model/ocm-project/issues/721
-  #    - Protect the release with an environment that has a timer and reviewers
-  #    - Create tag from RC tag commit
-  #    - Promote the image to the latest tag
-  #    - Promote the image to the release version
-  #    - Push new release with all artifacts from RC
+  # 6. Tag Final: Create and push final tag from RC commit
   # --------------------------------------------------------
+  tag_final:
+    name: Create and Push Final Tag
+    if: ${{ github.event.inputs.release_candidate == 'false' && github.event.inputs.dry_run == 'false' }}
+    needs: [prepare, validate_final, verify_attestations]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          permission-contents: write
+          # Required for pushing tags that reference commits touching workflow files under .github/workflows.
+          permission-workflows: write
+
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          sparse-checkout: ${{ env.COMPONENT_PATH }}
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.branch }}
+          token: ${{ steps.get_token.outputs.token }}
+
+      - name: Setup git config
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Create final tag from latest RC commit
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          RC_TAG: ${{ needs.prepare.outputs.latest_rc_tag }}
+          FINAL_TAG: ${{ needs.prepare.outputs.latest_promotion_tag }}
+        with:
+          github-token: ${{ steps.get_token.outputs.token }}
+          script: |
+            const { execSync } = require("child_process");
+            const rcTag = process.env.RC_TAG;
+            const finalTag = process.env.FINAL_TAG;
+
+            if (!rcTag || !finalTag) {
+              core.setFailed("Missing RC_TAG or FINAL_TAG");
+              return;
+            }
+
+            try {
+              execSync(`git rev-parse "refs/tags/${finalTag}"`, { stdio: "pipe" });
+              core.setFailed(`Final tag ${finalTag} already exists. Refusing to overwrite immutable tag.`);
+              return;
+            } catch {}
+
+            const rcSha = execSync(`git rev-parse "refs/tags/${rcTag}^{commit}"`, { stdio: "pipe" }).toString().trim();
+            if (!rcSha) {
+              core.setFailed(`Could not resolve commit for RC tag ${rcTag}`);
+              return;
+            }
+
+            execSync(`git tag -a "${finalTag}" "${rcSha}" -m "Promote ${rcTag} to ${finalTag}"`);
+            execSync(`git push origin "refs/tags/${finalTag}"`);
+            core.info(`✅ Created final tag ${finalTag} from ${rcTag} at ${rcSha}`);
+
+  # --------------------------------------------------------------
+  # 7. Verify Attestations: Ensure RC assets/image are attestable
+  # --------------------------------------------------------------
+  verify_attestations:
+    name: Verify RC Attestations for Final Promotion
+    if: ${{ github.event.inputs.release_candidate == 'false' && github.event.inputs.dry_run == 'false' }}
+    needs: [prepare, validate_final]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download RC release assets
+        uses: robinraju/release-downloader@daf26c55d821e836577a15f77d86ddc078948b05 # v1
+        with:
+          repository: ${{ github.repository }}
+          tag: ${{ needs.prepare.outputs.latest_rc_tag }}
+          out-file-path: ${{ runner.temp }}/rc-assets
+          fileName: '*'
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: 'false'
+
+      - name: Verify RC release attestations
+        id: verify_attestations
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSETS_DIR: ${{ runner.temp }}/rc-assets
+          ASSET_PATTERNS: '["ocm-*"]'
+          IMAGE_REF: oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ needs.prepare.outputs.latest_rc_version }}
+          REPOSITORY: ${{ github.repository }}
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/verify-attestations.js');
+            await script.default({ core });
+
+  # --------------------------------------------------------
+  # 8. Promote Image: Promote OCI image tags
+  # --------------------------------------------------------
+  promote_image:
+    name: Promote OCI Image to Final and Latest
+    if: ${{ github.event.inputs.release_candidate == 'false' && github.event.inputs.dry_run == 'false' }}
+    needs: [prepare, validate_final, verify_attestations, tag_final]
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote tags
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          RC_VERSION: ${{ needs.prepare.outputs.latest_rc_version }}
+          FINAL_VERSION: ${{ needs.prepare.outputs.latest_promotion_version }}
+          TARGET_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const rcVersion = process.env.RC_VERSION;
+            const finalVersion = process.env.FINAL_VERSION;
+            const targetRepo = process.env.TARGET_REPO;
+            if (!rcVersion) {
+              core.setFailed('Missing RC_VERSION');
+              return;
+            }
+            if (!finalVersion) {
+              core.setFailed('Missing FINAL_VERSION');
+              return;
+            }
+            execSync(`oras tag "${targetRepo}:${rcVersion}" "${finalVersion}" "latest"`, { stdio: 'inherit' });
+            core.info(`✅ Promoted ${targetRepo}:${rcVersion} to :${finalVersion} and :latest`);
+
+            await core.summary
+              .addHeading('OCI Image Promotion')
+              .addTable([
+                [{data: 'Field', header: true}, {data: 'Value', header: true}],
+                ['Source Tag', `${targetRepo}:${rcVersion}`],
+                ['Promoted Tags', `${targetRepo}:${finalVersion}, ${targetRepo}:latest`],
+              ])
+              .write();
+
+  # -------------------------------------------------------------
+  # 9. Release Final: Create GitHub final release from RC assets
+  # -------------------------------------------------------------
+  release_final:
+    name: Create Final Release from RC
+    if: ${{ github.event.inputs.release_candidate == 'false' && github.event.inputs.dry_run == 'false' }}
+    needs: [prepare, validate_final, verify_attestations, tag_final, promote_image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    environment:
+      name: cli/release
+    steps:
+      - name: Download RC assets
+        uses: robinraju/release-downloader@daf26c55d821e836577a15f77d86ddc078948b05 # v1
+        with:
+          repository: ${{ github.repository }}
+          tag: ${{ needs.prepare.outputs.latest_rc_tag }}
+          out-file-path: ${{ runner.temp }}/rc-assets
+          fileName: '*'
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Reuse RC release notes as source of truth (no git-cliff regeneration)
+      - name: Capture RC release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RC_TAG: ${{ needs.prepare.outputs.latest_rc_tag }}
+          NOTES_FILE: ${{ runner.temp }}/RELEASE_NOTES.md
+        run: gh release view "$RC_TAG" --repo "${{ github.repository }}" --json body --jq '.body // ""' > "$NOTES_FILE"
+
+      - name: Publish final release with RC assets
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          RC_TAG: ${{ needs.prepare.outputs.latest_rc_tag }}
+          RC_VERSION: ${{ needs.prepare.outputs.latest_rc_version }}
+          FINAL_TAG: ${{ needs.prepare.outputs.latest_promotion_tag }}
+          FINAL_VERSION: ${{ needs.prepare.outputs.latest_promotion_version }}
+          TARGET_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli
+          DOWNLOAD_DIR: ${{ runner.temp }}/rc-assets
+          NOTES_FILE: ${{ runner.temp }}/RELEASE_NOTES.md
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const finalTag = process.env.FINAL_TAG;
+            const finalVersion = process.env.FINAL_VERSION;
+            const rcTag = process.env.RC_TAG;
+            const rcVersion = process.env.RC_VERSION;
+            const targetRepo = process.env.TARGET_REPO;
+            const downloadDir = process.env.DOWNLOAD_DIR;
+            const notesFile = process.env.NOTES_FILE;
+
+            const rawNotes = fs.existsSync(notesFile) ? fs.readFileSync(notesFile, 'utf8') : '';
+            const today = new Date().toISOString().slice(0, 10);
+            const stripped = rawNotes
+              .replace(/^\s*##\s*\[[^\]]+\]\s*-\s*\d{4}-\d{2}-\d{2}\s*\n+/m, '')
+              .trim();
+            const promotedHeader = rcTag
+              ? `## Promoted from [${rcTag}] - ${today}`
+              : `## Promoted from RC - ${today}`;
+            const notes = stripped ? `${promotedHeader}\n\n${stripped}` : promotedHeader;
+
+            const created = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: finalTag,
+              name: `CLI ${finalVersion}`,
+              body: notes,
+              prerelease: false,
+            });
+
+            const files = fs.existsSync(downloadDir)
+              ? fs.readdirSync(downloadDir).map((f) => path.join(downloadDir, f))
+              : [];
+
+            for (const file of files) {
+              const data = fs.readFileSync(file);
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: created.data.id,
+                name: path.basename(file),
+                data,
+              });
+            }
+
+            const releaseUrl = created.data.html_url;
+            await core.summary
+              .addHeading('Final Release Published')
+              .addTable([
+                [{data: 'Field', header: true}, {data: 'Value', header: true}],
+                ['Final Tag', finalTag],
+                ['Promoted from RC', rcTag || 'n/a'],
+                ['OCI Tags', `${targetRepo}:${finalVersion}, ${targetRepo}:latest`],
+                ['Uploaded Assets', String(files.length)],
+              ])
+              .addEOL()
+              .addLink(releaseUrl, releaseUrl)
+              .addEOL()
+              .write();

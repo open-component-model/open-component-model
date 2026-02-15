@@ -11,6 +11,11 @@ on:
         required: true
         type: string
         description: "Path to the CLI component, e.g. cli"
+      release_candidate:
+        required: false
+        default: true
+        type: boolean
+        description: "If true, prepare next RC metadata. If false, prepare final promotion metadata from latest RC."
     outputs:
       new_tag:
         description: "New RC tag name (e.g. cli/v0.1.0-rc.3)"
@@ -24,6 +29,18 @@ on:
       promotion_tag:
         description: "Tag to be used for promotion later, eg. cli/v0.1.0-rc.1 -> cli/v0.1.0"
         value: ${{ jobs.prepare.outputs.promotion_tag }}
+      latest_rc_tag:
+        description: "Latest existing RC tag on the release branch (e.g. cli/v0.1.0-rc.2)"
+        value: ${{ jobs.prepare.outputs.latest_rc_tag }}
+      latest_rc_version:
+        description: "Latest existing RC version on the release branch (e.g. 0.1.0-rc.2)"
+        value: ${{ jobs.prepare.outputs.latest_rc_version }}
+      latest_promotion_tag:
+        description: "Final promotion tag derived from latest RC tag (e.g. cli/v0.1.0)"
+        value: ${{ jobs.prepare.outputs.latest_promotion_tag }}
+      latest_promotion_version:
+        description: "Final promotion version derived from latest RC tag (e.g. 0.1.0)"
+        value: ${{ jobs.prepare.outputs.latest_promotion_version }}
       changelog_b64:
         description: "Changelog encoded in base64 for release body"
         value: ${{ jobs.prepare.outputs.changelog_b64 }}
@@ -39,6 +56,10 @@ jobs:
       new_version: ${{ steps.compute.outputs.new_version }}
       base_version: ${{ steps.compute.outputs.base_version }}
       promotion_tag: ${{ steps.compute.outputs.promotion_tag }}
+      latest_rc_tag: ${{ steps.latest_rc.outputs.latest_rc_tag }}
+      latest_rc_version: ${{ steps.latest_rc.outputs.latest_rc_version }}
+      latest_promotion_tag: ${{ steps.latest_rc.outputs.latest_promotion_tag }}
+      latest_promotion_version: ${{ steps.latest_rc.outputs.latest_promotion_version }}
       changelog_b64: ${{ steps.summarize.outputs.changelog_b64 }}
     steps:
       # Checkout the repository and target branch
@@ -59,13 +80,29 @@ jobs:
         env:
           BRANCH: ${{ inputs.branch }}
           COMPONENT_PATH: ${{ inputs.component_path }}
+          RELEASE_CANDIDATE: ${{ inputs.release_candidate }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/compute-rc-version.js');
             await script.default({ core, github, context });
 
+      - name: Resolve latest existing RC on branch
+        if: ${{ inputs.release_candidate == false }}
+        id: latest_rc
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          BRANCH: ${{ inputs.branch }}
+          COMPONENT_PATH: ${{ inputs.component_path }}
+          RELEASE_CANDIDATE: ${{ inputs.release_candidate }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/resolve-latest-rc.js');
+            await script.default({ core, github, context });
+
       - name: Generate changelog with git-cliff
+        if: ${{ inputs.release_candidate == true }}
         uses: orhun/git-cliff-action@e16f179f0be49ecdfe63753837f20b9531642772 # v4
         id: git-cliff
         with:
@@ -81,6 +118,7 @@ jobs:
             --latest
 
       - name: Summarize changelog
+        if: ${{ inputs.release_candidate == true }}
         id: summarize
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
@@ -95,3 +133,4 @@ jobs:
             const encoded = Buffer.from(log).toString("base64");
             core.setOutput("changelog_b64", encoded);
             await core.summary.addRaw(log).write();
+
