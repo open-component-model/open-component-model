@@ -67,6 +67,12 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghc
 # Transfer from one OCI registry to another
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
+# Transfer from one OCI to another using localBlobs
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as localBlob
+
+# Transfer from one OCI to another using OCI artifacts (default)
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as ociArtifact
+
 # Transfer including all resources (e.g. OCI artifacts)
 transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm --copy-resources
 
