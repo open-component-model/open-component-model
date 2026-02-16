@@ -3,6 +3,7 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -90,11 +91,11 @@ func ociUploadAsLocalResource(toSpec runtime.Typed, ref *compref.Ref, addResourc
 				"access": map[string]interface{}{
 					"type":          descriptor.GetLocalBlobAccessType().String(),
 					"referenceName": referenceName,
-					"labels":        fmt.Sprintf("${has(%s.output.resource.labels) ? %s.output.resource.labels  : []}", getResourceID, getResourceID),
-					"extraIdentity": fmt.Sprintf("${has(%s.output.resource.extraIdentity) ? %s.output.resource.extraIdentity  : {}}", getResourceID, getResourceID),
-					"srcRefs":       fmt.Sprintf("${has(%s.output.resource.srcRefs) ? %s.output.resource.srcRefs  : []}", getResourceID, getResourceID),
 				},
-				"digest": fmt.Sprintf("${%s.output.resource.digest}", getResourceID),
+				"digest":        fmt.Sprintf("${%s.output.resource.digest}", getResourceID),
+				"labels":        fmt.Sprintf("${has(%s.output.resource.labels) ? %s.output.resource.labels  : []}", getResourceID, getResourceID),
+				"extraIdentity": fmt.Sprintf("${has(%s.output.resource.extraIdentity) ? %s.output.resource.extraIdentity  : {}}", getResourceID, getResourceID),
+				"srcRefs":       fmt.Sprintf("${has(%s.output.resource.srcRefs) ? %s.output.resource.srcRefs  : []}", getResourceID, getResourceID),
 			},
 			"file": fmt.Sprintf("${%s.output.file}", getResourceID),
 		}},
@@ -110,8 +111,10 @@ func ociUploadAsArtifact(toSpec runtime.Typed, addResourceID string, getResource
 	targetImageRef := referenceName
 
 	if toSpec != nil {
-		raw, err := json.Marshal(toSpec)
-		if err == nil {
+		if raw, err := json.Marshal(toSpec); err != nil {
+			slog.Info("cannot marshal target repository spec, defaulting to reference name as target image reference",
+				"error", err, "toSpec", toSpec)
+		} else {
 			var repoSpec ocirepo.Repository
 			if err := json.Unmarshal(raw, &repoSpec); err == nil && repoSpec.BaseUrl != "" {
 				targetRepoURL := repoSpec.BaseUrl
@@ -137,11 +140,11 @@ func ociUploadAsArtifact(toSpec runtime.Typed, addResourceID string, getResource
 				"access": map[string]interface{}{
 					"type":           runtime.NewVersionedType(ociv1.LegacyType, ociv1.LegacyTypeVersion).String(),
 					"imageReference": targetImageRef,
-					"labels":         fmt.Sprintf("${has(%s.output.resource.labels) ? %s.output.resource.labels  : []}", getResourceID, getResourceID),
-					"extraIdentity":  fmt.Sprintf("${has(%s.output.resource.extraIdentity) ? %s.output.resource.extraIdentity  : {}}", getResourceID, getResourceID),
-					"srcRefs":        fmt.Sprintf("${has(%s.output.resource.srcRefs) ? %s.output.resource.srcRefs  : []}", getResourceID, getResourceID),
 				},
-				"digest": fmt.Sprintf("${%s.output.resource.digest}", getResourceID),
+				"digest":        fmt.Sprintf("${%s.output.resource.digest}", getResourceID),
+				"labels":        fmt.Sprintf("${has(%s.output.resource.labels) ? %s.output.resource.labels  : []}", getResourceID, getResourceID),
+				"extraIdentity": fmt.Sprintf("${has(%s.output.resource.extraIdentity) ? %s.output.resource.extraIdentity  : {}}", getResourceID, getResourceID),
+				"srcRefs":       fmt.Sprintf("${has(%s.output.resource.srcRefs) ? %s.output.resource.srcRefs  : []}", getResourceID, getResourceID),
 			},
 			"file": fmt.Sprintf("${%s.output.file}", getResourceID),
 		}},

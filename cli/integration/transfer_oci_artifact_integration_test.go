@@ -31,7 +31,7 @@ import (
 	"ocm.software/open-component-model/cli/integration/internal"
 )
 
-func Test_Integration_Transfer_OCIArtifact_W(t *testing.T) {
+func Test_Integration_Transfer_OCIArtifact_WithLocalBlob(t *testing.T) {
 	ctx := t.Context()
 	r := require.New(t)
 	// We run this parallel as it spins up a separate container

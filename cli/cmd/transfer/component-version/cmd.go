@@ -165,7 +165,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting upload-as flag failed: %w", err)
 	}
 
-	upTyp := internal.UploadTypeDefault
+	upTyp := internal.UploadAsDefault
 	switch uploadType {
 	case UploadAsLocalBlob.String():
 		upTyp = internal.UploadAsLocalBlob

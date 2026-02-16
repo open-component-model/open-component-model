@@ -13,8 +13,8 @@ const (
 type UploadType int
 
 const (
-	// UploadTypeDefault is the default upload mode, which is determined by the source and target repository.
-	UploadTypeDefault UploadType = iota
+	// UploadAsDefault is the default upload mode, which is determined by the source and target repository.
+	UploadAsDefault UploadType = iota
 	// UploadAsLocalBlob sets the upload of all oci resources as local blobs.
 	UploadAsLocalBlob
 	// UploadAsOciArtifact sets the upload of all oci resources as OCI artifacts.
