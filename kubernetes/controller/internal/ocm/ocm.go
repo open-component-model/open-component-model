@@ -8,7 +8,6 @@ import (
 	"sort"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/mandelsoft/goutils/matcher"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -23,11 +22,17 @@ import (
 // Furthermore, references to other ocm objects are resolved and their effective
 // configuration (so again, config map and secret references) with policy
 // propagate are returned.
-func GetEffectiveConfig(ctx context.Context, client ctrl.Client, obj v1alpha1.ConfigRefProvider) ([]v1alpha1.OCMConfiguration, error) {
+func GetEffectiveConfig(ctx context.Context, client ctrl.Client, obj v1alpha1.ConfigRefProvider, parent v1alpha1.ConfigRefProvider) ([]v1alpha1.OCMConfiguration, error) {
 	configs := obj.GetSpecifiedOCMConfig()
 
-	if len(configs) == 0 {
-		return nil, nil
+	if len(configs) == 0 && parent != nil {
+		var refs []v1alpha1.OCMConfiguration
+		for _, ref := range parent.GetEffectiveOCMConfig() {
+			if ref.Policy == v1alpha1.ConfigurationPolicyPropagate {
+				refs = append(refs, ref)
+			}
+		}
+		return refs, nil
 	}
 
 	var refs []v1alpha1.OCMConfiguration
@@ -77,7 +82,7 @@ func GetEffectiveConfig(ctx context.Context, client ctrl.Client, obj v1alpha1.Co
 	return refs, nil
 }
 
-func RegexpFilter(regex string) (matcher.Matcher[string], error) {
+func RegexpFilter(regex string) (func(string) bool, error) {
 	if regex == "" {
 		return func(_ string) bool {
 			return true
@@ -93,14 +98,14 @@ func RegexpFilter(regex string) (matcher.Matcher[string], error) {
 	}, nil
 }
 
-func GetLatestValidVersion(ctx context.Context, versions []string, semvers string, filter ...matcher.Matcher[string]) (*semver.Version, error) {
+func GetLatestValidVersion(ctx context.Context, versions []string, semvers string, filter ...func(string) bool) (*semver.Version, error) {
 	logger := log.FromContext(ctx)
 	constraint, err := semver.NewConstraint(semvers)
 	if err != nil {
 		return nil, err
 	}
 
-	var f matcher.Matcher[string]
+	var f func(string) bool
 	filtered := versions
 	if len(filter) > 0 {
 		f = filter[0]
