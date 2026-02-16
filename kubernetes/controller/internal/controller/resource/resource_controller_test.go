@@ -2,13 +2,12 @@ package resource
 
 import (
 	"crypto"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
-
-	_ "embed"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -596,7 +595,6 @@ var _ = Describe("Resource Controller", func() {
 
 			By("checking that the resource has been reconciled successfully")
 			test.WaitForNotReadyObject(ctx, k8sClient, resourceObj, v1alpha1.GetOCMResourceFailedReason)
-
 		})
 
 		It("should not reconcile when the component is not ready", func(ctx SpecContext) {
@@ -1072,7 +1070,6 @@ var _ = Describe("Resource Controller", func() {
 					"reference": mustToJSON(expected.Reference),
 				},
 			})
-
 		})
 
 		It("reconcile a nested component by reference path", func(ctx SpecContext) {
@@ -1368,6 +1365,7 @@ var _ = Describe("Resource Controller", func() {
 
 			for i, ref := range desc.Component.References {
 				descNested, err := repo.GetComponentVersion(ctx, ref.Component, componentVersion)
+				Expect(err).NotTo(HaveOccurred())
 				digest, err := mockReferenceDigest(ctx, descNested)
 				Expect(err).ToNot(HaveOccurred())
 
