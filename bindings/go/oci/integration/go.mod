@@ -14,7 +14,7 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.10
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260212155305-86f8891d890c
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260216124158-17be0c7eb75b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/oci v0.0.31
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
@@ -51,7 +51,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/klauspost/compress v1.18.2 // indirect
+	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect

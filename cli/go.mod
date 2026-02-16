@@ -15,26 +15,26 @@ require (
 	golang.org/x/term v0.39.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260212155305-86f8891d890c
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260216124158-17be0c7eb75b
 	ocm.software/open-component-model/bindings/go/configuration v0.0.10
 	ocm.software/open-component-model/bindings/go/constructor v0.0.5
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260212155305-86f8891d890c
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260212155305-86f8891d890c
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260216124158-17be0c7eb75b
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260216124158-17be0c7eb75b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260212155305-86f8891d890c
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260216124158-17be0c7eb75b
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260212155305-86f8891d890c
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260216124158-17be0c7eb75b
 	ocm.software/open-component-model/bindings/go/oci v0.0.31
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260212155305-86f8891d890c
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260216124158-17be0c7eb75b
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260212155305-86f8891d890c
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260212155305-86f8891d890c
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260216124158-17be0c7eb75b
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260216124158-17be0c7eb75b
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -49,7 +49,7 @@ require (
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/chai2010/gettext-go v1.0.3 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
-	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
+	github.com/clipperhouse/uax29/v2 v2.3.1 // indirect
 	github.com/cloudflare/circl v1.6.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
@@ -128,7 +128,7 @@ require (
 	helm.sh/helm/v4 v4.1.0 // indirect
 	k8s.io/api v0.35.0 // indirect
 	k8s.io/apiextensions-apiserver v0.35.0 // indirect
-	k8s.io/apimachinery v0.35.0 // indirect
+	k8s.io/apimachinery v0.35.1 // indirect
 	k8s.io/cli-runtime v0.35.0 // indirect
 	k8s.io/client-go v0.35.0 // indirect
 	k8s.io/component-base v0.35.0 // indirect
