@@ -40,8 +40,8 @@ const (
 	// ComponentLabel is the name of the label for the passed in component's name.
 	ComponentLabel = "component"
 	// VersionLabel is the name of the label for the passed in component's version.
-	VersionLabel    = "version"
-	IsVerifiedLabel = "is_verified"
+	VersionLabel           = "version"
+	VerificationStateLabel = "verification_state"
 )
 
 // CacheMissCounterTotal counts the number of times a cache miss occurred.
@@ -51,7 +51,7 @@ var CacheMissCounterTotal = metrics.MustRegisterCounterVec(
 	OcmComponent,
 	CacheMissCounterLabel,
 	"Number of times a cache miss occurred.",
-	ComponentLabel, VersionLabel, IsVerifiedLabel,
+	ComponentLabel, VersionLabel, VerificationStateLabel,
 )
 
 // CacheHitCounterTotal counts the number of times a cache hit occurred.
@@ -61,7 +61,7 @@ var CacheHitCounterTotal = metrics.MustRegisterCounterVec(
 	OcmComponent,
 	CacheHitCounterLabel,
 	"Number of times a cache hit occurred.",
-	ComponentLabel, VersionLabel, IsVerifiedLabel,
+	ComponentLabel, VersionLabel, VerificationStateLabel,
 )
 
 // QueueSizeGauge tracks the current size of the lookup queue.
@@ -88,7 +88,7 @@ var ResolutionDurationHistogram = metrics.MustRegisterHistogramVec(
 	ResolutionDurationHistogramLabel,
 	"Duration of component version resolutions in seconds.",
 	[]float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
-	ComponentLabel, VersionLabel, IsVerifiedLabel,
+	ComponentLabel, VersionLabel, VerificationStateLabel,
 )
 
 // EventChannelDropsTotal counts the number of times events could not be emitted due to channel overflow.
@@ -98,5 +98,5 @@ var EventChannelDropsTotal = metrics.MustRegisterCounterVec(
 	OcmComponent,
 	EventChannelDropsLabel,
 	"Number of times resolution events could not be emitted due to channel overflow.",
-	ComponentLabel, VersionLabel, IsVerifiedLabel,
+	ComponentLabel, VersionLabel, VerificationStateLabel,
 )

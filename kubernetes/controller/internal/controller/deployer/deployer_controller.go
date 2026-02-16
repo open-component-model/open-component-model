@@ -838,7 +838,6 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 			return nil, fmt.Errorf("failed to get verifications: %w", err)
 		}
 		repoResource.Verifications = verifications
-		repoResource.SigningRegistry = r.PluginManager.SigningRegistry
 
 		componentDescriptor, err := repoResource.GetComponentVersion(ctx,
 			resource.Status.Component.Component,
@@ -951,7 +950,6 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 			Value:                  matchedRef.Digest.Value,
 			NormalisationAlgorithm: matchedRef.Digest.NormalisationAlgorithm,
 		}
-		repoResource.SigningRegistry = r.PluginManager.SigningRegistry
 	}
 
 	componentDescriptor, err = repoResource.GetComponentVersion(ctx,
