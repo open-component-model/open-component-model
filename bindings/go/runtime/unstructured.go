@@ -11,6 +11,17 @@ type Unstructured struct {
 	Data map[string]interface{}
 }
 
+// UnstructuredFromMixedData creates an Unstructured object from a map[string]interface{}.
+// The input data is normalized to ensure that it is in a consistent format for JSON serialization.
+// Use this function only, when the input data is expected to contain non-JSON-native types that need to be normalized.
+// If the input data is already in a JSON-native format, it is more efficient to create an Unstructured object directly with the data map, as normalization can be costly.
+func UnstructuredFromMixedData(data map[string]interface{}) *Unstructured {
+	data = normalizeJSONMap(data)
+	return &Unstructured{
+		Data: data,
+	}
+}
+
 var _ interface {
 	json.Marshaler
 	json.Unmarshaler
@@ -55,8 +66,7 @@ func (u *Unstructured) DeepCopy() *Unstructured {
 	}
 	out := new(Unstructured)
 	*out = *u
-
-	out.Data = DeepCopyJSON(normalizeJSONMap(u.Data))
+	out.Data = DeepCopyJSON(u.Data)
 	return out
 }
 

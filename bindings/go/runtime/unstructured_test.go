@@ -10,6 +10,51 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+var (
+	pureJsonDataPayload = map[string]interface{}{
+		"name":    "test-resource",
+		"version": "1.0.0",
+		"type":    "ociImage",
+		"labels": []interface{}{
+			map[string]interface{}{
+				"name":  "env",
+				"value": "production",
+			},
+		},
+		"access": map[string]interface{}{
+			"type":           "ociArtifact",
+			"imageReference": "ghcr.io/test/image:v1.0.0",
+		},
+		"digest": map[string]interface{}{
+			"hashAlgorithm":          "SHA-256",
+			"normalisationAlgorithm": "ociArtifactDigest/v1",
+			"value":                  "abc123",
+		},
+		"relation": "external",
+		"extraIdentity": map[string]interface{}{
+			"platform": "linux/amd64",
+		},
+	}
+
+	mixedDataPayload = map[string]interface{}{
+		"name":    "test-resource",
+		"version": "1.0.0",
+		"type":    "ociImage",
+		"resource": testResource{
+			Name:     "nested-resource",
+			Version:  "2.0.0",
+			Type:     "ociImage",
+			Relation: "external",
+			Access:   json.RawMessage(`{"type":"ociArtifact","imageReference":"ghcr.io/test/image:v2.0.0"}`),
+			Digest: &testDigest{
+				HashAlgorithm:          "SHA-256",
+				NormalisationAlgorithm: "ociArtifactDigest/v1",
+				Value:                  "def456",
+			},
+		},
+	}
+)
+
 func TestUnstructured(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -138,11 +183,9 @@ func TestUnstructured_DeepCopyWithStructValues(t *testing.T) {
 
 	// Simulate an Unstructured whose Data contains a struct value (not a pure JSON type).
 	// This can happen when values are set programmatically rather than via json.Unmarshal.
-	un := &runtime.Unstructured{
-		Data: map[string]interface{}{
-			"resource": resource,
-		},
-	}
+	un := runtime.UnstructuredFromMixedData(map[string]interface{}{
+		"resource": resource,
+	})
 
 	// DeepCopy should normalize the struct through JSON marshal/unmarshal
 	// so DeepCopyJSON does not panic on non-JSON-native types.
@@ -167,18 +210,6 @@ func TestUnstructured_DeepCopyWithStructValues(t *testing.T) {
 	assert.Equal(t, "ociImage", resource.Type)
 }
 
-// deepCopyOriginal is the original DeepCopy implementation
-func deepCopyOriginal(u *runtime.Unstructured) *runtime.Unstructured {
-	if u == nil {
-		return nil
-	}
-	out := new(runtime.Unstructured)
-	*out = *u
-
-	out.Data = runtime.DeepCopyJSON(u.Data)
-	return out
-}
-
 // deepCopyFullMarshal is a version of DeepCopy that fully marshals/unmarshals the entire Data map, not just the normalized version.
 // marshals/unmarshals the entire Data map, used as a baseline in benchmarks.
 func deepCopyFullMarshal(u *runtime.Unstructured) *runtime.Unstructured {
@@ -201,105 +232,68 @@ func deepCopyFullMarshal(u *runtime.Unstructured) *runtime.Unstructured {
 // pureJSONData returns an Unstructured with only JSON-native types (the common case).
 func pureJSONData() *runtime.Unstructured {
 	return &runtime.Unstructured{
-		Data: map[string]interface{}{
-			"name":    "test-resource",
-			"version": "1.0.0",
-			"type":    "ociImage",
-			"labels": []interface{}{
-				map[string]interface{}{
-					"name":  "env",
-					"value": "production",
-				},
-			},
-			"access": map[string]interface{}{
-				"type":           "ociArtifact",
-				"imageReference": "ghcr.io/test/image:v1.0.0",
-			},
-			"digest": map[string]interface{}{
-				"hashAlgorithm":          "SHA-256",
-				"normalisationAlgorithm": "ociArtifactDigest/v1",
-				"value":                  "abc123",
-			},
-			"relation": "external",
-			"extraIdentity": map[string]interface{}{
-				"platform": "linux/amd64",
-			},
-		},
+		Data: pureJsonDataPayload,
 	}
 }
 
 // mixedData returns an Unstructured with a struct value that needs normalization.
 func mixedData() *runtime.Unstructured {
-	return &runtime.Unstructured{
-		Data: map[string]interface{}{
-			"name":    "test-resource",
-			"version": "1.0.0",
-			"type":    "ociImage",
-			"resource": testResource{
-				Name:     "nested-resource",
-				Version:  "2.0.0",
-				Type:     "ociImage",
-				Relation: "external",
-				Access:   json.RawMessage(`{"type":"ociArtifact","imageReference":"ghcr.io/test/image:v2.0.0"}`),
-				Digest: &testDigest{
-					HashAlgorithm:          "SHA-256",
-					NormalisationAlgorithm: "ociArtifactDigest/v1",
-					Value:                  "def456",
-				},
-			},
-		},
-	}
+	return runtime.UnstructuredFromMixedData(mixedDataPayload)
 }
 
-func BenchmarkDeepCopy_PureJSON_New(b *testing.B) {
-	un := pureJSONData()
+func BenchmarkDeepCopy_PureJSON_Original(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
+		un := pureJSONData()
 		un.DeepCopy()
 	}
 }
 
-func BenchmarkDeepCopy_PureJSON_Original(b *testing.B) {
-	un := pureJSONData()
+func BenchmarkDeepCopy_PureJSON_UnstructuredFromMixedData(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
-		deepCopyOriginal(un)
+		un := runtime.UnstructuredFromMixedData(pureJsonDataPayload)
+		un.DeepCopy()
 	}
 }
 
 func BenchmarkDeepCopy_PureJSON_FullMarshal(b *testing.B) {
-	un := pureJSONData()
 	b.ResetTimer()
 	for b.Loop() {
+		un := pureJSONData()
 		deepCopyFullMarshal(un)
-	}
-}
-
-func BenchmarkDeepCopy_MixedData_New(b *testing.B) {
-	un := mixedData()
-	b.ResetTimer()
-	for b.Loop() {
-		un.DeepCopy()
 	}
 }
 
 func BenchmarkDeepCopy_MixedData_Original(b *testing.B) {
 	defer func() {
 		if r := recover(); r != nil {
-			b.Skip("DeepCopy panics on mixed data, skipping benchmark. This is expected behavior since the original DeepCopy does not normalize non-JSON-native types.")
+			b.Skipf("Expected panic during DeepCopy of mixed data without normalization: %v", r)
+			// Test passes if we get here, as we expect a panic due to non-JSON-native types.
+			return
 		}
 	}()
-	un := mixedData()
 	b.ResetTimer()
 	for b.Loop() {
-		deepCopyOriginal(un)
+		un := &runtime.Unstructured{
+			Data: mixedDataPayload,
+		}
+		un.DeepCopy()
+	}
+}
+
+func BenchmarkDeepCopy_MixedData_UnstructuredFromMixedData(b *testing.B) {
+	b.ResetTimer()
+	for b.Loop() {
+		un := mixedData()
+		un.DeepCopy()
 	}
 }
 
 func BenchmarkDeepCopy_MixedData_FullMarshal(b *testing.B) {
-	un := mixedData()
 	b.ResetTimer()
 	for b.Loop() {
+		un := mixedData()
 		deepCopyFullMarshal(un)
 	}
 }
