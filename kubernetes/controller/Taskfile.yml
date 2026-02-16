@@ -83,7 +83,6 @@ tasks:
     dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
     cmds:
       - task: helm/install
-      - defer: { task: helm/uninstall }
       - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v
 
   # Build
@@ -202,7 +201,7 @@ tasks:
     desc: "Install the Helm chart"
     cmds:
       - |
-        helm install ocm-k8s-toolkit chart/ \
+        helm upgrade --install ocm-k8s-toolkit chart/ \
           -f chart/test-values.yaml \
           --namespace ocm-k8s-toolkit-system \
           --create-namespace \
