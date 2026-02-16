@@ -31,11 +31,11 @@ import (
 )
 
 const (
-	FlagDryRun              = "dry-run"
-	FlagOutput              = "output"
-	FlagRecursive           = "recursive"
-	FlagCopyResources       = "copy-resources"
-	FlagUploadAsOCIArtifact = "upload-as-oci-artifact"
+	FlagDryRun        = "dry-run"
+	FlagOutput        = "output"
+	FlagRecursive     = "recursive"
+	FlagCopyResources = "copy-resources"
+	FlagUploadAs      = "upload-as"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the renderer consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -82,7 +82,7 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
 	cmd.Flags().Bool(FlagCopyResources, false, "copy all resources in the component version")
-	cmd.Flags().Bool(FlagUploadAsOCIArtifact, false, "upload OCI artifacts as OCI artifacts instead of local blobs")
+	enum.VarP(cmd.Flags(), FlagUploadAs, "u", []string{UploadAsDefault.String(), UploadAsLocalBlob.String(), UploadAsOciArtifact.String()}, "Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.")
 
 	return cmd
 }
@@ -154,9 +154,17 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		copyMode = internal.CopyModeAllResources
 	}
 
-	uploadAsOCIArtifact, err := cmd.Flags().GetBool(FlagUploadAsOCIArtifact)
+	uploadType, err := enum.Get(cmd.Flags(), FlagUploadAs)
 	if err != nil {
-		return fmt.Errorf("getting upload-as-oci-artifact flag failed: %w", err)
+		return fmt.Errorf("getting upload-as flag failed: %w", err)
+	}
+
+	upTyp := internal.UploadTypeDefault
+	switch uploadType {
+	case UploadAsLocalBlob.String():
+		upTyp = internal.UploadAsLocalBlob
+	case UploadAsOciArtifact.String():
+		upTyp = internal.UploadAsOciArtifact
 	}
 
 	// Build TransformationGraphDefinition
@@ -167,7 +175,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		repoProvider,
 		internal.WithRecursive(recursive),
 		internal.WithCopyMode(copyMode),
-		internal.WithUploadAsOCIArtifact(uploadAsOCIArtifact),
+		internal.WithUploadType(upTyp),
 	)
 	if err != nil {
 		return fmt.Errorf("building graph definition failed: %w", err)

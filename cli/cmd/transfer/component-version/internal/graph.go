@@ -31,9 +31,8 @@ func BuildGraphDefinition(
 	}
 
 	disc := &discoverer{
-		recursive:           o.Recursive,
-		uploadAsOCIArtifact: o.UploadAsOCIArtifact,
-		discoveredDigests:   make(map[string]descriptor.Digest),
+		recursive:         o.Recursive,
+		discoveredDigests: make(map[string]descriptor.Digest),
 	}
 	res := &resolver{
 		repoResolver: repoResolver,
@@ -49,7 +48,6 @@ func BuildGraphDefinition(
 			}
 			return &dig
 		},
-		uploadAsOCIArtifact: o.UploadAsOCIArtifact,
 	}
 
 	root := fromSpec.String()
@@ -74,7 +72,7 @@ func BuildGraphDefinition(
 
 	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(d, toSpec, tgd, o.CopyMode, o.UploadAsOCIArtifact)
+		return fillGraphDefinitionWithPrefetchedComponents(d, toSpec, tgd, o.CopyMode, o.UploadType)
 	})
 	if err != nil {
 		return nil, err
@@ -83,7 +81,7 @@ func BuildGraphDefinition(
 	return tgd, nil
 }
 
-func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[string], toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, copyMode CopyMode, uploadAsOCIArtifact bool) error {
+func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[string], toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, copyMode CopyMode, uploadType UploadType) error {
 	for _, v := range d.Vertices {
 		val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
 		ref := val.Ref
@@ -118,6 +116,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 			case *descriptorv2.LocalBlob:
 				processLocalBlob(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
 			case *ociv1.OCIImage:
+				uploadAsOCIArtifact := uploadType != UploadAsLocalBlob
 				err := processOCIArtifact(resource, id, ref, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact)
 				if err != nil {
 					return fmt.Errorf("cannot process OCI artifact resource: %w", err)

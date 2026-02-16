@@ -15,11 +15,11 @@ import (
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ociinmemory "ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -31,7 +31,7 @@ import (
 	"ocm.software/open-component-model/cli/integration/internal"
 )
 
-func Test_Integration_Transfer_OCIArtifact(t *testing.T) {
+func Test_Integration_Transfer_OCIArtifact_W(t *testing.T) {
 	ctx := t.Context()
 	r := require.New(t)
 	// We run this parallel as it spins up a separate container
@@ -188,6 +188,7 @@ components:
 		targetRef,
 		"--config", cfgPath,
 		"--copy-resources", // required, otherwise we wouldn't transfer oci artifacts
+		"--upload-as", "localBlob",
 	})
 
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -365,8 +366,8 @@ components:
 		sourceRef,
 		targetRef,
 		"--config", cfgPath,
-		"--copy-resources",         // required, otherwise we wouldn't transfer oci artifacts
-		"--upload-as-oci-artifact", // This is the new flag we are testing
+		"--copy-resources",           // required, otherwise we wouldn't transfer oci artifacts
+		"--upload-as", "ociArtifact", // This is the new flag we are testing
 	})
 
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)

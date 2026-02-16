@@ -10,10 +10,21 @@ const (
 	CopyModeAllResources
 )
 
+type UploadType int
+
+const (
+	// UploadTypeDefault is the default upload mode, which is determined by the source and target repository.
+	UploadTypeDefault UploadType = iota
+	// UploadAsLocalBlob sets the upload of all oci resources as local blobs.
+	UploadAsLocalBlob
+	// UploadAsOciArtifact sets the upload of all oci resources as OCI artifacts.
+	UploadAsOciArtifact
+)
+
 type Options struct {
-	CopyMode            CopyMode
-	Recursive           bool
-	UploadAsOCIArtifact bool
+	Recursive  bool
+	CopyMode   CopyMode
+	UploadType UploadType
 }
 
 type Option func(*Options)
@@ -32,8 +43,8 @@ func WithRecursive(recursive bool) func(*Options) {
 	}
 }
 
-func WithUploadAsOCIArtifact(upload bool) func(*Options) {
+func WithUploadType(upload UploadType) func(*Options) {
 	return func(o *Options) {
-		o.UploadAsOCIArtifact = upload
+		o.UploadType = upload
 	}
 }

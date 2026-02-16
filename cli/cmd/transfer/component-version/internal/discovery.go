@@ -23,9 +23,8 @@ type discoveryValue struct {
 }
 
 type resolver struct {
-	repoResolver        resolvers.ComponentVersionRepositoryResolver
-	expectedDigest      func(id runtime.Identity) *descriptor.Digest
-	uploadAsOCIArtifact bool
+	repoResolver   resolvers.ComponentVersionRepositoryResolver
+	expectedDigest func(id runtime.Identity) *descriptor.Digest
 }
 
 func (r *resolver) Resolve(ctx context.Context, key string) (*discoveryValue, error) {
@@ -59,9 +58,8 @@ func (r *resolver) Resolve(ctx context.Context, key string) (*discoveryValue, er
 }
 
 type discoverer struct {
-	mu                  sync.Mutex
-	recursive           bool
-	uploadAsOCIArtifact bool
+	mu        sync.Mutex
+	recursive bool
 
 	discoveredDigests map[string]descriptor.Digest
 }
