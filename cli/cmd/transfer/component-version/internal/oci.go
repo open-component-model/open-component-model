@@ -106,9 +106,8 @@ func ociUploadAsLocalResource(toSpec runtime.Typed, ref *compref.Ref, addResourc
 // It constructs the target image reference from the toSpec and referenceName, and uses the output of the GetOCIArtifact transformation to populate the fields of the AddOCIArtifact transformation, ensuring that the same resource is referenced and uploaded.
 func ociUploadAsArtifact(toSpec runtime.Typed, addResourceID string, getResourceID string, referenceName string) transformv1alpha1.GenericTransformation {
 	// Construct target Image Reference from toSpec and referenceName
-	var targetImageRef string
 	// Default to referenceName if we can't determine the target repo
-	targetImageRef = referenceName
+	targetImageRef := referenceName
 
 	if toSpec != nil {
 		raw, err := json.Marshal(toSpec)
