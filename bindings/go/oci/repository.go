@@ -98,12 +98,15 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 
 	// Scan component descriptor for local blob references
 	localBlobs := scanLocalBlobs(descriptor)
+	log.Operation(ctx, "found local blobs", slog.Int("count", len(localBlobs)))
 
 	// Validate that all referenced local blobs exist in the store
 	additionalManifests, additionalLayers, err := identifyLocalBlobManifestsAndLayers(ctx, store, localBlobs)
 	if err != nil {
 		return fmt.Errorf("failed to validate local blobs: %w", err)
 	}
+
+	log.Operation(ctx, "adding descriptor manifest", slog.Int("additionalLayers", len(additionalLayers)), slog.Int("additionalManifests", len(additionalManifests)))
 
 	manifest, err := AddDescriptorToStore(ctx, store, descriptor, AddDescriptorOptions{
 		Scheme:                        repo.scheme,
@@ -322,7 +325,9 @@ func scanLocalBlobs(desc *descriptor.Descriptor) []descriptor.Artifact {
 	// Scan resources for LocalBlob access specs
 	for i := range desc.Component.Resources {
 		resource := &desc.Component.Resources[i]
-		if _, ok := resource.Access.(*v2.LocalBlob); ok {
+		var lb v2.LocalBlob
+		if err := v2.Scheme.Convert(resource.Access, &lb); err == nil {
+			resource.Access = &lb
 			artifacts = append(artifacts, resource)
 		}
 	}
@@ -330,7 +335,9 @@ func scanLocalBlobs(desc *descriptor.Descriptor) []descriptor.Artifact {
 	// Scan sources for LocalBlob access specs
 	for i := range desc.Component.Sources {
 		source := &desc.Component.Sources[i]
-		if _, ok := source.Access.(*v2.LocalBlob); ok {
+		var lb v2.LocalBlob
+		if err := v2.Scheme.Convert(source.Access, &lb); err == nil {
+			source.Access = &lb
 			artifacts = append(artifacts, source)
 		}
 	}
@@ -504,7 +511,7 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	// now that we have a unique candidate, we should use its identity instead of the one requested, as
 	// the requested identity might not be fully qualified.
 	// For example, it is valid to ask for "name=abc", but receive an artifact with "name=abc,version=1.0.0".
-	slogcontext.Info(ctx, "found artifact in descriptor", "artifact", meta.ToIdentity())
+	slogcontext.Debug(ctx, "found artifact in descriptor", "artifact", meta.ToIdentity())
 
 	access := artifact.GetAccess()
 	typed, err := repo.scheme.NewObject(access.GetType())

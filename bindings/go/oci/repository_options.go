@@ -177,7 +177,7 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 					return nil
 				},
 				PostCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-					slog.InfoContext(ctx, "copied", log.DescriptorLogAttr(desc))
+					slog.DebugContext(ctx, "copied", log.DescriptorLogAttr(desc))
 					return nil
 				},
 				OnCopySkipped: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
