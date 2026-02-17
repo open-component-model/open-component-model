@@ -3,6 +3,9 @@ package internal
 import (
 	"fmt"
 
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -21,17 +24,6 @@ func AsUnstructured(typed runtime.Typed) *runtime.Unstructured {
 	return &unstructured
 }
 
-func ChooseGetType(repo runtime.Typed) runtime.Type {
-	switch repo.(type) {
-	case *oci.Repository:
-		return ociv1alpha1.OCIGetComponentVersionV1alpha1
-	case *ctfv1.Repository:
-		return ociv1alpha1.CTFGetComponentVersionV1alpha1
-	default:
-		panic(fmt.Sprintf("unknown repository type %T", repo))
-	}
-}
-
 func ChooseAddType(repo runtime.Typed) runtime.Type {
 	switch repo.(type) {
 	case *oci.Repository:
@@ -41,4 +33,56 @@ func ChooseAddType(repo runtime.Typed) runtime.Type {
 	default:
 		panic(fmt.Sprintf("unknown repository type %T", repo))
 	}
+}
+
+func ChooseGetLocalResourceType(repo runtime.Typed) runtime.Type {
+	switch repo.(type) {
+	case *oci.Repository:
+		return ociv1alpha1.OCIGetLocalResourceV1alpha1
+	case *ctfv1.Repository:
+		return ociv1alpha1.CTFGetLocalResourceV1alpha1
+	default:
+		panic(fmt.Sprintf("unknown repository type %T", repo))
+	}
+}
+
+func ChooseAddLocalResourceType(repo runtime.Typed) runtime.Type {
+	switch repo.(type) {
+	case *oci.Repository:
+		return ociv1alpha1.OCIAddLocalResourceV1alpha1
+	case *ctfv1.Repository:
+		return ociv1alpha1.CTFAddLocalResourceV1alpha1
+	default:
+		panic(fmt.Sprintf("unknown repository type %T", repo))
+	}
+}
+
+func GetReferenceName(ociAccess ociv1.OCIImage) (string, error) {
+	if ociAccess.ImageReference == "" {
+		return "", fmt.Errorf("cannot get reference name from empty image reference")
+	}
+	imageRef, err := looseref.ParseReference(ociAccess.ImageReference)
+	if err != nil {
+		return "", fmt.Errorf("invalid OCI image reference %q: %w", ociAccess.ImageReference, err)
+	}
+	if imageRef.Repository == "" {
+		return "", fmt.Errorf("invalid image reference %q: repository is required", ociAccess.ImageReference)
+	}
+	referenceName := imageRef.Repository
+	if imageRef.Tag != "" {
+		referenceName += ":" + imageRef.Tag
+	}
+	return referenceName, nil
+}
+
+// isLocalBlob checks if access method is a v2.LocalBlob
+func isLocalBlob(access runtime.Typed) bool {
+	if access == nil {
+		return false
+	}
+	var local v2.LocalBlob
+	if err := v2.Scheme.Convert(access, &local); err != nil {
+		return false
+	}
+	return true
 }

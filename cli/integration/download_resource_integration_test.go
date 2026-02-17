@@ -223,7 +223,6 @@ configurations:
 			r.Equal("foobar", string(layerData))
 		})
 	})
-
 }
 
 func Test_Integration_HelmTransformer(t *testing.T) {
@@ -234,7 +233,6 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 		r := require.New(t)
 
 		root := getRepoRootBasedOnGit(t)
-		pluginDir := buildHelmInputMethodInMonoRepoRoot(t, root)
 
 		name, version := "ocm.software/helm-chart", "v1.0.0"
 		resourceName, resourceVersion := "mychart", "0.1.0"
@@ -267,8 +265,6 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 			"component-version",
 			"--repository", transportArchivePath,
 			"--constructor", constructorPath,
-			"--plugin-directory",
-			pluginDir,
 		})
 		r.NoError(addCMD.ExecuteContext(t.Context()), "adding the component-version to the repository must succeed")
 
@@ -284,8 +280,6 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 			output,
 			"--transformer",
 			"helm",
-			"--plugin-directory",
-			pluginDir,
 		})
 		r.NoError(downloadCMD.ExecuteContext(t.Context()), "downloading and transforming the resource must succeed")
 
@@ -331,7 +325,7 @@ func uploadComponentVersion(t *testing.T, repo repository.ComponentVersionReposi
 		default:
 			repo, ok := repo.(repository.ResourceRepository)
 			r.True(ok, "repository must implement ResourceRepository to upload global accesses")
-			resource.Resource, err = repo.UploadResource(ctx, resource.Resource, resource.ReadOnlyBlob)
+			resource.Resource, err = repo.UploadResource(ctx, resource.Resource, resource.ReadOnlyBlob, nil)
 		}
 		r.NoError(err)
 		desc.Component.Resources = append(desc.Component.Resources, *resource.Resource)
@@ -368,16 +362,4 @@ func getRepoRootBasedOnGit(t *testing.T) string {
 	rootRaw, err := exec.CommandContext(t.Context(), git, "rev-parse", "--show-toplevel").Output()
 	r.NoError(err, "git rev-parse --show-toplevel must succeed to get repository root")
 	return strings.TrimSpace(string(rootRaw))
-}
-
-func buildHelmInputMethodInMonoRepoRoot(t *testing.T, root string) string {
-	t.Helper()
-	r := require.New(t)
-	task, err := exec.LookPath("task")
-	r.NoError(err, "task binary should be available in PATH to build helm input")
-	buildHelmInput := exec.CommandContext(t.Context(), task, "bindings/go/helm:build", "--dir", root)
-	buildHelmInput.Stdout = os.Stdout
-	buildHelmInput.Stderr = os.Stderr
-	r.NoError(buildHelmInput.Run(), "helm input build must succeed")
-	return filepath.Join(root, "bindings", "go", "helm", "tmp", "testdata")
 }

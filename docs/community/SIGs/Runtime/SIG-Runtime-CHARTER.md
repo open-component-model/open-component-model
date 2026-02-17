@@ -108,7 +108,7 @@ The mission of SIG Runtime is to allow OCM components to be:
 
 ### Roles
 
-- **Chair** — Jakob Möller (SAP) - @jakobmoellerdev
+- **Chair** — Gergely Bräutigam (Kubermatic) - @skarlso
   Provide administrative leadership, schedule and run meetings, ensure process adherence, and represent the SIG to the TSC.
 
 - **Tech Lead** — Fabian Burth (SAP) - @fabianburth

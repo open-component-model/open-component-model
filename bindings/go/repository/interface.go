@@ -97,18 +97,26 @@ type LocalSourceRepository interface {
 
 // ResourceRepository defines the interface for storing and retrieving OCM resources
 // independently of component versions from a store implementation.
+// When credentials are required to access the repository, they must be provided
+// and can be retrieved through the credentials.Resolver or passed in directly.
+// You should typically use the credentials.Graph to resolve credentials for a resource
+// by its consumer identity.
 type ResourceRepository interface {
+	// GetResourceCredentialConsumerIdentity resolves the identity of the given [descriptor.Resource] to use for credential resolution.
+	GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error)
 	// UploadResource uploads a [descriptor.Resource] to the repository.
 	// Returns the updated resource with repository-specific information.
 	// The resource must be referenced in the component descriptor.
-	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (resourceAfterUpload *descriptor.Resource, err error)
-
+	// The credentials map must contain necessary authentication information to access the resource.
+	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error)
 	// DownloadResource downloads and verifies the integrity of a [descriptor.Resource] from the repository.
-	DownloadResource(ctx context.Context, res *descriptor.Resource) (content blob.ReadOnlyBlob, err error)
+	// The credentials map must contain necessary authentication information to access the resource.
+	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error)
 }
 
 // SourceRepository defines the interface for storing and retrieving OCM sources
 // independently of component versions from a store implementation.
+// TODO https://github.com/open-component-model/ocm-project/issues/857 also provide credentials in UploadSource/DownloadSource
 type SourceRepository interface {
 	// UploadSource uploads a [descriptor.Source] to the repository.
 	// Returns the updated source with repository-specific information.

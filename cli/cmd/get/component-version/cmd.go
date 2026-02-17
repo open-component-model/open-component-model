@@ -20,6 +20,7 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -230,9 +231,9 @@ func processComponentReference(cmd *cobra.Command,
 	return nil
 }
 
-func renderComponents(cmd *cobra.Command, repoProvider ocm.ComponentVersionRepositoryForComponentProvider, roots []string, format string, mode string, recursive int) error {
+func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersionRepositoryResolver, roots []string, format string, mode string, recursive int) error {
 	resAndDis := resolverAndDiscoverer{
-		repositoryProvider: repoProvider,
+		repositoryResolver: repoResolver,
 		recursive:          recursive,
 	}
 	discoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *descruntime.Descriptor]{
@@ -343,7 +344,7 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 }
 
 type resolverAndDiscoverer struct {
-	repositoryProvider ocm.ComponentVersionRepositoryForComponentProvider
+	repositoryResolver resolvers.ComponentVersionRepositoryResolver
 	recursive          int
 }
 
@@ -358,7 +359,7 @@ func (r *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*descr
 		return nil, fmt.Errorf("parsing identity %q failed: %w", key, err)
 	}
 	component, version := id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion]
-	repo, err := r.repositoryProvider.GetComponentVersionRepositoryForComponent(ctx, component, version)
+	repo, err := r.repositoryResolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version repository for identity %q failed: %w", id, err)
 	}
@@ -435,7 +436,7 @@ func processRepositoryReference(cmd *cobra.Command,
 	slog.DebugContext(ctx, "components versions", "roots", roots)
 
 	// Create a component reference wrapper for the repository to use the standard provider function
-	repoProvider, err := ocm.NewComponentRepositoryProvider(ctx,
+	repoProvider, err := ocm.NewComponentRepositoryResolver(ctx,
 		pluginManager.ComponentVersionRepositoryRegistry,
 		credentialGraph,
 		ocm.WithConfig(config),

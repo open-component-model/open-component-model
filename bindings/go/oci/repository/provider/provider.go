@@ -131,23 +131,6 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 	}
 }
 
-// getCacheIdentity is a helper function that extracts the consumer identity
-// from a repository specification. It supports both OCI and CTF repository types.
-func getCacheIdentity(_ context.Context, scheme *runtime.Scheme, repositorySpecification runtime.Typed) (runtime.Identity, error) {
-	obj, err := getConvertedTypedSpec(scheme, repositorySpecification)
-	if err != nil {
-		return nil, err
-	}
-	switch obj := obj.(type) {
-	case *ocirepospecv1.Repository:
-		return v1.IdentityFromOCIRepository(obj)
-	case *ctfrepospecv1.Repository:
-		return v1.IdentityFromCTFRepository(obj)
-	default:
-		return nil, fmt.Errorf("unsupported repository specification type for identity generation %T", obj)
-	}
-}
-
 // GetComponentVersionRepository implements the repository.ComponentVersionRepositoryProvider interface.
 // It retrieves a component version repository with caching support for the given specification and credentials.
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {

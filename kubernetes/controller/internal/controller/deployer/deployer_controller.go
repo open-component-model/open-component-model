@@ -9,8 +9,8 @@ import (
 	"runtime"
 	"slices"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,13 +29,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
-	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
@@ -49,6 +49,10 @@ const (
 	// resourceWatchFinalizer is the finalizer used to ensure that the resource watch is removed when the deployer is deleted.
 	// It is used by the dynamic informer manager to unregister watches for resources that are referenced by the deployer.
 	resourceWatchFinalizer = "delivery.ocm.software/watch"
+
+	// applySetPruneFinalizer is the finalizer used to ensure that the ApplySet is pruned when the deployer is deleted.
+	applySetPruneFinalizer = "delivery.ocm.software/applyset-prune"
+
 	// deployerManager is the label used to identify the deployer as a manager of resources.
 	deployerManager = "deployer.delivery.ocm.software"
 )
@@ -84,7 +88,6 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/finalizers,verbs=update
-// +kubebuilder:rbac:groups=kro.run,resources=resourcegraphdefinitions,verbs=list;watch;create;update;patch
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -227,8 +230,40 @@ func (r *Reconciler) Untrack(ctx context.Context, deployer *deliveryv1alpha1.Dep
 		return fmt.Errorf("waiting for at least one resource watch to be removed")
 	}
 
-	controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
+	return nil
+}
 
+func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1alpha1.Deployer) error {
+	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
+
+	set := r.createApplySet(deployer, logger)
+
+	metadata, err := set.Project(nil)
+	if err != nil {
+		return fmt.Errorf("failed to project ApplySet: %w", err)
+	}
+
+	logger.Info("pruning ApplySet", "scope", metadata.PruneScope())
+	result, err := set.Prune(ctx, applyset.PruneOptions{
+		KeepUIDs:    nil,
+		Scope:       metadata.PruneScope(),
+		Concurrency: runtime.NumCPU(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to prune ApplySet: %w", err)
+	}
+
+	// Log results
+	logger.Info("ApplySet prune operation complete", "pruned", len(result.Pruned))
+
+	// Prune calls delete on every resource found, even if its already being deleted.
+	// If we were to remove this check, the deployer might be deleted while a child is stuck in terminating state.
+	if !result.HasPruned() {
+		logger.Info("pruned resources, doing one more pruning until nothing more to prune")
+		return fmt.Errorf("waiting for all resources to be pruned")
+	}
+
+	// nothing more to prune, remove finalizer
 	return nil
 }
 
@@ -250,12 +285,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, nil
 	}
 
-	if !deployer.GetDeletionTimestamp().IsZero() {
-		if err := r.Untrack(ctx, deployer); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to untrack deployer: %w", err)
-		}
-
-		return ctrl.Result{}, fmt.Errorf("deployer is being deleted, waiting for resource watches to be removed")
+	result, err, needsDeletion := r.reconcileDeletionTimestamp(ctx, deployer, logger)
+	if needsDeletion {
+		return result, err
 	}
 
 	resourceNamespace := deployer.Spec.ResourceRef.Namespace
@@ -297,12 +329,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to download resource from OCM or retrieve it from the cache: %w", err)
 	}
 
-	if err = r.applyConcurrently(ctx, resource, deployer, objs); err != nil {
+	if err = r.applyWithApplySet(ctx, resource, deployer, objs); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ApplyFailed, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to apply resources: %w", err)
 	}
 
+	// Track the applied objects for the dynamic informer manager
 	if err = r.trackConcurrently(ctx, deployer, objs); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceNotSynced, err.Error())
 
@@ -311,6 +344,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	updateDeployedObjectStatusReferences(objs, deployer)
 	// TODO: move finalizer up because removal is anyhow idempotent
+	controllerutil.AddFinalizer(deployer, applySetPruneFinalizer)
 	controllerutil.AddFinalizer(deployer, resourceWatchFinalizer)
 
 	// TODO: Status propagation of RGD status to deployer
@@ -321,17 +355,54 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	return ctrl.Result{RequeueAfter: resource.GetRequeueAfter()}, nil
 }
 
+func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *deliveryv1alpha1.Deployer, logger logr.Logger) (ctrl.Result, error, bool) {
+	if !deployer.GetDeletionTimestamp().IsZero() {
+		var errs []error
+
+		hasPruneSetFinalizer := controllerutil.ContainsFinalizer(deployer, applySetPruneFinalizer)
+
+		if hasPruneSetFinalizer {
+			logger.Info("pruning ApplySet before removing finalizer")
+			if err := r.pruneWithApplySet(ctx, deployer); err != nil {
+				logger.Error(err, "waiting for ApplySet to be pruned before removing finalizer")
+				errs = append(errs, err)
+			} else {
+				logger.Info("successfully pruned ApplySet for deployer")
+				controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
+			}
+		} else if controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
+			logger.Info("untracking resources before removing finalizer")
+			if err := r.Untrack(ctx, deployer); err != nil {
+				logger.Error(err, "waiting for tracked resources to be unregistered before pruning")
+				errs = append(errs, err)
+			} else {
+				logger.Info("successfully unregistered all resource watches for deployer")
+				controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
+			}
+		}
+
+		if len(errs) > 0 {
+			return ctrl.Result{}, fmt.Errorf("failed to cleanup deployer before deletion: %w", errors.Join(errs...)), true
+		}
+
+		logger.Info("successfully cleaned up deployer before deletion")
+		return ctrl.Result{}, nil, true
+	}
+	return ctrl.Result{}, nil, false
+}
+
 func (r *Reconciler) DownloadResourceWithOCM(
 	ctx context.Context,
 	deployer *deliveryv1alpha1.Deployer,
 	resource *deliveryv1alpha1.Resource,
 ) (objs []*unstructured.Unstructured, err error) {
-	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer)
+	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.ConfigureContextFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to get effective config: %w", err)
 	}
+	deployer.Status.EffectiveOCMConfig = configs
 
 	repoSpec := &ocmruntime.Raw{}
 	if err := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()).Decode(
@@ -452,8 +523,13 @@ func (r *Reconciler) downloadResourceBlob(
 	resource *descriptor.Resource,
 	cfg *configuration.Configuration,
 ) (io.ReadCloser, error) {
-	// local access types can be read directly
-	if resource.Access.GetType().Name == descriptor.LocalBlobAccessType {
+	typed, err := v2.Scheme.NewObject(resource.Access.GetType())
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve access type: %w", err)
+	}
+
+	switch typed.(type) { //nolint:gocritic // no, I like switch for types better
+	case *v2.LocalBlob:
 		blob, _, err := repo.GetLocalResource(ctx,
 			componentDescriptor.Component.Name,
 			componentDescriptor.Component.Version,
@@ -560,56 +636,96 @@ func identityFunc() ocmruntime.IdentityMatchingChainFn {
 	}
 }
 
-// applyConcurrently applies the resource objects to the cluster concurrently.
-//
-// See Apply for more details on how the objects are applied.
-func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured) error {
-	if len(objs) > 1 {
-		// TODO(jakobmoellerdev): remove once https://github.com/open-component-model/ocm-k8s-toolkit/issues/273#issue-3201709052
-		//  is implemented in the deployer controller. We need proper apply detection so we can support pruning diffs.
-		//  Otherwise we can orphan resources.
-		msg := "multiple objects found in manifest," +
-			"the current deployer implementation does not officially support this yet," +
-			"and will not prune diffs properly."
-		event.New(r, deployer, nil, eventv1.EventSeverityInfo, msg)
-		log.FromContext(ctx).Info(msg)
+func (r *Reconciler) createApplySet(deployer *deliveryv1alpha1.Deployer, logger logr.Logger) *applyset.ApplySet {
+	cfg := applyset.Config{
+		Client:          r.Client,
+		RESTMapper:      r.resourceRESTMapper,
+		Log:             logger,
+		ParentNamespace: deployer.GetNamespace(),
 	}
+	return applyset.New(cfg, deployer)
+}
 
-	eg, egctx := errgroup.WithContext(ctx)
+// applyWithApplySet applies the resource objects using ApplySet for proper tracking and pruning.
+// This method uses the ApplySet specification (KEP-3659) to manage sets of resources with automatic
+// pruning of orphaned resources.
+//
+// The deployer object itself is used as the ApplySet parent, which means:
+// - All deployed resources are labeled with applyset.k8s.io/part-of=<applyset-id>
+// - The deployer carries annotations tracking the GroupKinds and namespaces of managed resources
+// - Pruning automatically removes resources that were previously deployed but are no longer in the manifest
+func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured) error {
+	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
 
-	for i := range objs {
-		eg.Go(func() error {
-			//nolint:forcetypeassert // we know that objs[i] is a client.Object because we just cloned it
-			obj := objs[i].DeepCopyObject().(*unstructured.Unstructured)
+	// Use the deployer as the ApplySet parent
+	// This allows us to track all resources deployed by this deployer
+	set := r.createApplySet(deployer, logger)
 
-			return r.apply(egctx, resource, deployer, obj)
+	logger.Info("adding objects to ApplySet", "count", len(objs))
+
+	resourcesToAdd := make([]applyset.Resource, 0, len(objs))
+	// Add all objects to the ApplySet
+	for _, obj := range objs {
+		// Clone the object to avoid modifying the original
+		obj := obj.DeepCopy()
+
+		// Set ownership labels and annotations (preserving existing behavior)
+		setOwnershipLabels(obj, resource, deployer)
+		logger.Info("set ownership labels", "labels", obj.GetLabels())
+		setOwnershipAnnotations(obj, resource)
+		logger.Info("set ownership annotations", "annotations", obj.GetAnnotations())
+
+		// Set controller reference
+		if err := controllerutil.SetControllerReference(deployer, obj, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+		}
+
+		// Default namespace and apiVersion if needed
+		if err := r.defaultObj(ctx, resource, obj); err != nil {
+			return fmt.Errorf("failed to default object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+		}
+
+		resourcesToAdd = append(resourcesToAdd, applyset.Resource{
+			ID:        obj.GetName(),
+			Object:    obj,
+			SkipApply: false,
 		})
 	}
 
-	return eg.Wait()
-}
-
-// apply applies the object to the cluster using Server-Side Apply. It sets the controller reference on the object
-// and patches it with the FieldManager set to the deployer UID. It also updates the deployer status with the
-// applied object reference.
-func (r *Reconciler) apply(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, obj *unstructured.Unstructured) error {
-	setOwnershipLabels(obj, resource, deployer)
-	setOwnershipAnnotations(obj, resource)
-	if err := controllerutil.SetControllerReference(deployer, obj, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set controller reference on object: %w", err)
+	logger.Info("projecting ApplySet and set deployer metadata")
+	metadata, err := set.Project(resourcesToAdd)
+	if err != nil {
+		return fmt.Errorf("failed to project ApplySet: %w", err)
 	}
 
-	if err := r.defaultObj(ctx, resource, obj); err != nil {
-		return err
+	if err := r.setApplySetMetadata(ctx, deployer, metadata); err != nil {
+		return fmt.Errorf("failed to set ApplySet metadata on deployer: %w", err)
 	}
 
-	applyConfig := client.ApplyConfigurationFromUnstructured(obj)
-	if err := r.GetClient().Apply(ctx, applyConfig, &client.ApplyOptions{
-		Force:        ptr.To(true),
-		FieldManager: fmt.Sprintf("%s/%s", deployerManager, deployer.UID),
-	}); err != nil {
-		return fmt.Errorf("failed to apply object: %w", err)
+	logger.Info("applying ApplySet")
+	applyResult, metadata, err := set.Apply(ctx, resourcesToAdd, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
+	if err != nil {
+		return fmt.Errorf("failed to apply ApplySet: %w", err)
 	}
+
+	if applyResult.Errors() != nil {
+		return fmt.Errorf("errors occurred during ApplySet apply: %w", applyResult.Errors())
+	}
+
+	// Log results
+	logger.Info("ApplySet operation complete", "applied", len(applyResult.Applied))
+
+	pruneResult, err := set.Prune(ctx, applyset.PruneOptions{
+		KeepUIDs:    applyResult.ObservedUIDs(),
+		Scope:       metadata.PruneScope(),
+		Concurrency: runtime.NumCPU(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to prune ApplySet: %w", err)
+	}
+
+	// Log prune results
+	logger.Info("ApplySet prune operation complete", "pruned", len(pruneResult.Pruned))
 
 	return nil
 }

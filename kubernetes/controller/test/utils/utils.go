@@ -21,7 +21,7 @@ func Run(cmd *exec.Cmd) ([]byte, error) {
 	cmd.Env = append(cmd.Env, "GO110MODULE=on")
 
 	command := strings.Join(cmd.Args, " ")
-	fmt.Fprintf(GinkgoWriter, "running: %s\n", command)
+	GinkgoLogr.Info(fmt.Sprintf("Running: %s", command))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return output, fmt.Errorf("%s failed with error: (%w) %s", command, err, string(output))
@@ -57,9 +57,35 @@ func DeployResource(ctx context.Context, manifestFilePath string) error {
 	DeferCleanup(func(ctx SpecContext) error {
 		cmd = exec.CommandContext(ctx, "kubectl", "delete", "-f", manifestFilePath)
 		_, err := Run(cmd)
+		if err != nil {
+			GinkgoLogr.V(3).Info("WARNING: failed to delete resource", "manifest", manifestFilePath)
+		}
 
 		return err
 	})
+
+	return err
+}
+
+// DeployResourceWithoutCleanup takes a manifest file of a k8s resource and deploys it with "kubectl".
+// In contrast to "DeployResource", no DeferCleanup-handler is created to delete the resource afterwards.
+func DeployResourceWithoutCleanup(ctx context.Context, manifestFilePath string) error {
+	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", manifestFilePath)
+	_, err := Run(cmd)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// DeleteResource deletes one or more k8s resources with "kubectl".
+// The resources to delete are passed as arguments.
+// Additionally, a timeout can be specified, which is passed to "kubectl" as well.
+func DeleteResource(ctx context.Context, timeout string, resource ...string) error {
+	cmdArgs := append([]string{"delete"}, resource...)
+	cmdArgs = append(cmdArgs, "--timeout="+timeout)
+	cmd := exec.CommandContext(ctx, "kubectl", cmdArgs...)
+	_, err := Run(cmd)
 
 	return err
 }
@@ -70,20 +96,6 @@ func WaitForResource(ctx context.Context, condition, timeout string, resource ..
 	cmd := exec.CommandContext(ctx, "kubectl", cmdArgs...)
 	_, err := Run(cmd)
 
-	return err
-}
-
-func MakeServiceAccountClusterAdmin(ctx context.Context, serviceAccountNamespace string, serviceAccountName string) error {
-	cmdArgs := []string{"create", "clusterrolebinding", fmt.Sprintf("%s-admin", serviceAccountName), "--clusterrole=cluster-admin", "--serviceaccount=" + serviceAccountNamespace + ":" + serviceAccountName}
-	cmd := exec.CommandContext(ctx, "kubectl", cmdArgs...)
-	_, err := Run(cmd)
-	return err
-}
-
-func DeleteServiceAccountClusterAdmin(ctx context.Context, serviceAccountName string) error {
-	cmdArgs := []string{"delete", "clusterrolebinding", fmt.Sprintf("%s-admin", serviceAccountName), "--ignore-not-found=true"}
-	cmd := exec.CommandContext(ctx, "kubectl", cmdArgs...)
-	_, err := Run(cmd)
 	return err
 }
 

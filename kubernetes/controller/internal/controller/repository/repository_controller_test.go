@@ -82,7 +82,6 @@ var _ = Describe("Repository Controller", func() {
 
 				By("creating a CTF repository with non-existent path")
 				spec := &ctf.Repository{
-					Type:       runtime.NewVersionedType(ctf.Type, "v1"),
 					FilePath:   "/nonexistent/path/that/does/not/exist",
 					AccessMode: ctf.AccessModeReadOnly,
 				}
@@ -114,7 +113,6 @@ var _ = Describe("Repository Controller", func() {
 
 		Context("When incorrect RepositorySpec is provided", func() {
 			It("Validation must fail", func(ctx SpecContext) {
-
 				By("creating a OCI repository from a valid json but invalid RepositorySpec")
 				specdata := []byte(`{"json":"not a valid RepositorySpec"}`)
 				repoName := TestRepositoryObj + "-invalid-spec"
@@ -337,6 +335,121 @@ var _ = Describe("Repository Controller", func() {
 				}).WithTimeout(10 * time.Second).Should(Succeed())
 			})
 		})
+	})
+})
+
+var _ = Describe("Repository Controller OCM Config", func() {
+	var (
+		namespace *corev1.Namespace
+		ocmRepo   *v1alpha1.Repository
+	)
+
+	BeforeEach(func(ctx SpecContext) {
+		if namespace == nil {
+			namespace = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-ns-repo-ocmconfig",
+				},
+			}
+			Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+		}
+	})
+
+	AfterEach(func(ctx SpecContext) {
+		test.DeleteObject(ctx, k8sClient, ocmRepo)
+	})
+
+	It("repository without ocmConfig has empty effective config", func(ctx SpecContext) {
+		By("creating a CTF repository without ocmConfig")
+		ctfPath := GinkgoT().TempDir()
+		spec := &ctf.Repository{
+			Type:       runtime.NewVersionedType(ctf.Type, "v1"),
+			FilePath:   ctfPath,
+			AccessMode: ctf.AccessModeReadOnly,
+		}
+		specdata, err := json.Marshal(spec)
+		Expect(err).NotTo(HaveOccurred())
+		ocmRepo = newTestRepository(namespace.GetName(), "repo-no-config", &specdata)
+
+		Expect(k8sClient.Create(ctx, ocmRepo)).To(Succeed())
+
+		By("checking that the repository is ready with empty effective config")
+		Eventually(komega.Object(ocmRepo), "15s").Should(And(
+			HaveField("Status.Conditions", ContainElement(
+				And(HaveField("Type", Equal(meta.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionTrue))),
+			)),
+			HaveField("Status.EffectiveOCMConfig", BeEmpty()),
+		))
+	})
+
+	It("repository with explicit ocmConfig populates effective config", func(ctx SpecContext) {
+		By("creating a credential secret")
+		credSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace.GetName(),
+				Name:      "repo-cred-secret",
+			},
+			Data: map[string][]byte{
+				v1alpha1.OCMConfigKey: []byte(`
+type: credentials.config.ocm.software
+consumers:
+- identity:
+    type: MavenRepository
+    hostname: example.com
+  credentials:
+  - type: Credentials
+    properties:
+      username: testuser
+      password: testpassword
+`),
+			},
+		}
+		Expect(k8sClient.Create(ctx, credSecret)).To(Succeed())
+
+		By("creating a CTF repository with ocmConfig")
+		ctfPath := GinkgoT().TempDir()
+		spec := &ctf.Repository{
+			Type:       runtime.NewVersionedType(ctf.Type, "v1"),
+			FilePath:   ctfPath,
+			AccessMode: ctf.AccessModeReadOnly,
+		}
+		specdata, err := json.Marshal(spec)
+		Expect(err).NotTo(HaveOccurred())
+		ocmRepo = newTestRepository(namespace.GetName(), "repo-with-config", &specdata)
+		ocmRepo.Spec.OCMConfig = []v1alpha1.OCMConfiguration{
+			{
+				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					APIVersion: corev1.SchemeGroupVersion.String(),
+					Kind:       "Secret",
+					Name:       credSecret.Name,
+					Namespace:  credSecret.Namespace,
+				},
+				Policy: v1alpha1.ConfigurationPolicyPropagate,
+			},
+		}
+
+		Expect(k8sClient.Create(ctx, ocmRepo)).To(Succeed())
+
+		By("checking that the repository is ready with the expected effective config")
+		Eventually(komega.Object(ocmRepo), "15s").Should(And(
+			HaveField("Status.Conditions", ContainElement(
+				And(HaveField("Type", Equal(meta.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionTrue))),
+			)),
+			HaveField("Status.EffectiveOCMConfig", ConsistOf(
+				v1alpha1.OCMConfiguration{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						APIVersion: corev1.SchemeGroupVersion.String(),
+						Kind:       "Secret",
+						Name:       credSecret.Name,
+						Namespace:  credSecret.Namespace,
+					},
+					Policy: v1alpha1.ConfigurationPolicyPropagate,
+				},
+			)),
+		))
+
+		By("cleanup")
+		Expect(k8sClient.Delete(ctx, credSecret)).To(Succeed())
 	})
 })
 

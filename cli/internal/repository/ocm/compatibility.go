@@ -2,22 +2,18 @@ package ocm
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
-	"math"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
-	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/repository"
-	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-// NewComponentRepositoryProvider creates a ComponentVersionRepositoryForComponentProvider
-// that resolves and returns the appropriate repository for a given component name.
+// NewComponentRepositoryResolver creates a provider that resolves and returns
+// the appropriate repository for a given component name.
 //
 // The provider evaluates component names against configured patterns or fallback resolvers to determine
 // which repository specification should be used. This enables routing different components to different
@@ -34,156 +30,31 @@ import (
 //   - WithComponentRef: Convenience option to set repository and component pattern from a component reference
 //
 // Returns an error if both resolver types are configured, or if no repository and no resolvers are provided.
-func NewComponentRepositoryProvider(
+func NewComponentRepositoryResolver(
 	ctx context.Context,
 	repoProvider repository.ComponentVersionRepositoryProvider,
 	credentialGraph credentials.Resolver,
 	opts ...RepositoryResolverOption,
-) (ComponentVersionRepositoryForComponentProvider, error) {
+) (resolvers.ComponentVersionRepositoryResolver, error) {
 	options := &RepositoryResolverOptions{}
 	for _, opt := range opts {
 		opt(options)
 	}
 
-	var (
-		//nolint:staticcheck // compatibility mode for deprecated resolvers
-		fallbackResolvers []*resolverruntime.Resolver
-		pathMatchers      []*resolverspec.Resolver
-		err               error
-	)
-
-	if options.config != nil {
-		pathMatchers, err = ResolversFromConfig(options.config)
-		if err != nil {
-			return nil, fmt.Errorf("getting path matchers from configuration failed: %w", err)
-		}
-		fallbackResolvers, err = FallbackResolversFromConfig(options.config)
-		if err != nil {
-			return nil, fmt.Errorf("getting resolvers from configuration failed: %w", err)
-		}
+	fallbackResolvers, pathMatchers, err := resolvers.ExtractResolvers(options.config, ocirepository.Scheme)
+	if err != nil {
+		return nil, err
 	}
 
-	// Default to "*" if no component patterns specified
-	if len(options.componentPatterns) == 0 {
-		options.componentPatterns = []string{"*"}
+	providerOpts := resolvers.Options{
+		RepoProvider:      repoProvider,
+		CredentialGraph:   credentialGraph,
+		PathMatchers:      pathMatchers,
+		FallbackResolvers: fallbackResolvers,
+		ComponentPatterns: options.componentPatterns,
 	}
 
-	switch {
-	case len(pathMatchers) > 0 && len(fallbackResolvers) > 0:
-		return nil, fmt.Errorf("both path matcher and fallback resolvers are configured, only one type is allowed")
-
-	case len(fallbackResolvers) > 0:
-		slog.WarnContext(ctx, "using deprecated fallback resolvers, consider switching to path matcher resolvers")
-		return createFallbackProvider(ctx, repoProvider, credentialGraph, options.repository, fallbackResolvers)
-	case len(pathMatchers) > 0:
-		slog.DebugContext(ctx, "using path matcher resolvers", slog.Int("count", len(pathMatchers)))
-		return createPathMatcherProvider(ctx, repoProvider, credentialGraph, options.repository, options.componentPatterns, pathMatchers)
-	case len(pathMatchers) == 0 && len(fallbackResolvers) == 0 && options.repository != nil:
-		slog.DebugContext(ctx, "no resolvers configured, using repository reference as resolver")
-		return createSimplePathMatcherProvider(ctx, repoProvider, credentialGraph, options.repository)
-	}
-	return nil, nil
-}
-
-// createSimplePathMatcherProvider creates a resolver provider with a single wildcard matcher for the given repository.
-func createSimplePathMatcherProvider(
-	ctx context.Context,
-	repoProvider repository.ComponentVersionRepositoryProvider,
-	credentialGraph credentials.Resolver,
-	repository runtime.Typed,
-) (ComponentVersionRepositoryForComponentProvider, error) {
-	raw := runtime.Raw{}
-	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
-	if err := scheme.Convert(repository, &raw); err != nil {
-		return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
-	}
-
-	return &resolverProvider{
-		repoProvider: repoProvider,
-		graph:        credentialGraph,
-		provider: pathmatcher.NewSpecProvider(ctx, []*resolverspec.Resolver{
-			{
-				Repository:           &raw,
-				ComponentNamePattern: "*",
-			},
-		}),
-	}, nil
-}
-
-// createFallbackProvider creates a fallback resolver provider (deprecated).
-//
-//nolint:staticcheck // compatibility mode for deprecated resolvers
-func createFallbackProvider(
-	ctx context.Context,
-	repoProvider repository.ComponentVersionRepositoryProvider,
-	credentialGraph credentials.Resolver,
-	repository runtime.Typed,
-	fallbackResolvers []*resolverruntime.Resolver,
-) (ComponentVersionRepositoryForComponentProvider, error) {
-	// add repository as first entry to fallback list if available to mimic legacy behavior
-	//nolint:staticcheck // compatibility mode for deprecated resolvers
-	var finalResolvers []*resolverruntime.Resolver
-	if repository != nil {
-		//nolint:staticcheck // kept for backward compatibility, use resolvers instead
-		finalResolvers = append(finalResolvers, &resolverruntime.Resolver{
-			Repository: repository,
-			Priority:   math.MaxInt,
-		})
-	}
-	finalResolvers = append(finalResolvers, fallbackResolvers...)
-
-	return &fallbackProvider{
-		repoProvider: repoProvider,
-		graph:        credentialGraph,
-		resolvers:    finalResolvers,
-	}, nil
-}
-
-// createPathMatcherProvider creates a path matcher resolver provider with priority ordering.
-func createPathMatcherProvider(
-	ctx context.Context,
-	repoProvider repository.ComponentVersionRepositoryProvider,
-	credentialGraph credentials.Resolver,
-	repository runtime.Typed,
-	componentPatterns []string,
-	pathMatchers []*resolverspec.Resolver,
-) (ComponentVersionRepositoryForComponentProvider, error) {
-	if repository != nil {
-		var finalResolvers []*resolverspec.Resolver
-		finalResolvers = append(finalResolvers, pathMatchers...)
-
-		raw := runtime.Raw{}
-		scheme := runtime.NewScheme(runtime.WithAllowUnknown())
-		if err := scheme.Convert(repository, &raw); err != nil {
-			return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
-		}
-
-		// Create high-priority resolvers for each component pattern
-		componentMatchers := make([]*resolverspec.Resolver, 0, len(componentPatterns))
-		for _, pattern := range componentPatterns {
-			componentMatchers = append(componentMatchers, &resolverspec.Resolver{
-				Repository:           &raw,
-				ComponentNamePattern: pattern,
-			})
-		}
-
-		// add component matchers to index 0 to have the highest priority
-		finalResolvers = append(componentMatchers, finalResolvers...)
-
-		// Add wildcard matcher at the end as catch-all
-		finalResolvers = append(finalResolvers, &resolverspec.Resolver{
-			Repository:           &raw,
-			ComponentNamePattern: "*",
-		})
-
-		pathMatchers = finalResolvers
-	}
-
-	return &resolverProvider{
-		repoProvider: repoProvider,
-		graph:        credentialGraph,
-		provider:     pathmatcher.NewSpecProvider(ctx, pathMatchers),
-	}, nil
+	return resolvers.New(ctx, providerOpts, options.repository)
 }
 
 // RepositoryResolverOptions holds configuration for NewComponentRepositoryProvider.
@@ -233,7 +104,7 @@ func WithComponentRef(ref *compref.Ref) RepositoryResolverOption {
 	}
 }
 
-// NewComponentVersionRepositoryForComponentProvider creates a new ComponentVersionRepositoryForComponentProvider based on the provided
+// NewComponentVersionRepositoryForComponentProvider creates a provider based on the provided
 // component reference and configuration.
 //
 // Behaviour depends on what is provided:
@@ -249,6 +120,6 @@ func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 	credentialGraph credentials.Resolver,
 	config *genericv1.Config,
 	ref *compref.Ref,
-) (ComponentVersionRepositoryForComponentProvider, error) {
-	return NewComponentRepositoryProvider(ctx, repoProvider, credentialGraph, WithConfig(config), WithComponentRef(ref))
+) (resolvers.ComponentVersionRepositoryResolver, error) {
+	return NewComponentRepositoryResolver(ctx, repoProvider, credentialGraph, WithConfig(config), WithComponentRef(ref))
 }

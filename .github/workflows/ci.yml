@@ -25,10 +25,13 @@ jobs:
     permissions:
       pull-requests: read
     outputs:
-      # useful for working directly with modules
+      # modules_json = changed modules only (filtered by paths)
       modules_json: ${{ steps.filtered.outputs.modules_json }}
+      # lint_modules_json = all modules when .env changed, else changed modules
+      lint_modules_json: ${{ steps.filtered.outputs.lint_modules_json }}
       integration_test_modules_json: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
       unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
+      env_changed: ${{ steps.env_changes.outputs.env }}
     env:
       DIR: ${{ github.workspace }}
     steps:
@@ -37,10 +40,17 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
+      # Detect .env changes to decide whether to run golangci-lint on all or only changed modules
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: env_changes
+        with:
+          filters: |
+            env:
+              - '.env'
       - name: Discover Go Modules
         id: discover
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
@@ -87,10 +97,13 @@ jobs:
         env:
           MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
           CHANGE_JSON: ${{ steps.changes.outputs.changes }}
+          ENV_CHANGED: ${{ steps.env_changes.outputs.env }}
         with:
           script: |
             const modulesJson = JSON.parse(process.env.MODULES_JSON || '[]');
             const changeJson = JSON.parse(process.env.CHANGE_JSON || '[]');
+            const envChanged = process.env.ENV_CHANGED === 'true';
+            const lintModulesFromEnv = envChanged ? modulesJson : null;
             
             if (process.env.check_only_changed === "true") {
               console.log(`Filtering modules based on changes: ${JSON.stringify(changeJson)}`);
@@ -99,9 +112,11 @@ jobs:
               });
               console.log(`Filtered modules: ${JSON.stringify(filteredModules)}`);
               core.setOutput("modules_json", JSON.stringify(filteredModules));
+              core.setOutput('lint_modules_json', JSON.stringify(lintModulesFromEnv ?? filteredModules));
             } else {
               console.log("check_only_changed is false, no filtering applied.");
               core.setOutput("modules_json", JSON.stringify(modulesJson));
+              core.setOutput('lint_modules_json', JSON.stringify(lintModulesFromEnv ?? modulesJson));
             }
       - name: Filter based on Testability
         id: filtered_test
@@ -144,6 +159,7 @@ jobs:
           script: |
             const modules = JSON.parse(`${{ steps.discover.outputs.modules_json || '[]' }}`);
             const filtered = JSON.parse(`${{ steps.filtered.outputs.modules_json || '[]' }}`);
+            const envChanged = `${{ steps.env_changes.outputs.env || 'false' }}` === 'true';
             const unitTests = JSON.parse(`${{ steps.filtered_test.outputs.unit_test_modules_json || '[]' }}`);
             const integrationTests = JSON.parse(`${{ steps.filtered_test.outputs.integration_test_modules_json || '[]' }}`);
             
@@ -155,6 +171,7 @@ jobs:
             
             summary += `**🔍 Discovered Modules (${modules.length}):**\n${toMarkdownList(modules)}\n\n`;
             summary += `**🎯 Filtered Modules (${filtered.length}):**\n${toMarkdownList(filtered)}\n\n`;
+            summary += `**🧹 Lint Scope:** ${envChanged ? 'all modules (env changed)' : 'changed modules only'}\n\n`;
             summary += `**🧪 Unit Test Modules (${unitTests.length}):**\n${toMarkdownList(unitTests)}\n\n`;
             summary += `**🧬 Integration Test Modules (${integrationTests.length}):**\n${toMarkdownList(integrationTests)}\n`;
             
@@ -167,12 +184,12 @@ jobs:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       checks: write
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
           sparse-checkout: |
-            .github/config/golangci.yml
+            golangci.yml
             .env
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
@@ -197,18 +214,19 @@ jobs:
     permissions:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       checks: write
-    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
+    # Run for all modules when .env changed, else only for changed modules)
+    if: ${{ fromJSON(needs.discover_modules.outputs.lint_modules_json)[0] != null }}
     strategy:
       matrix:
-        module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
+        module: ${{ fromJSON(needs.discover_modules.outputs.lint_modules_json) }}
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
           sparse-checkout: |
             ${{ matrix.module }}
-            .github/config/golangci.yml
+            golangci.yml
             .env
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
@@ -226,7 +244,7 @@ jobs:
           verify: 'false' # we verify in a separate command ONCE instead of every run on every module
           version: ${{ steps.versions.outputs.golangci_lint }}
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
-          args: --timeout 10m --config=${{ github.workspace }}/.github/config/golangci.yml
+          args: --timeout 10m --config=${{ github.workspace }}/golangci.yml
 
   run_integration_tests:
     name: "Integration Tests"
@@ -250,7 +268,7 @@ jobs:
         with:
           app_id: ${{ secrets.OCMBOT_APP_ID }}
           private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -281,7 +299,7 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -311,7 +329,7 @@ jobs:
         project: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -320,15 +338,15 @@ jobs:
             .github/workflows/ci.yml
             ${{ matrix.project }}
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@439137e1b50c27ba9e2f9befc93e43091b449c34 # v3
+        uses: github/codeql-action/init@f5c2471be782132e47a6e6f9c725e56730d6e9a3 # v3
         with:
           languages: go
           queries: security-extended
       - name: Autobuild
-        uses: github/codeql-action/autobuild@439137e1b50c27ba9e2f9befc93e43091b449c34 # v3
+        uses: github/codeql-action/autobuild@f5c2471be782132e47a6e6f9c725e56730d6e9a3 # v3
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@439137e1b50c27ba9e2f9befc93e43091b449c34 # v3
+        uses: github/codeql-action/analyze@f5c2471be782132e47a6e6f9c725e56730d6e9a3 # v3
         with:
           category: "/language:go"
 
@@ -336,7 +354,7 @@ jobs:
     runs-on: ubuntu-latest
     name: "Code Generation"
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -377,7 +395,7 @@ jobs:
       - run_unit_tests
       - run_integration_tests
       - golangci_lint
-    if: failure()
+    if: ${{ failure() }}
     steps:
       - name: Some CI step failed or was cancelled!
         run: exit 1

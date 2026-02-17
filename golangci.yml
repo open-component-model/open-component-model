@@ -1,0 +1,155 @@
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+#
+# This is config for golangci-lint. Do not move this as this is in a canonical location auto-discovered by golangci-lint.
+# see https://golangci-lint.run/docs/configuration/file/
+version: "2"
+run:
+  issues-exit-code: 2
+  tests: false
+  allow-parallel-runners: true
+linters:
+  default: all
+  disable:
+    - bodyclose
+    - containedctx
+    - contextcheck
+    - cyclop
+    - depguard
+    - dogsled
+    - dupl
+    - embeddedstructfieldcheck
+    - err113
+    - errcheck
+    - exhaustive
+    - exhaustruct
+    - forcetypeassert
+    - funcorder
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - gocyclo
+    - godot
+    - godox
+    - gomoddirectives
+    - inamedparam
+    - interfacebloat
+    - intrange
+    - ireturn
+    - lll
+    - loggercheck
+    - mirror
+    - mnd
+    - modernize
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnil
+    - nlreturn
+    - noinlineerr
+    - nonamedreturns
+    - paralleltest
+    - perfsprint
+    - prealloc
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - tagliatelle
+    - testpackage
+    - unparam
+    - varnamelen
+    - wastedassign
+    - wrapcheck
+    - wsl
+    - wsl_v5
+  settings:
+    cyclop:
+      max-complexity: 15
+    funlen:
+      lines: 110
+      statements: 60
+    gocritic:
+      disabled-checks:
+        - elseif
+    lll:
+      line-length: 120
+    nolintlint:
+      require-explanation: true
+      require-specific: false
+      allow-unused: false
+    recvcheck:
+      disable-builtin: true
+      exclusions:
+        - "*.MarshalJSON"
+        - "*.UnmarshalJSON"
+        - "*.JSONSchema"
+        - "*.SetType"
+        - "*.GetType"
+        - "*.DeepCopy"
+        - "*.DeepCopyInto"
+        - "*.DeepCopyTyped"
+        - '*.String'
+    varnamelen:
+      ignore-names:
+        - err
+        - wg
+        - id
+    staticcheck:
+      dot-import-whitelist:
+        - "github.com/onsi/ginkgo/v2"
+        - "github.com/onsi/gomega"
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - lll
+        source: https://
+      - linters:
+          - dupl
+          - err113
+          - errcheck
+          - funlen
+          - gocyclo
+          - gosec
+          - scopelint
+        path: _test\.go
+      - path: (.+)\.go$
+        text: composites
+      - linters:
+          - cyclop
+        path: (.+)_test\.go
+      - linters:
+          - staticcheck
+        path: (.+)repository/ocm/fallback.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - blank
+        - dot
+        - default
+        - prefix(ocm.software/open-component-model)
+      custom-order: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

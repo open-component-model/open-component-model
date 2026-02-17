@@ -69,7 +69,7 @@ tasks:
     dir: '{{.ITEM}}'
     vars:
       GOLANGCI_LINT: '{{ .ROOT_DIR }}/tmp/bin/golangci-lint'
-      GOLANGCI_LINT_CONFIG: '{{ .ROOT_DIR }}/.github/config/golangci.yml'
+      GOLANGCI_LINT_CONFIG: '{{ .ROOT_DIR }}/golangci.yml'
       TIMEOUT: '10m'
     cmd: |
       {{ .GOLANGCI_LINT }} run \
@@ -99,7 +99,7 @@ tasks:
     deps: [golangci-lint/install]
     vars:
       GOLANGCI_LINT: '{{ .ROOT_DIR }}/tmp/bin/golangci-lint'
-      GOLANGCI_LINT_CONFIG: '{{ .ROOT_DIR }}/.github/config/golangci.yml'
+      GOLANGCI_LINT_CONFIG: '{{ .ROOT_DIR }}/golangci.yml'
     cmd: |
       {{ .GOLANGCI_LINT }} config verify \
         --config={{ .GOLANGCI_LINT_CONFIG }}

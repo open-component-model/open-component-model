@@ -17,6 +17,7 @@ apeirora
 api
 apis
 applyable
+ApplySet
 approvers
 araise
 architected
@@ -57,6 +58,8 @@ cliconfig
 clis
 closable
 closeable
+ClusterRole
+ClusterRoleBinding
 cmds
 cncf
 coc
@@ -120,6 +123,7 @@ deserialization
 deserialize
 deserialized
 dest
+dev
 devops
 digesters
 directorytree
@@ -164,6 +168,7 @@ gc
 gerald
 gergely
 getinexpensivecontentversionidentity
+GetOCIArtifact
 getresourcesbyname
 getter
 ghcr
@@ -232,6 +237,7 @@ json
 jsonNormalisation
 jsonschema
 kelch
+KEP
 keyless
 keypair
 keyring
@@ -284,6 +290,7 @@ mavenrepository
 mediatype
 mimetype
 mimetypes
+misconfigured
 moeller
 moldenhauer
 morri
@@ -318,6 +325,7 @@ ocireg
 ociregistry
 ocirepository
 OCIAddComponentVersion
+OCIAddLocalResource
 OCIGetComponentVersion
 ocm
 ocmbot
@@ -391,6 +399,7 @@ resolvefromcomponentversion
 resolvers
 resourceconfig
 resourcegraphdefinition
+ResourceGraphDefinitions
 resourceref
 resourcereference
 retrigger
@@ -579,3 +588,9 @@ artifactset
 stackit
 sast
 agentic
+saas
+greenlight
+warroom
+wgs
+kubermatic
+baseUrl

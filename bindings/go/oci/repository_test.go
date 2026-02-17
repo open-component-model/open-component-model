@@ -916,6 +916,7 @@ func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 		Type: "ociImageLayer",
 		Access: &v2.LocalBlob{
 			LocalReference: contentDigest.String(),
+			ReferenceName:  "ocm/oci/repo:latest",
 			MediaType:      ociImageSpecV1.MediaTypeImageLayer,
 		},
 	}
@@ -934,10 +935,15 @@ func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 	r.NoError(err, "Failed to add component version")
 
 	// Try to get the resource back
-	blob, _, err := repo.GetLocalResource(ctx, desc.Component.Name, desc.Component.Version, map[string]string{
+	blob, resource, err := repo.GetLocalResource(ctx, desc.Component.Name, desc.Component.Version, map[string]string{
 		"name":    "test-layer-resource",
 		"version": "1.0.0",
 	})
+	r.NotNil(resource)
+	var localAccess v2.LocalBlob
+	r.NoError(v2.Scheme.Convert(resource.Access, &localAccess))
+	r.Equal(localAccess.ReferenceName, "ocm/oci/repo:latest", "Resource reference name should match expected value")
+
 	r.NoError(err, "Failed to get OCI image layer resource")
 	r.NotNil(blob, "Blob should not be nil")
 

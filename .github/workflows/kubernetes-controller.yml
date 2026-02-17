@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Setup Go
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
       - name: Install Task
@@ -65,11 +65,11 @@ jobs:
   E2E:
     name: E2E with Helm
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs: verify-chart
     steps:
       - name: Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           sparse-checkout: |
             kubernetes/controller
@@ -98,7 +98,7 @@ jobs:
       - name: Create kind cluster with dependencies
         run: task kubernetes/controller:test/e2e/setup/local
       - name: Run E2E tests with Helm chart
-        run: task kubernetes/controller:test/e2e/helm
+        run: task kubernetes/controller:test/e2e
       - name: Cleanup unused cache
         shell: bash
         run: |
@@ -121,7 +121,7 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           sparse-checkout: |
             kubernetes/controller
@@ -156,8 +156,8 @@ jobs:
       - name: Package and Push Helm Chart
         working-directory: kubernetes/controller
         run: |
-          helm package chart/ --app-version "${{ steps.version.outputs.version }}"
-          helm push ocm-k8s-toolkit-*.tgz oci://ghcr.io/open-component-model/charts
+          task helm/package VERSION=${{ steps.version.outputs.version }} APP_VERSION=${{ steps.version.outputs.version }}
+          helm push dist/ocm-k8s-toolkit-*.tgz oci://ghcr.io/open-component-model/kubernetes/controller/chart
       - name: Cleanup unused cache
         shell: bash
         run: |
