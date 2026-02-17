@@ -3,7 +3,6 @@ package integration
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,15 +21,9 @@ func Test_Integration_TransferComponentVersion(t *testing.T) {
 	// We run this parallel as it spins up a separate container
 	t.Parallel()
 
-	// 1. Setup Local Registry
-	user := "ocm"
-	password := internal.GenerateRandomPassword(t, 20)
-	htpasswd := internal.GenerateHtpasswd(t, user, password)
-
-	containerName := fmt.Sprintf("transfer-component-version-oci-repository-%d", time.Now().UnixNano())
-	registryAddress := internal.StartDockerContainerRegistry(t, containerName, htpasswd)
-	host, port, err := net.SplitHostPort(registryAddress)
-	r.NoError(err)
+	// 1. Setup Local OCIRegistry
+	registry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err, "should be able to start registry container")
 
 	// 2. Configure OCM to point to this registry
 	// We create a temporary ocmconfig.yaml
@@ -49,7 +42,7 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, host, port, user, password)
+`, registry.Host, registry.Port, registry.User, registry.Password)
 
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
@@ -59,9 +52,9 @@ configurations:
 	componentVersion := "v1.0.0"
 
 	// Create connection to registry for verification later
-	client := internal.CreateAuthClient(registryAddress, user, password)
+	client := internal.CreateAuthClient(registry.RegistryAddress, registry.User, registry.Password)
 	resolver, err := urlresolver.New(
-		urlresolver.WithBaseURL(registryAddress),
+		urlresolver.WithBaseURL(registry.RegistryAddress),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(client),
 	)
@@ -102,7 +95,7 @@ components:
 	})
 	r.NoError(addCMD.ExecuteContext(t.Context()), "creation of source CTF should succeed")
 
-	// 4. Run Transfer Command: CTF -> OCI Registry
+	// 4. Run Transfer Command: CTF -> OCI OCIRegistry
 	transferCMD := cmd.New()
 
 	// Construct source ref: ctf::<path>//<component>:<version>
@@ -112,7 +105,7 @@ components:
 	// The previous add_component_version_integration_test.go suggests it works directly.
 
 	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion)
-	targetRef := fmt.Sprintf("http://%s", registryAddress)
+	targetRef := fmt.Sprintf("http://%s", registry.RegistryAddress)
 
 	transferCMD.SetArgs([]string{
 		"transfer",

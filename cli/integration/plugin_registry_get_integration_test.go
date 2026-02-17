@@ -24,7 +24,7 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
 	defer cancel()
 
-	t.Logf("Starting Integration Test for Plugin Registry Get Command")
+	t.Logf("Starting Integration Test for Plugin OCIRegistry Get Command")
 
 	// Setup environment
 	// Two remote registries (A and B) with one plugin registry each
@@ -32,7 +32,7 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 	password := internal.GenerateRandomPassword(t, 20)
 	htpasswd := internal.GenerateHtpasswd(t, user, password)
 
-	// Registry A
+	// OCIRegistry A
 	registryURLA := internal.StartDockerContainerRegistry(t, fmt.Sprintf("%s-%d", "registry-a", time.Now().UnixNano()), htpasswd)
 	var err error
 	oA := internal.ConfigOpts{
@@ -42,7 +42,7 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 	oA.Host, oA.Port, err = net.SplitHostPort(registryURLA)
 	r.NoError(err)
 
-	// Registry B
+	// OCIRegistry B
 	registryURLB := internal.StartDockerContainerRegistry(t, fmt.Sprintf("%s-%d", "registry-b", time.Now().UnixNano()), htpasswd)
 	oB := internal.ConfigOpts{
 		User:     user,

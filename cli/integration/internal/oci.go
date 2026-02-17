@@ -3,7 +3,10 @@ package internal
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"net"
 	"testing"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
@@ -60,4 +63,33 @@ func CreateSingleLayerOCIImageLayoutTar(t *testing.T, data []byte, ref ...string
 	r.NoError(w.Close())
 
 	return &buf
+}
+
+type OCIRegistry struct {
+	User            string
+	Password        string
+	RegistryAddress string
+	Host            string
+	Port            string
+}
+
+func CreateOCIRegistry(t *testing.T) (*OCIRegistry, error) {
+	user := "ocm"
+	password := GenerateRandomPassword(t, 20)
+	htpasswd := GenerateHtpasswd(t, user, password)
+
+	containerName := fmt.Sprintf("transfer-component-version-oci-repository-%d", time.Now().UnixNano())
+	registryAddress := StartDockerContainerRegistry(t, containerName, htpasswd)
+	host, port, err := net.SplitHostPort(registryAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse registry address: %w", err)
+	}
+
+	return &OCIRegistry{
+		User:            user,
+		Password:        password,
+		RegistryAddress: registryAddress,
+		Host:            host,
+		Port:            port,
+	}, nil
 }
