@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -74,12 +75,23 @@ type OCIRegistry struct {
 	Port            string
 }
 
+// validContainerNames matches characters not allowed in Docker container names.
+var validContainerNames = regexp.MustCompile(`[^a-zA-Z0-9_.-]`)
+
+// sanitizeContainerName produces a valid Docker container name by lowercasing
+// the input and replacing any characters outside [a-zA-Z0-9_.-] with a dash.
+func sanitizeContainerName(name string) string {
+	return validContainerNames.ReplaceAllString(strings.ToLower(name), "-")
+}
+
 func CreateOCIRegistry(t *testing.T) (*OCIRegistry, error) {
+	t.Helper()
+
 	user := "ocm"
 	password := GenerateRandomPassword(t, 20)
 	htpasswd := GenerateHtpasswd(t, user, password)
 
-	containerName := fmt.Sprintf("%s-repository-%d", strings.ToLower(t.Name()), time.Now().UnixNano())
+	containerName := fmt.Sprintf("%s-repository-%d", sanitizeContainerName(t.Name()), time.Now().UnixNano())
 	registryAddress := StartDockerContainerRegistry(t, containerName, htpasswd)
 	host, port, err := net.SplitHostPort(registryAddress)
 	if err != nil {

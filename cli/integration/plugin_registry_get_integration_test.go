@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"slices"
 	"strings"
 	"testing"
@@ -28,28 +27,26 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 
 	// Setup environment
 	// Two remote registries (A and B) with one plugin registry each
-	user := "ocm"
-	password := internal.GenerateRandomPassword(t, 20)
-	htpasswd := internal.GenerateHtpasswd(t, user, password)
-
 	// OCIRegistry A
-	registryURLA := internal.StartDockerContainerRegistry(t, fmt.Sprintf("%s-%d", "registry-a", time.Now().UnixNano()), htpasswd)
-	var err error
+	registryA, err := internal.CreateOCIRegistry(t)
+	r.NoError(err, "should be able to start registryA container")
+
 	oA := internal.ConfigOpts{
-		User:     user,
-		Password: password,
+		User:     registryA.User,
+		Password: registryA.Password,
+		Host:     registryA.Host,
+		Port:     registryA.Port,
 	}
-	oA.Host, oA.Port, err = net.SplitHostPort(registryURLA)
-	r.NoError(err)
 
 	// OCIRegistry B
-	registryURLB := internal.StartDockerContainerRegistry(t, fmt.Sprintf("%s-%d", "registry-b", time.Now().UnixNano()), htpasswd)
+	registryB, err := internal.CreateOCIRegistry(t)
+	r.NoError(err, "should be able to start registryB container")
 	oB := internal.ConfigOpts{
-		User:     user,
-		Password: password,
+		User:     registryB.User,
+		Password: registryB.Password,
+		Host:     registryB.Host,
+		Port:     registryB.Port,
 	}
-	oB.Host, oB.Port, err = net.SplitHostPort(registryURLB)
-	r.NoError(err)
 
 	// Generate and write config for the remote registry
 	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{oA, oB})
@@ -58,7 +55,7 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 	// Plugin A
 	pluginRegistryComponentA := "ocm.software/plugin-registry-a"
 	pluginRegistryVersionA := "v1.0.0"
-	pluginRegistryURLA := fmt.Sprintf("http://%s//%s:%s", registryURLA, pluginRegistryComponentA, pluginRegistryVersionA)
+	pluginRegistryURLA := fmt.Sprintf("http://%s//%s:%s", registryA.RegistryAddress, pluginRegistryComponentA, pluginRegistryVersionA)
 	pluginsA := []list.PluginInfo{
 		{"plugin-one.io/myplugin", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
 		{"plugin-one.io/myplugin", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLA, ""},
@@ -70,17 +67,17 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 	// Create plugin constructors and add them to the registry
 	var componentReferencesA string
 	for _, plugin := range pluginsA {
-		r.NoError(AddComponentForConstructor(ctx, CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryURLA))
+		r.NoError(AddComponentForConstructor(ctx, CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryA.RegistryAddress))
 		componentReferencesA += GeneratePluginReferences(plugin.Name, plugin.Version, plugin.Description, plugin.Platforms)
 	}
 
 	// Create plugin registry constructor and add it to the registry
-	r.NoError(AddComponentForConstructor(ctx, CreatePluginRegistryConstructor(pluginRegistryComponentA, pluginRegistryVersionA, componentReferencesA), cfgPath, registryURLA))
+	r.NoError(AddComponentForConstructor(ctx, CreatePluginRegistryConstructor(pluginRegistryComponentA, pluginRegistryVersionA, componentReferencesA), cfgPath, registryA.RegistryAddress))
 
 	// Plugin B
 	pluginRegistryComponentB := "ocm.software/plugin-registry-b"
 	pluginRegistryVersionB := "v1.0.0"
-	pluginRegistryURLB := fmt.Sprintf("http://%s//%s:%s", registryURLB, pluginRegistryComponentB, pluginRegistryVersionB)
+	pluginRegistryURLB := fmt.Sprintf("http://%s//%s:%s", registryB.RegistryAddress, pluginRegistryComponentB, pluginRegistryVersionB)
 	pluginsB := []list.PluginInfo{
 		{"plugin-one.io/myplugin", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLB, ""},
 		{"plugin-two.io/myplugin", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
@@ -91,12 +88,12 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 	// Create plugin constructors and add them to the registry
 	var componentReferencesB string
 	for _, plugin := range pluginsB {
-		r.NoError(AddComponentForConstructor(ctx, CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryURLB))
+		r.NoError(AddComponentForConstructor(ctx, CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryB.RegistryAddress))
 		componentReferencesB += GeneratePluginReferences(plugin.Name, plugin.Version, plugin.Description, plugin.Platforms)
 	}
 
 	// Create plugin registry constructor and add it to the registry
-	r.NoError(AddComponentForConstructor(ctx, CreatePluginRegistryConstructor(pluginRegistryComponentB, pluginRegistryVersionB, componentReferencesB), cfgPath, registryURLB))
+	r.NoError(AddComponentForConstructor(ctx, CreatePluginRegistryConstructor(pluginRegistryComponentB, pluginRegistryVersionB, componentReferencesB), cfgPath, registryB.RegistryAddress))
 
 	cases := []struct {
 		name             string

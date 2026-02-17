@@ -43,10 +43,6 @@ func Test_Integration_Transfer_OCIArtifact_WithLocalBlob(t *testing.T) {
 	targetRegistry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err, "should be able to start target registry container")
 
-	reference := func(ref string) string {
-		return fmt.Sprintf("%s/%s", sourceRegistry.RegistryAddress, ref)
-	}
-
 	// 2. Configure OCM to point to this registry
 	// We create a temporary ocmconfig.yaml
 	cfg := fmt.Sprintf(`
@@ -121,7 +117,7 @@ configurations:
 	}
 
 	targetAccess := resource.Access.DeepCopyTyped()
-	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", reference("test-resource:v1.0.0"))
+	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", sourceRegistry.Reference("test-resource:v1.0.0"))
 	resource.Access = targetAccess
 
 	resourceRepo := ocires.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
