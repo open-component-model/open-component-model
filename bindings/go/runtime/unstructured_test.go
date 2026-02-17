@@ -11,32 +11,32 @@ import (
 )
 
 var (
-	pureJsonDataPayload = map[string]interface{}{
+	pureJsonDataPayload = map[string]any{
 		"name":    "test-resource",
 		"version": "1.0.0",
 		"type":    "ociImage",
-		"labels": []interface{}{
-			map[string]interface{}{
+		"labels": []any{
+			map[string]any{
 				"name":  "env",
 				"value": "production",
 			},
 		},
-		"access": map[string]interface{}{
+		"access": map[string]any{
 			"type":           "ociArtifact",
 			"imageReference": "ghcr.io/test/image:v1.0.0",
 		},
-		"digest": map[string]interface{}{
+		"digest": map[string]any{
 			"hashAlgorithm":          "SHA-256",
 			"normalisationAlgorithm": "ociArtifactDigest/v1",
 			"value":                  "abc123",
 		},
 		"relation": "external",
-		"extraIdentity": map[string]interface{}{
+		"extraIdentity": map[string]any{
 			"platform": "linux/amd64",
 		},
 	}
 
-	mixedDataPayload = map[string]interface{}{
+	mixedDataPayload = map[string]any{
 		"name":    "test-resource",
 		"version": "1.0.0",
 		"type":    "ociImage",
@@ -89,7 +89,7 @@ func TestUnstructured(t *testing.T) {
 			},
 			un: func() *runtime.Unstructured {
 				return &runtime.Unstructured{
-					Data: map[string]interface{}{
+					Data: map[string]any{
 						"componentNameMapping": "urlPath",
 						"subPath":              "open-component-model/ocm",
 						"type":                 "OCIRegistry",
@@ -109,7 +109,7 @@ func TestUnstructured(t *testing.T) {
 			},
 			un: func() *runtime.Unstructured {
 				un := runtime.Unstructured{
-					Data: map[string]interface{}{
+					Data: map[string]any{
 						"componentNameMapping": "urlPath",
 					},
 				}
@@ -161,6 +161,37 @@ type testResource struct {
 	Digest        *testDigest       `json:"digest,omitempty"`
 }
 
+func TestUnstructuredFromMixedData_NumericTypes(t *testing.T) {
+	tests := []struct {
+		name  string
+		value any
+	}{
+		{"int", 42},
+		{"int32", int32(42)},
+		{"int64", int64(42)},
+		{"float32", float32(3.14)},
+		{"float64", 3.14},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			un, err := runtime.UnstructuredFromMixedData(map[string]any{
+				"val": tc.value,
+			})
+			require.NoError(t, err)
+
+			// isJSONNative recognizes these types, so they should be preserved as-is
+			// (not converted to float64 via JSON roundtrip).
+			assert.IsType(t, tc.value, un.Data["val"])
+			assert.Equal(t, tc.value, un.Data["val"])
+
+			// DeepCopy should also handle them without panic.
+			copied := un.DeepCopy()
+			require.NotNil(t, copied)
+			assert.Equal(t, tc.value, copied.Data["val"])
+		})
+	}
+}
+
 func TestUnstructured_DeepCopyWithStructValues(t *testing.T) {
 	resource := testResource{
 		Name:    "test-resource",
@@ -183,18 +214,19 @@ func TestUnstructured_DeepCopyWithStructValues(t *testing.T) {
 
 	// Simulate an Unstructured whose Data contains a struct value (not a pure JSON type).
 	// This can happen when values are set programmatically rather than via json.Unmarshal.
-	un := runtime.UnstructuredFromMixedData(map[string]interface{}{
+	un, err := runtime.UnstructuredFromMixedData(map[string]any{
 		"resource": resource,
 	})
+	require.NoError(t, err)
 
 	// DeepCopy should normalize the struct through JSON marshal/unmarshal
 	// so DeepCopyJSON does not panic on non-JSON-native types.
 	copied := un.DeepCopy()
 	require.NotNil(t, copied)
 
-	// The copied resource should be a map[string]interface{} after normalization.
-	copiedResource, ok := copied.Data["resource"].(map[string]interface{})
-	require.True(t, ok, "expected map[string]interface{}, got %T", copied.Data["resource"])
+	// The copied resource should be a map[string]any after normalization.
+	copiedResource, ok := copied.Data["resource"].(map[string]any)
+	require.True(t, ok, "expected map[string]any, got %T", copied.Data["resource"])
 
 	// Verify content matches the original struct's JSON representation.
 	originalJSON, err := json.Marshal(resource)
@@ -220,7 +252,7 @@ func deepCopyFullMarshal(u *runtime.Unstructured) *runtime.Unstructured {
 	if err != nil {
 		panic("deep copy: " + err.Error())
 	}
-	normalized := make(map[string]interface{})
+	normalized := make(map[string]any)
 	if err := json.Unmarshal(data, &normalized); err != nil {
 		panic("deep copy: " + err.Error())
 	}
@@ -237,12 +269,16 @@ func pureJSONData() *runtime.Unstructured {
 }
 
 // mixedData returns an Unstructured with a struct value that needs normalization.
-func mixedData() *runtime.Unstructured {
-	return runtime.UnstructuredFromMixedData(mixedDataPayload)
+func mixedData(tb testing.TB) *runtime.Unstructured {
+	tb.Helper()
+	un, err := runtime.UnstructuredFromMixedData(mixedDataPayload)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return un
 }
 
 func BenchmarkDeepCopy_PureJSON_Original(b *testing.B) {
-	b.ResetTimer()
 	for b.Loop() {
 		un := pureJSONData()
 		un.DeepCopy()
@@ -250,15 +286,16 @@ func BenchmarkDeepCopy_PureJSON_Original(b *testing.B) {
 }
 
 func BenchmarkDeepCopy_PureJSON_UnstructuredFromMixedData(b *testing.B) {
-	b.ResetTimer()
 	for b.Loop() {
-		un := runtime.UnstructuredFromMixedData(pureJsonDataPayload)
+		un, err := runtime.UnstructuredFromMixedData(pureJsonDataPayload)
+		if err != nil {
+			b.Fatal(err)
+		}
 		un.DeepCopy()
 	}
 }
 
 func BenchmarkDeepCopy_PureJSON_FullMarshal(b *testing.B) {
-	b.ResetTimer()
 	for b.Loop() {
 		un := pureJSONData()
 		deepCopyFullMarshal(un)
@@ -273,7 +310,6 @@ func BenchmarkDeepCopy_MixedData_Original(b *testing.B) {
 			return
 		}
 	}()
-	b.ResetTimer()
 	for b.Loop() {
 		un := &runtime.Unstructured{
 			Data: mixedDataPayload,
@@ -283,17 +319,15 @@ func BenchmarkDeepCopy_MixedData_Original(b *testing.B) {
 }
 
 func BenchmarkDeepCopy_MixedData_UnstructuredFromMixedData(b *testing.B) {
-	b.ResetTimer()
 	for b.Loop() {
-		un := mixedData()
+		un := mixedData(b)
 		un.DeepCopy()
 	}
 }
 
 func BenchmarkDeepCopy_MixedData_FullMarshal(b *testing.B) {
-	b.ResetTimer()
 	for b.Loop() {
-		un := mixedData()
+		un := mixedData(b)
 		deepCopyFullMarshal(un)
 	}
 }
