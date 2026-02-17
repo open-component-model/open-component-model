@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,15 +36,8 @@ func Test_Integration_OCIRepository(t *testing.T) {
 	t.Parallel()
 
 	t.Logf("Starting OCI based integration test")
-	user := "ocm"
 
-	// Setup credentials and htpasswd
-	password := internal.GenerateRandomPassword(t, 20)
-	htpasswd := internal.GenerateHtpasswd(t, user, password)
-
-	containerName := "download-resource-oci-repository"
-	registryAddress := internal.StartDockerContainerRegistry(t, containerName, htpasswd)
-	host, port, err := net.SplitHostPort(registryAddress)
+	registry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err)
 
 	cfg := fmt.Sprintf(`
@@ -63,14 +55,14 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, host, port, user, password)
+`, registry.Host, registry.Port, registry.User, registry.Password)
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
-	client := internal.CreateAuthClient(registryAddress, user, password)
+	client := internal.CreateAuthClient(registry.RegistryAddress, registry.User, registry.Password)
 
 	resolver, err := urlresolver.New(
-		urlresolver.WithBaseURL(registryAddress),
+		urlresolver.WithBaseURL(registry.RegistryAddress),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(client),
 	)
@@ -108,7 +100,7 @@ configurations:
 		downloadCMD.SetArgs([]string{
 			"download",
 			"resource",
-			fmt.Sprintf("http://%s//%s:%s", registryAddress, name, version),
+			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 			"--identity",
 			fmt.Sprintf("name=%s,version=%s", localResource.Resource.Name, localResource.Resource.Version),
 			"--output",
@@ -164,7 +156,7 @@ configurations:
 			downloadCMD.SetArgs([]string{
 				"download",
 				"resource",
-				fmt.Sprintf("http://%s//%s:%s", registryAddress, name, version),
+				fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 				"--identity",
 				fmt.Sprintf("name=%s,version=%s", localResource.Resource.Name, localResource.Resource.Version),
 				"--output",
@@ -188,7 +180,7 @@ configurations:
 			downloadCMD.SetArgs([]string{
 				"download",
 				"resource",
-				fmt.Sprintf("http://%s//%s:%s", registryAddress, name, version),
+				fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 				"--identity",
 				fmt.Sprintf("name=%s,version=%s", localResource.Resource.Name, localResource.Resource.Version),
 				"--output",

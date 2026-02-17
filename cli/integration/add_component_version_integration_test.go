@@ -3,7 +3,6 @@ package integration
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,7 +21,6 @@ func Test_Integration_AddComponentVersion_OCIRepository(t *testing.T) {
 	t.Parallel()
 
 	t.Logf("Starting OCI repository add component-version integration test")
-	user := "ocm"
 
 	cases := []struct {
 		name     string
@@ -104,24 +102,19 @@ configurations:
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup credentials and htpasswd
-			password := internal.GenerateRandomPassword(t, 20)
-			htpasswd := internal.GenerateHtpasswd(t, user, password)
-
-			containerName := fmt.Sprintf("add-component-version-oci-repository-%d", time.Now().UnixNano())
-			registryAddress := internal.StartDockerContainerRegistry(t, containerName, htpasswd)
-			host, port, err := net.SplitHostPort(registryAddress)
+			registry, err := internal.CreateOCIRegistry(t)
 			r.NoError(err)
 
-			cfg := fmt.Sprintf(tc.cfg, host, port, user, password)
+			cfg := fmt.Sprintf(tc.cfg, registry.Host, registry.Port, registry.User, registry.Password)
 			cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 			r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
 			t.Logf("Generated config:\n%s", cfg)
 
-			client := internal.CreateAuthClient(registryAddress, user, password)
+			client := internal.CreateAuthClient(registry.RegistryAddress, registry.User, registry.Password)
 
 			resolver, err := urlresolver.New(
-				urlresolver.WithBaseURL(registryAddress),
+				urlresolver.WithBaseURL(registry.RegistryAddress),
 				urlresolver.WithPlainHTTP(true),
 				urlresolver.WithBaseClient(client),
 			)
@@ -194,7 +187,7 @@ components:
 				addCMD.SetArgs([]string{
 					"add",
 					"component-version",
-					"--repository", fmt.Sprintf("http://%s", registryAddress),
+					"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
 					"--constructor", constructorPath,
 					"--config", cfgPath,
 				})
@@ -256,7 +249,7 @@ components:
 				addCMD.SetArgs([]string{
 					"add",
 					"component-version",
-					"--repository", fmt.Sprintf("oci::http://%s", registryAddress),
+					"--repository", fmt.Sprintf("oci::http://%s", registry.RegistryAddress),
 					"--constructor", constructorPath,
 					"--config", cfgPath,
 				})
@@ -300,7 +293,7 @@ components:
 				addCMD.SetArgs([]string{
 					"add",
 					"component-version",
-					"--repository", fmt.Sprintf("http://%s", registryAddress),
+					"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
 					"--constructor", constructorPath,
 					"--config", cfgPath,
 				})

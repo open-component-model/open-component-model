@@ -13,10 +13,12 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -33,6 +35,7 @@ const (
 	FlagOutput        = "output"
 	FlagRecursive     = "recursive"
 	FlagCopyResources = "copy-resources"
+	FlagUploadAs      = "upload-as"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the renderer consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -64,6 +67,12 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghc
 # Transfer from one OCI registry to another
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
+# Transfer from one OCI to another using localBlobs
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as localBlob
+
+# Transfer from one OCI to another using OCI artifacts (default)
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as ociArtifact
+
 # Transfer including all resources (e.g. OCI artifacts)
 transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm --copy-resources
 
@@ -79,6 +88,7 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
 	cmd.Flags().Bool(FlagCopyResources, false, "copy all resources in the component version")
+	enum.VarP(cmd.Flags(), FlagUploadAs, "u", []string{UploadAsDefault.String(), UploadAsLocalBlob.String(), UploadAsOciArtifact.String()}, "Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.")
 
 	return cmd
 }
@@ -150,8 +160,29 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		copyMode = internal.CopyModeAllResources
 	}
 
+	uploadType, err := enum.Get(cmd.Flags(), FlagUploadAs)
+	if err != nil {
+		return fmt.Errorf("getting upload-as flag failed: %w", err)
+	}
+
+	upTyp := internal.UploadAsDefault
+	switch uploadType {
+	case UploadAsLocalBlob.String():
+		upTyp = internal.UploadAsLocalBlob
+	case UploadAsOciArtifact.String():
+		upTyp = internal.UploadAsOciArtifact
+	}
+
 	// Build TransformationGraphDefinition
-	tgd, err := internal.BuildGraphDefinition(ctx, fromSpec, toSpec, repoProvider, internal.WithRecursive(recursive), internal.WithCopyMode(copyMode))
+	tgd, err := internal.BuildGraphDefinition(
+		ctx,
+		fromSpec,
+		toSpec,
+		repoProvider,
+		internal.WithRecursive(recursive),
+		internal.WithCopyMode(copyMode),
+		internal.WithUploadType(upTyp),
+	)
 	if err != nil {
 		return fmt.Errorf("building graph definition failed: %w", err)
 	}
@@ -207,7 +238,9 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 
 // TODO: make this a plugin manager integration.
 func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Resolver) *builder.Builder {
-	transformerScheme := ociv1alpha1.Scheme
+	transformerScheme := runtime.NewScheme()
+	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
+	transformerScheme.MustRegisterScheme(ociaccess.Scheme)
 
 	ociGet := &transformer.GetComponentVersion{
 		Scheme:             transformerScheme,
@@ -239,6 +272,12 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		CredentialProvider: credentialProvider,
 	}
 
+	ociAddOCIArtifact := &transformer.AddOCIArtifact{
+		Scheme:             transformerScheme,
+		Repository:         pm.ResourcePluginRegistry,
+		CredentialProvider: credentialProvider,
+	}
+
 	return builder.NewBuilder(transformerScheme).
 		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
 		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
@@ -248,7 +287,8 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		WithTransformer(&ociv1alpha1.OCIAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
 		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
-		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact)
+		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact).
+		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact)
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {

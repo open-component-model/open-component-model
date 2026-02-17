@@ -6,13 +6,13 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/blob/direct"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -27,15 +27,7 @@ func Test_Integration_Signing(t *testing.T) {
 	t.Parallel()
 
 	t.Logf("Starting OCI based integration test")
-	user := "ocm"
-
-	// Setup credentials and htpasswd
-	password := internal.GenerateRandomPassword(t, 20)
-	htpasswd := internal.GenerateHtpasswd(t, user, password)
-
-	containerName := "signing-oci-repository"
-	registryAddress := internal.StartDockerContainerRegistry(t, containerName, htpasswd)
-	host, port, err := net.SplitHostPort(registryAddress)
+	registry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err)
 
 	k, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -73,14 +65,14 @@ configurations:
       properties:
         public_key_pem: %[5]q
         private_key_pem: %[6]q
-`, host, port, user, password, pubPEM, privPEM)
+`, registry.Host, registry.Port, registry.User, registry.Password, pubPEM, privPEM)
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
-	client := internal.CreateAuthClient(registryAddress, user, password)
+	client := internal.CreateAuthClient(registry.RegistryAddress, registry.User, registry.Password)
 
 	resolver, err := urlresolver.New(
-		urlresolver.WithBaseURL(registryAddress),
+		urlresolver.WithBaseURL(registry.RegistryAddress),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(client),
 	)
@@ -115,7 +107,7 @@ configurations:
 		signArgs := []string{
 			"sign",
 			"cv",
-			fmt.Sprintf("http://%s//%s:%s", registryAddress, name, version),
+			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 			"--config",
 			cfgPath,
 		}
@@ -127,7 +119,7 @@ configurations:
 		verifyArgs := []string{
 			"verify",
 			"cv",
-			fmt.Sprintf("http://%s//%s:%s", registryAddress, name, version),
+			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 			"--config",
 			cfgPath,
 		}
