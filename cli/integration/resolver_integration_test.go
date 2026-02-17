@@ -3,11 +3,9 @@ package integration
 import (
 	"bytes"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -19,20 +17,10 @@ func Test_Integration_ResolverConfig_RoutesComponentsToCorrectRegistry(t *testin
 	r := require.New(t)
 	t.Parallel()
 
-	user := "ocm"
-
-	passwordA := internal.GenerateRandomPassword(t, 20)
-	htpasswdA := internal.GenerateHtpasswd(t, user, passwordA)
-	containerNameA := fmt.Sprintf("resolver-registry-a-%d", time.Now().UnixNano())
-	registryA := internal.StartDockerContainerRegistry(t, containerNameA, htpasswdA)
-	hostA, portA, err := net.SplitHostPort(registryA)
+	registryA, err := internal.CreateOCIRegistry(t)
 	r.NoError(err)
 
-	passwordB := internal.GenerateRandomPassword(t, 20)
-	htpasswdB := internal.GenerateHtpasswd(t, user, passwordB)
-	containerNameB := fmt.Sprintf("resolver-registry-b-%d", time.Now().UnixNano())
-	registryB := internal.StartDockerContainerRegistry(t, containerNameB, htpasswdB)
-	hostB, portB, err := net.SplitHostPort(registryB)
+	registryB, err := internal.CreateOCIRegistry(t)
 	r.NoError(err)
 
 	componentA := "ocm.software/resolver-test/component-a"
@@ -54,7 +42,7 @@ configurations:
       properties:
         username: %q
         password: %q
-`, hostB, portB, user, passwordB)
+`, registryB.Host, registryB.Port, registryB.User, registryB.Password)
 	cfgPathB := filepath.Join(t.TempDir(), "ocmconfig-b.yaml")
 	r.NoError(os.WriteFile(cfgPathB, []byte(cfgB), os.ModePerm))
 
@@ -89,7 +77,7 @@ configurations:
       type: OCIRepository/v1
       baseUrl: http://%[5]s:%[6]s
     componentNamePattern: "ocm.software/resolver-test/component-b"
-`, hostA, portA, user, passwordA, hostB, portB, user, passwordB)
+`, registryA.Host, registryA.Port, registryA.User, registryA.Password, registryB.Host, registryB.Port, registryB.User, registryB.Password)
 	resolverCfgPath := filepath.Join(t.TempDir(), "ocmconfig-resolver.yaml")
 	r.NoError(os.WriteFile(resolverCfgPath, []byte(resolverCfg), os.ModePerm))
 
@@ -135,7 +123,7 @@ components:
 	addB := cmd.New()
 	addB.SetArgs([]string{
 		"add", "component-version",
-		"--repository", fmt.Sprintf("http://%s", registryB),
+		"--repository", fmt.Sprintf("http://%s", registryB.RegistryAddress),
 		"--constructor", constructorPathB,
 		"--config", cfgPathB,
 	})
@@ -144,7 +132,7 @@ components:
 	addA := cmd.New()
 	addA.SetArgs([]string{
 		"add", "component-version",
-		"--repository", fmt.Sprintf("http://%s", registryA),
+		"--repository", fmt.Sprintf("http://%s", registryA.RegistryAddress),
 		"--constructor", constructorPathA,
 		"--config", resolverCfgPath,
 		"--external-component-version-copy-policy", "skip",
@@ -157,7 +145,7 @@ components:
 	getCMD.SetOut(output)
 	getCMD.SetArgs([]string{
 		"get", "component-version",
-		fmt.Sprintf("http://%s//%s:%s", registryA, componentA, version),
+		fmt.Sprintf("http://%s//%s:%s", registryA.RegistryAddress, componentA, version),
 		"--recursive",
 		"--config", resolverCfgPath,
 		"--output", "json",
@@ -169,6 +157,6 @@ components:
 	strOutput := output.String()
 	r.Contains(strOutput, "ocm.software/resolver-test/component-a", "output should contain resource from component-a")
 	r.Contains(strOutput, "ocm.software/resolver-test/component-b", "output should contain resource from component-b")
-	r.Contains(strOutput, fmt.Sprintf("%s/component-descriptors/ocm.software/resolver-test/component-a:v1.0.0", registryA), "output should contain reference to component-a in registry-a")
-	r.Contains(strOutput, fmt.Sprintf("%s/component-descriptors/ocm.software/resolver-test/component-b:v1.0.0", registryB), "output should contain reference to component-b in registry-b")
+	r.Contains(strOutput, fmt.Sprintf("%s/component-descriptors/ocm.software/resolver-test/component-a:v1.0.0", registryA.RegistryAddress), "output should contain reference to component-a in registry-a")
+	r.Contains(strOutput, fmt.Sprintf("%s/component-descriptors/ocm.software/resolver-test/component-b:v1.0.0", registryB.RegistryAddress), "output should contain reference to component-b in registry-b")
 }
