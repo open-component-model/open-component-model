@@ -84,7 +84,6 @@ tasks:
     cmds:
       - task: helm/install
       - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v
-      - task: helm/uninstall
 
   # Build
   build:
@@ -202,7 +201,7 @@ tasks:
     desc: "Install the Helm chart"
     cmds:
       - |
-        helm install ocm-k8s-toolkit chart/ \
+        helm upgrade --install ocm-k8s-toolkit chart/ \
           -f chart/test-values.yaml \
           --namespace ocm-k8s-toolkit-system \
           --create-namespace \
