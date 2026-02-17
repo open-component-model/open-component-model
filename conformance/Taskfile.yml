@@ -1,0 +1,441 @@
+# Taskfile for OCM Sovereign Scenario Conformance
+version: '3'
+
+vars:
+  ocm: 'go run {{ .ROOT_DIR }}/cli'
+  VERSION: '1.0.0'
+  POSTGRES_VERSION: '{{.POSTGRES_VERSION | default "15"}}'
+  CTF: '{{ .TASKFILE_DIR }}/transport-archive'
+  AIRGAP_CTF: airgap-archive
+  OCM_REPO: localhost:5001
+  CLUSTER_NAME: sovereign-conformance
+  NAME: acme.org/sovereign/product
+  # Image registry configuration
+  PUSH_IMAGE: '{{.PUSH_IMAGE | default "true"}}'
+
+tasks:
+  # === DEPENDENCY CHECKS ===
+  check:
+    desc: Check required dependencies are installed
+    cmds:
+      - cmd: which docker || (echo "❌ Docker not found" && exit 1)
+      - cmd: which kubectl || (echo "❌ kubectl not found" && exit 1)
+      - cmd: which kind || (echo "❌ kind not found" && exit 1)
+      - cmd: which flux || (echo "❌ flux CLI not found" && exit 1)
+      - cmd: which openssl || (echo "❌ openssl not found" && exit 1)
+      - cmd: echo "✅ All dependencies found"
+
+  # === BUILD TASKS ===
+  build:notes:
+    desc: Build notes OCM component
+    dir: scenarios/sovereign/components/notes
+    vars:
+      NAME: acme.org/sovereign/notes
+      OCI_LAYOUT: './deploy/notes.tar.gz'
+    env:
+      NAME: '{{.NAME}}'
+      VERSION: '{{.VERSION}}'
+      OCI_LAYOUT: '{{.OCI_LAYOUT}}'
+    cmds:
+      - cmd: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -t '{{.VERSION}}' \
+            --output type=oci,dest={{.OCI_LAYOUT}} \
+            .
+      - defer: rm -rf {{.OCI_LAYOUT}}
+      - cmd: |
+          {{ .ocm }} add componentversion \
+            --repository {{.CTF}} \
+            --component-version-conflict-policy=replace \
+            --constructor component-constructor.yaml
+  
+  build:postgres:
+    desc: Build postgres OCM component
+    dir: scenarios/sovereign/components/postgres
+    env:
+      NAME: acme.org/sovereign/postgres
+      VERSION: '{{.VERSION}}'
+      POSTGRES_VERSION: '{{.POSTGRES_VERSION}}'
+    cmds:
+      - cmd: |
+          {{ .ocm }} add componentversion \
+            --repository {{.CTF}} \
+            --component-version-conflict-policy=replace \
+            --constructor component-constructor.yaml
+
+  build:product:
+    desc: Build all OCM components into CTF archive
+    deps: [build:notes, build:postgres, product:keys]
+    dir: scenarios/sovereign/components/product
+    env:
+      NAME: '{{.NAME}}'
+      VERSION: '{{.VERSION}}'
+      POSTGRES_VERSION: '{{.POSTGRES_VERSION}}'
+    cmds:
+      - cmd: |
+          {{ .ocm }} add componentversion \
+            --repository {{.CTF}} \
+            --component-version-conflict-policy=replace \
+            --constructor component-constructor.yaml
+#      - task: sign
+#        vars:
+#          COMPONENT: '{{.CTF}}//{{.NAME}}:{{.VERSION}}'
+
+  # === SIGNING TASKS ===
+  product:keys:
+    status:
+      - test -f acme-private.pem
+      - test -f acme-public.pem
+    desc: Generate RSA key pair for signing
+    dir: scenarios/sovereign/keys
+    cmds:
+      - cmd: |
+          openssl genpkey -algorithm RSA -out acme-private.pem -pkeyopt rsa_keygen_bits:4096
+          openssl rsa -pubout -in acme-private.pem -out acme-public.pem
+  sign:
+    desc: Sign all components with RSA key
+    dir: scenarios/sovereign/components/product
+    env:
+      OCM_CONFIG: './config/sign.yaml'
+    requires:
+      vars: ["COMPONENT"]
+    cmd: '{{ .ocm }} sign componentversion {{.COMPONENT}}'
+  verify:
+    desc: Verify component signatures
+    dir: scenarios/sovereign/components/product
+    env:
+      OCM_CONFIG: './config/verify.yaml'
+    requires:
+      vars: ["COMPONENT"]
+    cmd: '{{ .ocm }} verify componentversion {{.COMPONENT}}'
+
+  # === TRANSPORT TASKS ===
+  transfer:airgap:
+    desc: Transfer components to air-gap archive with verification
+    cmds:
+      - cmd: rm -rf {{.AIRGAP_CTF}}
+#      - task: verify
+#        vars:
+#          COMPONENT: '{{.CTF}}//{{.NAME}}:{{.VERSION}}'
+      - cmd: |
+          {{ .ocm }} transfer cv \
+            --copy-resources \
+            --recursive \
+            {{.CTF}}//{{.NAME}}:{{.VERSION}} {{.AIRGAP_CTF}}
+
+  # === REGISTRY TASKS ===
+  
+  registry:start:
+    desc: Start local Docker registry for testing
+    cmds:
+      - cmd: |
+          if ! docker ps | grep -q "local-registry"; then
+            echo "Starting local registry on port 5001..."
+            docker run -d \
+              --restart=always \
+              --name local-registry \
+              -p 5001:5000 \
+              registry:2
+            echo "Waiting for registry to be ready..."
+            sleep 3
+            echo "✅ Local registry started at localhost:5001"
+          else
+            echo "✅ Local registry already running"
+          fi
+  
+  registry:stop:
+    desc: Stop local Docker registry
+    cmds:
+      - docker stop local-registry || true
+      - docker rm local-registry || true
+      - echo "✅ Local registry stopped"
+
+  # === CLUSTER TASKS ===
+
+  cluster:create:
+    desc: Create air-gapped kind cluster with local registry
+    cmds:
+      - echo "Setting up air-gapped kind cluster..."
+      - bash scripts/setup-airgapped-kind.sh {{.CLUSTER_NAME}}
+      - echo "✅ Cluster {{.CLUSTER_NAME}} created"
+
+  cluster:import:
+    desc: Transfer CTF archive to airgapped cluster
+    cmds:
+      - echo "Loading components into local registry..."
+      - ocm transfer ctf
+          --copy-resources
+          --enforce
+          --overwrite
+          {{.AIRGAP_CTF}} {{.OCM_REPO}}
+      - echo "✅ Components loaded into {{.OCM_REPO}}"
+
+  cluster:deploy:
+    desc: Deploy OCM controller and components
+    cmds:
+      - echo "Installing OCM controller..."
+      - task: install:controller
+      - echo "Creating signing key secret..."
+      - kubectl -n ocm-system create secret generic acme-signing-key
+          --from-file=key=scenarios/sovereign/keys/acme-public.pem
+          --dry-run=client -o yaml | kubectl apply -f -
+      - echo "Deploying components..."
+      - kubectl apply -f scenarios/sovereign/deploy/
+      - echo "✅ Components deployed"
+
+  install:controller:
+    desc: Install OCM controller on cluster
+    cmds:
+      - kubectl apply -f https://github.com/open-component-model/ocm-controller/releases/latest/download/install.yaml
+      - kubectl -n ocm-system wait --for=condition=Available deployment/ocm-controller --timeout=120s
+
+  # === VERIFICATION TASKS ===
+
+  verify:deployment:
+    desc: Verify successful deployment and functionality
+    cmds:
+      - echo "Waiting for components to be ready..."
+      - kubectl -n ocm-system wait --for=condition=Ready
+          component/sovereign-product --timeout=300s
+      - echo "Waiting for workloads to be available..."  
+      - kubectl -n sovereign-product wait --for=condition=Available
+          deployment/notes --timeout=180s
+      - kubectl -n sovereign-product wait --for=condition=Ready
+          pod -l app=postgres --timeout=180s
+      - echo "Testing application connectivity..."
+      - task: test:connectivity
+      - echo "✅ Deployment verified successfully"
+
+  test:connectivity:
+    desc: Test application connectivity and functionality
+    cmds:
+      - cmd: |
+          kubectl -n sovereign-product port-forward svc/notes 8080:80 > /dev/null 2>&1 &
+          PF_PID=$!
+          sleep 5
+          curl -f http://localhost:8080/readyz || (kill $PF_PID 2>/dev/null; echo "❌ Readiness check failed" && exit 1)
+          curl -f http://localhost:8080/notes || (kill $PF_PID 2>/dev/null; echo "❌ Notes API failed" && exit 1)
+          kill $PF_PID 2>/dev/null || true
+          echo "✅ Application responding correctly"
+
+  # === CLEANUP TASKS ===
+
+  clean:
+    desc: Clean up generated files and clusters
+    dir: scenarios/sovereign/components
+    cmds:
+      - rm -rf {{.CTF}} {{.AIRGAP_CTF}}
+      - rm -rf product/transport-archive || true
+      - rm -f notes/deploy/notes.tar.gz || true
+      - kind delete cluster --name {{.CLUSTER_NAME}} || true
+      - docker rm -f registry || true
+      - docker rm -f local-registry || true
+      - echo "✅ Cleanup completed"
+
+  clean:docker:
+    desc: Remove built container images
+    cmds:
+      - cmd: docker rmi {{.IMAGE_REGISTRY}}/{{.IMAGE_PREFIX}}/notes:{{.VERSION}} || true
+      - cmd: docker rmi {{.IMAGE_PREFIX}}/notes:{{.VERSION}} || true
+      - cmd: echo "✅ Docker images cleaned"
+
+  # === MAIN WORKFLOWS ===
+
+  demo:
+    desc: Run full conformance scenario end-to-end
+    deps: [check, registry:start]
+    cmds:
+      - cmd: |
+          echo "🚀 Starting OCM Sovereign Scenario Conformance Test"
+      - cmd: |
+          echo "Version: {{.VERSION}}"
+      - cmd: |
+          echo "Registry: {{.IMAGE_REGISTRY}}"
+      - task: clean
+      - cmd: echo "📦 Building components..."
+      - task: build:ctf
+
+      - cmd: echo "🔐 Signing components..."
+      - task: sign
+
+      - cmd: echo "✔️ Verifying signatures..."
+      - task: verify
+
+      - cmd: echo "📤 Creating air-gap archive..."
+      - task: transfer:airgap
+
+      - cmd: echo "🚢 Creating cluster..."
+      - task: cluster:create
+
+      - cmd: echo "📥 Loading components to registry..."
+      - task: cluster:load
+
+      - cmd: echo "🚀 Deploying to cluster..."
+      - task: cluster:deploy
+
+      - cmd: echo "🔍 Verifying deployment..."
+      - task: verify:deployment
+
+      - echo "🎉 Conformance scenario completed successfully!"
+
+  conformance:
+    desc: Run conformance test suite
+    cmds:
+      - echo "🧪 Running conformance tests..."
+      - go test -v ./tests/conformance/...
+      - echo "✅ All conformance tests passed"
+
+  upgrade:
+    desc: Test upgrade scenario (1.0.0 -> 1.1.0)
+    vars:
+      OLD_VERSION: "1.0.0"
+      NEW_VERSION: "1.1.0"
+    cmds:
+      - echo "🔄 Testing upgrade scenario {{.OLD_VERSION}} -> {{.NEW_VERSION}}"
+      - VERSION={{.OLD_VERSION}} task demo
+      - echo "Upgrading to {{.NEW_VERSION}}..."
+      - VERSION={{.NEW_VERSION}} task build:ctf
+      - VERSION={{.NEW_VERSION}} task sign
+      - VERSION={{.NEW_VERSION}} task transfer:airgap
+      - VERSION={{.NEW_VERSION}} task cluster:import
+      - echo "Waiting for automatic upgrade..."
+      - sleep 30
+      - task: verify:deployment
+      - echo "✅ Upgrade scenario completed successfully"
+
+  # === TESTING TASKS ===
+  
+  test:build:
+    desc: Test component building phase only
+    deps: [check]
+    cmds:
+      - task: clean
+      - cmd: echo "📦 Testing build phase..."
+      - task: build:app
+      - cmd: |
+          if [ -f scenarios/sovereign/components/notes/deploy/notes.tar ]; then
+            echo "✅ OCI tar created successfully"
+            ls -lh scenarios/sovereign/components/notes/deploy/notes.tar
+          else
+            echo "❌ OCI tar not found"
+            exit 1
+          fi
+      - task: build:notes
+      - task: build:postgres 
+      - task: build:product
+      - cmd: |
+          if [ -d scenarios/sovereign/components/product/transport-archive ]; then
+            echo "✅ Build successful - CTF archive created"
+            ls -la scenarios/sovereign/components/product/transport-archive/
+          else
+            echo "❌ Build failed - no CTF archive found"
+            exit 1
+          fi
+  
+  test:sign:
+    desc: Test signing and verification
+    deps: [test:build]
+    cmds:
+      - cmd: echo "🔐 Testing signing..."
+      - task: sign
+      - cmd: echo "✔️ Testing verification..."
+      - task: verify
+      - echo "✅ Signing and verification successful"
+  
+  test:cluster:
+    desc: Test cluster creation and setup
+    cmds:
+      - cmd: echo "🚢 Testing cluster setup..."
+      - task: cluster:create
+      - cmd: |
+          kubectl get nodes || (echo "❌ Cluster not accessible" && exit 1)
+          echo "✅ Cluster setup successful"
+  
+  test:incremental:
+    desc: Run incremental tests with verbose output
+    cmds:
+      - task: check
+      - task: test:build
+      - task: test:sign
+      - task: test:cluster
+      - cmd: echo "✅ All incremental tests passed"
+  
+  validate:ctf:
+    desc: Validate CTF archive contents
+    dir: scenarios/sovereign/components/product
+    cmds:
+      - cmd: |
+          if [ -f transport-archive/artifact-index.json ]; then
+            echo "📋 CTF Archive Contents:"
+            cat transport-archive/artifact-index.json | jq .
+          else
+            echo "❌ No CTF archive found"
+            exit 1
+          fi
+      - cmd: |
+          echo "📦 Blobs in archive:"
+          ls -la transport-archive/blobs/ 2>/dev/null || echo "No blobs directory"
+  
+  inspect:component:
+    desc: Inspect component descriptor
+    dir: scenarios/sovereign/components/product
+    vars:
+      COMPONENT: './transport-archive//{{.NAME}}:{{.VERSION}}'
+    cmds:
+      - cmd: |
+          {{ .ocm }} show componentversion {{.COMPONENT}} || echo "Component not found"
+  
+  inspect:oci:
+    desc: Inspect OCI tar contents
+    dir: scenarios/sovereign/components/notes/deploy
+    cmds:
+      - cmd: |
+          if [ -f notes.tar ]; then
+            echo "📦 OCI tar file info:"
+            ls -lh notes.tar
+            echo ""
+            echo "📋 OCI tar contents:"
+            tar -tvf notes.tar | head -20
+            echo ""
+            echo "🔍 Extracting and inspecting manifest..."
+            mkdir -p /tmp/oci-inspect
+            tar -xf notes.tar -C /tmp/oci-inspect
+            if [ -f /tmp/oci-inspect/index.json ]; then
+              cat /tmp/oci-inspect/index.json | jq .
+            fi
+            rm -rf /tmp/oci-inspect
+          else
+            echo "❌ No OCI tar found at notes.tar"
+            echo "Run 'task build:app' first"
+          fi
+
+  # === UTILITY TASKS ===
+
+  logs:
+    desc: Show OCM controller logs
+    cmds:
+      - kubectl -n ocm-system logs -l app=ocm-controller --tail=100 -f
+
+  status:
+    desc: Show status of all OCM resources
+    cmds:
+      - echo "=== Repositories ==="
+      - kubectl -n ocm-system get repositories
+      - echo "=== Components ==="
+      - kubectl -n ocm-system get components
+      - echo "=== Resources ==="
+      - kubectl -n ocm-system get resources
+      - echo "=== Deployers ==="
+      - kubectl -n ocm-system get deployers
+
+  debug:
+    desc: Debug failed deployment
+    cmds:
+      - echo "=== OCM Controller Logs ==="
+      - kubectl -n ocm-system logs -l app=ocm-controller --tail=50
+      - echo "=== Component Status ==="
+      - kubectl -n ocm-system describe component sovereign-product
+      - echo "=== Pod Status ==="
+      - kubectl -n sovereign-product get pods
+      - kubectl -n sovereign-product describe pods

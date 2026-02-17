@@ -1,0 +1,206 @@
+# ResourceGraphDefinition for sovereign product orchestration
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: sovereign-product
+  namespace: sovereign-product
+spec:
+  schema:
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    spec:
+      group: acme.org
+      names:
+        kind: SovereignProduct
+        plural: sovereignproducts
+      scope: Namespaced
+      versions:
+      - name: v1alpha1
+        served: true
+        storage: true
+        schema:
+          openAPIV3Schema:
+            type: object
+            properties:
+              spec:
+                type: object
+                properties:
+                  version:
+                    type: string
+                    default: "1.0.0"
+                  notes:
+                    type: object
+                    properties:
+                      replicas:
+                        type: integer
+                        default: 2
+                      resources:
+                        type: object
+                        properties:
+                          requests:
+                            type: object
+                            properties:
+                              cpu:
+                                type: string
+                                default: "100m"
+                              memory:
+                                type: string
+                                default: "64Mi"
+                          limits:
+                            type: object
+                            properties:
+                              cpu:
+                                type: string
+                                default: "200m"
+                              memory:
+                                type: string
+                                default: "128Mi"
+                  postgres:
+                    type: object
+                    properties:
+                      database:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                            default: "sovereign_notes"
+                          username:
+                            type: string
+                            default: "sovereign_user"
+                          password:
+                            type: string
+                            default: "changeme"
+                      persistence:
+                        type: object
+                        properties:
+                          size:
+                            type: string
+                            default: "8Gi"
+                      resources:
+                        type: object
+                        properties:
+                          requests:
+                            type: object
+                            properties:
+                              cpu:
+                                type: string
+                                default: "250m"
+                              memory:
+                                type: string
+                                default: "256Mi"
+                          limits:
+                            type: object
+                            properties:
+                              cpu:
+                                type: string
+                                default: "500m"
+                              memory:
+                                type: string
+                                default: "512Mi"
+              status:
+                type: object
+                properties:
+                  ready:
+                    type: boolean
+                  postgresReady:
+                    type: boolean
+                  notesReady:
+                    type: boolean
+                  endpoint:
+                    type: string
+  dependencies:
+  - group: v1
+    kind: Namespace
+    name: sovereign-product
+  graph:
+    nodes:
+    # Namespace and base resources
+    - id: namespace
+      template:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: sovereign-product
+          labels:
+            app.kubernetes.io/name: sovereign-product
+            app.kubernetes.io/part-of: ocm-sovereign-scenario
+            ocm.software/component: acme.org/sovereign/product
+    
+    - id: config
+      template:
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: sovereign-product-config
+          namespace: sovereign-product
+        data:
+          database.host: "postgres"
+          database.port: "5432"
+          database.name: "{{ .spec.postgres.database.name }}"
+      dependencies:
+      - namespace
+    
+    - id: secrets
+      template:
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: sovereign-product-secrets
+          namespace: sovereign-product
+        type: Opaque
+        stringData:
+          database.username: "{{ .spec.postgres.database.username }}"
+          database.password: "{{ .spec.postgres.database.password }}"
+      dependencies:
+      - namespace
+    
+    # PostgreSQL instance
+    - id: postgres-instance
+      template:
+        apiVersion: acme.org/v1alpha1
+        kind: SovereignPostgres
+        metadata:
+          name: postgres
+          namespace: sovereign-product
+        spec:
+          database:
+            name: "{{ .spec.postgres.database.name }}"
+            username: "{{ .spec.postgres.database.username }}"
+            password: "{{ .spec.postgres.database.password }}"
+          resources:
+            requests:
+              cpu: "{{ .spec.postgres.resources.requests.cpu }}"
+              memory: "{{ .spec.postgres.resources.requests.memory }}"
+            limits:
+              cpu: "{{ .spec.postgres.resources.limits.cpu }}"
+              memory: "{{ .spec.postgres.resources.limits.memory }}"
+          persistence:
+            size: "{{ .spec.postgres.persistence.size }}"
+      dependencies:
+      - secrets
+      - config
+    
+    # Notes application instance
+    - id: notes-instance
+      template:
+        apiVersion: acme.org/v1alpha1
+        kind: SovereignNotes
+        metadata:
+          name: notes
+          namespace: sovereign-product
+        spec:
+          releaseName: notes
+          namespace: sovereign-product
+          replicas: "{{ .spec.notes.replicas }}"
+          databaseSecretRef: sovereign-product-secrets
+          resources:
+            requests:
+              memory: "{{ .spec.notes.resources.requests.memory }}"
+              cpu: "{{ .spec.notes.resources.requests.cpu }}"
+            limits:
+              memory: "{{ .spec.notes.resources.limits.memory }}"
+              cpu: "{{ .spec.notes.resources.limits.cpu }}"
+      dependencies:
+      - postgres-instance
+      - secrets
+      - config

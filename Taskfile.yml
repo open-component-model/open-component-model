@@ -100,6 +100,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/transform/Taskfile.yml
     dir: ./bindings/go/transform
+  conformance:
+    optional: true
+    taskfile: ./conformance/Taskfile.yml
+    dir: ./conformance
   cli:
     optional: true
     taskfile: ./cli/Taskfile.yml

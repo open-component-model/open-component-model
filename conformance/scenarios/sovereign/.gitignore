@@ -1,0 +1,38 @@
+# Signing keys - never commit private keys
+keys/*-private.pem
+*.key
+*.p12
+*.pfx
+
+# Build artifacts
+transport-archive/
+airgap-archive/
+*.tar
+*.ctf
+deploy/notes-oci/
+deploy/notes.tar.gz
+
+# Go artifacts
+go.sum
+vendor/
+*.mod.backup
+
+# Testing artifacts
+tests/tmp/
+coverage.out
+*.test
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+/tmp/
+kind-config.yaml

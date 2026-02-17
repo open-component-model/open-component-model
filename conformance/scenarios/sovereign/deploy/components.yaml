@@ -1,0 +1,40 @@
+# OCM Components for sovereign scenario
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: sovereign-product
+  namespace: ocm-system
+spec:
+  component: acme.org/sovereign/product
+  repositoryRef:
+    name: sovereign-repo
+  semver: ">=1.0.0"
+  interval: 10m
+  verify:
+    - signature: acme-signature
+      secretRef:
+        name: acme-signing-key
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: sovereign-notes
+  namespace: ocm-system
+spec:
+  component: acme.org/sovereign/notes
+  repositoryRef:
+    name: sovereign-repo
+  semver: ">=1.0.0"
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: sovereign-postgres
+  namespace: ocm-system
+spec:
+  component: acme.org/sovereign/postgres
+  repositoryRef:
+    name: sovereign-repo
+  semver: ">=1.0.0"
+  interval: 10m

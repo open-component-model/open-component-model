@@ -1,0 +1,105 @@
+{
+  "$schema": "https://sap.github.io/open-resource-discovery/spec/v1/interfaces/Document.schema.json",
+  "openResourceDiscovery": "1.6",
+  "description": "Open Resource Discovery Document for Sovereign Notes Service",
+  "policyLevel": "sap:core:v1",
+  "packages": [
+    {
+      "ordId": "acme.org:sovereign:notes:v1",
+      "title": "Sovereign Notes Service",
+      "shortDescription": "A simple notes service for OCM sovereign scenario",
+      "description": "This service provides a REST API for managing notes in a sovereign cloud environment. It demonstrates OCM component model capabilities including signing, verification, and air-gapped deployment.",
+      "version": "1.0.0",
+      "packageLinks": [
+        {
+          "type": "terms-of-service",
+          "url": "https://acme.org/terms"
+        },
+        {
+          "type": "client-registration",
+          "url": "https://acme.org/register"
+        }
+      ],
+      "links": [
+        {
+          "description": "Sovereign Notes Service Documentation",
+          "url": "https://acme.org/docs/notes"
+        }
+      ],
+      "vendor": "acme.org",
+      "partOfProducts": [
+        "acme.org:sovereign:product"
+      ],
+      "tags": [
+        "notes",
+        "sovereign",
+        "ocm"
+      ],
+      "labels": {
+        "scenarios": [
+          "sovereign-cloud"
+        ]
+      }
+    }
+  ],
+  "apiResources": [
+    {
+      "ordId": "acme.org:sovereign:notes:api:v1",
+      "title": "Sovereign Notes API",
+      "shortDescription": "REST API for notes management",
+      "description": "A RESTful API for creating, reading, updating, and deleting notes",
+      "version": "1.0.0",
+      "partOfPackage": "acme.org:sovereign:notes:v1",
+      "visibility": "public",
+      "releaseStatus": "active",
+      "entryPoints": [
+        "http://notes:80/notes",
+        "http://notes:80/readyz"
+      ],
+      "apiProtocol": "rest",
+      "tags": [
+        "rest",
+        "api",
+        "notes"
+      ],
+      "resourceDefinitions": [
+        {
+          "type": "openapi-v3",
+          "mediaType": "application/vnd.oai.openapi+yaml",
+          "url": "./openapi/spec.yaml",
+          "accessStrategy": [
+            {
+              "type": "open"
+            }
+          ]
+        }
+      ],
+      "changelogEntries": [
+        {
+          "version": "1.0.0",
+          "releaseStatus": "active",
+          "date": "2023-01-01",
+          "description": "Initial release of Sovereign Notes API",
+          "url": "https://acme.org/changelog/notes/1.0.0"
+        }
+      ]
+    }
+  ],
+  "eventResources": [],
+  "entityTypes": [
+    {
+      "ordId": "acme.org:sovereign:notes:entity:Note:v1",
+      "title": "Note",
+      "shortDescription": "A note entity",
+      "description": "Represents a single note with title and content",
+      "version": "1.0.0",
+      "partOfPackage": "acme.org:sovereign:notes:v1",
+      "visibility": "public",
+      "releaseStatus": "active",
+      "tags": [
+        "note",
+        "entity"
+      ]
+    }
+  ]
+}

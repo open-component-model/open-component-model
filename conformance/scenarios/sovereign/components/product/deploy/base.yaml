@@ -1,0 +1,31 @@
+# Base manifests for sovereign product namespace and shared resources
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sovereign-product
+  labels:
+    app.kubernetes.io/name: sovereign-product
+    app.kubernetes.io/part-of: ocm-sovereign-scenario
+    ocm.software/component: acme.org/sovereign/product
+---
+# ConfigMap for shared configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sovereign-product-config
+  namespace: sovereign-product
+data:
+  database.host: "postgres"
+  database.port: "5432"
+  database.name: "sovereign_notes"
+---
+# Secret for database credentials (to be populated by deployment process)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sovereign-product-secrets
+  namespace: sovereign-product
+type: Opaque
+stringData:
+  database.username: "sovereign_user"
+  database.password: "changeme"
