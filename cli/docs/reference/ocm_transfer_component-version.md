@@ -39,6 +39,12 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghc
 # Transfer from one OCI registry to another
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
+# Transfer from one OCI to another using localBlobs
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as localBlob
+
+# Transfer from one OCI to another using OCI artifacts (default)
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as ociArtifact
+
 # Transfer including all resources (e.g. OCI artifacts)
 transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm --copy-resources
 
@@ -55,6 +61,8 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
   -o, --output enum      output format of the component descriptors
                          (must be one of [json ndjson yaml]) (default yaml)
   -r, --recursive        recursively discover and transfer component versions
+  -u, --upload-as enum   Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
+                         (must be one of [default localBlob ociArtifact]) (default default)
 ```
 
 ### Options inherited from parent commands
