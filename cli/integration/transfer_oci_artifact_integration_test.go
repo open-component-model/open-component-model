@@ -378,16 +378,7 @@ components:
 
 	// Check type
 	typeVal, ok := accessMap["type"].(string)
-	if !ok {
-		// nested type object
-		typeObj, ok := accessMap["type"].(map[string]interface{})
-		r.True(ok)
-		typeVal, ok = typeObj["type"].(string)
-		if !ok {
-			// check if it is "ociBlob" or "OCIImageLayer"
-			r.Contains([]string{"ociBlob", "OCIImageLayer", "ociBlob/v1", "OCIImageLayer/v1"}, typeVal)
-		}
-	}
+	r.Equal("ociArtifact/v1", typeVal, "access type should be ociArtifact")
 
 	// Check reference/imageReference
 	// ociBlob has "ref", OCIImage has "imageReference"
