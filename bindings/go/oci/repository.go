@@ -97,10 +97,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 	}
 
 	// Scan component descriptor for local blob references
-	localBlobs, err := scanLocalBlobs(descriptor)
-	if err != nil {
-		return fmt.Errorf("failed to scan local blob digests: %w", err)
-	}
+	localBlobs := scanLocalBlobs(descriptor)
 
 	// Validate that all referenced local blobs exist in the store
 	additionalManifests, additionalLayers, err := identifyLocalBlobManifestsAndLayers(ctx, store, localBlobs)
@@ -319,7 +316,7 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 }
 
 // scanLocalBlobs scans the component descriptor for all LocalBlob access specifications and returns them
-func scanLocalBlobs(desc *descriptor.Descriptor) ([]descriptor.Artifact, error) {
+func scanLocalBlobs(desc *descriptor.Descriptor) []descriptor.Artifact {
 	var artifacts []descriptor.Artifact
 
 	// Scan resources for LocalBlob access specs
@@ -338,7 +335,7 @@ func scanLocalBlobs(desc *descriptor.Descriptor) ([]descriptor.Artifact, error) 
 		}
 	}
 
-	return artifacts, nil
+	return artifacts
 }
 
 // identifyLocalBlobManifestsAndLayers fetches all descriptors in the store that are available
