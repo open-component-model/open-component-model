@@ -3,7 +3,12 @@ package internal
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"net"
+	"regexp"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
@@ -60,4 +65,48 @@ func CreateSingleLayerOCIImageLayoutTar(t *testing.T, data []byte, ref ...string
 	r.NoError(w.Close())
 
 	return &buf
+}
+
+type OCIRegistry struct {
+	User            string
+	Password        string
+	RegistryAddress string
+	Host            string
+	Port            string
+}
+
+// validContainerNames matches characters not allowed in Docker container names.
+var validContainerNames = regexp.MustCompile(`[^a-zA-Z0-9_.-]`)
+
+// sanitizeContainerName produces a valid Docker container name by lowercasing
+// the input and replacing any characters outside [a-zA-Z0-9_.-] with a dash.
+func sanitizeContainerName(name string) string {
+	return validContainerNames.ReplaceAllString(strings.ToLower(name), "-")
+}
+
+func CreateOCIRegistry(t *testing.T) (*OCIRegistry, error) {
+	t.Helper()
+
+	user := "ocm"
+	password := GenerateRandomPassword(t, 20)
+	htpasswd := GenerateHtpasswd(t, user, password)
+
+	containerName := fmt.Sprintf("%s-repository-%d", sanitizeContainerName(t.Name()), time.Now().UnixNano())
+	registryAddress := StartDockerContainerRegistry(t, containerName, htpasswd)
+	host, port, err := net.SplitHostPort(registryAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse registry address: %w", err)
+	}
+
+	return &OCIRegistry{
+		User:            user,
+		Password:        password,
+		RegistryAddress: registryAddress,
+		Host:            host,
+		Port:            port,
+	}, nil
+}
+
+func (r *OCIRegistry) Reference(ref string) string {
+	return fmt.Sprintf("%s/%s", r.RegistryAddress, ref)
 }
