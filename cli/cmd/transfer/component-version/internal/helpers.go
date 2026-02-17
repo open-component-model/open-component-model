@@ -56,6 +56,28 @@ func ChooseAddLocalResourceType(repo runtime.Typed) runtime.Type {
 	}
 }
 
+// shouldUploadAsOCIArtifact determines whether an OCI artifact resource should be uploaded
+// as an OCI artifact reference or as a local blob based on the upload type and target repository.
+//
+// When uploadType is UploadAsDefault, the decision is based on the target repository type:
+//   - OCI registry targets (*oci.Repository) → OCI artifact (the registry can host the image)
+//   - CTF targets (*ctfv1.Repository) → local blob (CTF archives have no registry URL to resolve against)
+//
+// Explicit upload types (UploadAsOciArtifact, UploadAsLocalBlob) always take precedence.
+func shouldUploadAsOCIArtifact(uploadType UploadType, toSpec runtime.Typed) bool {
+	switch uploadType {
+	case UploadAsOciArtifact:
+		return true
+	case UploadAsLocalBlob:
+		return false
+	default: // UploadAsDefault
+		// Default behavior: upload as OCI artifact only when targeting an OCI registry.
+		// CTF targets should receive local blobs since they don't have a registry URL.
+		_, isOCI := toSpec.(*oci.Repository)
+		return isOCI
+	}
+}
+
 func GetReferenceName(ociAccess ociv1.OCIImage) (string, error) {
 	if ociAccess.ImageReference == "" {
 		return "", fmt.Errorf("cannot get reference name from empty image reference")

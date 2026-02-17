@@ -402,6 +402,316 @@ components:
 	r.Contains(refVal, targetRegistry.RegistryAddress)
 }
 
+// Test_Integration_Transfer_OCIArtifact_DefaultToCTF verifies that when no --upload-as flag is
+// specified and the target is a CTF archive, OCI artifact resources are uploaded as local blobs.
+func Test_Integration_Transfer_OCIArtifact_DefaultToCTF(t *testing.T) {
+	ctx := t.Context()
+	r := require.New(t)
+	t.Parallel()
+
+	// 1. Setup source OCI registry to host the OCI artifact
+	sourceRegistry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err, "should be able to start source registry container")
+
+	// 2. Configure credentials for the source registry
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRepository
+      hostname: %[1]q
+      port: %[2]q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[3]q
+        password: %[4]q
+`, sourceRegistry.Host, sourceRegistry.Port, sourceRegistry.User, sourceRegistry.Password)
+
+	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
+	// 3. Create a source CTF with a component version containing an OCI artifact resource
+	componentName := "ocm.software/test-default-ctf"
+	componentVersion := "v1.0.0"
+
+	originalData := []byte("foobar-default-ctf")
+	data, access := createSingleLayerOCIImage(t, originalData, "ghcr.io/test-resource-default:v1.0.0")
+	r.NotNil(access)
+	access.Type = ocmruntime.Type{Name: "ociArtifact", Version: "v1"}
+
+	blob := inmemory.New(bytes.NewReader(data))
+	resource := descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{
+				Name:    "test-resource",
+				Version: "v1.0.0",
+			},
+		},
+		Type:   "some-arbitrary-type-packed-in-image",
+		Access: access,
+	}
+
+	targetAccess := resource.Access.DeepCopyTyped()
+	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", sourceRegistry.Reference("test-resource-default:v1.0.0"))
+	resource.Access = targetAccess
+
+	resourceRepo := ocires.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
+	newRes, err := resourceRepo.UploadResource(ctx, &resource, blob, map[string]string{
+		"username": sourceRegistry.User,
+		"password": sourceRegistry.Password,
+	})
+	r.NoError(err)
+	resource = *newRes
+
+	ociImage, ok := resource.Access.(*v1.OCIImage)
+	r.True(ok, "access should be of type OCIImage")
+
+	constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: test-resource
+    version: v1.0.0
+    type: ociArtifact
+    access:
+      type: %s
+      imageReference: %s
+`, componentName, componentVersion, ociImage.Type, ociImage.ImageReference)
+
+	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	sourceCTF := filepath.Join(t.TempDir(), "source-ctf")
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add", "component-version",
+		"--repository", fmt.Sprintf("ctf::%s", sourceCTF),
+		"--constructor", constructorPath,
+		"--config", cfgPath,
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "creation of source component version should succeed")
+
+	// 4. Transfer to a CTF target WITHOUT --upload-as flag (default behavior)
+	targetCTF := filepath.Join(t.TempDir(), "target-ctf")
+
+	transferCMD := cmd.New()
+	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion)
+	targetRef := fmt.Sprintf("ctf::%s", targetCTF)
+
+	transferCMD.SetArgs([]string{
+		"transfer", "component-version",
+		sourceRef,
+		targetRef,
+		"--config", cfgPath,
+		"--copy-resources",
+		// NOTE: no --upload-as flag — this is the default behavior we're testing
+	})
+
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	r.NoError(transferCMD.ExecuteContext(ctx), "transfer to CTF should succeed")
+
+	// 5. Verify the target CTF contains the component with local blob access
+	archive, err := ctf.OpenCTFFromOSPath(targetCTF, ctf.O_RDONLY)
+	r.NoError(err, "should be able to open target CTF")
+	store := ocictf.NewFromCTF(archive)
+	targetRepo, err := oci.NewRepository(ocictf.WithCTF(store), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	desc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err, "should be able to retrieve transferred component from target CTF")
+	r.Equal(componentName, desc.Component.Name)
+	r.Equal(componentVersion, desc.Component.Version)
+	r.Len(desc.Component.Resources, 1)
+	r.Equal("test-resource", desc.Component.Resources[0].Name)
+
+	// The resource should be a local blob since the target is a CTF
+	var localBlobAccess v2.LocalBlob
+	r.NoError(v2.Scheme.Convert(desc.Component.Resources[0].Access, &localBlobAccess),
+		"resource access should be convertible to LocalBlob when targeting CTF with default upload mode")
+	r.Equal("test-resource-default:v1.0.0", localBlobAccess.ReferenceName)
+}
+
+// Test_Integration_Transfer_OCIArtifact_DefaultToOCI verifies that when no --upload-as flag is
+// specified and the target is an OCI registry, OCI artifact resources are uploaded as OCI artifacts.
+// This ensures the default OCI→OCI behavior is preserved after the fix.
+func Test_Integration_Transfer_OCIArtifact_DefaultToOCI(t *testing.T) {
+	ctx := t.Context()
+	r := require.New(t)
+	t.Parallel()
+
+	// 1. Setup source and target OCI registries
+	sourceRegistry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+
+	targetRegistry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+
+	// 2. Configure credentials for both registries
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRepository
+      hostname: %[1]q
+      port: %[2]q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[3]q
+        password: %[4]q
+  - identity:
+      type: OCIRepository
+      hostname: %[5]q
+      port: %[6]q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[7]q
+        password: %[8]q
+`, sourceRegistry.Host, sourceRegistry.Port, sourceRegistry.User, sourceRegistry.Password,
+		targetRegistry.Host, targetRegistry.Port, targetRegistry.User, targetRegistry.Password)
+
+	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
+	// 3. Create a source CTF with a component version containing an OCI artifact resource
+	componentName := "ocm.software/test-default-oci"
+	componentVersion := "v1.0.0"
+
+	client := internal.CreateAuthClient(targetRegistry.RegistryAddress, targetRegistry.User, targetRegistry.Password)
+	resolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(targetRegistry.RegistryAddress),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
+	targetRepo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	originalData := []byte("foobar-default-oci")
+	data, access := createSingleLayerOCIImage(t, originalData, "ghcr.io/test-resource-default-oci:v1.0.0")
+	r.NotNil(access)
+	access.Type = ocmruntime.Type{Name: "ociArtifact", Version: "v1"}
+
+	blob := inmemory.New(bytes.NewReader(data))
+	resource := descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{
+				Name:    "test-resource",
+				Version: "v1.0.0",
+			},
+		},
+		Type:   "some-arbitrary-type-packed-in-image",
+		Access: access,
+	}
+
+	targetAccess := resource.Access.DeepCopyTyped()
+	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", sourceRegistry.Reference("test-resource-default-oci:v1.0.0"))
+	resource.Access = targetAccess
+
+	resourceRepo := ocires.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
+	newRes, err := resourceRepo.UploadResource(ctx, &resource, blob, map[string]string{
+		"username": sourceRegistry.User,
+		"password": sourceRegistry.Password,
+	})
+	r.NoError(err)
+	resource = *newRes
+
+	ociImage, ok := resource.Access.(*v1.OCIImage)
+	r.True(ok, "access should be of type OCIImage")
+
+	constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: test-resource
+    version: v1.0.0
+    type: ociArtifact
+    access:
+      type: %s
+      imageReference: %s
+`, componentName, componentVersion, ociImage.Type, ociImage.ImageReference)
+
+	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	sourceCTF := filepath.Join(t.TempDir(), "source-ctf")
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add", "component-version",
+		"--repository", fmt.Sprintf("ctf::%s", sourceCTF),
+		"--constructor", constructorPath,
+		"--config", cfgPath,
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "creation of source component version should succeed")
+
+	// 4. Transfer to an OCI registry WITHOUT --upload-as flag (default behavior)
+	transferCMD := cmd.New()
+	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion)
+	targetRef := fmt.Sprintf("http://%s", targetRegistry.RegistryAddress)
+
+	transferCMD.SetArgs([]string{
+		"transfer", "component-version",
+		sourceRef,
+		targetRef,
+		"--config", cfgPath,
+		"--copy-resources",
+		// NOTE: no --upload-as flag — this is the default behavior we're testing
+	})
+
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	r.NoError(transferCMD.ExecuteContext(ctx), "transfer to OCI registry should succeed")
+
+	// 5. Verify the target OCI registry contains the component with OCI artifact access
+	desc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err, "should be able to retrieve transferred component from target registry")
+	r.Equal(componentName, desc.Component.Name)
+	r.Equal(componentVersion, desc.Component.Version)
+	r.Len(desc.Component.Resources, 1)
+	r.Equal("test-resource", desc.Component.Resources[0].Name)
+
+	// The resource should NOT be a local blob since the target is an OCI registry
+	_, isLocal := desc.Component.Resources[0].Access.(*v2.LocalBlob)
+	r.False(isLocal, "resource access should not be LocalBlob when targeting OCI registry with default upload mode")
+
+	// Verify it's an OCI artifact reference pointing to the target registry
+	rawAccess, err := json.Marshal(desc.Component.Resources[0].Access)
+	r.NoError(err)
+	var accessMap map[string]interface{}
+	r.NoError(json.Unmarshal(rawAccess, &accessMap))
+
+	typeVal, _ := accessMap["type"].(string)
+	r.Equal("ociArtifact/v1", typeVal, "access type should be ociArtifact")
+
+	var refVal string
+	if v, ok := accessMap["ref"]; ok {
+		refVal = v.(string)
+	} else if v, ok := accessMap["imageReference"]; ok {
+		refVal = v.(string)
+	} else {
+		r.Fail("Access spec does not contain ref or imageReference")
+	}
+	r.Contains(refVal, targetRegistry.RegistryAddress, "OCI artifact reference should point to target registry")
+}
+
 // Test_Integration_Transfer_OCIArtifact_PreservesSignatures transfers a signed component
 // with OCI artifact resources from CTF to OCI registry and verifies signatures are preserved.
 func Test_Integration_Transfer_OCIArtifact_PreservesSignatures(t *testing.T) {

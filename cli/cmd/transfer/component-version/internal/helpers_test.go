@@ -5,7 +5,73 @@ import (
 
 	"github.com/stretchr/testify/require"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+func TestShouldUploadAsOCIArtifact(t *testing.T) {
+	ociTarget := &oci.Repository{
+		Type:    runtime.Type{Name: "OCIRepository", Version: "v1"},
+		BaseUrl: "http://localhost:5000",
+	}
+	ctfTarget := &ctfv1.Repository{
+		Type:     runtime.Type{Name: "CommonTransportFormat", Version: "v1"},
+		FilePath: "/tmp/test-ctf",
+	}
+
+	tests := []struct {
+		name       string
+		uploadType UploadType
+		toSpec     runtime.Typed
+		want       bool
+	}{
+		{
+			name:       "explicit ociArtifact with OCI target",
+			uploadType: UploadAsOciArtifact,
+			toSpec:     ociTarget,
+			want:       true,
+		},
+		{
+			name:       "explicit ociArtifact with CTF target",
+			uploadType: UploadAsOciArtifact,
+			toSpec:     ctfTarget,
+			want:       true,
+		},
+		{
+			name:       "explicit localBlob with OCI target",
+			uploadType: UploadAsLocalBlob,
+			toSpec:     ociTarget,
+			want:       false,
+		},
+		{
+			name:       "explicit localBlob with CTF target",
+			uploadType: UploadAsLocalBlob,
+			toSpec:     ctfTarget,
+			want:       false,
+		},
+		{
+			name:       "default with OCI target uploads as OCI artifact",
+			uploadType: UploadAsDefault,
+			toSpec:     ociTarget,
+			want:       true,
+		},
+		{
+			name:       "default with CTF target uploads as local blob",
+			uploadType: UploadAsDefault,
+			toSpec:     ctfTarget,
+			want:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			got := shouldUploadAsOCIArtifact(tt.uploadType, tt.toSpec)
+			r.Equal(tt.want, got)
+		})
+	}
+}
 
 func TestGetReferenceName(t *testing.T) {
 	tests := []struct {

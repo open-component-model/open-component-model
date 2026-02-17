@@ -116,7 +116,7 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 			case *descriptorv2.LocalBlob:
 				processLocalBlob(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
 			case *ociv1.OCIImage:
-				uploadAsOCIArtifact := uploadType != UploadAsLocalBlob
+				uploadAsOCIArtifact := shouldUploadAsOCIArtifact(uploadType, toSpec)
 				err := processOCIArtifact(resource, id, ref, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact)
 				if err != nil {
 					return fmt.Errorf("cannot process OCI artifact resource: %w", err)
