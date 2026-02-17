@@ -10,12 +10,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	slogcontext "github.com/veqryn/slog-context"
+	"golang.org/x/sync/errgroup"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/errdef"
+	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -23,6 +26,7 @@ import (
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
+	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
 	complister "ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
@@ -94,13 +98,13 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 	}
 
 	// Scan component descriptor for local blob references
-	localBlobDigests, err := scanLocalBlobDigests(descriptor)
+	localBlobs, err := scanLocalBlobs(descriptor)
 	if err != nil {
 		return fmt.Errorf("failed to scan local blob digests: %w", err)
 	}
 
 	// Validate that all referenced local blobs exist in the store
-	additionalManifests, additionalLayers, err := validateLocalBlobsExist(ctx, store, localBlobDigests)
+	additionalManifests, additionalLayers, err := identifyLocalBlobManifestsAndLayers(ctx, store, localBlobs)
 	if err != nil {
 		return fmt.Errorf("failed to validate local blobs: %w", err)
 	}
@@ -315,56 +319,76 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 	return res, nil
 }
 
-// scanLocalBlobDigests scans the component descriptor for all LocalBlob access specifications
-// and extracts their digests. These digests represent blobs that should already exist in the OCI store.
-func scanLocalBlobDigests(desc *descriptor.Descriptor) ([]digest.Digest, error) {
-	var digests []digest.Digest
+// scanLocalBlobs scans the component descriptor for all LocalBlob access specifications and returns them
+func scanLocalBlobs(desc *descriptor.Descriptor) ([]descriptor.Artifact, error) {
+	var artifacts []descriptor.Artifact
 
 	// Scan resources for LocalBlob access specs
 	for i := range desc.Component.Resources {
 		resource := &desc.Component.Resources[i]
-		if localBlob, ok := resource.Access.(*v2.LocalBlob); ok {
-			dig, err := digest.Parse(localBlob.LocalReference)
-			if err != nil {
-				return nil, fmt.Errorf("invalid digest in resource %s LocalBlob access: %w", resource.ToIdentity(), err)
-			}
-			digests = append(digests, dig)
+		if _, ok := resource.Access.(*v2.LocalBlob); ok {
+			artifacts = append(artifacts, resource)
 		}
 	}
 
 	// Scan sources for LocalBlob access specs
 	for i := range desc.Component.Sources {
 		source := &desc.Component.Sources[i]
-		if localBlob, ok := source.Access.(*v2.LocalBlob); ok {
-			dig, err := digest.Parse(localBlob.LocalReference)
-			if err != nil {
-				return nil, fmt.Errorf("invalid digest in source %s LocalBlob access: %w", source.ToIdentity(), err)
-			}
-			digests = append(digests, dig)
+		if _, ok := source.Access.(*v2.LocalBlob); ok {
+			artifacts = append(artifacts, source)
 		}
 	}
 
-	return digests, nil
+	return artifacts, nil
 }
 
-// validateLocalBlobsExist validates that all provided digests exist in the OCI store
-// and returns their descriptors categorized as manifests and layers.
-func validateLocalBlobsExist(ctx context.Context, store oras.Target, digests []digest.Digest) (manifests []ociImageSpecV1.Descriptor, layers []ociImageSpecV1.Descriptor, err error) {
-	for _, dig := range digests {
-		desc, err := store.Resolve(ctx, dig.String())
-		if err != nil {
-			if errors.Is(err, errdef.ErrNotFound) {
-				return nil, nil, fmt.Errorf("local blob %s referenced in component descriptor was not found in store - ensure AddLocalResource was called for this blob first", dig)
-			}
-			return nil, nil, fmt.Errorf("failed to resolve local blob %s: %w", dig, err)
-		}
+// identifyLocalBlobManifestsAndLayers fetches all descriptors in the store that are available
+// for the given artifact list.
+func identifyLocalBlobManifestsAndLayers(ctx context.Context, store oras.Target, artifacts []descriptor.Artifact) (manifests []ociImageSpecV1.Descriptor, layers []ociImageSpecV1.Descriptor, err error) {
+	eg, egctx := errgroup.WithContext(ctx)
+	var mu sync.Mutex
+	for _, artifact := range artifacts {
+		eg.Go(func() error {
+			localBlob := artifact.GetAccess().(*v2.LocalBlob)
 
-		// Categorize descriptor based on whether it's an OCI-compliant manifest or a layer
-		if introspection.IsOCICompliantManifest(desc) {
-			manifests = append(manifests, desc)
-		} else {
-			layers = append(layers, desc)
-		}
+			resolve := store.Resolve
+			//  TODO(jakobmoellerdev): currently, the blobs store is required
+			//    because the oras remote repo always hardcodes resolves against manifests
+			//    however we really want to resolve against the blob store here for non
+			//    manifest blobs. Mid-Term the oras.Target interface is insufficient
+			//    and CTFs also need to implement this BlobStore
+			if bs, ok := store.(interface{ Blobs() registry.BlobStore }); ok {
+				resolve = bs.Blobs().Resolve
+			}
+
+			desc, err := resolve(egctx, localBlob.LocalReference)
+			if err != nil {
+				return fmt.Errorf("failed to resolve descriptor for local blob %s: %w", localBlob.LocalReference, err)
+			}
+			// resolution of a blob will always cause a octet stream media type
+			// if we would use exists, then we would need to store the size in local blob spec
+			// but since we dont do that we have to take actual uploaded size of the descriptor
+			// from the API again.
+			desc.MediaType = localBlob.MediaType
+
+			if err := identity.Adopt(&desc, artifact); err != nil {
+				return fmt.Errorf("failed to adopt descriptor for local blob %s: %w", localBlob.LocalReference, err)
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			// Categorize descriptor based on whether it's an OCI-compliant manifest or a layer
+			if introspection.IsOCICompliantManifest(desc) {
+				manifests = append(manifests, desc)
+			} else {
+				layers = append(layers, desc)
+			}
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, nil, fmt.Errorf("failed to validate existence of local blobs: %w", err)
 	}
 
 	return manifests, layers, nil
