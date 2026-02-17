@@ -13,14 +13,14 @@ require (
 	github.com/fluxcd/pkg/runtime v0.94.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/cel-go v0.26.1
-	github.com/onsi/ginkgo/v2 v2.27.4
+	github.com/onsi/ginkgo/v2 v2.27.5
 	github.com/onsi/gomega v1.39.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.19.0
 	k8s.io/api v0.35.0
 	k8s.io/apiextensions-apiserver v0.35.0
-	k8s.io/apimachinery v0.35.0
+	k8s.io/apimachinery v0.35.1
 	k8s.io/apiserver v0.35.0
 	k8s.io/client-go v0.35.0
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570
@@ -33,18 +33,18 @@ require (
 	github.com/docker/cli v29.1.5+incompatible
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
-	ocm.software/open-component-model/bindings/go/configuration v0.0.9
+	ocm.software/open-component-model/bindings/go/configuration v0.0.10
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260211083249-c6c993e6d7a3
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260211083249-c6c993e6d7a3
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260216124158-17be0c7eb75b
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260216124158-17be0c7eb75b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/oci v0.0.29
+	ocm.software/open-component-model/bindings/go/oci v0.0.31
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260211083249-c6c993e6d7a3
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260216124158-17be0c7eb75b
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260211083249-c6c993e6d7a3
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260216124158-17be0c7eb75b
 	sigs.k8s.io/release-utils v0.12.3
 )
 
@@ -93,7 +93,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.2 // indirect
+	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -123,12 +123,12 @@ require (
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/mod v0.32.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
-	golang.org/x/oauth2 v0.34.0 // indirect
+	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/term v0.39.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
-	golang.org/x/tools v0.40.0 // indirect
+	golang.org/x/tools v0.41.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251222181119-0a764e51fe1b // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251222181119-0a764e51fe1b // indirect

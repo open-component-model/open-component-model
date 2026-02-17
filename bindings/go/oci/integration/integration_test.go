@@ -35,6 +35,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
+	filesystemaccessv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -475,6 +476,14 @@ func Test_Integration_Transformers(t *testing.T) {
 
 			t.Run("get oci transformation", func(t *testing.T) {
 				transformGetOCIArtifact(t, resourceRepo, testUsername, password, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
+			})
+		})
+
+		t.Run("add oci artifact", func(t *testing.T) {
+			resourceRepo := resource.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
+
+			t.Run("add oci transformation", func(t *testing.T) {
+				transformAddOCIArtifact(t, resourceRepo, testUsername, password, reference("add-test:v1.0.0"))
 			})
 		})
 	})
@@ -1098,4 +1107,111 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 	// must match pattern oci-artifact-%s.tar.gz
 	require.Regexp(t, `^oci-artifact-[a-f0-9]+\.tar\.gz$`, filepath.Base(ociOutput.Output.File.URI))
 	require.Equal(t, ociOutput.Output.File.MediaType, "application/vnd.ocm.software.oci.layout.v1+tar+gzip")
+}
+
+func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, username, password, to string) {
+	ctx := t.Context()
+	r := require.New(t)
+
+	url, err := ocmruntime.ParseURLAndAllowNoScheme(to)
+	r.NoError(err)
+
+	toIdentity := ocmruntime.Identity{
+		"scheme":   "http",
+		"hostname": url.Hostname(),
+		"port":     url.Port(),
+		"type":     "OCIRepository",
+	}
+
+	originalData := []byte("foobar-add")
+
+	data, access := createSingleLayerOCIImage(t, originalData, "ghcr.io/test-add:v1.0.0")
+	r.NotNil(access)
+
+	access.Type = ocmruntime.Type{
+		Name:    "ociArtifact",
+		Version: "v1",
+	}
+	access.ImageReference = fmt.Sprintf("http://%s", to)
+
+	// Write OCI image data to a temp file
+	tmpFile := filepath.Join(t.TempDir(), "oci-artifact.tar")
+	r.NoError(os.WriteFile(tmpFile, data, 0o644))
+
+	resource := descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{
+				Name:    "test-resource-add",
+				Version: "v1.0.0",
+			},
+		},
+		Type:         "some-arbitrary-type-packed-in-image",
+		Access:       access,
+		CreationTime: descriptor.CreationTime(time.Now()),
+	}
+
+	// Convert to v2 resource for the spec
+	v2Resource, err := descriptor.ConvertToV2Resource(ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()), &resource)
+	r.NoError(err)
+
+	credsMap := map[string]map[string]string{
+		toIdentity.String(): {
+			"username": username,
+			"password": password,
+		},
+	}
+	credsResolver := credentials.NewStaticCredentialsResolver(credsMap)
+
+	combinedScheme := ocmruntime.NewScheme()
+	v2.MustAddToScheme(combinedScheme)
+	ocmoci.MustAddToScheme(combinedScheme)
+	filesystemaccess.MustAddToScheme(combinedScheme)
+	combinedScheme.MustRegisterWithAlias(&v1alpha1.AddOCIArtifact{}, v1alpha1.AddOCIArtifactV1alpha1)
+
+	transform := transformer.AddOCIArtifact{
+		Scheme:             combinedScheme,
+		Repository:         repo,
+		CredentialProvider: credsResolver,
+	}
+
+	spec := &v1alpha1.AddOCIArtifact{
+		Type: ocmruntime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.Version),
+		ID:   "test-add-oci-transform",
+		Spec: &v1alpha1.AddOCIArtifactSpec{
+			Resource: v2Resource,
+			File: filesystemaccessv1alpha1.File{
+				Type: ocmruntime.NewVersionedType(filesystemaccessv1alpha1.FileType, filesystemaccessv1alpha1.Version),
+				URI:  "file://" + tmpFile,
+			},
+		},
+	}
+
+	// Execute transformation
+	result, err := transform.Transform(ctx, spec)
+	r.NoError(err)
+	r.NotNil(result)
+
+	addOutput, ok := result.(*v1alpha1.AddOCIArtifact)
+	r.True(ok)
+	r.NotNil(addOutput)
+	r.NotNil(addOutput.Output)
+	r.NotNil(addOutput.Output.Resource)
+
+	// Verify the output resource has the correct name and version
+	r.Equal("test-resource-add", addOutput.Output.Resource.Name)
+	r.Equal("v1.0.0", addOutput.Output.Resource.Version)
+
+	// Check Access Spec
+	rawAccess := addOutput.Output.Resource.Access
+	s := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown())
+
+	var resultAccess v1.OCIImage
+	err = s.Convert(rawAccess, &resultAccess)
+	r.NoError(err)
+	r.NotNil(resultAccess)
+
+	r.Equal(fmt.Sprintf("http://%s", to), resultAccess.ImageReference)
+	r.Equal("ociArtifact", resultAccess.Type.Name)
+	r.Equal("v1", resultAccess.Type.Version)
+	r.Equal(fmt.Sprintf("http://%s", to), resultAccess.ImageReference)
 }

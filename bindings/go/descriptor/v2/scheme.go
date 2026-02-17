@@ -13,7 +13,7 @@ func init() {
 func MustAddToScheme(scheme *runtime.Scheme) {
 	obj := &LocalBlob{}
 	scheme.MustRegisterWithAlias(obj,
-		runtime.NewUnversionedType(LocalBlobAccessType),
 		runtime.NewVersionedType(LocalBlobAccessType, LocalBlobAccessTypeVersion),
+		runtime.NewUnversionedType(LocalBlobAccessType),
 	)
 }

@@ -46,18 +46,12 @@ func NewComponentRepositoryResolver(
 		return nil, err
 	}
 
-	// Default to "*" if no component patterns specified
-	componentPatterns := options.componentPatterns
-	if len(componentPatterns) == 0 {
-		componentPatterns = []string{"*"}
-	}
-
 	providerOpts := resolvers.Options{
 		RepoProvider:      repoProvider,
 		CredentialGraph:   credentialGraph,
 		PathMatchers:      pathMatchers,
 		FallbackResolvers: fallbackResolvers,
-		ComponentPatterns: componentPatterns,
+		ComponentPatterns: options.componentPatterns,
 	}
 
 	return resolvers.New(ctx, providerOpts, options.repository)
