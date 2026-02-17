@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
@@ -87,8 +88,6 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/finalizers,verbs=update
-// TODO(matthiasbruns) Remove kro permissions https://github.com/open-component-model/ocm-project/issues/850
-// +kubebuilder:rbac:groups=kro.run,resources=resourcegraphdefinitions,verbs=list;watch;create;update;patch;delete
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -397,12 +396,13 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	deployer *deliveryv1alpha1.Deployer,
 	resource *deliveryv1alpha1.Resource,
 ) (objs []*unstructured.Unstructured, err error) {
-	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer)
+	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.ConfigureContextFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to get effective config: %w", err)
 	}
+	deployer.Status.EffectiveOCMConfig = configs
 
 	repoSpec := &ocmruntime.Raw{}
 	if err := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()).Decode(
@@ -523,8 +523,13 @@ func (r *Reconciler) downloadResourceBlob(
 	resource *descriptor.Resource,
 	cfg *configuration.Configuration,
 ) (io.ReadCloser, error) {
-	// local access types can be read directly
-	if resource.Access.GetType().Name == descriptor.LocalBlobAccessType {
+	typed, err := v2.Scheme.NewObject(resource.Access.GetType())
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve access type: %w", err)
+	}
+
+	switch typed.(type) { //nolint:gocritic // no, I like switch for types better
+	case *v2.LocalBlob:
 		blob, _, err := repo.GetLocalResource(ctx,
 			componentDescriptor.Component.Name,
 			componentDescriptor.Component.Version,

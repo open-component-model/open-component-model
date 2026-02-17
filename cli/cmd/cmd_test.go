@@ -866,7 +866,6 @@ resources:
 		})
 
 		t.Run("expect failure on invalid semver in constructor", func(t *testing.T) {
-
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,

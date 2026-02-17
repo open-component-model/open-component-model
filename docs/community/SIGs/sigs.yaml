@@ -6,9 +6,9 @@ sigs:
   - name: SIG Runtime
     purpose: The SIG Runtime maintains and shapes the OCM CLI, OCM Kubernetes controller and the OCM language bindings
     leads:
-      - name: Jakob Moeller
+      - name: Gergely Brautigam
         role: Chair
-        github: @jakobmoellerdev
+        github: @Skarlso
       - name: Fabian Burth
         role: Tech Lead
         github: @fabianburth

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,15 +36,8 @@ func Test_Integration_OCIRepository(t *testing.T) {
 	t.Parallel()
 
 	t.Logf("Starting OCI based integration test")
-	user := "ocm"
 
-	// Setup credentials and htpasswd
-	password := internal.GenerateRandomPassword(t, 20)
-	htpasswd := internal.GenerateHtpasswd(t, user, password)
-
-	containerName := "download-resource-oci-repository"
-	registryAddress := internal.StartDockerContainerRegistry(t, containerName, htpasswd)
-	host, port, err := net.SplitHostPort(registryAddress)
+	registry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err)
 
 	cfg := fmt.Sprintf(`
@@ -63,14 +55,14 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, host, port, user, password)
+`, registry.Host, registry.Port, registry.User, registry.Password)
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
-	client := internal.CreateAuthClient(registryAddress, user, password)
+	client := internal.CreateAuthClient(registry.RegistryAddress, registry.User, registry.Password)
 
 	resolver, err := urlresolver.New(
-		urlresolver.WithBaseURL(registryAddress),
+		urlresolver.WithBaseURL(registry.RegistryAddress),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(client),
 	)
@@ -108,7 +100,7 @@ configurations:
 		downloadCMD.SetArgs([]string{
 			"download",
 			"resource",
-			fmt.Sprintf("http://%s//%s:%s", registryAddress, name, version),
+			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 			"--identity",
 			fmt.Sprintf("name=%s,version=%s", localResource.Resource.Name, localResource.Resource.Version),
 			"--output",
@@ -164,7 +156,7 @@ configurations:
 			downloadCMD.SetArgs([]string{
 				"download",
 				"resource",
-				fmt.Sprintf("http://%s//%s:%s", registryAddress, name, version),
+				fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 				"--identity",
 				fmt.Sprintf("name=%s,version=%s", localResource.Resource.Name, localResource.Resource.Version),
 				"--output",
@@ -188,7 +180,7 @@ configurations:
 			downloadCMD.SetArgs([]string{
 				"download",
 				"resource",
-				fmt.Sprintf("http://%s//%s:%s", registryAddress, name, version),
+				fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 				"--identity",
 				fmt.Sprintf("name=%s,version=%s", localResource.Resource.Name, localResource.Resource.Version),
 				"--output",
@@ -233,7 +225,6 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 		r := require.New(t)
 
 		root := getRepoRootBasedOnGit(t)
-		pluginDir := buildHelmInputMethodInMonoRepoRoot(t, root)
 
 		name, version := "ocm.software/helm-chart", "v1.0.0"
 		resourceName, resourceVersion := "mychart", "0.1.0"
@@ -266,8 +257,6 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 			"component-version",
 			"--repository", transportArchivePath,
 			"--constructor", constructorPath,
-			"--plugin-directory",
-			pluginDir,
 		})
 		r.NoError(addCMD.ExecuteContext(t.Context()), "adding the component-version to the repository must succeed")
 
@@ -283,8 +272,6 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 			output,
 			"--transformer",
 			"helm",
-			"--plugin-directory",
-			pluginDir,
 		})
 		r.NoError(downloadCMD.ExecuteContext(t.Context()), "downloading and transforming the resource must succeed")
 
@@ -367,16 +354,4 @@ func getRepoRootBasedOnGit(t *testing.T) string {
 	rootRaw, err := exec.CommandContext(t.Context(), git, "rev-parse", "--show-toplevel").Output()
 	r.NoError(err, "git rev-parse --show-toplevel must succeed to get repository root")
 	return strings.TrimSpace(string(rootRaw))
-}
-
-func buildHelmInputMethodInMonoRepoRoot(t *testing.T, root string) string {
-	t.Helper()
-	r := require.New(t)
-	task, err := exec.LookPath("task")
-	r.NoError(err, "task binary should be available in PATH to build helm input")
-	buildHelmInput := exec.CommandContext(t.Context(), task, "bindings/go/helm:build", "--dir", root)
-	buildHelmInput.Stdout = os.Stdout
-	buildHelmInput.Stderr = os.Stderr
-	r.NoError(buildHelmInput.Run(), "helm input build must succeed")
-	return filepath.Join(root, "bindings", "go", "helm", "tmp", "testdata")
 }

@@ -1,7 +1,6 @@
 package resource
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -9,22 +8,23 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var (
-	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
-)
+var dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
 
 func dummyCapability(schema []byte) resourcev1.CapabilitySpec {
 	return resourcev1.CapabilitySpec{
@@ -95,7 +95,9 @@ func TestPluginFlow(t *testing.T) {
 	require.NoError(t, err)
 	reader, err := resource.ReadCloser()
 	require.NoError(t, err)
-	defer reader.Close()
+	defer func() {
+		_ = reader.Close()
+	}()
 	content, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	require.Equal(t, "test-resource", string(content))
@@ -163,7 +165,9 @@ func TestRegisterInternalResourcePlugin(t *testing.T) {
 	}
 }
 
-type mockResourcePlugin struct{}
+type mockResourcePlugin struct {
+	repository.ResourceRepository
+}
 
 var _ Repository = (*mockResourcePlugin)(nil)
 
@@ -171,10 +175,6 @@ func (m *mockResourcePlugin) GetResourceRepositoryScheme() *runtime.Scheme {
 	return dummytype.Scheme
 }
 
-func (m *mockResourcePlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
-	return nil, nil
-}
-
 func (m *mockResourcePlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
-	return blob.NewDirectReadOnlyBlob(bytes.NewBufferString("test-resource")), nil
+	return inmemory.New(strings.NewReader("test-resource")), nil
 }
