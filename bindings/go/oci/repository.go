@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -343,52 +342,60 @@ func scanLocalBlobs(desc *descriptor.Descriptor) ([]descriptor.Artifact, error) 
 }
 
 // identifyLocalBlobManifestsAndLayers fetches all descriptors in the store that are available
-// for the given artifact list.
+// for the given artifact list and the output is stable sorted based on the order of the artifact list.
 func identifyLocalBlobManifestsAndLayers(ctx context.Context, store oras.Target, artifacts []descriptor.Artifact) (manifests []ociImageSpecV1.Descriptor, layers []ociImageSpecV1.Descriptor, err error) {
 	eg, egctx := errgroup.WithContext(ctx)
-	var mu sync.Mutex
-	for _, artifact := range artifacts {
+
+	// Pre-allocate result slice to maintain order
+	results := make([]ociImageSpecV1.Descriptor, len(artifacts))
+
+	for idx, artifact := range artifacts {
 		eg.Go(func() error {
 			localBlob := artifact.GetAccess().(*v2.LocalBlob)
-
+			// resolution of a blob will always cause a octet stream media type as its just a blob.
+			// if we would use Exists(), then we would need to store the size in the local blob spec
+			// but since we dont do that we have to take actual uploaded size of the descriptor
+			// from the API again. Thats why we need to call Resolve and get the descriptor
+			// instead of just checking existence of the blob.
 			resolve := store.Resolve
-			//  TODO(jakobmoellerdev): currently, the blobs store is required
-			//    because the oras remote repo always hardcodes resolves against manifests
-			//    however we really want to resolve against the blob store here for non
-			//    manifest blobs. Mid-Term the oras.Target interface is insufficient
-			//    and CTFs also need to implement this BlobStore
 			if bs, ok := store.(interface{ Blobs() registry.BlobStore }); ok {
+				//  TODO(jakobmoellerdev): currently, the blobs store is required
+				//    because the oras remote repo always hardcodes resolves against manifests
+				//    however we really want to resolve against the blob store here for non
+				//    manifest blobs. Mid-Term the oras.Target interface is insufficient
+				//    and CTFs also need to implement this BlobStore and then we can drop this
+				//    assert.
 				resolve = bs.Blobs().Resolve
 			}
-
 			desc, err := resolve(egctx, localBlob.LocalReference)
 			if err != nil {
 				return fmt.Errorf("failed to resolve descriptor for local blob %s: %w", localBlob.LocalReference, err)
 			}
-			// resolution of a blob will always cause a octet stream media type
-			// if we would use exists, then we would need to store the size in local blob spec
-			// but since we dont do that we have to take actual uploaded size of the descriptor
-			// from the API again.
+			// a resolved blob will always have the octet stream media type, which needs
+			// to be overwritten with the media type from the local blob.
 			desc.MediaType = localBlob.MediaType
-
 			if err := identity.Adopt(&desc, artifact); err != nil {
 				return fmt.Errorf("failed to adopt descriptor for local blob %s: %w", localBlob.LocalReference, err)
 			}
 
-			mu.Lock()
-			defer mu.Unlock()
-			// Categorize descriptor based on whether it's an OCI-compliant manifest or a layer
-			if introspection.IsOCICompliantManifest(desc) {
-				manifests = append(manifests, desc)
-			} else {
-				layers = append(layers, desc)
-			}
+			// Store result at the correct index
+			results[idx] = desc
 			return nil
 		})
 	}
 
 	if err := eg.Wait(); err != nil {
 		return nil, nil, fmt.Errorf("failed to validate existence of local blobs: %w", err)
+	}
+
+	// Process results in order to maintain stable ordering based on input artifacts
+	for _, desc := range results {
+		// Categorize descriptor based on whether it's an OCI-compliant manifest or a layer
+		if introspection.IsOCICompliantManifest(desc) {
+			manifests = append(manifests, desc)
+		} else {
+			layers = append(layers, desc)
+		}
 	}
 
 	return manifests, layers, nil
