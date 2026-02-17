@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -209,23 +208,11 @@ func Test_Integration_Transfer_OCIArtifact_AsOCIArtifact(t *testing.T) {
 	t.Parallel()
 
 	// 1. Setup Local OCIRegistry
-	user := "ocm"
-	password := internal.GenerateRandomPassword(t, 20)
-	htpasswd := internal.GenerateHtpasswd(t, user, password)
-
-	containerName := fmt.Sprintf("source-oci-artifact-repository-%d", time.Now().UnixNano())
-	registryAddress := internal.StartDockerContainerRegistry(t, containerName, htpasswd)
-	host, port, err := net.SplitHostPort(registryAddress)
+	sourceRegistry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err)
 
-	targetContainerName := fmt.Sprintf("target-oci-artifact-repository-%d", time.Now().UnixNano())
-	targetRegistryAddress := internal.StartDockerContainerRegistry(t, targetContainerName, htpasswd)
-	targetHost, targetPort, err := net.SplitHostPort(targetRegistryAddress)
+	targetRegistry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err)
-
-	reference := func(ref string) string {
-		return fmt.Sprintf("%s/%s", registryAddress, ref)
-	}
 
 	// 2. Configure OCM to point to this registry
 	// We create a temporary ocmconfig.yaml
@@ -252,10 +239,10 @@ configurations:
     credentials:
     - type: Credentials/v1
       properties:
-        username: %[3]q
-        password: %[4]q
-`, host, port, user, password,
-		targetHost, targetPort)
+        username: %[7]q
+        password: %[8]q
+`, sourceRegistry.Host, sourceRegistry.Port, sourceRegistry.User, sourceRegistry.Password,
+		targetRegistry.Host, targetRegistry.Port, targetRegistry.User, targetRegistry.Password)
 
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
@@ -265,9 +252,9 @@ configurations:
 	componentVersion := "v1.0.0"
 
 	// Create connection to registry for verification later
-	client := internal.CreateAuthClient(targetRegistryAddress, user, password)
+	client := internal.CreateAuthClient(targetRegistry.RegistryAddress, targetRegistry.User, targetRegistry.Password)
 	resolver, err := urlresolver.New(
-		urlresolver.WithBaseURL(targetRegistryAddress),
+		urlresolver.WithBaseURL(targetRegistry.RegistryAddress),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(client),
 	)
@@ -301,13 +288,13 @@ configurations:
 	}
 
 	targetAccess := resource.Access.DeepCopyTyped()
-	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", reference("test-resource:v1.0.0"))
+	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", sourceRegistry.Reference("test-resource:v1.0.0"))
 	resource.Access = targetAccess
 
 	resourceRepo := ocires.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
 	newRes, err := resourceRepo.UploadResource(ctx, &resource, blob, map[string]string{
-		"username": user,
-		"password": password,
+		"username": sourceRegistry.User,
+		"password": sourceRegistry.Password,
 	})
 	r.NoError(err)
 	resource = *newRes
@@ -350,7 +337,7 @@ components:
 	transferCMD := cmd.New()
 
 	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion)
-	targetRef := fmt.Sprintf("http://%s", targetRegistryAddress)
+	targetRef := fmt.Sprintf("http://%s", targetRegistry.RegistryAddress)
 
 	transferCMD.SetArgs([]string{
 		"transfer",
@@ -418,7 +405,7 @@ components:
 	}
 
 	// The reference should contain the target registry address
-	r.Contains(refVal, targetRegistryAddress)
+	r.Contains(refVal, targetRegistry.RegistryAddress)
 }
 
 func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte, *v1.OCIImage) {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,7 +79,7 @@ func CreateOCIRegistry(t *testing.T) (*OCIRegistry, error) {
 	password := GenerateRandomPassword(t, 20)
 	htpasswd := GenerateHtpasswd(t, user, password)
 
-	containerName := fmt.Sprintf("transfer-component-version-oci-repository-%d", time.Now().UnixNano())
+	containerName := fmt.Sprintf("%s-repository-%d", strings.ToLower(t.Name()), time.Now().UnixNano())
 	registryAddress := StartDockerContainerRegistry(t, containerName, htpasswd)
 	host, port, err := net.SplitHostPort(registryAddress)
 	if err != nil {
@@ -92,4 +93,8 @@ func CreateOCIRegistry(t *testing.T) (*OCIRegistry, error) {
 		Host:            host,
 		Port:            port,
 	}, nil
+}
+
+func (r *OCIRegistry) Reference(ref string) string {
+	return fmt.Sprintf("%s/%s", r.RegistryAddress, ref)
 }
