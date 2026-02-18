@@ -18,6 +18,7 @@ import (
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -43,6 +44,9 @@ type ResourceRepository struct {
 	filesystemConfig *filesystemv1alpha1.Config
 	userAgent        string
 }
+
+// make sure that ResourceRepository implements the oci ResourceRepository interface
+var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
 func NewResourceRepository(manifests, layers cache.OCIDescriptorCache, filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
 	options := &Options{}
@@ -176,6 +180,40 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return b, nil
 	default:
 		return nil, fmt.Errorf("unsupported type %s for downloading the resource", t)
+	}
+}
+
+func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
+	t := resource.Access.GetType()
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	switch access := obj.(type) {
+	case *v1.OCIImage:
+		baseURL, err := ociImageAccessToBaseURL(access)
+		if err != nil {
+			return nil, fmt.Errorf("error creating oci image access: %w", err)
+		}
+
+		repo, err := p.getRepository(&ociv1.Repository{
+			BaseUrl: baseURL,
+		}, credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error creating repository: %w", err)
+		}
+
+		b, err := repo.UploadResource(ctx, resource, content)
+		if err != nil {
+			return nil, fmt.Errorf("error uploading resource: %w", err)
+		}
+
+		return b, nil
+	default:
+		return nil, fmt.Errorf("unsupported type %s for uploading the resource", t)
 	}
 }
 

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -98,20 +96,8 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	}
 
 	// Determine output path
-	if outputPath == "" {
-		// Create a temporary file
-		tempFile, err := os.CreateTemp("", "resource-*.bin")
-		if err != nil {
-			return nil, fmt.Errorf("failed creating temporary file: %w", err)
-		}
-		tempFile.Close() // Close immediately, BlobToSpec will overwrite it
-		outputPath = tempFile.Name()
-	} else {
-		// Ensure the directory exists
-		dir := filepath.Dir(outputPath)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, fmt.Errorf("failed creating output directory: %w", err)
-		}
+	if outputPath, err = DetermineOutputPath(outputPath, "resource", blobContent); err != nil {
+		return nil, fmt.Errorf("failed determining output path: %w", err)
 	}
 
 	// Buffer blob to file

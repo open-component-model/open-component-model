@@ -31,9 +31,6 @@ spec:
     name: basic-auth-repository
   semver: 1.0.0
   interval: 10m
-  ocmConfig:
-    - kind: Secret
-      name: basic-auth
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Resource
@@ -47,9 +44,6 @@ spec:
       resource:
         name: kro-rgd
   interval: 10m
-  ocmConfig:
-    - kind: Secret
-      name: basic-auth
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Deployer
@@ -59,7 +53,3 @@ spec:
   resourceRef:
     name: basic-auth-resource-rgd
     namespace: default
-  ocmConfig:
-    - kind: Secret
-      name: basic-auth
-      namespace: default

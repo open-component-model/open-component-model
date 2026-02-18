@@ -9,6 +9,15 @@ import (
 	_ "embed"
 )
 
+//go:embed schemas/AddOCIArtifact.schema.json
+var schemaAddOCIArtifact []byte
+
+//go:embed schemas/AddOCIArtifactOutput.schema.json
+var schemaAddOCIArtifactOutput []byte
+
+//go:embed schemas/AddOCIArtifactSpec.schema.json
+var schemaAddOCIArtifactSpec []byte
+
 //go:embed schemas/CTFAddComponentVersion.schema.json
 var schemaCTFAddComponentVersion []byte
 
@@ -45,6 +54,15 @@ var schemaCTFGetLocalResourceOutput []byte
 //go:embed schemas/CTFGetLocalResourceSpec.schema.json
 var schemaCTFGetLocalResourceSpec []byte
 
+//go:embed schemas/GetOCIArtifact.schema.json
+var schemaGetOCIArtifact []byte
+
+//go:embed schemas/GetOCIArtifactOutput.schema.json
+var schemaGetOCIArtifactOutput []byte
+
+//go:embed schemas/GetOCIArtifactSpec.schema.json
+var schemaGetOCIArtifactSpec []byte
+
 //go:embed schemas/OCIAddComponentVersion.schema.json
 var schemaOCIAddComponentVersion []byte
 
@@ -80,6 +98,21 @@ var schemaOCIGetLocalResourceOutput []byte
 
 //go:embed schemas/OCIGetLocalResourceSpec.schema.json
 var schemaOCIGetLocalResourceSpec []byte
+
+// JSONSchema returns the JSON Schema for AddOCIArtifact.
+func (AddOCIArtifact) JSONSchema() []byte {
+	return schemaAddOCIArtifact
+}
+
+// JSONSchema returns the JSON Schema for AddOCIArtifactOutput.
+func (AddOCIArtifactOutput) JSONSchema() []byte {
+	return schemaAddOCIArtifactOutput
+}
+
+// JSONSchema returns the JSON Schema for AddOCIArtifactSpec.
+func (AddOCIArtifactSpec) JSONSchema() []byte {
+	return schemaAddOCIArtifactSpec
+}
 
 // JSONSchema returns the JSON Schema for CTFAddComponentVersion.
 func (CTFAddComponentVersion) JSONSchema() []byte {
@@ -139,6 +172,21 @@ func (CTFGetLocalResourceOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for CTFGetLocalResourceSpec.
 func (CTFGetLocalResourceSpec) JSONSchema() []byte {
 	return schemaCTFGetLocalResourceSpec
+}
+
+// JSONSchema returns the JSON Schema for GetOCIArtifact.
+func (GetOCIArtifact) JSONSchema() []byte {
+	return schemaGetOCIArtifact
+}
+
+// JSONSchema returns the JSON Schema for GetOCIArtifactOutput.
+func (GetOCIArtifactOutput) JSONSchema() []byte {
+	return schemaGetOCIArtifactOutput
+}
+
+// JSONSchema returns the JSON Schema for GetOCIArtifactSpec.
+func (GetOCIArtifactSpec) JSONSchema() []byte {
+	return schemaGetOCIArtifactSpec
 }
 
 // JSONSchema returns the JSON Schema for OCIAddComponentVersion.

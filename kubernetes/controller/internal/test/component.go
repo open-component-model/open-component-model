@@ -30,10 +30,11 @@ import (
 )
 
 type MockComponentOptions struct {
-	Client     client.Client
-	Recorder   record.EventRecorder
-	Info       v1alpha1.ComponentInfo
-	Repository string
+	Client             client.Client
+	Recorder           record.EventRecorder
+	Info               v1alpha1.ComponentInfo
+	Repository         string
+	EffectiveOCMConfig []v1alpha1.OCMConfiguration
 }
 
 func MockComponent(
@@ -60,6 +61,7 @@ func MockComponent(
 	patchHelper := patch.NewSerialPatcher(component, options.Client)
 
 	component.Status.Component = options.Info
+	component.Status.EffectiveOCMConfig = options.EffectiveOCMConfig
 
 	Eventually(func(ctx context.Context) error {
 		status.MarkReady(options.Recorder, component, "applied mock component")
