@@ -264,10 +264,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
 	}
-
-	if len(verifications) > 0 {
-		cacheBackedRepo.Verifications = verifications
-	}
+	cacheBackedRepo.Verifications = verifications
 
 	desc, err := cacheBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)
 	switch {
