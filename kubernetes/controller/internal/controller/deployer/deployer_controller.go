@@ -830,13 +830,16 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		return nil, fmt.Errorf("failed to get ready component: %w", err)
 	}
 
-	if component.Status.Component.Component == resource.Status.Component.Component {
-		verifications, err := ocm.GetVerifications(ctx, r.Client, component)
-		if err != nil {
-			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+	verifications, err := ocm.GetVerifications(ctx, r.Client, component)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
 
-			return nil, fmt.Errorf("failed to get verifications: %w", err)
-		}
+		return nil, fmt.Errorf("failed to get verifications: %w", err)
+	}
+
+	if component.Status.Component.Component == resource.Status.Component.Component {
+		// Add verifications from the component to the cache-backed repository to make sure they are included in the
+		// cache key and used for verification (if any).
 		repoResource.Verifications = verifications
 
 		componentDescriptor, err := repoResource.GetComponentVersion(ctx,
@@ -896,12 +899,6 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 
 	// Add verifications from the component to the cache-backed repository to make sure they are included in the
 	// cache key and used for verification (if any).
-	verifications, err := ocm.GetVerifications(ctx, r.Client, component)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
-
-		return nil, fmt.Errorf("failed to get verifications: %w", err)
-	}
 	componentRepo.Verifications = verifications
 
 	componentDescriptor, err := componentRepo.GetComponentVersion(ctx,
