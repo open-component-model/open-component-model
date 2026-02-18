@@ -810,7 +810,7 @@ data:
 			By("checking cache metrics for verified component")
 			verifiedMiss, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "verified")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(verifiedMiss)).To(BeNumerically(">=", float64(1)),
+			Expect(testutil.ToFloat64(verifiedMiss)).To(Equal(float64(1)),
 				"expected at least 1 cache miss for the verified component on first resolution")
 
 			unverifiedMiss, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
@@ -820,7 +820,7 @@ data:
 
 			verifiedHit, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "verified")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(verifiedHit)).To(BeNumerically(">=", float64(1)),
+			Expect(testutil.ToFloat64(verifiedHit)).To(Equal(float64(1)),
 				"expected at least 1 cache hit for the verified component on subsequent reconciliation")
 
 			By("deleting the Deployer")
@@ -1052,8 +1052,8 @@ data:
 			By("checking cache metrics for verified parent component")
 			parentMissVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(parentComponentName, componentVersion, "verified")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(parentMissVerified)).To(BeNumerically(">=", float64(1)),
-				"expected at least 1 cache miss for the verified parent component on first resolution")
+			Expect(testutil.ToFloat64(parentMissVerified)).To(Equal(float64(1)),
+				"expected 1 cache miss for the verified parent component on first resolution")
 
 			parentMissUnverified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(parentComponentName, componentVersion, "unverified")
 			Expect(err).ToNot(HaveOccurred())
@@ -1063,8 +1063,8 @@ data:
 			By("checking cache metrics for child component resolved via integrity chain")
 			childMissVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "verified")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(childMissVerified)).To(BeNumerically(">=", float64(1)),
-				"expected at least 1 cache miss for the child component resolved via digest from parent reference")
+			Expect(testutil.ToFloat64(childMissVerified)).To(Equal(float64(1)),
+				"expected 1 cache miss for the child component resolved via digest from parent reference")
 
 			childMissUnverified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "unverified")
 			Expect(err).ToNot(HaveOccurred())
