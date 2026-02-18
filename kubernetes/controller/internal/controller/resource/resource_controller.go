@@ -501,12 +501,14 @@ func (r *Reconciler) resolveReferencePath(
 			}
 		}
 
-		// If the reference provides a digest spec, we set it in the repository to make sure the component version we
-		// get is stored with a cache key containing the digest information.
+		// If the parent component contained a digest spec for the component reference, we set it for the
+		// cache-backed repository, so it is used for the cache-key creation.
 		// We need to use the digest spec from the parent component descriptor as this will be the only information
-		// available in the deployer controller to retrieve the respective cache-key to the verified component
-		// version.
-		refRepo.Digest = referenceDigestFromParent
+		// available in the deployer controller to retrieve the respective cache-key to the verified/integrity-checked
+		// component version.
+		if referenceDigestFromParent != nil {
+			refRepo.Digest = referenceDigestFromParent
+		}
 
 		refDesc, err := refRepo.GetComponentVersion(ctx, matchedRef.Component, matchedRef.Version)
 		if err != nil {
