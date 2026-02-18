@@ -25,7 +25,7 @@ func DetermineOutputPath(outputPath string, filePrefix string, blobContent blob.
 		}
 
 		if fileExt == "" {
-			slog.Warn("unable to determine file extension from media type, setting .bin extension")
+			slog.Debug("unable to determine file extension from media type, setting .bin extension")
 			fileExt = ".bin"
 		}
 
