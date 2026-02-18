@@ -10,15 +10,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
-	"ocm.software/open-component-model/bindings/go/signing"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/cli/cmd/internal/test"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
@@ -191,4 +193,117 @@ func TestTransferComponentVersionRecursive(t *testing.T) {
 		}
 	}
 	require.True(t, found, "expected success log message")
+}
+
+// TestTransferComponentVersionPreservesSignatures verifies that signatures on a component
+// descriptor are preserved when transferring a component version that has local blob resources.
+func TestTransferComponentVersionPreservesSignatures(t *testing.T) {
+	r := require.New(t)
+
+	// Create a descriptor with a local blob resource
+	fromDesc := createTestDescriptor("ocm.software/signed-component", "1.0.0")
+	fromDesc.Component.Resources = []descriptor.Resource{
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "test-blob",
+					Version: "1.0.0",
+				},
+			},
+			Type:     "plainText",
+			Relation: descriptor.LocalRelation,
+			Access: &v2.LocalBlob{
+				MediaType: "text/plain",
+			},
+		},
+	}
+
+	// Sign the descriptor to add signatures
+	dig, err := signing.GenerateDigest(t.Context(), fromDesc, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
+	r.NoError(err, "should be able to generate digest")
+	fromDesc.Signatures = []descriptor.Signature{
+		{
+			Name:   "test-signature",
+			Digest: *dig,
+			Signature: descriptor.SignatureInfo{
+				Algorithm: "RSASSA-PSS",
+				Value:     "dGVzdC1zaWduYXR1cmUtdmFsdWU=",
+				MediaType: "application/vnd.ocm.signature.rsa",
+			},
+		},
+	}
+
+	// Setup source CTF with the signed component
+	archivePath := t.TempDir()
+	fs, err := filesystem.NewFS(archivePath, os.O_RDWR)
+	r.NoError(err)
+	archive := ctf.NewFileSystemCTF(fs)
+	sourceRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	r.NoError(err)
+
+	ctx := t.Context()
+
+	// Add the local blob resource data to the repository
+	blobData := []byte("Hello, signed world!")
+	updatedRes, err := sourceRepo.AddLocalResource(
+		ctx,
+		fromDesc.Component.Name,
+		fromDesc.Component.Version,
+		&fromDesc.Component.Resources[0],
+		inmemory.New(bytes.NewReader(blobData)),
+	)
+	r.NoError(err, "should be able to add local resource")
+	fromDesc.Component.Resources[0] = *updatedRes
+
+	// Add the component version to the source CTF
+	r.NoError(sourceRepo.AddComponentVersion(ctx, fromDesc), "should be able to add signed component version")
+
+	// Verify source has signatures
+	srcDesc, err := sourceRepo.GetComponentVersion(ctx, fromDesc.Component.Name, fromDesc.Component.Version)
+	r.NoError(err)
+	r.NotEmpty(srcDesc.Signatures, "source descriptor should have signatures")
+
+	// Transfer to target CTF with --copy-resources
+	toPath := t.TempDir()
+	fromRef := compref.Ref{
+		Repository: &ctfv1.Repository{
+			FilePath: archivePath,
+		},
+		Component: fromDesc.Component.Name,
+		Version:   fromDesc.Component.Version,
+	}
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	logs := test.NewJSONLogReader()
+	result := new(bytes.Buffer)
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", fromRef.String(), targetArg, "--copy-resources"),
+		test.WithOutput(result),
+		test.WithErrorOutput(logs),
+	)
+	r.NoError(err, "transfer should succeed")
+
+	// Verify target has signatures
+	targetFS, err := filesystem.NewFS(toPath, os.O_RDWR)
+	r.NoError(err)
+	targetArchive := ctf.NewFileSystemCTF(targetFS)
+	targetRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(targetArchive)))
+	r.NoError(err)
+
+	targetDesc, err := targetRepo.GetComponentVersion(ctx, fromDesc.Component.Name, fromDesc.Component.Version)
+	r.NoError(err, "should be able to retrieve transferred component")
+	r.Equal(fromDesc.Component.Name, targetDesc.Component.Name)
+	r.Equal(fromDesc.Component.Version, targetDesc.Component.Version)
+
+	// Verify signatures were preserved
+	r.Len(targetDesc.Signatures, 1, "transferred descriptor should have 1 signature")
+	r.Equal("test-signature", targetDesc.Signatures[0].Name)
+	r.Equal(fromDesc.Signatures[0].Digest.HashAlgorithm, targetDesc.Signatures[0].Digest.HashAlgorithm)
+	r.Equal(fromDesc.Signatures[0].Digest.Value, targetDesc.Signatures[0].Digest.Value)
+	r.Equal("RSASSA-PSS", targetDesc.Signatures[0].Signature.Algorithm)
+	r.Equal("dGVzdC1zaWduYXR1cmUtdmFsdWU=", targetDesc.Signatures[0].Signature.Value)
+
+	// Verify resource was also transferred
+	r.Len(targetDesc.Component.Resources, 1, "transferred descriptor should have 1 resource")
+	r.Equal("test-blob", targetDesc.Component.Resources[0].Name)
 }
