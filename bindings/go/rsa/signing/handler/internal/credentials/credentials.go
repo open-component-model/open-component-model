@@ -3,6 +3,7 @@ package credentials
 import (
 	"crypto/rsa"
 	"crypto/x509"
+	"fmt"
 	"os"
 
 	rsapem "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/pem"
@@ -21,29 +22,39 @@ const (
 	CredentialKeyPrivateKeyPEMFile = CredentialKeyPrivateKeyPEM + "_file"
 )
 
-func PrivateKeyFromCredentials(credentials map[string]string) *rsa.PrivateKey {
+func PrivateKeyFromCredentials(credentials map[string]string) (*rsa.PrivateKey, error) {
 	val := credentials[CredentialKeyPrivateKeyPEM]
 	b, err := loadBytes(val, CredentialKeyPrivateKeyPEMFile, credentials)
-	if err != nil || len(b) == 0 {
-		return nil
+	if err != nil {
+		return nil, fmt.Errorf("failed loading private key PEM: %w", err)
 	}
-	return rsapem.ParseRSAPrivateKeyPEM(b)
+	if len(b) == 0 {
+		return nil, nil
+	}
+	return rsapem.ParseRSAPrivateKeyPEM(b), nil
 }
 
-func PublicKeyFromCredentials(credentials map[string]string) *rsapem.RSAPublicKeyPEM {
+func PublicKeyFromCredentials(credentials map[string]string) (*rsapem.RSAPublicKeyPEM, error) {
 	val := credentials[CredentialKeyPublicKeyPEM]
 	b, err := loadBytes(val, CredentialKeyPublicKeyPEMFile, credentials)
-	if err != nil || len(b) == 0 {
-		// fallback: derive from private
-		if pk := PrivateKeyFromCredentials(credentials); pk != nil {
-			return &rsapem.RSAPublicKeyPEM{
-				PublicKey:            &pk.PublicKey,
-				UnderlyingPrivateKey: pk,
-			}
-		}
-		return nil
+	if err != nil {
+		return nil, fmt.Errorf("failed loading public key PEM: %w", err)
 	}
-	return rsapem.ParseRSAPublicKeyPEM(b)
+	if len(b) == 0 {
+		// fallback: derive from private
+		pk, err := PrivateKeyFromCredentials(credentials)
+		if err != nil {
+			return nil, err
+		}
+		if pk == nil {
+			return nil, nil
+		}
+		return &rsapem.RSAPublicKeyPEM{
+			PublicKey:            &pk.PublicKey,
+			UnderlyingPrivateKey: pk,
+		}, nil
+	}
+	return rsapem.ParseRSAPublicKeyPEM(b), nil
 }
 
 func CertificateChainFromCredentials(credentials map[string]string) ([]*x509.Certificate, error) {
