@@ -78,9 +78,9 @@ tasks:
             --repository {{.CTF}} \
             --component-version-conflict-policy=replace \
             --constructor component-constructor.yaml
-#      - task: sign
-#        vars:
-#          COMPONENT: '{{.CTF}}//{{.NAME}}:{{.VERSION}}'
+      - task: sign
+        vars:
+          COMPONENT: '{{.CTF}}//{{.NAME}}:{{.VERSION}}'
 
   # === SIGNING TASKS ===
   product:keys:
@@ -100,7 +100,7 @@ tasks:
       OCM_CONFIG: './config/sign.yaml'
     requires:
       vars: ["COMPONENT"]
-    cmd: '{{ .ocm }} sign componentversion {{.COMPONENT}}'
+    cmd: '{{ .ocm }} sign componentversion {{.COMPONENT}} --loglevel=debug'
   verify:
     desc: Verify component signatures
     dir: scenarios/sovereign/components/product
@@ -115,14 +115,14 @@ tasks:
     desc: Transfer components to air-gap archive with verification
     cmds:
       - cmd: rm -rf {{.AIRGAP_CTF}}
-#      - task: verify
-#        vars:
-#          COMPONENT: '{{.CTF}}//{{.NAME}}:{{.VERSION}}'
+      - task: verify
+        vars:
+          COMPONENT: '{{.CTF}}//{{.NAME}}:{{.VERSION}}'
       - cmd: |
           {{ .ocm }} transfer cv \
             --copy-resources \
             --recursive \
-            {{.CTF}}//{{.NAME}}:{{.VERSION}} {{.AIRGAP_CTF}}
+            {{.CTF}}//{{.NAME}}:{{.VERSION}} {{.AIRGAP_CTF}} {{ .CLI_ARGS }}
 
   # === REGISTRY TASKS ===
   
