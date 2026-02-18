@@ -184,26 +184,16 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 				componentMap["componentReferences"] = nil
 			}
 
-			if v2desc.Component.Labels != nil {
-				componentMap["labels"] = fmt.Sprintf("${environment.%s.component.labels}", id)
-			}
-
-			if v2desc.Component.CreationTime != "" {
-				componentMap["creationTime"] = fmt.Sprintf("${environment.%s.component.creationTime}", id)
-			}
-
-			descriptorSpec = map[string]any{
+			descSpecMap := map[string]any{
 				"meta":      fmt.Sprintf("${environment.%s.meta}", id),
 				"component": componentMap,
 			}
 
 			if v2desc.Signatures != nil {
-				descriptorSpec.(map[string]any)["signatures"] = fmt.Sprintf("${environment.%s.signatures}", id)
+				descSpecMap["signatures"] = fmt.Sprintf("${environment.%s.signatures}", id)
 			}
 
-			if v2desc.NestedDigests != nil {
-				descriptorSpec.(map[string]any)["nestedDigests"] = fmt.Sprintf("${environment.%s.nestedDigests}", id)
-			}
+			descriptorSpec = descSpecMap
 		} else {
 			// No local resources, use original descriptor from environment
 			descriptorSpec = fmt.Sprintf("${environment.%s}", id)
