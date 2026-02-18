@@ -107,7 +107,9 @@ serve as conformance tests.
    controllers.
 7. * **Reference Scenarios**: The reference scenarios as specified in the 
    [ADR 0013](0013_reference_scenarios.md) will constitute the core of our
-   conformance tests.
+   conformance tests. Since the reference scenarios are supposed to show the
+   commands as used by users, they will be implemented in taskfiles. The 
+   taskfiles will be executed in the e2e tests.
 
 **Technical Details:**
 * **Test Containers**: [Testcontainers](https://golang.testcontainers.org/) will
