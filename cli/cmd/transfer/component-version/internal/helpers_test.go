@@ -73,6 +73,74 @@ func TestShouldUploadAsOCIArtifact(t *testing.T) {
 	}
 }
 
+func TestValidateUploadType(t *testing.T) {
+	ociTarget := &oci.Repository{
+		Type:    runtime.Type{Name: "OCIRepository", Version: "v1"},
+		BaseUrl: "http://localhost:5000",
+	}
+	ctfTarget := &ctfv1.Repository{
+		Type:     runtime.Type{Name: "CommonTransportFormat", Version: "v1"},
+		FilePath: "/tmp/test-ctf",
+	}
+
+	tests := []struct {
+		name       string
+		uploadType UploadType
+		toSpec     runtime.Typed
+		wantErr    bool
+	}{
+		{
+			name:       "ociArtifact with CTF target is not allowed",
+			uploadType: UploadAsOciArtifact,
+			toSpec:     ctfTarget,
+			wantErr:    true,
+		},
+		{
+			name:       "ociArtifact with OCI target is allowed",
+			uploadType: UploadAsOciArtifact,
+			toSpec:     ociTarget,
+			wantErr:    false,
+		},
+		{
+			name:       "localBlob with CTF target is allowed",
+			uploadType: UploadAsLocalBlob,
+			toSpec:     ctfTarget,
+			wantErr:    false,
+		},
+		{
+			name:       "localBlob with OCI target is allowed",
+			uploadType: UploadAsLocalBlob,
+			toSpec:     ociTarget,
+			wantErr:    false,
+		},
+		{
+			name:       "default with CTF target is allowed",
+			uploadType: UploadAsDefault,
+			toSpec:     ctfTarget,
+			wantErr:    false,
+		},
+		{
+			name:       "default with OCI target is allowed",
+			uploadType: UploadAsDefault,
+			toSpec:     ociTarget,
+			wantErr:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			err := validateUploadType(tt.uploadType, tt.toSpec)
+			if tt.wantErr {
+				r.Error(err)
+				r.Contains(err.Error(), "cannot upload as OCI artifact to a CTF archive")
+			} else {
+				r.NoError(err)
+			}
+		})
+	}
+}
+
 func TestGetReferenceName(t *testing.T) {
 	tests := []struct {
 		name          string

@@ -56,6 +56,18 @@ func ChooseAddLocalResourceType(repo runtime.Typed) runtime.Type {
 	}
 }
 
+// validateUploadType checks that the given upload type is compatible with the target repository.
+// Uploading as OCI artifact to a CTF archive is not allowed because CTF archives have no
+// registry URL to resolve against.
+func validateUploadType(uploadType UploadType, toSpec runtime.Typed) error {
+	if uploadType == UploadAsOciArtifact {
+		if _, isCTF := toSpec.(*ctfv1.Repository); isCTF {
+			return fmt.Errorf("cannot upload as OCI artifact to a CTF archive: CTF archives have no registry URL to resolve against, use --upload-as localBlob or omit the flag to use the default behavior")
+		}
+	}
+	return nil
+}
+
 // shouldUploadAsOCIArtifact determines whether an OCI artifact resource should be uploaded
 // as an OCI artifact reference or as a local blob based on the upload type and target repository.
 //

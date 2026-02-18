@@ -142,6 +142,70 @@ components:
 	r.Equal("test-resource", desc.Component.Resources[0].Name)
 }
 
+// Test_Integration_TransferComponentVersion_CTFTarget_UploadAsOCIArtifact_Rejected verifies that
+// transferring a component version to a CTF target with --upload-as ociArtifact is rejected.
+func Test_Integration_TransferComponentVersion_CTFTarget_UploadAsOCIArtifact_Rejected(t *testing.T) {
+	r := require.New(t)
+	t.Parallel()
+
+	// 1. Create a Source CTF Archive with a component version
+	componentName := "ocm.software/test-ctf-upload-rejected"
+	componentVersion := "v1.0.0"
+
+	constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: test-resource
+    version: v1.0.0
+    type: plainText
+    input:
+      type: utf8
+      text: "Hello, World!"
+`, componentName, componentVersion)
+
+	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	sourceCTF := filepath.Join(t.TempDir(), "source-ctf")
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("ctf::%s", sourceCTF),
+		"--constructor", constructorPath,
+	})
+	r.NoError(addCMD.ExecuteContext(t.Context()), "creation of source CTF should succeed")
+
+	// 2. Attempt to transfer to a CTF target with --upload-as ociArtifact
+	targetCTF := filepath.Join(t.TempDir(), "target-ctf")
+
+	transferCMD := cmd.New()
+	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion)
+	targetRef := fmt.Sprintf("ctf::%s", targetCTF)
+
+	transferCMD.SetArgs([]string{
+		"transfer",
+		"component-version",
+		sourceRef,
+		targetRef,
+		"--copy-resources",
+		"--upload-as", "ociArtifact",
+	})
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	// 3. The transfer should fail because --upload-as ociArtifact is incompatible with CTF targets
+	err := transferCMD.ExecuteContext(ctx)
+	r.Error(err, "transfer to CTF with --upload-as ociArtifact should be rejected")
+	r.ErrorContains(err, "cannot upload as OCI artifact to a CTF archive")
+}
+
 // Test_Integration_TransferComponentVersion_PreservesSignatures_ToOCI verifies that signatures
 // on a component descriptor are preserved when transferring a component version with local blob
 // resources to an OCI registry. This exercises the OCIAddComponentVersion transformer path.

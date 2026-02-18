@@ -30,6 +30,10 @@ func BuildGraphDefinition(
 		opt(&o)
 	}
 
+	if err := validateUploadType(o.UploadType, toSpec); err != nil {
+		return nil, err
+	}
+
 	disc := &discoverer{
 		recursive:         o.Recursive,
 		discoveredDigests: make(map[string]descriptor.Digest),
