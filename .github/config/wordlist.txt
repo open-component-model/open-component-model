@@ -126,6 +126,7 @@ devops
 digesters
 directorytree
 dirtree
+Discoverability
 dns
 dockerconfig
 downloadconstraint
@@ -134,6 +135,7 @@ downloaderdescriptor
 downloaders
 downloadhandlers
 dry-run
+DSL
 dup
 dups
 dynaml
