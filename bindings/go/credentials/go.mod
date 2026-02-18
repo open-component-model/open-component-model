@@ -6,7 +6,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/configuration v0.0.10
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/runtime v0.0.5
+	ocm.software/open-component-model/bindings/go/runtime v0.0.6
 )
 
 require (
