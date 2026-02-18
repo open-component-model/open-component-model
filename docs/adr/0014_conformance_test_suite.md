@@ -31,6 +31,10 @@ However, we face several challenges and requirements:
 4.  **Tooling Complexity**: Kubernetes uses an elaborate Ginkgo setup with 
     complex labeling for conformance. We need to weigh the added 
     functionality of complex tooling against the additional complexity.
+5. **Environment Independence**: Tests should be runnable against a configurable
+   environment (e.g., different versions of the ocm cli, different oci 
+   registries (ghcr.io, gcr.io, docker.io, ...), different kubernetes 
+   clusters (kind, gardener, ...)).
 
 ## Decision Drivers
 
@@ -70,7 +74,7 @@ Testify with Functional Labeling (Go style)".
     developers struggled with Ginkgo's implicit behaviors and its IDE integration.
 *   **Functionality**: Functional labeling allows for a similar level of 
     flexibility as Ginkgo labels while being explicit.
-*   **Native Tooling**: Leveraging `go test -run` is standard and
+*   **Native Tooling**: Leveraging `go test -run` / `go test -c` is standard and
     well-understood by Go developers.
 *   **Clear Separation**: A dedicated `e2e` module avoids circular 
     dependencies and keeps the test suite distinct from the component code.
@@ -83,34 +87,37 @@ We will introduce a new top-level `e2e` Go module in the repository.
 This module will contain our end-to-end tests, a subset of which will 
 serve as conformance tests.
 
-**Key changes:**
-1.  **New `e2e` Module**: A dedicated place for integration and conformance tests.
-2.  **Framework**: Migration (for new/conformance tests) to `stretchr/testify` for assertions and standard `testing.T`.
-3.  **Identification**: Conformance tests will be identified by the prefix `TestConformance`.
-4.  **Promotion**: A test is promoted from a standard e2e test to a conformance test by renaming it to start with `TestConformance`. This is done via Pull Request.
+**Key Setup Design Decisions:**
+1.  **New `e2e` Module**: A dedicated place for e2e and conformance tests.
+2.  **Framework**: Migration to `stretchr/testify` for assertions and standard `testing.T`.
+3.  **Identification**: All tests MUST initialize a 
+    `type TestMeta struct { Labels map[string]string }`. Conformance 
+    tests MUST initialize this struct with a label `test-kind: conformance`.
+    Before running any tests, a global variable of `type TestEnv struct { 
+    Labels map[string]string }` that contains information about the test 
+    environment.
+4. **Configuration**: The test environment is configured by passing a command 
+   line argument `./e2e.test -- --config=<config_file_path>` to the test 
+   binary. The config is supposed to be YAML or JSON. The configuration file 
+   can be validated against a schema to ensure correctness and documentation.
+5. **Promotion**: A test is promoted from a standard e2e test to a 
+    conformance test by adding a label of `test-kind: conformance` to the 
+    `TestMeta` struct. This is done via Pull Request.
+6. **Versioning**: The conformance tests are versioned alongside CLI and k8s 
+   controllers.
+7. * **Reference Scenarios**: The reference scenarios as specified in the 
+   [ADR 0013](0013_reference_scenarios.md) will constitute the core of our
+   conformance tests.
 
-#### High-level Architecture
-
-```mermaid
-graph TD
-    CLI[CLI Component]
-    Controller[Kubernetes Controller]
-    E2E[e2e Module] -->|Tests| CLI
-    E2E -->|Tests| Controller
-    
-    subgraph "Test Suite"
-        Tests[All Tests]
-        Conformance[TestConformance...]
-        Tests -->|Contains| Conformance
-    end
-```
-
-#### Contract
-
-*   **Naming**: All conformance tests must start with `TestConformance`.
-*   **Location**: All conformance tests must reside in the `e2e` module.
-*   **Versioning**: Tests will be versioned alongside the codebase. 
-*   **Execution**: Conformance tests are executed via `go test ./... -run ^TestConformance`.
+**Technical Details:**
+* **Test Containers**: [Testcontainers](https://golang.testcontainers.org/) will
+  be used to run our ocm binary and other external dependencies such as oci 
+  registries in isolated containers to ensure environment consistency. 
+* **Providers**: We will try to implement provider interfaces for external 
+  dependencies such as oci registries (e.g. distribution, zot, ghcr.io, ...) 
+  and kubernetes clusters (e.g., kind, gardener, ...). This will be an 
+  abstraction layer that allows us to run the same tests against different 
+  oci registry or Kubernetes clusters.
 
 ## Pros and Cons of the Options
 
@@ -118,32 +125,31 @@ graph TD
 
 Pros:
 *   Rich BDD style (Given/When/Then).
+*   Built-in support for labeling and filtering tests.
 *   Powerful tooling (generators, parallel execution).
 *   Familiarity for those coming from Kubernetes development.
 
 Cons:
 *   Steep learning curve for the DSL.
-*   Magic behavior (global state, complex bootstrapping).
+*   Implicit behavior (global state, complex bootstrapping).
 *   Filtering requires specific Ginkgo CLI flags or label expressions.
 
 ### [Option 2] Standard Go + Testify (Chosen)
 
 Pros:
 *   Standard Go testing patterns (no DSL to learn).
-*   Simple regex filtering built into `go test`.
 *   `stretchr/testify` provides familiar assertions.
-*   easier debugging (just a standard go binary).
+*   Explicit filtering.
+*   Common tooling for CLI and Controllers.
+*   Preferred by our developers.
 
 Cons:
-*   Less "readable" for non-developers (BDD style is sometimes preferred for specs).
-*   Must enforce naming conventions manually (though linters can help).
+*   Must enforce conventions manually (though linters can help).
+*   Custom implementation for labeling and filtering instead of 
+    a well-established framework with thorough documentation.
 
 ## Discovery and Distribution
 
 *   The decision will be implemented by creating the `e2e` folder and migrating initial tests.
-*   CI pipelines will be updated to run the conformance suite using the `-run ^TestConformance` filter.
+*   CI pipelines will be updated to run the e2e test suite.
 *   Documentation will be added to `CONTRIBUTING.md` regarding how to write and promote tests.
-
-## Conclusion
-
-By adopting standard Go testing with a strict naming convention in a dedicated `e2e` module, we establish a robust, maintainable, and verifiable conformance test suite. This simplifies our tooling stack while meeting the requirement for a rigid conformance definition and promotion workflow.
