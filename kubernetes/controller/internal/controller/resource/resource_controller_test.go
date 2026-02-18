@@ -2,12 +2,13 @@ package resource
 
 import (
 	"crypto"
-	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
+
+	_ "embed"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -1324,9 +1325,14 @@ var _ = Describe("Resource Controller", func() {
 			}
 			Expect(repo.AddComponentVersion(ctx, nestedDesc11)).To(Succeed())
 
-			digest, err := mockReferenceDigest(ctx, nestedDesc11)
+			digest, err := signing.GenerateDigest(ctx, nestedDesc11, slog.New(logr.ToSlogHandler(log.FromContext(ctx))), signing.LegacyNormalisationAlgo, crypto.SHA256.String())
 			Expect(err).ToNot(HaveOccurred())
-			nestedDesc1.Component.References[0].Digest = digest
+
+			nestedDesc1.Component.References[0].Digest = descruntime.Digest{
+				HashAlgorithm:          digest.HashAlgorithm,
+				Value:                  digest.Value,
+				NormalisationAlgorithm: digest.NormalisationAlgorithm,
+			}
 			Expect(repo.AddComponentVersion(ctx, nestedDesc1)).To(Succeed())
 
 			nestedDesc2 := &descruntime.Descriptor{
@@ -1366,10 +1372,14 @@ var _ = Describe("Resource Controller", func() {
 			for i, ref := range desc.Component.References {
 				descNested, err := repo.GetComponentVersion(ctx, ref.Component, componentVersion)
 				Expect(err).NotTo(HaveOccurred())
-				digest, err := mockReferenceDigest(ctx, descNested)
+				digest, err := signing.GenerateDigest(ctx, descNested, slog.New(logr.ToSlogHandler(log.FromContext(ctx))), signing.LegacyNormalisationAlgo, crypto.SHA256.String())
 				Expect(err).ToNot(HaveOccurred())
 
-				desc.Component.References[i].Digest = digest
+				desc.Component.References[i].Digest = descruntime.Digest{
+					HashAlgorithm:          digest.HashAlgorithm,
+					Value:                  digest.Value,
+					NormalisationAlgorithm: digest.NormalisationAlgorithm,
+				}
 			}
 
 			By("signing the parent component version")
@@ -1878,17 +1888,4 @@ func mustMarshalJSON(v any) []byte {
 	raw, err := json.Marshal(v)
 	Expect(err).ToNot(HaveOccurred())
 	return raw
-}
-
-func mockReferenceDigest(ctx SpecContext, desc *descruntime.Descriptor) (descruntime.Digest, error) {
-	digest, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(log.FromContext(ctx))), signing.LegacyNormalisationAlgo, crypto.SHA256.String())
-	if err != nil {
-		return descruntime.Digest{}, err
-	}
-
-	return descruntime.Digest{
-		HashAlgorithm:          digest.HashAlgorithm,
-		Value:                  digest.Value,
-		NormalisationAlgorithm: digest.NormalisationAlgorithm,
-	}, nil
 }
