@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/stretchr/testify v1.11.1
-	ocm.software/open-component-model/bindings/go/runtime v0.0.5
+	ocm.software/open-component-model/bindings/go/runtime v0.0.6
 )
 
 require (
