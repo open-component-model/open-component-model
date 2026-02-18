@@ -10,10 +10,10 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260212155305-86f8891d890c
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260212155305-86f8891d890c
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260217133701-035a17a58f3e
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260217133701-035a17a58f3e
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/oci v0.0.29
+	ocm.software/open-component-model/bindings/go/oci v0.0.31
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	sigs.k8s.io/yaml v1.6.0
@@ -31,7 +31,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/text v0.33.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/configuration v0.0.9 // indirect
+	ocm.software/open-component-model/bindings/go/configuration v0.0.10 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 )
