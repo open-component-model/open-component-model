@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
-
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
@@ -18,6 +15,7 @@ import (
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"oras.land/oras-go/v2/registry/remote/auth"
 )
 
 const DefaultCreator = "ocm.software/open-component-model/bindings/go/oci"
@@ -91,6 +89,10 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		options.Scheme = repoSpec.Scheme
 	}
 
+	if options.HTTPClient == nil {
+		options.HTTPClient = NewHTTPClient(WithHTTPUserAgent(options.UserAgent))
+	}
+
 	provider := &CachingComponentVersionRepositoryProvider{
 		creator:            options.UserAgent,
 		scheme:             options.Scheme,
@@ -98,7 +100,7 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		credentialCache:    &credentialCache{},
 		ociCache:           &ociCache{scheme: options.Scheme},
 		authorizationCache: auth.NewCache(),
-		httpClient:         retry.DefaultClient,
+		httpClient:         options.HTTPClient,
 		tempDir:            options.TempDir,
 	}
 
@@ -189,9 +191,6 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 			Client:     b.httpClient,
 			Cache:      b.authorizationCache,
 			Credential: b.credentialCache.get,
-			Header: map[string][]string{
-				"User-Agent": {b.creator},
-			},
 		}, opts...)
 	case *ctfrepospecv1.Repository:
 		loadFunc := func(path string) (*ocictf.Store, error) {

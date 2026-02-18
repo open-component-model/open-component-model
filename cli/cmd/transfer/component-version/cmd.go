@@ -228,7 +228,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	// Execute graph
 	if err := graph.Process(ctx); err != nil {
 		tracker.Summary(err)
-		return fmt.Errorf("graph execution failed")
+		return fmt.Errorf("graph execution failed: %w", err)
 	}
 	tracker.Summary(nil)
 
