@@ -1,5 +1,5 @@
 // @ts-check
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 // --------------------------
 // GitHub Actions entrypoint
@@ -17,8 +17,20 @@ export default async function computeRcVersion({ core }) {
     const basePrefix = parseBranch(releaseBranch);
     const tagPrefix = `${componentPath}/v`;
 
-    const latestStable = run(core, `git tag --list '${tagPrefix}${basePrefix}.*' | sort -V | tail -n1`);
-    const latestRc = run(core, `git tag --list '${tagPrefix}${basePrefix}.*-rc.*' | sort -V | tail -n1`);
+    // Get all matching tags and filter/sort in JavaScript
+    const allTags = run(core, "git", ["tag", "--list", `${tagPrefix}${basePrefix}.*`]);
+    const tagList = allTags ? allTags.split("\n").filter(Boolean) : [];
+
+    // Exclude RC tags here, otherwise latestStable may incorrectly resolve to e.g. v0.4.0-rc.3
+    const stableTags = tagList.filter(tag => !/-rc\.\d+$/.test(tag));
+    const latestStable = sortVersions(stableTags).pop() || "";
+
+    // Get all RC tags
+    const rcTags = tagList.filter(tag => /-rc\.\d+$/.test(tag));
+    const latestRc = sortVersions(rcTags).pop() || "";
+
+    core.info(`Latest stable: ${latestStable || "(none)"}`);
+    core.info(`Latest RC: ${latestRc || "(none)"}`);
 
     const { baseVersion, rcVersion } = computeNextVersions(basePrefix, latestStable, latestRc, false);
 
@@ -29,6 +41,7 @@ export default async function computeRcVersion({ core }) {
     core.setOutput("new_version", rcVersion);
     core.setOutput("base_version", baseVersion);
     core.setOutput("promotion_tag", promotionTag);
+    core.setOutput("promotion_version", baseVersion);
 
     // --------------------------
     // Step summary
@@ -56,14 +69,22 @@ export default async function computeRcVersion({ core }) {
 // --------------------------
 // Core helpers
 // --------------------------
-export function run(core, cmd) {
-  core.info(`> ${cmd}`);
+/**
+ * Run a shell command safely using execFileSync.
+ * @param {*} core - GitHub Actions core module
+ * @param {string} executable - The executable to run (e.g., "git", "grep")
+ * @param {string[]} args - Array of arguments
+ * @returns {string} Command output or empty string on failure
+ */
+export function run(core, executable, args) {
+  const cmdStr = `${executable} ${args.join(" ")}`;
+  core.info(`> ${cmdStr}`);
   try {
-    const out = execSync(cmd).toString().trim();
+    const out = execFileSync(executable, args, { encoding: "utf-8" }).trim();
     if (out) core.info(`Output: ${out}`);
     return out;
   } catch (err) {
-    core.warning(`Command failed: ${cmd}\n${err.message}`);
+    core.warning(`Command failed: ${cmdStr}\n${err.message}`);
     return "";
   }
 }
@@ -189,4 +210,31 @@ export function parseVersion(tag) {
     if (!tag) return [];
     const version = tag.replace(/^.*v/, "").replace(/-rc\.\d+$/, "");
     return version.split(".").map(Number);
+}
+
+/**
+ * Sort version tags in ascending order (similar to `sort -V`).
+ * Handles both stable versions (v0.1.2) and RC versions (v0.1.2-rc.3).
+ *
+ * @param {string[]} tags - Array of version tags to sort
+ * @returns {string[]} Sorted array of version tags
+ */
+export function sortVersions(tags) {
+    return [...tags].sort((a, b) => {
+        const partsA = parseVersion(a);
+        const partsB = parseVersion(b);
+
+        // Compare major.minor.patch lexicographically (early return ensures correct ordering)
+        // Example: 2.1.1 vs 1.2.1 → i=0: diff=1 → return 1 (2 > 1, so A > B)
+        // Example: 1.2.1 vs 1.1.1 → i=0: diff=0, i=1: diff=1 → return 1 (A > B)
+        for (let i = 0; i < 3; i++) {
+            const diff = (partsA[i] || 0) - (partsB[i] || 0);
+            if (diff !== 0) return diff;
+        }
+
+        // If base versions are equal, compare RC numbers
+        const rcA = parseInt(a.match(/-rc\.(\d+)/)?.[1] ?? "0", 10);
+        const rcB = parseInt(b.match(/-rc\.(\d+)/)?.[1] ?? "0", 10);
+        return rcA - rcB;
+    });
 }
