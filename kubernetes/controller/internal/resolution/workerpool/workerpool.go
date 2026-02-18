@@ -437,13 +437,13 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 }
 
 func verificationState(verifications []ocm.Verification, digest *v2.Digest) string {
-	if len(verifications) != 0 && digest != nil {
+	switch {
+	// We expect EITHER verifications OR a digest to be present for a verified component
+	case (len(verifications) != 0 && digest == nil) || (len(verifications) == 0 && digest != nil):
+		return "verified"
+	case len(verifications) == 0 && digest == nil:
+		return "unverified"
+	default:
 		return "unknown"
 	}
-
-	if len(verifications) == 0 && digest == nil {
-		return "unverified"
-	}
-
-	return "verified"
 }
