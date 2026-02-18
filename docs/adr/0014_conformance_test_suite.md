@@ -1,4 +1,4 @@
-# ADR 0014: Conformance Test Suite
+# ADR 0014: Conformance Test Suite Design
 
 * **Status**: proposed
 * **Deciders**: Maintainers
