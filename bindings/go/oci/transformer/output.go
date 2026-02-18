@@ -2,35 +2,17 @@ package transformer
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
-
-	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 )
 
 // DetermineOutputPath determines the output path for buffering the blob content.
-// If the outputPath is empty, it creates a temporary file with an appropriate extension based on the media type of the blob content.
+// If the outputPath is empty, it creates a temporary file.
 // If the outputPath is provided, it ensures that the directory exists.
-func DetermineOutputPath(outputPath string, filePrefix string, blobContent blob.ReadOnlyBlob) (string, error) {
+func DetermineOutputPath(outputPath string, filePrefix string) (string, error) {
 	if outputPath == "" {
-		fileExt := ""
-		if mediaTypeAware, ok := blobContent.(blob.MediaTypeAware); ok {
-			if mediaType, ok := mediaTypeAware.MediaType(); ok {
-				if mediaType == layout.MediaTypeOCIImageLayoutTarGzipV1 {
-					fileExt = ".tar.gz"
-				}
-			}
-		}
-
-		if fileExt == "" {
-			slog.Debug("unable to determine file extension from media type, setting .bin extension")
-			fileExt = ".bin"
-		}
-
 		// Create a temporary file
-		tempFile, err := os.CreateTemp("", fmt.Sprintf("%s-*%s", filePrefix, fileExt))
+		tempFile, err := os.CreateTemp("", filePrefix+"-*")
 		if err != nil {
 			return "", fmt.Errorf("failed creating temporary file: %w", err)
 		}
