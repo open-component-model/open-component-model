@@ -59,6 +59,8 @@ cliconfig
 clis
 closable
 closeable
+ClusterRole
+ClusterRoleBinding
 cmds
 cncf
 coc
@@ -169,6 +171,7 @@ gc
 gerald
 gergely
 getinexpensivecontentversionidentity
+GetOCIArtifact
 getresourcesbyname
 getter
 ghcr
@@ -325,6 +328,7 @@ ocireg
 ociregistry
 ocirepository
 OCIAddComponentVersion
+OCIAddLocalResource
 OCIGetComponentVersion
 ocm
 ocmbot
@@ -398,6 +402,7 @@ resolvefromcomponentversion
 resolvers
 resourceconfig
 resourcegraphdefinition
+ResourceGraphDefinitions
 resourceref
 resourcereference
 retrigger

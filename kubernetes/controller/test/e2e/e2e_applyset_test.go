@@ -72,8 +72,6 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
 			Expect(utils.DeployResourceWithoutCleanup(ctx, filepath.Join(examplesDir, example.Name(), BootstrapDeployer))).To(Succeed())
 
-			Expect(utils.MakeServiceAccountClusterAdmin(ctx, "ocm-k8s-toolkit-system", "ocm-k8s-toolkit-controller-manager")).To(Succeed())
-
 			name := ""
 
 			By("waiting for the first deployment to be ready")

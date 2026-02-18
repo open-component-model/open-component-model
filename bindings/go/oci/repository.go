@@ -281,7 +281,7 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 
 	var desc ociImageSpecV1.Descriptor
 	if pinnedDigest.String() == "" {
-		if desc, err = src.Resolve(ctx, resolved.String()); err != nil {
+		if desc, err = src.Resolve(ctx, resolved.ReferenceOrTag()); err != nil {
 			return nil, fmt.Errorf("failed to resolve reference to process digest %q: %w", typed.ImageReference, err)
 		}
 	} else {

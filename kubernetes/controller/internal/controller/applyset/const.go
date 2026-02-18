@@ -39,12 +39,12 @@ func (e *ApplySetConflictError) Unwrap() error {
 // Internal constants for ApplySet implementation.
 const (
 	// FieldManager is the field manager name used for server-side apply.
-	FieldManager = "kro.run/applyset"
+	FieldManager = "delivery.ocm.software/applyset"
 )
 
-// ToolingID returns the tooling identifier in the format "kro/<version>".
+// ToolingID returns the tooling identifier in the format "ocm/<version>".
 func ToolingID() string {
-	return fmt.Sprintf("kro/%s", version.GetVersionInfo().GitVersion)
+	return fmt.Sprintf("ocm/%s", version.GetVersionInfo().GitVersion)
 }
 
 // Label and annotation keys from the ApplySet specification.

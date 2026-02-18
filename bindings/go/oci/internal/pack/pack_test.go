@@ -668,7 +668,7 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
 
-			fromStore, err := ResourceLocalBlobOCILayout(ctx, store, resourceBlob, tt.opts)
+			fromStore, err := ResourceLocalBlobOCILayout(ctx, store, resourceBlob, &v2.LocalBlob{}, tt.opts)
 
 			if tt.expectedError != "" {
 				assert.ErrorContains(t, err, tt.expectedError)
