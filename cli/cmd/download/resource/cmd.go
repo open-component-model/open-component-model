@@ -32,6 +32,7 @@ const (
 	FlagOutput           = "output"
 	FlagTransformer      = "transformer"
 	FlagExtractionPolicy = "extraction-policy"
+	FlagDecompress       = "decompress"
 )
 
 const (
@@ -57,7 +58,10 @@ It supports optional transformation of the resource using a registered transform
 If no transformer is specified, the resource is written directly in its original format. If the media type is known,
 the appropriate file extension will be added to the output file name if no output location is given.
 
-Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.`,
+Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
+
+If a resource was stored with compression enabled, it is downloaded in its compressed form by default.
+Use --decompress to transparently decompress it. This flag has no effect on resources that are not compressed.`,
 		Example: ` # Download a resource with identity 'name=example' and write to default output
   ocm download resource ghcr.io/org/component:v1 --identity name=example
 
@@ -65,7 +69,10 @@ Resources can be accessed either locally or via a plugin that supports remote fe
   ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
 
   # Download a resource and apply a transformer
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer`,
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer
+
+  # Download a compressed resource and decompress it
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --decompress`,
 		RunE:              DownloadResource,
 		DisableAutoGenTag: true,
 	}
@@ -78,6 +85,8 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 		"policy to apply when extracting a resource. "+
 			"If set to 'disable', the resource will not be extracted, even if they could be. "+
 			"If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.")
+	cmd.Flags().Bool(FlagDecompress, false, "decompress the resource if it was stored with compression enabled. "+
+		"If the resource is not compressed, this flag has no effect.")
 
 	return cmd
 }
@@ -115,6 +124,11 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	transformer, err := cmd.Flags().GetString(FlagTransformer)
 	if err != nil {
 		return fmt.Errorf("getting transformer flag failed: %w", err)
+	}
+
+	decompress, err := cmd.Flags().GetBool(FlagDecompress)
+	if err != nil {
+		return fmt.Errorf("getting decompress flag failed: %w", err)
 	}
 
 	requestedIdentity, err := runtime.ParseIdentity(identityStr)
@@ -159,6 +173,13 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, ref.Component, ref.Version, repo, res, requestedIdentity)
 	if err != nil {
 		return fmt.Errorf("downloading resource for identity %q failed: %w", requestedIdentity, err)
+	}
+
+	if decompress {
+		data, err = compression.Decompress(data)
+		if err != nil {
+			return fmt.Errorf("decompressing resource failed: %w", err)
+		}
 	}
 
 	finalOutputPath, err := processResourceOutput(output, res, data, requestedIdentity.String(), logger)

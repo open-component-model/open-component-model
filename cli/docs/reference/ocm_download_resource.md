@@ -23,6 +23,9 @@ the appropriate file extension will be added to the output file name if no outpu
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
 
+If a resource was stored with compression enabled, it is downloaded in its compressed form by default.
+Use --decompress to transparently decompress it. This flag has no effect on resources that are not compressed.
+
 ```
 ocm download resource [flags]
 ```
@@ -38,11 +41,15 @@ ocm download resource [flags]
 
   # Download a resource and apply a transformer
   ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer
+
+  # Download a compressed resource and decompress it
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --decompress
 ```
 
 ### Options
 
 ```
+      --decompress               decompress the resource if it was stored with compression enabled. If the resource is not compressed, this flag has no effect.
       --extraction-policy enum   policy to apply when extracting a resource. If set to 'disable', the resource will not be extracted, even if they could be. If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.
                                  (must be one of [auto disable]) (default auto)
   -h, --help                     help for resource

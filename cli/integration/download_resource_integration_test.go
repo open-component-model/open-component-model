@@ -18,6 +18,7 @@ import (
 	orasoci "oras.land/oras-go/v2/content/oci"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -214,6 +215,122 @@ configurations:
 			r.NoError(err)
 			r.Equal("foobar", string(layerData))
 		})
+	})
+
+	t.Run("download resource with decompress flag", func(t *testing.T) {
+		originalData := []byte("hello-decompress-test")
+
+		compressedBlob := compression.Compress(direct.NewFromBytes(originalData))
+
+		tests := []struct {
+			name               string
+			resourceName       string
+			component          string
+			blob               blob.ReadOnlyBlob
+			access             *v2.LocalBlob
+			decompress         bool
+			expectUncompressed bool // true = output should match originalData
+		}{
+			{
+				name:               "compressed data with --decompress yields original",
+				resourceName:       "compressed-resource",
+				component:          "ocm.software/test-decompress-on",
+				blob:               compressedBlob,
+				access:             &v2.LocalBlob{MediaType: "application/octet-stream" + compression.MediaTypeGzipSuffix},
+				decompress:         true,
+				expectUncompressed: true,
+			},
+			{
+				name:               "compressed data without --decompress stays compressed",
+				resourceName:       "compressed-resource-no-flag",
+				component:          "ocm.software/test-decompress-off",
+				blob:               compressedBlob,
+				access:             &v2.LocalBlob{MediaType: "application/octet-stream" + compression.MediaTypeGzipSuffix},
+				decompress:         false,
+				expectUncompressed: false,
+			},
+			{
+				name:               "uncompressed data with --decompress is a no-op",
+				resourceName:       "uncompressed-resource",
+				component:          "ocm.software/test-decompress-noop",
+				blob:               direct.NewFromBytes(originalData),
+				access:             &v2.LocalBlob{},
+				decompress:         true,
+				expectUncompressed: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				r := require.New(t)
+
+				version := "v1.0.0"
+				localResource := resource{
+					Resource: &descriptor.Resource{
+						ElementMeta: descriptor.ElementMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    tt.resourceName,
+								Version: version,
+							},
+						},
+						Type:         "some-arbitrary-type",
+						Access:       tt.access,
+						CreationTime: descriptor.CreationTime(time.Now()),
+					},
+					ReadOnlyBlob: tt.blob,
+				}
+
+				uploadComponentVersion(t, repo, tt.component, version, localResource)
+
+				output := filepath.Join(t.TempDir(), "output")
+
+				args := []string{
+					"download",
+					"resource",
+					fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, tt.component, version),
+					"--identity",
+					fmt.Sprintf("name=%s,version=%s", tt.resourceName, version),
+					"--output",
+					output,
+					"--config",
+					cfgPath,
+				}
+				if tt.decompress {
+					args = append(args, "--decompress")
+				}
+
+				downloadCMD := cmd.New()
+				downloadCMD.SetArgs(args)
+				r.NoError(downloadCMD.ExecuteContext(t.Context()))
+
+				outputBlob, err := filesystem.GetBlobFromOSPath(output)
+				r.NoError(err)
+
+				dataStream, err := outputBlob.ReadCloser()
+				r.NoError(err)
+				t.Cleanup(func() {
+					r.NoError(dataStream.Close())
+				})
+
+				data, err := io.ReadAll(dataStream)
+				r.NoError(err)
+
+				if tt.expectUncompressed {
+					r.Equal(string(originalData), string(data))
+				} else {
+					// read the compressed data and ensure it does not match the original uncompressed data
+					rc, err := localResource.ReadCloser()
+					r.NoError(err)
+					t.Cleanup(func() {
+						_ = rc.Close()
+					})
+					compressedData, err := io.ReadAll(rc)
+					r.NotEqual(string(originalData), string(data),
+						"data should equal to the data in the blob")
+					r.Equal(compressedData, data)
+				}
+			})
+		}
 	})
 }
 
