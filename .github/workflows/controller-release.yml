@@ -103,7 +103,7 @@ jobs:
     name: Build Controller
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
     needs: [prepare, tag_rc]
-    uses: ./.github/workflows/kubernetes-controller-new.yml
+    uses: ./.github/workflows/kubernetes-controller.yml
     secrets: inherit
     with:
       ref: ${{ needs.prepare.outputs.new_tag }}
