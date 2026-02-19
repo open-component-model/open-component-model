@@ -3,7 +3,7 @@ package internal
 import (
 	"fmt"
 
-	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -80,8 +80,8 @@ func IsOCICompliantManifest(mediaType string) bool {
 	switch mediaType {
 	// TODO(jakobmoellerdev): currently only Image Indexes and OCI manifests are supported,
 	//  but we may want to extend this down the line with additional media types such as docker manifests.
-	case ociImageSpecV1.MediaTypeImageManifest,
-		ociImageSpecV1.MediaTypeImageIndex:
+	case ocispecv1.MediaTypeImageManifest,
+		ocispecv1.MediaTypeImageIndex:
 		return true
 	default:
 		return false
