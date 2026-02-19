@@ -79,7 +79,7 @@ We will introduce a new top-level `e2e` Go module containing all end-to-end test
 *   **Pros**: Standard patterns, explicit filtering, simple debugging, preferred by the team.
 *   **Cons**: Requires manual convention enforcement (mitigated by linters).
 
-## Discovery and Distribution
+## Next Steps
 
 *   Create the `e2e` folder and migrate initial tests.
 *   Update CI pipelines to execute the suite.
