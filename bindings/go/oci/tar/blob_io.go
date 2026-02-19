@@ -105,13 +105,19 @@ func proxyOCIStore(ctx context.Context, ociStore *CloseableReadOnlyStore, opts *
 	// if our store only has one single descriptor, we dont need to copy the top level index of the layout.
 	// instead we can use whatever top level descriptor (manifest or index) is located as singleton in the layout index.
 	if len(ociStore.Index.Manifests) == 1 {
-		return proxyOCIStoreWithTopLevelDescriptor(ctx, ociStore, opts)
+		return proxyOCIStoreWithTopLevelDescriptor(ctx, 0, ociStore, opts)
 	}
-	// if there is more than one manifest in the store, we are dealing with multiple artifacts, so in this case we should also copy the index
-	// that is the top level descriptor of the oci layout.
-	// TODO(jakobmoellerdev): It might make sense here to split this into multiple manifests without a top level index as well.
-	//  Currently the use cases are too unclear to decide here, but we can revisit this at any time and switch it quite easily.
-	return proxyOCIStoreWithLayoutIndex(ociStore, opts)
+	var topLevelNamedDescriptors []int
+	for idx, manifest := range ociStore.Index.Manifests {
+		if manifest.Annotations != nil && manifest.Annotations["org.opencontainers.image.ref.name"] != "" {
+			topLevelNamedDescriptors = append(topLevelNamedDescriptors, idx)
+		}
+	}
+	if len(topLevelNamedDescriptors) == 1 {
+		return proxyOCIStoreWithTopLevelDescriptor(ctx, topLevelNamedDescriptors[0], ociStore, opts)
+	}
+
+	return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("multiple manifests found in oci store, but no unique top level manifest could be identified")
 }
 
 func proxyOCIStoreWithLayoutIndex(ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (ociImageSpecV1.Descriptor, content.ReadOnlyStorage, error) {
@@ -139,8 +145,8 @@ func proxyOCIStoreWithLayoutIndex(ociStore *CloseableReadOnlyStore, opts *CopyOC
 	return index, proxy, nil
 }
 
-func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (_ ociImageSpecV1.Descriptor, _ content.ReadOnlyStorage, err error) {
-	topLevelDesc := ociStore.Index.Manifests[0]
+func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (_ ociImageSpecV1.Descriptor, _ content.ReadOnlyStorage, err error) {
+	topLevelDesc := ociStore.Index.Manifests[idx]
 	descStream, err := ociStore.Fetch(ctx, topLevelDesc)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to fetch top level descriptor from store: %w", err)

@@ -322,7 +322,9 @@ func scanLocalBlobs(desc *descriptor.Descriptor) []descriptor.Artifact {
 	// Scan resources for LocalBlob access specs
 	for i := range desc.Component.Resources {
 		resource := &desc.Component.Resources[i]
-		if _, ok := resource.Access.(*v2.LocalBlob); ok {
+		var lb v2.LocalBlob
+		if err := v2.Scheme.Convert(resource.Access, &lb); err == nil {
+			resource.Access = &lb
 			artifacts = append(artifacts, resource)
 		}
 	}
@@ -330,7 +332,9 @@ func scanLocalBlobs(desc *descriptor.Descriptor) []descriptor.Artifact {
 	// Scan sources for LocalBlob access specs
 	for i := range desc.Component.Sources {
 		source := &desc.Component.Sources[i]
-		if _, ok := source.Access.(*v2.LocalBlob); ok {
+		var lb v2.LocalBlob
+		if err := v2.Scheme.Convert(source.Access, &lb); err == nil {
+			source.Access = &lb
 			artifacts = append(artifacts, source)
 		}
 	}
@@ -355,15 +359,18 @@ func identifyLocalBlobManifestsAndLayers(ctx context.Context, store oras.Target,
 			// from the API again. Thats why we need to call Resolve and get the descriptor
 			// instead of just checking existence of the blob.
 			resolve := store.Resolve
-			if bs, ok := store.(interface{ Blobs() registry.BlobStore }); ok {
-				//  TODO(jakobmoellerdev): currently, the blobs store is required
-				//    because the oras remote repo always hardcodes resolves against manifests
-				//    however we really want to resolve against the blob store here for non
-				//    manifest blobs. Mid-Term the oras.Target interface is insufficient
-				//    and CTFs also need to implement this BlobStore and then we can drop this
-				//    assert.
-				resolve = bs.Blobs().Resolve
+			if !introspection.IsOCICompliantMediaType(localBlob.MediaType) {
+				if bs, ok := store.(interface{ Blobs() registry.BlobStore }); ok {
+					//  TODO(jakobmoellerdev): currently, the blobs store is required
+					//    because the oras remote repo always hardcodes resolves against manifests
+					//    however we really want to resolve against the blob store here for non
+					//    manifest blobs. Mid-Term the oras.Target interface is insufficient
+					//    and CTFs also need to implement this BlobStore and then we can drop this
+					//    assert.
+					resolve = bs.Blobs().Resolve
+				}
 			}
+
 			desc, err := resolve(egctx, localBlob.LocalReference)
 			if err != nil {
 				return fmt.Errorf("failed to resolve descriptor for local blob %s: %w", localBlob.LocalReference, err)
@@ -504,7 +511,7 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	// now that we have a unique candidate, we should use its identity instead of the one requested, as
 	// the requested identity might not be fully qualified.
 	// For example, it is valid to ask for "name=abc", but receive an artifact with "name=abc,version=1.0.0".
-	slogcontext.Info(ctx, "found artifact in descriptor", "artifact", meta.ToIdentity())
+	slogcontext.Debug(ctx, "found artifact in descriptor", "artifact", meta.ToIdentity())
 
 	access := artifact.GetAccess()
 	typed, err := repo.scheme.NewObject(access.GetType())
@@ -517,7 +524,10 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
-		b, err := repo.getLocalBlobFromIndexOrManifest(ctx, store, index, manifest, typed.LocalReference)
+		b, err := repo.getLocalBlobFromIndexOrManifest(
+			ctx, store, index, manifest, typed.LocalReference,
+			artifact.GetElementMeta().Version,
+		)
 		return b, artifact, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
@@ -532,7 +542,7 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	store spec.Store,
 	index *ociImageSpecV1.Index,
 	manifest *ociImageSpecV1.Manifest,
-	ref string,
+	ref, version string,
 ) (LocalBlob, error) {
 	descriptors := collectDescriptors(index, manifest)
 
@@ -548,6 +558,7 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 		// to another OCI-compliant manifest instead of a single layer.
 		return tar.CopyToOCILayoutInMemory(ctx, store, artifact, tar.CopyToOCILayoutOptions{
 			CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
+			Tags:             []string{version},
 		})
 	}
 
