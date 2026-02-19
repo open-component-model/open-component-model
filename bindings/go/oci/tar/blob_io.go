@@ -109,7 +109,7 @@ func proxyOCIStore(ctx context.Context, ociStore *CloseableReadOnlyStore, opts *
 	}
 	var topLevelNamedDescriptors []int
 	for idx, manifest := range ociStore.Index.Manifests {
-		if manifest.Annotations != nil && manifest.Annotations["org.opencontainers.image.ref.name"] != "" {
+		if manifest.Annotations != nil && manifest.Annotations[ociImageSpecV1.AnnotationRefName] != "" {
 			topLevelNamedDescriptors = append(topLevelNamedDescriptors, idx)
 		}
 	}
@@ -117,7 +117,14 @@ func proxyOCIStore(ctx context.Context, ociStore *CloseableReadOnlyStore, opts *
 		return proxyOCIStoreWithTopLevelDescriptor(ctx, topLevelNamedDescriptors[0], ociStore, opts)
 	}
 
-	return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("multiple manifests found in oci store, but no unique top level manifest could be identified")
+	// we need this specifically for docker (one manifest),
+	// and oras / ocm packaging compat (many manifests, exactly one ref.name)
+	return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf(
+		"multiple manifests found in oci store, "+
+			"but no manifest could be identified as the top level parent."+
+			"the store must either contain exactly one top level manifest in its index,"+
+			" or at most one manifest with the annotation %s", ociImageSpecV1.AnnotationRefName,
+	)
 }
 
 func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (_ ociImageSpecV1.Descriptor, _ content.ReadOnlyStorage, err error) {
