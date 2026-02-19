@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
+
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
