@@ -44,6 +44,18 @@ func Test_DetermineOutputPath_DirectoryPath(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func Test_DetermineOutputPath_NonExistentFilePath(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "nonexistent.tar.gz")
+
+	result, err := transformer.DetermineOutputPath(outputPath, "test-prefix")
+
+	require.NoError(t, err)
+	assert.Equal(t, outputPath, result)
+	// filePrefix must be ignored when a full file path is provided
+	assert.NotContains(t, filepath.Base(result), "test-prefix")
+}
+
 func Test_DetermineOutputPath_ProvidedPath(t *testing.T) {
 	tests := []struct {
 		name     string
