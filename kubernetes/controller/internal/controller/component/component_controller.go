@@ -267,22 +267,24 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	cacheBackedRepo.Verifications = verifications
 
 	desc, err := cacheBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)
-	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.ResolutionInProgress, err.Error())
-		logger.Info("component version resolution in progress, waiting for event notification",
-			"component", component.Spec.Component,
-			"version", version)
+	if err != nil {
+		switch {
+		case errors.Is(err, workerpool.ErrResolutionInProgress):
+			// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+			status.MarkNotReady(r.EventRecorder, component, v1alpha1.ResolutionInProgress, err.Error())
+			logger.Info("component version resolution in progress, waiting for event notification",
+				"component", component.Spec.Component,
+				"version", version)
 
-		return ctrl.Result{}, nil
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
-		// Ignore error, but log event
-		event.New(r.EventRecorder, component, nil, eventv1.EventSeverityError, err.Error())
-	case err != nil:
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+			return ctrl.Result{}, nil
+		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+			// Ignore error, but log event
+			event.New(r.EventRecorder, component, nil, eventv1.EventSeverityError, err.Error())
+		default:
+			status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
+		}
 	}
 
 	digestSpec, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)), signing.LegacyNormalisationAlgo, crypto.SHA256.String())

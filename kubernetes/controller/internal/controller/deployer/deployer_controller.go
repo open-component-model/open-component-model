@@ -845,19 +845,21 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		componentDescriptor, err := repoResource.GetComponentVersion(ctx,
 			resource.Status.Component.Component,
 			resource.Status.Component.Version)
-		switch {
-		case errors.Is(err, workerpool.ErrResolutionInProgress):
-			// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
+		if err != nil {
+			switch {
+			case errors.Is(err, workerpool.ErrResolutionInProgress):
+				// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+				status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
 
-			return nil, workerpool.ErrResolutionInProgress
-		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
-			// Ignore error, but log event
-			event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityInfo, err.Error())
-		case err != nil:
-			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+				return nil, workerpool.ErrResolutionInProgress
+			case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+				// Ignore error, but log event
+				event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityInfo, err.Error())
+			default:
+				status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
 
-			return nil, fmt.Errorf("failed to get component version: %w", err)
+				return nil, fmt.Errorf("failed to get component version: %w", err)
+			}
 		}
 
 		return componentDescriptor, nil
@@ -904,19 +906,21 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 	componentDescriptor, err := componentRepo.GetComponentVersion(ctx,
 		component.Status.Component.Component,
 		component.Status.Component.Version)
-	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
+	if err != nil {
+		switch {
+		case errors.Is(err, workerpool.ErrResolutionInProgress):
+			// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
 
-		return nil, workerpool.ErrResolutionInProgress
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
-		// Ignore error, but log event
-		event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityInfo, err.Error())
-	case err != nil:
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+			return nil, workerpool.ErrResolutionInProgress
+		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+			// Ignore error, but log event
+			event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityInfo, err.Error())
+		default:
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
 
-		return nil, fmt.Errorf("failed to get component version: %w", err)
+			return nil, fmt.Errorf("failed to get component version: %w", err)
+		}
 	}
 
 	// We need to find the matching reference in the parent component descriptor to get the digest specification used
@@ -952,19 +956,21 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 	componentDescriptor, err = repoResource.GetComponentVersion(ctx,
 		resource.Status.Component.Component,
 		resource.Status.Component.Version)
-	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
+	if err != nil {
+		switch {
+		case errors.Is(err, workerpool.ErrResolutionInProgress):
+			// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
 
-		return nil, workerpool.ErrResolutionInProgress
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
-		// Ignore error, but log event
-		event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityInfo, err.Error())
-	case err != nil:
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+			return nil, workerpool.ErrResolutionInProgress
+		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+			// Ignore error, but log event
+			event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityInfo, err.Error())
+		default:
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
 
-		return nil, fmt.Errorf("failed to get component version: %w", err)
+			return nil, fmt.Errorf("failed to get component version: %w", err)
+		}
 	}
 
 	return componentDescriptor, nil

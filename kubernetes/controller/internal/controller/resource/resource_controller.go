@@ -316,22 +316,24 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	referencedDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
 		component.Status.Component.Component,
 		component.Status.Component.Version)
-	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
-		logger.Info("component version resolution in progress, waiting for event notification",
-			"component", component.Status.Component.Component,
-			"version", component.Status.Component.Version)
+	if err != nil {
+		switch {
+		case errors.Is(err, workerpool.ErrResolutionInProgress):
+			// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
+			logger.Info("component version resolution in progress, waiting for event notification",
+				"component", component.Status.Component.Component,
+				"version", component.Status.Component.Version)
 
-		return ctrl.Result{}, nil
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
-		// Ignore error, but log event
-		event.New(r.EventRecorder, component, nil, eventv1.EventSeverityInfo, err.Error())
-	case err != nil:
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+			return ctrl.Result{}, nil
+		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+			// Ignore error, but log event
+			event.New(r.EventRecorder, component, nil, eventv1.EventSeverityInfo, err.Error())
+		default:
+			status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
+		}
 	}
 
 	startRetrievingResource := time.Now()
@@ -349,20 +351,22 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			},
 		},
 	)
-	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
-		logger.Info("reference path resolution in progress, waiting for event notification")
+	if err != nil {
+		switch {
+		case errors.Is(err, workerpool.ErrResolutionInProgress):
+			// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
+			logger.Info("reference path resolution in progress, waiting for event notification")
 
-		return ctrl.Result{}, nil
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
-		// Ignore error, but log event
-		event.New(r.EventRecorder, resource, nil, eventv1.EventSeverityInfo, err.Error())
-	case err != nil:
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+			return ctrl.Result{}, nil
+		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+			// Ignore error, but log event
+			event.New(r.EventRecorder, resource, nil, eventv1.EventSeverityInfo, err.Error())
+		default:
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to resolve reference path: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to resolve reference path: %w", err)
+		}
 	}
 
 	resourceIdentity := resource.Spec.Resource.ByReference.Resource
