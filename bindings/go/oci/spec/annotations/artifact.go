@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 

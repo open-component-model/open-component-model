@@ -120,31 +120,6 @@ func proxyOCIStore(ctx context.Context, ociStore *CloseableReadOnlyStore, opts *
 	return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("multiple manifests found in oci store, but no unique top level manifest could be identified")
 }
 
-func proxyOCIStoreWithLayoutIndex(ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (ociImageSpecV1.Descriptor, content.ReadOnlyStorage, error) {
-	indexJSON, err := json.Marshal(ociStore.Index)
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to marshal index: %w", err)
-	}
-	index := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, indexJSON)
-	if err := opts.MutateParentFunc(&index); err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate index descriptor before copy: %w", err)
-	}
-
-	opts.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-		if content.Equal(desc, index) {
-			return ociStore.Index.Manifests, nil
-		}
-		return content.Successors(ctx, ociStore, desc)
-	}
-
-	proxy := &descriptorStoreProxy{
-		raw:             indexJSON,
-		desc:            index,
-		ReadOnlyStorage: ociStore,
-	}
-	return index, proxy, nil
-}
-
 func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (_ ociImageSpecV1.Descriptor, _ content.ReadOnlyStorage, err error) {
 	topLevelDesc := ociStore.Index.Manifests[idx]
 	descStream, err := ociStore.Fetch(ctx, topLevelDesc)
