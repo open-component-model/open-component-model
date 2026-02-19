@@ -318,7 +318,11 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 // scanLocalBlobs scans the component descriptor for all LocalBlob access specifications and returns them
 func scanLocalBlobs(desc *descriptor.Descriptor) []descriptor.Artifact {
 	var artifacts []descriptor.Artifact
-
+	// the conversion is either a noop if its already a local blob,
+	// or it will convert the access and then update it in place if successful.
+	// this is on purpose, and is expected for example when external plugins
+	// call this function with lazily serialized access specs.
+	//
 	// Scan resources for LocalBlob access specs
 	for i := range desc.Component.Resources {
 		resource := &desc.Component.Resources[i]
@@ -376,8 +380,10 @@ func identifyLocalBlobManifestsAndLayers(ctx context.Context, store oras.Target,
 				return fmt.Errorf("failed to resolve descriptor for local blob %s: %w", localBlob.LocalReference, err)
 			}
 			// a resolved blob will always have the octet stream media type, which needs
-			// to be overwritten with the media type from the local blob.
-			desc.MediaType = localBlob.MediaType
+			// to be overwritten with the media type from the local blob if its present.
+			if localBlob.MediaType != "" {
+				desc.MediaType = localBlob.MediaType
+			}
 			if err := identity.Adopt(&desc, artifact); err != nil {
 				return fmt.Errorf("failed to adopt descriptor for local blob %s: %w", localBlob.LocalReference, err)
 			}
