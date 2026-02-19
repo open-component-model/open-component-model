@@ -84,4 +84,4 @@ We will introduce a new top-level `e2e` Go module containing all end-to-end test
 *   Create the `e2e` folder and migrate initial tests.
 *   Update CI pipelines to execute the suite.
 *   Document test creation and promotion workflows in `CONTRIBUTING.md`.
-*   Incrementally deprecate and migrate k8s ginkgo tests to the new suite.
+*   Incrementally deprecate and migrate e2e tests to the new suite.
