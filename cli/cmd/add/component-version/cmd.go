@@ -365,10 +365,12 @@ func GetComponentConstructor(file *file.Flag) (*constructorruntime.ComponentCons
 	if err != nil {
 		return nil, fmt.Errorf("opening component constructor %q failed: %w", path, err)
 	}
+	defer func() { _ = constructorStream.Close() }()
 	constructorData, err := io.ReadAll(constructorStream)
 	if err != nil {
 		return nil, fmt.Errorf("reading component constructor %q failed: %w", path, err)
 	}
+	constructorData = []byte(os.Expand(string(constructorData), os.Getenv))
 
 	data := constructorv1.ComponentConstructor{}
 	if err := yaml.Unmarshal(constructorData, &data); err != nil {
