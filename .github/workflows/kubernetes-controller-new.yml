@@ -1,0 +1,402 @@
+name: Kubernetes Controller
+
+on:
+  push:
+    branches:
+      - main
+      - 'releases/v**'
+    tags:
+      - 'kubernetes/controller/v**'
+    paths:
+      - kubernetes/controller/**/*
+      - .github/workflows/kubernetes-controller-new.yml
+      - .env
+  pull_request:
+    branches:
+      - main
+    paths:
+      - kubernetes/controller/**/*
+      - .github/workflows/kubernetes-controller-new.yml
+      - .env
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: "The artifact name to build."
+        type: string
+        required: false
+      ref:
+        description: "The ref to build on (branch or tag). Defaults to the current ref."
+        type: string
+        required: false
+    outputs:
+      artifact_name:
+        description: "The artifact name that was built."
+        value: ${{ jobs.build.outputs.artifact_name }}
+      artifact_id:
+        description: "The artifact id that was built."
+        value: ${{ jobs.build.outputs.artifact_id }}
+      image_digest:
+        description: "The digest of the pushed controller image (sha256:...)."
+        value: ${{ jobs.publish.outputs.image_digest }}
+      chart_digest:
+        description: "The digest of the pushed Helm chart (sha256:...)."
+        value: ${{ jobs.publish.outputs.chart_digest }}
+      chart_artifact_name:
+        description: "The artifact name containing the packaged Helm chart."
+        value: ${{ jobs.publish.outputs.chart_artifact_name }}
+
+env:
+  LOCATION: "kubernetes/controller"
+  REGISTRY: ghcr.io
+  REF: ${{ inputs.ref || github.head_ref || github.ref_name }}
+  ARTIFACT_NAME: ${{ inputs.artifact_name || 'controller-artifacts' }}
+  CHECKOUT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+
+jobs:
+  verify-chart:
+    name: Verify Chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.REF }}
+          sparse-checkout: |
+            ${{ env.LOCATION }}
+            Taskfile.yml
+          persist-credentials: false
+
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.14.0
+
+      - name: Validate Helm chart
+        working-directory: ${{ env.LOCATION }}
+        run: |
+          task helm/schema
+          task helm/docs
+          task helm/lint
+          task helm/template
+
+      - name: Verify no uncommitted changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Uncommitted changes detected after running helm tasks"
+            git status && git diff
+            exit 1
+          fi
+
+  build:
+    name: Build Controller
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: verify-chart
+    outputs:
+      artifact_name: ${{ env.ARTIFACT_NAME }}
+      artifact_id: ${{ steps.upload-artifacts.outputs.artifact-id }}
+      version: ${{ steps.version.outputs.version }}
+      should_publish: ${{ steps.branch-check.outputs.should_publish }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          sparse-checkout: |
+            .github/scripts
+            ${{ env.LOCATION }}
+            Taskfile.yml
+          persist-credentials: false
+          ref: ${{ env.REF }}
+
+      - name: Setup Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
+        with:
+          go-version-file: ${{ env.LOCATION }}/go.mod
+          cache-dependency-path: ${{ env.LOCATION }}/go.sum
+
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: 3.x
+
+      - name: Setup docker/buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Compute VERSION
+        id: version
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          REF: ${{ env.REF }}
+          TAG_PREFIX: "kubernetes/controller/v"
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/compute-version.js');
+            await script.default({ core });
+
+      - name: Determine publish eligibility
+        id: branch-check
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          REF: ${{ env.REF }}
+          EVENT_NAME: ${{ github.event_name }}
+        with:
+          script: |
+            const ref = process.env.REF;
+            const eventName = process.env.EVENT_NAME;
+            const defaultBranch = context.payload.repository?.default_branch || 'main';
+            // Publish for: main, release branches, release tags, workflow_call
+            // Never publish for PRs
+            const shouldPublish = eventName !== 'pull_request' && (
+              eventName === 'workflow_call' ||
+              ref === defaultBranch ||
+              /^releases\/v\d+\./.test(ref) ||
+              /^kubernetes\/controller\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(ref)
+            );
+            core.setOutput('should_publish', shouldPublish);
+
+      - name: Build Multi-Arch Image to OCI Layout
+        working-directory: ${{ env.LOCATION }}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
+        run: |
+          mkdir -p tmp/oci
+          # Build multi-arch OCI image (amd64 + arm64) to OCI Layout tar archive
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --tag "${IMAGE_NAME}:${VERSION}" \
+            --output type=oci,dest=tmp/oci/controller.tar,oci-mediatypes=true \
+            -f Dockerfile .
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        id: upload-artifacts
+        with:
+          if-no-files-found: error
+          name: ${{ env.ARTIFACT_NAME }}
+          path: |
+            ${{ env.LOCATION }}/tmp/oci/
+
+  E2E:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build
+    permissions:
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.REF }}
+          sparse-checkout: |
+            ${{ env.LOCATION }}
+            Taskfile.yml
+            .env
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
+        with:
+          go-version-file: ${{ env.LOCATION }}/go.mod
+          cache: false
+
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up docker
+        uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4 # v4
+
+      - name: Setup Skopeo
+        # ORAS cannot extract platform-specific images from multi-arch indexes
+        # in the right Docker Archive format (docker-archive) which kind can load directly.
+        # Skopeo can do both: extract by platform (--override-arch) AND convert to docker-archive
+        run: |
+          sudo apt-get update && sudo apt-get install -y skopeo
+
+      - name: Setup ocm
+        uses: open-component-model/ocm-setup-action@655f3525fd283ca7d22e6b2ceec42324331df401 # v1.0.0
+
+      - name: Setup Flux CLI
+        uses: fluxcd/flux2/action@8454b02a32e48d775b9f563cb51fdcb1787b5b93 # v2.7.5
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.14.0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: ${{ env.LOCATION }}/tmp/oci
+
+      - name: Extract linux/amd64 image for E2E testing
+        working-directory: ${{ env.LOCATION }}
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
+        run: |
+          mkdir -p tmp/docker tmp/oci-dir
+          # Buildx outputs OCI layout as tar archive, not a directory.
+          # Skopeo requires a directory, so extract it first.
+          tar -xf tmp/oci/controller.tar -C tmp/oci-dir
+          # Extract amd64 manifest from multi-arch index and convert to Docker Archive.
+          # Ensures we test the exact same image layers that will be attested later.
+          skopeo --override-arch amd64 --override-os linux copy \
+            oci:tmp/oci-dir:${VERSION} \
+            docker-archive:tmp/docker/controller-amd64.tar:${IMAGE_NAME}:${VERSION}    
+          echo "CONTROLLER_IMG=${IMAGE_NAME}:${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Run E2E tests
+        run: |
+          set -a && source ${{ env.LOCATION }}/.env && set +a
+          bash ${{ env.LOCATION }}/test/e2e/hacks/setup.sh
+          kind load image-archive "${{ env.LOCATION }}/tmp/docker/controller-amd64.tar"
+          task ${{ env.LOCATION }}:test/e2e
+
+      - name: Cleanup
+        if: always()
+        run: docker system prune --force
+
+  publish:
+    name: Publish and Attest Image & Chart
+    runs-on: ubuntu-latest
+    needs: [build, E2E]
+    if: ${{ needs.build.outputs.should_publish == 'true' }}
+    outputs:
+      image_digest: ${{ steps.image-digest.outputs.digest }}
+      chart_digest: ${{ steps.chart-digest.outputs.digest }}
+      chart_artifact_name: controller-chart-${{ needs.build.outputs.version }}
+    permissions:
+      actions: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.REF }}
+          sparse-checkout: |
+            ${{ env.LOCATION }}
+            Taskfile.yml
+          persist-credentials: false
+
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: 3.x
+
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.14.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: ${{ env.LOCATION }}/tmp/oci
+
+      - name: Push image from OCI layout
+        working-directory: ${{ env.LOCATION }}
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
+        run: |
+          mkdir -p tmp/oci-dir
+          
+          # Buildx outputs OCI layout as a tar archive, extract it first
+          tar -xf tmp/oci/controller.tar -C tmp/oci-dir
+          
+          # Push the complete multi-arch image to the registry
+          oras cp --from-oci-layout tmp/oci-dir:${VERSION} ${IMAGE_NAME}:${VERSION}
+
+      - name: Resolve image digest
+        id: image-digest
+        env:
+          IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          DIGEST=$(oras resolve "${IMAGE_NAME}:${VERSION}")
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Attest image
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          subject-digest: ${{ steps.image-digest.outputs.digest }}
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
+          push-to-registry: true
+
+      - name: Tag as latest on main
+        if: ${{ env.REF == github.event.repository.default_branch }}
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
+        run: oras tag "${IMAGE_NAME}:${VERSION}" latest
+
+      - name: Package and push Helm chart
+        working-directory: ${{ env.LOCATION }}
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          IMAGE_DIGEST: ${{ steps.image-digest.outputs.digest }}
+        run: |
+          task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_DIGEST="${IMAGE_DIGEST}"
+          helm push dist/ocm-k8s-toolkit-${VERSION}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart
+
+      - name: Resolve chart digest
+        id: chart-digest
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          CHART_REPO="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart/ocm-k8s-toolkit"
+          echo "digest=$(oras resolve ${CHART_REPO}:${VERSION})" >> "$GITHUB_OUTPUT"
+
+      - name: Attest chart
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          subject-digest: ${{ steps.chart-digest.outputs.digest }}
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart/ocm-k8s-toolkit
+          push-to-registry: true
+
+      - name: Upload chart artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: controller-chart-${{ needs.build.outputs.version }}
+          path: ${{ env.LOCATION }}/dist/ocm-k8s-toolkit-*.tgz
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: docker system prune --force

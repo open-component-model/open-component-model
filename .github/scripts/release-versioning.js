@@ -17,25 +17,12 @@ export default async function computeRcVersion({ core }) {
     const basePrefix = parseBranch(releaseBranch);
     const tagPrefix = `${componentPath}/v`;
 
-    // Get latest stable tag using Git's native version sort (descending)
-    // Filter out RC tags after fetching since git doesn't support negative pattern matching
-    const stableTags = run(core, "git", [
-        "tag", "--list", `${tagPrefix}${basePrefix}.*`,
-        "--sort=-version:refname"
-    ]);
-    const latestStable = stableTags
-        .split("\n")
-        .filter(tag => tag && !/-rc\.\d+$/.test(tag))[0] || "";
-
-    // Get latest RC tag using Git's native version sort (descending)
-    const rcTags = run(core, "git", [
-        "tag", "--list", `${tagPrefix}${basePrefix}.*-rc.*`,
-        "--sort=-version:refname"
-    ]);
-    const latestRc = rcTags.split("\n").filter(Boolean)[0] || "";
-
-    core.info(`Latest stable: ${latestStable || "(none)"}`);
-    core.info(`Latest RC: ${latestRc || "(none)"}`);
+    // Exclude RC tags here, otherwise latestStable may incorrectly resolve to e.g. v0.4.0-rc.3
+    const latestStable = run(
+      core,
+      `git tag --list '${tagPrefix}${basePrefix}.*' | grep -Ev -- '-rc\.[0-9]+$' | sort -V | tail -n1`
+    );
+    const latestRc = run(core, `git tag --list '${tagPrefix}${basePrefix}.*-rc.*' | sort -V | tail -n1`);
 
     const { baseVersion, rcVersion } = computeNextVersions(basePrefix, latestStable, latestRc, false);
 
@@ -46,6 +33,7 @@ export default async function computeRcVersion({ core }) {
     core.setOutput("new_version", rcVersion);
     core.setOutput("base_version", baseVersion);
     core.setOutput("promotion_tag", promotionTag);
+    core.setOutput("promotion_version", baseVersion);
 
     // --------------------------
     // Step summary
@@ -214,46 +202,4 @@ export function parseVersion(tag) {
     if (!tag) return [];
     const version = tag.replace(/^.*v/, "").replace(/-rc\.\d+$/, "");
     return version.split(".").map(Number);
-}
-
-// --------------------------
-// Latest release determination
-// --------------------------
-
-/** GitHub Actions entrypoint for determining if release should be latest */
-export async function determineLatestRelease({ core, github, context }) {
-    const { COMPONENT_PATH: componentPath, PROMOTION_VERSION: promotionVersion } = process.env;
-    if (!componentPath || !promotionVersion) return core.setFailed("Missing COMPONENT_PATH or PROMOTION_VERSION");
-
-    const tagPrefix = `${componentPath}/v`;
-    let releases = [];
-    try {
-        releases = (await github.rest.repos.listReleases({ owner: context.repo.owner, repo: context.repo.repo, per_page: 100 })).data;
-    } catch (e) {
-        core.setFailed(`Could not fetch releases: ${e.message}`);
-        return;
-    }
-
-    const highestFinal = extractHighestFinalVersion(releases, tagPrefix);
-    const setLatest = shouldSetLatest(promotionVersion, highestFinal);
-
-    core.setOutput('set_latest', setLatest ? 'true' : 'false');
-    core.setOutput('highest_final_version', highestFinal || '(none)');
-    core.info(setLatest ? `✅ Will set :latest (${promotionVersion} >= ${highestFinal || 'none'})` : `⚠️ Will NOT set :latest (${promotionVersion} < ${highestFinal})`);
-
-    await core.summary.addRaw('---').addEOL().addHeading('Latest Tag Decision', 2)
-        .addTable([[{ data: 'Field', header: true }, { data: 'Value', header: true }], ['Final Version', promotionVersion], ['Highest Final Version', highestFinal || '(none)'], ['Will Set Latest', setLatest ? '✅ Yes' : '⚠️ No']]).write();
-}
-
-/** Extract highest final (non-prerelease) version from releases */
-export function extractHighestFinalVersion(releases, tagPrefix) {
-    const versions = releases.filter(r => !r.prerelease && r.tag_name.startsWith(tagPrefix))
-        .map(r => r.tag_name.replace(tagPrefix, '')).filter(v => /^\d+\.\d+\.\d+$/.test(v));
-    if (!versions.length) return '';
-    return versions.sort((a, b) => isStableNewer(`v${a}`, `v${b}`) ? 1 : -1).pop();
-}
-
-/** Determine if promotion version should be tagged as latest */
-export function shouldSetLatest(promotionVersion, highestFinal) {
-    return !highestFinal || !isStableNewer(`v${highestFinal}`, `v${promotionVersion}`);
 }
