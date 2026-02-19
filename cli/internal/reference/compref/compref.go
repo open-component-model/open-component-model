@@ -4,8 +4,6 @@ package compref
 import (
 	"fmt"
 	"log/slog"
-	"net/url"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"unicode"
@@ -170,10 +168,7 @@ func Parse(input string, opts ...Option) (*Ref, error) {
 		input = input[idx+2:]
 	}
 
-	if isWindowsAbsPath(input) {
-		// normalize Windows backslash path separators
-		input = strings.ReplaceAll(input, `\`, `/`)
-	}
+	input = normalizePath(input)
 
 	// Step 2: Extract optional digest (e.g., @sha256:...)
 	var digestPart string
@@ -342,65 +337,6 @@ func ParseRepository(repoRef string, opts ...Option) (runtime.Typed, error) {
 	return typed, nil
 }
 
-// guessType tries to guess the repository type ("ctf" or "oci")
-// from an untyped repository specification string.
-//
-// You may ask yourself why this is needed.
-// The reason is that there are some repository strings that are indistinguishable from being either
-// a CTF or OCI repository. For example,
-// "github.com/organization/repository" could be an OCI repository without a Scheme,
-// but it could also be a file path to a CTF in the subfolders "github.com", "organization" and "repository".
-//
-// It uses a practical set of heuristics:
-//   - If it has a URL scheme ("file://"), assume CTF
-//   - If it's an absolute filesystem path, assume CTF
-//   - If it contains a colon (e.g., "localhost:5000"), assume OCI
-//   - If it looks like an archive file (tar.gz, tgz or tar), assume CTF
-//   - If it looks like a domain (contains dots like ".com", ".io", etc.), assume OCI
-//   - Otherwise fallback to CTF
-func guessType(repository string) (string, error) {
-	// Windows absolute paths (e.g., C:\path or D:/path) must be detected before URL parsing
-	if isWindowsAbsPath(repository) {
-		return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
-	}
-
-	// Try parsing as URL first
-	if u, err := url.Parse(repository); err == nil {
-		if u.Scheme == "file" {
-			return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
-		}
-		if u.Scheme != "" {
-			// Any other scheme (e.g., https) implies OCI
-			return runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(), nil
-		}
-	}
-
-	cleaned := filepath.Clean(repository)
-
-	// Absolute filesystem path → assume CTF
-	if filepath.IsAbs(cleaned) {
-		return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
-	}
-
-	// Contains colon (e.g., localhost:5000), or is localhost without port → assume OCI
-	if strings.Contains(cleaned, ":") || cleaned == "localhost" {
-		return runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(), nil
-	}
-
-	// Check if it looks like an archive file → assume CTF
-	if looksLikeArchive(cleaned) {
-		return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
-	}
-
-	// Contains domain-looking part (e.g., github.com, ghcr.io) → assume OCI
-	if looksLikeDomain(cleaned) {
-		return runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(), nil
-	}
-
-	// Default fallback: assume CTF
-	return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
-}
-
 // looksLikeArchive checks if the string ends with tar.gz or tgz archive file extensions.
 // This helps identify repository strings that point to archive files, which should be treated as CTF.
 func looksLikeArchive(s string) bool {
@@ -411,12 +347,6 @@ func looksLikeArchive(s string) bool {
 		}
 	}
 	return false
-}
-
-// isWindowsAbsPath checks if the string looks like a Windows absolute path (e.g., C:\foo or D:/bar).
-// This is needed because url.Parse interprets the single-letter drive prefix as a URL scheme.
-func isWindowsAbsPath(s string) bool {
-	return len(s) >= 3 && unicode.IsLetter(rune(s[0])) && s[1] == ':' && (s[2] == '\\' || s[2] == '/')
 }
 
 // looksLikeDomain checks if the string contains a dot with non-numeric parts (heuristic).
