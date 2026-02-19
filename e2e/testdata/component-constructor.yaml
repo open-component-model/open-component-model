@@ -1,0 +1,12 @@
+components:
+- name: ocm.software/conformance-test-component
+  version: v1.0.0
+  provider:
+    name: ocm.software
+  resources:
+  - name: test-resource
+    version: v1.0.0
+    type: plainText
+    input:
+      type: utf8
+      text: "Hello, Conformance World!"

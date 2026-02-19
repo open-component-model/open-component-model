@@ -1,0 +1,24 @@
+version: '3'
+
+vars:
+  OCM_CMD: 'echo "mock ocm"' # Default, overridden by runner
+
+tasks:
+  add-cv:
+    desc: Add component version to CTF
+    cmds:
+      - mkdir -p ctf
+      - |
+        {{.OCM_CMD}} add component-versions \
+          --repository ctf \
+          --constructor ./component-constructor.yaml
+    
+  transfer-cv:
+    desc: Transfer component version to OCI registry
+    cmds:
+      - |
+        {{.OCM_CMD}} transfer component-versions \
+          ctf//ocm.software/conformance-test-component:v1.0.0 \
+          {{.TARGET_REPO}} \
+          --config .ocmconfig \
+          --copy-resources
