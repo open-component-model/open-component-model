@@ -217,7 +217,7 @@ configurations:
 		})
 	})
 
-	t.Run("download resource with decompress flag", func(t *testing.T) {
+	t.Run("download resource with extraction policy", func(t *testing.T) {
 		originalData := []byte("hello-decompress-test")
 
 		compressedBlob := compression.Compress(direct.NewFromBytes(originalData))
@@ -228,34 +228,60 @@ configurations:
 			component          string
 			blob               blob.ReadOnlyBlob
 			access             *v2.LocalBlob
-			decompress         bool
+			extractionPolicy   string
 			expectUncompressed bool // true = output should match originalData
 		}{
 			{
-				name:               "compressed data with --decompress yields original",
-				resourceName:       "compressed-resource",
-				component:          "ocm.software/test-decompress-on",
+				name:               "compressed tar data with no extraction policy",
+				resourceName:       "compressed-missing-flag",
+				component:          "ocm.software/test-extract-auto",
 				blob:               compressedBlob,
-				access:             &v2.LocalBlob{MediaType: "application/octet-stream" + compression.MediaTypeGzipSuffix},
-				decompress:         true,
+				access:             &v2.LocalBlob{MediaType: "application/tar"},
 				expectUncompressed: true,
 			},
 			{
-				name:               "compressed data without --decompress stays compressed",
-				resourceName:       "compressed-resource-no-flag",
-				component:          "ocm.software/test-decompress-off",
+				name:               "compressed tar data with auto extraction policy is decompressed",
+				resourceName:       "compressed-resource-auto",
+				component:          "ocm.software/test-extract-auto",
 				blob:               compressedBlob,
-				access:             &v2.LocalBlob{MediaType: "application/octet-stream" + compression.MediaTypeGzipSuffix},
-				decompress:         false,
+				access:             &v2.LocalBlob{MediaType: "application/tar"},
+				extractionPolicy:   resourceCMD.ExtractionPolicyAuto,
+				expectUncompressed: true,
+			},
+			{
+				name:               "compressed gzip data with disable extraction policy stays compressed",
+				resourceName:       "compressed-resource-disable",
+				component:          "ocm.software/test-extract-disable",
+				blob:               compressedBlob,
+				access:             &v2.LocalBlob{MediaType: "application/gzip"},
+				extractionPolicy:   resourceCMD.ExtractionPolicyDisable,
 				expectUncompressed: false,
 			},
 			{
-				name:               "uncompressed data with --decompress is a no-op",
-				resourceName:       "uncompressed-resource",
-				component:          "ocm.software/test-decompress-noop",
+				name:               "compressed tar data with disable extraction policy stays compressed",
+				resourceName:       "compressed-resource-disable",
+				component:          "ocm.software/test-extract-disable",
+				blob:               compressedBlob,
+				access:             &v2.LocalBlob{MediaType: "application/tar"},
+				extractionPolicy:   resourceCMD.ExtractionPolicyDisable,
+				expectUncompressed: false,
+			},
+			{
+				name:               "uncompressed data with auto extraction policy is unchanged",
+				resourceName:       "uncompressed-resource-auto",
+				component:          "ocm.software/test-extract-auto-noop",
 				blob:               direct.NewFromBytes(originalData),
 				access:             &v2.LocalBlob{},
-				decompress:         true,
+				extractionPolicy:   resourceCMD.ExtractionPolicyAuto,
+				expectUncompressed: true,
+			},
+			{
+				name:               "uncompressed data with disable extraction policy is unchanged",
+				resourceName:       "uncompressed-resource-auto",
+				component:          "ocm.software/test-extract-auto-noop",
+				blob:               direct.NewFromBytes(originalData),
+				access:             &v2.LocalBlob{},
+				extractionPolicy:   resourceCMD.ExtractionPolicyDisable,
 				expectUncompressed: true,
 			},
 		}
@@ -295,8 +321,9 @@ configurations:
 					"--config",
 					cfgPath,
 				}
-				if tt.decompress {
-					args = append(args, "--decompress")
+
+				if tt.extractionPolicy != "" {
+					args = append(args, "--extraction-policy", tt.extractionPolicy)
 				}
 
 				downloadCMD := cmd.New()
@@ -325,8 +352,9 @@ configurations:
 						_ = rc.Close()
 					})
 					compressedData, err := io.ReadAll(rc)
+					r.NoError(err)
 					r.NotEqual(string(originalData), string(data),
-						"data should equal to the data in the blob")
+						"data should not equal the original uncompressed data")
 					r.Equal(compressedData, data)
 				}
 			})

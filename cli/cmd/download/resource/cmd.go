@@ -230,6 +230,14 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 var ErrCannotExtractFS = errors.New("cannot extract resource as filesystem")
 
 func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, err error) {
+	var originalMediaType string
+	originalMediaTypeAware, ok := b.(blob.MediaTypeAware)
+	if ok {
+		originalMediaType, ok = originalMediaTypeAware.MediaType()
+		if !ok {
+			slog.Debug("blob is media type aware but does not have a media type")
+		}
+	}
 	decompressedOrOriginal, err := compression.Decompress(b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decompress resource: %w", err)
@@ -239,16 +247,26 @@ func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, err error) {
 		// if were not media type aware, its unsafe to try to extract it, avoid
 		return nil, ErrCannotExtractFS
 	}
-
 	mediaType, ok := mediaTypeAware.MediaType()
 	if !ok {
+		// if we don't have a media type, we cannot reliably determine how to extract it, avoid
 		return nil, ErrCannotExtractFS
 	}
 
 	// TODO(jakobmoellerdev): once we add more compression algorithms, use blob media type for discovery.
 	//  For now we just support tar.
 	switch {
-	case isTar(mediaType):
+	case isTar(originalMediaType) || isTar(mediaType):
+		data, err := decompressedOrOriginal.ReadCloser()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read resource: %w", err)
+		}
+		defer func() {
+			err = errors.Join(err, data.Close())
+		}()
+
+		return tarfs.New(data)
+	case isGZip(originalMediaType) || isGZip(mediaType):
 		data, err := decompressedOrOriginal.ReadCloser()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read resource: %w", err)
@@ -267,6 +285,12 @@ func isTar(mediaType string) bool {
 	return slices.Contains([]string{
 		"application/tar", "application/x-tar",
 	}, mediaType) || strings.HasSuffix(mediaType, "+tar")
+}
+
+func isGZip(mediaType string) bool {
+	return slices.Contains([]string{
+		"application/gzip",
+	}, mediaType) || strings.HasSuffix(mediaType, "+gzip")
 }
 
 func processResourceOutput(output string, resource *descriptor.Resource, data blob.ReadOnlyBlob, identity string, logger *slog.Logger) (string, error) {
