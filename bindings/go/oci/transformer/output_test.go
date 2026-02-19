@@ -25,6 +25,25 @@ func Test_DetermineOutputPath_EmptyPath(t *testing.T) {
 	_ = os.Remove(outputPath)
 }
 
+func Test_DetermineOutputPath_DirectoryPath(t *testing.T) {
+	tempDir := t.TempDir()
+	prefix := "test-prefix"
+
+	outputPath, err := transformer.DetermineOutputPath(tempDir, prefix)
+
+	require.NoError(t, err)
+	assert.Contains(t, filepath.Base(outputPath), prefix)
+	assert.True(t, strings.HasPrefix(outputPath, tempDir))
+	// ensure the outputPath is a file, not a directory
+	info, err := os.Stat(outputPath)
+	require.NoError(t, err)
+	assert.False(t, info.IsDir())
+
+	// Verify file exists and clean up
+	_, err = os.Stat(outputPath)
+	assert.NoError(t, err)
+}
+
 func Test_DetermineOutputPath_ProvidedPath(t *testing.T) {
 	tests := []struct {
 		name     string
