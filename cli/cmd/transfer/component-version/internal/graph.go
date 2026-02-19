@@ -11,6 +11,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -112,11 +113,26 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 				continue
 			}
 
-			switch access.(type) {
+			switch acc := access.(type) {
 			case *descriptorv2.LocalBlob:
-				processLocalBlob(resource, id, ref, tgd, toSpec, resourceTransformIDs, i)
+				uploadAsOCIArtifact := false
+				if _, isOCITarget := toSpec.(*oci.Repository); isOCITarget {
+					if uploadType == UploadAsOciArtifact {
+						if IsOCICompliantManifest(acc.MediaType) {
+							uploadAsOCIArtifact = true
+						}
+					}
+				}
+				if err := processLocalBlob(resource, acc, id, ref, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact); err != nil {
+					return fmt.Errorf("failed processing local blob resource: %w", err)
+				}
 			case *ociv1.OCIImage:
-				uploadAsOCIArtifact := uploadType != UploadAsLocalBlob
+				uploadAsOCIArtifact := false
+				if _, isOCITarget := toSpec.(*oci.Repository); isOCITarget {
+					if uploadType == UploadAsOciArtifact {
+						uploadAsOCIArtifact = true
+					}
+				}
 				err := processOCIArtifact(resource, id, ref, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact)
 				if err != nil {
 					return fmt.Errorf("cannot process OCI artifact resource: %w", err)
