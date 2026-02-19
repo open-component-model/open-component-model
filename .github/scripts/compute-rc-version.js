@@ -17,7 +17,11 @@ export default async function computeRcVersion({ core }) {
     const basePrefix = parseBranch(releaseBranch);
     const tagPrefix = `${componentPath}/v`;
 
-    const latestStable = run(core, `git tag --list '${tagPrefix}${basePrefix}.*' | sort -V | tail -n1`);
+    // Exclude RC tags here, otherwise latestStable may incorrectly resolve to e.g. v0.4.0-rc.3
+    const latestStable = run(
+      core,
+      `git tag --list '${tagPrefix}${basePrefix}.*' | grep -Ev -- '-rc\.[0-9]+$' | sort -V | tail -n1`
+    );
     const latestRc = run(core, `git tag --list '${tagPrefix}${basePrefix}.*-rc.*' | sort -V | tail -n1`);
 
     const { baseVersion, rcVersion } = computeNextVersions(basePrefix, latestStable, latestRc, false);
@@ -29,6 +33,7 @@ export default async function computeRcVersion({ core }) {
     core.setOutput("new_version", rcVersion);
     core.setOutput("base_version", baseVersion);
     core.setOutput("promotion_tag", promotionTag);
+    core.setOutput("promotion_version", baseVersion);
 
     // --------------------------
     // Step summary
