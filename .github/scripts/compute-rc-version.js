@@ -186,7 +186,7 @@ export function isStableNewer(stable, rc) {
     const stableParts = parseVersion(stable);
     const rcParts = parseVersion(rc);
 
-    // Compare [major, minor, patch] lexicographically
+    // Compare [major, minor, patch] numerically
     for (let i = 0; i < 3; i++) {
         const s = stableParts[i] || 0;
         const r = rcParts[i] || 0;
