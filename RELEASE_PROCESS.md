@@ -47,7 +47,7 @@ This role rotates each sprint and involves:
 Copy this checklist to your "Sprint Responsible" issue:
 
 ```markdown
-- [ ] Release branch created (`releases/v0.X`)
+- [ ] Release branch created (`releases/vX.Y`)
 - [ ] CLI RC created and verified
 - [ ] Controller RC created and verified
 - [ ] (wait 1 sprint for testing)
