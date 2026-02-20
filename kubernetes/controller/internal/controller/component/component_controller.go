@@ -13,7 +13,6 @@ import (
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -25,11 +24,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
-	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
@@ -238,6 +235,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		RepositorySpec:    repoSpec,
 		OCMConfigurations: configs,
 		Namespace:         component.GetNamespace(),
+		SigningRegistry:   r.PluginManager.SigningRegistry,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: types.NamespacedName{
@@ -260,20 +258,33 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to determine effective version: %w", err)
 	}
 
-	desc, err := cacheBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)
-	if errors.Is(err, workerpool.ErrResolutionInProgress) {
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.ResolutionInProgress, err.Error())
-		logger.Info("component version resolution in progress, waiting for event notification",
-			"component", component.Spec.Component,
-			"version", version)
-
-		return ctrl.Result{}, nil
-	}
+	verifications, err := ocm.GetVerifications(ctx, r.Client, component)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
+	}
+	cacheBackedRepo.Verifications = verifications
+
+	desc, err := cacheBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)
+	if err != nil {
+		switch {
+		case errors.Is(err, workerpool.ErrResolutionInProgress):
+			// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+			status.MarkNotReady(r.EventRecorder, component, v1alpha1.ResolutionInProgress, err.Error())
+			logger.Info("component version resolution in progress, waiting for event notification",
+				"component", component.Spec.Component,
+				"version", version)
+
+			return ctrl.Result{}, nil
+		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+			// Ignore error, but log event
+			event.New(r.EventRecorder, component, nil, eventv1.EventSeverityError, err.Error())
+		default:
+			status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+
+			return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
+		}
 	}
 
 	digestSpec, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)), signing.LegacyNormalisationAlgo, crypto.SHA256.String())
@@ -281,12 +292,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to generate digest: %w", err)
-	}
-
-	if err := r.verifyComponentVersion(ctx, component, desc); err != nil {
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to verify component version: %w", err)
 	}
 
 	logger.Info("updating status")
@@ -425,97 +430,4 @@ func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, comp
 	default:
 		return "", reconcile.TerminalError(errors.New("unknown downgrade policy: " + string(component.Spec.DowngradePolicy)))
 	}
-}
-
-// verifyComponentVersion verifies the component version signatures.
-func (r *Reconciler) verifyComponentVersion(ctx context.Context, component *v1alpha1.Component, desc *descruntime.Descriptor) error {
-	logger := log.FromContext(ctx)
-
-	verifications := component.GetVerifications()
-	if len(verifications) == 0 {
-		logger.Info("no verifications configured, skipping signature verification")
-
-		return nil
-	}
-
-	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
-		event.New(r.EventRecorder, component, nil, eventv1.EventSeverityInfo, err.Error())
-	}
-
-	logger.Info("verifying component version signatures", "verifications", len(verifications))
-
-	for _, verify := range verifications {
-		var signature *descruntime.Signature
-		for i := range desc.Signatures {
-			if desc.Signatures[i].Name == verify.Signature {
-				signature = &desc.Signatures[i]
-				break
-			}
-		}
-
-		if signature == nil {
-			return fmt.Errorf("signature %q not found in component version", verify.Signature)
-		}
-
-		if err := signing.VerifyDigestMatchesDescriptor(ctx, desc, *signature, slog.New(logr.ToSlogHandler(logger))); err != nil {
-			return fmt.Errorf("digest verification failed for signature %q: %w", verify.Signature, err)
-		}
-
-		cfg := &signingv1alpha1.Config{
-			SignatureAlgorithm: signingv1alpha1.SignatureAlgorithm(signature.Signature.Algorithm),
-		}
-
-		hdlr, err := r.PluginManager.SigningRegistry.GetPlugin(ctx, cfg)
-		if err != nil {
-			return fmt.Errorf("failed to get signing handler for signature %q: %w", verify.Signature, err)
-		}
-
-		credentials, err := r.createCredentials(ctx, verify, signature.Signature.Algorithm, component.GetNamespace())
-		if err != nil {
-			return fmt.Errorf("failed to create credentials for signature %q: %w", verify.Signature, err)
-		}
-
-		if err := hdlr.Verify(ctx, *signature, cfg, credentials); err != nil {
-			return fmt.Errorf("signature verification failed for signature %q: %w", verify.Signature, err)
-		}
-	}
-
-	return nil
-}
-
-// createCredentials generates a map of credentials required for verifying a component version's signature.
-// It supports retrieving the credentials either from a provided value or from a Kubernetes Secret.
-func (r *Reconciler) createCredentials(ctx context.Context, verify v1alpha1.Verification, algo, namespace string) (map[string]string, error) {
-	credentials := make(map[string]string)
-
-	// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
-	//       reliable currently. This will probably change, when typed credentials are supported.
-	var key string
-	switch signingv1alpha1.SignatureAlgorithm(algo) {
-	case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
-		key = "public_key_pem"
-	default:
-		return nil, fmt.Errorf("unsupported signature algorithm: %q", algo)
-	}
-
-	switch {
-	case verify.Value != "":
-		credentials[key] = verify.Value
-	case verify.SecretRef.Name != "":
-		secret := &corev1.Secret{}
-		if err := r.Get(ctx, types.NamespacedName{Name: verify.SecretRef.Name, Namespace: namespace}, secret); err != nil {
-			return nil, fmt.Errorf("failed to get secret %q for signature %q: %w", verify.SecretRef.Name, verify.Signature, err)
-		}
-
-		data, ok := secret.Data[verify.Signature]
-		if !ok {
-			return nil, fmt.Errorf("secret %q does not contain data for signature %q", verify.SecretRef.Name, verify.Signature)
-		}
-
-		credentials[key] = string(data)
-	default:
-		return nil, fmt.Errorf("no provided value or secret reference for verification of signature %q", verify.Signature)
-	}
-
-	return credentials, nil
 }

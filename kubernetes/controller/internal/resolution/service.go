@@ -8,12 +8,15 @@ import (
 	"k8s.io/utils/lru"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 )
@@ -57,6 +60,13 @@ type RepositoryOptions struct {
 	OCMConfigurations []v1alpha1.OCMConfiguration
 	Namespace         string
 	RequesterFunc     func() workerpool.RequesterInfo
+	// Verifications are used to create a cache key to distinguish between verified and unverified component versions
+	Verifications []ocm.Verification
+	// Digest is used to create a cache key for component versions from component references resolved in the resource
+	// controller. It is used to distinguish between integrity-checked and unchecked component versions. The integrity
+	// can only be checked if the component reference provides a digest specification.
+	Digest          *v2.Digest
+	SigningRegistry *signinghandler.SigningRegistry
 }
 
 // NewCacheBackedRepository creates a new cache-backed repository wrapper.
@@ -98,7 +108,7 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 		r.repoCache.Add(cacheKey, provider)
 	}
 
-	return newCacheBackedRepository(r.logger, provider, cfg, r.workerPool, requesterFunc, baseRepoSpec), nil
+	return newCacheBackedRepository(r.logger, provider, cfg, r.workerPool, requesterFunc, baseRepoSpec, opts.Verifications, opts.Digest, opts.SigningRegistry), nil
 }
 
 // createResolver creates a resolver based on the configuration.
