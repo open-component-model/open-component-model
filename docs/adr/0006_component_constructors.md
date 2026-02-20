@@ -443,11 +443,46 @@ Cons:
 * Complex Interfaces for a lot of different scenarios (input and access specs are mutually exclusive and lead to branching)
 * By default, accesses by reference do not get their digest information added when pushed into the constructor.
 
+## Environment Variable Substitution
+
+Component constructor files support environment variable substitution to enable dynamic configuration at construction time. This is implemented using Go's `os.Expand()` function, which performs variable expansion using the shell syntax `${VAR_NAME}` or `$VAR_NAME`.
+
+### Processing Order
+
+1. **File Loading**: The component constructor YAML file is read from disk
+2. **Environment Expansion**: All environment variables in the file content are expanded using `os.Expand(string(constructorData), os.Getenv)`
+3. **YAML Parsing**: The expanded content is then parsed as YAML into the component constructor specification
+4. **Component Construction**: The constructor processes the expanded specification normally
+
+### Supported Syntax
+
+The environment variable substitution follows standard shell variable expansion:
+
+- `${VAR_NAME}` - expands to the value of VAR_NAME
+- `$VAR_NAME` - expands to the value of VAR_NAME
+
+### Use Cases
+
+Common use cases for environment variable substitution in component constructors include:
+
+- **Dynamic Versioning**: Using CI/CD pipeline variables for component versions
+- **Registry Configuration**: Configuring different registries per environment (dev/staging/prod)
+- **Credential References**: Referencing credential paths or identifiers
+- **Build-time Configuration**: Injecting build metadata or configuration values
+
+### Security Considerations
+
+- Environment variables are expanded at file processing time, before any validation
+- All environment variables accessible to the process are available for substitution
+- Care should be taken to avoid exposing sensitive information in constructor files
+- Constructor files with environment variables should be treated as templates
+
 ## Conclusion
 
 The new component constructor library will:
 
 - Provide a simple and extensible way to construct component versions based on a `component-constructor.yaml` specification.
+- Support environment variable substitution for dynamic configuration.
 - Support various input methods and access specifications, and upload the resulting component version to an OCM repository.
 - Download resources and upload them as local blobs.
 - Process component version resources and sources in parallel to improve efficiency.
