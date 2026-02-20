@@ -8,7 +8,6 @@
 [transformation](0005_transformation.md) and 
 [component constructors](0006_component_constructors.md).
 
-
 ## Context and Problem Statement
 
 The original transformation specification proposed in the
@@ -48,10 +47,12 @@ For complex operations, validating the transformation graph before
 execution is **mission-critical** for operational confidence and efficiency.
 
 ### Size of a Transformation Graph
+
 A serializable transformation specification makes complexity and the 
 number of atomic transformations involved in an operation such as transfer 
 visible and tangible.  
 With the legacy ocm cli, we have use cases including:
+
 - **~ 100 components**
 - **~ 1500 resources**
 
@@ -59,6 +60,7 @@ In the most basic of transfer use cases (source resource format matches target
 resource format, no resigning required, no custom modifications of upload 
 locations, ...),
 we have
+
 - download transformation per component version
 - upload transformation per component version
 and 
@@ -71,13 +73,13 @@ transformations**.
 > [!NOTE] The serialized version of such a transformation specification is 
 > rather large.
 
-
 ## Requirements
 
 The table below lists the requirements shared by the **transfer** and 
 **constructor** use cases.
 
 This serves as:
+
 - a rationale for unifying transfer and constructor under a single 
   implementation
 
@@ -166,7 +168,6 @@ graph TD
   H --> G
   D -- modify --> D
 ```
-
 
 ## Transformation Specification
 
@@ -270,6 +271,7 @@ transformations:
 ```
 
 > [!NOTE] Comparison with Transformation ADR
+>
 > - Instead of expecting a component descriptor as a starting point for all
 >   operations that is consecutively modified and then merged (to detect
 >   conflicts), we create a new component descriptor to be uploaded
@@ -330,7 +332,6 @@ graph TD
 > To avoid such complications and to keep the generation logic simple, the 
 > generator will include such static variables as literal in both places.
 
-
 ## Mapping From Constructor to Transformation Specification
 
 **We still lack a prototype here to validate the concept.**
@@ -341,6 +342,7 @@ examples of how these **constructor** use cases can be mapped to the
 **transformation specification**.
 
 **Input Types**
+
 - **By Value**: `resource.creator` and 
   `resource.uploader`. 
   
@@ -464,6 +466,7 @@ examples of how these **constructor** use cases can be mapped to the
    ```
 
 **Access Types**
+
 - **By Value**: `resource.creator` and `resource.uploader`
   
   **Constructor**
@@ -575,6 +578,7 @@ examples of how these **constructor** use cases can be mapped to the
    ```
 
 **Component References**
+
 - **Internal Component Reference** (referenced component is also part of the 
   constructor):
 
@@ -831,6 +835,7 @@ transformation.
 
 We do not want to go into detail here. This section alone warrants an entire 
 ADR. However, the rough general idea here is:
+
 1) **Pre-Fetch:** Download the entire component graph of the component to be 
    transferred.
 2) **Deduce and Generate Transformations:** Analyze each component in the 
@@ -839,6 +844,7 @@ ADR. However, the rough general idea here is:
    transformation specification.
 
 ## Resource as Atomic Unit in OCM
+
 - The atomic unit in ocm is **resource** NOT A PLAIN BLOB or ACCESS, kind of
   like the atomic unit in kubernetes are pods not containers.
 - While this takes the operations to a higher abstraction level, offering each
@@ -847,17 +853,18 @@ ADR. However, the rough general idea here is:
 > [!NOTE]
 > In ocm v1, several interfaces were built against plain blobs or access as
 > the atomic unit. This led to issues, as
+>
 > - several operations had to be performed twice (digest calculation of a blob)
 >   or the metadata could not be passed along.
 > - several extension points were not flexible enough (resource uploader could
 >   not provide the digest of the uploaded blob, as it only returned a blob)
 
-
 ## Integration with Plugin System
+
 - The transformation specification implementation is aware of the supported 
-  capabilities. So, depending on the *capability* 
+  capabilities. So, depending on the _capability_ 
   (such as `type: resource.
-  uploader`), the implementation will use the corresponding *Provider* 
+  uploader`), the implementation will use the corresponding _Provider_ 
   API (e.g. `ResourcePluginProvider`).
   ```go
   func (t *Transformer) ProcessTransformation(transformation 
@@ -881,7 +888,7 @@ ADR. However, the rough general idea here is:
   }
   ```
   
-- For a *capability* (such as `resource.uploader`), all its types share a 
+- For a _capability_ (such as `resource.uploader`), all its types share a 
   common `spec` schema. The `type` information has to be contained in this 
   common portion.
   ```yaml
@@ -906,18 +913,21 @@ ADR. However, the rough general idea here is:
 > > repository where the component will also be uploaded to.
 
 **Advantages**
+
 - We have a single uniform plugin system.
-- *Capabilities* can define a schema of common fields all *types* have to 
+- _Capabilities_ can define a schema of common fields all _types_ have to 
   provide.
 
 **Disadvantages**
+
 - Additional indirection adds complexity. We have to first select a plugin 
-  registry based on the *capability* and then select the actual plugin based 
-  on the *type*.
+  registry based on the _capability_ and then select the actual plugin based 
+  on the _type_.
 - It is harder to introduce arbitrary plugins as a plugin registry for the
-  corresponding *capability* has to be available.
+  corresponding _capability_ has to be available.
 
 **Conclusion** 
+
 - Generally, this additional layer of indirection adds 
 flexibility at the cost of complexity. This is especially visible in simple use 
 cases (capability with a single type). 
@@ -929,6 +939,7 @@ systems is even higher.
 capabilities and therefore, transformers, at runtime.**
 
 ## Versioning of Transformations
+
 - The examples currently omit versioning of transformations for brevity.
 - We assume that transformations will be versioned similar to plugins to be 
   able to introduce non-backwards compatible changes in the future.
@@ -936,10 +947,12 @@ capabilities and therefore, transformers, at runtime.**
 ## Static Type Analysis
 
 **Prerequisite**
+
 - Each plugin (internal and external) has to provide a JSON schema for both, 
   its input type and its output type.
 
 **Current State**
+
 - Only external plugins provide JSON schemas and only for their input types.
 - The schemas are only available on the low-level external plugin data 
   structure.
@@ -963,6 +976,7 @@ type Type struct {
 ```
 
 **Proposed Solution**
+
 - Implement a JSON schema generator to generate JSON schemas for go types.
   - A generator is more suitable than a runtime generation of JSON schemas 
     as the schemas are static.
@@ -1003,6 +1017,7 @@ transformations:
 ```
 
 **Static Type Analysis Implementation**
+
 - We translate the JSON schemas of input and output types to CEL types. 
 - **JSON schema to CEL:** Kubernetes API server has an implementation to 
   translate OpenAPI schemas to CEL types. With slight modifications, this 
@@ -1018,13 +1033,14 @@ transformations:
   also have to make adjustments to make it work for our use cases.
 
 - The [example](#conceptual-example-constructing-a-component-version-with-a-local-file-resource)
-  shows the *outputs* of each transformation as comments. This
+  shows the _outputs_ of each transformation as comments. This
   is purely for illustration purposes. In the actual implementation, every
-  transformation has to define its *specification* and *output* schema.
+  transformation has to define its _specification_ and _output_ schema.
 
 ### Program Flow
 
 We propose a 3-step program flow for the transformation engine:
+
 1. **Discover**: 
    - Parse the transformations without knowledge of the schemas 
      (reuse KROs `ParseSchemalessResource` ). This process discovers all 

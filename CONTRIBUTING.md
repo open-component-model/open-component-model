@@ -21,7 +21,7 @@ task
 
 ## Project Structure
 
-```
+```text
 .
 ├── bindings/go/     # Go library modules (see bindings/go/README.md)
 ├── cli/             # OCM CLI
@@ -61,6 +61,7 @@ task cli:build
 ## Working with Modules
 
 This is a multi-module Go workspace. Each module in `bindings/go/` has its own:
+
 - `go.mod`
 - `Taskfile.yml` with `test`, `test/integration` (if applicable)
 
