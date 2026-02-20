@@ -261,6 +261,46 @@ func Test_ComponentReference(t *testing.T) {
 			err: assert.NoError,
 		},
 		{
+			// Regression test for https://github.com/open-component-model/open-component-model/issues/1776
+			input: `C:\TEMP\ctf\component-descriptors\ocm.software/cli:0.1.0`,
+			expected: &Ref{
+				Type: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(),
+				Repository: &ctfv1.Repository{
+					// Backslashes are normalized to forward slashes during parsing.
+					FilePath: "C:/TEMP/ctf",
+				},
+				Prefix:    "component-descriptors",
+				Component: "ocm.software/cli",
+				Version:   "0.1.0",
+			},
+			err: assert.NoError,
+		},
+		{
+			input: `D:/TEMP/ctf/component-descriptors/ocm.software/cli:0.1.0`,
+			expected: &Ref{
+				Type: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(),
+				Repository: &ctfv1.Repository{
+					FilePath: "D:/TEMP/ctf",
+				},
+				Prefix:    "component-descriptors",
+				Component: "ocm.software/cli",
+				Version:   "0.1.0",
+			},
+			err: assert.NoError,
+		},
+		{
+			input: `C:\TEMP\ctf//ocm.software/cli:0.1.0`,
+			expected: &Ref{
+				Type: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(),
+				Repository: &ctfv1.Repository{
+					FilePath: "C:/TEMP/ctf",
+				},
+				Component: "ocm.software/cli",
+				Version:   "0.1.0",
+			},
+			err: assert.NoError,
+		},
+		{
 			input:    "github.com/open-component-model/ocm//ocm.software/ocmcli:invalid-0.23.0",
 			expected: nil,
 			err: func(t assert.TestingT, err error, i ...interface{}) bool {
@@ -330,6 +370,7 @@ func Test_ComponentReference_Permutations(t *testing.T) {
 		{"./local/path", false},
 		{"file://./local/path", false},
 		{"/absolute/path", false},
+		{"D:/data/archive", false},
 		{"1.2.3.5:5000/open-component-model/ocm", true},
 	}
 
@@ -397,7 +438,12 @@ func Test_ComponentReference_Permutations(t *testing.T) {
 								}
 								expectedRepository = ociRepo
 							case "ctf", runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String():
-								expectedRepository = &ctfv1.Repository{FilePath: normalizePath(repo.input)}
+								// Windows backslash paths are normalized to forward slashes during parsing.
+								expectedFilePath := repo.input
+								if isWindowsAbsPath(expectedFilePath) {
+									expectedFilePath = strings.ReplaceAll(expectedFilePath, `\`, `/`)
+								}
+								expectedRepository = &ctfv1.Repository{FilePath: expectedFilePath}
 							}
 
 							expected := &Ref{
@@ -502,6 +548,37 @@ func TestParseRepository(t *testing.T) {
 		{
 			name:         "CTF Archive - absolute path",
 			repoRef:      "/tmp/test-archive",
+			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, repoSpec, repo.FilePath)
+			},
+		},
+		{
+			// Regression test for https://github.com/open-component-model/open-component-model/issues/1776
+			name:         "CTF Archive - Windows absolute path with backslash",
+			repoRef:      `C:\TEMP\ctf`,
+			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, repoSpec, repo.FilePath)
+			},
+		},
+		{
+			name:         "CTF Archive - Windows absolute path with forward slash",
+			repoRef:      `D:/TEMP/ctf`,
+			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, repoSpec, repo.FilePath)
+			},
+		},
+		{
+			name:         "CTF Archive - Windows path with nested directories",
+			repoRef:      `C:\Users\test\repos\my-archive`,
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
 				repo, ok := result.(*ctfv1.Repository)
