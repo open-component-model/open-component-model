@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -74,18 +73,4 @@ func IsArtifactForResource(descriptor ociImageSpecV1.Descriptor, identity runtim
 		}
 	}
 	return false
-}
-
-func FilterFirstMatchingArtifact(descriptors []ociImageSpecV1.Descriptor, identity runtime.Identity, kind ArtifactKind, matchers ...runtime.ChainableIdentityMatcher) (ociImageSpecV1.Descriptor, error) {
-	var notMatched []ociImageSpecV1.Descriptor
-
-	for _, desc := range descriptors {
-		if !IsArtifactForResource(desc, identity, kind, matchers...) {
-			notMatched = append(notMatched, desc)
-			continue
-		}
-		return desc, nil
-	}
-
-	return ociImageSpecV1.Descriptor{}, fmt.Errorf("no matching descriptor for identity %v (not matched other descriptors %v): %w", identity, notMatched, errdef.ErrNotFound)
 }
