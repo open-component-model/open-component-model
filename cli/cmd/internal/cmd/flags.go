@@ -15,4 +15,16 @@ const (
 	PluginShutdownTimeoutDefault = 10 * time.Second
 	// PluginDirectoryFlag Flag to specify the default directory path for OCM plugins.
 	PluginDirectoryFlag = "plugin-directory"
+	// TimeoutFlag Flag to specify the HTTP client timeout, overriding the config file value.
+	TimeoutFlag = "timeout"
+	// TCPDialTimeoutFlag Flag to specify the TCP dial timeout (TCP connection establishment).
+	TCPDialTimeoutFlag = "tcp-dial-timeout"
+	// TCPKeepAliveFlag Flag to specify the TCP keep-alive interval.
+	TCPKeepAliveFlag = "tcp-keep-alive"
+	// TLSHandshakeTimeoutFlag Flag to specify the TLS handshake timeout.
+	TLSHandshakeTimeoutFlag = "tls-handshake-timeout"
+	// ResponseHeaderTimeoutFlag Flag to specify the response header timeout.
+	ResponseHeaderTimeoutFlag = "response-header-timeout"
+	// IdleConnTimeoutFlag Flag to specify the idle connection timeout.
+	IdleConnTimeoutFlag = "idle-conn-timeout"
 )

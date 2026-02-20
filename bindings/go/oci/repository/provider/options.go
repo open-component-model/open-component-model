@@ -1,6 +1,11 @@
 package provider
 
-import "ocm.software/open-component-model/bindings/go/runtime"
+import (
+	"net/http"
+	"time"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
+)
 
 // Options holds configuration options for the OCI repository provider.
 type Options struct {
@@ -14,6 +19,12 @@ type Options struct {
 
 	// Scheme is the runtime scheme used by the repositories.
 	Scheme *runtime.Scheme
+
+	// HTTPClient is the HTTP client for requests to the registry.
+	HTTPClient *http.Client
+
+	// Timeout is the timeout for HTTP requests to the registry.
+	Timeout time.Duration
 }
 
 type Option func(*Options)
@@ -25,15 +36,15 @@ func WithTempDir(dir string) Option {
 	}
 }
 
-// WithUserAgent sets the user agent option
-func WithUserAgent(userAgent string) Option {
-	return func(o *Options) {
-		o.UserAgent = userAgent
-	}
-}
-
 func WithScheme(scheme *runtime.Scheme) Option {
 	return func(o *Options) {
 		o.Scheme = scheme
+	}
+}
+
+// WithHTTPClient sets the HTTP client option
+func WithHTTPClient(client *http.Client) Option {
+	return func(o *Options) {
+		o.HTTPClient = client
 	}
 }

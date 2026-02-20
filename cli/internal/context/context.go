@@ -8,6 +8,7 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/http/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/cli/internal/subsystem"
@@ -54,6 +55,11 @@ type Context struct {
 	// that can be used by plugins and other components.
 	filesystemConfig *filesystemv1alpha1.Config
 
+	// httpConfig is the central HTTP client configuration for OCM.
+	// It defines HTTP-related settings like timeout that are used
+	// by HTTP clients across the CLI.
+	httpConfig *httpv1alpha1.Config
+
 	// subsystemRegistry is the registry containing all registered subsystems.
 	// Subsystems are logical groupings of OCM types that provide runtime scheme
 	// information for type introspection and documentation.
@@ -79,6 +85,17 @@ func WithFilesystemConfig(ctx context.Context, cfg *filesystemv1alpha1.Config) c
 	ocmctx.mu.Lock()
 	defer ocmctx.mu.Unlock()
 	ocmctx.filesystemConfig = cfg
+	return ctx
+}
+
+// WithHTTPConfig creates a new context with the given HTTP configuration.
+// After this function is called, the HTTP configuration can be retrieved from the context
+// using [FromContext] and [Context.HTTPConfig].
+func WithHTTPConfig(ctx context.Context, cfg *httpv1alpha1.Config) context.Context {
+	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
+	ocmctx.mu.Lock()
+	defer ocmctx.mu.Unlock()
+	ocmctx.httpConfig = cfg
 	return ctx
 }
 
@@ -158,6 +175,15 @@ func (ctx *Context) FilesystemConfig() *filesystemv1alpha1.Config {
 	ctx.mu.RLock()
 	defer ctx.mu.RUnlock()
 	return ctx.filesystemConfig
+}
+
+func (ctx *Context) HTTPConfig() *httpv1alpha1.Config {
+	if ctx == nil {
+		return nil
+	}
+	ctx.mu.RLock()
+	defer ctx.mu.RUnlock()
+	return ctx.httpConfig
 }
 
 func (ctx *Context) SubsystemRegistry() *subsystem.Registry {

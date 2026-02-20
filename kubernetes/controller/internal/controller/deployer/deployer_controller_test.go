@@ -229,11 +229,11 @@ stringData:
 
 	Context("ocm config propagation from resource to deployer", func() {
 		var (
-			resourceObj *v1alpha1.Resource
-			namespace *corev1.Namespace
+			resourceObj                                   *v1alpha1.Resource
+			namespace                                     *corev1.Namespace
 			componentName, resourceName, componentVersion string
-			specData []byte
-			credentialSecret *corev1.Secret
+			specData                                      []byte
+			credentialSecret                              *corev1.Secret
 		)
 
 		BeforeEach(func(ctx SpecContext) {

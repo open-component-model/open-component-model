@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/http/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
@@ -82,6 +83,12 @@ func main() {
 		resourceConcurrency       int
 		resolverWorkerCount       int
 		resolverWorkerQueueLength int
+		httpTimeout               time.Duration
+		tcpDialTimeout            time.Duration
+		tcpKeepAlive              time.Duration
+		tlsHandshakeTimeout       time.Duration
+		responseHeaderTimeout     time.Duration
+		idleConnTimeout           time.Duration
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
@@ -107,6 +114,18 @@ func main() {
 		"This is the number of active resolver workers.")
 	flag.IntVar(&resolverWorkerQueueLength, "resolver-worker-queue-length", 100, //nolint:mnd // no magic number
 		"The maximum number of work items in the queue for the workers to pick up component versions to resolve from.")
+	flag.DurationVar(&httpTimeout, "timeout", 0,
+		"HTTP client timeout for OCI registry requests. Use 0 to disable the timeout (default).")
+	flag.DurationVar(&tcpDialTimeout, "tcp-dial-timeout", 30*time.Second, //nolint:mnd // no magic number
+		"TCP connection establishment timeout (default: 30s).")
+	flag.DurationVar(&tcpKeepAlive, "tcp-keep-alive", 30*time.Second, //nolint:mnd // no magic number
+		"TCP keep-alive probe interval (default: 30s).")
+	flag.DurationVar(&tlsHandshakeTimeout, "tls-handshake-timeout", 10*time.Second, //nolint:mnd // no magic number
+		"TLS handshake timeout (default: 10s).")
+	flag.DurationVar(&responseHeaderTimeout, "response-header-timeout", 10*time.Second, //nolint:mnd // no magic number
+		"Time to wait for server response headers (default: 10s).")
+	flag.DurationVar(&idleConnTimeout, "idle-conn-timeout", 90*time.Second, //nolint:mnd // no magic number
+		"Idle connection timeout (default: 90s).")
 
 	opts := zap.Options{
 		Development: true,
@@ -170,7 +189,19 @@ func main() {
 	pm := manager.NewPluginManager(ctx)
 
 	ocirepository.MustAddLegacyToScheme(ocirepository.Scheme)
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(ocirepository.Scheme))
+
+	httpClient := provider.NewHTTPClient(provider.WithHttpConfig(&httpv1alpha1.Config{
+		Timeout:               httpv1alpha1.NewTimeout(httpTimeout),
+		TCPDialTimeout:        httpv1alpha1.NewTimeout(tcpDialTimeout),
+		TCPKeepAlive:          httpv1alpha1.NewTimeout(tcpKeepAlive),
+		TLSHandshakeTimeout:   httpv1alpha1.NewTimeout(tlsHandshakeTimeout),
+		ResponseHeaderTimeout: httpv1alpha1.NewTimeout(responseHeaderTimeout),
+		IdleConnTimeout:       httpv1alpha1.NewTimeout(idleConnTimeout),
+	}))
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(
+		provider.WithScheme(ocirepository.Scheme),
+		provider.WithHTTPClient(httpClient),
+	)
 	if err := pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider); err != nil {
 		setupLog.Error(err, "failed to register internal component version repository plugin")
 		os.Exit(1)
@@ -192,7 +223,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ociResourceRepoPlugin := ocires.NewResourceRepository(inmemory.New(), inmemory.New(), &filesystemv1alpha1.Config{}, ocires.WithUserAgent(creator))
+	ociResourceRepoPlugin := ocires.NewResourceRepository(inmemory.New(), inmemory.New(), &filesystemv1alpha1.Config{}, &httpv1alpha1.Config{}, ocires.WithUserAgent(creator))
 	if err := pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin); err != nil {
 		setupLog.Error(err, "failed to register internal resource repository plugin")
 		os.Exit(1)

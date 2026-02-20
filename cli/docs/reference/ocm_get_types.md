@@ -134,6 +134,7 @@ ocm get types [subsystem [type [field-path]]] [flags]
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            Using the option, this configuration file be used instead of the lookup above.
+      --idle-conn-timeout duration         HTTP idle connection timeout (e.g. "90s"). Overrides config file value.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
@@ -150,7 +151,12 @@ ocm get types [subsystem [type [field-path]]] [flags]
                                            (must be one of [stderr stdout]) (default stderr)
       --plugin-directory string            default directory path for ocm plugins. (default "$HOME/.config/ocm/plugins")
       --plugin-shutdown-timeout duration   Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
+      --response-header-timeout duration   HTTP response header timeout (e.g. "10s"). Overrides config file value.
+      --tcp-dial-timeout duration          TCP dial timeout for establishing connections (e.g. "30s"). Overrides config file value.
+      --tcp-keep-alive duration            TCP keep-alive interval (e.g. "30s"). Overrides config file value.
       --temp-folder string                 Specify a custom temporary folder path for filesystem operations.
+      --timeout duration                   HTTP client timeout, overriding the config file value (e.g. "30s", "5m"). Use "0" to disable the timeout.
+      --tls-handshake-timeout duration     TLS handshake timeout (e.g. "10s"). Overrides config file value.
       --working-directory string           Specify a custom working directory path to load resources from.
 ```
 

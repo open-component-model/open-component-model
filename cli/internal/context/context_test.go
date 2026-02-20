@@ -3,11 +3,13 @@ package context
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/http/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
@@ -122,6 +124,10 @@ func TestContextWithMultipleConfigurations(t *testing.T) {
 	}
 	ctx = WithFilesystemConfig(ctx, fsConfig)
 
+	// Add HTTP config
+	httpConfig := &httpv1alpha1.Config{Timeout: httpv1alpha1.NewTimeout(5 * time.Minute)}
+	ctx = WithHTTPConfig(ctx, httpConfig)
+
 	// Verify all configurations are available
 	ocmCtx := FromContext(ctx)
 	r.NotNil(ocmCtx, "OCM context should be available")
@@ -134,6 +140,10 @@ func TestContextWithMultipleConfigurations(t *testing.T) {
 	retrievedFsConfig := ocmCtx.FilesystemConfig()
 	r.NotNil(retrievedFsConfig, "filesystem config should be available")
 	r.Equal("/tmp/multi", retrievedFsConfig.TempFolder, "filesystem config should be correct")
+
+	retrievedHTTPConfig := ocmCtx.HTTPConfig()
+	r.NotNil(retrievedHTTPConfig, "http config should be available")
+	r.Equal(httpv1alpha1.NewTimeout(5*time.Minute), retrievedHTTPConfig.Timeout, "http timeout should be correct")
 }
 
 func TestContextOverwriteFilesystemConfig(t *testing.T) {
@@ -206,6 +216,72 @@ func TestFilesystemConfigIsolation(t *testing.T) {
 	r.Equal("/tmp/ctx1", fsCfg1.TempFolder, "context 1 should have correct config")
 	r.Equal("/tmp/ctx2", fsCfg2.TempFolder, "context 2 should have correct config")
 	r.NotEqual(fsCfg1.TempFolder, fsCfg2.TempFolder, "contexts should be isolated")
+}
+
+func TestWithHTTPConfig(t *testing.T) {
+	t.Run("retrieves config with timeout", func(t *testing.T) {
+		r := require.New(t)
+
+		cfg := &httpv1alpha1.Config{Timeout: httpv1alpha1.NewTimeout(5 * time.Minute)}
+		ctx := WithHTTPConfig(context.Background(), cfg)
+
+		ocmCtx := FromContext(ctx)
+		r.NotNil(ocmCtx, "OCM context should be available")
+
+		result := ocmCtx.HTTPConfig()
+		r.NotNil(result, "http config should not be nil")
+		r.Equal(httpv1alpha1.NewTimeout(5*time.Minute), result.Timeout, "timeout should match")
+	})
+
+	t.Run("returns zero timeout for empty config", func(t *testing.T) {
+		r := require.New(t)
+
+		ctx := WithHTTPConfig(context.Background(), &httpv1alpha1.Config{})
+
+		ocmCtx := FromContext(ctx)
+		r.NotNil(ocmCtx, "OCM context should be available")
+		r.NotNil(ocmCtx.HTTPConfig(), "http config should not be nil")
+		r.Equal((*httpv1alpha1.Timeout)(nil), ocmCtx.HTTPConfig().Timeout, "timeout should be zero")
+	})
+
+	t.Run("is safe for concurrent reads", func(t *testing.T) {
+		r := require.New(t)
+
+		initialConfig := &httpv1alpha1.Config{Timeout: httpv1alpha1.NewTimeout(30 * time.Second)}
+		ctx := WithHTTPConfig(context.Background(), initialConfig)
+
+		done := make(chan bool, 10)
+		for range 10 {
+			go func() {
+				defer func() { done <- true }()
+				ocmCtx := FromContext(ctx)
+				httpCfg := ocmCtx.HTTPConfig()
+				r.NotNil(httpCfg, "http config should be available")
+				r.Equal(httpv1alpha1.NewTimeout(30*time.Second), httpCfg.Timeout, "timeout should be consistent")
+			}()
+		}
+
+		for range 10 {
+			<-done
+		}
+	})
+
+	t.Run("isolates configs across separate contexts", func(t *testing.T) {
+		r := require.New(t)
+
+		config1 := &httpv1alpha1.Config{Timeout: httpv1alpha1.NewTimeout(10 * time.Second)}
+		config2 := &httpv1alpha1.Config{Timeout: httpv1alpha1.NewTimeout(5 * time.Minute)}
+
+		ctx1 := WithHTTPConfig(context.Background(), config1)
+		ctx2 := WithHTTPConfig(context.Background(), config2)
+
+		ocmCtx1 := FromContext(ctx1)
+		ocmCtx2 := FromContext(ctx2)
+
+		r.Equal(httpv1alpha1.NewTimeout(10*time.Second), ocmCtx1.HTTPConfig().Timeout, "context 1 should have correct timeout")
+		r.Equal(httpv1alpha1.NewTimeout(5*time.Minute), ocmCtx2.HTTPConfig().Timeout, "context 2 should have correct timeout")
+		r.NotEqual(ocmCtx1.HTTPConfig().Timeout, ocmCtx2.HTTPConfig().Timeout, "contexts should be isolated")
+	})
 }
 
 func TestWithPluginManager(t *testing.T) {
