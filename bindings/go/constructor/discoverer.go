@@ -4,10 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
+	"golang.org/x/sync/errgroup"
+
+	"ocm.software/open-component-model/bindings/go/blob"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -15,6 +20,7 @@ import (
 type resolverAndDiscoverer struct {
 	componentConstructor                *constructor.ComponentConstructor
 	externalComponentRepositoryProvider ExternalComponentRepositoryProvider
+	resolveExternalLocalBlobs           bool
 }
 
 var (
@@ -71,7 +77,21 @@ func (d *resolverAndDiscoverer) resolveConstructorComponent(_ context.Context, i
 	return nil, fmt.Errorf("component %s not found in constructor: %w", id, repository.ErrNotFound)
 }
 
-func (d *resolverAndDiscoverer) resolveExternalComponent(ctx context.Context, id string) (*descriptor.Descriptor, error) {
+type DescriptorWithLocalBlobs struct {
+	*descriptor.Descriptor
+	Local []LocalResourceWithContent
+}
+
+type LocalResourceWithContent struct {
+	// Index specifies the position of the local resource within the original descriptor.
+	Index int
+	// Content represents a read-only blob that provides lazy access to the content of the local resource.
+	Content blob.ReadOnlyBlob
+	// Resource represents the original resource descriptor.
+	Resource *descriptor.Resource
+}
+
+func (d *resolverAndDiscoverer) resolveExternalComponent(ctx context.Context, id string) (*DescriptorWithLocalBlobs, error) {
 	identity, err := ocmruntime.ParseIdentity(id)
 	if err != nil {
 		return nil, fmt.Errorf("failed parsing identity %q: %w", id, err)
@@ -88,5 +108,34 @@ func (d *resolverAndDiscoverer) resolveExternalComponent(ctx context.Context, id
 	if err != nil {
 		return nil, fmt.Errorf("error getting component version %q from repository: %w", identity.String(), err)
 	}
-	return desc, nil
+
+	descriptorWithLocalBlobs := &DescriptorWithLocalBlobs{Descriptor: desc}
+	var mu sync.Mutex
+
+	if d.resolveExternalLocalBlobs {
+		eg, egctx := errgroup.WithContext(ctx)
+		for idx, resource := range desc.Component.Resources {
+			if err := v2.Scheme.Convert(resource.Access, &v2.LocalBlob{}); err == nil {
+				eg.Go(func() error {
+					content, resource, err := repo.GetLocalResource(egctx, desc.Component.Name, desc.Component.Version, resource.ToIdentity())
+					if err != nil {
+						return fmt.Errorf("error getting local resource for component %q: %w", identity.String(), err)
+					}
+					mu.Lock()
+					defer mu.Unlock()
+					descriptorWithLocalBlobs.Local = append(descriptorWithLocalBlobs.Local, LocalResourceWithContent{
+						Index:    idx,
+						Content:  content,
+						Resource: resource,
+					})
+					return nil
+				})
+			}
+		}
+		if err := eg.Wait(); err != nil {
+			return nil, fmt.Errorf("error getting local resources for component %q: %w", identity.String(), err)
+		}
+	}
+
+	return descriptorWithLocalBlobs, nil
 }
