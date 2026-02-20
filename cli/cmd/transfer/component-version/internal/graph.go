@@ -73,7 +73,7 @@ func BuildGraphDefinition(
 
 	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(d, toSpec, tgd, o.CopyMode, o.UploadType)
+		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, toSpec, tgd, o.CopyMode, o.UploadType)
 	})
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func BuildGraphDefinition(
 	return tgd, nil
 }
 
-func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[string], toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, copyMode CopyMode, uploadType UploadType) error {
+func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.DirectedAcyclicGraph[string], toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, copyMode CopyMode, uploadType UploadType) error {
 	for _, v := range d.Vertices {
 		val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
 		ref := val.Ref
@@ -117,9 +117,14 @@ func fillGraphDefinitionWithPrefetchedComponents(d *dag.DirectedAcyclicGraph[str
 			case *descriptorv2.LocalBlob:
 				uploadAsOCIArtifact := false
 				if _, isOCITarget := toSpec.(*oci.Repository); isOCITarget {
-					if uploadType == UploadAsOciArtifact {
-						if IsOCICompliantManifest(acc.MediaType) {
+					if uploadType == UploadAsOciArtifact && IsOCICompliantManifest(acc.MediaType) {
+						// TODO(fabianburth): We currently do not support a way to specify a reference name
+						//  based on input type. Long term, this whole scenario should be redesigned through
+						//  a transfer config. Short term, we pray that we can neglect this scenario.
+						if acc.ReferenceName != "" {
 							uploadAsOCIArtifact = true
+						} else {
+							slog.DebugContext(ctx, "local blob resource %q is not uploaded to individual oci repository since it does not have a reference name.", resource.ToIdentity().String())
 						}
 					}
 				}

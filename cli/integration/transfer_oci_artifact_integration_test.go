@@ -26,7 +26,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
-	ociinmemory "ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -87,7 +86,8 @@ configurations:
 `, sourceRegistry.Host, sourceRegistry.Port, sourceRegistry.User, sourceRegistry.Password,
 		targetRegistry.Host, targetRegistry.Port, targetRegistry.User, targetRegistry.Password)
 
-	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	tempdir := t.TempDir()
+	cfgPath := filepath.Join(tempdir, "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
 	// Set up repository provider and credential resolver to check whether the
@@ -141,7 +141,7 @@ configurations:
 
 	// Upload the resource to the source oci registry where the constructor
 	// image reference is pointing to.
-	resourceRepo := ocires.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
+	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
 	id, err := resourceRepo.GetResourceCredentialConsumerIdentity(ctx, &resource)
 	r.NoError(err, "should be able to get credential consumer identity for resource")
 	creds, err := credentialResolver.Resolve(ctx, id)
@@ -153,7 +153,6 @@ configurations:
 
 	// Store the resource to the file system to be used in the constructor
 	// to add a local blob oci layout
-	tempdir := t.TempDir()
 	ociLayoutPath := filepath.Join(tempdir, "oci-layout")
 	r.NoError(os.WriteFile(ociLayoutPath, data, os.ModePerm))
 
@@ -180,7 +179,7 @@ components:
       type: file
       path: %s
       mediaType: %s
-`, componentName, componentVersion, ociArtifactAccess.Type, ociArtifactAccess.ImageReference, ociLayoutPath, layout.MediaTypeOCIImageLayoutV1)
+`, componentName, componentVersion, ociArtifactAccess.Type, ociArtifactAccess.ImageReference, ociLayoutPath, layout.MediaTypeOCIImageLayoutTarV1)
 
 	constructorPath := filepath.Join(tempdir, "constructor.yaml")
 	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
@@ -270,15 +269,20 @@ components:
 		r.NoError(err, "should be able to retrieve transferred component")
 		r.Equal(componentName, desc.Component.Name)
 		r.Equal(componentVersion, desc.Component.Version)
-		r.Len(desc.Component.Resources, 1)
+		r.Len(desc.Component.Resources, 2)
 		r.Equal("test-oci-resource", desc.Component.Resources[0].Name)
+
 		var localBlobAccess v2.LocalBlob
 		r.NoError(v2.Scheme.Convert(desc.Component.Resources[0].Access, &localBlobAccess))
 		r.Equal("test-oci-resource:v1.0.0", localBlobAccess.ReferenceName)
+
+		r.Equal("test-localblob-oci-resource", desc.Component.Resources[1].Name)
+		var localBlobAccess2 v2.LocalBlob
+		r.NoError(v2.Scheme.Convert(desc.Component.Resources[1].Access, &localBlobAccess2))
 	})
 
-	t.Run("transfer with --upload-as ociArtifact", func(t *testing.T) {
-		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "as/oci")
+	t.Run("transfer with --upload-as ociArtifact (local blob with missing reference name)", func(t *testing.T) {
+		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "as/oci/norefname")
 
 		transferCMD := cmd.New()
 		transferCMD.SetArgs([]string{
@@ -307,12 +311,78 @@ components:
 		r.NoError(err, "should be able to retrieve transferred component")
 		r.Equal(componentName, desc.Component.Name)
 		r.Equal(componentVersion, desc.Component.Version)
-		r.Len(desc.Component.Resources, 1)
+		r.Len(desc.Component.Resources, 2)
 		r.Equal("test-oci-resource", desc.Component.Resources[0].Name)
 
 		var ociAccess v1.OCIImage
 		r.NoError(ociaccess.Scheme.Convert(desc.Component.Resources[0].Access, &ociAccess))
 		r.Equal(fmt.Sprintf("%s/test-oci-resource:v1.0.0", targetRef), ociAccess.ImageReference)
+
+		// upload as oci is expected to be skipped due to missing reference name
+		r.Equal("test-localblob-oci-resource", desc.Component.Resources[1].Name)
+		var localBlobAccess2 v2.LocalBlob
+		r.NoError(v2.Scheme.Convert(desc.Component.Resources[1].Access, &localBlobAccess2))
+	})
+
+	t.Run("transfer with --upload-as ociArtifact", func(t *testing.T) {
+		// Perform an intermediary transfer to get a local blob with a reference name
+		intermediaryctf := filepath.Join(tempdir, "intermediary-ctf")
+		intermediaryRef := fmt.Sprintf("ctf::%s", intermediaryctf)
+		transferIntermediaryCMD := cmd.New()
+		transferIntermediaryCMD.SetArgs([]string{
+			"transfer",
+			"component-version",
+			sourceRef,
+			intermediaryRef,
+			"--config", cfgPath,
+			"--copy-resources", // required, otherwise we wouldn't transfer oci artifacts
+		})
+
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		// Executes transfer
+		r.NoError(transferIntermediaryCMD.ExecuteContext(ctx), "transfer should succeed")
+
+		// Actual transfer to be tested
+		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "as/oci/refname")
+		intermediaryRef = fmt.Sprintf("ctf::%s//%s:%s", intermediaryctf, componentName, componentVersion)
+
+		transferCMD := cmd.New()
+		transferCMD.SetArgs([]string{
+			"transfer",
+			"component-version",
+			intermediaryRef,
+			targetRef,
+			"--config", cfgPath,
+			"--copy-resources",           // required, otherwise we wouldn't transfer oci artifacts
+			"--upload-as", "ociArtifact", // This is the new flag we are testing
+		})
+
+		// Executes transfer
+		r.NoError(transferCMD.ExecuteContext(ctx), "transfer should succeed")
+
+		// Set up a repository to download components from the target to check whether
+		// the transfer worked as expected.
+		targetRepo, err := createTargetOCIRepo(ctx, repoProvider, credentialResolver, targetRef)
+		r.NoError(err, "should be able to create target repository")
+
+		// Check if component exists in target registry
+		desc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+		r.NoError(err, "should be able to retrieve transferred component")
+		r.Equal(componentName, desc.Component.Name)
+		r.Equal(componentVersion, desc.Component.Version)
+		r.Len(desc.Component.Resources, 2)
+		r.Equal("test-oci-resource", desc.Component.Resources[0].Name)
+
+		var ociAccess v1.OCIImage
+		r.NoError(ociaccess.Scheme.Convert(desc.Component.Resources[0].Access, &ociAccess))
+		r.Equal(fmt.Sprintf("%s/test-oci-resource:v1.0.0", targetRef), ociAccess.ImageReference)
+
+		// upload as oci is expected to be skipped due to missing reference name
+		r.Equal("test-localblob-oci-resource", desc.Component.Resources[1].Name)
+		var localBlobAccess2 v2.LocalBlob
+		r.NoError(v2.Scheme.Convert(desc.Component.Resources[1].Access, &localBlobAccess2))
 	})
 }
 
@@ -320,10 +390,13 @@ func createTargetOCIRepo(ctx context.Context, repoProvider *provider.CachingComp
 	targetSpec := &ociv1.Repository{
 		BaseUrl: targetRef,
 	}
+	var creds map[string]string
 	id, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, targetSpec)
-	creds, err := credentialResolver.Resolve(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("should be able to resolve credentials for target repository: %w", err)
+	if err == nil {
+		creds, err = credentialResolver.Resolve(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("should be able to resolve credentials for target repository: %w", err)
+		}
 	}
 	targetRepo, err := repoProvider.GetComponentVersionRepository(ctx, targetSpec, creds)
 	if err != nil {
@@ -395,7 +468,7 @@ configurations:
 	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", sourceRegistry.Reference("test-signed:v1.0.0"))
 	resource.Access = targetAccess
 
-	resourceRepo := ocires.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
+	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
 	newRes, err := resourceRepo.UploadResource(ctx, &resource, inmemory.New(bytes.NewReader(data)), map[string]string{
 		"username": sourceRegistry.User,
 		"password": sourceRegistry.Password,
