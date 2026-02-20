@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/credentials/spec/config"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
@@ -19,7 +20,7 @@ import (
 
 type CredentialPlugin struct {
 	ConsumerIdentityTypeAttributes map[runtime.Type]map[string]func(v any) (string, string)
-	CredentialFunc                 func(ctx context.Context, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error)
+	CredentialFunc                 func(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (resolved runtime.Typed, err error)
 }
 
 func (p CredentialPlugin) GetConsumerIdentity(_ context.Context, typed runtime.Typed) (runtime.Identity, error) {
@@ -50,7 +51,7 @@ func (p CredentialPlugin) GetConsumerIdentity(_ context.Context, typed runtime.T
 	return identity, nil
 }
 
-func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 	if p.CredentialFunc == nil {
 		return nil, fmt.Errorf("no credential function for %v", identity)
 	}
@@ -59,7 +60,7 @@ func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity
 
 type RepositoryPlugin struct {
 	RepositoryIdentityFunc func(config runtime.Typed) (runtime.Identity, error)
-	ResolveFunc            func(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
+	ResolveFunc            func(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error)
 }
 
 func (s RepositoryPlugin) GetCredentialRepositoryScheme() *runtime.Scheme {
@@ -70,7 +71,7 @@ func (s RepositoryPlugin) ConsumerIdentityForConfig(_ context.Context, config ru
 	return s.RepositoryIdentityFunc(config)
 }
 
-func (s RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+func (s RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 	return s.ResolveFunc(ctx, config, identity, credentials)
 }
 
@@ -184,13 +185,13 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 						"dockerConfigFile":            file.(string),
 					}, nil
 				},
-				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error) {
+				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (resolved runtime.Typed, err error) {
 					switch identity["hostname"] {
 					case "quay.io":
-						return map[string]string{
+						return v1.CredentialsFromMap(map[string]string{
 							"username": "test1",
 							"password": "bar",
-						}, nil
+						}), nil
 					case "notfound.io":
 						return nil, nil
 					default:
@@ -205,7 +206,7 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 						runtime.IdentityAttributeType: "ErrorRegistry",
 					}, nil
 				},
-				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error) {
+				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (resolved runtime.Typed, err error) {
 					return nil, fmt.Errorf("some internal plugin error")
 				},
 			}, nil
@@ -229,20 +230,25 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 						runtime.IdentityAttributeHostname: purl.Hostname(),
 					}, nil
 				},
-				ResolveFunc: func(_ context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error) {
+				ResolveFunc: func(_ context.Context, config runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (resolved runtime.Typed, err error) {
+					typed, ok := credentials.(*v1.DirectCredentials)
+					if !ok {
+						return nil, fmt.Errorf("failed access")
+					}
+
 					var mm map[string]interface{}
 					_ = json.Unmarshal(config.(*runtime.Raw).Data, &mm)
 
-					if credentials["role_id"] != "repository.vault.com-role" || credentials["secret_id"] != "repository.vault.com-secret" {
+					if typed.Properties["role_id"] != "repository.vault.com-role" || typed.Properties["secret_id"] != "repository.vault.com-secret" {
 						return nil, fmt.Errorf("failed access")
 					}
 					if identity["hostname"] != "some-hostname.com" {
 						return nil, fmt.Errorf("failed access")
 					}
 
-					return map[string]string{
+					return v1.CredentialsFromMap(map[string]string{
 						"something-from-vault-repo": "some-value-from-vault",
-					}, nil
+					}), nil
 				},
 			}, nil
 		default:
@@ -271,17 +277,22 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 						},
 					},
 				},
-				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
+					typed, ok := credentials.(*v1.DirectCredentials)
+					if !ok {
+						return nil, fmt.Errorf("failed access")
+					}
+
 					if identity["secretId"] != "vault-access-creds" {
 						return nil, fmt.Errorf("failed access")
 					}
-					if credentials["roleid"] != "my-role-id" {
+					if typed.Properties["roleid"] != "my-role-id" {
 						return nil, fmt.Errorf("failed access")
 					}
-					return map[string]string{
+					return v1.CredentialsFromMap(map[string]string{
 						"role_id":   "myvault.example.com-role",
 						"secret_id": "myvault.example.com-secret",
-					}, nil
+					}), nil
 				},
 			}, nil
 		case runtime.NewUnversionedType("HashiCorpVault"):
@@ -294,31 +305,36 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 						},
 					},
 				},
-				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
+					typed, ok := credentials.(*v1.DirectCredentials)
+					if !ok {
+						return nil, fmt.Errorf("failed access")
+					}
+
 					switch identity["hostname"] {
 					case "myvault.example.com":
-						roleid, secret := credentials["role_id"], credentials["secret_id"]
+						roleid, secret := typed.Properties["role_id"], typed.Properties["secret_id"]
 						if roleid != "myvault.example.com-role" || secret != "myvault.example.com-secret" {
 							return nil, fmt.Errorf("failed access")
 						}
-						return map[string]string{
+						return v1.CredentialsFromMap(map[string]string{
 							"role_id":   "other.vault.com-role",
 							"secret_id": "other.vault.com-secret",
-						}, nil
+						}), nil
 					case "other.vault.com":
-						roleid, secret := credentials["role_id"], credentials["secret_id"]
+						roleid, secret := typed.Properties["role_id"], typed.Properties["secret_id"]
 						if roleid != "other.vault.com-role" || secret != "other.vault.com-secret" {
 							return nil, fmt.Errorf("failed access")
 						}
-						return map[string]string{
+						return v1.CredentialsFromMap(map[string]string{
 							"username": "foo",
 							"password": "bar",
-						}, nil
+						}), nil
 					}
 
-					return map[string]string{
+					return v1.CredentialsFromMap(map[string]string{
 						"vaultSecret": "vault-secret-for-https://" + identity["hostname"] + "/",
-					}, nil
+					}), nil
 				},
 			}, nil
 		}
@@ -343,7 +359,7 @@ func TestResolveCredentials(t *testing.T) {
 		name        string
 		yaml        string
 		identity    runtime.Identity
-		expected    map[string]string
+		expected    runtime.Typed
 		expectedErr require.ErrorAssertionFunc
 	}{
 		{
@@ -353,10 +369,10 @@ func TestResolveCredentials(t *testing.T) {
 				"type":     "OCIRegistry",
 				"hostname": "docker.io",
 			},
-			map[string]string{
+			v1.CredentialsFromMap(map[string]string{
 				"username": "foo",
 				"password": "bar",
-			},
+			}),
 			require.NoError,
 		},
 		{
@@ -366,10 +382,10 @@ func TestResolveCredentials(t *testing.T) {
 				"type":     "OCIRegistry",
 				"hostname": "quay.io",
 			},
-			map[string]string{
+			v1.CredentialsFromMap(map[string]string{
 				"username": "test1",
 				"password": "bar",
-			},
+			}),
 			require.NoError,
 		},
 		{
@@ -379,9 +395,9 @@ func TestResolveCredentials(t *testing.T) {
 				"type":     "SomeCatchAllType",
 				"hostname": "some-hostname.com",
 			},
-			map[string]string{
+			v1.CredentialsFromMap(map[string]string{
 				"something-from-vault-repo": "some-value-from-vault",
-			},
+			}),
 			require.NoError,
 		},
 		{
@@ -392,10 +408,10 @@ func TestResolveCredentials(t *testing.T) {
 				"hostname": "quay.io",
 				"path":     "some-owner/some-repo",
 			},
-			map[string]string{
+			v1.CredentialsFromMap(map[string]string{
 				"username": "some-owner",
 				"password": "abc",
-			},
+			}),
 			require.NoError,
 		},
 		{
@@ -406,10 +422,10 @@ func TestResolveCredentials(t *testing.T) {
 				"hostname": "notfound.io",
 				"path":     "another-owner/another-repo",
 			},
-			map[string]string{
+			v1.CredentialsFromMap(map[string]string{
 				"username": "some-owner",
 				"password": "abc",
-			},
+			}),
 			require.ErrorAssertionFunc(func(t require.TestingT, err error, i ...interface{}) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, credentials.ErrNotFound)
@@ -423,10 +439,10 @@ func TestResolveCredentials(t *testing.T) {
 				"hostname": "quay.io",
 				"path":     "some-owner/some-repo",
 			},
-			map[string]string{
+			v1.CredentialsFromMap(map[string]string{
 				"username": "some-owner",
 				"password": "abc",
-			},
+			}),
 			require.ErrorAssertionFunc(func(t require.TestingT, err error, i ...interface{}) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, credentials.ErrUnknown)
@@ -578,4 +594,228 @@ func TestResolutionErrors(t *testing.T) {
 	r.ErrorIs(err, credentials.ErrNoIndirectCredentials)
 	r.ErrorContains(err, fmt.Sprintf("failed to resolve credentials for identity %q: credentials not found", id.String()))
 	r.ErrorContains(err, "no indirect credentials found in graph")
+}
+
+func TestIdentityMerge(t *testing.T) {
+	ctx := t.Context()
+	r := require.New(t)
+	yaml := `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: user
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          password: pass
+`
+
+	split := strings.Split(yaml, "---")
+	var configs []*credentialruntime.Config
+	for _, yaml := range split {
+		var configv1 v1.Config
+		r.NoError(config.Scheme.Decode(strings.NewReader(yaml), &configv1))
+		configs = append(configs, credentialruntime.ConvertFromV1(&configv1))
+	}
+
+	graph, err := credentials.ToGraph(t.Context(), credentialruntime.Merge(configs...), credentials.Options{})
+	r.NoError(err)
+
+	creds, err := graph.Resolve(ctx, runtime.Identity{
+		"type":     "OCIRegistry",
+		"hostname": "docker.io",
+	})
+	r.NoError(err)
+	r.NotNil(creds)
+	r.IsType(&v1.DirectCredentials{}, creds)
+	properties := creds.(*v1.DirectCredentials).Properties
+	r.Equal("user", properties["username"])
+	r.Equal("pass", properties["password"])
+}
+
+func TestCredentialMerge(t *testing.T) {
+	ctx := t.Context()
+	r := require.New(t)
+	yaml := `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: user
+      - type: Credentials/v1
+        properties:
+          password: pass
+`
+
+	split := strings.Split(yaml, "---")
+	var configs []*credentialruntime.Config
+	for _, yaml := range split {
+		var configv1 v1.Config
+		r.NoError(config.Scheme.Decode(strings.NewReader(yaml), &configv1))
+		configs = append(configs, credentialruntime.ConvertFromV1(&configv1))
+	}
+
+	graph, err := credentials.ToGraph(t.Context(), credentialruntime.Merge(configs...), credentials.Options{})
+	r.NoError(err)
+
+	creds, err := graph.Resolve(ctx, runtime.Identity{
+		"type":     "OCIRegistry",
+		"hostname": "docker.io",
+	})
+	r.NoError(err)
+	r.NotNil(creds)
+	r.IsType(&v1.DirectCredentials{}, creds)
+	properties := creds.(*v1.DirectCredentials).Properties
+	r.Equal("user", properties["username"])
+	r.Equal("pass", properties["password"])
+}
+
+func TestCredential_Match_Partial_Match_in_Path(t *testing.T) {
+	t.Run("loose query, but strict definition", func(t *testing.T) {
+		ctx := t.Context()
+		r := require.New(t)
+		yaml := `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+      path: "some-owner/some-repo"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: user
+`
+
+		split := strings.Split(yaml, "---")
+		var configs []*credentialruntime.Config
+		for _, yaml := range split {
+			var configv1 v1.Config
+			r.NoError(config.Scheme.Decode(strings.NewReader(yaml), &configv1))
+			configs = append(configs, credentialruntime.ConvertFromV1(&configv1))
+		}
+
+		graph, err := credentials.ToGraph(t.Context(), credentialruntime.Merge(configs...), credentials.Options{})
+		r.NoError(err)
+
+		creds, err := graph.Resolve(ctx, runtime.Identity{
+			"type":     "OCIRegistry",
+			"hostname": "docker.io",
+		})
+		r.Error(err)
+		r.Nil(creds)
+	})
+
+	t.Run("strict query, but loose definition", func(t *testing.T) {
+		ctx := t.Context()
+		r := require.New(t)
+		yaml := `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: user
+`
+
+		split := strings.Split(yaml, "---")
+		var configs []*credentialruntime.Config
+		for _, yaml := range split {
+			var configv1 v1.Config
+			r.NoError(config.Scheme.Decode(strings.NewReader(yaml), &configv1))
+			configs = append(configs, credentialruntime.ConvertFromV1(&configv1))
+		}
+
+		graph, err := credentials.ToGraph(t.Context(), credentialruntime.Merge(configs...), credentials.Options{})
+		r.NoError(err)
+
+		creds, err := graph.Resolve(ctx, runtime.Identity{
+			"type":     "OCIRegistry",
+			"hostname": "docker.io",
+			"path":     "some-owner/some-repo",
+		})
+		r.NoError(err)
+		r.NotNil(creds)
+		r.IsType(&v1.DirectCredentials{}, creds)
+		properties := creds.(*v1.DirectCredentials).Properties
+		r.Equal("user", properties["username"])
+	})
+
+	t.Run("strict query, but loose definition (scheme) should be forbidden", func(t *testing.T) {
+		ctx := t.Context()
+		r := require.New(t)
+		yaml := `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: user
+`
+
+		split := strings.Split(yaml, "---")
+		var configs []*credentialruntime.Config
+		for _, yaml := range split {
+			var configv1 v1.Config
+			r.NoError(config.Scheme.Decode(strings.NewReader(yaml), &configv1))
+			configs = append(configs, credentialruntime.ConvertFromV1(&configv1))
+		}
+
+		graph, err := credentials.ToGraph(t.Context(), credentialruntime.Merge(configs...), credentials.Options{})
+		r.NoError(err)
+
+		creds, err := graph.Resolve(ctx, runtime.Identity{
+			"type":     "OCIRegistry",
+			"hostname": "docker.io",
+			"scheme":   "http",
+		})
+		r.Error(err)
+		r.Nil(creds)
+	})
+}
+
+func TestCredentialCustomType_Unrecognized(t *testing.T) {
+	r := require.New(t)
+	yaml := `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: user
+      - type: Custom/v1
+        password: pass
+`
+
+	split := strings.Split(yaml, "---")
+	var configs []*credentialruntime.Config
+	for _, yaml := range split {
+		var configv1 v1.Config
+		r.NoError(config.Scheme.Decode(strings.NewReader(yaml), &configv1))
+		configs = append(configs, credentialruntime.ConvertFromV1(&configv1))
+	}
+
+	_, err := credentials.ToGraph(t.Context(), credentialruntime.Merge(configs...), credentials.Options{})
+	r.Error(err)
 }

@@ -18,5 +18,5 @@ var ErrUnknown = errors.New("unknown error occurred")
 // In case of an error it will either return ErrNotFound when no credentials could be found
 // or another error indicating the failure reason wrapped by ErrUnknown.
 type Resolver interface {
-	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
+	Resolve(ctx context.Context, identity runtime.Identity) (runtime.Typed, error)
 }

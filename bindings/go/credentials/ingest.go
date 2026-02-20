@@ -80,7 +80,7 @@ func processDirectCredentials(g *Graph, config *cfgRuntime.Config) ([]cfgRuntime
 	}
 
 	for node, credentials := range directPerIdentity {
-		g.setCredentials(node, credentials)
+		g.setCredentials(node, v1.CredentialsFromMap(credentials))
 	}
 
 	return consumers, nil
@@ -111,6 +111,9 @@ func processPluginBasedEdges(ctx context.Context, g *Graph, consumers []cfgRunti
 // 3. Adds the credential identity as a node in the graph
 // 4. Creates an edge from the consumer identity to the credential identity
 func processConsumerCredential(ctx context.Context, g *Graph, credential runtime.Typed, node string, identity runtime.Identity) error {
+	if g.credentialPluginProvider == nil {
+		return fmt.Errorf("no credential plugin provider available")
+	}
 	plugin, err := g.credentialPluginProvider.GetCredentialPlugin(ctx, credential)
 	if err != nil {
 		return fmt.Errorf("getting credential plugin failed: %w", err)

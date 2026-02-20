@@ -3,13 +3,12 @@ package credentials
 import (
 	"context"
 	"fmt"
-	"maps"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // resolveFromGraph resolves credentials for a given identity by traversing the graph.
-func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
+func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
 	// Check for cancellation to exit early
 	select {
 	case <-ctx.Done():
@@ -28,10 +27,10 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 		return creds, nil
 	}
 
-	// Non–leaf node: recursively resolve each child and merge the results.
+	// Non–leaf node: try to resolve each child and use first successfully resolved result.
 	node := identity.String()
 
-	result := make(map[string]string)
+	var result runtime.Typed
 	for id := range vertex.Edges {
 		childID, ok := g.getIdentity(id)
 		if !ok {
@@ -53,7 +52,8 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 		}
 
 		// Merge the resolved credentials into the result
-		maps.Copy(result, credentials)
+		result = credentials
+		break
 	}
 
 	// Cache the resolved credentials for the identity
