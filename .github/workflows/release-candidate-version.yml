@@ -24,9 +24,15 @@ on:
       promotion_tag:
         description: "Tag to be used for promotion later, eg. cli/v0.1.0-rc.1 -> cli/v0.1.0"
         value: ${{ jobs.prepare.outputs.promotion_tag }}
-      changelog_b64:
-        description: "Changelog encoded in base64 for release body"
-        value: ${{ jobs.prepare.outputs.changelog_b64 }}
+      changelog_artifact:
+        description: "Name of the changelog artifact"
+        value: ${{ jobs.prepare.outputs.changelog_artifact }}
+      set_latest:
+        description: "Whether to set :latest tag (true if this version >= highest existing final)"
+        value: ${{ jobs.prepare.outputs.set_latest }}
+      highest_final_version:
+        description: "Highest existing final version for this component (for logging)"
+        value: ${{ jobs.prepare.outputs.highest_final_version }}
 
 jobs:
   prepare:
@@ -39,7 +45,9 @@ jobs:
       new_version: ${{ steps.compute.outputs.new_version }}
       base_version: ${{ steps.compute.outputs.base_version }}
       promotion_tag: ${{ steps.compute.outputs.promotion_tag }}
-      changelog_b64: ${{ steps.summarize.outputs.changelog_b64 }}
+      changelog_artifact: changelog-${{ steps.compute.outputs.new_tag }}
+      set_latest: ${{ steps.latest.outputs.set_latest }}
+      highest_final_version: ${{ steps.latest.outputs.highest_final_version }}
     steps:
       # Checkout the repository and target branch
       - name: Checkout Repository
@@ -89,9 +97,84 @@ jobs:
         with:
           script: |
             const fs = require("fs");
-            const log = fs.existsSync(process.env.CHANGELOG_FILE)
-              ? fs.readFileSync(process.env.CHANGELOG_FILE, "utf8").trim()
-              : "No changelog.";
-            const encoded = Buffer.from(log).toString("base64");
-            core.setOutput("changelog_b64", encoded);
+            const tag = process.env.TAG;
+            const today = new Date().toISOString().split("T")[0];
+
+            // Read changelog file if it exists
+            let log = "";
+            if (fs.existsSync(process.env.CHANGELOG_FILE)) {
+              log = fs.readFileSync(process.env.CHANGELOG_FILE, "utf8").trim();
+            }
+
+            // Generate fallback header if changelog is empty
+            // This can happen when --use-branch-tags finds no tags on a new release branch
+            if (!log) {
+              log = `## [${tag}] - ${today}\n\nNo changes since the previous release.`;
+              core.info(`Generated fallback changelog for ${tag}`);
+              fs.writeFileSync(process.env.CHANGELOG_FILE, log);
+            }
+
             await core.summary.addRaw(log).write();
+
+      - name: Upload changelog artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: changelog-${{ steps.compute.outputs.new_tag }}
+          path: ${{ runner.temp }}/CHANGELOG.md
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Determine if release should be latest
+        id: latest
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          COMPONENT_PATH: ${{ inputs.component_path }}
+          PROMOTION_VERSION: ${{ steps.compute.outputs.base_version }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { COMPONENT_PATH: componentPath, PROMOTION_VERSION: promotionVersion } = process.env;
+            
+            // Build tag prefix based on component path
+            const tagPrefix = `${componentPath}/v`;
+            
+            // Find highest existing final version from GitHub releases
+            let highestFinal = '';
+            try {
+              const releases = await github.rest.repos.listReleases({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: 100,
+              });
+              highestFinal = releases.data
+                .filter(r => !r.prerelease && r.tag_name.startsWith(tagPrefix))
+                .map(r => r.tag_name.replace(tagPrefix, ''))
+                .filter(v => /^\d+\.\d+\.\d+$/.test(v))
+                .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+                .pop() || '';
+            } catch (e) {
+              core.warning(`Could not fetch existing releases: ${e.message}`);
+            }
+            
+            // Set :latest only if this version is >= the current highest
+            const setLatest = !highestFinal || promotionVersion.localeCompare(highestFinal, undefined, { numeric: true }) >= 0;
+            
+            core.setOutput('set_latest', setLatest ? 'true' : 'false');
+            core.setOutput('highest_final_version', highestFinal || '(none)');
+            
+            core.info(setLatest
+              ? `✅ Will set :latest (${promotionVersion} >= ${highestFinal || 'none'})`
+              : `⚠️ Will NOT set :latest (${promotionVersion} < ${highestFinal})`);
+            
+            // Add to summary with separator
+            await core.summary
+              .addRaw('---')
+              .addEOL()
+              .addHeading('Latest Tag Decision', 2)
+              .addTable([
+                [{ data: 'Field', header: true }, { data: 'Value', header: true }],
+                ['Final Version', promotionVersion],
+                ['Highest Final Version', highestFinal || '(none)'],
+                ['Will Set Latest', setLatest ? '✅ Yes' : '⚠️ No'],
+              ])
+              .write();
