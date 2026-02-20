@@ -124,7 +124,7 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 						if acc.ReferenceName != "" {
 							uploadAsOCIArtifact = true
 						} else {
-							slog.DebugContext(ctx, "local blob resource %q is not uploaded to individual oci repository since it does not have a reference name.", resource.ToIdentity().String())
+							slog.DebugContext(ctx, "local blob resource is not uploaded to individual oci repository since it does not have a reference name", "resource", resource.ToIdentity().String())
 						}
 					}
 				}
