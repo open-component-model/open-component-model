@@ -416,6 +416,7 @@ func looksLikeArchive(s string) bool {
 // isWindowsAbsPath checks if the string looks like a Windows absolute path (e.g., C:\foo or D:/bar).
 // This is needed because url.Parse interprets the single-letter drive prefix as a URL scheme.
 // This will only be relevant when running on Windows, but it doesn't hurt to have this check in place for cross-platform compatibility.
+// TODO(matthiasbruns) Move os dependant code into _windows.go files https://github.com/open-component-model/ocm-project/issues/902
 func isWindowsAbsPath(s string) bool {
 	return len(s) >= 3 && unicode.IsLetter(rune(s[0])) && s[1] == ':' && (s[2] == '\\' || s[2] == '/')
 }
