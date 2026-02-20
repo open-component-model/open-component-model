@@ -259,6 +259,15 @@ configurations:
 				extractionPolicy:   resourceCMD.ExtractionPolicyAuto,
 				expectUncompressed: true,
 			},
+			{
+				name:               "compressed resource with auto extraction policy is decompressed",
+				resourceName:       "compressed-resource-auto",
+				component:          "ocm.software/test-extract-auto-decompress",
+				blob:               compressedBlob,
+				access:             &v2.LocalBlob{},
+				extractionPolicy:   resourceCMD.ExtractionPolicyAuto,
+				expectUncompressed: true,
+			},
 		}
 
 		for _, tt := range tests {
@@ -535,6 +544,59 @@ func Test_Integration_ConstructorCompress(t *testing.T) {
 		data, err := os.ReadFile(output)
 		r.NoError(err)
 		r.Equal(originalContent, string(data), "uncompressed resource should match original content")
+	})
+
+	t.Run("compressed resource with auto extraction is decompressed", func(t *testing.T) {
+		r := require.New(t)
+
+		tempDir := t.TempDir()
+		filePath := filepath.Join(tempDir, "testfile.txt")
+		r.NoError(os.WriteFile(filePath, []byte(originalContent), os.ModePerm))
+
+		constructorPath := filepath.Join(tempDir, "constructor.yaml")
+		transportArchivePath := filepath.Join(tempDir, "transport-archive")
+
+		constructor := fmt.Sprintf(`components:
+- name: %[1]s
+  version: %[2]s
+  provider:
+    name: acme.org
+  resources:
+    - name: %[3]s
+      version: %[4]s
+      type: blob
+      input:
+        type: file
+        path: %[5]s
+        compress: true
+`, name, version, resourceName, resourceVersion, filePath)
+		r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+
+		addCMD := cmd.New()
+		addCMD.SetArgs([]string{
+			"add",
+			"component-version",
+			"--repository", transportArchivePath,
+			"--constructor", constructorPath,
+		})
+		r.NoError(addCMD.ExecuteContext(t.Context()), "adding the component-version must succeed")
+
+		output := filepath.Join(tempDir, "downloaded-resource")
+		downloadCMD := cmd.New()
+		downloadCMD.SetArgs([]string{
+			"download",
+			"resource",
+			fmt.Sprintf("%s//%s:%s", transportArchivePath, name, version),
+			"--identity",
+			fmt.Sprintf("name=%s,version=%s", resourceName, resourceVersion),
+			"--output",
+			output,
+		})
+		r.NoError(downloadCMD.ExecuteContext(t.Context()), "downloading with auto extraction must succeed")
+
+		data, err := os.ReadFile(output)
+		r.NoError(err)
+		r.Equal(originalContent, string(data), "auto extraction should decompress and match original content")
 	})
 }
 

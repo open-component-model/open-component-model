@@ -193,7 +193,12 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	case ExtractionPolicyAuto:
 		extractedFS, err := extractFSFromBlob(data)
 		if errors.Is(err, ErrCannotExtractFS) {
-			return shared.SaveBlobToFile(data, finalOutputPath)
+			// try anyway
+			decompressed, decompErr := compression.Decompress(data)
+			if decompErr != nil {
+				return shared.SaveBlobToFile(data, finalOutputPath)
+			}
+			return shared.SaveBlobToFile(decompressed, finalOutputPath)
 		}
 		if err != nil {
 			return err
