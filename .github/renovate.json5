@@ -47,6 +47,19 @@
       ],
     },
     {
+      matchDatasources: ['docker'],
+      matchPackageNames: ['golang'],
+      matchFileNames: ['kubernetes/controller/Dockerfile'],
+      groupName: 'Golang versions',
+      groupSlug: 'golang-versions',
+    },
+    {
+      matchManagers: ['github-actions'],
+      matchDepNames: ['go'],
+      groupName: 'Golang versions',
+      groupSlug: 'golang-versions',
+    },
+    {
       matchManagers: [
         'gomod',
         'custom.regex',
