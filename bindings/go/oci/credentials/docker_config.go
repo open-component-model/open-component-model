@@ -98,7 +98,9 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 
 	hostname := identity[runtime.IdentityAttributeHostname]
 	if hostname == "" {
-		return nil, fmt.Errorf("missing %q in identity", runtime.IdentityAttributeHostname)
+		slog.DebugContext(ctx, "no hostname provided, skipping credential resolution, since docker configs"+
+			"cannot resolve without hostname", "identity", identity)
+		return nil, nil
 	}
 
 	cred, err := credStore.Get(ctx, hostname)

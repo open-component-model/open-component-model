@@ -63,6 +63,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 	} else {
 		addResourceTransform = ociUploadAsLocalResource(toSpec, ref, addResourceID, getResourceID, referenceName)
 	}
+
 	tgd.Transformations = append(tgd.Transformations, addResourceTransform)
 
 	// Track this resource's transformation
