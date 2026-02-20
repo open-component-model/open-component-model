@@ -144,6 +144,7 @@ jobs:
           prerelease: true
           files: |
             ${{ runner.temp }}/rc-build-assets/bin/ocm-*
+            ${{ runner.temp }}/rc-build-assets/oci/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -345,8 +346,8 @@ jobs:
             --json body \
             --jq '.body' > "${{ runner.temp }}/CHANGELOG.md"
 
-      - name: Download RC release binaries
-        # Download binaries from RC release assets to reuse for final release
+      - name: Download RC release assets
+        # Download binaries and OCI tarballs from RC release assets to reuse for final release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
@@ -354,7 +355,8 @@ jobs:
           gh release download "$RC_TAG" \
             --repo "${{ github.repository }}" \
             --pattern "ocm-*" \
-            --dir "${{ runner.temp }}/binaries"
+            --pattern "*.tar" \
+            --dir "${{ runner.temp }}/assets"
 
       - name: Publish final release
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
@@ -363,7 +365,7 @@ jobs:
           FINAL_TAG: ${{ needs.prepare.outputs.promotion_tag }}
           FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
           TARGET_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli
-          BINARIES_DIR: ${{ runner.temp }}/binaries
+          ASSETS_DIR: ${{ runner.temp }}/assets
           NOTES_FILE: ${{ runner.temp }}/CHANGELOG.md
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
           HIGHEST_FINAL_VERSION: ${{ needs.prepare.outputs.highest_final_version }}
@@ -377,7 +379,7 @@ jobs:
             const finalVersion = process.env.FINAL_VERSION;
             const rcTag = process.env.RC_TAG;
             const targetRepo = process.env.TARGET_REPO;
-            const binariesDir = process.env.BINARIES_DIR;
+            const assetsDir = process.env.ASSETS_DIR;
             const notesFile = process.env.NOTES_FILE;
             const setLatest = process.env.SET_LATEST === 'true';
 
@@ -410,10 +412,10 @@ jobs:
               ? `✅ Release marked as Latest`
               : `⚠️ Release NOT marked as Latest (older patch release)`);
 
-            // Upload binaries from RC release
-            const binaries = fs.readdirSync(binariesDir).filter(f => f.startsWith('ocm-'));
-            for (const file of binaries) {
-              const filePath = path.join(binariesDir, file);
+            // Upload all assets from RC release (binaries + OCI tarballs)
+            const assets = fs.readdirSync(assetsDir).filter(f => f.startsWith('ocm-') || f.endsWith('.tar'));
+            for (const file of assets) {
+              const filePath = path.join(assetsDir, file);
               const data = fs.readFileSync(filePath);
               await github.rest.repos.uploadReleaseAsset({
                 owner: context.repo.owner,
@@ -442,6 +444,7 @@ jobs:
                 ['Highest Final Version', highestFinal],
                 ['OCI Tags', ociTags],
                 ['GitHub Latest', setLatest ? 'Yes' : 'No (older version)'],
+                ['Uploaded Assets', String(assets.length)],
               ])
               .addEOL()
               .addLink(releaseUrl, releaseUrl)
