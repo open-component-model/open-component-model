@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/helm
 
-go 1.25.5
+go 1.25.7
 
 require (
 	github.com/opencontainers/go-digest v1.0.0
@@ -117,8 +117,8 @@ require (
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260218105921-92cb5e362a44 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260218105921-92cb5e362a44 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260220081128-7620d4e5890c // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260220081128-7620d4e5890c // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.7 // indirect
 	sigs.k8s.io/controller-runtime v0.22.4 // indirect
