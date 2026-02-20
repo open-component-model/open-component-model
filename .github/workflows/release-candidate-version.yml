@@ -24,12 +24,9 @@ on:
       promotion_tag:
         description: "Tag to be used for promotion later, eg. cli/v0.1.0-rc.1 -> cli/v0.1.0"
         value: ${{ jobs.prepare.outputs.promotion_tag }}
-      promotion_version:
-        description: "Version to be used for promotion later, eg. 0.1.0-rc.1 -> 0.1.0"
-        value: ${{ jobs.prepare.outputs.promotion_version }}
-      changelog_b64:
-        description: "Changelog encoded in base64 for release body"
-        value: ${{ jobs.prepare.outputs.changelog_b64 }}
+      changelog_artifact:
+        description: "Name of the changelog artifact"
+        value: ${{ jobs.prepare.outputs.changelog_artifact }}
       set_latest:
         description: "Whether to set :latest tag (true if this version >= highest existing final)"
         value: ${{ jobs.prepare.outputs.set_latest }}
@@ -48,8 +45,7 @@ jobs:
       new_version: ${{ steps.compute.outputs.new_version }}
       base_version: ${{ steps.compute.outputs.base_version }}
       promotion_tag: ${{ steps.compute.outputs.promotion_tag }}
-      promotion_version: ${{ steps.compute.outputs.promotion_version }}
-      changelog_b64: ${{ steps.summarize.outputs.changelog_b64 }}
+      changelog_artifact: changelog-${{ steps.compute.outputs.new_tag }}
       set_latest: ${{ steps.latest.outputs.set_latest }}
       highest_final_version: ${{ steps.latest.outputs.highest_final_version }}
     steps:
@@ -115,18 +111,25 @@ jobs:
             if (!log) {
               log = `## [${tag}] - ${today}\n\nNo changes since the previous release.`;
               core.info(`Generated fallback changelog for ${tag}`);
+              fs.writeFileSync(process.env.CHANGELOG_FILE, log);
             }
 
-            const encoded = Buffer.from(log).toString("base64");
-            core.setOutput("changelog_b64", encoded);
             await core.summary.addRaw(log).write();
+
+      - name: Upload changelog artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: changelog-${{ steps.compute.outputs.new_tag }}
+          path: ${{ runner.temp }}/CHANGELOG.md
+          retention-days: 90
+          if-no-files-found: error
 
       - name: Determine if release should be latest
         id: latest
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           COMPONENT_PATH: ${{ inputs.component_path }}
-          PROMOTION_VERSION: ${{ steps.compute.outputs.promotion_version }}
+          PROMOTION_VERSION: ${{ steps.compute.outputs.base_version }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

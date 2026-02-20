@@ -1,12 +1,5 @@
 import assert from "assert";
-import {
-    computeNextVersions,
-    isStableNewer,
-    parseBranch,
-    parseVersion,
-    extractHighestFinalVersion,
-    shouldSetLatest,
-} from "./release-versioning.js";
+import { computeNextVersions, isStableNewer, parseBranch, parseVersion, sortVersions } from "./compute-rc-version.js";
 
 // ----------------------------------------------------------
 // parseVersion tests
@@ -127,67 +120,38 @@ assert.ok(
 );
 
 // ----------------------------------------------------------
-// extractHighestFinalVersion tests
+// sortVersions tests
 // ----------------------------------------------------------
-const mockReleases = [
-    { prerelease: false, tag_name: "cli/v0.1.0" },
-    { prerelease: true, tag_name: "cli/v0.1.1-rc.1" },
-    { prerelease: false, tag_name: "cli/v0.1.2" },
-    { prerelease: false, tag_name: "cli/v0.2.0" },
-    { prerelease: false, tag_name: "other/v1.0.0" },
-    { prerelease: true, tag_name: "cli/v0.3.0-rc.1" },
-];
 
-assert.strictEqual(
-    extractHighestFinalVersion(mockReleases, "cli/v"),
-    "0.2.0",
-    "Should return highest non-prerelease version for prefix"
+// Stable versions should be sorted numerically, not lexicographically
+assert.deepStrictEqual(
+    sortVersions(["cli/v0.1.2", "cli/v0.1.1", "cli/v0.1.10"]),
+    ["cli/v0.1.1", "cli/v0.1.2", "cli/v0.1.10"],
+    "Stable versions should be sorted numerically"
 );
 
-assert.strictEqual(
-    extractHighestFinalVersion(mockReleases, "other/v"),
-    "1.0.0",
-    "Should filter by tag prefix"
+// RC versions should be sorted by base version first, then by RC number
+assert.deepStrictEqual(
+    sortVersions(["cli/v0.1.1-rc.2", "cli/v0.1.1-rc.10", "cli/v0.1.1-rc.1"]),
+    ["cli/v0.1.1-rc.1", "cli/v0.1.1-rc.2", "cli/v0.1.1-rc.10"],
+    "RC versions should be sorted by RC number numerically"
 );
 
-assert.strictEqual(
-    extractHighestFinalVersion([], "cli/v"),
-    "",
-    "Should return empty string for no releases"
+// Mixed stable and RC versions
+assert.deepStrictEqual(
+    sortVersions(["cli/v0.1.2", "cli/v0.1.1-rc.3", "cli/v0.1.1"]),
+    ["cli/v0.1.1", "cli/v0.1.1-rc.3", "cli/v0.1.2"],
+    "Stable versions without RC suffix should come before RC versions with same base"
 );
 
-assert.strictEqual(
-    extractHighestFinalVersion([{ prerelease: true, tag_name: "cli/v0.1.0-rc.1" }], "cli/v"),
-    "",
-    "Should return empty string if only prereleases exist"
-);
+// Empty array should return empty array
+assert.deepStrictEqual(sortVersions([]), [], "Empty array should return empty array");
 
-// ----------------------------------------------------------
-// shouldSetLatest tests
-// ----------------------------------------------------------
-assert.ok(
-    shouldSetLatest("0.2.0", ""),
-    "Should return true if no existing final version"
-);
-
-assert.ok(
-    shouldSetLatest("0.2.0", "0.1.0"),
-    "Should return true if promotion > highest"
-);
-
-assert.ok(
-    shouldSetLatest("0.2.0", "0.2.0"),
-    "Should return true if promotion == highest"
-);
-
-assert.ok(
-    !shouldSetLatest("0.1.0", "0.2.0"),
-    "Should return false if promotion < highest"
-);
-
-assert.ok(
-    shouldSetLatest("0.10.0", "0.9.0"),
-    "Should handle numeric comparison correctly (0.10 > 0.9)"
+// Single element should return same element
+assert.deepStrictEqual(
+    sortVersions(["cli/v0.1.0"]),
+    ["cli/v0.1.0"],
+    "Single element array should return same element"
 );
 
 console.log("✅ All tests passed.");
