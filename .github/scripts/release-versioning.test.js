@@ -1,5 +1,5 @@
 import assert from "assert";
-import { computeNextVersions, isStableNewer, parseBranch, parseVersion, sortVersions } from "./compute-rc-version.js";
+import { computeNextVersions, isStableNewer, parseBranch, parseVersion } from "./compute-rc-version.js";
 
 // ----------------------------------------------------------
 // parseVersion tests
@@ -119,39 +119,6 @@ assert.ok(
     "Should return false if no stable tag"
 );
 
-// ----------------------------------------------------------
-// sortVersions tests
-// ----------------------------------------------------------
-
-// Stable versions should be sorted numerically, not lexicographically
-assert.deepStrictEqual(
-    sortVersions(["cli/v0.1.2", "cli/v0.1.1", "cli/v0.1.10"]),
-    ["cli/v0.1.1", "cli/v0.1.2", "cli/v0.1.10"],
-    "Stable versions should be sorted numerically"
-);
-
-// RC versions should be sorted by base version first, then by RC number
-assert.deepStrictEqual(
-    sortVersions(["cli/v0.1.1-rc.2", "cli/v0.1.1-rc.10", "cli/v0.1.1-rc.1"]),
-    ["cli/v0.1.1-rc.1", "cli/v0.1.1-rc.2", "cli/v0.1.1-rc.10"],
-    "RC versions should be sorted by RC number numerically"
-);
-
-// Mixed stable and RC versions
-assert.deepStrictEqual(
-    sortVersions(["cli/v0.1.2", "cli/v0.1.1-rc.3", "cli/v0.1.1"]),
-    ["cli/v0.1.1", "cli/v0.1.1-rc.3", "cli/v0.1.2"],
-    "Stable versions without RC suffix should come before RC versions with same base"
-);
-
-// Empty array should return empty array
-assert.deepStrictEqual(sortVersions([]), [], "Empty array should return empty array");
-
-// Single element should return same element
-assert.deepStrictEqual(
-    sortVersions(["cli/v0.1.0"]),
-    ["cli/v0.1.0"],
-    "Single element array should return same element"
-);
+// Note: sortVersions was removed - using git's native --sort=version:refname instead
 
 console.log("✅ All tests passed.");
