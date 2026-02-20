@@ -32,7 +32,6 @@ const (
 	FlagOutput           = "output"
 	FlagTransformer      = "transformer"
 	FlagExtractionPolicy = "extraction-policy"
-	FlagDecompress       = "decompress"
 )
 
 const (
@@ -58,10 +57,7 @@ It supports optional transformation of the resource using a registered transform
 If no transformer is specified, the resource is written directly in its original format. If the media type is known,
 the appropriate file extension will be added to the output file name if no output location is given.
 
-Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
-
-If a resource was stored with compression enabled, it is downloaded in its compressed form by default.
-Use --decompress to transparently decompress it. This flag has no effect on resources that are not compressed.`,
+Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.`,
 		Example: ` # Download a resource with identity 'name=example' and write to default output
   ocm download resource ghcr.io/org/component:v1 --identity name=example
 
@@ -69,10 +65,7 @@ Use --decompress to transparently decompress it. This flag has no effect on reso
   ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
 
   # Download a resource and apply a transformer
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer
-
-  # Download a compressed resource and decompress it
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --decompress`,
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer`,
 		RunE:              DownloadResource,
 		DisableAutoGenTag: true,
 	}
@@ -85,8 +78,6 @@ Use --decompress to transparently decompress it. This flag has no effect on reso
 		"policy to apply when extracting a resource. "+
 			"If set to 'disable', the resource will not be extracted, even if they could be. "+
 			"If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.")
-	cmd.Flags().Bool(FlagDecompress, false, "decompress the resource if it was stored with compression enabled. "+
-		"If the resource is not compressed, this flag has no effect.")
 
 	return cmd
 }
@@ -124,11 +115,6 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	transformer, err := cmd.Flags().GetString(FlagTransformer)
 	if err != nil {
 		return fmt.Errorf("getting transformer flag failed: %w", err)
-	}
-
-	decompress, err := cmd.Flags().GetBool(FlagDecompress)
-	if err != nil {
-		return fmt.Errorf("getting decompress flag failed: %w", err)
 	}
 
 	requestedIdentity, err := runtime.ParseIdentity(identityStr)
@@ -175,13 +161,6 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("downloading resource for identity %q failed: %w", requestedIdentity, err)
 	}
 
-	if decompress {
-		data, err = compression.Decompress(data)
-		if err != nil {
-			return fmt.Errorf("decompressing resource failed: %w", err)
-		}
-	}
-
 	finalOutputPath, err := processResourceOutput(output, res, data, requestedIdentity.String(), logger)
 	if err != nil {
 		return err
@@ -206,9 +185,7 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		logger.Info("resource transformed successfully")
 	}
 
-	defer func() {
-		logger.Info("resource downloaded successfully", slog.String("output", finalOutputPath))
-	}()
+	logger.Info("resource downloaded successfully", slog.String("output", finalOutputPath))
 
 	switch extractionPolicy {
 	case ExtractionPolicyAuto:
@@ -230,14 +207,6 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 var ErrCannotExtractFS = errors.New("cannot extract resource as filesystem")
 
 func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, err error) {
-	var originalMediaType string
-	originalMediaTypeAware, ok := b.(blob.MediaTypeAware)
-	if ok {
-		originalMediaType, ok = originalMediaTypeAware.MediaType()
-		if !ok {
-			slog.Debug("blob is media type aware but does not have a media type")
-		}
-	}
 	decompressedOrOriginal, err := compression.Decompress(b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decompress resource: %w", err)
@@ -247,26 +216,16 @@ func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, err error) {
 		// if were not media type aware, its unsafe to try to extract it, avoid
 		return nil, ErrCannotExtractFS
 	}
+
 	mediaType, ok := mediaTypeAware.MediaType()
 	if !ok {
-		// if we don't have a media type, we cannot reliably determine how to extract it, avoid
 		return nil, ErrCannotExtractFS
 	}
 
 	// TODO(jakobmoellerdev): once we add more compression algorithms, use blob media type for discovery.
 	//  For now we just support tar.
 	switch {
-	case isTar(originalMediaType) || isTar(mediaType):
-		data, err := decompressedOrOriginal.ReadCloser()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read resource: %w", err)
-		}
-		defer func() {
-			err = errors.Join(err, data.Close())
-		}()
-
-		return tarfs.New(data)
-	case isGZip(originalMediaType) || isGZip(mediaType):
+	case isTar(mediaType):
 		data, err := decompressedOrOriginal.ReadCloser()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read resource: %w", err)
@@ -285,12 +244,6 @@ func isTar(mediaType string) bool {
 	return slices.Contains([]string{
 		"application/tar", "application/x-tar",
 	}, mediaType) || strings.HasSuffix(mediaType, "+tar")
-}
-
-func isGZip(mediaType string) bool {
-	return slices.Contains([]string{
-		"application/gzip",
-	}, mediaType) || strings.HasSuffix(mediaType, "+gzip")
 }
 
 func processResourceOutput(output string, resource *descriptor.Resource, data blob.ReadOnlyBlob, identity string, logger *slog.Logger) (string, error) {
