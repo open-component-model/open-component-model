@@ -33,6 +33,7 @@ import (
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -220,7 +221,7 @@ components:
 
 		// Set up a repository to download components from the target to check whether
 		// the transfer worked as expected.
-		targetRepo, err := createTargetOCIRepo(ctx, repoProvider, credentialResolver, targetRef)
+		targetRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ociv1.Repository{BaseUrl: targetRef})
 		r.NoError(err, "should be able to create target repository")
 
 		// Check if component exists in target registry
@@ -262,7 +263,7 @@ components:
 
 		// Set up a repository to download components from the target to check whether
 		// the transfer worked as expected.
-		targetRepo, err := createTargetOCIRepo(ctx, repoProvider, credentialResolver, targetRef)
+		targetRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ociv1.Repository{BaseUrl: targetRef})
 
 		// Check if component exists in target registry
 		desc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
@@ -303,7 +304,7 @@ components:
 
 		// Set up a repository to download components from the target to check whether
 		// the transfer worked as expected.
-		targetRepo, err := createTargetOCIRepo(ctx, repoProvider, credentialResolver, targetRef)
+		targetRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ociv1.Repository{BaseUrl: targetRef})
 		r.NoError(err, "should be able to create target repository")
 
 		// Check if component exists in target registry
@@ -344,6 +345,18 @@ components:
 		// Executes transfer
 		r.NoError(transferIntermediaryCMD.ExecuteContext(ctx), "transfer should succeed")
 
+		// Check that the intermediary looks as we expect
+		intermediaryRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ctfv1.Repository{FilePath: intermediaryctf})
+		r.NoError(err, "should be able to create intermediary repository")
+		desc, err := intermediaryRepo.GetComponentVersion(ctx, componentName, componentVersion)
+		r.NoError(err, "should be able to retrieve component from intermediary repository")
+		var localBlobAccess v2.LocalBlob
+		r.NoError(v2.Scheme.Convert(desc.Component.Resources[0].Access, &localBlobAccess))
+		r.Equal("test-oci-resource:v1.0.0", localBlobAccess.ReferenceName)
+		var anotherLocalBlobAccess v2.LocalBlob
+		r.NoError(v2.Scheme.Convert(desc.Component.Resources[1].Access, &anotherLocalBlobAccess))
+		r.Equal("", anotherLocalBlobAccess.ReferenceName)
+
 		// Actual transfer to be tested
 		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "as/oci/refname")
 		intermediaryRef = fmt.Sprintf("ctf::%s//%s:%s", intermediaryctf, componentName, componentVersion)
@@ -364,11 +377,11 @@ components:
 
 		// Set up a repository to download components from the target to check whether
 		// the transfer worked as expected.
-		targetRepo, err := createTargetOCIRepo(ctx, repoProvider, credentialResolver, targetRef)
+		targetRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ociv1.Repository{BaseUrl: targetRef})
 		r.NoError(err, "should be able to create target repository")
 
 		// Check if component exists in target registry
-		desc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+		desc, err = targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
 		r.NoError(err, "should be able to retrieve transferred component")
 		r.Equal(componentName, desc.Component.Name)
 		r.Equal(componentVersion, desc.Component.Version)
@@ -386,10 +399,7 @@ components:
 	})
 }
 
-func createTargetOCIRepo(ctx context.Context, repoProvider *provider.CachingComponentVersionRepositoryProvider, credentialResolver credentials.Resolver, targetRef string) (repository.ComponentVersionRepository, error) {
-	targetSpec := &ociv1.Repository{
-		BaseUrl: targetRef,
-	}
+func createRepo(ctx context.Context, repoProvider *provider.CachingComponentVersionRepositoryProvider, credentialResolver credentials.Resolver, targetSpec ocmruntime.Typed) (repository.ComponentVersionRepository, error) {
 	var creds map[string]string
 	id, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, targetSpec)
 	if err == nil {
