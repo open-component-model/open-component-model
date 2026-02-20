@@ -17,17 +17,22 @@ export default async function computeRcVersion({ core }) {
     const basePrefix = parseBranch(releaseBranch);
     const tagPrefix = `${componentPath}/v`;
 
-    // Get all matching tags and filter/sort in JavaScript
-    const allTags = run(core, "git", ["tag", "--list", `${tagPrefix}${basePrefix}.*`]);
-    const tagList = allTags ? allTags.split("\n").filter(Boolean) : [];
+    // Get latest stable tag using Git's native version sort (descending)
+    // Filter out RC tags after fetching since git doesn't support negative pattern matching
+    const stableTags = run(core, "git", [
+        "tag", "--list", `${tagPrefix}${basePrefix}.*`,
+        "--sort=-version:refname"
+    ]);
+    const latestStable = stableTags
+        .split("\n")
+        .filter(tag => tag && !/-rc\.\d+$/.test(tag))[0] || "";
 
-    // Exclude RC tags here, otherwise latestStable may incorrectly resolve to e.g. v0.4.0-rc.3
-    const stableTags = tagList.filter(tag => !/-rc\.\d+$/.test(tag));
-    const latestStable = sortVersions(stableTags).pop() || "";
-
-    // Get all RC tags
-    const rcTags = tagList.filter(tag => /-rc\.\d+$/.test(tag));
-    const latestRc = sortVersions(rcTags).pop() || "";
+    // Get latest RC tag using Git's native version sort (descending)
+    const rcTags = run(core, "git", [
+        "tag", "--list", `${tagPrefix}${basePrefix}.*-rc.*`,
+        "--sort=-version:refname"
+    ]);
+    const latestRc = rcTags.split("\n").filter(Boolean)[0] || "";
 
     core.info(`Latest stable: ${latestStable || "(none)"}`);
     core.info(`Latest RC: ${latestRc || "(none)"}`);
@@ -211,27 +216,3 @@ export function parseVersion(tag) {
     return version.split(".").map(Number);
 }
 
-/**
- * Sort version tags in ascending order (similar to `sort -V`).
- * Handles both stable versions (v0.1.2) and RC versions (v0.1.2-rc.3).
- *
- * @param {string[]} tags - Array of version tags to sort
- * @returns {string[]} Sorted array of version tags
- */
-export function sortVersions(tags) {
-    return [...tags].sort((a, b) => {
-        const partsA = parseVersion(a);
-        const partsB = parseVersion(b);
-
-        // Compare major.minor.patch numerically (early return ensures correct ordering)
-        for (let i = 0; i < 3; i++) {
-            const diff = (partsA[i] || 0) - (partsB[i] || 0);
-            if (diff !== 0) return diff;
-        }
-
-        // If base versions are equal, compare RC numbers
-        const rcA = parseInt(a.match(/-rc\.(\d+)/)?.[1] ?? "0", 10);
-        const rcB = parseInt(b.match(/-rc\.(\d+)/)?.[1] ?? "0", 10);
-        return rcA - rcB;
-    });
-}
