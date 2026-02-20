@@ -1,16 +1,16 @@
 name: CLI Release
 
-run-name: CLI Release based on ${{ github.event.inputs.branch }}${{ github.event.inputs.dry_run == 'true' && '(dry-run)' || '' }}
+run-name: CLI Release from ${{ github.event.inputs.branch }}${{ github.event.inputs.dry_run == 'true' && '(dry-run)' || '' }}
 
 on:
   workflow_dispatch:
     inputs:
       branch:
-        description: "Branch to cut to, must match regex releases/v0.[0-9]+"
+        description: "Branch to release from, must match regex releases/v0.[0-9]+"
         required: true
         type: string
       dry_run:
-        description: "Perform dry run without pushing tags"
+        description: "Dry-run RC phase without pushing tags or creating releases."
         required: false
         default: true
         type: boolean
@@ -24,11 +24,15 @@ concurrency:
   group: cli-release-${{ github.event.inputs.branch }}
 
 jobs:
+  # ============================================================
+  # PHASE 1: RELEASE CANDIDATE
+  # ============================================================
+
   # --------------------------------------------------------
-  # 1. Prepare: release candidate version
+  # 1. PREPARE: Compute RC version and generate changelog
   # --------------------------------------------------------
   prepare:
-    name: Prepare Release Candidate Version
+    name: Prepare Release Metadata
     uses: ./.github/workflows/release-candidate-version.yml
     with:
       branch: ${{ github.event.inputs.branch }}
@@ -36,10 +40,10 @@ jobs:
     secrets: inherit
 
   # --------------------------------------------------------
-  # 2. Tag: Create and push RC tag (skipped on dry-run)
+  # 2. TAG RC: Create and push RC tag (skipped on dry-run)
   # --------------------------------------------------------
-  tag:
-    name: Create and Push Tag
+  tag_rc:
+    name: Create and Push RC Tag
     runs-on: ubuntu-latest
     needs: [prepare]
     if: ${{ github.event.inputs.dry_run == 'false' }}
@@ -48,76 +52,79 @@ jobs:
     outputs:
       pushed: ${{ steps.tag.outputs.pushed }}
     steps:
-      # Checkout repository for tagging
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           sparse-checkout: ${{ env.COMPONENT_PATH }}
           ref: ${{ github.event.inputs.branch }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Determine committer and set up git identity
-      - id: committer
-        name: Determine Committer used for pushing Tag
-        run: |
-          echo "name=${{ github.actor }}" >> "$GITHUB_OUTPUT" 
-          echo "email=${{ github.actor }}@users.noreply.github.com" >> "$GITHUB_OUTPUT"
+          token: ${{ steps.get_token.outputs.token }}
 
       - name: Setup git config
         run: |
-          git config --global user.name "${{ steps.committer.outputs.name }}" 
-          git config --global user.email "${{ steps.committer.outputs.email }}"
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
 
-      # Create and push tag if not existing
+      - name: Download changelog artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ needs.prepare.outputs.changelog_artifact }}
+          path: ${{ runner.temp }}
+
       - name: Create ${{ needs.prepare.outputs.new_tag }}
         id: tag
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           TAG: ${{ needs.prepare.outputs.new_tag }}
-          CHANGELOG_B64: ${{ needs.prepare.outputs.changelog_b64 }}
+          CHANGELOG_FILE: ${{ runner.temp }}/CHANGELOG.md
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.get_token.outputs.token }}
           script: |
-            const { execSync } = require("child_process");
+            const { execFileSync } = require("child_process");
+            const fs = require("fs");
             const tag = process.env.TAG;
-            const msg = Buffer.from(process.env.CHANGELOG_B64, "base64").toString("utf8");
-            try { execSync(`git rev-parse "refs/tags/${tag}"`); core.info(`Tag ${tag} exists`); core.setOutput("pushed","false"); return; } catch {}
-            require("fs").writeFileSync(".tagmsg", msg);
-            execSync(`git tag -a "${tag}" -F .tagmsg`);
-            execSync(`git push origin "refs/tags/${tag}"`);
+            const msg = fs.readFileSync(process.env.CHANGELOG_FILE, "utf8");
+            try { execFileSync("git", ["rev-parse", `refs/tags/${tag}`], { stdio: "pipe" }); core.info(`Tag ${tag} exists`); core.setOutput("pushed","false"); return; } catch {}
+            fs.writeFileSync(".tagmsg", msg);
+            execFileSync("git", ["tag", "-a", tag, "-F", ".tagmsg"]);
+            execFileSync("git", ["push", "origin", `refs/tags/${tag}`]);
             core.setOutput("pushed","true");
             core.info(`✅ Created RC tag ${tag}`);
 
   # --------------------------------------------------------
-  # 3. Build CLI
+  # 3. BUILD CLI
   # --------------------------------------------------------
   build:
     name: Build CLI for ${{ needs.prepare.outputs.new_tag }}
-    if: ${{ needs.tag.outputs.pushed == 'true' }}
-    needs: [prepare, tag]
+    if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
+    needs: [prepare, tag_rc]
     uses: ./.github/workflows/cli.yml
     secrets: inherit
     with:
       ref: ${{ needs.prepare.outputs.new_tag }}
 
-
   # --------------------------------------------------------
-  # 4. Release: Create GitHub pre-release if tag was pushed
+  # 4. RELEASE RC: Create GitHub pre-release
   # --------------------------------------------------------
-  release:
-    name: Create Pre-Release
-    needs: [prepare, tag, build]
+  release_rc:
+    name: Create RC Pre-Release
+    if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
+    needs: [prepare, tag_rc, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    environment:
-      name: cli/release-candidate
-      url: ${{ steps.release.outputs.html_url }}
     steps:
-      # Recreate changelog file from base64 string for release body
-      - name: Decode changelog to file
-        run: |
-          echo "${{ needs.prepare.outputs.changelog_b64 }}" | base64 --decode > "${{ runner.temp }}/CHANGELOG.md"
+      - name: Download changelog artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ needs.prepare.outputs.changelog_artifact }}
+          path: ${{ runner.temp }}
 
       - name: Download CLI artifacts
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -125,28 +132,321 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
           name: ${{ needs.build.outputs.artifact_name }}
+          path: ${{ runner.temp }}/rc-build-assets
 
-      - name: Create Release
+      - name: Create RC Release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
         with:
           name: CLI ${{ needs.prepare.outputs.new_version }}
           tag_name: ${{ needs.prepare.outputs.new_tag }}
           body_path: ${{ runner.temp }}/CHANGELOG.md
           fail_on_unmatched_files: true
-          overwrite_files: 'true'
           prerelease: true
           files: |
-            ${{ github.workspace }}/bin/ocm-*    
-            ${{ github.workspace }}/oci/*
+            ${{ runner.temp }}/rc-build-assets/bin/ocm-*
+            ${{ runner.temp }}/rc-build-assets/oci/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Summarize RC release
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const release = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: process.env.RC_TAG,
+            });
+            const releaseUrl = release.data.html_url;
+            const assetsCount = Array.isArray(release.data.assets) ? release.data.assets.length : 0;
+
+            await core.summary
+              .addHeading('RC Release Published')
+              .addTable([
+                [{ data: 'Field', header: true }, { data: 'Value', header: true }],
+                ['RC Tag', process.env.RC_TAG],
+                ['RC Version', process.env.RC_VERSION],
+                ['Uploaded Assets', String(assetsCount)],
+              ])
+              .addEOL()
+              .addLink(releaseUrl, releaseUrl)
+              .addEOL()
+              .write();
+
+  # ================================================
+  # PHASE 2: FINAL RELEASE (after environment gate)
+  # ================================================
+  # Environment Gate:
+  # The "cli/release" environment must be configured in GitHub Settings → Environments:
+  # - Required reviewers: At least 1 reviewer must approve
+  # - Wait timer: 20160 minutes (14 days)
+  #
+  # This gate blocks all Phase 2 jobs until approved.
+
+  # -----------------------------------------------------------
+  # 5. VERIFY ATTESTATIONS: Ensure RC artifacts are attestable
+  # -----------------------------------------------------------
+  verify_attestations:
+    name: Verify RC Attestations
+    needs: [prepare, build, release_rc]
+    runs-on: ubuntu-latest
+    environment:
+      name: cli/release
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Download RC binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+        run: |
+          gh release download "$RC_TAG" \
+            --repo "${{ github.repository }}" \
+            --pattern "ocm-*" \
+            --dir "${{ runner.temp }}/binaries"
+
+      - name: Verify binary attestations
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for file in ${{ runner.temp }}/binaries/ocm-*; do
+            echo "Verifying $(basename "$file")..."
+            gh attestation verify "$file" --repo "${{ github.repository }}"
+          done
+          echo "✅ All binary attestations verified"
+
+      - name: Verify OCI image attestation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
+          TARGET_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli
+        run: |
+          echo "Verifying OCI image attestation for ${TARGET_REPO}@${IMAGE_DIGEST}..."
+          gh attestation verify "oci://${TARGET_REPO}@${IMAGE_DIGEST}" --repo "${{ github.repository }}"
+          echo "✅ OCI image attestation verified"
+
+  # ---------------------------------------------------------
+  # 6. PROMOTE FINAL: Create final tag and promote OCI image
+  # ---------------------------------------------------------
+  promote_final:
+    name: Promote to Final Release
+    needs: [prepare, build, verify_attestations]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          sparse-checkout: ${{ env.COMPONENT_PATH }}
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.branch }}
+          token: ${{ steps.get_token.outputs.token }}
+
+      - name: Setup git config
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Create final tag
+        # Points final tag to same commit as RC tag (no rebuild needed)
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          FINAL_TAG: ${{ needs.prepare.outputs.promotion_tag }}
+        with:
+          github-token: ${{ steps.get_token.outputs.token }}
+          script: |
+            const { execFileSync } = require("child_process");
+            const { RC_TAG: rcTag, FINAL_TAG: finalTag } = process.env;
+
+            // Pre-flight checks
+            if (!rcTag || !finalTag) {
+              core.setFailed("Missing RC_TAG or FINAL_TAG");
+              return;
+            }
+
+            // Check if final tag already exists
+            try { 
+              execFileSync("git", ["rev-parse", `refs/tags/${finalTag}`], { stdio: "pipe" }); 
+              core.setFailed(`Tag ${finalTag} already exists`); 
+              return; 
+            } catch {
+              // Expected: tag doesn't exist, continue
+            }
+
+            // Resolve RC commit
+            const rcSha = execFileSync("git", ["rev-parse", `refs/tags/${rcTag}^{commit}`], { stdio: "pipe" }).toString().trim();
+            if (!rcSha) {
+              core.setFailed(`Could not resolve commit for RC tag ${rcTag}`);
+              return;
+            }
+
+            // Create and push final tag
+            execFileSync("git", ["tag", "-a", finalTag, rcSha, "-m", `Promote ${rcTag} to ${finalTag}`]);
+            execFileSync("git", ["push", "origin", `refs/tags/${finalTag}`]);
+            core.info(`✅ Created final tag ${finalTag} from ${rcTag} (${rcSha.substring(0,7)})`);
+
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote OCI image tags
+        env:
+          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
+          TARGET_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli
+          SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
+        run: |
+          if [ "$SET_LATEST" = "true" ]; then
+            oras tag "${TARGET_REPO}:${RC_VERSION}" "${FINAL_VERSION}" "latest"
+            echo "✅ Tagged :${FINAL_VERSION} and :latest"
+          else
+            oras tag "${TARGET_REPO}:${RC_VERSION}" "${FINAL_VERSION}"
+            echo "⚠️ Tagged :${FINAL_VERSION} (not setting :latest)"
+          fi
 
   # --------------------------------------------------------
-  # 5. Promote: TODO(jakobmoellerdev): https://github.com/open-component-model/ocm-project/issues/721
-  #    - Protect the release with an environment that has a timer and reviewers
-  #    - Create tag from RC tag commit
-  #    - Promote the image to the latest tag
-  #    - Promote the image to the release version
-  #    - Push new release with all artifacts from RC
+  # 7. RELEASE FINAL: Create GitHub final release
   # --------------------------------------------------------
+  release_final:
+    name: Create Final Release
+    needs: [prepare, promote_final]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Get release notes from RC
+        # Get release notes from RC release body to reuse for final release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+        run: |
+          gh release view "$RC_TAG" \
+            --repo "${{ github.repository }}" \
+            --json body \
+            --jq '.body' > "${{ runner.temp }}/CHANGELOG.md"
+
+      - name: Download RC release assets
+        # Download binaries and OCI tarballs from RC release assets to reuse for final release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+        run: |
+          gh release download "$RC_TAG" \
+            --repo "${{ github.repository }}" \
+            --pattern "ocm-*" \
+            --pattern "*.tar" \
+            --dir "${{ runner.temp }}/assets"
+
+      - name: Publish final release
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          FINAL_TAG: ${{ needs.prepare.outputs.promotion_tag }}
+          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
+          TARGET_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli
+          ASSETS_DIR: ${{ runner.temp }}/assets
+          NOTES_FILE: ${{ runner.temp }}/CHANGELOG.md
+          SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
+          HIGHEST_FINAL_VERSION: ${{ needs.prepare.outputs.highest_final_version }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const finalTag = process.env.FINAL_TAG;
+            const finalVersion = process.env.FINAL_VERSION;
+            const rcTag = process.env.RC_TAG;
+            const targetRepo = process.env.TARGET_REPO;
+            const assetsDir = process.env.ASSETS_DIR;
+            const notesFile = process.env.NOTES_FILE;
+            const setLatest = process.env.SET_LATEST === 'true';
+
+            let notes = fs.existsSync(notesFile)
+              ? fs.readFileSync(notesFile, 'utf8').trim()
+              : `Promoted from ${rcTag}`;
+
+            // Replace RC header with final release header
+            // From: "[cli/v0.17.0-rc.1] - 2026-02-02"
+            // To:   "[cli/v0.17.0] - promoted from [cli/v0.17.0-rc.1] on 2026-02-16"
+            const today = new Date().toISOString().split('T')[0];
+            notes = notes.replace(
+              /^\[([^\]]+)\]\s*-\s*[\d-]+/,
+              `[${finalTag}] - promoted from [${rcTag}] on ${today}`
+            );
+
+            // Use make_latest to control whether this release is marked as "latest"
+            // Only set as latest if this version >= highest existing final version
+            const created = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: finalTag,
+              name: `CLI ${finalVersion}`,
+              body: notes,
+              prerelease: false,
+              make_latest: setLatest ? 'true' : 'false',
+            });
+
+            core.info(setLatest
+              ? `✅ Release marked as Latest`
+              : `⚠️ Release NOT marked as Latest (older patch release)`);
+
+            // Upload all assets from RC release (binaries + OCI tarballs)
+            const assets = fs.readdirSync(assetsDir).filter(f => f.startsWith('ocm-') || f.endsWith('.tar'));
+            for (const file of assets) {
+              const filePath = path.join(assetsDir, file);
+              const data = fs.readFileSync(filePath);
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: created.data.id,
+                name: file,
+                data,
+                headers: {
+                  'content-type': 'application/octet-stream',
+                },
+              });
+            }
+
+            const releaseUrl = created.data.html_url;
+            const highestFinal = process.env.HIGHEST_FINAL_VERSION || '(none)';
+            const ociTags = setLatest
+              ? `${targetRepo}:${finalVersion}, ${targetRepo}:latest`
+              : `${targetRepo}:${finalVersion}`;
+
+            await core.summary
+              .addHeading('Final Release Published')
+              .addTable([
+                [{data: 'Field', header: true}, {data: 'Value', header: true}],
+                ['Final Tag', finalTag],
+                ['Promoted from RC', rcTag],
+                ['Highest Final Version', highestFinal],
+                ['OCI Tags', ociTags],
+                ['GitHub Latest', setLatest ? 'Yes' : 'No (older version)'],
+                ['Uploaded Assets', String(assets.length)],
+              ])
+              .addEOL()
+              .addLink(releaseUrl, releaseUrl)
+              .addEOL()
+              .write();

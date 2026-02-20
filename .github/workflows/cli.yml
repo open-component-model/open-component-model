@@ -34,6 +34,9 @@ on:
       artifact_id:
         description: "The artifact id that was built."
         value: ${{ jobs.build.outputs.artifact_id }}
+      image_digest:
+        description: "The digest of the pushed OCI image (sha256:...)."
+        value: ${{ jobs.publish.outputs.image_digest }}
 
 env:
   LOCATION: "cli"                       # Folder containing the CLI source
@@ -144,10 +147,12 @@ jobs:
             ${{ env.LOCATION }}/tmp/oci/*      
 
   publish:
-    name: Push & Attest
+    name: Publish and Attest
     needs: build
     if: ${{ needs.build.outputs.should_push_oci_image == 'true' }}  # Skip unless we should push
     runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.digest.outputs.digest }}
     permissions:
       actions: read           # Needed for artifact download
       packages: write         # Needed for pushing OCI images and provenance layers
