@@ -6,6 +6,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/jedib0t/go-pretty/v6 v6.7.8
 	github.com/nlepage/go-tarfs v1.2.1
+	github.com/opencontainers/image-spec v1.1.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -15,26 +16,26 @@ require (
 	golang.org/x/term v0.39.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260219124622-3fc4541a6d34
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260220081128-7620d4e5890c
 	ocm.software/open-component-model/bindings/go/configuration v0.0.10
 	ocm.software/open-component-model/bindings/go/constructor v0.0.5
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260219124622-3fc4541a6d34
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260219124622-3fc4541a6d34
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260220081128-7620d4e5890c
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260220081128-7620d4e5890c
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260219124622-3fc4541a6d34
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260220081128-7620d4e5890c
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260219124622-3fc4541a6d34
-	ocm.software/open-component-model/bindings/go/oci v0.0.31
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260220081128-7620d4e5890c
+	ocm.software/open-component-model/bindings/go/oci v0.0.32
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260219124622-3fc4541a6d34
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260220081128-7620d4e5890c
 	ocm.software/open-component-model/bindings/go/runtime v0.0.6
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260219124622-3fc4541a6d34
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260219124622-3fc4541a6d34
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260220081128-7620d4e5890c
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260220081128-7620d4e5890c
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -100,7 +101,6 @@ require (
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect

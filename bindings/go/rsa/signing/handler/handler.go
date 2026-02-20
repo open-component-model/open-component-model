@@ -85,7 +85,10 @@ func (h *Handler) Sign(
 	}
 	algorithm := supported.GetSignatureAlgorithm()
 
-	priv := rsacredentials.PrivateKeyFromCredentials(creds)
+	priv, err := rsacredentials.PrivateKeyFromCredentials(creds)
+	if err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("cannot load private key from credentials for signing: %w", err)
+	}
 	if priv == nil {
 		return descruntime.SignatureInfo{}, ErrMissingPrivateKey
 	}
@@ -134,7 +137,10 @@ func (h *Handler) Verify(
 	_ runtime.Typed,
 	creds map[string]string,
 ) error {
-	pubFromCreds := rsacredentials.PublicKeyFromCredentials(creds)
+	pubFromCreds, err := rsacredentials.PublicKeyFromCredentials(creds)
+	if err != nil {
+		return fmt.Errorf("cannot load public key from credentials for verification: %w", err)
+	}
 
 	hash, dig, err := parseDigest(signed.Digest)
 	if err != nil {

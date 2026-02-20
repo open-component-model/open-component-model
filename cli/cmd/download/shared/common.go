@@ -2,6 +2,7 @@ package shared
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -58,7 +59,7 @@ func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginMana
 		}
 		var creds map[string]string
 		if credIdentity, err := plugin.GetResourceCredentialConsumerIdentity(ctx, res); err == nil {
-			if creds, err = credentialGraph.Resolve(ctx, credIdentity); err != nil {
+			if creds, err = credentialGraph.Resolve(ctx, credIdentity); err != nil && !errors.Is(err, credentials.ErrNotFound) {
 				return nil, fmt.Errorf("getting credentials for resource %q failed: %w", res.Name, err)
 			}
 		}
