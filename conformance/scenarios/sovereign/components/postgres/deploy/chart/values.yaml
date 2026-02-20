@@ -1,0 +1,77 @@
+# Default values for sovereign-postgres
+replicaCount: 1
+
+image:
+  repository: postgres
+  pullPolicy: IfNotPresent
+  tag: "15"
+
+nameOverride: ""
+fullnameOverride: "postgres"
+
+postgresql:
+  # Database configuration
+  postgresqlDatabase: sovereign_notes
+  postgresqlUsername: sovereign_user
+  postgresqlPassword: changeme
+  
+  # Additional configuration
+  postgresqlMaxConnections: 100
+  postgresqlSharedPreloadLibraries: ""
+  
+  # Persistence
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 8Gi
+
+service:
+  type: ClusterIP
+  port: 5432
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Security context
+securityContext:
+  runAsUser: 999
+  runAsGroup: 999
+  fsGroup: 999
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container security context
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  capabilities:
+    drop:
+    - ALL
+
+# Annotations
+podAnnotations: {}
+serviceAnnotations: {}
+
+# Labels
+labels:
+  app.kubernetes.io/name: postgres
+  app.kubernetes.io/component: database
+  app.kubernetes.io/part-of: sovereign-product
+  ocm.software/component: "acme.org/sovereign/postgres"

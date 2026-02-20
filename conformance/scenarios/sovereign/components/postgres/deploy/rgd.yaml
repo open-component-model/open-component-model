@@ -1,0 +1,164 @@
+# ResourceGraphDefinition for PostgreSQL deployment
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: sovereign-postgres
+  namespace: sovereign-product
+spec:
+  schema:
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    spec:
+      group: acme.org
+      names:
+        kind: SovereignPostgres
+        plural: sovereignpostgres
+      scope: Namespaced
+      versions:
+      - name: v1alpha1
+        served: true
+        storage: true
+        schema:
+          openAPIV3Schema:
+            type: object
+            properties:
+              spec:
+                type: object
+                properties:
+                  database:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        default: "sovereign_notes"
+                      username:
+                        type: string
+                        default: "sovereign_user"
+                      password:
+                        type: string
+                        default: "changeme"
+                  resources:
+                    type: object
+                    properties:
+                      requests:
+                        type: object
+                        properties:
+                          cpu:
+                            type: string
+                            default: "250m"
+                          memory:
+                            type: string
+                            default: "256Mi"
+                      limits:
+                        type: object
+                        properties:
+                          cpu:
+                            type: string
+                            default: "500m"
+                          memory:
+                            type: string
+                            default: "512Mi"
+                  persistence:
+                    type: object
+                    properties:
+                      size:
+                        type: string
+                        default: "8Gi"
+              status:
+                type: object
+                properties:
+                  ready:
+                    type: boolean
+                  endpoint:
+                    type: string
+  dependencies:
+  - group: v1
+    kind: Namespace
+    name: sovereign-product
+  graph:
+    nodes:
+    - id: statefulset
+      template:
+        apiVersion: apps/v1
+        kind: StatefulSet
+        metadata:
+          name: postgres
+          namespace: sovereign-product
+        spec:
+          serviceName: postgres
+          replicas: 1
+          selector:
+            matchLabels:
+              app: postgres
+          template:
+            metadata:
+              labels:
+                app: postgres
+                ocm.software/component: acme.org/sovereign/postgres
+            spec:
+              containers:
+              - name: postgresql
+                image: postgres:15
+                ports:
+                - containerPort: 5432
+                  name: postgresql
+                env:
+                - name: POSTGRES_DB
+                  value: "{{ .spec.database.name }}"
+                - name: POSTGRES_USER
+                  value: "{{ .spec.database.username }}"
+                - name: POSTGRES_PASSWORD
+                  value: "{{ .spec.database.password }}"
+                resources:
+                  requests:
+                    cpu: "{{ .spec.resources.requests.cpu }}"
+                    memory: "{{ .spec.resources.requests.memory }}"
+                  limits:
+                    cpu: "{{ .spec.resources.limits.cpu }}"
+                    memory: "{{ .spec.resources.limits.memory }}"
+                livenessProbe:
+                  exec:
+                    command:
+                    - /bin/sh
+                    - -c
+                    - exec pg_isready -U "{{ .spec.database.username }}" -d "{{ .spec.database.name }}" -h 127.0.0.1 -p 5432
+                  initialDelaySeconds: 30
+                  periodSeconds: 10
+                readinessProbe:
+                  exec:
+                    command:
+                    - /bin/sh
+                    - -c
+                    - exec pg_isready -U "{{ .spec.database.username }}" -d "{{ .spec.database.name }}" -h 127.0.0.1 -p 5432
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                volumeMounts:
+                - name: data
+                  mountPath: /var/lib/postgresql/data
+                  subPath: postgresql
+          volumeClaimTemplates:
+          - metadata:
+              name: data
+            spec:
+              accessModes:
+              - ReadWriteOnce
+              resources:
+                requests:
+                  storage: "{{ .spec.persistence.size }}"
+    
+    - id: service
+      template:
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: postgres
+          namespace: sovereign-product
+        spec:
+          type: ClusterIP
+          ports:
+          - port: 5432
+            targetPort: postgresql
+            protocol: TCP
+            name: postgresql
+          selector:
+            app: postgres

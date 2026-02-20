@@ -1,0 +1,32 @@
+# OCM Component Constructor for PostgreSQL
+components:
+  - name: "${NAME}"
+    version: "${VERSION}"
+    provider:
+      name: ocm.software/sovereign
+    
+    resources:
+      # Official PostgreSQL image
+      - name: image
+        type: ociImage
+        version: "${POSTGRES_VERSION}"
+        access:
+          type: ociArtifact
+          imageReference: docker.io/library/postgres:${POSTGRES_VERSION}
+
+      # Helm chart for StatefulSet deployment
+      - name: helm-chart
+        type: helmChart
+        relation: local
+        input:
+          type: helm
+          path: ./deploy/chart
+
+      # ResourceGraphDefinition for kro deployment
+      - name: rgd
+        type: blob
+        relation: local
+        input:
+          type: file
+          path: ./deploy/rgd.yaml
+          mediaType: application/vnd.cncf.kro.resourcegraphdefinition.v1+yaml

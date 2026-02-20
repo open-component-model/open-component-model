@@ -1,0 +1,15 @@
+# OCM Repository pointing to local air-gapped registry
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: sovereign-repo
+  namespace: ocm-system
+spec:
+  repositorySpec:
+    baseUrl: localhost:5001
+    type: OCIRegistry
+  interval: 10m
+  # Registry credentials if needed
+  # ocmConfig:
+  #   - secretRef:
+  #       name: registry-credentials

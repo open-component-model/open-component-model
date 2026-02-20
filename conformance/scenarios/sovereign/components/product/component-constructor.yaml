@@ -1,0 +1,34 @@
+# OCM Product Component - orchestrates notes and postgres
+components:
+  - name: "${NAME}"
+    version: "${VERSION}"
+    provider:
+      name: ocm.software/sovereign
+
+    # References to child components
+    componentReferences:
+      - name: notes
+        componentName: acme.org/sovereign/notes
+        version: "${VERSION}"
+      - name: postgres
+        componentName: acme.org/sovereign/postgres
+        version: "${VERSION}"
+
+    resources:
+      # Product-level RGD for orchestrating deployment order
+      - name: product-rgd
+        type: blob
+        relation: local
+        input:
+          type: file
+          path: ./deploy/rgd.yaml
+          mediaType: application/vnd.cncf.kro.resourcegraphdefinition.v1+yaml
+
+      # Base namespace and secrets
+      - name: base-manifests
+        type: blob
+        relation: local
+        input:
+          type: file
+          path: ./deploy/base.yaml
+          mediaType: application/x-kubernetes+yaml

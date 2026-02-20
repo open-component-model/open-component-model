@@ -24,6 +24,7 @@ import (
 	. "ocm.software/open-component-model/bindings/go/oci/internal/pack"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -441,22 +442,6 @@ func TestResourceLocalBlob(t *testing.T) {
 		expectedError string
 	}{
 		{
-			name: "success with OCI layout media type",
-			blob: &testBlob{
-				content:   content,
-				mediaType: "application/vnd.oci.image.layout.v1+tar",
-				digest:    dig,
-			},
-			resource: &descriptor.Resource{},
-			access: &v2.LocalBlob{
-				MediaType: "application/vnd.oci.image.layout.v1+tar",
-			},
-			opts: Options{
-				AccessScheme:  runtime.NewScheme(),
-				BaseReference: "test-ref",
-			},
-		},
-		{
 			name: "success with single layer artifact",
 			blob: &testBlob{
 				content:   content,
@@ -500,6 +485,153 @@ func TestResourceLocalBlob(t *testing.T) {
 			layerData, err := io.ReadAll(data)
 			require.NoError(t, err)
 			assert.Equal(t, tt.blob.content, layerData)
+		})
+	}
+}
+
+// TestResourceLocalBlobMediaTypeDetection tests the specific logic for detecting
+// OCI layout vs OCI layer based on both access and blob media types separately.
+// This test verifies the fix where access media type is checked first, then blob
+// media type is checked separately if access media type doesn't match OCI layout types.
+func TestResourceLocalBlobMediaTypeDetection(t *testing.T) {
+	store, err := file.New(t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, store.Close())
+	})
+
+	// Create valid OCI layout content for layout tests
+	ctx := t.Context()
+	var buf bytes.Buffer
+	writer := tar.NewOCILayoutWriter(&buf)
+	_, err = oras.PackManifest(ctx, writer, oras.PackManifestVersion1_1, "application/custom", oras.PackManifestOptions{})
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	ociLayoutContent := buf.Bytes()
+	ociLayoutDigest := digest.FromBytes(ociLayoutContent)
+
+	// Regular content for layer tests
+	layerContent := []byte("regular layer content")
+	layerDigest := digest.FromBytes(layerContent)
+
+	tests := []struct {
+		name           string
+		blob           *testBlob
+		access         *v2.LocalBlob
+		expectLayout   bool
+		expectOCILayer bool
+		expectedError  string
+	}{
+		{
+			name: "access media type takes precedence - layout in access",
+			blob: &testBlob{
+				content:   ociLayoutContent,
+				mediaType: "application/vnd.test", // Different blob media type
+				digest:    ociLayoutDigest,
+			},
+			access: &v2.LocalBlob{
+				MediaType: layout.MediaTypeOCIImageLayoutTarV1, // Access has layout type
+			},
+			expectLayout: true,
+		},
+		{
+			name: "access media type takes precedence - gzip layout in access",
+			blob: &testBlob{
+				content:   ociLayoutContent,
+				mediaType: "application/vnd.test", // Different blob media type
+				digest:    ociLayoutDigest,
+			},
+			access: &v2.LocalBlob{
+				MediaType: layout.MediaTypeOCIImageLayoutTarGzipV1, // Access has layout type
+			},
+			expectLayout: true,
+		},
+		{
+			name: "fallback to blob media type when access is empty - layout in blob",
+			blob: &testBlob{
+				content:   ociLayoutContent,
+				mediaType: layout.MediaTypeOCIImageLayoutTarV1, // Blob has layout type
+				digest:    ociLayoutDigest,
+			},
+			access: &v2.LocalBlob{
+				MediaType: "", // Empty access media type
+			},
+			expectLayout: true,
+		},
+		{
+			name: "fallback to blob media type when access is empty - gzip layout in blob",
+			blob: &testBlob{
+				content:   ociLayoutContent,
+				mediaType: layout.MediaTypeOCIImageLayoutTarGzipV1, // Blob has layout type
+				digest:    ociLayoutDigest,
+			},
+			access: &v2.LocalBlob{
+				MediaType: "", // Empty access media type
+			},
+			expectLayout: true,
+		},
+		{
+			name: "fallback to OCI layer when neither access nor blob have layout types",
+			blob: &testBlob{
+				content:   layerContent,
+				mediaType: "application/vnd.test", // Regular media type
+				digest:    layerDigest,
+			},
+			access: &v2.LocalBlob{
+				MediaType: "", // Empty access media type
+			},
+			expectOCILayer: true,
+		},
+		{
+			name: "fallback to OCI layer when access is non-layout but blob has different type",
+			blob: &testBlob{
+				content:   layerContent,
+				mediaType: "application/vnd.other", // Different but non-layout type
+				digest:    layerDigest,
+			},
+			access: &v2.LocalBlob{
+				MediaType: "application/vnd.test", // Non-layout access type
+			},
+			expectOCILayer: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := Options{
+				AccessScheme:  runtime.NewScheme(),
+				BaseReference: "test-ref",
+			}
+			v2.MustAddToScheme(opts.AccessScheme)
+			oci.MustAddToScheme(opts.AccessScheme)
+
+			resource := &descriptor.Resource{}
+			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(resource, tt.blob))
+
+			resourceBlob, err := resourceblob.NewArtifactBlob(resource, tt.blob)
+			require.NoError(t, err)
+
+			desc, err := ResourceLocalBlob(ctx, store, resourceBlob, tt.access, opts)
+
+			if tt.expectedError != "" {
+				assert.ErrorContains(t, err, tt.expectedError)
+				return
+			}
+
+			assert.NoError(t, err)
+
+			// Verify the expected behavior based on media type detection
+			if tt.expectLayout {
+				// For OCI layout, we expect a manifest media type
+				assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
+			} else if tt.expectOCILayer {
+				// For OCI layer, we expect the original blob media type
+				expectedMediaType := tt.blob.mediaType
+				if expectedMediaType == "" && tt.access.MediaType != "" {
+					expectedMediaType = tt.access.MediaType
+				}
+				assert.Equal(t, expectedMediaType, desc.MediaType)
+			}
 		})
 	}
 }

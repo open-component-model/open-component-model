@@ -1,0 +1,52 @@
+# OCM Component Constructor for sovereign-notes service
+components:
+  - name: "${NAME}"
+    version: "${VERSION}"
+    provider:
+      name: ocm.software/sovereign
+      
+    resources:
+      # The application container image (built from source)
+      - name: image
+        type: ociImage
+        relation: local
+        version: "${VERSION}"
+        input:
+          type: file
+          mediaType: application/vnd.ocm.software.oci.layout.v1+tar+gzip
+          path: "${OCI_LAYOUT}"
+
+      # Helm chart for Kubernetes deployment
+      - name: helm-chart
+        type: helmChart
+        relation: local
+        input:
+          type: helm
+          path: ./deploy/chart
+          
+      # ResourceGraphDefinition for kro deployment orchestration
+      - name: rgd
+        type: blob
+        relation: local
+        input:
+          type: file
+          path: ./deploy/rgd.yaml
+          mediaType: application/vnd.cncf.kro.resourcegraphdefinition.v1+yaml
+          
+      # OpenAPI specification for the notes API
+      - name: openapi-spec
+        type: blob
+        relation: local
+        input:
+          type: file
+          path: ./deploy/openapi/spec.yaml
+          mediaType: application/vnd.oai.openapi+yaml
+          
+      # Open Resource Discovery metadata
+      - name: ord-document
+        type: blob
+        relation: local
+        input:
+          type: file
+          path: ./deploy/ord/document.json
+          mediaType: application/vnd.open-resource-discovery.v1+json

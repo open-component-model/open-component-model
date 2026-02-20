@@ -1,0 +1,66 @@
+# ResourceGraphDefinition for deploying sovereign-notes via kro
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: sovereign-notes
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: SovereignNotes
+    spec:
+      releaseName: string | default="sovereign-notes"
+      namespace: string | default="sovereign-product"
+      replicas: integer | default=2
+      databaseSecretRef: string | default="db-credentials"
+      resources:
+        requests:
+          memory: string | default="64Mi"
+          cpu: string | default="100m"
+        limits:
+          memory: string | default="128Mi"
+          cpu: string | default="200m"
+
+  resources:
+    # FluxCD OCIRepository for Helm chart
+    - id: ociRepository
+      template:
+        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        kind: OCIRepository
+        metadata:
+          name: ${schema.spec.releaseName}
+          namespace: ${schema.spec.namespace}
+        spec:
+          interval: 10m
+          url: oci://${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
+          ref:
+            tag: ${resourceChart.status.additional.tag}
+
+    # FluxCD HelmRelease
+    - id: helmRelease
+      template:
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: ${schema.spec.releaseName}
+          namespace: ${schema.spec.namespace}
+        spec:
+          interval: 10m
+          chart:
+            spec:
+              chart: .
+              sourceRef:
+                kind: OCIRepository
+                name: ${ociRepository.metadata.name}
+          values:
+            replicaCount: ${schema.spec.replicas}
+            image:
+              repository: ${resourceImage.status.additional.registry}/${resourceImage.status.additional.repository}
+              tag: ${resourceImage.status.additional.tag}
+            databaseSecretRef: ${schema.spec.databaseSecretRef}
+            resources:
+              requests:
+                memory: ${schema.spec.resources.requests.memory}
+                cpu: ${schema.spec.resources.requests.cpu}
+              limits:
+                memory: ${schema.spec.resources.limits.memory}
+                cpu: ${schema.spec.resources.limits.cpu}

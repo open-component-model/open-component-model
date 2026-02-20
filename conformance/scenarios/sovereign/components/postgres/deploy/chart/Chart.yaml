@@ -1,0 +1,20 @@
+apiVersion: v2
+name: sovereign-postgres
+description: PostgreSQL database for OCM sovereign scenario
+type: application
+version: 1.0.0
+appVersion: "15"
+keywords:
+  - postgresql
+  - database
+  - sovereign
+  - ocm
+home: https://acme.org/sovereign/postgres
+sources:
+  - https://github.com/acme-org/sovereign-postgres
+maintainers:
+  - name: Acme Organization
+    email: contact@acme.org
+annotations:
+  ocm.software/component: "acme.org/sovereign/postgres"
+  ocm.software/scenario: "sovereign-cloud-conformance"

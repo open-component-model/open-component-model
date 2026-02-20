@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sovereign-postgres.fullname" . }}
+  labels:
+    {{- include "sovereign-postgres.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "sovereign-postgres.fullname" . }}
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sovereign-postgres.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "sovereign-postgres.selectorLabels" . | nindent 8 }}
+        {{- with .Values.labels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: postgresql
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.postgresql.postgresqlDatabase | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.postgresql.postgresqlUsername | quote }}
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.postgresql.postgresqlPassword | quote }}
+            - name: POSTGRES_MAX_CONNECTIONS
+              value: {{ .Values.postgresql.postgresqlMaxConnections | quote }}
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U {{ .Values.postgresql.postgresqlUsername | quote }} -d {{ .Values.postgresql.postgresqlDatabase | quote }} -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U {{ .Values.postgresql.postgresqlUsername | quote }} -d {{ .Values.postgresql.postgresqlDatabase | quote }} -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+              subPath: postgresql
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if .Values.postgresql.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+        {{- range .Values.postgresql.persistence.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.persistence.size | quote }}
+        {{- if .Values.postgresql.persistence.storageClass }}
+        storageClassName: {{ .Values.postgresql.persistence.storageClass | quote }}
+        {{- end }}
+  {{- end }}

@@ -1,0 +1,12 @@
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+    - identity:
+        type: RSA/v1alpha1
+        algorithm: RSASSA-PSS
+        signature: default
+      credentials:
+        - type: Credentials/v1
+          properties:
+            public_key_pem_file: ../../keys/acme-public.pem

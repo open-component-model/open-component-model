@@ -61,19 +61,23 @@ func ArtifactBlob(ctx context.Context, storage content.Storage, b *ociblob.Artif
 }
 
 func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
-	mediaType := access.MediaType
-	if mediaType == "" {
-		if mtAware, ok := b.ReadOnlyBlob.(blob.MediaTypeAware); ok {
-			mediaType, _ = mtAware.MediaType()
-		}
+	accessMediaType := access.MediaType
+	var blobMediaType string
+	if mtAware, ok := b.ReadOnlyBlob.(blob.MediaTypeAware); ok {
+		blobMediaType, _ = mtAware.MediaType()
 	}
 
-	switch mediaType {
+	switch accessMediaType {
 	case layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1:
 		return ResourceLocalBlobOCILayout(ctx, storage, b, access, opts)
-	default:
-		return ResourceLocalBlobOCILayer(ctx, storage, b, access, opts)
 	}
+
+	switch blobMediaType {
+	case layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1:
+		return ResourceLocalBlobOCILayout(ctx, storage, b, access, opts)
+	}
+
+	return ResourceLocalBlobOCILayer(ctx, storage, b, access, opts)
 }
 
 func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {

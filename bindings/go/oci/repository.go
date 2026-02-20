@@ -14,16 +14,18 @@ import (
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	slogcontext "github.com/veqryn/slog-context"
+	"golang.org/x/sync/errgroup"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/errdef"
+	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
-	"ocm.software/open-component-model/bindings/go/oci/cache"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
+	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
 	complister "ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
@@ -45,22 +47,15 @@ var _ ComponentVersionRepository = (*Repository)(nil)
 // Repository implements the ComponentVersionRepository interface using OCI registries.
 // Each component may be stored in a separate OCI repository, but ultimately the storage is determined by the Resolver.
 //
-// This Repository implementation synchronizes OCI Manifests through the concepts of LocalManifestCache.
-// Through this any local blob added with AddLocalResource will be added to the memory until
-// AddComponentVersion is called with a reference to that resource.
-// This allows the repository to associate newly added blobs with the component version and still upload them
-// when AddLocalResource is called.
+// This Repository implementation validates local blob references by scanning component descriptors
+// for LocalBlob access specifications and ensuring the referenced blobs exist in the OCI store.
+// Local blobs uploaded via AddLocalResource must exist before calling AddComponentVersion.
 //
 // Note: Store implementations are expected to either allow orphaned local resources or
 // regularly issue an async garbage collection to remove them due to this behavior.
 // This however should not be an issue since all OCI registries implement such a garbage collection mechanism.
 type Repository struct {
 	scheme *runtime.Scheme
-
-	// localArtifactManifestCache temporarily stores manifests for local artifacts until they are added to a component version.
-	localArtifactManifestCache cache.OCIDescriptorCache
-	// localArtifactLayerCache temporarily stores layers for local artifacts until they are added to a component version.
-	localArtifactLayerCache cache.OCIDescriptorCache
 
 	// resolver resolves component version references to OCI stores.
 	resolver Resolver
@@ -101,11 +96,23 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return err
 	}
 
+	// Scan component descriptor for local blob references
+	localBlobs := scanLocalBlobs(descriptor)
+	log.Operation(ctx, "found local blobs", slog.Int("count", len(localBlobs)))
+
+	// Validate that all referenced local blobs exist in the store
+	additionalManifests, additionalLayers, err := identifyLocalBlobManifestsAndLayers(ctx, store, localBlobs)
+	if err != nil {
+		return fmt.Errorf("failed to validate local blobs: %w", err)
+	}
+
+	log.Operation(ctx, "adding descriptor manifest", slog.Int("additionalLayers", len(additionalLayers)), slog.Int("additionalManifests", len(additionalManifests)))
+
 	manifest, err := AddDescriptorToStore(ctx, store, descriptor, AddDescriptorOptions{
 		Scheme:                        repo.scheme,
 		Author:                        repo.creatorAnnotation,
-		AdditionalDescriptorManifests: repo.localArtifactManifestCache.Get(reference),
-		AdditionalLayers:              repo.localArtifactLayerCache.Get(reference),
+		AdditionalDescriptorManifests: additionalManifests,
+		AdditionalLayers:              additionalLayers,
 		ReferrerTrackingPolicy:        repo.referrerTrackingPolicy,
 		DescriptorEncodingMediaType:   repo.descriptorEncodingMediaType,
 	})
@@ -116,9 +123,6 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 	if err := store.Tag(ctx, *manifest, reference); err != nil {
 		return fmt.Errorf("failed to tag manifest: %w", err)
 	}
-	// Cleanup local blob memory as all layers have been pushed
-	repo.localArtifactManifestCache.Delete(reference)
-	repo.localArtifactLayerCache.Delete(reference)
 
 	return nil
 }
@@ -314,6 +318,96 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 	return res, nil
 }
 
+// scanLocalBlobs scans the component descriptor for all LocalBlob access specifications and returns them
+func scanLocalBlobs(desc *descriptor.Descriptor) []descriptor.Artifact {
+	var artifacts []descriptor.Artifact
+
+	// Scan resources for LocalBlob access specs
+	for i := range desc.Component.Resources {
+		resource := &desc.Component.Resources[i]
+		var lb v2.LocalBlob
+		if err := v2.Scheme.Convert(resource.Access, &lb); err == nil {
+			resource.Access = &lb
+			artifacts = append(artifacts, resource)
+		}
+	}
+
+	// Scan sources for LocalBlob access specs
+	for i := range desc.Component.Sources {
+		source := &desc.Component.Sources[i]
+		var lb v2.LocalBlob
+		if err := v2.Scheme.Convert(source.Access, &lb); err == nil {
+			source.Access = &lb
+			artifacts = append(artifacts, source)
+		}
+	}
+
+	return artifacts
+}
+
+// identifyLocalBlobManifestsAndLayers fetches all descriptors in the store that are available
+// for the given artifact list and the output is stable sorted based on the order of the artifact list.
+func identifyLocalBlobManifestsAndLayers(ctx context.Context, store oras.Target, artifacts []descriptor.Artifact) (manifests []ociImageSpecV1.Descriptor, layers []ociImageSpecV1.Descriptor, err error) {
+	eg, egctx := errgroup.WithContext(ctx)
+
+	// Pre-allocate result slice to maintain order
+	results := make([]ociImageSpecV1.Descriptor, len(artifacts))
+
+	for idx, artifact := range artifacts {
+		eg.Go(func() error {
+			localBlob := artifact.GetAccess().(*v2.LocalBlob)
+			// resolution of a blob will always cause a octet stream media type as its just a blob.
+			// if we would use Exists(), then we would need to store the size in the local blob spec
+			// but since we dont do that we have to take actual uploaded size of the descriptor
+			// from the API again. Thats why we need to call Resolve and get the descriptor
+			// instead of just checking existence of the blob.
+			resolve := store.Resolve
+			if !introspection.IsOCICompliantMediaType(localBlob.MediaType) {
+				if bs, ok := store.(interface{ Blobs() registry.BlobStore }); ok {
+					//  TODO(jakobmoellerdev): currently, the blobs store is required
+					//    because the oras remote repo always hardcodes resolves against manifests
+					//    however we really want to resolve against the blob store here for non
+					//    manifest blobs. Mid-Term the oras.Target interface is insufficient
+					//    and CTFs also need to implement this BlobStore and then we can drop this
+					//    assert.
+					resolve = bs.Blobs().Resolve
+				}
+			}
+
+			desc, err := resolve(egctx, localBlob.LocalReference)
+			if err != nil {
+				return fmt.Errorf("failed to resolve descriptor for local blob %s: %w", localBlob.LocalReference, err)
+			}
+			// a resolved blob will always have the octet stream media type, which needs
+			// to be overwritten with the media type from the local blob.
+			desc.MediaType = localBlob.MediaType
+			if err := identity.Adopt(&desc, artifact); err != nil {
+				return fmt.Errorf("failed to adopt descriptor for local blob %s: %w", localBlob.LocalReference, err)
+			}
+
+			// Store result at the correct index
+			results[idx] = desc
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, nil, fmt.Errorf("failed to validate existence of local blobs: %w", err)
+	}
+
+	// Process results in order to maintain stable ordering based on input artifacts
+	for _, desc := range results {
+		// Categorize descriptor based on whether it's an OCI-compliant manifest or a layer
+		if introspection.IsOCICompliantManifest(desc) {
+			manifests = append(manifests, desc)
+		} else {
+			layers = append(layers, desc)
+		}
+	}
+
+	return manifests, layers, nil
+}
+
 func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, component string, version string, artifact descriptor.Artifact, b blob.ReadOnlyBlob) error {
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
@@ -329,19 +423,13 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, compon
 		return fmt.Errorf("failed to create resource blob: %w", err)
 	}
 
-	desc, err := pack.ArtifactBlob(ctx, store, artifactBlob, pack.Options{
+	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, pack.Options{
 		AccessScheme:     repo.scheme,
 		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
 		BaseReference:    reference,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to pack resource blob: %w", err)
-	}
-
-	if introspection.IsOCICompliantManifest(desc) {
-		repo.localArtifactManifestCache.Add(reference, desc)
-	} else {
-		repo.localArtifactLayerCache.Add(reference, desc)
 	}
 
 	return nil
@@ -426,7 +514,7 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	// now that we have a unique candidate, we should use its identity instead of the one requested, as
 	// the requested identity might not be fully qualified.
 	// For example, it is valid to ask for "name=abc", but receive an artifact with "name=abc,version=1.0.0".
-	slogcontext.Info(ctx, "found artifact in descriptor", "artifact", meta.ToIdentity())
+	slogcontext.Debug(ctx, "found artifact in descriptor", "artifact", meta.ToIdentity())
 
 	access := artifact.GetAccess()
 	typed, err := repo.scheme.NewObject(access.GetType())
@@ -439,7 +527,10 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
-		b, err := repo.getLocalBlobFromIndexOrManifest(ctx, store, index, manifest, typed.LocalReference)
+		b, err := repo.getLocalBlobFromIndexOrManifest(
+			ctx, store, index, manifest, typed.LocalReference,
+			artifact.GetElementMeta().Version,
+		)
 		return b, artifact, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
@@ -454,7 +545,7 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	store spec.Store,
 	index *ociImageSpecV1.Index,
 	manifest *ociImageSpecV1.Manifest,
-	ref string,
+	ref, version string,
 ) (LocalBlob, error) {
 	descriptors := collectDescriptors(index, manifest)
 
@@ -470,6 +561,7 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 		// to another OCI-compliant manifest instead of a single layer.
 		return tar.CopyToOCILayoutInMemory(ctx, store, artifact, tar.CopyToOCILayoutOptions{
 			CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
+			Tags:             []string{version},
 		})
 	}
 

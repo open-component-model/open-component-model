@@ -43,7 +43,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
-	ociinmemory "ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -472,7 +471,7 @@ func Test_Integration_Transformers(t *testing.T) {
 		}
 
 		t.Run("get oci artifact", func(t *testing.T) {
-			resourceRepo := resource.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
+			resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{})
 
 			t.Run("get oci transformation", func(t *testing.T) {
 				transformGetOCIArtifact(t, resourceRepo, testUsername, password, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
@@ -480,7 +479,7 @@ func Test_Integration_Transformers(t *testing.T) {
 		})
 
 		t.Run("add oci artifact", func(t *testing.T) {
-			resourceRepo := resource.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
+			resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{})
 
 			t.Run("add oci transformation", func(t *testing.T) {
 				transformAddOCIArtifact(t, resourceRepo, testUsername, password, reference("add-test:v1.0.0"))
