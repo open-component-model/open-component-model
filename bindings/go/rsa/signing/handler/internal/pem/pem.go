@@ -47,9 +47,8 @@ func ParseRSAPrivateKeyPEM(pemBytes []byte) *rsa.PrivateKey {
 // RSAPublicKeyPEM holds a parsed RSA public key and optionally the original
 // X.509 certificate it came from or the private key that it was derived from.
 type RSAPublicKeyPEM struct {
-	PublicKey            *rsa.PublicKey
-	UnderlyingCert       *x509.Certificate
-	UnderlyingPrivateKey *rsa.PrivateKey
+	PublicKey      *rsa.PublicKey
+	UnderlyingCert *x509.Certificate
 }
 
 func (pem *RSAPublicKeyPEM) GetOptionalUnderlyingCert() *x509.Certificate {
