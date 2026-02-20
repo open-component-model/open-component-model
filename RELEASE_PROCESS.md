@@ -11,7 +11,7 @@ Scope: **CLI and Kubernetes Controller are released together in version lockstep
 ### Context and scope
 
 Development in the [Open Component Model monorepo](https://github.com/open-component-model/open-component-model)
-happens on `main`, while releases are prepared and promoted from release branches (`releases/v0.X`).
+happens on `main`, while releases are prepared and promoted from release branches (`releases/vX.Y`).
 This repository follows a lockstep release model for multiple components — currently the
 [CLI](https://github.com/open-component-model/open-component-model/tree/main/cli) and the
 [Kubernetes Controller](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller).
