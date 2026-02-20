@@ -18,7 +18,7 @@ This repository follows a lockstep release model for multiple components — cur
 
 ### Release cadence
 
-The default cadence is sprint-based. At the start of each sprint, create a Release Candidate (RC)
+The default cadence is sprint-based: one release every two weeks. At the start of each sprint, create a Release Candidate (RC)
 for the current release branch. After one sprint of testing, promote the previous RC to a final release.
 At the end of each sprint (typically Friday), assign the next release responsible.
 
@@ -47,13 +47,12 @@ This role rotates each sprint and involves:
 Copy this checklist to your "Sprint Responsible" issue:
 
 ```markdown
-- [ ] Release branch created (`releases/vX.Y`)
-- [ ] CLI RC created and verified
-- [ ] Controller RC created and verified
-- [ ] (wait 1 sprint for testing)
-- [ ] CLI Final promoted
-- [ ] Controller Final promoted
-- [ ] Both releases visible on GitHub Releases page
+- [ ] New release branch created (e.g `releases/v0.17`)
+- [ ] CLI RC created and verified (`v0.17-rc.1`)
+- [ ] Controller RC created and verified (`v0.17-rc.1`)
+- [ ] CLI Final promoted from last RC (`v0.16-rc.1` --> `v0.16.0`)
+- [ ] Controller Final promoted from last RC (`v0.16-rc.1` --> `v0.16.0`)
+- [ ] Both releases visible on GitHub Releases page (`v0.16.0`)
 ```
 
 ### Timeline
@@ -147,6 +146,7 @@ Release candidates are created for both components sequentially, in lock-step.
 1. Run workflow **[CLI Release](./.github/workflows/cli-release.yml)** with:
    - `dry_run = true` first to validate
    - `dry_run = false` for actual release
+   - `Branch to release from` set to the release branch created in step 1 (e.g., `releases/v0.17`)
 2. Run workflow **Controller Release** with equivalent inputs
    (once `controller-release.yml` is available).
 3. Verify both pre-releases were created successfully on the GitHub Releases page.
@@ -179,8 +179,8 @@ Highest Final Version: 0.17.0
 ```
 
 This means the patch release will **not** be marked as the GitHub "Latest Release"
-and the `latest` OCI tag will **not** be updated. This is expected behavior to prevent
-users from accidentally downgrading when pulling `latest`.
+and the `:latest` OCI tag will **not** be updated. This is expected behavior to prevent
+users from accidentally downgrading when pulling `:latest`.
 
 </details>
 
@@ -322,3 +322,19 @@ If something goes wrong during a release, check the following common issues:
 - Use `gh attestation verify <file> --repo <repo>` to manually verify binaries.
 - Use `gh attestation verify oci://<image>@<digest> --repo <repo>` to verify OCI images.
 - If attestations are missing, create a new RC (attestations are generated during build).
+
+**Retracting a release**
+
+If a release needs to be retracted due to critical bugs or security issues:
+
+1. Edit the GitHub Release and mark it as "Pre-release" to hide it from the latest release view.
+2. Prepend a deprecation notice to the release notes:
+   ```
+   > ⚠️ **RETRACTED**: This release has been retracted due to [reason].
+   > Please upgrade to vX.Y.Z instead.
+   ```
+3. Create a new patch release with the fix as soon as possible.
+4. If security-related, consider filing a security advisory via GitHub's Security tab.
+
+The OCI image tags remain available in GHCR for users who have pinned to the specific version,
+but the retraction notice guides new users to the replacement release.
