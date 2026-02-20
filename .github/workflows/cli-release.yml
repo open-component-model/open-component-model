@@ -304,7 +304,7 @@ jobs:
       - name: Promote OCI image tags
         env:
           RC_VERSION: ${{ needs.prepare.outputs.new_version }}
-          FINAL_VERSION: ${{ needs.prepare.outputs.promotion_version }}
+          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
           TARGET_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
         run: |
@@ -353,7 +353,7 @@ jobs:
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           FINAL_TAG: ${{ needs.prepare.outputs.promotion_tag }}
-          FINAL_VERSION: ${{ needs.prepare.outputs.promotion_version }}
+          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
           TARGET_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli
           BINARIES_DIR: ${{ runner.temp }}/binaries
           NOTES_FILE: ${{ runner.temp }}/CHANGELOG.md

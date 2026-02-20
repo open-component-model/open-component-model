@@ -24,9 +24,6 @@ on:
       promotion_tag:
         description: "Tag to be used for promotion later, eg. cli/v0.1.0-rc.1 -> cli/v0.1.0"
         value: ${{ jobs.prepare.outputs.promotion_tag }}
-      promotion_version:
-        description: "Version to be used for promotion later, eg. 0.1.0-rc.1 -> 0.1.0"
-        value: ${{ jobs.prepare.outputs.promotion_version }}
       changelog_b64:
         description: "Changelog encoded in base64 for release body"
         value: ${{ jobs.prepare.outputs.changelog_b64 }}
@@ -48,7 +45,6 @@ jobs:
       new_version: ${{ steps.compute.outputs.new_version }}
       base_version: ${{ steps.compute.outputs.base_version }}
       promotion_tag: ${{ steps.compute.outputs.promotion_tag }}
-      promotion_version: ${{ steps.compute.outputs.promotion_version }}
       changelog_b64: ${{ steps.summarize.outputs.changelog_b64 }}
       set_latest: ${{ steps.latest.outputs.set_latest }}
       highest_final_version: ${{ steps.latest.outputs.highest_final_version }}
@@ -126,7 +122,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           COMPONENT_PATH: ${{ inputs.component_path }}
-          PROMOTION_VERSION: ${{ steps.compute.outputs.promotion_version }}
+          PROMOTION_VERSION: ${{ steps.compute.outputs.base_version }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

@@ -41,7 +41,6 @@ export default async function computeRcVersion({ core }) {
     core.setOutput("new_version", rcVersion);
     core.setOutput("base_version", baseVersion);
     core.setOutput("promotion_tag", promotionTag);
-    core.setOutput("promotion_version", baseVersion);
 
     // --------------------------
     // Step summary
@@ -224,9 +223,7 @@ export function sortVersions(tags) {
         const partsA = parseVersion(a);
         const partsB = parseVersion(b);
 
-        // Compare major.minor.patch lexicographically (early return ensures correct ordering)
-        // Example: 2.1.1 vs 1.2.1 → i=0: diff=1 → return 1 (2 > 1, so A > B)
-        // Example: 1.2.1 vs 1.1.1 → i=0: diff=0, i=1: diff=1 → return 1 (A > B)
+        // Compare major.minor.patch numerically (early return ensures correct ordering)
         for (let i = 0; i < 3; i++) {
             const diff = (partsA[i] || 0) - (partsB[i] || 0);
             if (diff !== 0) return diff;
