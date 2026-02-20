@@ -129,6 +129,27 @@ If you provide a working directory, all paths in the %[1]q file will be resolved
 Otherwise the path to the %[1]q file will be used as the working directory.
 You are only allowed to reference files within the working directory or sub-directories of the working directory.
 
+Environment Variable Substitution:
+
+The %[1]q file supports environment variable substitution using Go template syntax.
+Variables can be referenced using ${VAR_NAME} or $VAR_NAME format.
+All environment variables are expanded before the file is processed, allowing for dynamic
+configuration of component versions, resource paths, image references, and other values.
+
+Example:
+  components:
+    - name: ${COMPONENT_NAME}
+      version: ${COMPONENT_VERSION}
+      provider:
+        name: ${PROVIDER_NAME}
+      resources:
+        - name: my-image
+          type: ociImage
+          version: ${COMPONENT_VERSION}
+          access:
+            type: ociArtifact
+            imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
+
 Repository Reference Format:
 	[type::]{repository}
 
@@ -162,6 +183,13 @@ Specifying repository types explicitly:
 
 add component-version --%[1]s ctf::./local/archive --%[2]s %[3]s.yaml
 add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.yaml
+
+Using environment variables in %[3]q files:
+
+export COMPONENT_NAME="github.com/my-org/my-app"
+export COMPONENT_VERSION="1.2.3"
+export REGISTRY_URL="ghcr.io/my-org"
+add component-version --%[1]s ./archive --%[2]s %[3]s.yaml
 `, FlagRepositoryRef, FlagComponentConstructorPath, DefaultComponentConstructorBaseName)),
 		RunE:              AddComponentVersion,
 		PersistentPreRunE: persistentPreRunE,
@@ -370,6 +398,9 @@ func GetComponentConstructor(file *file.Flag) (*constructorruntime.ComponentCons
 	if err != nil {
 		return nil, fmt.Errorf("reading component constructor %q failed: %w", path, err)
 	}
+	// Perform environment variable substitution on the constructor file content.
+	// This enables dynamic configuration using ${VAR_NAME} or $VAR_NAME syntax.
+	// Variables are expanded using os.Expand with os.Getenv as the mapping function.
 	constructorData = []byte(os.Expand(string(constructorData), os.Getenv))
 
 	data := constructorv1.ComponentConstructor{}
