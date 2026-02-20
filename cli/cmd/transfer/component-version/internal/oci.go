@@ -9,6 +9,8 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepo "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -56,13 +58,23 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, ref *compref.
 	}
 	tgd.Transformations = append(tgd.Transformations, getArtifactTransform)
 
+	obj, err := repository.Scheme.NewObject(toSpec.GetType())
+	if err != nil {
+		return fmt.Errorf("cannot create new object for type %s: %w", toSpec.GetType(), err)
+	}
 	// Create AddLocalResource transformation
 	var addResourceTransform transformv1alpha1.GenericTransformation
-	if uploadAsOCIArtifact {
-		addResourceTransform = ociUploadAsArtifact(toSpec, addResourceID, getResourceID, referenceName)
-	} else {
+	switch obj.(type) {
+	case *ocirepo.Repository:
+		if uploadAsOCIArtifact {
+			addResourceTransform = ociUploadAsArtifact(toSpec, addResourceID, getResourceID, referenceName)
+		} else {
+			addResourceTransform = ociUploadAsLocalResource(toSpec, ref, addResourceID, getResourceID, referenceName)
+		}
+	case *ctfrepospecv1.Repository:
 		addResourceTransform = ociUploadAsLocalResource(toSpec, ref, addResourceID, getResourceID, referenceName)
 	}
+
 	tgd.Transformations = append(tgd.Transformations, addResourceTransform)
 
 	// Track this resource's transformation

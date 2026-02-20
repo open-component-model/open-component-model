@@ -594,3 +594,4 @@ warroom
 wgs
 kubermatic
 baseUrl
+ociimage
