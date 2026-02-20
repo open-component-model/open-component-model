@@ -11,7 +11,6 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
-	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -39,8 +38,6 @@ func WithUserAgent(userAgent string) Option {
 }
 
 type ResourceRepository struct {
-	manifests        cache.OCIDescriptorCache
-	layers           cache.OCIDescriptorCache
 	filesystemConfig *filesystemv1alpha1.Config
 	userAgent        string
 }
@@ -48,7 +45,7 @@ type ResourceRepository struct {
 // make sure that ResourceRepository implements the oci ResourceRepository interface
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
-func NewResourceRepository(manifests, layers cache.OCIDescriptorCache, filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
+func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
 	options := &Options{}
 	for _, opt := range opts {
 		opt(options)
@@ -59,8 +56,6 @@ func NewResourceRepository(manifests, layers cache.OCIDescriptorCache, filesyste
 	}
 
 	return &ResourceRepository{
-		manifests:        manifests,
-		layers:           layers,
 		filesystemConfig: filesystemConfig,
 		userAgent:        options.UserAgent,
 	}
@@ -218,7 +213,7 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 }
 
 func (p *ResourceRepository) getRepository(spec *ociv1.Repository, creds map[string]string) (*oci.Repository, error) {
-	repo, err := createRepository(spec, creds, p.manifests, p.layers, p.filesystemConfig, p.userAgent)
+	repo, err := createRepository(spec, creds, p.filesystemConfig, p.userAgent)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -238,8 +233,6 @@ func ociImageAccessToBaseURL(access *v1.OCIImage) (string, error) {
 func createRepository(
 	spec *ociv1.Repository,
 	credentials map[string]string,
-	manifests cache.OCIDescriptorCache,
-	layers cache.OCIDescriptorCache,
 	filesystemConfig *filesystemv1alpha1.Config,
 	userAgent string,
 ) (*oci.Repository, error) {
@@ -268,8 +261,6 @@ func createRepository(
 	options := []oci.RepositoryOption{
 		oci.WithResolver(urlResolver),
 		oci.WithCreator(userAgent),
-		oci.WithManifestCache(manifests),
-		oci.WithLayerCache(layers),
 		oci.WithTempDir(tempDir), // the filesystem config being empty is a valid config
 	}
 
