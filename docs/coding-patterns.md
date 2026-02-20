@@ -45,6 +45,62 @@ func NewManager(ctx context.Context) *Manager {
 }
 ```
 
+### Builder / Method Chaining
+
+Some packages use fluent builders where `With*()` methods return `*Builder` for chaining:
+
+```go
+b := NewBuilder(scheme).
+    WithTransformer(t).
+    WithEvents(ch)
+result, err := b.Build(ctx)
+```
+
+---
+
+## Type Definitions
+
+### Typed String Enums
+
+String-based enums use a named type with a const block:
+
+```go
+type Policy string
+
+const (
+    PolicyAllow Policy = "Allow"
+    PolicyDeny  Policy = "Deny"
+)
+```
+
+Validation happens at the boundary — custom flag types validate on `Set()`, kubebuilder markers validate on admission.
+
+### Iota Enums
+
+Numeric enums use `iota`:
+
+```go
+type CopyMode int
+
+const (
+    CopyModeLocal CopyMode = iota
+    CopyModeAll
+)
+```
+
+### Version Constants
+
+Each typed package defines its type name and version as constants:
+
+```go
+const (
+    Type    = "example.config"
+    Version = "v1"
+)
+```
+
+These are passed to `runtime.NewVersionedType(Type, Version)` during scheme registration.
+
 ---
 
 ## Interface Design
@@ -78,6 +134,52 @@ type ExtendedRepository interface {
 }
 ```
 
+### Capability / Trait Interfaces
+
+Optional behaviors are expressed as small single-method interfaces that a type may or may not implement. Consumers use type assertions to discover capabilities at runtime:
+
+```go
+type SizeAware interface {
+    Size() (int64, error)
+}
+
+type DigestAware interface {
+    Digest() (string, error)
+}
+
+// Consumer checks at runtime:
+if sa, ok := blob.(SizeAware); ok {
+    size, _ := sa.Size()
+    // use size
+}
+```
+
+This pattern avoids bloating the primary interface with optional concerns.
+
+### Callback / Hook Function Fields
+
+Structs use function fields for lifecycle extensibility. Callbacks follow the `On<Event>` naming convention:
+
+```go
+type Callbacks struct {
+    OnStart func(ctx context.Context, obj *Thing) error
+    OnEnd   func(ctx context.Context, obj *Thing, err error) error
+}
+```
+
+### Adapter / Converter Wrappers
+
+Unexported structs adapt between interface boundaries (e.g., external plugin contracts to internal interfaces). The wrapper holds the external dependency and translates method signatures:
+
+```go
+type pluginConverter struct {
+    external ExternalContract
+    scheme   *runtime.Scheme
+}
+
+var _ InternalInterface = (*pluginConverter)(nil)
+```
+
 ---
 
 ## Error Handling
@@ -99,12 +201,39 @@ return fmt.Errorf("unable to open file: %w", err)
 return fmt.Errorf("failed to resolve version: %w", err)
 ```
 
-### Joining
+### Deferred Error Composition
 
-Combine multiple errors with `errors.Join()`:
+Combine multiple errors from cleanup paths with `errors.Join()`:
+
+```go
+func doWork() (err error) {
+    r, err := open()
+    if err != nil {
+        return err
+    }
+    defer func() { err = errors.Join(err, r.Close()) }()
+    // ...
+}
+```
+
+Also used inline:
 
 ```go
 return errors.Join(ErrUnknown, fmt.Errorf("operation failed: %w", err))
+```
+
+### Custom Error Types
+
+Domain-specific error types carry structured context and enable `errors.As()` matching:
+
+```go
+type NotReadyError struct {
+    ObjectName string
+}
+
+func (e *NotReadyError) Error() string {
+    return fmt.Sprintf("object %s is not ready", e.ObjectName)
+}
 ```
 
 ### Checking
@@ -170,6 +299,28 @@ if err := g.Wait(); err != nil {
 
 For lock-free concurrent access in hot paths (e.g., done-tracking maps).
 
+### Closure-Based Lock Guards
+
+Wraps critical sections in closures to centralize lock management:
+
+```go
+func (g *SyncedGraph[T]) WithReadLock(fn func(d *Graph[T]) error) error {
+    g.mu.RLock()
+    defer g.mu.RUnlock()
+    return fn(g.graph)
+}
+```
+
+### sync.OnceValues for Lazy Initialization
+
+Defers expensive setup (environment creation, client initialization) to first use:
+
+```go
+var getEnv = sync.OnceValues(func() (*Environment, error) {
+    return createExpensiveEnvironment()
+})
+```
+
 ---
 
 ## Resource Cleanup
@@ -203,6 +354,69 @@ var _ io.Closer = (*MyType)(nil)
 
 ---
 
+## JSON Marshaling
+
+### Custom Marshal/Unmarshal for Backward Compatibility
+
+Types that need to accept multiple input formats use the type-alias trick to avoid infinite recursion:
+
+```go
+func (c *Consumer) UnmarshalJSON(data []byte) error {
+    type Alias Consumer
+    alias := &Alias{}
+    if err := json.Unmarshal(data, alias); err == nil {
+        *c = Consumer(*alias)
+        return nil
+    }
+    // try legacy format...
+}
+```
+
+Some types accept both array and single-object forms, trying each format and falling back:
+
+```go
+func (c *Spec) UnmarshalJSON(data []byte) error {
+    var items []Item
+    if err := json.Unmarshal(data, &items); err == nil {
+        c.Items = items
+        return nil
+    }
+    var single Item
+    if err := json.Unmarshal(data, &single); err == nil {
+        c.Items = []Item{single}
+        return nil
+    }
+    return fmt.Errorf("unable to unmarshal spec")
+}
+```
+
+### Schema Embedding
+
+JSON schemas for validation are embedded in production code via `//go:embed`:
+
+```go
+//go:embed schemas/Config.schema.json
+var configSchema []byte
+```
+
+Generated by `jsonschemagen` into `zz_generated.ocm_jsonschema.go` files.
+
+---
+
+## Receiver Conventions
+
+- **Pointer receivers** for methods that mutate state or implement `UnmarshalJSON`.
+- **Value receivers** for pure queries like `String()`, `IsZero()`, `Equal()`.
+
+```go
+func (t Type) String() string     { /* value - no mutation */ }
+func (t *Type) UnmarshalJSON([]byte) error { /* pointer - mutates */ }
+```
+
+Most structs use pointer receivers throughout. Value receivers are reserved for small value types.
+
+---
+
 ## Generics
 
 Used sparingly — primarily in DAG processing and generic utility functions.
@@ -216,6 +430,26 @@ Controller utilities use generics with pointer type constraints for K8s objects:
 ```go
 func GetReadyObject[T any, P ObjectPointer[T]](ctx context.Context, c client.Reader, key client.ObjectKey) (P, error)
 ```
+
+### Iterator-Based Lazy Evaluation (iter.Seq2)
+
+Go range-over-func iterators for lazy traversal without materializing collections:
+
+```go
+func (r *Scheme) GetTypesIter() iter.Seq2[Type, iter.Seq[Type]] {
+    return func(yield func(Type, iter.Seq[Type]) bool) {
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+        for typ := range r.defaults.Iter() {
+            if !yield(typ, r.AliasesIter(typ)) {
+                return
+            }
+        }
+    }
+}
+```
+
+Used alongside materialized methods (e.g., `GetTypes()`) for flexibility.
 
 ---
 
@@ -525,6 +759,14 @@ Implementation details live under `internal/`. Public interfaces are defined in 
 | `*_options.go` | Functional options |
 | `suite_test.go` | Ginkgo test suite setup |
 
+### Blank Imports for Side-Effect Registration
+
+Packages that self-register types via `init()` are imported with blank identifiers where their types are needed:
+
+```go
+import _ "ocm.software/open-component-model/bindings/go/access/localblob/v1"
+```
+
 ---
 
 ## Import Order
@@ -560,25 +802,6 @@ import (
 | `bindings/go/` | testify | `require.New(t)` |
 | `cli/` | testify + `test.OCM()` helper | `require.New(t)` |
 | `kubernetes/controller/` | Ginkgo v2 + Gomega | `Expect().To()` |
-
-### Table-Driven Tests (bindings/CLI)
-
-```go
-tests := []struct {
-    name    string
-    input   string
-    want    Type
-    wantErr bool
-}{...}
-for _, tt := range tests {
-    t.Run(tt.name, func(t *testing.T) {
-        r := require.New(t)
-        // ...
-    })
-}
-```
-
-Start every test function with `r := require.New(t)`.
 
 ### Ginkgo (Controller)
 
@@ -622,13 +845,19 @@ Dependencies are injected via context during `PersistentPreRunE` and retrieved w
 ocmctx.FromContext(cmd.Context()).PluginManager()
 ```
 
-### Custom Flags
+### Custom Flag Types
 
-Flags implement `flag.Value` for validation at set-time (e.g., enum flags that reject invalid values).
+Flags implement `pflag.Value` for validation at set-time. Reusable flag types (enum, file) enforce constraints and generate help text automatically:
+
+```go
+enum.VarP(cmd.Flags(), "output", "o", []string{"json", "yaml", "ndjson"}, "output format")
+```
+
+File flags validate existence on `Set()` and expose `Open()` / `Exists()` helpers.
 
 ### Output Formatting
 
-Pluggable renderer system supporting JSON, YAML, NDJSON, Tree, and Table output via a format enum.
+Pluggable renderer system supporting JSON, YAML, NDJSON, Tree, and Table output via a format enum. Two render modes: static (one-time) and live (terminal refresh with ANSI control sequences). Pager integration for large output.
 
 ---
 
@@ -654,7 +883,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 ### Status Conditions
 
-Helpers abstract fluxcd condition management:
+Helpers abstract fluxcd condition management. Condition helpers combine condition mutation with event recording in a single call:
 
 ```go
 status.MarkReady(recorder, obj, "reconciled")
@@ -662,21 +891,58 @@ status.MarkNotReady(recorder, obj, reason, message)
 status.MarkAsStalled(recorder, obj, reason, message)
 ```
 
-### Field Indexing
+The deferred `UpdateStatus` observes reconciliation state — setting `ProgressingWithRetryReason` on errors during reconciliation and mutating `ObservedGeneration` only when ready.
 
-Cross-resource lookups use field indexes registered at controller setup, queried via `client.MatchingFields{}` in watch handlers.
+### Predicates
+
+All controllers use `GenerationChangedPredicate` to only reconcile on spec changes, filtering out status-only updates:
+
+```go
+For(&v1alpha1.Component{}, builder.WithPredicates(predicate.GenerationChangedPredicate{}))
+```
+
+### Field Indexing and Cross-Resource Watches
+
+Field indexes are registered at controller setup for efficient cross-resource lookups. Watch handlers use `handler.EnqueueRequestsFromMapFunc` with `client.MatchingFields{}` to find related objects:
+
+```go
+Watches(&v1alpha1.Repository{},
+    handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+        list := &v1alpha1.ComponentList{}
+        r.List(ctx, list, client.MatchingFields{fieldName: obj.GetName()})
+        // build and return requests...
+    }))
+```
 
 ### Finalizers
 
-Deletion is guarded by finalizers. `reconcileDelete` checks for dependent resources before removing the finalizer. Adding a finalizer triggers an immediate requeue.
+Deletion is guarded by finalizers. `reconcileDelete` checks for dependent resources before removing the finalizer. Adding a finalizer triggers an immediate requeue. Multiple finalizers may be used in sequence to enforce cleanup ordering.
+
+### Server-Side Apply with ApplySet
+
+The deployer uses SSA (`client.Apply` with `client.ForceOwnership`) and ApplySet (KEP-3659) for resource lifecycle management. The workflow is: Project (compute scope) → Apply (SSA all resources) → Prune (delete orphans matching the ApplySet label).
+
+### Worker Pool with Cache
+
+Async resolution uses a worker pool with an expirable LRU cache. The `Load(key, fallbackFunc)` pattern checks cache first, then dispatches work. Multiple requesters can subscribe to the same in-progress resolution:
+
+```go
+result, err := cache.Load(key, func() (V, error) {
+    return expensiveOperation()
+})
+```
+
+### Owner References
+
+Controller references are set on dynamically deployed objects for garbage collection. Dynamic informers use `EnqueueRequestForOwner` with `OnlyControllerOwner()` to watch owned resources.
 
 ### CRD Types
 
 Defined with kubebuilder markers. List types and scheme registration happen in `init()`.
 
-### Metrics
+### Dynamic Informer Management
 
-Registered via helper functions organized by subsystem (`MustRegisterCounterVec`, `MustRegisterGauge`, `MustRegisterHistogramVec`).
+For watching arbitrary GVKs at runtime, a custom informer manager maintains metadata-only caches (`PartialObjectMetadata`). Register/unregister via channels. Implements `manager.Runnable` for controller-runtime integration. A transformer strips objects to metadata-only to reduce memory.
 
 ---
 
