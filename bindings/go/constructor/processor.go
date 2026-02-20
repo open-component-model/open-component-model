@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/dag"
@@ -136,11 +139,11 @@ func (p *processor) processConstructorComponent(ctx context.Context, component *
 	return nil
 }
 
-func (p *processor) processExternalComponent(ctx context.Context, descriptor *descriptor.Descriptor) error {
+func (p *processor) processExternalComponent(ctx context.Context, descriptor *DescriptorWithLocalBlobs) error {
 	if p.constructor.opts.ExternalComponentVersionCopyPolicy == ExternalComponentVersionCopyPolicySkip {
 		slog.DebugContext(ctx, "external component was skipped")
 
-		if err := p.processedDescriptors.store(ctx, descriptor); err != nil {
+		if err := p.processedDescriptors.store(ctx, descriptor.Descriptor); err != nil {
 			return fmt.Errorf("failed to store processed descriptor: %w", err)
 		}
 		return nil
@@ -151,12 +154,32 @@ func (p *processor) processExternalComponent(ctx context.Context, descriptor *de
 	if err != nil {
 		return fmt.Errorf("error getting target repository for component %q: %w", descriptor.Component.ToIdentity(), err)
 	}
-	if err := repo.AddComponentVersion(ctx, descriptor); err != nil {
+
+	eg, egctx := errgroup.WithContext(ctx)
+	var mu sync.Mutex
+	for _, local := range descriptor.Local {
+		eg.Go(func() error {
+			uploaded, err := repo.AddLocalResource(egctx,
+				descriptor.Component.Name, descriptor.Component.Version, local.Resource, local.Content)
+			if err != nil {
+				return fmt.Errorf("error getting local resource %q for component %q: %w", local.Resource.ToIdentity(), descriptor.Component.ToIdentity(), err)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			descriptor.Component.Resources[local.Index] = *uploaded
+			return nil
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		return fmt.Errorf("error uploading local resources for component %q: %w", descriptor.Component.ToIdentity(), err)
+	}
+
+	if err := repo.AddComponentVersion(ctx, descriptor.Descriptor); err != nil {
 		return fmt.Errorf("error adding component version to target: %w", err)
 	}
 	slog.DebugContext(ctx, "external component added to target repository")
 
-	if err := p.processedDescriptors.store(ctx, descriptor); err != nil {
+	if err := p.processedDescriptors.store(ctx, descriptor.Descriptor); err != nil {
 		return fmt.Errorf("failed to store processed descriptor: %w", err)
 	}
 

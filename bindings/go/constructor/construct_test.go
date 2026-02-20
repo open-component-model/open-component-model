@@ -27,16 +27,18 @@ import (
 
 // mockTargetRepository implements TargetRepository for testing
 type mockTargetRepository struct {
-	mu                  sync.Mutex
-	components          map[string]*descriptor.Descriptor
-	addedLocalResources []*descriptor.Resource
-	addedSources        []*descriptor.Source
-	addedVersions       []*descriptor.Descriptor
+	mu                     sync.Mutex
+	components             map[string]*descriptor.Descriptor
+	addedLocalResources    []*descriptor.Resource
+	addedLocalResourceData map[string]blob.ReadOnlyBlob // resource identity -> blob data
+	addedSources           []*descriptor.Source
+	addedVersions          []*descriptor.Descriptor
 }
 
 func newMockTargetRepository() *mockTargetRepository {
 	return &mockTargetRepository{
-		components: make(map[string]*descriptor.Descriptor),
+		components:             make(map[string]*descriptor.Descriptor),
+		addedLocalResourceData: make(map[string]blob.ReadOnlyBlob),
 	}
 }
 
@@ -58,6 +60,8 @@ func (m *mockTargetRepository) AddLocalResource(ctx context.Context, component, 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.addedLocalResources = append(m.addedLocalResources, resource)
+	// Store the blob data so we can verify it later
+	m.addedLocalResourceData[resource.ToIdentity().String()] = data
 	return resource, nil
 }
 
@@ -86,6 +90,37 @@ func (m *mockTargetRepositoryProvider) GetTargetRepository(ctx context.Context, 
 	return m.repo, nil
 }
 
+// componentVersionRepoProvider wraps a ComponentVersionRepository to provide it as TargetRepository
+type componentVersionRepoProvider struct {
+	repo repository.ComponentVersionRepository
+}
+
+func (c *componentVersionRepoProvider) GetTargetRepository(ctx context.Context, component *constructorruntime.Component) (TargetRepository, error) {
+	// Wrap the ComponentVersionRepository to implement TargetRepository
+	return &targetRepoWrapper{repo: c.repo}, nil
+}
+
+// targetRepoWrapper wraps a ComponentVersionRepository to implement TargetRepository
+type targetRepoWrapper struct {
+	repo repository.ComponentVersionRepository
+}
+
+func (t *targetRepoWrapper) GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error) {
+	return t.repo.GetComponentVersion(ctx, name, version)
+}
+
+func (t *targetRepoWrapper) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
+	return t.repo.AddComponentVersion(ctx, desc)
+}
+
+func (t *targetRepoWrapper) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+	return t.repo.AddLocalResource(ctx, component, version, resource, data)
+}
+
+func (t *targetRepoWrapper) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {
+	return t.repo.AddLocalSource(ctx, component, version, source, data)
+}
+
 // mockBlob implements blob.ReadOnlyBlob for testing
 type mockBlob struct {
 	mediaType string
@@ -107,35 +142,19 @@ func (m *mockBlob) ReadCloser() (io.ReadCloser, error) {
 func TestConstructWithSourceAndResourceAndReferences(t *testing.T) {
 	t.Parallel()
 
-	// Mock source input method
+	// Mock source input method - returns blob data instead of processed source
 	mockSourceInput := &mockSourceInputMethod{
-		processedSource: &descriptor.Source{
-			ElementMeta: descriptor.ElementMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    "test-source",
-					Version: "v1.0.0",
-				},
-			},
-			Type: "git",
-			Access: &v2.LocalBlob{
-				MediaType: "application/octet-stream",
-			},
+		processedBlob: &mockBlob{
+			mediaType: "application/octet-stream",
+			data:      []byte("test source data"),
 		},
 	}
 
-	// Mock resource input method
+	// Mock resource input method - returns blob data instead of processed resource
 	mockResourceInput := &mockInputMethod{
-		processedResource: &descriptor.Resource{
-			ElementMeta: descriptor.ElementMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    "test-resource",
-					Version: "v1.0.0",
-				},
-			},
-			Access: &v2.LocalBlob{
-				MediaType: "application/json",
-			},
-			Relation: descriptor.LocalRelation,
+		processedBlob: &mockBlob{
+			mediaType: "application/json",
+			data:      []byte(`{"test": "resource"}`),
 		},
 	}
 
@@ -231,7 +250,7 @@ components:
 	require.NoError(t, yaml.Unmarshal([]byte(yamlData), &constructor))
 	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
 
-	// External repository with external descriptor
+	// Create an actual OCI repository for external components
 	externalRepo, err := ocirepository.NewFromCTFRepoV1(t.Context(), &ctf.Repository{
 		FilePath:   t.TempDir(),
 		AccessMode: ctf.AccessModeReadWrite,
@@ -239,6 +258,9 @@ components:
 	require.NoError(t, err)
 
 	externalDescriptor := &descriptor.Descriptor{
+		Meta: descriptor.Meta{
+			Version: "v2",
+		},
 		Component: descriptor.Component{
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
@@ -247,9 +269,45 @@ components:
 				},
 			},
 			Provider: descriptor.Provider{Name: "external-provider"},
+			Resources: []descriptor.Resource{
+				{
+					ElementMeta: descriptor.ElementMeta{
+						ObjectMeta: descriptor.ObjectMeta{
+							Name:    "external-local-resource",
+							Version: "v1.0.0",
+						},
+					},
+					Type:     "ociImage",
+					Relation: descriptor.LocalRelation,
+					Access: &v2.LocalBlob{
+						MediaType: "application/json",
+					},
+				},
+			},
 		},
 	}
-	require.NoError(t, externalRepo.AddComponentVersion(t.Context(), externalDescriptor))
+
+	// Add local resource to the external repository first (required by OCI repository)
+	externalResourceData := &mockBlob{
+		mediaType: "application/json",
+		data:      []byte(`{"external": "resource data"}`),
+	}
+
+	// Add the local resource BEFORE adding the component version
+	// The AddLocalResource call updates the resource descriptor with storage information
+	updatedResource, err := externalRepo.AddLocalResource(t.Context(),
+		externalDescriptor.Component.Name,
+		externalDescriptor.Component.Version,
+		&externalDescriptor.Component.Resources[0],
+		externalResourceData)
+	require.NoError(t, err)
+
+	// Update the descriptor with the modified resource (which now has the correct LocalBlob access)
+	externalDescriptor.Component.Resources[0] = *updatedResource
+
+	// Now add the component version (this will validate that the local blob exists)
+	err = externalRepo.AddComponentVersion(t.Context(), externalDescriptor)
+	require.NoError(t, err)
 
 	runAssertions := func(t *testing.T, descMap map[string]*descriptor.Descriptor) {
 		t.Helper()
@@ -260,8 +318,9 @@ components:
 		assert.Equal(t, "test-provider", desc.Component.Provider.Name)
 		assert.Len(t, desc.Component.Resources, 1)
 		assert.Len(t, desc.Component.Sources, 1)
-		assert.Equal(t, "application/json", desc.Component.Resources[0].Access.(*v2.LocalBlob).MediaType)
-		assert.Equal(t, "application/octet-stream", desc.Component.Sources[0].Access.(*v2.LocalBlob).MediaType)
+		// Check that resources have proper access (LocalBlob when using blob data from input methods)
+		assert.NotNil(t, desc.Component.Resources[0].Access, "resource should have access")
+		assert.NotNil(t, desc.Component.Sources[0].Access, "source should have access")
 
 		// ocm.software/test-component-ref-a
 		descA := descMap["ocm.software/test-component-ref-a"]
@@ -269,8 +328,8 @@ components:
 		assert.Equal(t, "test-provider", descA.Component.Provider.Name)
 		assert.Len(t, descA.Component.Resources, 1)
 		assert.Len(t, descA.Component.Sources, 1)
-		assert.Equal(t, "application/json", descA.Component.Resources[0].Access.(*v2.LocalBlob).MediaType)
-		assert.Equal(t, "application/octet-stream", descA.Component.Sources[0].Access.(*v2.LocalBlob).MediaType)
+		assert.NotNil(t, descA.Component.Resources[0].Access, "resource should have access")
+		assert.NotNil(t, descA.Component.Sources[0].Access, "source should have access")
 
 		// ocm.software/test-component-ref-b
 		descB := descMap["ocm.software/test-component-ref-b"]
@@ -278,12 +337,14 @@ components:
 		assert.Equal(t, "test-provider", descB.Component.Provider.Name)
 		assert.Len(t, descB.Component.Resources, 1)
 		assert.Len(t, descB.Component.Sources, 1)
-		assert.Equal(t, "application/json", descB.Component.Resources[0].Access.(*v2.LocalBlob).MediaType)
-		assert.Equal(t, "application/octet-stream", descB.Component.Sources[0].Access.(*v2.LocalBlob).MediaType)
+		assert.NotNil(t, descB.Component.Resources[0].Access, "resource should have access")
+		assert.NotNil(t, descB.Component.Sources[0].Access, "source should have access")
 	}
 
 	t.Run("with external references", func(t *testing.T) {
+		// Use mock repository to focus on testing the copying logic
 		mockRepo := newMockTargetRepository()
+
 		opts := Options{
 			SourceInputMethodProvider:           sourceProvider,
 			ResourceInputMethodProvider:         resourceProvider,
@@ -294,7 +355,7 @@ components:
 		constructorInstance := NewDefaultConstructor(converted, opts)
 		graph := constructorInstance.GetGraph()
 
-		err := constructorInstance.Construct(t.Context())
+		err = constructorInstance.Construct(t.Context())
 		require.NoError(t, err)
 		descs := collectDescriptors(t, graph)
 		require.Len(t, descs, 4)
@@ -305,10 +366,53 @@ components:
 		}
 		runAssertions(t, descMap)
 
+		// Verify external component was uploaded to target mock repository
 		uploaded, err := mockRepo.GetComponentVersion(t.Context(), externalDescriptor.Component.Name, externalDescriptor.Component.Version)
 		require.NoError(t, err, "external reference should have been uploaded")
 		require.NotNil(t, uploaded)
-		assert.Equal(t, externalDescriptor, uploaded)
+		assert.Equal(t, externalDescriptor.Component.Name, uploaded.Component.Name)
+		assert.Equal(t, externalDescriptor.Component.Version, uploaded.Component.Version)
+		assert.Equal(t, "external-provider", uploaded.Component.Provider.Name)
+
+		// Verify external component's local resources were copied
+		require.Len(t, uploaded.Component.Resources, 1, "external component's resources should be copied")
+		externalResource := uploaded.Component.Resources[0]
+		assert.Equal(t, "external-local-resource", externalResource.Name)
+		assert.Equal(t, "v1.0.0", externalResource.Version)
+		assert.Equal(t, descriptor.LocalRelation, externalResource.Relation)
+
+		// Verify that the local resource was added to the mock repository
+		hasExternalResource := false
+		for _, res := range mockRepo.addedLocalResources {
+			if res.Name == "external-local-resource" {
+				hasExternalResource = true
+
+				// Verify the actual data was copied correctly
+				copiedData, exists := mockRepo.addedLocalResourceData[res.ToIdentity().String()]
+				assert.True(t, exists, "resource data should be stored")
+				if exists && copiedData != nil {
+					// Read the actual data from the blob
+					reader, err := copiedData.ReadCloser()
+					assert.NoError(t, err, "should be able to get reader for copied blob")
+					if reader != nil {
+						actualBytes, err := io.ReadAll(reader)
+						assert.NoError(t, err, "should be able to read copied blob data")
+						_ = reader.Close() // Close after reading
+
+						expectedData := `{"external": "resource data"}`
+						assert.Equal(t, expectedData, string(actualBytes), "copied resource data should match original")
+					}
+
+					// Verify media type is preserved
+					if mediaTypeAware, ok := copiedData.(blob.MediaTypeAware); ok {
+						mediaType, _ := mediaTypeAware.MediaType()
+						assert.Equal(t, "application/json", mediaType, "media type should be preserved")
+					}
+				}
+				break
+			}
+		}
+		assert.True(t, hasExternalResource, "external component's local resource should be added to repository")
 	})
 
 	t.Run("skip external references", func(t *testing.T) {

@@ -71,7 +71,7 @@ var _ ExternalComponentRepositoryProvider = (*componentVersionRepositoryWrapper)
 
 type ConstructorOrExternalComponent struct {
 	ConstructorComponent *constructor.Component
-	ExternalComponent    *descriptor.Descriptor
+	ExternalComponent    *DescriptorWithLocalBlobs
 }
 
 func (c *DefaultConstructor) Construct(ctx context.Context) error {
@@ -181,6 +181,7 @@ func buildDiscoverer(componentConstructor *constructor.ComponentConstructor, opt
 	resAndDis := resolverAndDiscoverer{
 		componentConstructor:                componentConstructor,
 		externalComponentRepositoryProvider: opts.ExternalComponentRepositoryProvider,
+		resolveExternalLocalBlobs:           opts.ExternalComponentVersionCopyPolicy == ExternalComponentVersionCopyPolicyCopyOrFail,
 	}
 	graphDiscoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *ConstructorOrExternalComponent]{
 		Roots:      roots,
