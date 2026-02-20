@@ -1,10 +1,10 @@
 module ocm.software/open-component-model/bindings/go/rsa
 
-go 1.25.5
+go 1.25.7
 
 require (
 	github.com/stretchr/testify v1.11.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260218105921-92cb5e362a44
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260219124622-3fc4541a6d34
 	ocm.software/open-component-model/bindings/go/runtime v0.0.6
 )
 
