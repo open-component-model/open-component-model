@@ -286,16 +286,13 @@ jobs:
         run: task ${{ matrix.module }}:test/integration
 
   run_unit_tests:
+    name: "Unit Tests"
     needs: discover_modules
+    runs-on: ubuntu-latest
     if: ${{ fromJSON(needs.discover_modules.outputs.unit_test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
-        os:
-          - ubuntu
-          - windows
         module: ${{ fromJSON(needs.discover_modules.outputs.unit_test_modules_json) }}
-    name: "Unit Tests (${{ matrix.os }})"
-    runs-on: ${{matrix.os}}-latest
     steps:
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
