@@ -145,7 +145,6 @@ Once created, only bug fixes and documentation changes are allowed.
 Release candidates are created for both components sequentially, in lock-step.
 
 1. Run workflow **[CLI Release](./.github/workflows/cli-release.yml)** with:
-   - `release_candidate = true`
    - `dry_run = true` first to validate
    - `dry_run = false` for actual release
 2. Run workflow **Controller Release** with equivalent inputs
@@ -164,8 +163,8 @@ The workflow summary shows exactly what **would** happen:
 
 | Field | Description |
 |-------|-------------|
-| Next RC Version | The version that would be created (e.g., `0.17.1-rc.1`) |
-| Promotion Version | The final version after promotion (e.g., `0.17.1`) |
+| RC Version | The RC version that would be created (e.g., `0.17.1-rc.1`) |
+| Base Version | The final version after promotion (e.g., `0.17.1`) |
 | Set Latest | Whether `:latest` tag would be applied to OCI images |
 | Highest Final Version | The current highest released version |
 
@@ -204,15 +203,19 @@ users from accidentally downgrading when pulling `:latest`.
 Final promotion takes an existing RC and promotes it to a stable release.
 The workflow verifies attestations before creating any final artifacts.
 
-1. Run workflow **[CLI Release](./.github/workflows/cli-release.yml)** with:
-   - `release_candidate = false`
-   - `dry_run = true` first to validate
-   - `dry_run = false` for actual promotion
-2. Run workflow **Controller Release** with equivalent inputs
-   (once `controller-release.yml` is available).
-3. Verify both final releases are published.
+The final promotion is triggered automatically after the RC phase completes
+and the `cli/release` environment gate is approved.
 
-> ⚠️ **Always do a dry-run first** before the actual promotion.
+1. Wait for the RC to be tested (typically 1 sprint).
+2. Go to the workflow run in GitHub Actions.
+3. Approve the `cli/release` environment gate (requires reviewer approval + wait timer).
+4. The workflow will automatically:
+   - Verify RC attestations
+   - Create final tag from RC commit
+   - Promote OCI image tags
+   - Publish final GitHub release
+5. Repeat for **Controller Release** once `controller-release.yml` is available.
+6. Verify both final releases are published on the GitHub Releases page.
 
 > 🔐 **Security:** The workflow automatically verifies all attestations from the RC release
 > before proceeding. If verification fails, the promotion is aborted.
@@ -221,12 +224,9 @@ The workflow verifies attestations before creating any final artifacts.
 <summary>What happens in the background?</summary>
 
 - **CLI path (`cli-release.yml`)**
-   - `prepare`: resolve latest RC and target final version.
-   - `validate_final`: ensure promotable RC exists.
-   - `verify_attestations`: verify all attestation bundles from RC release.
-   - `tag_final`: create immutable final tag from RC source.
-   - `promote_image`: promote OCI tags (version + latest).
-   - `release_final`: publish final GitHub release from RC artifacts.
+   - `verify_attestations`: verify binary and OCI image attestations (gated by environment approval).
+   - `promote_final`: create final tag from RC commit, promote OCI image tags.
+   - `release_final`: publish final GitHub release with assets from RC.
 - **Controller path (`controller-release.yml`)**
    - Mirrors the same final promotion pattern for controller image + Helm chart.
 - Final is only valid when both components are promoted in the same cycle.
@@ -240,8 +240,8 @@ The workflow verifies attestations before creating any final artifacts.
 flowchart TD
   A[Release Branch Creation] --> B[CLI RC: prepare -> tag_rc -> build -> release_rc]
   A --> C[Controller RC: prepare -> tag_rc -> build -> release_rc]
-  B --> D[CLI Final: validate_final -> verify_attestations -> tag_final -> promote -> release_final]
-  C --> E[Controller Final: validate_final -> verify_attestations -> tag_final -> promote -> release_final]
+  B --> D[CLI Final: verify_attestations -> promote_final -> release_final]
+  C --> E[Controller Final: verify_attestations -> promote_final -> release_final]
   D --> F[Release cycle completed]
   E --> F
 ```
@@ -317,7 +317,8 @@ If something goes wrong during a release, check the following common issues:
 - Complete or rerun the missing component release immediately.
 
 **Attestation verification failed**
-- Verify that the RC release assets include `attestations-index.json` and `attestation-*.jsonl` bundles.
-- Check that the OCI image digest in the index matches the actual image.
-- If assets are missing, create a new RC.
-  If there's a digest mismatch, investigate potential image tampering.
+- Verify that the RC release binaries have valid build provenance attestations.
+- Check that the OCI image was pushed to GHCR with attestation metadata.
+- Use `gh attestation verify <file> --repo <repo>` to manually verify binaries.
+- Use `gh attestation verify oci://<image>@<digest> --repo <repo>` to verify OCI images.
+- If attestations are missing, create a new RC (attestations are generated during build).
