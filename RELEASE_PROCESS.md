@@ -179,8 +179,8 @@ Highest Final Version: 0.17.0
 ```
 
 This means the patch release will **not** be marked as the GitHub "Latest Release"
-and the `:latest` OCI tag will **not** be updated. This is expected behavior to prevent
-users from accidentally downgrading when pulling `:latest`.
+and the `latest` OCI tag will **not** be updated. This is expected behavior to prevent
+users from accidentally downgrading when pulling `latest`.
 
 </details>
 
