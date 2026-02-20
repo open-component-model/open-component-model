@@ -76,21 +76,28 @@ jobs:
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
 
+      - name: Download changelog artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ needs.prepare.outputs.changelog_artifact }}
+          path: ${{ runner.temp }}
+
       - name: Create tag
         # Creates annotated tag with changelog; skips if already exists
         id: tag
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           TAG: ${{ needs.prepare.outputs.new_tag }}
-          CHANGELOG_B64: ${{ needs.prepare.outputs.changelog_b64 }}
+          CHANGELOG_FILE: ${{ runner.temp }}/CHANGELOG.md
         with:
           github-token: ${{ steps.get_token.outputs.token }}
           script: |
             const { execFileSync } = require("child_process");
+            const fs = require("fs");
             const tag = process.env.TAG;
-            const msg = Buffer.from(process.env.CHANGELOG_B64, "base64").toString("utf8");
+            const msg = fs.readFileSync(process.env.CHANGELOG_FILE, "utf8");
             try { execFileSync("git", ["rev-parse", `refs/tags/${tag}`], { stdio: "pipe" }); core.info(`Tag ${tag} already exists`); core.setOutput("pushed","false"); return; } catch {}
-            require("fs").writeFileSync(".tagmsg", msg);
+            fs.writeFileSync(".tagmsg", msg);
             execFileSync("git", ["tag", "-a", tag, "-F", ".tagmsg"]);
             execFileSync("git", ["push", "origin", `refs/tags/${tag}`]);
             core.setOutput("pushed","true");
@@ -120,8 +127,11 @@ jobs:
       contents: write
       actions: read
     steps:
-      - name: Decode changelog
-        run: echo "${{ needs.prepare.outputs.changelog_b64 }}" | base64 --decode > "${{ runner.temp }}/CHANGELOG.md"
+      - name: Download changelog artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ needs.prepare.outputs.changelog_artifact }}
+          path: ${{ runner.temp }}
 
       - name: Download chart artifact
         # Use artifact from build instead of pulling from registry
@@ -305,7 +315,7 @@ jobs:
         # Re-tags existing image; adds 'latest' only if this is the highest version
         env:
           RC_VERSION: ${{ needs.prepare.outputs.new_version }}
-          FINAL_VERSION: ${{ needs.prepare.outputs.promotion_version }}
+          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
           IMAGE_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
         run: |
@@ -332,7 +342,7 @@ jobs:
         # Re-packages chart with final version but SAME image digest for reproducibility
         working-directory: ${{ env.COMPONENT_PATH }}
         env:
-          VERSION: ${{ needs.prepare.outputs.promotion_version }}
+          VERSION: ${{ needs.prepare.outputs.base_version }}
           IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
         run: |
           task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_DIGEST="${IMAGE_DIGEST}"
@@ -341,7 +351,7 @@ jobs:
       - name: Resolve chart digest
         id: chart-digest
         env:
-          VERSION: ${{ needs.prepare.outputs.promotion_version }}
+          VERSION: ${{ needs.prepare.outputs.base_version }}
         run: |
           CHART_REPO="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart/ocm-k8s-toolkit"
           echo "digest=$(oras resolve ${CHART_REPO}:${VERSION})" >> "$GITHUB_OUTPUT"
@@ -366,7 +376,7 @@ jobs:
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           FINAL_TAG: ${{ needs.prepare.outputs.promotion_tag }}
-          FINAL_VERSION: ${{ needs.prepare.outputs.promotion_version }}
+          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
           IMAGE_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
           CHART_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart/ocm-k8s-toolkit
           IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
