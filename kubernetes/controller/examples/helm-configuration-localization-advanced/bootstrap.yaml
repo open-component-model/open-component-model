@@ -1,0 +1,104 @@
+# ---
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: ClusterRoleBinding
+# metadata:
+#   name: ocm-k8s-toolkit-cluster-admin
+# roleRef:
+#   apiGroup: rbac.authorization.k8s.io
+#   kind: ClusterRole
+#   name: cluster-admin
+# subjects:
+#   - kind: ServiceAccount
+#     name: ocm-k8s-toolkit-controller-manager
+#     namespace: ocm-k8s-toolkit-system
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: helm-configuration-localization-advanced-repository
+spec:
+  repositorySpec:
+    # Adjust to your OCM repository
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: helm-configuration-localization-advanced-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/helm-configuration-localization-advanced
+  repositoryRef:
+    name: helm-configuration-localization-advanced-repository
+  semver: 1.0.0
+  interval: 10m
+#---
+#apiVersion: delivery.ocm.software/v1alpha1
+#kind: Resource
+#metadata:
+#  name: helm-configuration-localization-advanced-resource-rgd
+#  namespace: default
+#spec:
+#  componentRef:
+#    name: helm-configuration-localization-advanced-component
+#  resource:
+#    byReference:
+#      resource:
+#        name: kro-rgd
+#  interval: 10m
+#---
+#apiVersion: delivery.ocm.software/v1alpha1
+#kind: Deployer
+#metadata:
+#  name: helm-configuration-localization-advanced-deployer
+#spec:
+#  resourceRef:
+#    name: helm-configuration-localization-advanced-resource-rgd
+#    namespace: default
+#---
+#apiVersion: delivery.ocm.software/v1alpha1
+#kind: Resource
+#metadata:
+#  name: helm-configuration-localization-advanced-resource-instance
+#  namespace: default
+#spec:
+#  componentRef:
+#    name: helm-configuration-localization-advanced-component
+#  resource:
+#    byReference:
+#      resource:
+#        name: kro-instance
+#  interval: 10m
+#---
+#apiVersion: delivery.ocm.software/v1alpha1
+#kind: Deployer
+#metadata:
+#  name: helm-configuration-localization-advanced-deployer-instance
+#spec:
+#  resourceRef:
+#    name: helm-configuration-localization-advanced-resource-instance
+#    namespace: default
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-configuration-localization-advanced-resource-all-in-one
+  namespace: default
+spec:
+  componentRef:
+    name: helm-configuration-localization-advanced-component
+  resource:
+    byReference:
+      resource:
+        name: all-in-one
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-configuration-localization-advanced-deployer-all-in-one
+spec:
+  resourceRef:
+    name: helm-configuration-localization-advanced-resource-all-in-one
+    namespace: default
