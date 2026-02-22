@@ -182,7 +182,7 @@ require (
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260220081128-7620d4e5890c // indirect
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260220081128-7620d4e5890c // indirect
-	sigs.k8s.io/controller-runtime v0.22.4 // indirect
+	sigs.k8s.io/controller-runtime v0.23.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.0 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.0 // indirect
