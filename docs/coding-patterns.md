@@ -264,7 +264,7 @@ return reconcile.TerminalError(fmt.Errorf("invalid config: %w", err))
 func (r *Repo) Get(ctx context.Context, name string) (*Thing, error)
 ```
 
-In tests, use `t.Context()` (bindings/CLI) or `ctx SpecContext` (controller/Ginkgo). Never `context.Background()` or `context.TODO()`.
+In new test code, prefer `t.Context()` (bindings/CLI) or `ctx SpecContext` (controller/Ginkgo) over `context.Background()` or `context.TODO()`. Legacy tests still use `context.Background()` — migrate when touching those files.
 
 ---
 
