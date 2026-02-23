@@ -1,11 +1,11 @@
 module ocm.software/open-component-model/bindings/go/signing
 
-go 1.25.5
+go 1.25.7
 
 require (
 	github.com/stretchr/testify v1.11.1
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260218105921-92cb5e362a44
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260218105921-92cb5e362a44
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260223095936-f9d28296be0d
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260223095936-f9d28296be0d
 	ocm.software/open-component-model/bindings/go/runtime v0.0.6
 )
 

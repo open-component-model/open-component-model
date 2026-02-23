@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -121,7 +121,6 @@ func TestGetLocalResource_Transform_OCI(t *testing.T) {
 
 	// Create temporary directory for output
 	tempDir := t.TempDir()
-	outputPath := filepath.Join(tempDir, "downloaded-resource.bin")
 
 	// Create transformation spec
 	spec := &v1alpha1.OCIGetLocalResource{
@@ -141,7 +140,7 @@ func TestGetLocalResource_Transform_OCI(t *testing.T) {
 				"name":    "test-resource",
 				"version": "1.0.0",
 			},
-			OutputPath: outputPath,
+			OutputPath: tempDir,
 		},
 	}
 
@@ -156,16 +155,17 @@ func TestGetLocalResource_Transform_OCI(t *testing.T) {
 	require.NotNil(t, transformed.Output)
 	require.NotNil(t, transformed.Output.Resource)
 
-	// Verify file was created
-	assert.FileExists(t, outputPath)
+	// Verify file was created in the output directory
+	outputFile := strings.ReplaceAll(transformed.Output.File.URI, "file://", "")
+	assert.FileExists(t, outputFile)
+	assert.True(t, strings.HasPrefix(outputFile, tempDir))
 
 	// Verify file content
-	fileContent, err := os.ReadFile(outputPath)
+	fileContent, err := os.ReadFile(outputFile)
 	require.NoError(t, err)
 	assert.Equal(t, testBlobData, fileContent)
 
 	// Verify file spec in output
-	assert.Equal(t, "file://"+outputPath, transformed.Output.File.URI)
 	assert.Equal(t, "application/test", transformed.Output.File.MediaType)
 
 	// Verify resource in output

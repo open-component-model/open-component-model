@@ -135,10 +135,10 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 		wantCreds    map[string]string
 	}{
 		{
-			name:         "missing hostname in identity",
+			name:         "missing hostname in identity leads to no credentials",
 			dockerConfig: credentialsv1.DockerConfig{},
 			identity:     runtime.Identity{},
-			wantErr:      true,
+			wantErr:      false,
 		},
 		{
 			name:         "empty docker config",

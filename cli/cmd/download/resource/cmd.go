@@ -185,7 +185,9 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		logger.Info("resource transformed successfully")
 	}
 
-	logger.Info("resource downloaded successfully", slog.String("output", finalOutputPath))
+	defer func() {
+		logger.Info("resource downloaded successfully", slog.String("output", finalOutputPath))
+	}()
 
 	switch extractionPolicy {
 	case ExtractionPolicyAuto:

@@ -70,7 +70,7 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
 ```
       --config string                      supply configuration by a given configuration file.
                                            By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
-                                           1. The path specified in the OCM_CONFIG_PATH environment variable
+                                           1. The path specified in the OCM_CONFIG environment variable
                                            2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user's home directory
                                            - $XDG_CONFIG_HOME/ocm/config
                                            - $XDG_CONFIG_HOME/.ocmconfig

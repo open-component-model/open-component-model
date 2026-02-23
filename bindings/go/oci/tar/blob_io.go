@@ -105,42 +105,30 @@ func proxyOCIStore(ctx context.Context, ociStore *CloseableReadOnlyStore, opts *
 	// if our store only has one single descriptor, we dont need to copy the top level index of the layout.
 	// instead we can use whatever top level descriptor (manifest or index) is located as singleton in the layout index.
 	if len(ociStore.Index.Manifests) == 1 {
-		return proxyOCIStoreWithTopLevelDescriptor(ctx, ociStore, opts)
+		return proxyOCIStoreWithTopLevelDescriptor(ctx, 0, ociStore, opts)
 	}
-	// if there is more than one manifest in the store, we are dealing with multiple artifacts, so in this case we should also copy the index
-	// that is the top level descriptor of the oci layout.
-	// TODO(jakobmoellerdev): It might make sense here to split this into multiple manifests without a top level index as well.
-	//  Currently the use cases are too unclear to decide here, but we can revisit this at any time and switch it quite easily.
-	return proxyOCIStoreWithLayoutIndex(ociStore, opts)
-}
-
-func proxyOCIStoreWithLayoutIndex(ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (ociImageSpecV1.Descriptor, content.ReadOnlyStorage, error) {
-	indexJSON, err := json.Marshal(ociStore.Index)
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to marshal index: %w", err)
-	}
-	index := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, indexJSON)
-	if err := opts.MutateParentFunc(&index); err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate index descriptor before copy: %w", err)
-	}
-
-	opts.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-		if content.Equal(desc, index) {
-			return ociStore.Index.Manifests, nil
+	var topLevelNamedDescriptors []int
+	for idx, manifest := range ociStore.Index.Manifests {
+		if manifest.Annotations != nil && manifest.Annotations[ociImageSpecV1.AnnotationRefName] != "" {
+			topLevelNamedDescriptors = append(topLevelNamedDescriptors, idx)
 		}
-		return content.Successors(ctx, ociStore, desc)
+	}
+	if len(topLevelNamedDescriptors) == 1 {
+		return proxyOCIStoreWithTopLevelDescriptor(ctx, topLevelNamedDescriptors[0], ociStore, opts)
 	}
 
-	proxy := &descriptorStoreProxy{
-		raw:             indexJSON,
-		desc:            index,
-		ReadOnlyStorage: ociStore,
-	}
-	return index, proxy, nil
+	// we need this specifically for docker (one manifest),
+	// and oras / ocm packaging compat (many manifests, exactly one ref.name)
+	return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf(
+		"multiple manifests found in oci store, "+
+			"but no manifest could be identified as the top level parent."+
+			"the store must either contain exactly one top level manifest in its index,"+
+			" or at most one manifest with the annotation %s", ociImageSpecV1.AnnotationRefName,
+	)
 }
 
-func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (_ ociImageSpecV1.Descriptor, _ content.ReadOnlyStorage, err error) {
-	topLevelDesc := ociStore.Index.Manifests[0]
+func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (_ ociImageSpecV1.Descriptor, _ content.ReadOnlyStorage, err error) {
+	topLevelDesc := ociStore.Index.Manifests[idx]
 	descStream, err := ociStore.Fetch(ctx, topLevelDesc)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to fetch top level descriptor from store: %w", err)

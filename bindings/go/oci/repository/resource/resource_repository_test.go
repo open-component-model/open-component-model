@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 )
 
@@ -37,10 +36,8 @@ func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 				BaseUrl: "localhost:5000",
 			}
 			credentials := map[string]string{}
-			manifests := inmemory.New()
-			layers := inmemory.New()
 
-			repo, err := createRepository(spec, credentials, manifests, layers, tt.filesystemConfig, "test")
+			repo, err := createRepository(spec, credentials, tt.filesystemConfig, "test")
 
 			if tt.expectError {
 				r.Error(err, "expected error")

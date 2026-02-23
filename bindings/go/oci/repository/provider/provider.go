@@ -25,7 +25,6 @@ const DefaultCreator = "ocm.software/open-component-model/bindings/go/oci"
 // CachingComponentVersionRepositoryProvider is a caching implementation of the repository.ComponentVersionRepositoryProvider interface.
 // It provides efficient caching mechanisms for repository operations by maintaining:
 // - A credential cache for authentication information
-// - An OCI cache for manifests and layers
 // - An authorization cache for auth tokens
 // - A shared HTTP client with retry capabilities
 type CachingComponentVersionRepositoryProvider struct {
@@ -47,16 +46,6 @@ type CachingComponentVersionRepositoryProvider struct {
 	// also for repositories (including already existing repositories) provided
 	// by this repository provider.
 	credentialCache *credentialCache
-
-	// ociCache provides caching for OCI descriptors (manifests and layers) with
-	// oci repository path as key. It is used for caching the oci descriptors
-	// of local blobs.
-	// In case of oci artifacts, it caches the oci descriptor of the manifest
-	// which is added to an index manifest alongside the component version's
-	// manifest.
-	// In case of non-oci artifacts, it caches the oci descriptor of the layer
-	// which is added to the manifest of the component version.
-	ociCache *ociCache
 
 	// authorizationCache caches the auth-scheme and auth-token for the
 	// "Authorization" header in accessing the remote registry.
@@ -96,7 +85,6 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		scheme:             options.Scheme,
 		storeCache:         &storeCache{store: make(map[string]*ocictf.Store)},
 		credentialCache:    &credentialCache{},
-		ociCache:           &ociCache{scheme: options.Scheme},
 		authorizationCache: auth.NewCache(),
 		httpClient:         retry.DefaultClient,
 		tempDir:            options.TempDir,
@@ -143,23 +131,6 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 	}
 }
 
-// getCacheIdentity is a helper function that extracts the consumer identity
-// from a repository specification. It supports both OCI and CTF repository types.
-func getCacheIdentity(_ context.Context, scheme *runtime.Scheme, repositorySpecification runtime.Typed) (runtime.Identity, error) {
-	obj, err := getConvertedTypedSpec(scheme, repositorySpecification)
-	if err != nil {
-		return nil, err
-	}
-	switch obj := obj.(type) {
-	case *ocirepospecv1.Repository:
-		return v1.IdentityFromOCIRepository(obj)
-	case *ctfrepospecv1.Repository:
-		return v1.IdentityFromCTFRepository(obj)
-	default:
-		return nil, fmt.Errorf("unsupported repository specification type for identity generation %T", obj)
-	}
-}
-
 // GetComponentVersionRepository implements the repository.ComponentVersionRepositoryProvider interface.
 // It retrieves a component version repository with caching support for the given specification and credentials.
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
@@ -168,14 +139,7 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		return nil, err
 	}
 
-	manifests, layers, err := b.ociCache.get(ctx, obj)
-	if err != nil {
-		return nil, fmt.Errorf("failed to getOCIDescriptors from repository cache: %w", err)
-	}
-
 	opts := []oci.RepositoryOption{
-		oci.WithManifestCache(manifests),
-		oci.WithLayerCache(layers),
 		oci.WithTempDir(b.tempDir),
 		oci.WithCreator(b.creator),
 	}

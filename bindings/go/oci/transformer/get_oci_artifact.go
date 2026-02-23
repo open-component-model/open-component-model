@@ -2,6 +2,7 @@ package transformer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -50,7 +51,7 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	var creds map[string]string
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
-			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
+			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
 				return nil, fmt.Errorf("failed resolving credentials: %w", err)
 			}
 		}
@@ -62,7 +63,7 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	}
 
 	// Determine output path
-	if outputPath, err = DetermineOutputPath(outputPath, "oci-artifact", blobContent); err != nil {
+	if outputPath, err = DetermineOutputPath(outputPath, "oci-artifact"); err != nil {
 		return nil, fmt.Errorf("failed determining output path: %w", err)
 	}
 

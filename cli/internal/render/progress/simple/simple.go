@@ -25,9 +25,9 @@ func NewSimpleVisualizer[T any](logger *slog.Logger) progress.VisualizerFactory[
 func (v *simpleVisualizer[T]) HandleEvent(event progress.Event[T]) {
 	switch event.State {
 	case progress.Running:
-		v.logger.Info("transformation started", "id", event.ID)
+		v.logger.Debug("transformation started", "id", event.ID)
 	case progress.Completed:
-		v.logger.Info("transformation completed", "id", event.ID)
+		v.logger.Debug("transformation completed", "id", event.ID)
 	case progress.Failed:
 		v.logger.Error("transformation failed", "id", event.ID, "error", event.Err)
 	case progress.Cancelled:
