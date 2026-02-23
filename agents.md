@@ -20,7 +20,7 @@ The task file documentation should be followed located here: https://taskfile.de
 - Avoid flattering, corporate, or marketing language. Maintain a neutral viewpoint.
 - Avoid vague or generic claims not substantiated by context.
 - Do NOT add comments on lines you are adding unless the logic is non-obvious.
-- In tests, always use `t.Context()` instead of `context.Background()` or `context.TODO()`.
+- In tests, prefer `t.Context()` over `context.Background()` or `context.TODO()`. Not yet enforced by linting, but the goal for all new code.
 
 ## Code Review Rules
 
@@ -89,7 +89,7 @@ Three generators exist: `ocmtypegen`, `jsonschemagen`, and `deepcopy-gen`. Use `
 
 ### Linting
 
-Config: `golangci.yml` at repo root. Use `task -a` to find linting targets.
+Config: `golangci.yml` at repo root. Use `task -a` to find linting targets. To auto-fix lint issues, run `task tools:lint -- --fix`.
 
 ### Runtime Type System
 
@@ -109,7 +109,7 @@ Types are registered in `runtime.Scheme` — a thread-safe registry mapping `Typ
 
 - Smart module detection: CI discovers Go modules dynamically and filters based on changed files
 - Tests only run for affected modules on PRs; full suite on main
-- Pipeline: conventional commit validation → auto-labeling → module discovery → lint → unit tests → integration tests → CodeQL → generation verification
+- Pipeline: PR title validation (conventional commit format) → auto-labeling → module discovery → lint → unit tests → integration tests → CodeQL → generation verification
 - Multi-arch builds for CLI and controller (linux/darwin, amd64/arm64)
 
 ---
@@ -127,7 +127,7 @@ For detailed coding patterns, conventions, and idiomatic Go practices used acros
 Each module under `bindings/go/` is an independent Go module. Analyze the target module's `doc.go`, `README.md`, and existing code for structure and conventions before making changes.
 
 - **Testing**: testify only (`require` and `mock`). No Ginkgo. Table-driven tests with `t.Run()`. Start every test with `r := require.New(t)`.
-- **Test data**: Embedded via `//go:embed testdata`.
+- **Test data**: Typically read from `testdata/` directories via `os.ReadFile` or `os.Open`. Some tests use `//go:embed testdata`.
 
 ### cli/
 
