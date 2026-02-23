@@ -684,26 +684,38 @@ func init() {
 JSON → Raw → Typed → modify → Raw → JSON:
 
 ```go
-// 1. JSON arrives
-data := []byte(`{"type": "config/v1", "host": "localhost"}`)
+data := bytes.NewReader([]byte(`{"type": "config/v1", "host": "localhost"}`))
 
-// 2. Unmarshal into Raw (preserves JSON, extracts Type)
-var raw runtime.Raw
-json.Unmarshal(data, &raw)
+raw := &runtime.Raw{}
+if err := scheme.Decode(data, raw); err != nil {
+    return err
+}
 
-// 3. Convert Raw → concrete type via Scheme
 cfg := &v1.Config{}
-scheme.Convert(&raw, cfg)
+if err := scheme.Convert(raw, cfg); err != nil {
+    return err
+}
 
-// 4. Modify
 cfg.Host = "example.com"
 
-// 5. Convert back to Raw
 out := &runtime.Raw{}
-scheme.Convert(cfg, out)
+if err := scheme.Convert(cfg, out); err != nil {
+    return err
+}
 
-// 6. Serialize
-output, _ := json.Marshal(out)
+output, err := json.Marshal(out)
+```
+
+When the concrete type is unknown at compile time, use `NewObject` for dispatch:
+
+```go
+obj, err := scheme.NewObject(raw.Type)
+if err != nil {
+    return err
+}
+if err := scheme.Convert(raw, obj); err != nil {
+    return err
+}
 ```
 
 ### Common Mistakes
