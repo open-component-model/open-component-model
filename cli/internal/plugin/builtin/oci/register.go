@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
@@ -29,7 +28,7 @@ func Register(
 ) error {
 	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithUserAgent(creator), provider.WithTempDir(filesystemConfig.TempFolder))
 
-	resourceRepoPlugin := ocires.NewResourceRepository(inmemory.New(), inmemory.New(), filesystemConfig, ocires.WithUserAgent(creator))
+	resourceRepoPlugin := ocires.NewResourceRepository(filesystemConfig, ocires.WithUserAgent(creator))
 	ociBlobTransformerPlugin := transformer.New(logger)
 
 	return errors.Join(
