@@ -37,7 +37,7 @@ func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 			}
 			credentials := map[string]string{}
 
-			repo, err := createRepository(spec, credentials, tt.filesystemConfig, "test")
+			repo, err := createRepository(spec, credentials, tt.filesystemConfig, nil, "test")
 
 			if tt.expectError {
 				r.Error(err, "expected error")

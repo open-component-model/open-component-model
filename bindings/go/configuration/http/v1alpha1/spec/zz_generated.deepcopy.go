@@ -13,6 +13,51 @@ import (
 func (in *Config) DeepCopyInto(out *Config) {
 	*out = *in
 	out.Type = in.Type
+	if in.Timeout != nil {
+		in, out := &in.Timeout, &out.Timeout
+		*out = new(Timeout)
+		**out = **in
+	}
+	if in.ResponseHeaderTimeout != nil {
+		in, out := &in.ResponseHeaderTimeout, &out.ResponseHeaderTimeout
+		*out = new(Timeout)
+		**out = **in
+	}
+	if in.IdleConnTimeout != nil {
+		in, out := &in.IdleConnTimeout, &out.IdleConnTimeout
+		*out = new(Timeout)
+		**out = **in
+	}
+	if in.TCPDialTimeout != nil {
+		in, out := &in.TCPDialTimeout, &out.TCPDialTimeout
+		*out = new(Timeout)
+		**out = **in
+	}
+	if in.TCPKeepAlive != nil {
+		in, out := &in.TCPKeepAlive, &out.TCPKeepAlive
+		*out = new(Timeout)
+		**out = **in
+	}
+	if in.TLSHandshakeTimeout != nil {
+		in, out := &in.TLSHandshakeTimeout, &out.TLSHandshakeTimeout
+		*out = new(Timeout)
+		**out = **in
+	}
+	if in.RetryMinWait != nil {
+		in, out := &in.RetryMinWait, &out.RetryMinWait
+		*out = new(Timeout)
+		**out = **in
+	}
+	if in.RetryMaxWait != nil {
+		in, out := &in.RetryMaxWait, &out.RetryMaxWait
+		*out = new(Timeout)
+		**out = **in
+	}
+	if in.RetryMaxRetry != nil {
+		in, out := &in.RetryMaxRetry, &out.RetryMaxRetry
+		*out = new(int)
+		**out = **in
+	}
 	return
 }
 

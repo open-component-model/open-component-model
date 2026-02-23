@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/http/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
@@ -39,13 +39,14 @@ func WithUserAgent(userAgent string) Option {
 
 type ResourceRepository struct {
 	filesystemConfig *filesystemv1alpha1.Config
+	httpConfig       *httpv1alpha1.Config
 	userAgent        string
 }
 
 // make sure that ResourceRepository implements the oci ResourceRepository interface
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
-func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
+func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, opts ...Option) *ResourceRepository {
 	options := &Options{}
 	for _, opt := range opts {
 		opt(options)
@@ -57,6 +58,7 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 
 	return &ResourceRepository{
 		filesystemConfig: filesystemConfig,
+		httpConfig:       httpConfig,
 		userAgent:        options.UserAgent,
 	}
 }
@@ -213,7 +215,7 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 }
 
 func (p *ResourceRepository) getRepository(spec *ociv1.Repository, creds map[string]string) (*oci.Repository, error) {
-	repo, err := createRepository(spec, creds, p.filesystemConfig, p.userAgent)
+	repo, err := createRepository(spec, creds, p.filesystemConfig, p.httpConfig, p.userAgent)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -234,6 +236,7 @@ func createRepository(
 	spec *ociv1.Repository,
 	credentials map[string]string,
 	filesystemConfig *filesystemv1alpha1.Config,
+	httpConfig *httpv1alpha1.Config,
 	userAgent string,
 ) (*oci.Repository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
@@ -242,13 +245,11 @@ func createRepository(
 	}
 	urlString := url.Host + url.Path
 
+	client := provider.NewHTTPClient(provider.WithHTTPUserAgent(userAgent), provider.WithHttpConfig(httpConfig))
 	urlResolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(urlString),
 		urlresolver.WithBaseClient(&auth.Client{
-			Client: retry.DefaultClient,
-			Header: map[string][]string{
-				"User-Agent": {userAgent},
-			},
+			Client:     client,
 			Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
 		}))
 	if err != nil {
