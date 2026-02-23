@@ -59,19 +59,25 @@ func CreateAuthClient(address, username, password string) *auth.Client {
 
 const distributionRegistryImage = "registry:3.0.0"
 
-func StartDockerContainerRegistry(t *testing.T, container, htpasswd string) string {
+func StartDockerContainerRegistry(t *testing.T, container, htpasswd string, opts ...testcontainers.ContainerCustomizer) string {
 	t.Helper()
 	// Start containerized registry
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
-	registryContainer, err := registry.Run(t.Context(), distributionRegistryImage,
+
+	baseOpts := []testcontainers.ContainerCustomizer{
 		WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{
 			"REGISTRY_VALIDATION_DISABLED": "true",
 			"REGISTRY_LOG_LEVEL":           "debug",
 		}),
 		testcontainers.WithLogger(log.TestLogger(t)),
-		testcontainers.WithName(container),
-	)
+	}
+	if container != "" {
+		baseOpts = append(baseOpts, testcontainers.WithName(container))
+	}
+	baseOpts = append(baseOpts, opts...)
+
+	registryContainer, err := registry.Run(t.Context(), distributionRegistryImage, baseOpts...)
 	r := require.New(t)
 	r.NoError(err)
 	t.Cleanup(func() {
