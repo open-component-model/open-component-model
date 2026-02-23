@@ -25,14 +25,8 @@ You should be familiar with the following concepts:
 > The following section provides a high-level overview of the OCM K8s Toolkit and its components regarding the
 > deployment of an OCM resource in a very basic scenario.
 
-The primary purpose of OCM K8s Toolkit is simple: Deploy an OCM resource from an OCM component version into a Kubernetes
-cluster.
-
-The implementation, however, is a bit more complex as deployments must be secure and configurable. Additionally, an
-OCM Resource can, in theory, contain any form of deployable resource, for instance a Helm chart, a Kustomization, or
-plain Kubernetes manifests. Each of these resources has its own way of being deployed or
-configured. So, instead of creating a generic deployer that offers all these functionalities, we decided to use existing
-tools that are already available in the Kubernetes ecosystem.
+The primary purpose of OCM K8s Toolkit is simple: Deploy an OCM resource 
+from an OCM component version into a Kubernetes cluster.
 
 The diagram below provides an overview of the architecture of the OCM 
 K8s Toolkit.
