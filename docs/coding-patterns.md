@@ -53,7 +53,7 @@ Some packages use fluent builders where `With*()` methods return `*Builder` for 
 b := NewBuilder(scheme).
     WithTransformer(t).
     WithEvents(ch)
-result, err := b.Build(ctx)
+result, err := b.BuildAndCheck(ctx)
 ```
 
 ---
@@ -304,10 +304,10 @@ For lock-free concurrent access in hot paths (e.g., done-tracking maps).
 Wraps critical sections in closures to centralize lock management:
 
 ```go
-func (g *SyncedGraph[T]) WithReadLock(fn func(d *Graph[T]) error) error {
-    g.mu.RLock()
-    defer g.mu.RUnlock()
-    return fn(g.graph)
+func (g *SyncedDirectedAcyclicGraph[T]) WithReadLock(fn func(d *dag.DirectedAcyclicGraph[T]) error) error {
+    g.dagMu.RLock()
+    defer g.dagMu.RUnlock()
+    return fn(g.dag)
 }
 ```
 
