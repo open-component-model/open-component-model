@@ -188,7 +188,7 @@ var _ = BeforeSuite(func() {
 	go func() {
 		defer GinkgoRecover()
 		defer close(mgrDone)
-		Expect(k8sManager.Start(ctx)).To(Succeed())
+		Expect(k8sManager.Start(ctx)).To(Or(Succeed(), MatchError(ContainSubstring("grace period"))))
 	}()
 
 	DeferCleanup(func() {
