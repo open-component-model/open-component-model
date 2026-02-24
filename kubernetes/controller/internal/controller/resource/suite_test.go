@@ -85,6 +85,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
+
 	Expect(v1alpha1.AddToScheme(scheme.Scheme)).Should(Succeed())
 	Expect(err).NotTo(HaveOccurred())
 
@@ -110,6 +111,7 @@ var _ = BeforeSuite(func() {
 	DeferCleanup(func() {
 		cancel()
 		<-mgrDone
+		Expect(testEnv.Stop()).To(Succeed())
 	})
 
 	events := make(chan string)

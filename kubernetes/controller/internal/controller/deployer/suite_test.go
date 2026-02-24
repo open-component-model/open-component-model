@@ -105,6 +105,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
+
 	Expect(v1alpha1.AddToScheme(scheme.Scheme)).Should(Succeed())
 
 	// +kubebuilder:scaffold:scheme
@@ -129,6 +130,7 @@ var _ = BeforeSuite(func() {
 	DeferCleanup(func() {
 		cancel()
 		<-mgrDone
+		Expect(testEnv.Stop()).To(Succeed())
 	})
 
 	events := make(chan string)

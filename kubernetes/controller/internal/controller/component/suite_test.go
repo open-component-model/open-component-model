@@ -108,6 +108,7 @@ var _ = BeforeSuite(func() {
 	DeferCleanup(func() {
 		cancel()
 		<-mgrDone
+		Expect(testEnv.Stop()).To(Succeed())
 	})
 
 	events := make(chan string)
