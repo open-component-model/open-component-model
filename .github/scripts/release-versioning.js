@@ -229,7 +229,10 @@ export async function determineLatestRelease({ core, github, context }) {
     let releases = [];
     try {
         releases = (await github.rest.repos.listReleases({ owner: context.repo.owner, repo: context.repo.repo, per_page: 100 })).data;
-    } catch (e) { core.warning(`Could not fetch releases: ${e.message}`); }
+    } catch (e) {
+        core.setFailed(`Could not fetch releases: ${e.message}`);
+        return;
+    }
 
     const highestFinal = extractHighestFinalVersion(releases, tagPrefix);
     const setLatest = shouldSetLatest(promotionVersion, highestFinal);
