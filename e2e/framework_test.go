@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
@@ -32,19 +33,36 @@ func TestMain(m *testing.M) {
 }
 
 func (e *TestEnv) NewRegistryProvider(workDir, certsDir string) RegistryProvider {
-	return NewZotProvider(e.Config, workDir, certsDir)
+	switch spec := e.Config.Registry.(type) {
+	case *ZotProviderSpec:
+		return NewZotProvider(spec, workDir, certsDir)
+	default:
+		panic(fmt.Sprintf("unsupported registry provider type: %T", spec))
+	}
 }
 
 func (e *TestEnv) NewClusterProvider(workDir string) ClusterProvider {
-	return NewKindProvider(e.Config, workDir)
+	switch spec := e.Config.Cluster.(type) {
+	case *KindProviderSpec:
+		return NewKindProvider(spec, workDir)
+	default:
+		panic(fmt.Sprintf("unsupported cluster provider type: %T", spec))
+	}
 }
 
 func (e *TestEnv) NewCLIProvider(workDir, certsDir string) CLIProvider {
-	return NewOCMCLIProvider(e.Config, workDir, certsDir)
+	switch spec := e.Config.CLI.(type) {
+	case *ImageCLIProviderSpec:
+		return NewOCMCLIProvider(spec, workDir, certsDir)
+	case *BinaryCLIProviderSpec:
+		panic("binary CLI provider not yet fully implemented in E2E setup")
+	default:
+		panic(fmt.Sprintf("unsupported CLI provider type: %T", spec))
+	}
 }
 
 func (e *TestEnv) NewControllerProvider(workDir string, cluster ClusterProvider) ControllerProvider {
-	return NewOCMControllerProvider(e.Config, workDir, cluster)
+	return NewOCMControllerProvider(workDir, cluster)
 }
 
 // TestMeta defines metadata for a test, including labels and description.

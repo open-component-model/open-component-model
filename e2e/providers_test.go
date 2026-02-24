@@ -57,15 +57,15 @@ type ControllerProvider interface {
 
 // ZotProvider implements RegistryProvider using Zot.
 type ZotProvider struct {
-	Config    *Config
+	Spec      *ZotProviderSpec
 	Container testcontainers.Container
 	CertsDir  string
 	WorkDir   string
 }
 
-func NewZotProvider(cfg *Config, workDir, certsDir string) *ZotProvider {
+func NewZotProvider(spec *ZotProviderSpec, workDir, certsDir string) *ZotProvider {
 	return &ZotProvider{
-		Config:   cfg,
+		Spec:     spec,
 		WorkDir:  workDir,
 		CertsDir: certsDir,
 	}
@@ -193,13 +193,13 @@ func (p *ZotProvider) Teardown(ctx context.Context) error {
 
 // KindProvider implements ClusterProvider using Kind.
 type KindProvider struct {
-	Config  *Config
+	Spec    *KindProviderSpec
 	WorkDir string
 }
 
-func NewKindProvider(cfg *Config, workDir string) *KindProvider {
+func NewKindProvider(spec *KindProviderSpec, workDir string) *KindProvider {
 	return &KindProvider{
-		Config:  cfg,
+		Spec:    spec,
 		WorkDir: workDir,
 	}
 }
@@ -233,15 +233,15 @@ func (p *KindProvider) Teardown(ctx context.Context) error {
 
 // OCMCLIProvider implements CLIProvider using a runner container.
 type OCMCLIProvider struct {
-	Config    *Config
+	Spec      *ImageCLIProviderSpec
 	Container testcontainers.Container
 	WorkDir   string
 	CertsDir  string
 }
 
-func NewOCMCLIProvider(cfg *Config, workDir, certsDir string) *OCMCLIProvider {
+func NewOCMCLIProvider(spec *ImageCLIProviderSpec, workDir, certsDir string) *OCMCLIProvider {
 	return &OCMCLIProvider{
-		Config:   cfg,
+		Spec:     spec,
 		WorkDir:  workDir,
 		CertsDir: certsDir,
 	}
@@ -250,7 +250,7 @@ func NewOCMCLIProvider(cfg *Config, workDir, certsDir string) *OCMCLIProvider {
 func (p *OCMCLIProvider) Setup(ctx context.Context) error {
 	// A. Extract Binary
 	extractReq := testcontainers.ContainerRequest{
-		Image:      p.Config.OCM.Path,
+		Image:      p.Spec.Path,
 		Entrypoint: []string{"/ocm", "version"},
 	}
 	extractC, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -327,14 +327,13 @@ func (p *OCMCLIProvider) Teardown(ctx context.Context) error {
 
 // OCMControllerProvider implements ControllerProvider using Helm and kubectl.
 type OCMControllerProvider struct {
-	Config  *Config
+	// Controllers don't have a distinct config type right now, we just pass what we need.
 	WorkDir string
 	Cluster ClusterProvider
 }
 
-func NewOCMControllerProvider(cfg *Config, workDir string, cluster ClusterProvider) *OCMControllerProvider {
+func NewOCMControllerProvider(workDir string, cluster ClusterProvider) *OCMControllerProvider {
 	return &OCMControllerProvider{
-		Config:  cfg,
 		WorkDir: workDir,
 		Cluster: cluster,
 	}
