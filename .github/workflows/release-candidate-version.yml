@@ -45,7 +45,7 @@ jobs:
       new_version: ${{ steps.compute.outputs.new_version }}
       base_version: ${{ steps.compute.outputs.base_version }}
       promotion_tag: ${{ steps.compute.outputs.promotion_tag }}
-      changelog_artifact: changelog-${{ inputs.component_path }}-${{ steps.compute.outputs.new_version }}
+      changelog_artifact: changelog-${{ steps.compute.outputs.new_version }}
       set_latest: ${{ steps.latest.outputs.set_latest }}
       highest_final_version: ${{ steps.latest.outputs.highest_final_version }}
     steps:
@@ -119,7 +119,7 @@ jobs:
       - name: Upload changelog artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: changelog-${{ inputs.component_path }}-${{ steps.compute.outputs.new_version }}
+          name: changelog-${{ steps.compute.outputs.new_version }}
           path: ${{ runner.temp }}/CHANGELOG.md
           retention-days: 90
           if-no-files-found: error
