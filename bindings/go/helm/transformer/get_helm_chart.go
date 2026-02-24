@@ -70,6 +70,7 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		download.WithVersion(helmAccess.Version),
 		download.WithTempDirBase(transformation.Spec.OutputPath),
 		download.WithCredentials(creds),
+		download.WithAlwaysDownloadProv(true),
 	}
 
 	helmURL := helmAccess.HelmRepository
