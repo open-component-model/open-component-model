@@ -87,7 +87,7 @@ func (h *Handler) Sign(
 
 	priv, err := rsacredentials.PrivateKeyFromCredentials(creds)
 	if err != nil {
-		return descruntime.SignatureInfo{}, err
+		return descruntime.SignatureInfo{}, fmt.Errorf("cannot load private key from credentials for signing: %w", err)
 	}
 	if priv == nil {
 		return descruntime.SignatureInfo{}, ErrMissingPrivateKey
@@ -139,7 +139,7 @@ func (h *Handler) Verify(
 ) error {
 	pubFromCreds, err := rsacredentials.PublicKeyFromCredentials(creds)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot load public key from credentials for verification: %w", err)
 	}
 
 	hash, dig, err := parseDigest(signed.Digest)

@@ -99,7 +99,7 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 	hostname := identity[runtime.IdentityAttributeHostname]
 	if hostname == "" {
 		slog.DebugContext(ctx, "no hostname provided, skipping credential resolution, since docker configs"+
-			"cannot resolve without hostname")
+			"cannot resolve without hostname", "identity", identity)
 		return nil, nil
 	}
 

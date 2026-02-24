@@ -63,7 +63,7 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	}
 
 	// Determine output path
-	if outputPath, err = DetermineOutputPath(outputPath, "oci-artifact", blobContent); err != nil {
+	if outputPath, err = DetermineOutputPath(outputPath, "oci-artifact"); err != nil {
 		return nil, fmt.Errorf("failed determining output path: %w", err)
 	}
 

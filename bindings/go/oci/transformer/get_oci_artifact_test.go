@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -130,7 +129,6 @@ func TestGetOCIArtifact_Transform_OCI_WithOutputPath(t *testing.T) {
 
 	// Create temporary directory for output
 	tempDir := t.TempDir()
-	outputPath := filepath.Join(tempDir, "oci-artifact.tar.gz")
 
 	// Create transformation spec
 	spec := &v1alpha1.GetOCIArtifact{
@@ -154,7 +152,7 @@ func TestGetOCIArtifact_Transform_OCI_WithOutputPath(t *testing.T) {
 					Data: []byte(`{ "imageReference": "ghcr.io/open-component-model/helmexample/charts/mariadb:12.2.7" }`),
 				},
 			},
-			OutputPath: outputPath,
+			OutputPath: tempDir,
 		},
 	}
 
@@ -169,16 +167,15 @@ func TestGetOCIArtifact_Transform_OCI_WithOutputPath(t *testing.T) {
 	require.NotNil(t, transformed.Output)
 	require.NotNil(t, transformed.Output.Resource)
 
-	// Verify file was created
-	assert.FileExists(t, outputPath)
+	// Verify file was created in the output directory
+	outputFile := strings.ReplaceAll(transformed.Output.File.URI, "file://", "")
+	assert.FileExists(t, outputFile)
+	assert.True(t, strings.HasPrefix(outputFile, tempDir))
 
 	// Verify file content
-	fileContent, err := os.ReadFile(outputPath)
+	fileContent, err := os.ReadFile(outputFile)
 	require.NoError(t, err)
 	assert.Equal(t, testBlobData, fileContent)
-
-	// Verify file spec in output
-	assert.Equal(t, "file://"+outputPath, transformed.Output.File.URI)
 
 	// Verify resource in output
 	assert.Equal(t, "test-image", transformed.Output.Resource.Name)

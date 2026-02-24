@@ -1102,9 +1102,6 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 
 	require.NotNil(t, ociOutput.Output.File)
 	require.NotNil(t, ociOutput.Output.File.URI)
-
-	// must match pattern oci-artifact-%s.tar.gz
-	require.Regexp(t, `^oci-artifact-[a-f0-9]+\.tar\.gz$`, filepath.Base(ociOutput.Output.File.URI))
 	require.Equal(t, ociOutput.Output.File.MediaType, "application/vnd.ocm.software.oci.layout.v1+tar+gzip")
 }
 

@@ -50,8 +50,7 @@ func PublicKeyFromCredentials(credentials map[string]string) (*rsapem.RSAPublicK
 			return nil, nil
 		}
 		return &rsapem.RSAPublicKeyPEM{
-			PublicKey:            &pk.PublicKey,
-			UnderlyingPrivateKey: pk,
+			PublicKey: &pk.PublicKey,
 		}, nil
 	}
 	return rsapem.ParseRSAPublicKeyPEM(b), nil
