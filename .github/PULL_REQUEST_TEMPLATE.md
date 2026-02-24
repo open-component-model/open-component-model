@@ -36,5 +36,4 @@ ocm transfer xxx
 ##### Verification
 
 - [ ] I have tested the changes locally by running `ocm`
-  -->
   
