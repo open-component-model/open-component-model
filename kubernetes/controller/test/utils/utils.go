@@ -172,25 +172,37 @@ func DumpLogs(namespace, resourceType string) {
 		GinkgoLogr.Info(msg)
 	}
 
-	logCmd := func(label string, args ...string) {
-		cmd := exec.CommandContext(ctx, args[0], args[1:]...) //nolint:gosec // args are hardcoded in test code
-		output, err := Run(cmd)
-		if err != nil {
-			logLine(fmt.Sprintf("[DIAG] %s: error: %v", label, err))
-		} else {
-			for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-				logLine(fmt.Sprintf("[DIAG] %s: %s", label, line))
-			}
-		}
+	return nil
+}
+
+// DumpLogs dumps pod logs and resource status for the given namespace and resource type.
+// Intended for use in AfterEach to capture state on test failure.
+func DumpLogs(ctx context.Context, namespace, resourceType string) {
+	GinkgoLogr.Info(fmt.Sprintf("=== Diagnostic dump: %s pods in namespace %s ===", resourceType, namespace))
+
+	cmd := exec.CommandContext(ctx, "kubectl", "get", "pods", "-n", namespace, "-o", "wide")
+	output, err := Run(cmd)
+	if err != nil {
+		GinkgoLogr.Info(fmt.Sprintf("Failed to get pods in %s: %v", namespace, err))
+	} else {
+		GinkgoLogr.Info(string(output))
 	}
 
-	logCmd("kro-pods", "kubectl", "get", "pods", "-n", namespace, "-o", "wide")
-	logCmd("kro-events", "kubectl", "get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
-	logCmd("rgd-conditions",
-		"kubectl", "get", resourceType, "-o",
-		"custom-columns=NAME:.metadata.name,ACCEPTED:.status.conditions[?(@.type==\"ResourceGraphAccepted\")].status,ACCEPTED_MSG:.status.conditions[?(@.type==\"ResourceGraphAccepted\")].message,READY:.status.conditions[?(@.type==\"Ready\")].status,READY_MSG:.status.conditions[?(@.type==\"Ready\")].message",
-	)
-	logCmd("kro-logs", "kubectl", "logs", "-n", namespace, "--all-containers", "--tail=100", "-l", "app.kubernetes.io/name=kro")
+	cmd = exec.CommandContext(ctx, "kubectl", "logs", "-n", namespace, "--all-containers", "--tail=200", "-l", "app.kubernetes.io/name=kro")
+	output, err = Run(cmd)
+	if err != nil {
+		GinkgoLogr.Info(fmt.Sprintf("Failed to get kro logs in %s: %v", namespace, err))
+	} else {
+		GinkgoLogr.Info(fmt.Sprintf("=== KRO logs (last 200 lines) ===\n%s", string(output)))
+	}
+
+	cmd = exec.CommandContext(ctx, "kubectl", "get", resourceType, "-o", "yaml")
+	output, err = Run(cmd)
+	if err != nil {
+		GinkgoLogr.Info(fmt.Sprintf("Failed to get %s resources: %v", resourceType, err))
+	} else {
+		GinkgoLogr.Info(fmt.Sprintf("=== %s resource status ===\n%s", resourceType, string(output)))
+	}
 }
 
 // CompareResourceField compares the value of a specific field in a Kubernetes resource

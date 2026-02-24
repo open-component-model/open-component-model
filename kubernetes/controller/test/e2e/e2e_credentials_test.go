@@ -15,12 +15,12 @@ var _ = Describe("Credentials E2E Tests", func() {
 	Context("simple use-cases", func() {
 		testdata := filepath.Join(os.Getenv("PROJECT_DIR"), "test/e2e/testdata")
 
-		AfterEach(func() {
+		AfterEach(func(ctx SpecContext) {
 			if !CurrentSpecReport().Failed() {
 				return
 			}
 
-			utils.DumpLogs("kro", "rgd")
+			utils.DumpLogs(ctx, "kro", "rgd")
 		})
 
 		It("basic-auth", func(ctx SpecContext) {
