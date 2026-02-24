@@ -35,9 +35,9 @@ ocm transfer xxx
 
 ##### Verification
 
-- [] I have testing the changes locally by running `ocm`
-- [] I have compared the behaviour with the old CLI (if applicable)
-  - [] The behaviour is the same as the old CLI
+- [ ] I have tested the changes locally by running `ocm`
+- [ ] I have compared the behaviour with the old CLI (if applicable)
+  - [ ] The behaviour is the same as the old CLI
   <!--
   Explain why the behaviour may differ and how the descission was made
   -->
