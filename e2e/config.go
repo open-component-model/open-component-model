@@ -13,7 +13,7 @@ import (
 var configPath string
 
 func init() {
-	flag.StringVar(&configPath, "e2e-config", "", "Path to e2e test configuration YAML file")
+	flag.StringVar(&configPath, "e2e-config", "testdata/e2e-config.yaml", "Path to e2e test configuration YAML file")
 }
 
 // ParseConfig parses the specified yaml file using the generic configuration scheme.

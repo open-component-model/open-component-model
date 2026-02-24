@@ -41,7 +41,7 @@ func (e *TestEnv) NewRegistryProvider(workDir, certsDir string) RegistryProvider
 	}
 
 	if len(configs) == 0 {
-		return NewZotProvider(&ZotProviderSpec{Version: "latest"}, workDir, certsDir)
+		panic("no registry provider configuration found")
 	}
 
 	spec, err := DecodeProvider(configs[0].Provider)
@@ -64,7 +64,7 @@ func (e *TestEnv) NewClusterProvider(workDir string) ClusterProvider {
 	}
 
 	if len(configs) == 0 {
-		return NewKindProvider(&KindProviderSpec{Version: "kindest/node:v1.29.2"}, workDir)
+		panic("no cluster provider configuration found")
 	}
 
 	spec, err := DecodeProvider(configs[0].Provider)
@@ -87,7 +87,7 @@ func (e *TestEnv) NewCLIProvider(workDir, certsDir string) CLIProvider {
 	}
 
 	if len(configs) == 0 {
-		return NewOCMCLIProvider(&ImageCLIProviderSpec{Path: "ghcr.io/open-component-model/cli@sha256:e2571d4df8b1816075a169c0b4e6851cae59b75f4f786f2a00bb832ee0db868e"}, workDir, certsDir)
+		panic("no CLI provider configuration found")
 	}
 
 	spec, err := DecodeProvider(configs[0].Provider)

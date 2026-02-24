@@ -1,0 +1,14 @@
+type: generic.config.ocm.software/v1
+configurations:
+  - type: registry.provider.ocm.software
+    provider:
+      type: zot
+      version: latest
+  - type: cluster.provider.ocm.software
+    provider:
+      type: kind
+      version: kindest/node:v1.29.2
+  - type: cli.provider.ocm.software
+    provider:
+      type: image
+      path: ghcr.io/open-component-model/cli@sha256:e2571d4df8b1816075a169c0b4e6851cae59b75f4f786f2a00bb832ee0db868e
