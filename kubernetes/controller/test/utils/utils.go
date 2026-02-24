@@ -187,7 +187,7 @@ func DumpLogs(namespace, resourceType string) {
 	}
 
 	logCmd := func(label string, args ...string) {
-		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+		cmd := exec.CommandContext(ctx, args[0], args[1:]...) //nolint:gosec // args are hardcoded in test code
 		output, err := Run(cmd)
 		if err != nil {
 			logLine(fmt.Sprintf("[DIAG] %s: error: %v", label, err))
