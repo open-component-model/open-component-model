@@ -43,6 +43,10 @@ func (e *TestEnv) NewCLIProvider(workDir, certsDir string) CLIProvider {
 	return NewOCMCLIProvider(e.Config, workDir, certsDir)
 }
 
+func (e *TestEnv) NewControllerProvider(workDir string, cluster ClusterProvider) ControllerProvider {
+	return NewOCMControllerProvider(e.Config, workDir, cluster)
+}
+
 // TestMeta defines metadata for a test, including labels and description.
 type TestMeta struct {
 	ID          string // Optional unique ID

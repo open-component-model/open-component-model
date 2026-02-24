@@ -10,3 +10,16 @@ components:
     input:
       type: utf8
       text: "Hello, Conformance World!"
+  - name: sample-configmap
+    version: v1.0.0
+    type: plainText
+    input:
+      type: utf8
+      text: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: sample-configmap
+          namespace: default
+        data:
+          key: "value from OCM component"

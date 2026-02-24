@@ -1,12 +1,15 @@
 package e2e
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -27,6 +30,23 @@ func TestConformance(t *testing.T) {
 	registry := env.NewRegistryProvider(workDir, certsDir)
 	require.NoError(t, registry.Setup(ctx))
 	t.Cleanup(func() { _ = registry.Teardown(ctx) })
+
+	cluster := env.NewClusterProvider(workDir)
+	require.NoError(t, cluster.Setup(ctx))
+	t.Cleanup(func() { _ = cluster.Teardown(ctx) })
+
+	controllers := env.NewControllerProvider(workDir, cluster)
+	require.NoError(t, controllers.Setup(ctx, certsDir))
+	t.Cleanup(func() { _ = controllers.Teardown(ctx) })
+
+	t.Cleanup(func() {
+		if t.Failed() {
+			out, err := exec.CommandContext(context.Background(), "kubectl", "logs", "-n", "ocm-system", "-l", "control-plane=controller-manager", "--kubeconfig", cluster.GetKubeconfig()).CombinedOutput()
+			t.Logf("Controller Logs on Failure:\nErr: %v\n%s", err, string(out))
+			outCRs, err := exec.CommandContext(context.Background(), "kubectl", "get", "repository,component,resource,deployer", "-A", "-o", "yaml", "--kubeconfig", cluster.GetKubeconfig()).CombinedOutput()
+			t.Logf("Applied CRs on Failure:\nErr: %v\n%s", err, string(outCRs))
+		}
+	})
 
 	cli := env.NewCLIProvider(workDir, certsDir)
 	require.NoError(t, cli.Setup(ctx))
@@ -70,12 +90,95 @@ configurations:
 	cmd.Dir = workDir // Taskfile is copied here
 	cmd.Env = os.Environ()
 
-	out, err := cmd.CombinedOutput()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
 	if err != nil {
-		t.Fatalf("Task execution failed: %s\nOutput:\n%s", err, string(out))
+		t.Fatalf("Task execution failed: %v\nStdout:\n%s\nStderr:\n%s", err, stdout.String(), stderr.String())
 	} else {
-		t.Logf("Task execution succeeded:\n%s", string(out))
+		t.Logf("Task execution succeeded:\nStdout:\n%s\nStderr:\n%s", stdout.String(), stderr.String())
 	}
+
+	// 10. Apply Custom Resources to deploy ConfigMap
+	crs := fmt.Sprintf(`---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: conformance-repository
+  namespace: default
+spec:
+  repositorySpec:
+    baseUrl: %s
+    type: OCIRegistry
+  ocmConfig:
+  - kind: Secret
+    name: zot-ocmconfig
+    namespace: default
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: conformance-component
+  namespace: default
+spec:
+  component: ocm.software/conformance-test-component
+  semver: 1.0.0
+  repositoryRef:
+    name: conformance-repository
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: conformance-resource
+  namespace: default
+spec:
+  componentRef:
+    name: conformance-component
+  resource:
+    byReference:
+      resource:
+        name: sample-configmap
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: conformance-deployer
+  namespace: default
+spec:
+  resourceRef:
+    name: conformance-resource
+    namespace: default
+`, registry.GetURL())
+
+	// Create Secret with Zot coordinates
+	ocmConfigCmd := exec.CommandContext(ctx, "kubectl", "create", "secret", "generic", "zot-ocmconfig",
+		"--from-file=.ocmconfig="+filepath.Join(workDir, ".ocmconfig"),
+		"-n", "default",
+		"--kubeconfig", cluster.GetKubeconfig(),
+	)
+	if out, err := ocmConfigCmd.CombinedOutput(); err != nil {
+		t.Fatalf("Failed to create ocmconfig secret: %v\nOutput: %s", err, string(out))
+	}
+
+	crsFile := filepath.Join(workDir, "crs.yaml")
+	require.NoError(t, os.WriteFile(crsFile, []byte(crs), 0644))
+
+	applyCmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", crsFile, "--kubeconfig", cluster.GetKubeconfig())
+	if out, err := applyCmd.CombinedOutput(); err != nil {
+		t.Fatalf("Failed to apply CRs: %v\nOutput: %s", err, string(out))
+	}
+
+	// 11. Verify ConfigMap deployed
+	t.Log("Waiting for ConfigMap to be deployed by controllers...")
+	require.Eventually(t, func() bool {
+		checkCmd := exec.CommandContext(ctx, "kubectl", "get", "configmap", "sample-configmap", "-n", "default", "--kubeconfig", cluster.GetKubeconfig())
+		return checkCmd.Run() == nil
+	}, 2*time.Minute, 5*time.Second, "ConfigMap should be deployed by OCM controllers")
 }
 
 // copyTestData recursively copies files from src to dst.

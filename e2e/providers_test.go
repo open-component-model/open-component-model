@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -45,6 +46,12 @@ type CLIProvider interface {
 	Setup(ctx context.Context) error
 	Exec(ctx context.Context, args ...string) (string, error)
 	GetContainerID() string
+	Teardown(ctx context.Context) error
+}
+
+// ControllerProvider defines the interface for the OCM Kubernetes controllers provider.
+type ControllerProvider interface {
+	Setup(ctx context.Context, certsDir string) error
 	Teardown(ctx context.Context) error
 }
 
@@ -317,6 +324,107 @@ func (p *OCMCLIProvider) Teardown(ctx context.Context) error {
 }
 
 // Certificate Helpers (moved from conformance_test.go)
+
+// OCMControllerProvider implements ControllerProvider using Helm and kubectl.
+type OCMControllerProvider struct {
+	Config  *Config
+	WorkDir string
+	Cluster ClusterProvider
+}
+
+func NewOCMControllerProvider(cfg *Config, workDir string, cluster ClusterProvider) *OCMControllerProvider {
+	return &OCMControllerProvider{
+		Config:  cfg,
+		WorkDir: workDir,
+		Cluster: cluster,
+	}
+}
+
+func (p *OCMControllerProvider) Setup(ctx context.Context, certsDir string) error {
+	kubeconfig := p.Cluster.GetKubeconfig()
+
+	// 1. Build and Load Docker Image
+	// Build the controller image locally for E2E
+	buildCmd := exec.CommandContext(ctx, "task", "-d", filepath.Join("..", "kubernetes", "controller"), "docker-build", "LOAD=true")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("task docker-build failed: %v\nOutput: %s", err, string(out))
+	}
+
+	// Load into the kind cluster
+	// Cluster config in framework_test.go names the cluster "ocm-conformance"
+	loadCmd := exec.CommandContext(ctx, "kind", "load", "docker-image", "ghcr.io/open-component-model/kubernetes/controller:latest", "--name", "ocm-conformance")
+	if out, err := loadCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("kind load failed: %v\nOutput: %s", err, string(out))
+	}
+
+	// 2. Install Controller using Helm
+	helmCmd := exec.CommandContext(ctx, "helm", "upgrade", "-i", "ocm",
+		"../kubernetes/controller/chart",
+		"-n", "ocm-system", "--create-namespace",
+		"--set", "manager.image.repository=ghcr.io/open-component-model/kubernetes/controller",
+		"--set", "manager.image.tag=latest",
+		"--set", "fullnameOverride=ocm-controller",
+		"--kubeconfig", kubeconfig,
+	)
+	if out, err := helmCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("helm install failed: %v\nOutput: %s", err, string(out))
+	}
+
+	// 2. Create Secret for Zot CA
+	caCertPath := filepath.Join(certsDir, "ca.crt")
+	kubectlSecret := exec.CommandContext(ctx, "kubectl", "create", "secret", "generic", "zot-ca",
+		"--from-file=ca.crt="+caCertPath,
+		"-n", "ocm-system",
+		"--kubeconfig", kubeconfig,
+	)
+	if out, err := kubectlSecret.CombinedOutput(); err != nil {
+		return fmt.Errorf("kubectl create secret failed: %v\nOutput: %s", err, string(out))
+	}
+
+	// 3. Patch Deployment to mount CA
+	patch := `{"spec":{"template":{"spec":{"volumes":[{"name":"zot-ca","secret":{"secretName":"zot-ca"}}],"containers":[{"name":"manager","env":[{"name":"SSL_CERT_FILE","value":"/etc/ssl/certs/zot-ca.crt"}],"volumeMounts":[{"name":"zot-ca","mountPath":"/etc/ssl/certs/zot-ca.crt","subPath":"ca.crt"}]}]}}}}`
+	kubectlPatch := exec.CommandContext(ctx, "kubectl", "patch", "deployment", "ocm-controller-controller-manager",
+		"-n", "ocm-system",
+		"-p", patch,
+		"--kubeconfig", kubeconfig,
+	)
+	if out, err := kubectlPatch.CombinedOutput(); err != nil {
+		return fmt.Errorf("kubectl patch failed: %v\nOutput: %s", err, string(out))
+	}
+
+	// 4. Wait for deployment to be ready
+	kubectlWait := exec.CommandContext(ctx, "kubectl", "rollout", "status", "deployment", "ocm-controller-controller-manager",
+		"-n", "ocm-system",
+		"--timeout=300s",
+		"--kubeconfig", kubeconfig,
+	)
+	if out, err := kubectlWait.CombinedOutput(); err != nil {
+		describeCmd := exec.CommandContext(ctx, "kubectl", "describe", "pods", "-n", "ocm-system", "--kubeconfig", kubeconfig)
+		describeOut, _ := describeCmd.CombinedOutput()
+		logCmd := exec.CommandContext(ctx, "kubectl", "logs", "-n", "ocm-system", "-l", "control-plane=controller-manager", "--kubeconfig", kubeconfig)
+		logOut, _ := logCmd.CombinedOutput()
+		return fmt.Errorf("kubectl wait failed: %v\nOutput: %s\nDescribe: %s\nLogs: %s", err, string(out), string(describeOut), string(logOut))
+	}
+
+	// 5. Grant ClusterAdmin to the controller's ServiceAccount (for Deployer to apply resources)
+	kubectlRbac := exec.CommandContext(ctx, "kubectl", "create", "clusterrolebinding", "ocm-controller-e2e-admin",
+		"--clusterrole=cluster-admin",
+		"--serviceaccount=ocm-system:ocm-controller-controller-manager",
+		"--kubeconfig", kubeconfig,
+	)
+	if err := kubectlRbac.Run(); err != nil {
+		// ignore ALREADY EXISTS error
+	}
+
+	return nil
+}
+
+func (p *OCMControllerProvider) Teardown(ctx context.Context) error {
+	kubeconfig := p.Cluster.GetKubeconfig()
+	cmd := exec.CommandContext(ctx, "helm", "uninstall", "ocm", "-n", "ocm-system", "--kubeconfig", kubeconfig)
+	_ = cmd.Run()
+	return nil
+}
 
 func generateCA() ([]byte, []byte, error) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
