@@ -191,19 +191,24 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 
 	switch extractionPolicy {
 	case ExtractionPolicyAuto:
-		extractedFS, decompressedOrOriginal, err := extractFSFromBlob(data)
+		// decompress in any case - DecompressedBlob lazily decompresses or returns the original blob based on the media type
+		decompressedOrOriginal, err := compression.Decompress(data)
 		if err != nil {
-			if errors.Is(err, ErrCannotExtractFS) {
-				if decompressedOrOriginal != nil {
-					// use the DecompressBlob proxy to access the inner ReaderCloser if available.
-					// It will decompress if the algorithm is supported, or just pass through if not compressed at all.
-					return shared.SaveBlobToFile(decompressedOrOriginal, finalOutputPath)
-				}
-				return shared.SaveBlobToFile(data, finalOutputPath)
-			}
-			return err
+			return fmt.Errorf("decompressing resource failed: %w", err)
 		}
-		return os.CopyFS(finalOutputPath, extractedFS)
+
+		// try extracting FS
+		extractedFS, err := extractFSFromBlob(decompressedOrOriginal)
+		if err != nil && !errors.Is(err, ErrCannotExtractFS) {
+			return fmt.Errorf("extracting resource as filesystem failed: %w", err)
+		}
+
+		if extractedFS != nil {
+			return os.CopyFS(finalOutputPath, extractedFS)
+		}
+
+		// if we cannot extract a fs, since it's not supported, return the decompressed blob
+		return shared.SaveBlobToFile(decompressedOrOriginal, finalOutputPath)
 	case ExtractionPolicyDisable:
 		fallthrough
 	default:
@@ -213,38 +218,34 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 
 var ErrCannotExtractFS = errors.New("cannot extract resource as filesystem")
 
-func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, decompressedOrOriginal blob.ReadOnlyBlob, err error) {
-	decompressedOrOriginal, err = compression.Decompress(b)
-	if err != nil {
-		return nil, decompressedOrOriginal, fmt.Errorf("failed to decompress resource: %w", err)
-	}
-	mediaTypeAware, ok := decompressedOrOriginal.(blob.MediaTypeAware)
+func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, err error) {
+	mediaTypeAware, ok := b.(blob.MediaTypeAware)
 	if !ok {
 		// if were not media type aware, it's unsafe to try to extract it, avoid
-		return nil, decompressedOrOriginal, ErrCannotExtractFS
+		return nil, ErrCannotExtractFS
 	}
 
 	mediaType, ok := mediaTypeAware.MediaType()
 	if !ok {
-		return nil, decompressedOrOriginal, ErrCannotExtractFS
+		return nil, ErrCannotExtractFS
 	}
 
 	// TODO(jakobmoellerdev): once we add more compression algorithms, use blob media type for discovery.
 	//  For now we just support tar.
 	switch {
 	case isTar(mediaType):
-		data, err := decompressedOrOriginal.ReadCloser()
+		data, err := b.ReadCloser()
 		if err != nil {
-			return nil, decompressedOrOriginal, fmt.Errorf("failed to read resource: %w", err)
+			return nil, fmt.Errorf("failed to read resource: %w", err)
 		}
 		defer func() {
 			err = errors.Join(err, data.Close())
 		}()
 
 		f, err := tarfs.New(data)
-		return f, decompressedOrOriginal, err
+		return f, err
 	default:
-		return nil, decompressedOrOriginal, ErrCannotExtractFS
+		return nil, ErrCannotExtractFS
 	}
 }
 
