@@ -393,3 +393,17 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker system prune --force
+
+  status-check:
+    name: Status Check
+    runs-on: ubuntu-latest
+    needs: [E2E, publish]
+    if: always()
+    steps:
+      - name: Fail if E2E did not succeed
+        run: |
+          if [[ "${{ needs.E2E.result }}" != "success" ]]; then
+            echo "::error::E2E tests did not pass (result: ${{ needs.E2E.result }})"
+            exit 1
+          fi
+
