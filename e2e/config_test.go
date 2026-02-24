@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	genericspecv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 )
 
 func TestParseConfig(t *testing.T) {
@@ -39,17 +40,32 @@ configurations:
 	cfg := ParseConfig()
 
 	// Verify CLI
-	cliSpec, ok := cfg.CLI.(*BinaryCLIProviderSpec)
+	cliConfigs, err := genericspecv1.FilterForType[*CLIProviderConfig](DefaultScheme, cfg)
+	require.NoError(t, err)
+	require.Len(t, cliConfigs, 1)
+	cliProvider, err := DecodeProvider(cliConfigs[0].Provider)
+	require.NoError(t, err)
+	cliSpec, ok := cliProvider.(*BinaryCLIProviderSpec)
 	require.True(t, ok)
 	require.Equal(t, "/usr/local/bin/ocm", cliSpec.Path)
 
 	// Verify Registry
-	registrySpec, ok := cfg.Registry.(*ZotProviderSpec)
+	registryConfigs, err := genericspecv1.FilterForType[*RegistryProviderConfig](DefaultScheme, cfg)
+	require.NoError(t, err)
+	require.Len(t, registryConfigs, 1)
+	registryProvider, err := DecodeProvider(registryConfigs[0].Provider)
+	require.NoError(t, err)
+	registrySpec, ok := registryProvider.(*ZotProviderSpec)
 	require.True(t, ok)
 	require.Equal(t, "v1.2.3", registrySpec.Version)
 
 	// Verify Cluster
-	clusterSpec, ok := cfg.Cluster.(*KindProviderSpec)
+	clusterConfigs, err := genericspecv1.FilterForType[*ClusterProviderConfig](DefaultScheme, cfg)
+	require.NoError(t, err)
+	require.Len(t, clusterConfigs, 1)
+	clusterProvider, err := DecodeProvider(clusterConfigs[0].Provider)
+	require.NoError(t, err)
+	clusterSpec, ok := clusterProvider.(*KindProviderSpec)
 	require.True(t, ok)
 	require.Equal(t, "v4.5.6", clusterSpec.Version)
 
@@ -57,14 +73,6 @@ configurations:
 	configPath = "" // reset flag
 
 	cfgDefault := ParseConfig()
-
-	cliDefault, ok := cfgDefault.CLI.(*ImageCLIProviderSpec)
-	require.True(t, ok)
-	require.Contains(t, cliDefault.Path, "ghcr.io/open-component-model/cli")
-
-	_, ok = cfgDefault.Registry.(*ZotProviderSpec)
-	require.True(t, ok)
-
-	_, ok = cfgDefault.Cluster.(*KindProviderSpec)
-	require.True(t, ok)
+	require.NotNil(t, cfgDefault)
+	require.Empty(t, cfgDefault.Configurations) // the defaults are handled in framework_test.go now, ParseConfig simply parses whatever is there.
 }

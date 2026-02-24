@@ -79,6 +79,6 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace ocm.software/open-component-model/bindings/go/runtime => ../bindings/go/runtime
-
-replace ocm.software/open-component-model/bindings/go/configuration => ../bindings/go/configuration
+//replace ocm.software/open-component-model/bindings/go/runtime => ../bindings/go/runtime
+//
+//replace ocm.software/open-component-model/bindings/go/configuration => ../bindings/go/configuration

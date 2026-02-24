@@ -16,20 +16,13 @@ func init() {
 	flag.StringVar(&configPath, "e2e-config", "", "Path to e2e test configuration YAML file")
 }
 
-// Config holds the configuration for the e2e tests.
-type Config struct {
-	Registry runtime.Typed
-	Cluster  runtime.Typed
-	CLI      runtime.Typed
-}
-
 // ParseConfig parses the specified yaml file using the generic configuration scheme.
-func ParseConfig() *Config {
+func ParseConfig() *genericspecv1.Config {
 	if !flag.Parsed() {
 		flag.Parse()
 	}
 
-	cfg := &Config{}
+	genericCfg := &genericspecv1.Config{}
 
 	if configPath != "" {
 		data, err := os.ReadFile(configPath)
@@ -38,61 +31,16 @@ func ParseConfig() *Config {
 			os.Exit(1)
 		}
 
-		// Decode the outer generic config list
-		genericCfg := &genericspecv1.Config{}
 		if err := DefaultScheme.Decode(bytes.NewReader(data), genericCfg); err != nil {
 			fmt.Printf("Failed to decode e2e config file: %v\n", err)
 			os.Exit(1)
 		}
-
-		// Process each configuration
-		for _, rawCfg := range genericCfg.Configurations {
-			// Convert raw wrapper to a typed config wrapper (e.g., RegistryProviderConfig)
-			obj, err := DefaultScheme.NewObject(rawCfg.Type)
-			if err != nil {
-				continue // not an e2e config wrapper
-			}
-			if err := DefaultScheme.Convert(rawCfg, obj); err != nil {
-				fmt.Printf("Failed to convert raw config to wrapper: %v\n", err)
-				os.Exit(1)
-			}
-
-			// Extract the provider spec based on the wrapper type
-			switch wrapper := obj.(type) {
-			case *RegistryProviderConfig:
-				spec, err := decodeProvider(wrapper.Provider)
-				if err != nil {
-					fmt.Printf("Failed to decode registry provider spec: %v\n", err)
-					os.Exit(1)
-				}
-				cfg.Registry = spec
-			case *ClusterProviderConfig:
-				spec, err := decodeProvider(wrapper.Provider)
-				if err != nil {
-					fmt.Printf("Failed to decode cluster provider spec: %v\n", err)
-					os.Exit(1)
-				}
-				cfg.Cluster = spec
-			case *CLIProviderConfig:
-				spec, err := decodeProvider(wrapper.Provider)
-				if err != nil {
-					fmt.Printf("Failed to decode CLI provider spec: %v\n", err)
-					os.Exit(1)
-				}
-				cfg.CLI = spec
-			}
-		}
-	} else {
-		// Provide reasonable defaults if no file provided
-		cfg.Registry = &ZotProviderSpec{Version: "latest"}
-		cfg.Cluster = &KindProviderSpec{Version: "kindest/node:v1.29.2"}
-		cfg.CLI = &ImageCLIProviderSpec{Path: "ghcr.io/open-component-model/cli@sha256:e2571d4df8b1816075a169c0b4e6851cae59b75f4f786f2a00bb832ee0db868e"}
 	}
 
-	return cfg
+	return genericCfg
 }
 
-func decodeProvider(raw *runtime.Raw) (runtime.Typed, error) {
+func DecodeProvider(raw *runtime.Raw) (runtime.Typed, error) {
 	if raw == nil {
 		return nil, fmt.Errorf("provider configuration is missing")
 	}

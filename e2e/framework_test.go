@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	genericspecv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 )
 
 var (
@@ -13,7 +15,7 @@ var (
 
 // TestEnv holds the configuration for the test execution.
 type TestEnv struct {
-	Config *Config
+	Config *genericspecv1.Config
 }
 
 // TestMain acts as the global entry point for the test suite.
@@ -33,31 +35,73 @@ func TestMain(m *testing.M) {
 }
 
 func (e *TestEnv) NewRegistryProvider(workDir, certsDir string) RegistryProvider {
-	switch spec := e.Config.Registry.(type) {
+	configs, err := genericspecv1.FilterForType[*RegistryProviderConfig](DefaultScheme, e.Config)
+	if err != nil {
+		panic(fmt.Sprintf("failed to filter registry configs: %v", err))
+	}
+
+	if len(configs) == 0 {
+		return NewZotProvider(&ZotProviderSpec{Version: "latest"}, workDir, certsDir)
+	}
+
+	spec, err := DecodeProvider(configs[0].Provider)
+	if err != nil {
+		panic(fmt.Sprintf("failed to decode registry provider: %v", err))
+	}
+
+	switch s := spec.(type) {
 	case *ZotProviderSpec:
-		return NewZotProvider(spec, workDir, certsDir)
+		return NewZotProvider(s, workDir, certsDir)
 	default:
-		panic(fmt.Sprintf("unsupported registry provider type: %T", spec))
+		panic(fmt.Sprintf("unsupported registry provider type: %T", s))
 	}
 }
 
 func (e *TestEnv) NewClusterProvider(workDir string) ClusterProvider {
-	switch spec := e.Config.Cluster.(type) {
+	configs, err := genericspecv1.FilterForType[*ClusterProviderConfig](DefaultScheme, e.Config)
+	if err != nil {
+		panic(fmt.Sprintf("failed to filter cluster configs: %v", err))
+	}
+
+	if len(configs) == 0 {
+		return NewKindProvider(&KindProviderSpec{Version: "kindest/node:v1.29.2"}, workDir)
+	}
+
+	spec, err := DecodeProvider(configs[0].Provider)
+	if err != nil {
+		panic(fmt.Sprintf("failed to decode cluster provider: %v", err))
+	}
+
+	switch s := spec.(type) {
 	case *KindProviderSpec:
-		return NewKindProvider(spec, workDir)
+		return NewKindProvider(s, workDir)
 	default:
-		panic(fmt.Sprintf("unsupported cluster provider type: %T", spec))
+		panic(fmt.Sprintf("unsupported cluster provider type: %T", s))
 	}
 }
 
 func (e *TestEnv) NewCLIProvider(workDir, certsDir string) CLIProvider {
-	switch spec := e.Config.CLI.(type) {
+	configs, err := genericspecv1.FilterForType[*CLIProviderConfig](DefaultScheme, e.Config)
+	if err != nil {
+		panic(fmt.Sprintf("failed to filter CLI configs: %v", err))
+	}
+
+	if len(configs) == 0 {
+		return NewOCMCLIProvider(&ImageCLIProviderSpec{Path: "ghcr.io/open-component-model/cli@sha256:e2571d4df8b1816075a169c0b4e6851cae59b75f4f786f2a00bb832ee0db868e"}, workDir, certsDir)
+	}
+
+	spec, err := DecodeProvider(configs[0].Provider)
+	if err != nil {
+		panic(fmt.Sprintf("failed to decode CLI provider: %v", err))
+	}
+
+	switch s := spec.(type) {
 	case *ImageCLIProviderSpec:
-		return NewOCMCLIProvider(spec, workDir, certsDir)
+		return NewOCMCLIProvider(s, workDir, certsDir)
 	case *BinaryCLIProviderSpec:
 		panic("binary CLI provider not yet fully implemented in E2E setup")
 	default:
-		panic(fmt.Sprintf("unsupported CLI provider type: %T", spec))
+		panic(fmt.Sprintf("unsupported CLI provider type: %T", s))
 	}
 }
 
