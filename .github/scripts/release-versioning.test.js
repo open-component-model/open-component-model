@@ -1,5 +1,12 @@
 import assert from "assert";
-import { computeNextVersions, isStableNewer, parseBranch, parseVersion } from "./compute-rc-version.js";
+import {
+    computeNextVersions,
+    isStableNewer,
+    parseBranch,
+    parseVersion,
+    extractHighestFinalVersion,
+    shouldSetLatest,
+} from "./release-versioning.js";
 
 // ----------------------------------------------------------
 // parseVersion tests
@@ -119,6 +126,68 @@ assert.ok(
     "Should return false if no stable tag"
 );
 
-// Note: sortVersions was removed - using git's native --sort=version:refname instead
+// ----------------------------------------------------------
+// extractHighestFinalVersion tests
+// ----------------------------------------------------------
+const mockReleases = [
+    { prerelease: false, tag_name: "cli/v0.1.0" },
+    { prerelease: true, tag_name: "cli/v0.1.1-rc.1" },
+    { prerelease: false, tag_name: "cli/v0.1.2" },
+    { prerelease: false, tag_name: "cli/v0.2.0" },
+    { prerelease: false, tag_name: "other/v1.0.0" },
+    { prerelease: true, tag_name: "cli/v0.3.0-rc.1" },
+];
+
+assert.strictEqual(
+    extractHighestFinalVersion(mockReleases, "cli/v"),
+    "0.2.0",
+    "Should return highest non-prerelease version for prefix"
+);
+
+assert.strictEqual(
+    extractHighestFinalVersion(mockReleases, "other/v"),
+    "1.0.0",
+    "Should filter by tag prefix"
+);
+
+assert.strictEqual(
+    extractHighestFinalVersion([], "cli/v"),
+    "",
+    "Should return empty string for no releases"
+);
+
+assert.strictEqual(
+    extractHighestFinalVersion([{ prerelease: true, tag_name: "cli/v0.1.0-rc.1" }], "cli/v"),
+    "",
+    "Should return empty string if only prereleases exist"
+);
+
+// ----------------------------------------------------------
+// shouldSetLatest tests
+// ----------------------------------------------------------
+assert.ok(
+    shouldSetLatest("0.2.0", ""),
+    "Should return true if no existing final version"
+);
+
+assert.ok(
+    shouldSetLatest("0.2.0", "0.1.0"),
+    "Should return true if promotion > highest"
+);
+
+assert.ok(
+    shouldSetLatest("0.2.0", "0.2.0"),
+    "Should return true if promotion == highest"
+);
+
+assert.ok(
+    !shouldSetLatest("0.1.0", "0.2.0"),
+    "Should return false if promotion < highest"
+);
+
+assert.ok(
+    shouldSetLatest("0.10.0", "0.9.0"),
+    "Should handle numeric comparison correctly (0.10 > 0.9)"
+);
 
 console.log("✅ All tests passed.");

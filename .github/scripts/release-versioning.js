@@ -216,3 +216,44 @@ export function parseVersion(tag) {
     return version.split(".").map(Number);
 }
 
+// --------------------------
+// Latest release determination
+// --------------------------
+
+/** GitHub Actions entrypoint for determining if release should be latest */
+export async function determineLatestRelease({ core, github, context }) {
+    const { COMPONENT_PATH: componentPath, PROMOTION_VERSION: promotionVersion } = process.env;
+    if (!componentPath || !promotionVersion) return core.setFailed("Missing COMPONENT_PATH or PROMOTION_VERSION");
+
+    const tagPrefix = `${componentPath}/v`;
+    let releases = [];
+    try {
+        releases = (await github.rest.repos.listReleases({ owner: context.repo.owner, repo: context.repo.repo, per_page: 100 })).data;
+    } catch (e) {
+        core.setFailed(`Could not fetch releases: ${e.message}`);
+        return;
+    }
+
+    const highestFinal = extractHighestFinalVersion(releases, tagPrefix);
+    const setLatest = shouldSetLatest(promotionVersion, highestFinal);
+
+    core.setOutput('set_latest', setLatest ? 'true' : 'false');
+    core.setOutput('highest_final_version', highestFinal || '(none)');
+    core.info(setLatest ? `✅ Will set :latest (${promotionVersion} >= ${highestFinal || 'none'})` : `⚠️ Will NOT set :latest (${promotionVersion} < ${highestFinal})`);
+
+    await core.summary.addRaw('---').addEOL().addHeading('Latest Tag Decision', 2)
+        .addTable([[{ data: 'Field', header: true }, { data: 'Value', header: true }], ['Final Version', promotionVersion], ['Highest Final Version', highestFinal || '(none)'], ['Will Set Latest', setLatest ? '✅ Yes' : '⚠️ No']]).write();
+}
+
+/** Extract highest final (non-prerelease) version from releases */
+export function extractHighestFinalVersion(releases, tagPrefix) {
+    const versions = releases.filter(r => !r.prerelease && r.tag_name.startsWith(tagPrefix))
+        .map(r => r.tag_name.replace(tagPrefix, '')).filter(v => /^\d+\.\d+\.\d+$/.test(v));
+    if (!versions.length) return '';
+    return versions.sort((a, b) => isStableNewer(`v${a}`, `v${b}`) ? 1 : -1).pop();
+}
+
+/** Determine if promotion version should be tagged as latest */
+export function shouldSetLatest(promotionVersion, highestFinal) {
+    return !highestFinal || !isStableNewer(`v${highestFinal}`, `v${promotionVersion}`);
+}
