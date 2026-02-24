@@ -3,162 +3,112 @@ apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
 metadata:
   name: sovereign-postgres
-  namespace: sovereign-product
 spec:
   schema:
-    apiVersion: apiextensions.k8s.io/v1
-    kind: CustomResourceDefinition
+    apiVersion: v1alpha1
+    kind: SovereignPostgres
     spec:
-      group: acme.org
-      names:
-        kind: SovereignPostgres
-        plural: sovereignpostgres
-      scope: Namespaced
-      versions:
-      - name: v1alpha1
-        served: true
-        storage: true
-        schema:
-          openAPIV3Schema:
-            type: object
-            properties:
-              spec:
-                type: object
-                properties:
-                  database:
-                    type: object
-                    properties:
-                      name:
-                        type: string
-                        default: "sovereign_notes"
-                      username:
-                        type: string
-                        default: "sovereign_user"
-                      password:
-                        type: string
-                        default: "changeme"
-                  resources:
-                    type: object
-                    properties:
-                      requests:
-                        type: object
-                        properties:
-                          cpu:
-                            type: string
-                            default: "250m"
-                          memory:
-                            type: string
-                            default: "256Mi"
-                      limits:
-                        type: object
-                        properties:
-                          cpu:
-                            type: string
-                            default: "500m"
-                          memory:
-                            type: string
-                            default: "512Mi"
-                  persistence:
-                    type: object
-                    properties:
-                      size:
-                        type: string
-                        default: "8Gi"
-              status:
-                type: object
-                properties:
-                  ready:
-                    type: boolean
-                  endpoint:
-                    type: string
-  dependencies:
-  - group: v1
-    kind: Namespace
-    name: sovereign-product
-  graph:
-    nodes:
-    - id: statefulset
+      prefix: string | default="sovereign-postgres"
+      database:
+        name: string | default="sovereign_notes"
+        username: string | default="sovereign_user"
+        password: string | default="changeme"
+      resources:
+        requests:
+          cpu: string | default="250m"
+          memory: string | default="256Mi"
+        limits:
+          cpu: string | default="500m"
+          memory: string | default="512Mi"
+      persistence:
+        size: string | default="8Gi"
+
+  resources:
+    # OCM Resource: resolve helm-chart from component
+    - id: resourceChart
       template:
-        apiVersion: apps/v1
-        kind: StatefulSet
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
         metadata:
-          name: postgres
-          namespace: sovereign-product
+          name: "${schema.spec.prefix}-resource-chart"
         spec:
-          serviceName: postgres
-          replicas: 1
-          selector:
-            matchLabels:
-              app: postgres
-          template:
-            metadata:
-              labels:
-                app: postgres
-                ocm.software/component: acme.org/sovereign/postgres
-            spec:
-              containers:
-              - name: postgresql
-                image: postgres:15
-                ports:
-                - containerPort: 5432
-                  name: postgresql
-                env:
-                - name: POSTGRES_DB
-                  value: "{{ .spec.database.name }}"
-                - name: POSTGRES_USER
-                  value: "{{ .spec.database.username }}"
-                - name: POSTGRES_PASSWORD
-                  value: "{{ .spec.database.password }}"
-                resources:
-                  requests:
-                    cpu: "{{ .spec.resources.requests.cpu }}"
-                    memory: "{{ .spec.resources.requests.memory }}"
-                  limits:
-                    cpu: "{{ .spec.resources.limits.cpu }}"
-                    memory: "{{ .spec.resources.limits.memory }}"
-                livenessProbe:
-                  exec:
-                    command:
-                    - /bin/sh
-                    - -c
-                    - exec pg_isready -U "{{ .spec.database.username }}" -d "{{ .spec.database.name }}" -h 127.0.0.1 -p 5432
-                  initialDelaySeconds: 30
-                  periodSeconds: 10
-                readinessProbe:
-                  exec:
-                    command:
-                    - /bin/sh
-                    - -c
-                    - exec pg_isready -U "{{ .spec.database.username }}" -d "{{ .spec.database.name }}" -h 127.0.0.1 -p 5432
-                  initialDelaySeconds: 5
-                  periodSeconds: 10
-                volumeMounts:
-                - name: data
-                  mountPath: /var/lib/postgresql/data
-                  subPath: postgresql
-          volumeClaimTemplates:
-          - metadata:
-              name: data
-            spec:
-              accessModes:
-              - ReadWriteOnce
-              resources:
-                requests:
-                  storage: "{{ .spec.persistence.size }}"
-    
-    - id: service
+          componentRef:
+            name: sovereign-postgres-component
+          resource:
+            byReference:
+              resource:
+                name: helm-chart
+          additionalStatusFields:
+            registry: resource.access.globalAccess.imageReference.toOCI().registry
+            repository: resource.access.globalAccess.imageReference.toOCI().repository
+            digest: resource.access.globalAccess.imageReference.toOCI().digest
+          interval: 10m
+
+    # OCM Resource: resolve image from component
+    - id: resourceImage
       template:
-        apiVersion: v1
-        kind: Service
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
         metadata:
-          name: postgres
-          namespace: sovereign-product
+          name: "${schema.spec.prefix}-resource-image"
         spec:
-          type: ClusterIP
-          ports:
-          - port: 5432
-            targetPort: postgresql
-            protocol: TCP
-            name: postgresql
-          selector:
-            app: postgres
+          componentRef:
+            name: sovereign-postgres-component
+          resource:
+            byReference:
+              resource:
+                name: image
+          additionalStatusFields:
+            registry: resource.access.globalAccess.imageReference.toOCI().registry
+            repository: resource.access.globalAccess.imageReference.toOCI().repository
+            tag: resource.access.globalAccess.imageReference.toOCI().tag
+          interval: 10m
+
+    # FluxCD OCIRepository for Helm chart
+    - id: ociRepository
+      template:
+        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        kind: OCIRepository
+        metadata:
+          name: "${schema.spec.prefix}-oci-repository"
+        spec:
+          interval: 1m0s
+          insecure: true
+          layerSelector:
+            mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+            operation: copy
+          url: oci://${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
+          ref:
+            digest: ${resourceChart.status.additional.digest}
+
+    # FluxCD HelmRelease
+    - id: helmRelease
+      template:
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: "${schema.spec.prefix}-helm-release"
+        spec:
+          releaseName: "${schema.spec.prefix}"
+          interval: 1m
+          timeout: 5m
+          chartRef:
+            kind: OCIRepository
+            name: ${ociRepository.metadata.name}
+          values:
+            image:
+              repository: ${resourceImage.status.additional.registry}/${resourceImage.status.additional.repository}
+              tag: ${resourceImage.status.additional.tag}
+            postgresql:
+              postgresqlDatabase: ${schema.spec.database.name}
+              postgresqlUsername: ${schema.spec.database.username}
+              postgresqlPassword: ${schema.spec.database.password}
+              persistence:
+                size: ${schema.spec.persistence.size}
+            resources:
+              requests:
+                cpu: ${schema.spec.resources.requests.cpu}
+                memory: ${schema.spec.resources.requests.memory}
+              limits:
+                cpu: ${schema.spec.resources.limits.cpu}
+                memory: ${schema.spec.resources.limits.memory}

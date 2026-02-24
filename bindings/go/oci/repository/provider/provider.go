@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"time"
 
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
@@ -79,6 +81,31 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 	if options.Scheme == nil {
 		options.Scheme = repoSpec.Scheme
 	}
+
+	transport := http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			// override specific hosts
+			overrides := map[string]string{
+				"registry:5001": "localhost:5001",
+			}
+			if mapped, ok := overrides[addr]; ok {
+				addr = mapped
+			}
+			return (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext(ctx, network, addr)
+		},
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	clnt := retry.DefaultClient
+	clnt.Transport = &transport
 
 	provider := &CachingComponentVersionRepositoryProvider{
 		creator:            options.UserAgent,

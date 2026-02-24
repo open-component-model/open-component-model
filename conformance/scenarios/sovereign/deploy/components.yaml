@@ -1,25 +1,13 @@
 # OCM Components for sovereign scenario
+# Repository is defined in repository.yaml
+
+# --- Components ---
+
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
 metadata:
-  name: sovereign-product
-  namespace: ocm-system
-spec:
-  component: acme.org/sovereign/product
-  repositoryRef:
-    name: sovereign-repo
-  semver: ">=1.0.0"
-  interval: 10m
-  verify:
-    - signature: acme-signature
-      secretRef:
-        name: acme-signing-key
----
-apiVersion: delivery.ocm.software/v1alpha1
-kind: Component
-metadata:
-  name: sovereign-notes
-  namespace: ocm-system
+  name: sovereign-notes-component
+  namespace: sovereign-product
 spec:
   component: acme.org/sovereign/notes
   repositoryRef:
@@ -30,11 +18,105 @@ spec:
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
 metadata:
-  name: sovereign-postgres
-  namespace: ocm-system
+  name: sovereign-postgres-component
+  namespace: sovereign-product
 spec:
   component: acme.org/sovereign/postgres
   repositoryRef:
     name: sovereign-repo
   semver: ">=1.0.0"
   interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: sovereign-product-component
+  namespace: sovereign-product
+spec:
+  component: acme.org/sovereign/product
+  repositoryRef:
+    name: sovereign-repo
+  semver: ">=1.0.0"
+  interval: 10m
+  verify:
+    - signature: default
+      secretRef:
+        name: acme-signing-key
+
+# --- Resources (RGDs from each component) ---
+
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: sovereign-notes-resource-rgd
+  namespace: sovereign-product
+spec:
+  componentRef:
+    name: sovereign-notes-component
+  resource:
+    byReference:
+      resource:
+        name: rgd
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: sovereign-postgres-resource-rgd
+  namespace: sovereign-product
+spec:
+  componentRef:
+    name: sovereign-postgres-component
+  resource:
+    byReference:
+      resource:
+        name: rgd
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: sovereign-product-resource-rgd
+  namespace: sovereign-product
+spec:
+  componentRef:
+    name: sovereign-product-component
+  resource:
+    byReference:
+      resource:
+        name: product-rgd
+  interval: 10m
+
+# --- Deployers ---
+
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: sovereign-notes-deployer
+  namespace: sovereign-product
+spec:
+  resourceRef:
+    name: sovereign-notes-resource-rgd
+    namespace: sovereign-product
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: sovereign-postgres-deployer
+  namespace: sovereign-product
+spec:
+  resourceRef:
+    name: sovereign-postgres-resource-rgd
+    namespace: sovereign-product
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: sovereign-product-deployer
+  namespace: sovereign-product
+spec:
+  resourceRef:
+    name: sovereign-product-resource-rgd
+    namespace: sovereign-product

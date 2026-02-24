@@ -6,11 +6,14 @@ set -euo pipefail
 CLUSTER_NAME=${1:-sovereign-conformance}
 REGISTRY_NAME="registry"
 REGISTRY_PORT="5001"
+KIND_NODE_IMAGE_VERSION="${KIND_NODE_IMAGE_VERSION:-v1.31.0}"
+KIND_NODE_IMAGE="kindest/node:${KIND_NODE_IMAGE_VERSION}"
+CONTAINERD_CONFIG_PATH="/etc/containerd/certs.d"
 
 echo "Setting up air-gapped kind cluster: $CLUSTER_NAME"
 
 # Check required dependencies
-for cmd in docker kind kubectl; do
+for cmd in docker kind kubectl helm flux; do
     if ! command -v $cmd >/dev/null 2>&1; then
         echo "❌ $cmd not found. Please install $cmd first."
         exit 1
@@ -18,26 +21,23 @@ for cmd in docker kind kubectl; do
 done
 
 # Create local registry if it doesn't exist
-if ! docker ps | grep -q $REGISTRY_NAME; then
+if [ "$(docker inspect -f '{{.State.Running}}' "${REGISTRY_NAME}" 2>/dev/null || true)" != 'true' ]; then
     echo "Starting local registry..."
     docker run -d \
         --restart=always \
         --name $REGISTRY_NAME \
-        -p ${REGISTRY_PORT}:5000 \
+        -p "127.0.0.1:${REGISTRY_PORT}:5000" \
+        --network bridge \
         registry:2
+    echo "Waiting for registry to be ready..."
+    sleep 3
 fi
 
-# Create kind cluster config
-cat <<EOF > /tmp/kind-config.yaml
+# Create kind cluster with proper containerd config
+echo "Creating kind cluster..."
+cat <<EOF | kind create cluster --name $CLUSTER_NAME --image="${KIND_NODE_IMAGE}" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-containerdConfigPatches:
-- |-
-  [plugins."io.containerd.grpc.v1.cri".registry]
-    config_path = "/etc/containerd/certs.d"
-- |-
-  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:${REGISTRY_PORT}"]
-    endpoint = ["http://registry:5000"]
 nodes:
 - role: control-plane
   kubeadmConfigPatches:
@@ -53,28 +53,39 @@ nodes:
   - containerPort: 443
     hostPort: 8443
     protocol: TCP
+containerdConfigPatches:
+- |-
+  [plugins."io.containerd.grpc.v1.cri".registry]
+    config_path = "${CONTAINERD_CONFIG_PATH}"
 EOF
 
-# Create kind cluster
-echo "Creating kind cluster..."
-kind create cluster --name $CLUSTER_NAME --config /tmp/kind-config.yaml
+# Add registry configs to nodes
+add_hosts_toml() {
+  local node="$1" path="$2" host="$3"
+  docker exec "${node}" mkdir -p "${path}"
+  cat <<EOF | docker exec -i "${node}" cp /dev/stdin "${path}/hosts.toml"
+[host."${host}"]
+  skip_verify = true
+EOF
+}
 
-# Connect registry to kind network
+echo "Configuring registry access for cluster nodes..."
+for node in $(kind get nodes --name $CLUSTER_NAME); do
+  add_hosts_toml "${node}" "${CONTAINERD_CONFIG_PATH}/${REGISTRY_NAME}:${REGISTRY_PORT}" "http://${REGISTRY_NAME}:${REGISTRY_PORT}"
+done
+
+# Connect registry to kind network if not already connected
 echo "Connecting registry to kind network..."
-docker network connect kind $REGISTRY_NAME || true
+if [ "$(docker inspect -f='{{json .NetworkSettings.Networks.kind}}' "${REGISTRY_NAME}")" = 'null' ]; then
+  docker network connect --alias "${REGISTRY_NAME}" "kind" "${REGISTRY_NAME}"
+fi
 
 # Install kro (ResourceGraphDefinition controller)
 echo "Installing kro..."
-kubectl apply -f https://github.com/GoogleCloudPlatform/kro/releases/latest/download/kro.yaml
-kubectl -n kro-system wait --for=condition=Available deployment/kro-controller --timeout=120s
+helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.8.5 || exit 1
 
 # Install Flux
 echo "Installing Flux..."
-if ! command -v flux >/dev/null 2>&1; then
-    echo "❌ flux CLI not found. Please install flux CLI first."
-    echo "Installation instructions: https://fluxcd.io/flux/installation/"
-    exit 1
-fi
 flux install --components=source-controller,helm-controller
 kubectl -n flux-system wait --for=condition=Available deployment/source-controller --timeout=120s
 kubectl -n flux-system wait --for=condition=Available deployment/helm-controller --timeout=120s

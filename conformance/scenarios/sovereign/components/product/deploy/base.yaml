@@ -6,7 +6,6 @@ metadata:
   labels:
     app.kubernetes.io/name: sovereign-product
     app.kubernetes.io/part-of: ocm-sovereign-scenario
-    ocm.software/component: acme.org/sovereign/product
 ---
 # ConfigMap for shared configuration
 apiVersion: v1

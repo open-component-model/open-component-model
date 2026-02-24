@@ -1,0 +1,31 @@
+# Sample SovereignProduct instance - uses defaults where sensible
+apiVersion: kro.run/v1alpha1
+kind: SovereignProduct
+metadata:
+  name: sovereign-product
+  namespace: sovereign-product
+spec:
+  version: "1.0.0"
+  notes:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+  postgres:
+    database:
+      name: "sovereign_notes"
+      username: "sovereign_user"
+      password: "changeme"
+    persistence:
+      size: "8Gi"
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"

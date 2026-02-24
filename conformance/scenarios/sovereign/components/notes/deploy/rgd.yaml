@@ -9,7 +9,6 @@ spec:
     kind: SovereignNotes
     spec:
       releaseName: string | default="sovereign-notes"
-      namespace: string | default="sovereign-product"
       replicas: integer | default=2
       databaseSecretRef: string | default="db-credentials"
       resources:
@@ -21,19 +20,60 @@ spec:
           cpu: string | default="200m"
 
   resources:
+    # OCM Resource: resolve helm-chart from component
+    - id: resourceChart
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: "${schema.spec.releaseName}-resource-chart"
+        spec:
+          componentRef:
+            name: sovereign-notes-component
+          resource:
+            byReference:
+              resource:
+                name: helm-chart
+          additionalStatusFields:
+            repository: resource.access.globalAccess.imageReference.toOCI().repository
+            digest: resource.access.globalAccess.imageReference.toOCI().digest
+          interval: 10m
+
+    # OCM Resource: resolve image from component
+    - id: resourceImage
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: "${schema.spec.releaseName}-resource-image"
+        spec:
+          componentRef:
+            name: sovereign-notes-component
+          resource:
+            byReference:
+              resource:
+                name: image
+          additionalStatusFields:
+            repository: resource.access.globalAccess.imageReference.toOCI().repository
+            tag: resource.access.globalAccess.imageReference.toOCI().tag
+          interval: 10m
+
     # FluxCD OCIRepository for Helm chart
     - id: ociRepository
       template:
         apiVersion: source.toolkit.fluxcd.io/v1beta2
         kind: OCIRepository
         metadata:
-          name: ${schema.spec.releaseName}
-          namespace: ${schema.spec.namespace}
+          name: "${schema.spec.releaseName}-oci-repository"
         spec:
-          interval: 10m
-          url: oci://${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
+          interval: 1m0s
+          insecure: true
+          layerSelector:
+            mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+            operation: copy
+          url: ${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
           ref:
-            tag: ${resourceChart.status.additional.tag}
+            digest: ${resourceChart.status.additional.digest}
 
     # FluxCD HelmRelease
     - id: helmRelease
@@ -41,16 +81,14 @@ spec:
         apiVersion: helm.toolkit.fluxcd.io/v2
         kind: HelmRelease
         metadata:
-          name: ${schema.spec.releaseName}
-          namespace: ${schema.spec.namespace}
+          name: "${schema.spec.releaseName}"
         spec:
-          interval: 10m
-          chart:
-            spec:
-              chart: .
-              sourceRef:
-                kind: OCIRepository
-                name: ${ociRepository.metadata.name}
+          releaseName: "${schema.spec.releaseName}"
+          interval: 1m
+          timeout: 5m
+          chartRef:
+            kind: OCIRepository
+            name: ${ociRepository.metadata.name}
           values:
             replicaCount: ${schema.spec.replicas}
             image:
