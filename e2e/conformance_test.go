@@ -17,19 +17,26 @@ func TestConformance(t *testing.T) {
 	meta.RequireLabel(t, LabelTestKind, ValueConformance)
 
 	// 1. Setup Workspace
-	// We use the global shared env.WorkDir for now?
-	// Or create a sub-workspace for this test?
-	// The providers are global, so Zot and CLI are already running and mounted to env.WorkDir.
-	// If we want isolation, we might need nested directories in env.WorkDir.
-	// But OCM CLI mount is fixed to specific paths in provider setup.
-	// So we must use env.WorkDir.
-	// CLEANUP: We should clean up artifacts in env.WorkDir after test or ensure unique names.
+	workDir := t.TempDir()
+	certsDir := filepath.Join(workDir, "certs")
+	require.NoError(t, os.MkdirAll(certsDir, 0755))
 
-	// Copy test data to global workspace
-	copyTestData(t, "testdata", env.WorkDir)
+	// 2. Setup Providers
+	ctx := t.Context()
+
+	registry := env.NewRegistryProvider(workDir, certsDir)
+	require.NoError(t, registry.Setup(ctx))
+	t.Cleanup(func() { _ = registry.Teardown(ctx) })
+
+	cli := env.NewCLIProvider(workDir, certsDir)
+	require.NoError(t, cli.Setup(ctx))
+	t.Cleanup(func() { _ = cli.Teardown(ctx) })
+
+	// Copy test data to workspace
+	copyTestData(t, "testdata", workDir)
 
 	// 8. Generate .ocmconfig (using registry credentials)
-	user, pass := env.Registry.GetCredentials()
+	user, pass := registry.GetCredentials()
 	// GetURL returns "https://zot:5000", we need to parse if we want specific parts, but here we construct config.
 	// Note: Providers are responsible for connectivity.
 
@@ -49,18 +56,18 @@ configurations:
               username: %s
               password: %s
 `, user, pass)
-	require.NoError(t, os.WriteFile(filepath.Join(env.WorkDir, ".ocmconfig"), []byte(ocmConfigContent), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, ".ocmconfig"), []byte(ocmConfigContent), 0644))
 
 	// 9. Run Task
-	containerID := env.CLI.GetContainerID()
+	containerID := cli.GetContainerID()
 	ocmCmd := fmt.Sprintf("docker exec -w /workspace %s ocm", containerID)
 
 	// Pass variables as arguments to task
 	cmd := exec.Command("task", "add-cv", "transfer-cv",
 		fmt.Sprintf("OCM_CMD=%s", ocmCmd),
-		fmt.Sprintf("TARGET_REPO=%s", env.Registry.GetURL()),
+		fmt.Sprintf("TARGET_REPO=%s", registry.GetURL()),
 	)
-	cmd.Dir = env.WorkDir // Taskfile is copied here
+	cmd.Dir = workDir // Taskfile is copied here
 	cmd.Env = os.Environ()
 
 	out, err := cmd.CombinedOutput()
