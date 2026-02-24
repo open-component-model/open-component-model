@@ -12,16 +12,14 @@ Scope: **CLI and Kubernetes Controller are released together in version lockstep
 
 Development in the [Open Component Model monorepo](https://github.com/open-component-model/open-component-model)
 happens on `main`, while releases are prepared and promoted from release branches (`releases/vX.Y`).
-For the time being, we will only ship minor releases (e.g., `v0.17.0`, `v0.18.0`) and patch releases (e.g., `v0.17.1`),
-without any major releases.
 This repository follows a lockstep release model for multiple components — currently the
 [CLI](https://github.com/open-component-model/open-component-model/tree/main/cli) and the
 [Kubernetes Controller](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller).
 
 ### Release cadence
 
-The default cadence is sprint-based: one release every two weeks. At the start of each sprint,
-create a new release branch and a new Release Candidate (RC). After one sprint of testing, promote the previous RC to a final release.
+The default cadence is sprint-based: one release every two weeks. At the start of each sprint, create a Release Candidate (RC)
+for the current release branch. After one sprint of testing, promote the previous RC to a final release.
 At the end of each sprint (typically Friday), assign the next release responsible.
 
 Patch releases are handled out-of-band and created on demand for critical fixes.
@@ -32,10 +30,9 @@ A scheduled release can be skipped if the branch is not ready or there are no me
 The release responsible coordinates and executes the release flow.
 This role rotates each sprint and involves:
 
-- Agreeing with the team, if a new release is needed for the past sprint
+- Agreeing with the team, if a new release has to be produced
 - Triggering and supervising release branch creation
 - Creating release candidates for all lockstep components
-- Agreeing with the team, if the new release is ready for promotion
 - Promoting release candidates to final releases
 - Coordinating patch releases when needed
 - Keeping this guide accurate and up to date
@@ -63,10 +60,16 @@ Copy this checklist to your "Sprint Responsible" issue:
 
 | When | Action |
 |------|--------|
+
 | Sprint Start | Create new release branch and RCs for both components |
-| During sprint | Issue patch releases or increment RCs if required (Security issues, bugs, ..) |
 | Sprint End | Assign next release responsible |
 | Next Sprint Start | Promote previous RCs to Final |
+
+### Guardrails
+
+Once a release branch is created, it enters cut-off mode:
+No feature or breaking-change work is accepted on the release branch.
+All fixes must go to `main` branch first, then be cherry-picked to the release branch.
 
 ---
 
@@ -113,14 +116,25 @@ gitGraph TB:
 A new release branch marks the cut-off point for that minor release line.
 Once created, only bug fixes and documentation changes are allowed.
 
-1. Run workflow **[Release Branch Creation](https://github.com/open-component-model/open-component-model/actions/workflows/release-branch.yml)**.
+1. Run workflow **[Release Branch Creation](./.github/workflows/release-branch.yml)**.
 2. Set target branch to `releases/vX.Y`.
 3. Confirm the branch was created successfully.
 
 <details>
+<summary>Cut-off policy for this release branch</summary>
+
+- No feature or breaking-change work is accepted.
+- Non-bugfix and non-documentation changes require release responsible approval.
+- Any change that is not a bug fix or a documentation change require release responsible approval.
+- Any bug fix that is not deemed critical must be approved by the release manager.
+- Fixes must be merged to `main` first, then cherry-picked to this branch.
+
+</details>
+
+<details>
 <summary>What happens in the background?</summary>
 
-- Validate `target_branch` against regex pattern `releases/v0.[0-9]+` (for the time being, we only allow minor releases)
+- Validate `target_branch` against regex pattern `releases/v0.[0-9]+`
 - Check if `target_branch` already exists; if yes, skip creation and report success
 - Check out the repository and identify the latest commit on `source_branch` (default: `main`)
 - Create a new branch `refs/heads/<target_branch>` pointing to this commit
@@ -128,19 +142,11 @@ Once created, only bug fixes and documentation changes are allowed.
 
 </details>
 
-> [!CAUTION] **Cut-off policy for this release branch**
->
->- No feature or breaking-change work is accepted.
->- Non-bugfix and non-documentation changes require release responsible approval.
->- Any change that is not a bug fix or a documentation change require release responsible approval.
->- Any bug fix that is not deemed critical must be approved by the release manager.
->- Fixes must be merged to `main` first, then cherry-picked to this branch.
-
 ### 2) Create a Release Candidate (CLI + Controller)
 
 Release candidates are created for both components sequentially, in lock-step.
 
-1. Run workflow **[CLI Release](https://github.com/open-component-model/open-component-model/actions/workflows/cli-release.yml)** with:
+1. Run workflow **[CLI Release](./.github/workflows/cli-release.yml)** with:
    - `dry_run = true` first to validate
    - `dry_run = false` for actual release
    - `Branch to release from` set to the release branch created in step 1 (e.g., `releases/v0.17`)
@@ -148,8 +154,8 @@ Release candidates are created for both components sequentially, in lock-step.
    (once `controller-release.yml` is available).
 3. Verify both pre-releases were created successfully on the GitHub Releases page.
 
-> [!CAUTION]
-> **Always do a dry-run first** before the actual release.
+> ⚠️ **Always do a dry-run first** before the actual release.
+
 > CLI and Controller are released together. Do not release only one of them.
 
 <details>
@@ -162,7 +168,7 @@ The workflow summary shows exactly what **would** happen:
 |-------|-------------|
 | RC Version | The RC version that would be created (e.g., `0.17.1-rc.1`) |
 | Base Version | The final version after promotion (e.g., `0.17.1`) |
-| Set Latest | Whether `latest` tag would be applied to OCI images |
+| Set Latest | Whether `:latest` tag would be applied to OCI images |
 | Highest Final Version | The current highest released version |
 
 **Important for Patch Releases:**
@@ -176,8 +182,8 @@ Highest Final Version: 0.17.0
 ```
 
 This means the patch release will **not** be marked as the GitHub "Latest Release"
-and the `latest` OCI tag will **not** be updated. This is expected behavior to prevent
-users from accidentally downgrading when pulling `latest`.
+and the `:latest` OCI tag will **not** be updated. This is expected behavior to prevent
+users from accidentally downgrading when pulling `:latest`.
 
 </details>
 
@@ -226,8 +232,22 @@ and the `cli/release` environment gate is approved.
    - `release_final`: publish final GitHub release with assets from RC.
 - **Controller path (`controller-release.yml`)**
    - Mirrors the same final promotion pattern for controller image + Helm chart.
-   - Due to Helm specifics, the chart cannot be promoted from RC to Final, but is re-packaged, re-attested and released directly in the final promotion step.
 - Final is only valid when both components are promoted in the same cycle.
+
+</details>
+
+<details>
+<summary>Workflow execution view (technical)</summary>
+
+```mermaid
+flowchart TD
+  A[Release Branch Creation] --> B[CLI RC: prepare -> tag_rc -> build -> release_rc]
+  A --> C[Controller RC: prepare -> tag_rc -> build -> release_rc]
+  B --> D[CLI Final: verify_attestations -> promote_final -> release_final]
+  C --> E[Controller Final: verify_attestations -> promote_final -> release_final]
+  D --> F[Release cycle completed]
+  E --> F
+```
 
 </details>
 
@@ -237,13 +257,13 @@ Patch releases address critical fixes for an already-released version.
 The fix must always land on `main` first, then be cherry-picked to the release branch.
 
 > ⚠️ **Older version lines:** When creating a patch for an older release line
-> (e.g., `v0.16.1` when `v0.17.0` exists), the release will NOT be marked as "latest"
-> on GitHub and the `latest` OCI tags will remain on the newer version.
+> (e.g., `v0.16.1` when `v0.17.0` exists), the release will NOT be marked as "Latest"
+> on GitHub and the `:latest` OCI tags will remain on the newer version.
 > This is intentional — use dry-run first to verify this behavior in the summary.
 
 1. Ensure the fix was merged to `main` first.
-2. Cherry-pick the fix to the correct release branch, e.g. `releases/v0.17` for a patch to `v0.17.1`.
-3. Create a PR with the cherry-picked commit to the release branch.
+2. Cherry-pick the fix to the active release branch `releases/v0.X`.
+3. Create a patch PR to the release branch.
 4. Create and test RCs for **both** CLI and Controller.
 5. Promote both components to final.
 
@@ -252,16 +272,16 @@ The fix must always land on `main` first, then be cherry-picked to the release b
 
 ```bash
 # Check out the target release branch
-git checkout releases/vX.Y
+git checkout releases/v0.X
 
 # Cherry-pick the commit from main
 git cherry-pick <commit-hash>
 
 # Create a PR to the release branch
 gh pr create \
-   --title "[releases/vX.Y] cherry-pick: <Original PR or Commit>" \
-   --body "Cherry-pick of <Original PR or Commit> from main to releases/vX.Y" \
-   --base releases/vX.Y \
+   --title "[releases/v0.X] cherry-pick: <Original PR or Commit>" \
+   --body "Cherry-pick of <Original PR or Commit> from main to releases/v0.X" \
+   --base releases/v0.X \
    --draft
 ```
 
