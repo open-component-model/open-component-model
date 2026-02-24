@@ -107,12 +107,6 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 
 	ctx, cancel = context.WithCancel(GinkgoT().Context())
-	mgrDone := make(chan struct{})
-	DeferCleanup(func() {
-		cancel()
-		<-mgrDone
-		Expect(testEnv.Stop()).To(Succeed())
-	})
 
 	events := make(chan string)
 	recorder = &record.FakeRecorder{
