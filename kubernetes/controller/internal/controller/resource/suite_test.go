@@ -106,6 +106,11 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 
 	ctx, cancel = context.WithCancel(GinkgoT().Context())
+	mgrDone := make(chan struct{})
+	DeferCleanup(func() {
+		cancel()
+		<-mgrDone
+	})
 
 	events := make(chan string)
 	recorder = &record.FakeRecorder{
@@ -169,7 +174,7 @@ var _ = BeforeSuite(func() {
 	go func() {
 		defer GinkgoRecover()
 		defer close(mgrDone)
-		Expect(k8sManager.Start(ctx)).To(Or(Succeed(), MatchError(ContainSubstring("grace period"))))
+		Expect(k8sManager.Start(ctx)).To(Succeed())
 	}()
 
 	DeferCleanup(func() {
