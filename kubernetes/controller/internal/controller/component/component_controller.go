@@ -7,13 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -25,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -33,10 +35,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 )
@@ -283,7 +287,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to generate digest: %w", err)
 	}
 
-	if err := r.verifyComponentVersion(ctx, component, desc); err != nil {
+	if err := r.verifyComponentVersion(ctx, component, desc, configs); err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to verify component version: %w", err)
@@ -428,12 +432,27 @@ func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, comp
 }
 
 // verifyComponentVersion verifies the component version signatures.
-func (r *Reconciler) verifyComponentVersion(ctx context.Context, component *v1alpha1.Component, desc *descruntime.Descriptor) error {
+func (r *Reconciler) verifyComponentVersion(ctx context.Context, component *v1alpha1.Component, desc *descruntime.Descriptor, cfg []v1alpha1.OCMConfiguration) error {
 	logger := log.FromContext(ctx)
 
-	verifications := component.GetVerifications()
-	if len(verifications) == 0 {
-		logger.Info("no verifications configured, skipping signature verification")
+	if len(desc.Signatures) == 0 {
+		logger.Info("no signatures found for component version %s, skipping verification",
+			"component", desc.Component.Name,
+			"version", desc.Component.Version)
+
+		return nil
+	}
+
+	ocmConfig, err := configuration.LoadConfigurations(context.Background(), r.Client, component.GetNamespace(), cfg)
+	if err != nil {
+		return fmt.Errorf("failed to load configurations: %w", err)
+	}
+
+	if ocmConfig.Config == nil {
+		logger.Info("no OCM configuration found for component %s, skipping verification",
+			"component", component.Spec.Component,
+			"semVer", component.Spec.Semver,
+		)
 
 		return nil
 	}
@@ -442,80 +461,63 @@ func (r *Reconciler) verifyComponentVersion(ctx context.Context, component *v1al
 		event.New(r.EventRecorder, component, nil, eventv1.EventSeverityInfo, err.Error())
 	}
 
-	logger.Info("verifying component version signatures", "verifications", len(verifications))
+	logger.Info("verifying component version", "component", component.Spec.Component)
 
-	for _, verify := range verifications {
-		var signature *descruntime.Signature
-		for i := range desc.Signatures {
-			if desc.Signatures[i].Name == verify.Signature {
-				signature = &desc.Signatures[i]
-				break
+	hdlr, err := r.PluginManager.SigningRegistry.GetPlugin(ctx, &signingv1alpha1.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to get signing handler: %w", err)
+	}
+
+	credentialGraph, err := setup.NewCredentialGraph(ctx, ocmConfig.Config, setup.CredentialGraphOptions{
+		PluginManager: r.PluginManager,
+		Logger:        &logger,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create credential graph: %w", err)
+	}
+
+	// TODO(@frewilhelm): How to handle not found credentials?
+	//   See https://github.com/open-component-model/ocm-project/issues/866#issuecomment-3958468855
+
+	notFoundCreds := 0
+	verified := false
+	for _, signature := range desc.Signatures {
+		if err := signing.VerifyDigestMatchesDescriptor(ctx, desc, signature, slog.New(logr.ToSlogHandler(logger))); err != nil {
+			return fmt.Errorf("digest verification failed for signature %q: %w", signature.Name, err)
+		}
+
+		var creds map[string]string
+		var verifierSpec runtime.Typed
+		if consumerID, err := hdlr.GetVerifyingCredentialConsumerIdentity(ctx, signature, verifierSpec); err == nil {
+			if creds, err = credentialGraph.Resolve(ctx, consumerID); err != nil {
+				if errors.Is(err, credentials.ErrNotFound) {
+					logger.Info("could not resolve credentials for verification", "error", err.Error())
+					notFoundCreds++
+					continue
+				} else {
+					return fmt.Errorf("resolving credentials for verification failed: %w", err)
+				}
 			}
 		}
 
-		if signature == nil {
-			return fmt.Errorf("signature %q not found in component version", verify.Signature)
-		}
+		logger.Info("using discovered credentials for verification", "attributes", slices.Collect(maps.Keys(creds)))
 
-		if err := signing.VerifyDigestMatchesDescriptor(ctx, desc, *signature, slog.New(logr.ToSlogHandler(logger))); err != nil {
-			return fmt.Errorf("digest verification failed for signature %q: %w", verify.Signature, err)
+		if err := hdlr.Verify(ctx, signature, &signingv1alpha1.Config{}, creds); err != nil {
+			return fmt.Errorf("signature verification failed for signature %q: %w", signature.Name, err)
 		}
+		verified = true
+	}
 
-		cfg := &signingv1alpha1.Config{
-			SignatureAlgorithm: signingv1alpha1.SignatureAlgorithm(signature.Signature.Algorithm),
-		}
+	// TODO(frewilhelm): Needs to be reworked depending on the above TODO
+	if len(desc.Signatures) == notFoundCreds {
+		event.New(r.EventRecorder, component, nil, eventv1.EventSeverityInfo, "no credentials found for any signature, skipping verification")
 
-		hdlr, err := r.PluginManager.SigningRegistry.GetPlugin(ctx, cfg)
-		if err != nil {
-			return fmt.Errorf("failed to get signing handler for signature %q: %w", verify.Signature, err)
-		}
+		return nil
+	}
 
-		credentials, err := r.createCredentials(ctx, verify, signature.Signature.Algorithm, component.GetNamespace())
-		if err != nil {
-			return fmt.Errorf("failed to create credentials for signature %q: %w", verify.Signature, err)
-		}
-
-		if err := hdlr.Verify(ctx, *signature, cfg, credentials); err != nil {
-			return fmt.Errorf("signature verification failed for signature %q: %w", verify.Signature, err)
-		}
+	if !verified {
+		return fmt.Errorf("no signature could be verified for component version %s", component.Spec.Component)
 	}
 
 	return nil
-}
-
-// createCredentials generates a map of credentials required for verifying a component version's signature.
-// It supports retrieving the credentials either from a provided value or from a Kubernetes Secret.
-func (r *Reconciler) createCredentials(ctx context.Context, verify v1alpha1.Verification, algo, namespace string) (map[string]string, error) {
-	credentials := make(map[string]string)
-
-	// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
-	//       reliable currently. This will probably change, when typed credentials are supported.
-	var key string
-	switch signingv1alpha1.SignatureAlgorithm(algo) {
-	case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
-		key = "public_key_pem"
-	default:
-		return nil, fmt.Errorf("unsupported signature algorithm: %q", algo)
-	}
-
-	switch {
-	case verify.Value != "":
-		credentials[key] = verify.Value
-	case verify.SecretRef.Name != "":
-		secret := &corev1.Secret{}
-		if err := r.Get(ctx, types.NamespacedName{Name: verify.SecretRef.Name, Namespace: namespace}, secret); err != nil {
-			return nil, fmt.Errorf("failed to get secret %q for signature %q: %w", verify.SecretRef.Name, verify.Signature, err)
-		}
-
-		data, ok := secret.Data[verify.Signature]
-		if !ok {
-			return nil, fmt.Errorf("secret %q does not contain data for signature %q", verify.SecretRef.Name, verify.Signature)
-		}
-
-		credentials[key] = string(data)
-	default:
-		return nil, fmt.Errorf("no provided value or secret reference for verification of signature %q", verify.Signature)
-	}
-
-	return credentials, nil
 }

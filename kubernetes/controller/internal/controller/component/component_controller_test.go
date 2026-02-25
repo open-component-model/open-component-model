@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -727,6 +728,10 @@ var _ = Describe("Component Controller", func() {
 			By("mocking an ocm repository")
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
 
+			By("creating a config map with an OCM config containing the verification information")
+			cmName := "ocm-config-with-verify"
+			createOCMConfigWithVerify(ctx, &corev1.ConfigMap{}, cmName, namespace.GetName(), signatureName, pubKey)
+
 			By("creating a component")
 			component := &v1alpha1.Component{
 				ObjectMeta: metav1.ObjectMeta{
@@ -740,10 +745,13 @@ var _ = Describe("Component Controller", func() {
 					Component: componentName,
 					Semver:    Version1,
 					Interval:  metav1.Duration{Duration: time.Minute * 10},
-					Verify: []v1alpha1.Verification{
+					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							Signature: signatureName,
-							Value:     pubKey,
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								Name:      cmName,
+								Namespace: namespace.GetName(),
+								Kind:      "ConfigMap",
+							},
 						},
 					},
 				},
@@ -792,18 +800,9 @@ var _ = Describe("Component Controller", func() {
 			By("mocking an ocm repository")
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
 
-			By("creating a secret with the public key")
-			secretName := "signature-public-key"
-			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: namespace.GetName(),
-					Name:      secretName,
-				},
-				Data: map[string][]byte{
-					signatureName: []byte(pubKey),
-				},
-			}
-			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+			By("creating a secret with an OCM config containing the verification information")
+			secretName := "ocm-config-with-verify"
+			createOCMConfigWithVerify(ctx, &corev1.Secret{}, secretName, namespace.GetName(), signatureName, pubKey)
 
 			By("creating a component")
 			component := &v1alpha1.Component{
@@ -818,10 +817,13 @@ var _ = Describe("Component Controller", func() {
 					Component: componentName,
 					Semver:    Version1,
 					Interval:  metav1.Duration{Duration: time.Minute * 10},
-					Verify: []v1alpha1.Verification{
+					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							Signature: signatureName,
-							SecretRef: corev1.LocalObjectReference{Name: secretName},
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								Name:      secretName,
+								Namespace: namespace.GetName(),
+								Kind:      "Secret",
+							},
 						},
 					},
 				},
@@ -867,34 +869,26 @@ var _ = Describe("Component Controller", func() {
 			descSecret.Signatures = append(descSecret.Signatures, signatureSecret)
 			Expect(repo.AddComponentVersion(ctx, descSecret)).To(Succeed())
 
-			By("creating a secret with the public key")
-			secretNameSecret := "signature-public-key"
-			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: namespace.GetName(),
-					Name:      secretNameSecret,
-				},
-				Data: map[string][]byte{
-					signatureNameSecret: []byte(pubKeySecret),
-				},
-			}
-			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+			By("signing the component version for a config map")
+			signatureNameConfigMap := "test-signature-configmap"
 
-			By("signing the component version for a value")
-			signatureNameValue := "test-signature-value"
-
-			descValue, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			descConfigMap, err := repo.GetComponentVersion(ctx, componentName, Version1)
 			Expect(err).ToNot(HaveOccurred())
 
-			normalisedValue, err := normalisation.Normalise(descValue, v4alpha1.Algorithm)
+			normalisedValue, err := normalisation.Normalise(descConfigMap, v4alpha1.Algorithm)
 			Expect(err).ToNot(HaveOccurred())
-			signatureValue, pubKeyValue := test.SignComponent(ctx, signatureNameValue, signingv1alpha1.AlgorithmRSASSAPKCS1V15, normalisedValue, pm)
+			signatureConfigMap, pubKeyConfigMap := test.SignComponent(ctx, signatureNameConfigMap, signingv1alpha1.AlgorithmRSASSAPKCS1V15, normalisedValue, pm)
 
-			descValue.Signatures = append(descValue.Signatures, signatureValue)
-			Expect(repo.AddComponentVersion(ctx, descValue)).To(Succeed())
+			descConfigMap.Signatures = append(descConfigMap.Signatures, signatureConfigMap)
+			Expect(repo.AddComponentVersion(ctx, descConfigMap)).To(Succeed())
 
 			By("mocking an ocm repository")
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating a secret and a config with an OCM config containing the verification information")
+			secretName := "ocm-config-with-verify"
+			createOCMConfigWithVerify(ctx, &corev1.Secret{}, secretName, namespace.GetName(), signatureNameSecret, pubKeySecret)
+			createOCMConfigWithVerify(ctx, &corev1.ConfigMap{}, secretName, namespace.GetName(), signatureNameConfigMap, pubKeyConfigMap)
 
 			By("creating a component")
 			component := &v1alpha1.Component{
@@ -909,14 +903,20 @@ var _ = Describe("Component Controller", func() {
 					Component: componentName,
 					Semver:    Version1,
 					Interval:  metav1.Duration{Duration: time.Minute * 10},
-					Verify: []v1alpha1.Verification{
+					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							Signature: signatureNameSecret,
-							SecretRef: corev1.LocalObjectReference{Name: secretNameSecret},
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								Name:      secretName,
+								Namespace: namespace.GetName(),
+								Kind:      "Secret",
+							},
 						},
 						{
-							Signature: signatureNameValue,
-							Value:     pubKeyValue,
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								Name:      secretName,
+								Namespace: namespace.GetName(),
+								Kind:      "ConfigMap",
+							},
 						},
 					},
 				},
@@ -928,6 +928,384 @@ var _ = Describe("Component Controller", func() {
 			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
 				"Status.Component.Version": Version1,
 			})
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
+
+		It("verifies the signing of a cv with a stuffed ocm config", func(ctx SpecContext) {
+			By("creating a component version")
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("signing the component version")
+			signatureName := "test-signature"
+
+			desc, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			normalised, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			signature, pubKey := test.SignComponent(ctx, signatureName, signingv1alpha1.AlgorithmRSASSAPSS, normalised, pm)
+
+			desc.Signatures = append(desc.Signatures, signature)
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+
+			By("By adding another signature with a different algorithm to the component version (that should ignored)")
+			signatureNameIgnore := "test-signature-ignore"
+
+			descIgnore, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			normalisedValue, err := normalisation.Normalise(descIgnore, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			signatureIgnore, _ := test.SignComponent(ctx, signatureNameIgnore, signingv1alpha1.AlgorithmRSASSAPKCS1V15, normalisedValue, pm)
+
+			descIgnore.Signatures = append(descIgnore.Signatures, signatureIgnore)
+			Expect(repo.AddComponentVersion(ctx, descIgnore)).To(Succeed())
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating a config map with an OCM config containing the verification information")
+			cmName := "ocm-config-with-verify"
+
+			// Make sure to preserve indention for proper yaml parsing
+			lines := strings.Split(strings.TrimSpace(pubKey), "\n")
+			indentedPubkey := strings.Join(lines, "\n            ")
+			data := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+    - identity:
+        type: MavenRepository
+        hostname: example.com
+        pathprefix: path/ocm
+      credentials:
+      - type: Credentials
+        properties:
+          username: testuser1
+          password: testpassword1
+    - identity:
+        type: RSA/v1alpha1
+        algorithm: RSASSA-PSS
+        signature: %s
+      credentials:
+      - type: Credentials/v1
+        properties:
+          public_key_pem: |
+            %s
+    - identity:
+        type: RSA/v1alpha1
+        algorithm: RSASSA-PSS
+        signature: another-signature
+      credentials:
+      - type: Credentials/v1
+        properties:
+          public_key_pem: another-pubkey
+`, signatureName, indentedPubkey)
+
+			configMap := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      cmName,
+				},
+				Data: map[string]string{
+					v1alpha1.OCMConfigKey: data,
+				},
+			}
+			Expect(k8sClient.Create(ctx, configMap)).To(Succeed())
+
+			By("creating a component")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    Version1,
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+					OCMConfig: []v1alpha1.OCMConfiguration{
+						{
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								Name:      cmName,
+								Namespace: namespace.GetName(),
+								Kind:      "ConfigMap",
+							},
+						},
+					},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
+				"Status.Component.Version": Version1,
+			})
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
+
+		// TODO(frewilhelm): Depends on the decision how to proceed when no credentials are provided for signature verification.
+		PIt("does not fail if no creds are provided to verify the signature", func(ctx SpecContext) {
+			By("creating a component version")
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("signing the component version")
+			signatureName := "test-signature"
+
+			desc, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			normalised, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			signature, _ := test.SignComponent(ctx, signatureName, signingv1alpha1.AlgorithmRSASSAPSS, normalised, pm)
+
+			desc.Signatures = append(desc.Signatures, signature)
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating a config map with an OCM config containing the verification information")
+			cmName := "ocm-config-with-verify"
+			data := `
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+    - identity:
+        type: MavenRepository
+        hostname: example.com
+        pathprefix: path/ocm
+      credentials:
+      - type: Credentials
+        properties:
+          username: testuser1
+          password: testpassword1
+    - identity:
+        type: RSA/v1alpha1
+        algorithm: RSASSA-PSS
+        signature: another-signature
+      credentials:
+      - type: Credentials/v1
+        properties:
+          public_key_pem: another-pubkey
+`
+
+			configMap := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      cmName,
+				},
+				Data: map[string]string{
+					v1alpha1.OCMConfigKey: data,
+				},
+			}
+			Expect(k8sClient.Create(ctx, configMap)).To(Succeed())
+
+			By("creating a component")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    Version1,
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+					OCMConfig: []v1alpha1.OCMConfiguration{
+						{
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								Name:      cmName,
+								Namespace: namespace.GetName(),
+								Kind:      "ConfigMap",
+							},
+						},
+					},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
+				"Status.Component.Version": Version1,
+			})
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
+
+		It("fails to verify the signature of a cv due to malformed pubkey", func(ctx SpecContext) {
+			By("creating a component version")
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("signing the component version")
+			signatureName := "test-signature"
+
+			desc, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			normalised, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			signature, _ := test.SignComponent(ctx, signatureName, signingv1alpha1.AlgorithmRSASSAPSS, normalised, pm)
+
+			desc.Signatures = append(desc.Signatures, signature)
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating a config map with an OCM config containing the verification information")
+			cmName := "ocm-config-with-verify"
+			createOCMConfigWithVerify(ctx, &corev1.ConfigMap{}, cmName, namespace.GetName(), signatureName, "asdfg")
+
+			By("creating a component")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    Version1,
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+					OCMConfig: []v1alpha1.OCMConfiguration{
+						{
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								Name:      cmName,
+								Namespace: namespace.GetName(),
+								Kind:      "ConfigMap",
+							},
+						},
+					},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has been not reconciled successfully")
+			test.WaitForNotReadyObject(ctx, k8sClient, component, v1alpha1.GetComponentVersionFailedReason)
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
+
+		// TODO(frewilhelm): Depends on the decision how to proceed when no credentials are provided for signature verification.
+		PIt("fails to verify the signature of a cv due to wrong signature name", func(ctx SpecContext) {
+			By("creating a component version")
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("signing the component version")
+			signatureName := "test-signature"
+
+			desc, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			normalised, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			signature, pubKey := test.SignComponent(ctx, signatureName, signingv1alpha1.AlgorithmRSASSAPSS, normalised, pm)
+
+			desc.Signatures = append(desc.Signatures, signature)
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating a config map with an OCM config containing the verification information")
+			cmName := "ocm-config-with-verify"
+			createOCMConfigWithVerify(ctx, &corev1.ConfigMap{}, cmName, namespace.GetName(), "random-name", pubKey)
+
+			By("creating a component")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    Version1,
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+					OCMConfig: []v1alpha1.OCMConfiguration{
+						{
+							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+								Name:      cmName,
+								Namespace: namespace.GetName(),
+								Kind:      "ConfigMap",
+							},
+						},
+					},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has been not reconciled successfully")
+			test.WaitForNotReadyObject(ctx, k8sClient, component, v1alpha1.GetComponentVersionFailedReason)
 
 			By("delete resources manually")
 			test.DeleteObject(ctx, k8sClient, component)
@@ -1334,6 +1712,56 @@ var _ = Describe("Component Controller", func() {
 	})
 })
 
+func createOCMConfigWithVerify(ctx SpecContext, obj client.Object, name, namespace, signature, secret string) {
+	GinkgoHelper()
+
+	// Make sure to preserve indention for proper yaml parsing
+	lines := strings.Split(strings.TrimSpace(secret), "\n")
+	indentedPubkey := strings.Join(lines, "\n          ")
+	data := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: %s
+    credentials:
+    - type: Credentials/v1
+      properties:
+        public_key_pem: |
+          %s
+`, signature, indentedPubkey)
+
+	switch obj.(type) {
+	case *corev1.Secret:
+		secretObj := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      name,
+			},
+			Data: map[string][]byte{
+				v1alpha1.OCMConfigKey: []byte(data),
+			},
+		}
+		Expect(k8sClient.Create(ctx, secretObj)).To(Succeed())
+
+	case *corev1.ConfigMap:
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      name,
+			},
+			Data: map[string]string{
+				v1alpha1.OCMConfigKey: data,
+			},
+		}
+		Expect(k8sClient.Create(ctx, configMap)).To(Succeed())
+
+	}
+}
+
 func createTestConfigsAndSecrets(ctx context.Context, namespace string) (configs []*corev1.ConfigMap, secrets []*corev1.Secret) {
 	const (
 		Config1 = "config1"
@@ -1368,7 +1796,7 @@ sets:
         - type: Credentials
           properties:
             username: testuser1
-            password: testpassword1 
+            password: testpassword1
 `,
 		},
 	}
@@ -1397,7 +1825,7 @@ sets:
         - type: Credentials
           properties:
             username: testuser1
-            password: testpassword1 
+            password: testpassword1
 `,
 		},
 	}
@@ -1426,7 +1854,7 @@ sets:
         - type: Credentials
           properties:
             username: testuser1
-            password: testpassword1 
+            password: testpassword1
 `,
 		},
 	}
