@@ -1,32 +1,14 @@
-# OCM Components for sovereign scenario
-# Repository is defined in repository.yaml
+# Bootstrap: Product component pipeline.
+#
+# This is the minimum needed to deliver the product RGD into the cluster.
+# The product RGD itself then creates the full deployment pipeline for
+# sub-components (notes, postgres) — see product/deploy/rgd.yaml.
+#
+# Prerequisites (applied before this file):
+#   - Namespace: sovereign-product
+#   - Secret: acme-signing-key
+#   - Repository: sovereign-repo (deploy/repository.yaml)
 
-# --- Components ---
-
-apiVersion: delivery.ocm.software/v1alpha1
-kind: Component
-metadata:
-  name: sovereign-notes-component
-  namespace: sovereign-product
-spec:
-  component: acme.org/sovereign/notes
-  repositoryRef:
-    name: sovereign-repo
-  semver: ">=1.0.0"
-  interval: 1m
----
-apiVersion: delivery.ocm.software/v1alpha1
-kind: Component
-metadata:
-  name: sovereign-postgres-component
-  namespace: sovereign-product
-spec:
-  component: acme.org/sovereign/postgres
-  repositoryRef:
-    name: sovereign-repo
-  semver: ">=1.0.0"
-  interval: 1m
----
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
 metadata:
@@ -42,37 +24,6 @@ spec:
     - signature: default
       secretRef:
         name: acme-signing-key
-
-# --- Resources (RGDs from each component) ---
-
----
-apiVersion: delivery.ocm.software/v1alpha1
-kind: Resource
-metadata:
-  name: sovereign-notes-resource-rgd
-  namespace: sovereign-product
-spec:
-  componentRef:
-    name: sovereign-notes-component
-  resource:
-    byReference:
-      resource:
-        name: rgd
-  interval: 1m
----
-apiVersion: delivery.ocm.software/v1alpha1
-kind: Resource
-metadata:
-  name: sovereign-postgres-resource-rgd
-  namespace: sovereign-product
-spec:
-  componentRef:
-    name: sovereign-postgres-component
-  resource:
-    byReference:
-      resource:
-        name: rgd
-  interval: 1m
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Resource
@@ -87,29 +38,6 @@ spec:
       resource:
         name: product-rgd
   interval: 1m
-
-# --- Deployers ---
-
----
-apiVersion: delivery.ocm.software/v1alpha1
-kind: Deployer
-metadata:
-  name: sovereign-notes-deployer
-  namespace: sovereign-product
-spec:
-  resourceRef:
-    name: sovereign-notes-resource-rgd
-    namespace: sovereign-product
----
-apiVersion: delivery.ocm.software/v1alpha1
-kind: Deployer
-metadata:
-  name: sovereign-postgres-deployer
-  namespace: sovereign-product
-spec:
-  resourceRef:
-    name: sovereign-postgres-resource-rgd
-    namespace: sovereign-product
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Deployer

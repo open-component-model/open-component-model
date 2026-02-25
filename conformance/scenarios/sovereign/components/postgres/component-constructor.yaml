@@ -22,11 +22,3 @@ components:
           type: helm
           path: ./deploy/chart
 
-      # ResourceGraphDefinition for kro deployment
-      - name: rgd
-        type: blob
-        relation: local
-        input:
-          type: file
-          path: ./deploy/rgd.yaml
-          mediaType: application/vnd.cncf.kro.resourcegraphdefinition.v1+yaml

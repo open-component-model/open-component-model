@@ -23,12 +23,3 @@ components:
           type: file
           path: ./deploy/rgd.yaml
           mediaType: application/vnd.cncf.kro.resourcegraphdefinition.v1+yaml
-
-      # Base namespace and secrets
-      - name: base-manifests
-        type: blob
-        relation: local
-        input:
-          type: file
-          path: ./deploy/base.yaml
-          mediaType: application/x-kubernetes+yaml

@@ -1,4 +1,14 @@
-# ResourceGraphDefinition for sovereign product orchestration
+# ResourceGraphDefinition for sovereign product orchestration.
+#
+# Single unified RGD that creates the entire deployment:
+#   1. Infrastructure (namespace, repository, config, secrets)
+#   2. OCM Components for notes and postgres
+#   3. OCM Resources to resolve helm charts and images
+#   4. FluxCD OCIRepositories and HelmReleases for deployment
+#
+# The product's own Component/Resource/Deployer must be bootstrapped
+# externally (see deploy/components.yaml) since this RGD is delivered
+# through that pipeline.
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
 metadata:
@@ -35,7 +45,10 @@ spec:
             memory: string | default="512Mi"
 
   resources:
-    # Namespace for sovereign product
+    # ==========================================================
+    # Infrastructure
+    # ==========================================================
+
     - id: productNamespace
       template:
         apiVersion: v1
@@ -43,7 +56,58 @@ spec:
         metadata:
           name: sovereign-product
 
-    # ConfigMap with database configuration
+    # OCM Repository pointing to the local air-gapped registry.
+    # Also created during bootstrap (for the product Component);
+    # kro reconciles idempotently.
+    - id: repository
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Repository
+        metadata:
+          name: sovereign-repo
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          repositorySpec:
+            baseUrl: http://registry:5000
+            type: OCIRegistry
+          interval: 10m
+
+    # ==========================================================
+    # OCM Components
+    # ==========================================================
+
+    - id: notesComponent
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Component
+        metadata:
+          name: sovereign-notes-component
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          component: acme.org/sovereign/notes
+          repositoryRef:
+            name: ${repository.metadata.name}
+          semver: ">=1.0.0"
+          interval: 1m
+
+    - id: postgresComponent
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Component
+        metadata:
+          name: sovereign-postgres-component
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          component: acme.org/sovereign/postgres
+          repositoryRef:
+            name: ${repository.metadata.name}
+          semver: ">=1.0.0"
+          interval: 1m
+
+    # ==========================================================
+    # Application Configuration
+    # ==========================================================
+
     - id: config
       template:
         apiVersion: v1
@@ -56,7 +120,6 @@ spec:
           database.port: "5432"
           database.name: ${schema.spec.postgres.database.name}
 
-    # Secret with database credentials
     - id: secrets
       template:
         apiVersion: v1
@@ -69,45 +132,194 @@ spec:
           database.username: ${schema.spec.postgres.database.username}
           database.password: ${schema.spec.postgres.database.password}
 
-    # PostgreSQL instance (kro CR)
-    - id: postgresInstance
-      template:
-        apiVersion: kro.run/v1alpha1
-        kind: SovereignPostgres
-        metadata:
-          name: postgres
-          namespace: ${productNamespace.metadata.name}
-        spec:
-          database:
-            name: ${schema.spec.postgres.database.name}
-            username: ${schema.spec.postgres.database.username}
-            password: ${schema.spec.postgres.database.password}
-          resources:
-            requests:
-              cpu: ${schema.spec.postgres.resources.requests.cpu}
-              memory: ${schema.spec.postgres.resources.requests.memory}
-            limits:
-              cpu: ${schema.spec.postgres.resources.limits.cpu}
-              memory: ${schema.spec.postgres.resources.limits.memory}
-          persistence:
-            size: ${schema.spec.postgres.persistence.size}
+    # ==========================================================
+    # PostgreSQL: OCM Resources → FluxCD → HelmRelease
+    # ==========================================================
 
-    # Notes application instance (kro CR)
-    - id: notesInstance
+    # Resolve helm chart from postgres component
+    - id: postgresChartResource
       template:
-        apiVersion: kro.run/v1alpha1
-        kind: SovereignNotes
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
         metadata:
-          name: notes
+          name: sovereign-postgres-resource-chart
           namespace: ${productNamespace.metadata.name}
         spec:
-          releaseName: notes
-          replicas: ${schema.spec.notes.replicas}
-          databaseSecretRef: ${secrets.metadata.name}
-          resources:
-            requests:
-              memory: ${schema.spec.notes.resources.requests.memory}
-              cpu: ${schema.spec.notes.resources.requests.cpu}
-            limits:
-              memory: ${schema.spec.notes.resources.limits.memory}
-              cpu: ${schema.spec.notes.resources.limits.cpu}
+          componentRef:
+            name: ${postgresComponent.metadata.name}
+          resource:
+            byReference:
+              resource:
+                name: helm-chart
+          additionalStatusFields:
+            registry: resource.access.globalAccess.imageReference.toOCI().registry
+            repository: resource.access.globalAccess.imageReference.toOCI().repository
+            digest: resource.access.globalAccess.imageReference.toOCI().digest
+          interval: 10m
+
+    # Resolve container image from postgres component
+    - id: postgresImageResource
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: sovereign-postgres-resource-image
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          componentRef:
+            name: ${postgresComponent.metadata.name}
+          resource:
+            byReference:
+              resource:
+                name: image
+          additionalStatusFields:
+            registry: resource.access.globalAccess.imageReference.toOCI().registry
+            repository: resource.access.globalAccess.imageReference.toOCI().repository
+            tag: resource.access.globalAccess.imageReference.toOCI().tag
+            digest: resource.access.globalAccess.imageReference.toOCI().digest
+          interval: 10m
+
+    # FluxCD OCIRepository for postgres helm chart
+    - id: postgresOciRepository
+      template:
+        apiVersion: source.toolkit.fluxcd.io/v1
+        kind: OCIRepository
+        metadata:
+          name: sovereign-postgres-oci-repository
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          interval: 1m0s
+          insecure: true
+          layerSelector:
+            mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+            operation: copy
+          url: oci://${postgresChartResource.status.additional.registry}/${postgresChartResource.status.additional.repository}
+          ref:
+            digest: ${postgresChartResource.status.additional.digest}
+
+    # FluxCD HelmRelease for postgres
+    - id: postgresHelmRelease
+      template:
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: sovereign-postgres
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          releaseName: sovereign-postgres
+          interval: 1m
+          timeout: 5m
+          chartRef:
+            kind: OCIRepository
+            name: ${postgresOciRepository.metadata.name}
+          values:
+            image:
+              repository: ${postgresImageResource.status.additional.registry}/${postgresImageResource.status.additional.repository}
+              tag: ${postgresImageResource.status.additional.tag}@${postgresImageResource.status.additional.digest}
+            postgresql:
+              postgresqlDatabase: ${schema.spec.postgres.database.name}
+              postgresqlUsername: ${schema.spec.postgres.database.username}
+              postgresqlPassword: ${schema.spec.postgres.database.password}
+              persistence:
+                size: ${schema.spec.postgres.persistence.size}
+            resources:
+              requests:
+                cpu: ${schema.spec.postgres.resources.requests.cpu}
+                memory: ${schema.spec.postgres.resources.requests.memory}
+              limits:
+                cpu: ${schema.spec.postgres.resources.limits.cpu}
+                memory: ${schema.spec.postgres.resources.limits.memory}
+
+    # ==========================================================
+    # Notes: OCM Resources → FluxCD → HelmRelease
+    # ==========================================================
+
+    # Resolve helm chart from notes component
+    - id: notesChartResource
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: sovereign-notes-resource-chart
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          componentRef:
+            name: ${notesComponent.metadata.name}
+          resource:
+            byReference:
+              resource:
+                name: helm-chart
+          additionalStatusFields:
+            registry: resource.access.globalAccess.imageReference.toOCI().registry
+            repository: resource.access.globalAccess.imageReference.toOCI().repository
+            digest: resource.access.globalAccess.imageReference.toOCI().digest
+          interval: 10m
+
+    # Resolve container image from notes component
+    - id: notesImageResource
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: sovereign-notes-resource-image
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          componentRef:
+            name: ${notesComponent.metadata.name}
+          resource:
+            byReference:
+              resource:
+                name: image
+          additionalStatusFields:
+            registry: resource.access.globalAccess.imageReference.toOCI().registry
+            repository: resource.access.globalAccess.imageReference.toOCI().repository
+            tag: resource.access.globalAccess.imageReference.toOCI().tag
+            digest: resource.access.globalAccess.imageReference.toOCI().digest
+          interval: 10m
+
+    # FluxCD OCIRepository for notes helm chart
+    - id: notesOciRepository
+      template:
+        apiVersion: source.toolkit.fluxcd.io/v1
+        kind: OCIRepository
+        metadata:
+          name: sovereign-notes-oci-repository
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          interval: 1m0s
+          insecure: true
+          layerSelector:
+            mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+            operation: copy
+          url: oci://${notesChartResource.status.additional.registry}/${notesChartResource.status.additional.repository}
+          ref:
+            digest: ${notesChartResource.status.additional.digest}
+
+    # FluxCD HelmRelease for notes
+    - id: notesHelmRelease
+      template:
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: sovereign-notes
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          releaseName: sovereign-notes
+          interval: 1m
+          timeout: 5m
+          chartRef:
+            kind: OCIRepository
+            name: ${notesOciRepository.metadata.name}
+          values:
+            replicaCount: ${schema.spec.notes.replicas}
+            image:
+              repository: ${notesImageResource.status.additional.registry}/${notesImageResource.status.additional.repository}
+              tag: ${notesImageResource.status.additional.tag}@${notesImageResource.status.additional.digest}
+            databaseSecretRef: ${secrets.metadata.name}
+            resources:
+              requests:
+                memory: ${schema.spec.notes.resources.requests.memory}
+                cpu: ${schema.spec.notes.resources.requests.cpu}
+              limits:
+                memory: ${schema.spec.notes.resources.limits.memory}
+                cpu: ${schema.spec.notes.resources.limits.cpu}
