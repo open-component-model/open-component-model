@@ -425,17 +425,101 @@ func Test_Integration_ConstructorCompress(t *testing.T) {
 	name, version := "ocm.software/compress-test", "v1.0.0"
 	resourceName, resourceVersion := "myfile", "v1.0.0"
 
-	t.Run("compressed resource with disable extraction stays compressed", func(t *testing.T) {
-		r := require.New(t)
+	tests := []struct {
+		name             string
+		compress         bool
+		extractionPolicy string // "" means don't pass the flag (defaults to auto)
+		assertOutput     func(t *testing.T, data []byte)
+	}{
+		{
+			name:             "compressed resource with disable extraction stays compressed",
+			compress:         true,
+			extractionPolicy: "disable",
+			assertOutput: func(t *testing.T, data []byte) {
+				r := require.New(t)
+				r.NotEqual(originalContent, string(data),
+					"with disable extraction, output should be compressed (not match original)")
 
-		tempDir := t.TempDir()
-		filePath := filepath.Join(tempDir, "testfile.txt")
-		r.NoError(os.WriteFile(filePath, []byte(originalContent), os.ModePerm))
+				decomp, err := compression.Decompress(
+					direct.New(bytes.NewReader(data), direct.WithMediaType(compression.MediaTypeGzip)),
+				)
+				r.NoError(err)
+				rc, err := decomp.ReadCloser()
+				r.NoError(err)
+				defer func() { r.NoError(rc.Close()) }()
+				got, err := io.ReadAll(rc)
+				r.NoError(err)
+				r.Equal(originalContent, string(got), "decompressed data should match original content")
+			},
+		},
+		{
+			name:             "uncompressed resource with disable extraction is unchanged",
+			compress:         false,
+			extractionPolicy: "disable",
+			assertOutput: func(t *testing.T, data []byte) {
+				require.Equal(t, originalContent, string(data),
+					"uncompressed resource should match original content")
+			},
+		},
+		{
+			name:     "compressed resource with auto extraction is decompressed",
+			compress: true,
+			assertOutput: func(t *testing.T, data []byte) {
+				require.Equal(t, originalContent, string(data),
+					"auto extraction should decompress and match original content")
+			},
+		},
+	}
 
-		constructorPath := filepath.Join(tempDir, "constructor.yaml")
-		transportArchivePath := filepath.Join(tempDir, "transport-archive")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			tempDir := t.TempDir()
 
-		constructor := fmt.Sprintf(`components:
+			filePath := filepath.Join(tempDir, "testfile.txt")
+			r.NoError(os.WriteFile(filePath, []byte(originalContent), os.ModePerm))
+
+			constructorPath := filepath.Join(tempDir, "constructor.yaml")
+			transportArchivePath := filepath.Join(tempDir, "transport-archive")
+
+			constructor := buildConstructorYAML(name, version, resourceName, resourceVersion, filePath, tt.compress)
+			r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+
+			addCMD := cmd.New()
+			addCMD.SetArgs([]string{
+				"add", "component-version",
+				"--repository", transportArchivePath,
+				"--constructor", constructorPath,
+			})
+			r.NoError(addCMD.ExecuteContext(t.Context()), "adding the component-version must succeed")
+
+			output := filepath.Join(tempDir, "downloaded-resource")
+			downloadArgs := []string{
+				"download", "resource",
+				fmt.Sprintf("%s//%s:%s", transportArchivePath, name, version),
+				"--identity", fmt.Sprintf("name=%s,version=%s", resourceName, resourceVersion),
+				"--output", output,
+			}
+			if tt.extractionPolicy != "" {
+				downloadArgs = append(downloadArgs, "--extraction-policy", tt.extractionPolicy)
+			}
+			downloadCMD := cmd.New()
+			downloadCMD.SetArgs(downloadArgs)
+			r.NoError(downloadCMD.ExecuteContext(t.Context()), "downloading resource must succeed")
+
+			data, err := os.ReadFile(output)
+			r.NoError(err)
+			tt.assertOutput(t, data)
+		})
+	}
+}
+
+func buildConstructorYAML(name, version, resourceName, resourceVersion, filePath string, compress bool) string {
+	compressLine := ""
+	if compress {
+		compressLine = "\n        compress: true"
+	}
+	return fmt.Sprintf(`components:
 - name: %[1]s
   version: %[2]s
   provider:
@@ -446,158 +530,8 @@ func Test_Integration_ConstructorCompress(t *testing.T) {
       type: blob
       input:
         type: file
-        path: %[5]s
-        compress: true
-`, name, version, resourceName, resourceVersion, filePath)
-		r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
-
-		addCMD := cmd.New()
-		addCMD.SetArgs([]string{
-			"add",
-			"component-version",
-			"--repository", transportArchivePath,
-			"--constructor", constructorPath,
-		})
-		r.NoError(addCMD.ExecuteContext(t.Context()), "adding the component-version must succeed")
-
-		output := filepath.Join(tempDir, "downloaded-resource")
-		downloadCMD := cmd.New()
-		downloadCMD.SetArgs([]string{
-			"download",
-			"resource",
-			fmt.Sprintf("%s//%s:%s", transportArchivePath, name, version),
-			"--identity",
-			fmt.Sprintf("name=%s,version=%s", resourceName, resourceVersion),
-			"--output",
-			output,
-			"--extraction-policy",
-			"disable",
-		})
-		r.NoError(downloadCMD.ExecuteContext(t.Context()), "downloading with disable extraction must succeed")
-
-		data, err := os.ReadFile(output)
-		r.NoError(err)
-		r.NotEqual(originalContent, string(data), "with disable extraction, output should be compressed (not match original)")
-
-		// Decompress the data to verify it matches the original content
-		decompress, err := compression.Decompress(direct.New(bytes.NewReader(data), direct.WithMediaType(compression.MediaTypeGzip)))
-		r.NoError(err)
-		readCloser, err := decompress.ReadCloser()
-		r.NoError(err)
-		defer func() {
-			r.NoError(readCloser.Close())
-		}()
-		decompressedData, err := io.ReadAll(readCloser)
-		r.NoError(err)
-		r.Equal(originalContent, string(decompressedData), "decompressed data should match original content")
-	})
-
-	t.Run("uncompressed resource with disable extraction is unchanged", func(t *testing.T) {
-		r := require.New(t)
-
-		tempDir := t.TempDir()
-		filePath := filepath.Join(tempDir, "testfile.txt")
-		r.NoError(os.WriteFile(filePath, []byte(originalContent), os.ModePerm))
-
-		constructorPath := filepath.Join(tempDir, "constructor.yaml")
-		transportArchivePath := filepath.Join(tempDir, "transport-archive")
-
-		constructor := fmt.Sprintf(`components:
-- name: %[1]s
-  version: %[2]s
-  provider:
-    name: acme.org
-  resources:
-    - name: %[3]s
-      version: %[4]s
-      type: blob
-      input:
-        type: file
-        path: %[5]s
-`, name, version, resourceName, resourceVersion, filePath)
-		r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
-
-		addCMD := cmd.New()
-		addCMD.SetArgs([]string{
-			"add",
-			"component-version",
-			"--repository", transportArchivePath,
-			"--constructor", constructorPath,
-		})
-		r.NoError(addCMD.ExecuteContext(t.Context()), "adding the component-version must succeed")
-
-		output := filepath.Join(tempDir, "downloaded-resource")
-		downloadCMD := cmd.New()
-		downloadCMD.SetArgs([]string{
-			"download",
-			"resource",
-			fmt.Sprintf("%s//%s:%s", transportArchivePath, name, version),
-			"--identity",
-			fmt.Sprintf("name=%s,version=%s", resourceName, resourceVersion),
-			"--output",
-			output,
-			"--extraction-policy",
-			"disable",
-		})
-		r.NoError(downloadCMD.ExecuteContext(t.Context()), "downloading uncompressed resource must succeed")
-
-		data, err := os.ReadFile(output)
-		r.NoError(err)
-		r.Equal(originalContent, string(data), "uncompressed resource should match original content")
-	})
-
-	t.Run("compressed resource with auto extraction is decompressed", func(t *testing.T) {
-		r := require.New(t)
-
-		tempDir := t.TempDir()
-		filePath := filepath.Join(tempDir, "testfile.txt")
-		r.NoError(os.WriteFile(filePath, []byte(originalContent), os.ModePerm))
-
-		constructorPath := filepath.Join(tempDir, "constructor.yaml")
-		transportArchivePath := filepath.Join(tempDir, "transport-archive")
-
-		constructor := fmt.Sprintf(`components:
-- name: %[1]s
-  version: %[2]s
-  provider:
-    name: acme.org
-  resources:
-    - name: %[3]s
-      version: %[4]s
-      type: blob
-      input:
-        type: file
-        path: %[5]s
-        compress: true
-`, name, version, resourceName, resourceVersion, filePath)
-		r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
-
-		addCMD := cmd.New()
-		addCMD.SetArgs([]string{
-			"add",
-			"component-version",
-			"--repository", transportArchivePath,
-			"--constructor", constructorPath,
-		})
-		r.NoError(addCMD.ExecuteContext(t.Context()), "adding the component-version must succeed")
-
-		output := filepath.Join(tempDir, "downloaded-resource")
-		downloadCMD := cmd.New()
-		downloadCMD.SetArgs([]string{
-			"download",
-			"resource",
-			fmt.Sprintf("%s//%s:%s", transportArchivePath, name, version),
-			"--identity",
-			fmt.Sprintf("name=%s,version=%s", resourceName, resourceVersion),
-			"--output",
-			output,
-		})
-		r.NoError(downloadCMD.ExecuteContext(t.Context()), "downloading with auto extraction must succeed")
-
-		data, err := os.ReadFile(output)
-		r.NoError(err)
-		r.Equal(originalContent, string(data), "auto extraction should decompress and match original content")
-	})
+        path: %[5]s%[6]s
+`, name, version, resourceName, resourceVersion, filePath, compressLine)
 }
 
 type resource struct {
