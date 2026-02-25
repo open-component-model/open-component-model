@@ -388,6 +388,8 @@ func (a *ApplySet) applyResource(
 		client.FieldOwner(options.FieldManager),
 	}
 
+	//nolint: staticcheck // client.Apply is deprecated: Use client.Client.Apply()
+	// TODO(matthiasbruns): Switch to client.Client.Apply()
 	err := a.client.Patch(ctx, r.Object, client.Apply, patchOptions...)
 	if err != nil {
 		item.Error = err

@@ -176,7 +176,7 @@ func CheckOCMComponent(ctx context.Context, componentReference, ocmConfigPath st
 	}
 	c = append(c, componentReference)
 
-	cmd := exec.CommandContext(ctx, c[0], c[1:]...) //nolint:gosec // The argument list is constructed right above.
+	cmd := exec.CommandContext(ctx, c[0], c[1:]...)
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
