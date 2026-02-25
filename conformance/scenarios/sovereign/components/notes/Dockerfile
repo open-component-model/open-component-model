@@ -13,8 +13,14 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o sovereign-notes ./cmd/sovereign-notes
+# Build the application with version injection.
+# v1.0.0 builds from cmd/sovereign-notes-v1 (initial schema, no migrations).
+# v1.1.0+ builds from cmd/sovereign-notes (migration-based schema evolution).
+ARG VERSION=1.0.0
+RUN CMD_DIR=$(if [ "${VERSION}" = "1.0.0" ]; then echo "sovereign-notes-v1"; else echo "sovereign-notes"; fi) && \
+    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+    -ldflags="-X main.version=${VERSION}" \
+    -o sovereign-notes ./cmd/${CMD_DIR}
 
 # Final stage
 FROM alpine:3.19

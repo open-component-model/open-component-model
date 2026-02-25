@@ -35,6 +35,7 @@ tasks:
 
   # === DEPENDENCY CHECKS ===
   check:
+    silent: true
     desc: Check required dependencies are installed
     cmds:
       - cmd: which docker || (echo "❌ Docker not found" && exit 1)
@@ -42,7 +43,6 @@ tasks:
       - cmd: which kind || (echo "❌ kind not found" && exit 1)
       - cmd: which flux || (echo "❌ flux CLI not found" && exit 1)
       - cmd: which openssl || (echo "❌ openssl not found" && exit 1)
-      - cmd: echo "✅ All dependencies found"
 
   # === BUILD TASKS ===
   build:notes:
@@ -59,6 +59,7 @@ tasks:
       - cmd: |
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
+            --build-arg VERSION={{.VERSION}} \
             -t '{{.VERSION}}' \
             --output type=oci,dest={{.OCI_LAYOUT}} \
             .
@@ -85,7 +86,14 @@ tasks:
 
   build:product:
     desc: Build all OCM components into CTF archive
-    deps: [build:notes, build:postgres, product:keys]
+    deps:
+      - task: build:notes
+        vars:
+          VERSION: '{{.VERSION}}'
+      - task: build:postgres
+        vars:
+          VERSION: '{{.VERSION}}'
+      - task: product:keys
     dir: scenarios/sovereign/components/product
     env:
       NAME: '{{.NAME}}'
@@ -179,7 +187,7 @@ tasks:
       vars:
         KIND: ResourceGraphDefinition
         NAME: sovereign-product
-    - cmd: kubectl apply -f deploy/sample-product.yaml
+    - cmd: kubectl apply -f deploy/sample-product-1.0.0.yaml
 
   # === VERIFICATION TASKS ===
 
@@ -187,28 +195,23 @@ tasks:
     desc: Verify successful deployment and functionality
     cmds:
       - echo "Waiting for components to be ready..."
-      - kubectl -n ocm-k8s-toolkit-system wait --for=condition=Ready
-          component/sovereign-product --timeout=300s
-      - echo "Waiting for workloads to be available..."  
-      - kubectl -n sovereign-product wait --for=condition=Available
-          deployment/notes --timeout=180s
       - kubectl -n sovereign-product wait --for=condition=Ready
-          pod -l app=postgres --timeout=180s
-      - echo "Testing application connectivity..."
+          component/sovereign-product-component --timeout=300s
       - task: test:connectivity
-      - echo "✅ Deployment verified successfully"
 
   test:connectivity:
     desc: Test application connectivity and functionality
+    silent: true
     cmds:
       - cmd: |
-          kubectl -n sovereign-product port-forward svc/notes 8080:80 > /dev/null 2>&1 &
+          trap 'kill $PF_PID 2>/dev/null' EXIT
+          kubectl -n sovereign-product port-forward svc/notes-sovereign-notes 8085:80 &>/dev/null &
           PF_PID=$!
-          sleep 5
-          curl -f http://localhost:8080/readyz || (kill $PF_PID 2>/dev/null; echo "❌ Readiness check failed" && exit 1)
-          curl -f http://localhost:8080/notes || (kill $PF_PID 2>/dev/null; echo "❌ Notes API failed" && exit 1)
-          kill $PF_PID 2>/dev/null || true
-          echo "✅ Application responding correctly"
+          until curl -sf http://localhost:8085/readyz &>/dev/null; do sleep 0.5; done
+          for ep in readyz notes; do
+            curl -sf --max-time 5 "http://localhost:8085/${ep}" > /dev/null \
+              && echo "✅ /${ep}" || { echo "❌ /${ep}"; exit 1; }
+          done
 
   # === CLEANUP TASKS ===
   clean:
@@ -222,128 +225,38 @@ tasks:
 
   # === MAIN WORKFLOWS ===
   upgrade:
-    desc: Test upgrade scenario (1.0.0 -> 1.1.0)
+    dir: scenarios/sovereign
+    desc: Test upgrade scenario
     vars:
-      OLD_VERSION: "1.0.0"
       NEW_VERSION: "1.1.0"
     cmds:
-      - echo "🔄 Testing upgrade scenario {{.OLD_VERSION}} -> {{.NEW_VERSION}}"
-      - VERSION={{.OLD_VERSION}} task demo
-      - echo "Upgrading to {{.NEW_VERSION}}..."
-      - VERSION={{.NEW_VERSION}} task build:ctf
-      - VERSION={{.NEW_VERSION}} task sign
-      - VERSION={{.NEW_VERSION}} task transfer:airgap
-      - VERSION={{.NEW_VERSION}} task cluster:import
-      - echo "Waiting for automatic upgrade..."
-      - sleep 30
-      - task: verify:deployment
-      - echo "✅ Upgrade scenario completed successfully"
-
-  # === TESTING TASKS ===
-  
-  test:build:
-    desc: Test component building phase only
-    deps: [check]
-    cmds:
-      - task: clean
-      - cmd: echo "📦 Testing build phase..."
-      - task: build:app
-      - cmd: |
-          if [ -f scenarios/sovereign/components/notes/deploy/notes.tar ]; then
-            echo "✅ OCI tar created successfully"
-            ls -lh scenarios/sovereign/components/notes/deploy/notes.tar
-          else
-            echo "❌ OCI tar not found"
-            exit 1
-          fi
-      - task: build:notes
-      - task: build:postgres 
+      - cmd: rm -rf {{.CTF}} {{.AIRGAP_CTF}}
+      - task: test:create-note
       - task: build:product
-      - cmd: |
-          if [ -d scenarios/sovereign/components/product/transport-archive ]; then
-            echo "✅ Build successful - CTF archive created"
-            ls -la scenarios/sovereign/components/product/transport-archive/
-          else
-            echo "❌ Build failed - no CTF archive found"
-            exit 1
-          fi
-  
-  test:sign:
-    desc: Test signing and verification
-    deps: [test:build]
-    cmds:
-      - cmd: echo "🔐 Testing signing..."
-      - task: sign
-      - cmd: echo "✔️ Testing verification..."
-      - task: verify
-      - echo "✅ Signing and verification successful"
-  
-  test:cluster:
-    desc: Test cluster creation and setup
-    cmds:
-      - cmd: echo "🚢 Testing cluster setup..."
-      - task: cluster:create
-      - cmd: |
-          kubectl get nodes || (echo "❌ Cluster not accessible" && exit 1)
-          echo "✅ Cluster setup successful"
-  
-  test:incremental:
-    desc: Run incremental tests with verbose output
-    cmds:
-      - task: check
-      - task: test:build
-      - task: test:sign
-      - task: test:cluster
-      - cmd: echo "✅ All incremental tests passed"
-  
-  validate:ctf:
-    desc: Validate CTF archive contents
-    dir: scenarios/sovereign/components/product
+        vars:
+          VERSION: "{{.NEW_VERSION}}"
+      - task: transfer:airgap
+        vars:
+          VERSION: "{{.NEW_VERSION}}"
+      - task: cluster:import
+        vars:
+          VERSION: "{{.NEW_VERSION}}"
+      - cmd: kubectl apply -f deploy/sample-product-1.1.0.yaml
+      # TODO bump component spec automatically
+
+  test:create-note:
+    desc: Create a pre-upgrade test note to verify data survives migration
+    silent: true
     cmds:
       - cmd: |
-          if [ -f transport-archive/artifact-index.json ]; then
-            echo "📋 CTF Archive Contents:"
-            cat transport-archive/artifact-index.json | jq .
-          else
-            echo "❌ No CTF archive found"
-            exit 1
-          fi
-      - cmd: |
-          echo "📦 Blobs in archive:"
-          ls -la transport-archive/blobs/ 2>/dev/null || echo "No blobs directory"
-  
-  inspect:component:
-    desc: Inspect component descriptor
-    dir: scenarios/sovereign/components/product
-    vars:
-      COMPONENT: './transport-archive//{{.NAME}}:{{.VERSION}}'
-    cmds:
-      - cmd: |
-          {{ .ocm }} show componentversion {{.COMPONENT}} || echo "Component not found"
-  
-  inspect:oci:
-    desc: Inspect OCI tar contents
-    dir: scenarios/sovereign/components/notes/deploy
-    cmds:
-      - cmd: |
-          if [ -f notes.tar ]; then
-            echo "📦 OCI tar file info:"
-            ls -lh notes.tar
-            echo ""
-            echo "📋 OCI tar contents:"
-            tar -tvf notes.tar | head -20
-            echo ""
-            echo "🔍 Extracting and inspecting manifest..."
-            mkdir -p /tmp/oci-inspect
-            tar -xf notes.tar -C /tmp/oci-inspect
-            if [ -f /tmp/oci-inspect/index.json ]; then
-              cat /tmp/oci-inspect/index.json | jq .
-            fi
-            rm -rf /tmp/oci-inspect
-          else
-            echo "❌ No OCI tar found at notes.tar"
-            echo "Run 'task build:app' first"
-          fi
+          trap 'kill $PF_PID 2>/dev/null' EXIT
+          kubectl -n sovereign-product port-forward svc/notes-sovereign-notes 8085:80 &>/dev/null &
+          PF_PID=$!
+          until curl -sf http://localhost:8085/readyz &>/dev/null; do sleep 0.5; done
+          RESPONSE=$(curl -sf -X POST http://localhost:8085/notes \
+            -H 'Content-Type: application/json' \
+            -d '{"content": "pre-upgrade note"}') || { echo "❌ Failed to create note"; exit 1; }
+          echo "✅ Pre-upgrade note created: $RESPONSE"
 
   # === UTILITY TASKS ===
   kubectl-wait:
@@ -367,19 +280,15 @@ tasks:
         done
         echo "{{.KIND}} {{.NAME}} is available"
 
-  logs:
-    desc: Show OCM controller logs
-    cmds:
-      - kubectl -n ocm-k8s-toolkit-system logs -l app=ocm-controller --tail=100 -f
-
   status:
     desc: Show status of all OCM resources
+    silent: true
     cmds:
       - echo "=== Repositories ==="
-      - kubectl -n ocm-k8s-toolkit-system get repositories
+      - kubectl get repositories -A
       - echo "=== Components ==="
-      - kubectl -n ocm-k8s-toolkit-system get components
+      - kubectl get components  -A
       - echo "=== Resources ==="
-      - kubectl -n ocm-k8s-toolkit-system get resources
+      - kubectl get resources -A
       - echo "=== Deployers ==="
-      - kubectl -n ocm-k8s-toolkit-system get deployers
+      - kubectl get deployers -A

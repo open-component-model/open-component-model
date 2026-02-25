@@ -13,7 +13,7 @@ spec:
   repositoryRef:
     name: sovereign-repo
   semver: ">=1.0.0"
-  interval: 10m
+  interval: 1m
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
@@ -25,7 +25,7 @@ spec:
   repositoryRef:
     name: sovereign-repo
   semver: ">=1.0.0"
-  interval: 10m
+  interval: 1m
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
@@ -37,7 +37,7 @@ spec:
   repositoryRef:
     name: sovereign-repo
   semver: ">=1.0.0"
-  interval: 10m
+  interval: 1m
   verify:
     - signature: default
       secretRef:
@@ -58,7 +58,7 @@ spec:
     byReference:
       resource:
         name: rgd
-  interval: 10m
+  interval: 1m
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Resource
@@ -72,7 +72,7 @@ spec:
     byReference:
       resource:
         name: rgd
-  interval: 10m
+  interval: 1m
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Resource
@@ -86,7 +86,7 @@ spec:
     byReference:
       resource:
         name: product-rgd
-  interval: 10m
+  interval: 1m
 
 # --- Deployers ---
 

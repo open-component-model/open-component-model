@@ -1,9 +1,12 @@
-// Package main implements the sovereign-notes web service
+// Package main implements the sovereign-notes v1.1.0 web service.
+// This version uses incremental migrations to evolve the schema
+// created by v1.0.0 (cmd/sovereign-notes-v1).
 package main
 
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -19,6 +22,7 @@ import (
 // Note represents a note in the system
 type Note struct {
 	ID        int       `json:"id"`
+	Title     string    `json:"title"`
 	Content   string    `json:"content"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -32,7 +36,7 @@ type VersionInfo struct {
 
 var (
 	db      *sql.DB
-	version = "1.0.0" // Set via build flags
+	version = "1.1.0" // Set via build flags
 )
 
 func main() {
@@ -60,9 +64,9 @@ func main() {
 		log.Fatal("Failed to ping database:", err)
 	}
 
-	// Initialize database schema
-	if err := initializeSchema(); err != nil {
-		log.Fatal("Failed to initialize database schema:", err)
+	// Run database migrations
+	if err := runMigrations(); err != nil {
+		log.Fatal("Failed to run database migrations:", err)
 	}
 
 	// Setup routes
@@ -94,17 +98,77 @@ func main() {
 	}
 }
 
-// initializeSchema creates the notes table if it doesn't exist
-func initializeSchema() error {
-	query := `
-		CREATE TABLE IF NOT EXISTS notes (
+// migration represents a database schema migration.
+type migration struct {
+	id  int
+	sql string
+}
+
+// migrations is the ordered list of schema migrations.
+// Each migration is idempotent and safe to re-run.
+var migrations = []migration{
+	{
+		id: 1,
+		sql: `CREATE TABLE IF NOT EXISTS notes (
 			id SERIAL PRIMARY KEY,
 			content TEXT NOT NULL,
 			created_at TIMESTAMP DEFAULT NOW()
+		)`,
+	},
+	{
+		id:  2,
+		sql: `ALTER TABLE notes ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT ''`,
+	},
+}
+
+// runMigrations applies all pending migrations using an advisory lock
+// to prevent race conditions when multiple replicas start simultaneously.
+func runMigrations() error {
+	// Acquire advisory lock to prevent concurrent migrations
+	if _, err := db.Exec("SELECT pg_advisory_lock(1)"); err != nil {
+		return fmt.Errorf("failed to acquire advisory lock: %w", err)
+	}
+	defer db.Exec("SELECT pg_advisory_unlock(1)") //nolint:errcheck
+
+	// Create migrations tracking table
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			id INTEGER PRIMARY KEY,
+			applied_at TIMESTAMP DEFAULT NOW()
 		)
-	`
-	_, err := db.Exec(query)
-	return err
+	`); err != nil {
+		return fmt.Errorf("failed to create schema_migrations table: %w", err)
+	}
+
+	for _, m := range migrations {
+		// Check if migration has already been applied
+		var exists bool
+		if err := db.QueryRow(
+			"SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE id = $1)", m.id,
+		).Scan(&exists); err != nil {
+			return fmt.Errorf("failed to check migration %d: %w", m.id, err)
+		}
+
+		if exists {
+			log.Printf("Migration %d already applied, skipping", m.id)
+			continue
+		}
+
+		log.Printf("Applying migration %d...", m.id)
+		if _, err := db.Exec(m.sql); err != nil {
+			return fmt.Errorf("failed to apply migration %d: %w", m.id, err)
+		}
+
+		if _, err := db.Exec(
+			"INSERT INTO schema_migrations (id) VALUES ($1)", m.id,
+		); err != nil {
+			return fmt.Errorf("failed to record migration %d: %w", m.id, err)
+		}
+
+		log.Printf("Migration %d applied successfully", m.id)
+	}
+
+	return nil
 }
 
 // Health check endpoint
@@ -135,7 +199,7 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 
 // List all notes
 func listNotesHandler(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT id, content, created_at FROM notes ORDER BY created_at DESC")
+	rows, err := db.Query("SELECT id, title, content, created_at FROM notes ORDER BY created_at DESC")
 	if err != nil {
 		http.Error(w, "Failed to query notes: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -145,7 +209,7 @@ func listNotesHandler(w http.ResponseWriter, r *http.Request) {
 	var notes []Note
 	for rows.Next() {
 		var note Note
-		if err := rows.Scan(&note.ID, &note.Content, &note.CreatedAt); err != nil {
+		if err := rows.Scan(&note.ID, &note.Title, &note.Content, &note.CreatedAt); err != nil {
 			http.Error(w, "Failed to scan note: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -170,8 +234,8 @@ func createNoteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := db.QueryRow(
-		"INSERT INTO notes (content) VALUES ($1) RETURNING id, created_at",
-		note.Content,
+		"INSERT INTO notes (title, content) VALUES ($1, $2) RETURNING id, created_at",
+		note.Title, note.Content,
 	).Scan(&note.ID, &note.CreatedAt)
 	if err != nil {
 		http.Error(w, "Failed to create note: "+err.Error(), http.StatusInternalServerError)
@@ -194,9 +258,9 @@ func getNoteHandler(w http.ResponseWriter, r *http.Request) {
 
 	var note Note
 	err = db.QueryRow(
-		"SELECT id, content, created_at FROM notes WHERE id = $1",
+		"SELECT id, title, content, created_at FROM notes WHERE id = $1",
 		id,
-	).Scan(&note.ID, &note.Content, &note.CreatedAt)
+	).Scan(&note.ID, &note.Title, &note.Content, &note.CreatedAt)
 
 	if err == sql.ErrNoRows {
 		http.Error(w, "Note not found", http.StatusNotFound)
@@ -261,40 +325,43 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
     
     <div class="form">
         <h3>Add Note</h3>
+        <input type="text" id="titleInput" placeholder="Title (optional)" />
         <input type="text" id="noteInput" placeholder="Enter your note..." />
         <button onclick="addNote()">Add Note</button>
     </div>
-    
+
     <div id="notes"></div>
-    
+
     <script>
         async function loadNotes() {
             const response = await fetch('/notes');
             const notes = await response.json();
             const notesDiv = document.getElementById('notes');
-            notesDiv.innerHTML = notes.map(note => 
+            notesDiv.innerHTML = notes.map(note =>
                 '<div class="note">' +
-                '<strong>Note #' + note.id + '</strong><br>' +
+                '<strong>' + (note.title || 'Note #' + note.id) + '</strong><br>' +
                 note.content + '<br>' +
                 '<small>' + new Date(note.created_at).toLocaleString() + '</small>' +
                 '</div>'
             ).join('');
         }
-        
+
         async function addNote() {
+            const title = document.getElementById('titleInput').value;
             const content = document.getElementById('noteInput').value;
             if (!content) return;
-            
+
             await fetch('/notes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content })
+                body: JSON.stringify({ title, content })
             });
-            
+
+            document.getElementById('titleInput').value = '';
             document.getElementById('noteInput').value = '';
             loadNotes();
         }
-        
+
         loadNotes();
     </script>
 </body>
