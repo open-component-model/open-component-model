@@ -222,7 +222,7 @@ func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, err error) {
 	mediaTypeAware, ok := b.(blob.MediaTypeAware)
 	if !ok {
 		// if were not media type aware, it's unsafe to try to extract it, avoid
-		return nil, ErrCannotExtractFS
+		return nil, fmt.Errorf("blob is not media type aware: %w", ErrCannotExtractFS)
 	}
 
 	mediaType, ok := mediaTypeAware.MediaType()
