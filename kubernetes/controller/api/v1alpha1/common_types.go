@@ -2,7 +2,6 @@ package v1alpha1
 
 import (
 	"github.com/fluxcd/pkg/apis/meta"
-	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -40,24 +39,6 @@ type ObjectKey struct {
 	Namespace string `json:"namespace,omitempty"`
 	// +required
 	Name string `json:"name,omitempty"`
-}
-
-type Verification struct {
-	// +required
-	Signature string `json:"signature,omitempty"`
-	// Public Key Secret Format
-	// A secret containing public keys for signature verification is expected to be of the structure:
-	//
-	//  Data:
-	//	  <Signature-Name>: <PublicKey/Certificate>
-	//
-	// Additionally, to prepare for a common ocm secret management, it might make sense to introduce a specific secret type
-	// for these secrets.
-	// +optional
-	SecretRef corev1.LocalObjectReference `json:"secretRef,omitempty"`
-	// Value defines a PEM/base64 encoded public key value.
-	// +optional
-	Value string `json:"value,omitempty"`
 }
 
 // ResourceID defines the configuration of the repository.

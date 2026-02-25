@@ -151,40 +151,6 @@ spec:
                   Suspend tells the controller to suspend the reconciliation of this
                   Component.
                 type: boolean
-              verify:
-                description: |-
-                  Verify contains a signature name specifying the component signature to be
-                  verified as well as the trusted public keys (or certificates containing
-                  the public keys) used to verify the signature.
-                items:
-                  properties:
-                    secretRef:
-                      description: "Public Key Secret Format\nA secret containing
-                        public keys for signature verification is expected to be of
-                        the structure:\n\n Data:\n\t  <Signature-Name>: <PublicKey/Certificate>\n\nAdditionally,
-                        to prepare for a common ocm secret management, it might make
-                        sense to introduce a specific secret type\nfor these secrets."
-                      properties:
-                        name:
-                          default: ""
-                          description: |-
-                            Name of the referent.
-                            This field is effectively required, but due to backwards compatibility is
-                            allowed to be empty. Instances of this type with an empty value here are
-                            almost certainly wrong.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                          type: string
-                      type: object
-                      x-kubernetes-map-type: atomic
-                    signature:
-                      type: string
-                    value:
-                      description: Value defines a PEM/base64 encoded public key value.
-                      type: string
-                  required:
-                  - signature
-                  type: object
-                type: array
             required:
             - component
             - interval

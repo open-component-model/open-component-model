@@ -33,11 +33,3 @@ type OCMK8SObject interface {
 	conditions.Setter
 	ConfigRefProvider
 }
-
-// VerificationProvider are objects that may provide verification information. The interface allows all implementers to
-// use the same function to retrieve and parse the contained or referenced public keys.
-// +kubebuilder:object:generate=false
-type VerificationProvider interface {
-	GetNamespace() string
-	GetVerifications() []Verification
-}

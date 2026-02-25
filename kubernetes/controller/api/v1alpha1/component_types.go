@@ -51,12 +51,6 @@ type ComponentSpec struct {
 	// +optional
 	SemverFilter string `json:"semverFilter,omitempty"`
 
-	// Verify contains a signature name specifying the component signature to be
-	// verified as well as the trusted public keys (or certificates containing
-	// the public keys) used to verify the signature.
-	// +optional
-	Verify []Verification `json:"verify,omitempty"`
-
 	// OCMConfig defines references to secrets, config maps or ocm api
 	// objects providing configuration data including credentials.
 	// +optional
@@ -156,10 +150,6 @@ func (in *Component) GetSpecifiedOCMConfig() []OCMConfiguration {
 
 func (in *Component) GetEffectiveOCMConfig() []OCMConfiguration {
 	return in.Status.EffectiveOCMConfig
-}
-
-func (in *Component) GetVerifications() []Verification {
-	return in.Spec.Verify
 }
 
 // +kubebuilder:object:root=true
