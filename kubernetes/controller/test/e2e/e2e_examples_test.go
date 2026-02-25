@@ -29,6 +29,14 @@ var ignoreExamples = map[string]struct{}{
 
 var _ = Describe("controller", func() {
 	Context("examples", func() {
+		AfterEach(func() {
+			if !CurrentSpecReport().Failed() {
+				return
+			}
+
+			utils.DumpLogs("kro", "rgd")
+		})
+
 		for _, example := range examples {
 			if _, ok := ignoreExamples[example.Name()]; ok {
 				continue

@@ -2,13 +2,12 @@ package utils
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 )
@@ -185,61 +184,36 @@ func CheckOCMComponent(ctx context.Context, componentReference, ocmConfigPath st
 	return nil
 }
 
-// GetOCMResourceImageRef returns the image reference of a specified resource of a component version.
-// For the format of component reference see OCM CLI documentation.
-func GetOCMResourceImageRef(ctx context.Context, componentReference, resourceName, ocmConfigPath string) (string, error) {
-	// Construct the command 'ocm get resources', which is used here to get the image reference of a resource.
-	// See also: https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_get_resources.md
-	c := []string{"ocm", "--loglevel", "error"}
-	if len(ocmConfigPath) > 0 {
-		c = append(c, "--config", ocmConfigPath)
-	}
-	c = append(c, "get", "resources", componentReference, resourceName, "-oJSON") // -oJSON is used to get the output in JSON format.
+// DumpLogs dumps pod logs and resource status for the given namespace and resource type.
+// Intended for use in AfterEach to capture state on test failure.
+// Creates its own context with a 30s timeout to survive parent context cancellation.
+func DumpLogs(namespace, resourceType string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	cmd := exec.CommandContext(ctx, c[0], c[1:]...) //nolint:gosec // The argument list is constructed right above.
-	output, err := Run(cmd)
-	if err != nil {
-		return "", err
+	logLine := func(msg string) {
+		GinkgoLogr.Info(msg)
 	}
 
-	// This struct corresponds to the json format of the command output.
-	// We are only interested in one specific field, the image reference. All other fields are omitted.
-	type Result struct {
-		Items []struct {
-			Element struct {
-				Access struct {
-					ImageReference string `json:"imageReference"`
-				} `json:"access"`
-			} `json:"element"`
-		} `json:"items"`
+	logCmd := func(label string, args ...string) {
+		cmd := exec.CommandContext(ctx, args[0], args[1:]...) //nolint:gosec // args are hardcoded in test code
+		output, err := Run(cmd)
+		if err != nil {
+			logLine(fmt.Sprintf("[DIAG] %s: error: %v", label, err))
+		} else {
+			for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+				logLine(fmt.Sprintf("[DIAG] %s: %s", label, line))
+			}
+		}
 	}
 
-	var r Result
-	err = json.Unmarshal(output, &r)
-	if err != nil {
-		return "", errors.New("could not unmarshal command output: " + string(output))
-	}
-	if len(r.Items) != 1 {
-		return "", errors.New("exactly one item is expected in command output: " + string(output))
-	}
-
-	return r.Items[0].Element.Access.ImageReference, nil
-}
-
-// CreateNamespace creates Kubernetes namespace.
-func CreateNamespace(ctx context.Context, ns string) error {
-	cmd := exec.CommandContext(ctx, "kubectl", "create", "ns", ns)
-	_, err := Run(cmd)
-
-	return err
-}
-
-// DeleteNamespace deletes Kubernetes namespace.
-func DeleteNamespace(ctx context.Context, ns string) error {
-	cmd := exec.CommandContext(ctx, "kubectl", "delete", "ns", ns, "--ignore-not-found=true", "--cascade=foreground")
-	_, err := Run(cmd)
-
-	return err
+	logCmd("kro-pods", "kubectl", "get", "pods", "-n", namespace, "-o", "wide")
+	logCmd("kro-events", "kubectl", "get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
+	logCmd("rgd-conditions",
+		"kubectl", "get", resourceType, "-o",
+		"custom-columns=NAME:.metadata.name,ACCEPTED:.status.conditions[?(@.type==\"ResourceGraphAccepted\")].status,ACCEPTED_MSG:.status.conditions[?(@.type==\"ResourceGraphAccepted\")].message,READY:.status.conditions[?(@.type==\"Ready\")].status,READY_MSG:.status.conditions[?(@.type==\"Ready\")].message",
+	)
+	logCmd("kro-logs", "kubectl", "logs", "-n", namespace, "--all-containers", "--tail=100", "-l", "app.kubernetes.io/name=kro")
 }
 
 // CompareResourceField compares the value of a specific field in a Kubernetes resource
