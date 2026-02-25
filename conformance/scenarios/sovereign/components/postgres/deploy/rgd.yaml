@@ -62,12 +62,13 @@ spec:
             registry: resource.access.globalAccess.imageReference.toOCI().registry
             repository: resource.access.globalAccess.imageReference.toOCI().repository
             tag: resource.access.globalAccess.imageReference.toOCI().tag
+            digest: resource.access.globalAccess.imageReference.toOCI().digest
           interval: 10m
 
     # FluxCD OCIRepository for Helm chart
     - id: ociRepository
       template:
-        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        apiVersion: source.toolkit.fluxcd.io/v1
         kind: OCIRepository
         metadata:
           name: "${schema.spec.prefix}-oci-repository"
@@ -98,7 +99,7 @@ spec:
           values:
             image:
               repository: ${resourceImage.status.additional.registry}/${resourceImage.status.additional.repository}
-              tag: ${resourceImage.status.additional.tag}
+              tag: ${resourceImage.status.additional.tag}@${resourceImage.status.additional.digest}
             postgresql:
               postgresqlDatabase: ${schema.spec.database.name}
               postgresqlUsername: ${schema.spec.database.username}

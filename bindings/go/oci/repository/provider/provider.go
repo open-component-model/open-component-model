@@ -87,7 +87,7 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			// override specific hosts
 			overrides := map[string]string{
-				"registry:5001": "localhost:5001",
+				"registry:5000": "localhost:5001",
 			}
 			if mapped, ok := overrides[addr]; ok {
 				addr = mapped

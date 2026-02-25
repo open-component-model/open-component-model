@@ -69,7 +69,7 @@ spec:
             failureThreshold: 6
           volumeMounts:
             - name: data
-              mountPath: /var/lib/postgresql/data
+              mountPath: /var/lib/postgresql
               subPath: postgresql
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

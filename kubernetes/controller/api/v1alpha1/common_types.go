@@ -77,6 +77,9 @@ type ResourceReference struct {
 
 type ComponentInfo struct {
 	// +required
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:validation:Type=object
 	RepositorySpec *apiextensionsv1.JSON `json:"repositorySpec,omitempty"`
 	// +required
 	Component string `json:"component,omitempty"`

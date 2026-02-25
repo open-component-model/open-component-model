@@ -18,6 +18,8 @@ type loggingStore struct {
 }
 
 func (l *loggingStore) Get(ctx context.Context, serverAddress string) (auth.Credential, error) {
+	// TODO remove
+	serverAddress = remotecredentials.ServerAddressFromRegistry(serverAddress)
 	logger := l.base.With("serverAddress", serverAddress)
 	logger.DebugContext(ctx, "getting credentials")
 	credential, err := l.Store.Get(ctx, serverAddress)

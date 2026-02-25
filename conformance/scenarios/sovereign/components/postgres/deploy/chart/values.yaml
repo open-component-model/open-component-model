@@ -60,10 +60,7 @@ podSecurityContext:
 containerSecurityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: false
-  runAsNonRoot: true
-  capabilities:
-    drop:
-    - ALL
+  runAsNonRoot: false
 
 # Annotations
 podAnnotations: {}
@@ -71,7 +68,4 @@ serviceAnnotations: {}
 
 # Labels
 labels:
-  app.kubernetes.io/name: postgres
   app.kubernetes.io/component: database
-  app.kubernetes.io/part-of: sovereign-product
-  ocm.software/component: "acme.org/sovereign/postgres"

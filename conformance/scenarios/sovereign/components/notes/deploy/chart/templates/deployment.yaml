@@ -17,7 +17,6 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -45,17 +44,15 @@ spec:
           env:
             - name: PORT
               value: "{{ .Values.service.targetPort | default 8080 }}"
-            - name: DATABASE_URL
-              value: "postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=disable"
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
-                  name: sovereign-product-secrets
+                  name: {{ .Values.databaseSecretRef }}
                   key: database.username
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: sovereign-product-secrets
+                  name: {{ .Values.databaseSecretRef }}
                   key: database.password
             - name: DB_HOST
               valueFrom:
@@ -72,6 +69,8 @@ spec:
                 configMapKeyRef:
                   name: sovereign-product-config
                   key: database.name
+            - name: DATABASE_URL
+              value: "postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=disable"
           livenessProbe:
             {{- toYaml .Values.probes.liveness | nindent 12 }}
           readinessProbe:

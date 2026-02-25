@@ -6,6 +6,7 @@ set -euo pipefail
 CLUSTER_NAME=${1:-sovereign-conformance}
 REGISTRY_NAME="registry"
 REGISTRY_PORT="5001"
+REGISTRY_INTERNAL_PORT="5000"
 KIND_NODE_IMAGE_VERSION="${KIND_NODE_IMAGE_VERSION:-v1.31.0}"
 KIND_NODE_IMAGE="kindest/node:${KIND_NODE_IMAGE_VERSION}"
 CONTAINERD_CONFIG_PATH="/etc/containerd/certs.d"
@@ -71,7 +72,7 @@ EOF
 
 echo "Configuring registry access for cluster nodes..."
 for node in $(kind get nodes --name $CLUSTER_NAME); do
-  add_hosts_toml "${node}" "${CONTAINERD_CONFIG_PATH}/${REGISTRY_NAME}:${REGISTRY_PORT}" "http://${REGISTRY_NAME}:${REGISTRY_PORT}"
+  add_hosts_toml "${node}" "${CONTAINERD_CONFIG_PATH}/${REGISTRY_NAME}:${REGISTRY_INTERNAL_PORT}" "http://${REGISTRY_NAME}:${REGISTRY_INTERNAL_PORT}"
 done
 
 # Connect registry to kind network if not already connected

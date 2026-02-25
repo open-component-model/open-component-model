@@ -103,9 +103,11 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 		return nil, nil
 	}
 
-	cred, err := credStore.Get(ctx, hostname)
+	address := remotecredentials.ServerAddressFromHostname(hostname)
+
+	cred, err := credStore.Get(ctx, address)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get credentials for %q: %w", hostname, err)
+		return nil, fmt.Errorf("failed to get credentials for %q: %w", address, err)
 	}
 	if cred == auth.EmptyCredential {
 		// because ORAS stores docker credentials including its port if defined, we'll try
@@ -113,10 +115,10 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 		// default the port to 443 so trying it with that in the first time would fail that's why
 		// this is a fallback try).
 		if port, ok := identity[runtime.IdentityAttributePort]; ok {
-			hostname = fmt.Sprintf("%s:%s", hostname, port)
-			cred, err = credStore.Get(ctx, hostname)
+			address = fmt.Sprintf("%s:%s", address, port)
+			cred, err = credStore.Get(ctx, address)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get credentials for %q with port: %w", hostname, err)
+				return nil, fmt.Errorf("failed to get credentials for %q with port: %w", address, err)
 			}
 			if cred == auth.EmptyCredential {
 				return nil, nil

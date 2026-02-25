@@ -35,6 +35,7 @@ spec:
               resource:
                 name: helm-chart
           additionalStatusFields:
+            registry: resource.access.globalAccess.imageReference.toOCI().registry
             repository: resource.access.globalAccess.imageReference.toOCI().repository
             digest: resource.access.globalAccess.imageReference.toOCI().digest
           interval: 10m
@@ -54,14 +55,16 @@ spec:
               resource:
                 name: image
           additionalStatusFields:
+            registry: resource.access.globalAccess.imageReference.toOCI().registry
             repository: resource.access.globalAccess.imageReference.toOCI().repository
             tag: resource.access.globalAccess.imageReference.toOCI().tag
+            digest: resource.access.globalAccess.imageReference.toOCI().digest
           interval: 10m
 
     # FluxCD OCIRepository for Helm chart
     - id: ociRepository
       template:
-        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        apiVersion: source.toolkit.fluxcd.io/v1
         kind: OCIRepository
         metadata:
           name: "${schema.spec.releaseName}-oci-repository"
@@ -71,7 +74,7 @@ spec:
           layerSelector:
             mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
             operation: copy
-          url: ${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
+          url: oci://${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
           ref:
             digest: ${resourceChart.status.additional.digest}
 
@@ -93,7 +96,7 @@ spec:
             replicaCount: ${schema.spec.replicas}
             image:
               repository: ${resourceImage.status.additional.registry}/${resourceImage.status.additional.repository}
-              tag: ${resourceImage.status.additional.tag}
+              tag: ${resourceImage.status.additional.tag}@${resourceImage.status.additional.digest}
             databaseSecretRef: ${schema.spec.databaseSecretRef}
             resources:
               requests:

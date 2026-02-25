@@ -92,4 +92,3 @@ podDisruptionBudget:
 podAnnotations: {}
 podLabels:
   app.kubernetes.io/component: "web-service"
-  ocm.software/component: "acme.org/sovereign/notes"
