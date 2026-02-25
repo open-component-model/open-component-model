@@ -1,10 +1,29 @@
 apiVersion: v1
-kind: Secret
+kind: ConfigMap
 metadata:
-  name: helm-signing-secret
+  name: helm-signing
 data:
-  # Base64 encoded value of the public key ocm.software.pub
-  ocm.software: "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJDZ0tDQVFFQTE0UUhEdHlaVFJXbThCZDdoZjVkVnp1L3VhQ3JVSmU4UFhXc2M0U0ZEWjJuRWZWWmZ2Rm8KQXV4aFF6UzFjN2dEOVlmRDBTSnpKU0ZnbmNlY29EQTI5TTBPTFltd2ptQWZoajlBNm1YNm1JbXlienVPYU9vago0RkpabkpkM3JGek5Cb0t3cW9ld0lIUkIvb1R6ZDZIWDZmQUM1M2RyYW8vaDFoTWpFODFEcld5a1hSQmd2ekJpClZ6ZGd1N0ZleUxMVzZEVzE1VmZMdmlpL1RTVk9RT3FlTHdpc3hUR2JpNjdMYy8vVFRnQlZCRUg5NjU0MnB2bjAKUTVuRzVKa3hGVWY2ajBxM3lkM0lPVW9nUHZJbzNkcDllR1Q0b1VRTTNTSTdKcC9NRG5NNHEySkpjbERNL1pZTQpwWE5ub2VXWlQ3NEZ3QzdBcTdBWmxKSG9hRHVqVGdGSTR3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K"
+  .ocmconfig: |
+    type: generic.config.ocm.software/v1
+    configurations:
+      - type: credentials.config.ocm.software
+        consumers:
+          - identity:
+              type: RSA/v1alpha1
+              algorithm: RSASSA-PKCS1-V1_5
+              signature: ocm.software
+            credentials:
+              - type: Credentials/v1
+                properties:
+                  public_key_pem: |
+                    -----BEGIN RSA PUBLIC KEY-----
+                    MIIBCgKCAQEA14QHDtyZTRWm8Bd7hf5dVzu/uaCrUJe8PXWsc4SFDZ2nEfVZfvFo
+                    AuxhQzS1c7gD9YfD0SJzJSFgncecoDA29M0OLYmwjmAfhj9A6mX6mImybzuOaOoj
+                    4FJZnJd3rFzNBoKwqoewIHRB/oTzd6HX6fAC53drao/h1hMjE81DrWykXRBgvzBi
+                    Vzdgu7FeyLLW6DW15VfLvii/TSVOQOqeLwisxTGbi67Lc//TTgBVBEH96542pvn0
+                    Q5nG5JkxFUf6j0q3yd3IOUogPvIo3dp9eGT4oUQM3SI7Jp/MDnM4q2JJclDM/ZYM
+                    pXNnoeWZT74FwC7Aq7AZlJHoaDujTgFI4wIDAQAB
+                    -----END RSA PUBLIC KEY-----
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Repository
@@ -23,10 +42,9 @@ metadata:
   name: helm-signing-component
 spec:
   component: ocm.software/ocm-k8s-toolkit/examples/helm-signing
-  verify:
-    - signature: ocm.software
-      secretRef:
-        name: helm-signing-secret
+  ocmConfig:
+    - kind: ConfigMap
+      name: helm-signing
   repositoryRef:
     name: helm-signing-repository
   semver: 1.0.0
