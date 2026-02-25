@@ -6,6 +6,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/jedib0t/go-pretty/v6 v6.7.8
 	github.com/nlepage/go-tarfs v1.2.1
+	github.com/opencontainers/image-spec v1.1.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -15,26 +16,26 @@ require (
 	golang.org/x/term v0.39.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260220081128-7620d4e5890c
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260224082343-7434564d64aa
 	ocm.software/open-component-model/bindings/go/configuration v0.0.10
 	ocm.software/open-component-model/bindings/go/constructor v0.0.5
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260220081128-7620d4e5890c
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260220081128-7620d4e5890c
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260224082343-7434564d64aa
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260224082343-7434564d64aa
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260220081128-7620d4e5890c
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260224082343-7434564d64aa
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260220081128-7620d4e5890c
-	ocm.software/open-component-model/bindings/go/oci v0.0.31
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260224082343-7434564d64aa
+	ocm.software/open-component-model/bindings/go/oci v0.0.32
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260220081128-7620d4e5890c
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260224082343-7434564d64aa
 	ocm.software/open-component-model/bindings/go/runtime v0.0.6
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260220081128-7620d4e5890c
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260220081128-7620d4e5890c
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260224082343-7434564d64aa
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260224082343-7434564d64aa
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -49,8 +50,8 @@ require (
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/chai2010/gettext-go v1.0.3 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
-	github.com/clipperhouse/uax29/v2 v2.3.1 // indirect
-	github.com/cloudflare/circl v1.6.2 // indirect
+	github.com/clipperhouse/uax29/v2 v2.4.0 // indirect
+	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
@@ -100,7 +101,6 @@ require (
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
@@ -137,10 +137,10 @@ require (
 	k8s.io/kubectl v0.35.0 // indirect
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
-	sigs.k8s.io/controller-runtime v0.22.4 // indirect
+	sigs.k8s.io/controller-runtime v0.22.5 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.0 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.0 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.3.1 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
 )
