@@ -13,8 +13,15 @@ import (
 
 var _ = Describe("Credentials E2E Tests", func() {
 	Context("simple use-cases", func() {
-
 		testdata := filepath.Join(os.Getenv("PROJECT_DIR"), "test/e2e/testdata")
+
+		AfterEach(func() {
+			if !CurrentSpecReport().Failed() {
+				return
+			}
+
+			utils.DumpLogs("kro", "rgd")
+		})
 
 		It("basic-auth", func(ctx SpecContext) {
 			testName := ctx.SpecReport().LeafNodeText

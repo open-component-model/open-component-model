@@ -18,11 +18,11 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.19.0
-	k8s.io/api v0.35.0
-	k8s.io/apiextensions-apiserver v0.35.0
+	k8s.io/api v0.35.1
+	k8s.io/apiextensions-apiserver v0.35.1
 	k8s.io/apimachinery v0.35.1
-	k8s.io/apiserver v0.35.0
-	k8s.io/client-go v0.35.0
+	k8s.io/apiserver v0.35.1
+	k8s.io/client-go v0.35.1
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570
 	sigs.k8s.io/controller-runtime v0.22.5
 	sigs.k8s.io/yaml v1.6.0
@@ -36,15 +36,15 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.10
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260223095936-f9d28296be0d
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260223095936-f9d28296be0d
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260224184125-f76107238b97
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260224184125-f76107238b97
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/oci v0.0.31
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260223095936-f9d28296be0d
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260224184125-f76107238b97
 	ocm.software/open-component-model/bindings/go/runtime v0.0.6
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260223095936-f9d28296be0d
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260224184125-f76107238b97
 	sigs.k8s.io/release-utils v0.12.3
 )
 
