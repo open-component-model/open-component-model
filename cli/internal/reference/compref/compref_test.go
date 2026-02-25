@@ -323,8 +323,8 @@ func Test_ComponentReference(t *testing.T) {
 		},
 	}
 
-	for i, tc := range cases {
-		t.Run(fmt.Sprintf("case-%02d", i+1), func(t *testing.T) {
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
 			t.Logf("%q", tc.input)
 			r := require.New(t)
 			var opts []Option
@@ -332,13 +332,13 @@ func Test_ComponentReference(t *testing.T) {
 				opts = append(opts, IgnoreSemverCompatibility())
 			}
 			parsed, err := Parse(tc.input, opts...)
+			if !tc.err(t, err) {
+				r.Equalf(tc.expected, parsed, "input %q was incorrectly parsed", tc.input)
+			}
 			if tc.expected != nil && tc.expected.Type != "" {
 				if typ, err := runtime.TypeFromString(parsed.Type); err == nil {
 					tc.expected.Repository.SetType(typ)
 				}
-			}
-			if tc.err(t, err) && err == nil {
-				r.Equalf(tc.expected, parsed, "input %q was incorrectly parsed", tc.input)
 			}
 			if parsed != nil && tc.expected != nil {
 				r.Contains(parsed.String(), tc.expected.Component, "input %q did not serialize properly", tc.input)
@@ -682,6 +682,7 @@ func TestParseRepositoryErrorCases(t *testing.T) {
 		})
 	}
 }
+
 func Test_Ref_String(t *testing.T) {
 	tests := []struct {
 		name     string
