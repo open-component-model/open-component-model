@@ -13,7 +13,6 @@ deploy/notes-oci/
 deploy/notes.tar.gz
 
 # Go artifacts
-go.sum
 vendor/
 *.mod.backup
 

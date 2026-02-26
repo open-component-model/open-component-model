@@ -132,7 +132,7 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 
 	transformed, err := transformer.Transform(ctx, transformation.AsRaw())
 	if err != nil {
-		return fmt.Errorf("%s(%s): %w", transformation.ID, transformation.GetType().String(), err)
+		return fmt.Errorf("failed to transform transformation %q: %w", transformation.ID, err)
 	}
 	updated, err := v1alpha1.GenericTransformationFromTyped(transformed)
 	if err != nil {

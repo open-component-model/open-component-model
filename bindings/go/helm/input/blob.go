@@ -23,12 +23,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
-
-	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 )
 
 const (
@@ -176,7 +175,7 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 		// If path is a directory, we need to create a tgz archive in a temporary folder.
 		tmpDir, err := os.MkdirTemp(tmpDirBase, "chartDirToTgz*")
 		if err != nil {
-			return nil, fmt.Errorf("error creating temporary directory: %w", err)
+			return nil, fmt.Errorf("error creating temporary directory")
 		}
 
 		// Save the chart as a tgz archive. If the directory is /foo, and the chart is named bar, with version 1.0.0,

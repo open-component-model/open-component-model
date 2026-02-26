@@ -442,6 +442,22 @@ func TestResourceLocalBlob(t *testing.T) {
 		expectedError string
 	}{
 		{
+			name: "success with OCI layout media type",
+			blob: &testBlob{
+				content:   content,
+				mediaType: "application/vnd.oci.image.layout.v1+tar",
+				digest:    dig,
+			},
+			resource: &descriptor.Resource{},
+			access: &v2.LocalBlob{
+				MediaType: "application/vnd.oci.image.layout.v1+tar",
+			},
+			opts: Options{
+				AccessScheme:  runtime.NewScheme(),
+				BaseReference: "test-ref",
+			},
+		},
+		{
 			name: "success with single layer artifact",
 			blob: &testBlob{
 				content:   content,
