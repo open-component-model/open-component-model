@@ -62,6 +62,7 @@ Copy this checklist to your "Sprint Responsible" issue:
 |------|--------|
 
 | Sprint Start | Create new release branch and RCs for both components |
+| During sprint | Issue patch releases or increment RCs if required (Security issues, bugs, ..) |
 | Sprint End | Assign next release responsible |
 | Next Sprint Start | Promote previous RCs to Final |
 
