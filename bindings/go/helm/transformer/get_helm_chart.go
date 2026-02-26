@@ -20,8 +20,11 @@ import (
 
 // GetHelmChart is a transformer that retrieves Helm charts from remote Helm repositories and buffers them to files.
 // It uses the Helm spec specification to determine the repository URL, chart name, version, and any necessary credentials.
+// This transformer is designed to support the helm access with classic helm charts.
+// For OCI registry access, the OCI registry access transformer should be used instead, which can also handle Helm charts stored in OCI registries.
 type GetHelmChart struct {
-	Scheme                           *runtime.Scheme
+	Scheme *runtime.Scheme
+	// ResourceConsumerIdentityProvider is used to get the consumer identity for the resource when resolving credentials.
 	ResourceConsumerIdentityProvider helm.ResourceConsumerIdentityProvider
 	CredentialProvider               credentials.Resolver
 }
@@ -66,10 +69,15 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		return nil, fmt.Errorf("failed converting resource spec to v1.Helm: %w", err)
 	}
 
+	// Configure the downloader options based on the Helm access specification and resolved credentials
+	// We omit backwards compatibility options like certificates and keyrings and rely on the credentials approach.
 	opts := []download.Option{
+		// If a version is specified in the Helm access spec, use it to ensure we get the correct chart version.
+		// If not specified, the downloader will use the default behavior which tries to get the version from helmAccess.HelmRepository
 		download.WithVersion(helmAccess.Version),
 		download.WithTempDirBase(transformation.Spec.OutputPath),
 		download.WithCredentials(creds),
+		// Override the default downloader behavior to always download the chart and prov files.
 		download.WithAlwaysDownloadProv(true),
 	}
 
@@ -79,6 +87,7 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		helmURL = fmt.Sprintf("%s/%s", helmURL, helmAccess.HelmChart)
 	}
 
+	// TODO(matthiasbruns): Introduce a helm based ResourceRepository and handle access in there https://github.com/open-component-model/ocm-project/issues/911
 	resultBlob, err := download.NewReadOnlyChartFromRemote(ctx, helmURL, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading helm chart from repository %q: %w", helmURL, err)
