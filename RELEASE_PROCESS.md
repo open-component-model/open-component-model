@@ -12,6 +12,8 @@ Scope: **CLI and Kubernetes Controller are released together in version lockstep
 
 Development in the [Open Component Model monorepo](https://github.com/open-component-model/open-component-model)
 happens on `main`, while releases are prepared and promoted from release branches (`releases/vX.Y`).
+For the time being, we will only ship minor releases (e.g., `v0.17.0`, `v0.18.0`) and patch releases (e.g., `v0.17.1`),
+without any major releases.
 This repository follows a lockstep release model for multiple components — currently the
 [CLI](https://github.com/open-component-model/open-component-model/tree/main/cli) and the
 [Kubernetes Controller](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller).
@@ -134,7 +136,7 @@ Once created, only bug fixes and documentation changes are allowed.
 <details>
 <summary>What happens in the background?</summary>
 
-- Validate `target_branch` against regex pattern `releases/v0.[0-9]+`
+- Validate `target_branch` against regex pattern `releases/v0.[0-9]+` (for the time being, we only allow minor releases)
 - Check if `target_branch` already exists; if yes, skip creation and report success
 - Check out the repository and identify the latest commit on `source_branch` (default: `main`)
 - Create a new branch `refs/heads/<target_branch>` pointing to this commit
@@ -182,8 +184,8 @@ Highest Final Version: 0.17.0
 ```
 
 This means the patch release will **not** be marked as the GitHub "Latest Release"
-and the `:latest` OCI tag will **not** be updated. This is expected behavior to prevent
-users from accidentally downgrading when pulling `:latest`.
+and the `latest` OCI tag will **not** be updated. This is expected behavior to prevent
+users from accidentally downgrading when pulling `latest`.
 
 </details>
 
@@ -272,16 +274,16 @@ The fix must always land on `main` first, then be cherry-picked to the release b
 
 ```bash
 # Check out the target release branch
-git checkout releases/v0.X
+git checkout releases/vX.Y
 
 # Cherry-pick the commit from main
 git cherry-pick <commit-hash>
 
 # Create a PR to the release branch
 gh pr create \
-   --title "[releases/v0.X] cherry-pick: <Original PR or Commit>" \
-   --body "Cherry-pick of <Original PR or Commit> from main to releases/v0.X" \
-   --base releases/v0.X \
+   --title "[releases/vX.Y] cherry-pick: <Original PR or Commit>" \
+   --body "Cherry-pick of <Original PR or Commit> from main to releases/vX.Y" \
+   --base releases/vX.Y \
    --draft
 ```
 
