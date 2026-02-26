@@ -16,6 +16,8 @@ vars:
   OCM_CREDENTIALS_CONFIG: '{{ .TASKFILE_DIR }}/tmp/credentials.yaml'
   REGISTRY_NAME: "registry"
   REGISTRY_PORT: "5001"
+  REGISTRY_INTERNAL_PORT: "5000"
+  KRO_VERSION: "0.8.5"
   ocm: >-
     docker run --rm
     --network {{ .DOCKER_NETWORK }}
@@ -40,15 +42,9 @@ tasks:
       - check
       - clean
     desc: Run the conformance scenario end-to-end with kind
-    env:
-      CLUSTER_NAME: "{{.CLUSTER_NAME}}"
-      REGISTRY_NAME: "{{.REGISTRY_NAME}}"
-      REGISTRY_PORT: "{{.REGISTRY_PORT}}"
-      KIND_NODE_IMAGE_VERSION: "{{.KIND_NODE_IMAGE_VERSION}}"
     cmds:
       - task: prepare
-      - cmd: bash scripts/setup-airgapped-kind.sh {{.CLUSTER_NAME}}
-      - task: cluster:install:toolkit
+      - task: cluster:setup
       - task: build:product
       - task: transfer:airgap
       - task: cluster:import
@@ -156,7 +152,7 @@ tasks:
       OCM_CONFIG: './config/sign.yaml'
     requires:
       vars: ["COMPONENT"]
-    cmd: '{{ .ocm }} sign componentversion {{.COMPONENT}} --loglevel=debug'
+    cmd: '{{ .ocm }} sign componentversion {{.COMPONENT}}'
   verify:
     desc: Verify component signatures
     dir: scenarios/sovereign/components/product
@@ -184,14 +180,75 @@ tasks:
 
   # === CLUSTER TASKS ===
 
-  cluster:import:
-    desc: Transfer CTF archive to airgapped cluster
-    cmd: |
-      {{ .ocm }} transfer cv \
-        --copy-resources \
-        --recursive \
-        {{.AIRGAP_CTF}}//{{.NAME}}:{{.VERSION}} \
-        http://registry:5000
+  cluster:registry:
+    desc: Start local Docker registry if not already running
+    status:
+      - docker inspect -f '{{`{{.State.Running}}`}}' {{.REGISTRY_NAME}} 2>/dev/null | grep -q true
+    cmds:
+      - cmd: |
+          docker run -d \
+            --restart=always \
+            --name {{.REGISTRY_NAME}} \
+            -p "127.0.0.1:{{.REGISTRY_PORT}}:{{.REGISTRY_INTERNAL_PORT}}" \
+            --network bridge \
+            registry:2
+
+  cluster:create:
+    vars:
+      CONTAINERD_CONFIG_PATH: "/etc/containerd/certs.d"
+    desc: Create kind cluster with containerd registry config
+    status:
+      - kind get clusters | grep -q {{.CLUSTER_NAME}}
+    cmds:
+      - cmd: |
+          cat <<EOF | kind create cluster --name {{.CLUSTER_NAME}} --image="kindest/node:{{.KIND_NODE_IMAGE_VERSION}}" --config=-
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+          - role: control-plane
+            kubeadmConfigPatches:
+            - |
+              kind: InitConfiguration
+              nodeRegistration:
+                kubeletExtraArgs:
+                  node-labels: "ingress-ready=true"
+            extraPortMappings:
+            - containerPort: 80
+              hostPort: 8080
+              protocol: TCP
+            - containerPort: 443
+              hostPort: 8443
+              protocol: TCP
+          containerdConfigPatches:
+          - |-
+            [plugins."io.containerd.grpc.v1.cri".registry]
+              config_path = "{{.CONTAINERD_CONFIG_PATH}}"
+          EOF
+
+  cluster:registry:configure:
+    vars:
+      CONTAINERD_CONFIG_PATH: "/etc/containerd/certs.d"
+    desc: Configure registry access on all cluster nodes
+    cmds:
+      - cmd: |
+          for node in $(kind get nodes --name {{.CLUSTER_NAME}}); do
+            HOSTS_DIR="{{.CONTAINERD_CONFIG_PATH}}/{{.REGISTRY_NAME}}:{{.REGISTRY_INTERNAL_PORT}}"
+            docker exec "${node}" mkdir -p "${HOSTS_DIR}"
+            cat <<EOF | docker exec -i "${node}" cp /dev/stdin "${HOSTS_DIR}/hosts.toml"
+          [host."http://{{.REGISTRY_NAME}}:{{.REGISTRY_INTERNAL_PORT}}"]
+            skip_verify = true
+          EOF
+          done
+      - cmd: |
+          if [ "$(docker inspect -f='{{`{{json .NetworkSettings.Networks.kind}}`}}' {{.REGISTRY_NAME}})" = 'null' ]; then
+            docker network connect --alias {{.REGISTRY_NAME}} kind {{.REGISTRY_NAME}}
+          fi
+
+  cluster:install:controllers:
+    deps:
+      - cluster:install:toolkit
+      - cluster:install:kro
+      - cluster:install:flux
   cluster:install:toolkit:
     desc: Install OCM controller on cluster
     vars:
@@ -200,9 +257,37 @@ tasks:
       helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/charts/ocm-k8s-toolkit \
         --namespace {{ .TOOLKIT_NAMESPACE }} \
         --create-namespace
+  cluster:install:kro:
+    desc: Install kro (ResourceGraphDefinition controller) via Helm
+    cmd: |
+      echo "Installing kro..."
+      helm install kro oci://registry.k8s.io/kro/charts/kro \
+        --namespace kro \
+        --create-namespace \
+        --version={{.KRO_VERSION}}
+  cluster:install:flux:
+    desc: Install Flux and wait for readiness
+    cmd: flux install --components=source-controller,helm-controller
+
+  cluster:setup:
+    desc: Set up air-gapped kind cluster with registry, kro, and flux
+    cmds:
+      - task: cluster:registry
+      - task: cluster:create
+      - task: cluster:registry:configure
+      - task: cluster:install:controllers
+
+  cluster:import:
+    desc: Transfer CTF archive to airgapped cluster
+    cmd: |
+      {{ .ocm }} transfer cv \
+        --copy-resources \
+        --recursive \
+        {{.AIRGAP_CTF}}//{{.NAME}}:{{.VERSION}} \
+        http://registry:5000
 
   cluster:bootstrap:
-    desc: Bootstrap Components
+    desc: Bootstrap Components and Wait for Product to be Ready
     dir: scenarios/sovereign
     cmds:
     - cmd: kubectl apply -f deploy/namespace.yaml
@@ -289,6 +374,7 @@ tasks:
       - cmd: which docker || (echo "❌ Docker not found" && exit 1)
       - cmd: which kubectl || (echo "❌ kubectl not found" && exit 1)
       - cmd: which kind || (echo "❌ kind not found" && exit 1)
+      - cmd: which helm || (echo "❌ Helm not found" && exit 1)
       - cmd: which flux || (echo "❌ flux CLI not found" && exit 1)
       - cmd: which openssl || (echo "❌ openssl not found" && exit 1)
   status:
