@@ -383,12 +383,12 @@ func (a *ApplySet) applyResource(
 	item.Desired = r.Object.DeepCopy()
 
 	// Apply using controller-runtime client with Server-Side Apply
-	patchOptions := []client.PatchOption{
+	applyOptions := []client.ApplyOption{
 		client.ForceOwnership,
 		client.FieldOwner(options.FieldManager),
 	}
 
-	err := a.client.Patch(ctx, r.Object, client.Apply, patchOptions...)
+	err := a.client.Apply(ctx, client.ApplyConfigurationFromUnstructured(r.Object), applyOptions...)
 	if err != nil {
 		item.Error = err
 		a.log.V(2).Info("apply failed",

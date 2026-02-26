@@ -103,11 +103,17 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 		return nil, nil
 	}
 
-	address := remotecredentials.ServerAddressFromHostname(hostname)
+	// this is a special case
+	// The Docker CLI expects that the credentials of
+	// the registry 'docker.io' will be added under the key "https://index.docker.io/v1/".
+	// See: https://github.com/moby/moby/blob/v24.0.2/registry/config.go#L25-L48
+	if hostname == "docker.io" {
+		hostname = "index.docker.io"
+	}
 
-	cred, err := credStore.Get(ctx, address)
+	cred, err := credStore.Get(ctx, hostname)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get credentials for %q: %w", address, err)
+		return nil, fmt.Errorf("failed to get credentials for %q: %w", hostname, err)
 	}
 	if cred == auth.EmptyCredential {
 		// because ORAS stores docker credentials including its port if defined, we'll try
@@ -115,10 +121,10 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 		// default the port to 443 so trying it with that in the first time would fail that's why
 		// this is a fallback try).
 		if port, ok := identity[runtime.IdentityAttributePort]; ok {
-			address = fmt.Sprintf("%s:%s", address, port)
-			cred, err = credStore.Get(ctx, address)
+			hostname = fmt.Sprintf("%s:%s", hostname, port)
+			cred, err = credStore.Get(ctx, hostname)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get credentials for %q with port: %w", address, err)
+				return nil, fmt.Errorf("failed to get credentials for %q with port: %w", hostname, err)
 			}
 			if cred == auth.EmptyCredential {
 				return nil, nil
