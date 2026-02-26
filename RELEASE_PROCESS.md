@@ -20,8 +20,8 @@ This repository follows a lockstep release model for multiple components — cur
 
 ### Release cadence
 
-The default cadence is sprint-based: one release every two weeks. At the start of each sprint, create a Release Candidate (RC)
-for the current release branch. After one sprint of testing, promote the previous RC to a final release.
+The default cadence is sprint-based: one release every two weeks. At the start of each sprint,
+create a new release branch and a new Release Candidate (RC). After one sprint of testing, promote the previous RC to a final release.
 At the end of each sprint (typically Friday), assign the next release responsible.
 
 Patch releases are handled out-of-band and created on demand for critical fixes.
@@ -32,9 +32,10 @@ A scheduled release can be skipped if the branch is not ready or there are no me
 The release responsible coordinates and executes the release flow.
 This role rotates each sprint and involves:
 
-- Agreeing with the team, if a new release has to be produced
+- Agreeing with the team, if a new release is needed for the past sprint
 - Triggering and supervising release branch creation
 - Creating release candidates for all lockstep components
+- Agreeing with the team, if the new release is ready for promotion
 - Promoting release candidates to final releases
 - Coordinating patch releases when needed
 - Keeping this guide accurate and up to date
@@ -62,17 +63,10 @@ Copy this checklist to your "Sprint Responsible" issue:
 
 | When | Action |
 |------|--------|
-
 | Sprint Start | Create new release branch and RCs for both components |
 | During sprint | Issue patch releases or increment RCs if required (Security issues, bugs, ..) |
 | Sprint End | Assign next release responsible |
 | Next Sprint Start | Promote previous RCs to Final |
-
-### Guardrails
-
-Once a release branch is created, it enters cut-off mode:
-No feature or breaking-change work is accepted on the release branch.
-All fixes must go to `main` branch first, then be cherry-picked to the release branch.
 
 ---
 
@@ -124,17 +118,6 @@ Once created, only bug fixes and documentation changes are allowed.
 3. Confirm the branch was created successfully.
 
 <details>
-<summary>Cut-off policy for this release branch</summary>
-
-- No feature or breaking-change work is accepted.
-- Non-bugfix and non-documentation changes require release responsible approval.
-- Any change that is not a bug fix or a documentation change require release responsible approval.
-- Any bug fix that is not deemed critical must be approved by the release manager.
-- Fixes must be merged to `main` first, then cherry-picked to this branch.
-
-</details>
-
-<details>
 <summary>What happens in the background?</summary>
 
 - Validate `target_branch` against regex pattern `releases/v0.[0-9]+` (for the time being, we only allow minor releases)
@@ -144,6 +127,14 @@ Once created, only bug fixes and documentation changes are allowed.
 - Publish workflow summary with source branch, target branch, and commit SHA
 
 </details>
+
+> [!CAUTION] **Cut-off policy for this release branch**
+>
+>- No feature or breaking-change work is accepted.
+>- Non-bugfix and non-documentation changes require release responsible approval.
+>- Any change that is not a bug fix or a documentation change require release responsible approval.
+>- Any bug fix that is not deemed critical must be approved by the release manager.
+>- Fixes must be merged to `main` first, then cherry-picked to this branch.
 
 ### 2) Create a Release Candidate (CLI + Controller)
 
