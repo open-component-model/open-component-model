@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"reflect"
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
@@ -19,32 +18,6 @@ import (
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
-
-// processor is implemented by types that can process a resource of a specific access type and add the necessary transformations to the graph definition.
-type processor interface {
-	Process(ctx context.Context, resource descriptorv2.Resource, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error
-}
-
-// ociUploadSupported is implemented by processors that support optionally uploading the resource as an OCI artifact.
-// This allows the decision whether to upload as OCI artifact to be made based on the resource and target repository characteristics.
-type ociUploadSupported interface {
-	ShouldUploadAsOCIArtifact(ctx context.Context, resource descriptorv2.Resource, toSpec runtime.Typed, access runtime.Typed, uploadType UploadType) (bool, error)
-}
-
-// processors for different resource access types. The key is the type of the access object in the descriptor.
-var processors = map[reflect.Type]processor{
-	reflect.TypeOf(&descriptorv2.LocalBlob{}): &localBlobProcessor{},
-	reflect.TypeOf(&ociv1.OCIImage{}):         &ociArtifactProcessor{},
-	reflect.TypeOf(&helmv1.Helm{}):            &helmChartProcessor{},
-}
-
-// ociUploaders for different resource access types. The key is the type of the access object in the descriptor.
-// This is an optional mapping that processors can implement if they support uploading the resource as an OCI artifact.
-var ociUploaders = map[reflect.Type]ociUploadSupported{
-	reflect.TypeOf(&descriptorv2.LocalBlob{}): &localBlobProcessor{},
-	reflect.TypeOf(&ociv1.OCIImage{}):         &ociArtifactProcessor{},
-	reflect.TypeOf(&helmv1.Helm{}):            &helmChartProcessor{},
-}
 
 func BuildGraphDefinition(
 	ctx context.Context,
@@ -155,16 +128,15 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 				continue
 			}
 
-			typ := reflect.TypeOf(access)
 			uploadAsOCIArtifact := false
-			if uploader, ok := ociUploaders[typ]; ok {
+			if uploader, ok := lookupOCIUploadSupported(access); ok {
 				uploadAsOCIArtifact, err = uploader.ShouldUploadAsOCIArtifact(ctx, resource, toSpec, access, uploadType)
 				if err != nil {
 					return fmt.Errorf("failed to determine whether resource should be uploaded as OCI artifact: %w", err)
 				}
 			}
-			if proc, ok := processors[typ]; !ok {
-				slog.Info("Unsupported resource access type...")
+			if proc, ok := lookupProcessor(access); !ok {
+				slog.Warn("Unsupported resource access type...", "component", ref.Component, "version", ref.Version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 				continue
 			} else {
 				if err := proc.Process(ctx, resource, id, ref, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact); err != nil {

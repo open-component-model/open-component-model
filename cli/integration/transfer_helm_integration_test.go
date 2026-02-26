@@ -15,10 +15,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	helmaccess "ocm.software/open-component-model/bindings/go/helm/access"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	helmv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ociaccessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd"
@@ -158,10 +157,10 @@ configurations:
 		r.Equal("mychart", desc.Component.Resources[0].Name)
 
 		// The helm chart should have been converted to an OCI artifact during transfer
-		var helmAccess helmv1.OCIImage
-		r.NoError(helmaccess.Scheme.Convert(desc.Component.Resources[0].Access, &helmAccess),
+		var ociAccess ociaccessv1.OCIImage
+		r.NoError(ociaccess.Scheme.Convert(desc.Component.Resources[0].Access, &ociAccess),
 			"resource access should be convertible to OCIImage")
-		r.NotEmpty(helmAccess.ImageReference, "image reference should not be empty")
+		r.NotEmpty(ociAccess.ImageReference, "image reference should not be empty")
 	})
 
 	t.Run("transfer helm chart with --upload-as ociArtifact", func(t *testing.T) {
@@ -194,7 +193,7 @@ configurations:
 		r.Len(desc.Component.Resources, 1)
 		r.Equal("mychart", desc.Component.Resources[0].Name)
 
-		var ociAccess helmv1.OCIImage
+		var ociAccess ociaccessv1.OCIImage
 		r.NoError(ociaccess.Scheme.Convert(desc.Component.Resources[0].Access, &ociAccess),
 			"resource access should be an OCI artifact")
 		r.Contains(ociAccess.ImageReference, targetRef,

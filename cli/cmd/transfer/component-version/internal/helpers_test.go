@@ -157,7 +157,7 @@ func TestGetReferenceName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
 
-			gotReference, gotErr := ParseReferenceName(tt.ociImage)
+			gotReference, gotErr := ParseReferenceName(tt.ociImage.ImageReference)
 
 			if tt.wantErr {
 				r.Error(gotErr, "ParseReferenceName() should return an error")
