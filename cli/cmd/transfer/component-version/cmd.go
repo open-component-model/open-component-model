@@ -244,7 +244,7 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 	transformerScheme := runtime.NewScheme()
 	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(ociaccess.Scheme)
-	transformerScheme.MustRegisterScheme(helmaccess.Scheme)
+	transformerScheme.MustRegisterScheme(helmv1alpha1.Scheme)
 
 	ociGet := &ocitransformer.GetComponentVersion{
 		Scheme:             transformerScheme,
