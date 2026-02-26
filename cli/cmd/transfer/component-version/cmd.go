@@ -13,10 +13,13 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	helmaccess "ocm.software/open-component-model/bindings/go/helm/access"
+	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformer"
+	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformer/spec/v1alpha1"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/oci/transformer"
+	ocitransformer "ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
@@ -241,41 +244,49 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 	transformerScheme := runtime.NewScheme()
 	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(ociaccess.Scheme)
+	transformerScheme.MustRegisterScheme(helmaccess.Scheme)
 
-	ociGet := &transformer.GetComponentVersion{
+	ociGet := &ocitransformer.GetComponentVersion{
 		Scheme:             transformerScheme,
 		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
 		CredentialProvider: credentialProvider,
 	}
-	ociAdd := &transformer.AddComponentVersion{
+	ociAdd := &ocitransformer.AddComponentVersion{
 		Scheme:             transformerScheme,
 		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
 		CredentialProvider: credentialProvider,
 	}
 
 	// Resource transformers
-	ociGetResource := &transformer.GetLocalResource{
+	ociGetResource := &ocitransformer.GetLocalResource{
 		Scheme:             transformerScheme,
 		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
 		CredentialProvider: credentialProvider,
 	}
-	ociAddResource := &transformer.AddLocalResource{
+	ociAddResource := &ocitransformer.AddLocalResource{
 		Scheme:             transformerScheme,
 		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
 		CredentialProvider: credentialProvider,
 	}
 
 	// OCI Artifact transformers
-	ociGetOCIArtifact := &transformer.GetOCIArtifact{
+	ociGetOCIArtifact := &ocitransformer.GetOCIArtifact{
 		Scheme:             transformerScheme,
 		Repository:         pm.ResourcePluginRegistry,
 		CredentialProvider: credentialProvider,
 	}
 
-	ociAddOCIArtifact := &transformer.AddOCIArtifact{
+	ociAddOCIArtifact := &ocitransformer.AddOCIArtifact{
 		Scheme:             transformerScheme,
 		Repository:         pm.ResourcePluginRegistry,
 		CredentialProvider: credentialProvider,
+	}
+
+	// Helm transformers
+	getHelmChart := &helmtransformer.GetHelmChart{
+		Scheme:                           transformerScheme,
+		ResourceConsumerIdentityProvider: &helmaccess.HelmAccess{},
+		CredentialProvider:               credentialProvider,
 	}
 
 	return builder.NewBuilder(transformerScheme).
@@ -288,7 +299,8 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
 		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact).
-		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact)
+		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact).
+		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart)
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {
