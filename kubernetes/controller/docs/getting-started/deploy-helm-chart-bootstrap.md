@@ -265,7 +265,7 @@ spec:
     # The Helm chart location (url) refers to the status of the resource helm-resource.
     - id: ocirepository
       template:
-        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        apiVersion: source.toolkit.fluxcd.io/v1
         kind: OCIRepository
         metadata:
           name: bootstrap-ocirepository

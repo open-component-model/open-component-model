@@ -178,7 +178,7 @@ spec:
           interval: 10m
     - id: ocirepository
       template:
-        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        apiVersion: source.toolkit.fluxcd.io/v1
         kind: OCIRepository
         metadata:
           name: "helm-simple-ocirepository"
@@ -349,7 +349,7 @@ spec:
     # Any deployer can be used. In this case we are using FluxCD HelmRelease that references FluxCD OCIRepository
     - id: ocirepository
       template:
-        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        apiVersion: source.toolkit.fluxcd.io/v1
         kind: OCIRepository
         metadata:
           name: oci-repository
