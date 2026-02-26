@@ -103,6 +103,14 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 		return nil, nil
 	}
 
+	// this is a special case
+	// The Docker CLI expects that the credentials of
+	// the registry 'docker.io' will be added under the key "https://index.docker.io/v1/".
+	// See: https://github.com/moby/moby/blob/v24.0.2/registry/config.go#L25-L48
+	if hostname == "docker.io" {
+		hostname = "index.docker.io"
+	}
+
 	cred, err := credStore.Get(ctx, hostname)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get credentials for %q: %w", hostname, err)
