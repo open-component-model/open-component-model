@@ -6,7 +6,6 @@ import (
 	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
-	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -89,16 +88,16 @@ func ChooseAddLocalResourceType(repo runtime.Typed) (runtime.Type, error) {
 	}
 }
 
-func GetReferenceName(ociAccess ociv1.OCIImage) (string, error) {
-	if ociAccess.ImageReference == "" {
+func ParseReferenceName(imageReference string) (string, error) {
+	if imageReference == "" {
 		return "", fmt.Errorf("cannot get reference name from empty image reference")
 	}
-	imageRef, err := looseref.ParseReference(ociAccess.ImageReference)
+	imageRef, err := looseref.ParseReference(imageReference)
 	if err != nil {
-		return "", fmt.Errorf("invalid OCI image reference %q: %w", ociAccess.ImageReference, err)
+		return "", fmt.Errorf("invalid OCI image reference %q: %w", imageReference, err)
 	}
 	if imageRef.Repository == "" {
-		return "", fmt.Errorf("invalid image reference %q: repository is required", ociAccess.ImageReference)
+		return "", fmt.Errorf("invalid image reference %q: repository is required", imageRef)
 	}
 	referenceName := imageRef.Repository
 	if imageRef.Tag != "" {

@@ -45,7 +45,7 @@ func (p *ociArtifactProcessor) Process(ctx context.Context, resource descriptorv
 
 	// e.g. ghcr.io/open-component-model/helmexample/charts/mariadb:12.2.7
 	// strip the domain part and keep the rest
-	referenceName, err := GetReferenceName(ociAccess)
+	referenceName, err := ParseReferenceName(ociAccess.ImageReference)
 	if err != nil {
 		return fmt.Errorf("cannot get reference name: %w", err)
 	}
