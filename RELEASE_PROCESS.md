@@ -157,8 +157,8 @@ Release candidates are created for both components sequentially, in lock-step.
    (once `controller-release.yml` is available).
 3. Verify both pre-releases were created successfully on the GitHub Releases page.
 
-> ⚠️ **Always do a dry-run first** before the actual release.
-
+> [!CAUTION]
+> **Always do a dry-run first** before the actual release.
 > CLI and Controller are released together. Do not release only one of them.
 
 <details>
@@ -171,7 +171,7 @@ The workflow summary shows exactly what **would** happen:
 |-------|-------------|
 | RC Version | The RC version that would be created (e.g., `0.17.1-rc.1`) |
 | Base Version | The final version after promotion (e.g., `0.17.1`) |
-| Set Latest | Whether `:latest` tag would be applied to OCI images |
+| Set Latest | Whether `latest` tag would be applied to OCI images |
 | Highest Final Version | The current highest released version |
 
 **Important for Patch Releases:**
@@ -235,22 +235,8 @@ and the `cli/release` environment gate is approved.
    - `release_final`: publish final GitHub release with assets from RC.
 - **Controller path (`controller-release.yml`)**
    - Mirrors the same final promotion pattern for controller image + Helm chart.
+   - Due to Helm specifics, the chart cannot be promoted from RC to Final, but is re-packaged, re-attested and released directly in the final promotion step.
 - Final is only valid when both components are promoted in the same cycle.
-
-</details>
-
-<details>
-<summary>Workflow execution view (technical)</summary>
-
-```mermaid
-flowchart TD
-  A[Release Branch Creation] --> B[CLI RC: prepare -> tag_rc -> build -> release_rc]
-  A --> C[Controller RC: prepare -> tag_rc -> build -> release_rc]
-  B --> D[CLI Final: verify_attestations -> promote_final -> release_final]
-  C --> E[Controller Final: verify_attestations -> promote_final -> release_final]
-  D --> F[Release cycle completed]
-  E --> F
-```
 
 </details>
 
@@ -260,12 +246,12 @@ Patch releases address critical fixes for an already-released version.
 The fix must always land on `main` first, then be cherry-picked to the release branch.
 
 > ⚠️ **Older version lines:** When creating a patch for an older release line
-> (e.g., `v0.16.1` when `v0.17.0` exists), the release will NOT be marked as "Latest"
-> on GitHub and the `:latest` OCI tags will remain on the newer version.
+> (e.g., `v0.16.1` when `v0.17.0` exists), the release will NOT be marked as "latest"
+> on GitHub and the `latest` OCI tags will remain on the newer version.
 > This is intentional — use dry-run first to verify this behavior in the summary.
 
 1. Ensure the fix was merged to `main` first.
-2. Cherry-pick the fix to the active release branch `releases/v0.X`.
+2. Cherry-pick the fix to the correct release branch, e.g. `releases/v0.17` for a patch to `v0.17.1`.
 3. Create a PR with the cherry-picked commit to the release branch.
 4. Create and test RCs for **both** CLI and Controller.
 5. Promote both components to final.
