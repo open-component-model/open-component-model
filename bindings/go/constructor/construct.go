@@ -411,6 +411,7 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 			if c.opts.ResourceDigestProcessorProvider != nil {
 				var digestProcessor ResourceDigestProcessor
 				if digestProcessor, err = c.opts.GetDigestProcessor(ctx, res); err == nil {
+					// TODO(matthiasbruns): Improve logging here - if we cannot digest that we do not know the contents about, we should hint using "--skip-reference-digest-processing"
 					logger.Debug("processing resource digest")
 					var creds map[string]string
 					if c.opts.Resolver != nil {
