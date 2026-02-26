@@ -18,8 +18,9 @@ spec:
     apiVersion: v1alpha1
     kind: SovereignProduct
     spec:
-      prefix: string | default="sovereign-product"
       version: string | default="1.0.0"
+      prefix: string | default="sovereign-product"
+      repository: object
       notes:
         replicas: integer | default=2
         resources:
@@ -46,20 +47,22 @@ spec:
 
   resources:
     # ==========================================================
-    # Infrastructure
+    # Bootstrap (Self Managed) Configuration
+    # Once this stuff is adopted, The Product will start managing
+    # itself.
     # ==========================================================
-
     - id: productNamespace
       template:
         apiVersion: v1
         kind: Namespace
         metadata:
           name: sovereign-product
-
     # OCM Repository pointing to the local air-gapped registry.
     # Also created during bootstrap (for the product Component);
     # kro reconciles idempotently.
     - id: repository
+      readyWhen:
+        - ${repository.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
       template:
         apiVersion: delivery.ocm.software/v1alpha1
         kind: Repository
@@ -67,47 +70,60 @@ spec:
           name: sovereign-repo
           namespace: ${productNamespace.metadata.name}
         spec:
-          repositorySpec:
-            baseUrl: http://registry:5000
-            type: OCIRegistry
+          repositorySpec: ${schema.spec.repository}
           interval: 10m
 
-    # ==========================================================
-    # OCM Components
-    # ==========================================================
-
-    - id: notesComponent
+    - id: productComponent
+      readyWhen:
+        - ${productComponent.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
       template:
         apiVersion: delivery.ocm.software/v1alpha1
         kind: Component
         metadata:
-          name: sovereign-notes-component
+          name: sovereign-product-component
           namespace: ${productNamespace.metadata.name}
         spec:
-          component: acme.org/sovereign/notes
+          component: acme.org/sovereign/product
           repositoryRef:
             name: ${repository.metadata.name}
-          semver: ">=1.0.0"
+          semver: ${schema.spec.version}
           interval: 1m
-
-    - id: postgresComponent
+          verify:
+            - signature: default
+              secretRef:
+                name: acme-signing-key
+    - id: rgdResource
+      readyWhen:
+        - ${rgdResource.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
       template:
         apiVersion: delivery.ocm.software/v1alpha1
-        kind: Component
+        kind: Resource
         metadata:
-          name: sovereign-postgres-component
+          name: sovereign-product-resource-rgd
           namespace: ${productNamespace.metadata.name}
         spec:
-          component: acme.org/sovereign/postgres
-          repositoryRef:
-            name: ${repository.metadata.name}
-          semver: ">=1.0.0"
+          componentRef:
+            name: ${productComponent.metadata.name}
+          resource:
+            byReference:
+              resource:
+                name: product-rgd
           interval: 1m
-
+    - id: rgdDeployer
+      readyWhen:
+        - ${rgdDeployer.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Deployer
+        metadata:
+          name: sovereign-product-deployer
+        spec:
+          resourceRef:
+            name: ${rgdResource.metadata.name}
+            namespace: ${productNamespace.metadata.name}
     # ==========================================================
     # Application Configuration
     # ==========================================================
-
     - id: config
       template:
         apiVersion: v1
@@ -138,6 +154,8 @@ spec:
 
     # Resolve helm chart from postgres component
     - id: postgresChartResource
+      readyWhen:
+        - ${postgresChartResource.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
       template:
         apiVersion: delivery.ocm.software/v1alpha1
         kind: Resource
@@ -146,9 +164,11 @@ spec:
           namespace: ${productNamespace.metadata.name}
         spec:
           componentRef:
-            name: ${postgresComponent.metadata.name}
+            name: ${productComponent.metadata.name}
           resource:
             byReference:
+              referencePath:
+                - name: postgres
               resource:
                 name: helm-chart
           additionalStatusFields:
@@ -159,6 +179,8 @@ spec:
 
     # Resolve container image from postgres component
     - id: postgresImageResource
+      readyWhen:
+        - ${postgresImageResource.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
       template:
         apiVersion: delivery.ocm.software/v1alpha1
         kind: Resource
@@ -167,9 +189,11 @@ spec:
           namespace: ${productNamespace.metadata.name}
         spec:
           componentRef:
-            name: ${postgresComponent.metadata.name}
+            name: ${productComponent.metadata.name}
           resource:
             byReference:
+              referencePath:
+                - name: postgres
               resource:
                 name: image
           additionalStatusFields:
@@ -181,6 +205,8 @@ spec:
 
     # FluxCD OCIRepository for postgres helm chart
     - id: postgresOciRepository
+      readyWhen:
+        - ${postgresOciRepository.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
       template:
         apiVersion: source.toolkit.fluxcd.io/v1
         kind: OCIRepository
@@ -199,6 +225,8 @@ spec:
 
     # FluxCD HelmRelease for postgres
     - id: postgresHelmRelease
+      readyWhen:
+        - ${postgresHelmRelease.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
       template:
         apiVersion: helm.toolkit.fluxcd.io/v2
         kind: HelmRelease
@@ -236,6 +264,8 @@ spec:
 
     # Resolve helm chart from notes component
     - id: notesChartResource
+      readyWhen:
+        - ${notesChartResource.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
       template:
         apiVersion: delivery.ocm.software/v1alpha1
         kind: Resource
@@ -244,9 +274,11 @@ spec:
           namespace: ${productNamespace.metadata.name}
         spec:
           componentRef:
-            name: ${notesComponent.metadata.name}
+            name: ${productComponent.metadata.name}
           resource:
             byReference:
+              referencePath:
+                - name: notes
               resource:
                 name: helm-chart
           additionalStatusFields:
@@ -257,6 +289,8 @@ spec:
 
     # Resolve container image from notes component
     - id: notesImageResource
+      readyWhen:
+        - ${notesImageResource.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
       template:
         apiVersion: delivery.ocm.software/v1alpha1
         kind: Resource
@@ -265,9 +299,11 @@ spec:
           namespace: ${productNamespace.metadata.name}
         spec:
           componentRef:
-            name: ${notesComponent.metadata.name}
+            name: ${productComponent.metadata.name}
           resource:
             byReference:
+              referencePath:
+                - name: notes
               resource:
                 name: image
           additionalStatusFields:
@@ -279,6 +315,8 @@ spec:
 
     # FluxCD OCIRepository for notes helm chart
     - id: notesOciRepository
+      readyWhen:
+        - ${notesOciRepository.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
       template:
         apiVersion: source.toolkit.fluxcd.io/v1
         kind: OCIRepository
@@ -297,6 +335,8 @@ spec:
 
     # FluxCD HelmRelease for notes
     - id: notesHelmRelease
+      readyWhen:
+        - ${notesHelmRelease.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
       template:
         apiVersion: helm.toolkit.fluxcd.io/v2
         kind: HelmRelease

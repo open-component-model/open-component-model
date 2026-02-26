@@ -2,13 +2,24 @@
 #
 # This is the minimum needed to deliver the product RGD into the cluster.
 # The product RGD itself then creates the full deployment pipeline for
-# sub-components (notes, postgres) — see product/deploy/rgd.yaml.
+# sub-components (notes, postgres) and starts managing itself — see product/deploy/rgd.yaml.
 #
 # Prerequisites (applied before this file):
 #   - Namespace: sovereign-product
 #   - Secret: acme-signing-key
 #   - Repository: sovereign-repo (deploy/repository.yaml)
-
+# OCM Repository pointing to local air-gapped registry
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: sovereign-repo
+  namespace: sovereign-product
+spec:
+  repositorySpec:
+    baseUrl: http://registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
 metadata:
@@ -18,7 +29,7 @@ spec:
   component: acme.org/sovereign/product
   repositoryRef:
     name: sovereign-repo
-  semver: ">=1.0.0"
+  semver: "1.0.0"
   interval: 1m
   verify:
     - signature: default

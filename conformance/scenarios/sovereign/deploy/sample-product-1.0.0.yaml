@@ -6,6 +6,9 @@ metadata:
   namespace: sovereign-product
 spec:
   version: "1.0.0"
+  repository:
+    baseUrl: http://registry:5000
+    type: OCIRegistry
   notes:
     replicas: 2
     resources:

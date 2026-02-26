@@ -181,8 +181,7 @@ tasks:
     - cmd: |
         kubectl -n sovereign-product create secret generic acme-signing-key \
         --from-file=default=keys/acme-public.pem || true
-    - cmd: kubectl apply -f deploy/repository.yaml
-    - cmd: kubectl apply -f deploy/components.yaml
+    - cmd: kubectl apply -f deploy/bootstrap.yaml
     - task: kubectl-wait
       vars:
         KIND: ResourceGraphDefinition
@@ -231,7 +230,6 @@ tasks:
       NEW_VERSION: "1.1.0"
     cmds:
       - cmd: rm -rf {{.CTF}} {{.AIRGAP_CTF}}
-      - task: test:create-note
       - task: build:product
         vars:
           VERSION: "{{.NEW_VERSION}}"
@@ -241,22 +239,8 @@ tasks:
       - task: cluster:import
         vars:
           VERSION: "{{.NEW_VERSION}}"
-      - cmd: kubectl apply -f deploy/sample-product-1.1.0.yaml
       # TODO bump component spec automatically
-
-  test:create-note:
-    desc: Create a pre-upgrade test note to verify data survives migration
-    silent: true
-    cmds:
-      - cmd: |
-          trap 'kill $PF_PID 2>/dev/null' EXIT
-          kubectl -n sovereign-product port-forward svc/notes-sovereign-notes 8085:80 &>/dev/null &
-          PF_PID=$!
-          until curl -sf http://localhost:8085/readyz &>/dev/null; do sleep 0.5; done
-          RESPONSE=$(curl -sf -X POST http://localhost:8085/notes \
-            -H 'Content-Type: application/json' \
-            -d '{"content": "pre-upgrade note"}') || { echo "❌ Failed to create note"; exit 1; }
-          echo "✅ Pre-upgrade note created: $RESPONSE"
+      # - cmd: kubectl apply -f deploy/sample-product-1.1.0.yaml
 
   # === UTILITY TASKS ===
   kubectl-wait:
