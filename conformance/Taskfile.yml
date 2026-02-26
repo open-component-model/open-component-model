@@ -178,7 +178,6 @@ tasks:
           COMPONENT: '{{.CTF}}//{{.NAME}}:{{.VERSION}}'
       - cmd: |
           {{ .ocm }} transfer cv \
-            --loglevel=debug \
             --copy-resources \
             --recursive \
             {{.CTF}}//{{.NAME}}:{{.VERSION}} {{.AIRGAP_CTF}} {{ .CLI_ARGS }}
@@ -211,6 +210,7 @@ tasks:
         kubectl -n sovereign-product create secret generic acme-signing-key \
         --from-file=default=keys/acme-public.pem || true
     - cmd: kubectl apply -f deploy/bootstrap.yaml
+    - cmd: kubectl wait --for=condition=Ready deployer/sovereign-product-deployer --timeout=300s
     - cmd: kubectl wait --for=condition=Ready ResourceGraphDefinition/sovereign-product --timeout=300s
     - cmd: kubectl apply -f deploy/sample-product-1.0.0.yaml
     - cmd: kubectl wait --for=condition=Ready -n sovereign-product sovereignproduct/sovereign-product --timeout=300s
@@ -244,6 +244,7 @@ tasks:
     desc: Clean up generated data
     cmds:
       - rm -rf {{ .OCM_TMPDIR }}
+      - rm -rf scenarios/sovereign/keys
       - kind delete cluster --name {{.CLUSTER_NAME}} || true
       - docker rm -f registry || true
 
