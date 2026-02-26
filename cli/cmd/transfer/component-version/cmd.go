@@ -14,6 +14,8 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/access"
+	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformation"
+	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformer"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformer/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
@@ -288,6 +290,9 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		ResourceConsumerIdentityProvider: &helmaccess.HelmAccess{},
 		CredentialProvider:               credentialProvider,
 	}
+	convertHelmToOCI := &helmtransformer.ConvertHelmChartToOCI{
+		Scheme: transformerScheme,
+	}
 
 	return builder.NewBuilder(transformerScheme).
 		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
@@ -300,7 +305,8 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact).
 		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact).
-		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart)
+		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
+		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI)
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {
