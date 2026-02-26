@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -12,9 +13,23 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
+	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-func processOCIArtifact(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+type ociArtifactProcessor struct{}
+
+var _ processor = (*ociArtifactProcessor)(nil)
+
+func (p *ociArtifactProcessor) ShouldUploadAsOCIArtifact(ctx context.Context, resource descriptorv2.Resource, toSpec runtime.Typed, access runtime.Typed, uploadType UploadType) (bool, error) {
+	if _, isOCITarget := toSpec.(*ocirepo.Repository); isOCITarget {
+		if uploadType == UploadAsOciArtifact {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (p *ociArtifactProcessor) Process(ctx context.Context, resource descriptorv2.Resource, id string, ref *compref.Ref,val *discoveryValue,  tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 
