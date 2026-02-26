@@ -2,6 +2,7 @@ package internal
 
 import (
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	helm "ocm.software/open-component-model/bindings/go/helm/access"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -12,5 +13,6 @@ var Scheme = runtime.NewScheme(runtime.WithAllowUnknown())
 func init() {
 	Scheme.MustRegisterScheme(oci.Scheme)
 	Scheme.MustRegisterScheme(descriptorv2.Scheme)
+	Scheme.MustRegisterScheme(helm.Scheme)
 	Scheme.MustRegisterScheme(repository.Scheme)
 }

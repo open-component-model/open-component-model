@@ -19,6 +19,10 @@ type localBlobProcessor struct{}
 
 var _ processor = (*localBlobProcessor)(nil)
 
+func init() {
+	registerProcessor(&descriptorv2.LocalBlob{}, &localBlobProcessor{})
+}
+
 func (p *localBlobProcessor) ShouldUploadAsOCIArtifact(ctx context.Context, resource descriptorv2.Resource, toSpec runtime.Typed, access runtime.Typed, uploadType UploadType) (bool, error) {
 	acc, ok := access.(*descriptorv2.LocalBlob)
 	if !ok {

@@ -18,6 +18,10 @@ import (
 
 type helmChartProcessor struct{}
 
+func init() {
+	registerProcessor(&helmv1.Helm{}, &helmChartProcessor{})
+}
+
 func (h helmChartProcessor) ShouldUploadAsOCIArtifact(ctx context.Context, resource v2.Resource, toSpec runtime.Typed, access runtime.Typed, uploadType UploadType) (bool, error) {
 	if _, isOCITarget := toSpec.(*ocirepo.Repository); isOCITarget {
 		if uploadType == UploadAsOciArtifact {
@@ -74,7 +78,7 @@ func (h helmChartProcessor) Process(ctx context.Context, resource v2.Resource, i
 		Spec: &runtime.Unstructured{Data: map[string]any{
 			"resource":  fmt.Sprintf("${%s.output.resource}", getResourceID),
 			"chartFile": fmt.Sprintf("${%s.output.chartFile}", getResourceID),
-			"provFile":  fmt.Sprintf("${has(%[1]s.output.resource.provFile) ? %[1]s.output.resource.provFile : nil}", getResourceID),
+			"provFile":  fmt.Sprintf("${has(%[1]s.output.provFile) ? %[1]s.output.provFile : null}", getResourceID),
 		}},
 	}
 	tgd.Transformations = append(tgd.Transformations, convertToOCITransform)
@@ -82,7 +86,7 @@ func (h helmChartProcessor) Process(ctx context.Context, resource v2.Resource, i
 	// Create AddLocalResource transformation
 	var addResourceTransform transformv1alpha1.GenericTransformation
 	if uploadAsOCIArtifact {
-		if addResourceTransform, err = ociUploadAsArtifact(toSpec, addResourceID, convertResourceID, referenceName); err != nil {
+		if addResourceTransform, err = ociUploadAsArtifact(toSpec, addResourceID, convertResourceID, celExpReferenceName(convertResourceID, referenceName)); err != nil {
 			return fmt.Errorf("failed to create oci upload transformation: %w", err)
 		}
 	} else {
