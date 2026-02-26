@@ -105,7 +105,7 @@ var _ = BeforeSuite(func() {
 	cfg, err := testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
-	DeferCleanup(testEnv.Stop)
+
 
 	Expect(v1alpha1.AddToScheme(scheme.Scheme)).Should(Succeed())
 
@@ -116,8 +116,10 @@ var _ = BeforeSuite(func() {
 
 	komega.SetClient(k8sClient)
 
+	gracefulTimeout := 5 * time.Second
 	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme.Scheme,
+		Scheme:                  scheme.Scheme,
+		GracefulShutdownTimeout: &gracefulTimeout,
 		Metrics: metricserver.Options{
 			BindAddress: "0",
 		},
@@ -125,7 +127,6 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 
 	ctx, cancel = context.WithCancel(context.Background())
-	DeferCleanup(cancel)
 
 	events := make(chan string)
 	recorder = &record.FakeRecorder{
@@ -186,8 +187,16 @@ var _ = BeforeSuite(func() {
 		PluginManager: pm,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
 
+	mgrDone := make(chan struct{})
 	go func() {
 		defer GinkgoRecover()
-		Expect(k8sManager.Start(ctx)).To(Succeed())
+		defer close(mgrDone)
+		Expect(k8sManager.Start(ctx)).To(Or(Succeed(), MatchError(ContainSubstring("grace period"))))
 	}()
+
+	DeferCleanup(func() {
+		cancel()
+		<-mgrDone
+		Expect(testEnv.Stop()).To(Succeed())
+	})
 })

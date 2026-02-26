@@ -64,6 +64,7 @@ Copy this checklist to your "Sprint Responsible" issue:
 |------|--------|
 
 | Sprint Start | Create new release branch and RCs for both components |
+| During sprint | Issue patch releases or increment RCs if required (Security issues, bugs, ..) |
 | Sprint End | Assign next release responsible |
 | Next Sprint Start | Promote previous RCs to Final |
 
@@ -265,7 +266,7 @@ The fix must always land on `main` first, then be cherry-picked to the release b
 
 1. Ensure the fix was merged to `main` first.
 2. Cherry-pick the fix to the active release branch `releases/v0.X`.
-3. Create a patch PR to the release branch.
+3. Create a PR with the cherry-picked commit to the release branch.
 4. Create and test RCs for **both** CLI and Controller.
 5. Promote both components to final.
 
