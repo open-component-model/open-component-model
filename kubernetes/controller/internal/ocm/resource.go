@@ -9,8 +9,14 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 )
 
@@ -57,4 +63,89 @@ func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *de
 	}
 
 	return digestResource, nil
+}
+
+// ResolveReferencePath walks a reference path from a parent component version to a final component version.
+// It returns the final descriptor and repository spec.
+func ResolveReferencePath(
+	ctx context.Context,
+	resolver *resolution.Resolver,
+	signingRegistry *signinghandler.SigningRegistry,
+	parentDesc *descriptor.Descriptor,
+	parentRepoSpec runtime.Typed,
+	referencePath []runtime.Identity,
+	configs []v1alpha1.OCMConfiguration,
+	reqInfo workerpool.RequesterInfo,
+) (*descriptor.Descriptor, runtime.Typed, error) {
+	logger := log.FromContext(ctx)
+
+	if len(referencePath) == 0 {
+		return parentDesc, parentRepoSpec, nil
+	}
+
+	currentDesc := parentDesc
+	currentRepoSpec := parentRepoSpec
+
+	for i, refIdentity := range referencePath {
+		logger.V(1).Info("resolving reference", "step", i+1, "identity", refIdentity)
+
+		var matchedRef *descriptor.Reference
+		for j, ref := range currentDesc.Component.References {
+			refIdent := ref.ToIdentity()
+			if refIdentity.Match(refIdent, IdentityFuncIgnoreVersion()) {
+				matchedRef = &currentDesc.Component.References[j]
+				break
+			}
+		}
+
+		if matchedRef == nil {
+			return nil, nil, fmt.Errorf("component reference with identity %v not found in component %s:%s at reference path step %d",
+				refIdentity, currentDesc.Component.Name, currentDesc.Component.Version, i+1)
+		}
+
+		refRepo, err := resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+			RepositorySpec:    currentRepoSpec,
+			OCMConfigurations: configs,
+			Namespace:         reqInfo.NamespacedName.Namespace,
+			SigningRegistry:   signingRegistry,
+			RequesterFunc: func() workerpool.RequesterInfo {
+				return reqInfo
+			},
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create cache-backed repository for reference: %w", err)
+		}
+
+		// If the reference contains a digest spec, we set it for the cache-backed repository, so it is used for the
+		// cache-key creation and digest integrity check in the resolution service. This is the digest of the
+		// referenced component from the component reference of the parent component.
+		if matchedRef.Digest.Value != "" && matchedRef.Digest.HashAlgorithm != "" && matchedRef.Digest.NormalisationAlgorithm != "" {
+			refRepo.Digest = &v2.Digest{
+				HashAlgorithm:          matchedRef.Digest.HashAlgorithm,
+				Value:                  matchedRef.Digest.Value,
+				NormalisationAlgorithm: matchedRef.Digest.NormalisationAlgorithm,
+			}
+		}
+
+		refDesc, err := refRepo.GetComponentVersion(ctx, matchedRef.Component, matchedRef.Version)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get referenced component version %s:%s: %w",
+				matchedRef.Component, matchedRef.Version, err)
+		}
+
+		currentDesc = refDesc
+	}
+
+	return currentDesc, currentRepoSpec, nil
+}
+
+// IdentityFuncIgnoreVersion is a custom identity matching function that ignores the "version" field if it is not set.
+func IdentityFuncIgnoreVersion() runtime.IdentityMatchingChainFn {
+	return func(i, o runtime.Identity) bool {
+		version, ok := i["version"]
+		if !ok || version == "" {
+			delete(o, "version")
+		}
+		return runtime.IdentityEqual(i, o)
+	}
 }
