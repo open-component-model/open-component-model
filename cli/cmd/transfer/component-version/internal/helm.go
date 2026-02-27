@@ -78,7 +78,7 @@ func (h helmChartProcessor) Process(ctx context.Context, resource v2.Resource, i
 		Spec: &runtime.Unstructured{Data: map[string]any{
 			"resource":  fmt.Sprintf("${%s.output.resource}", getResourceID),
 			"chartFile": fmt.Sprintf("${%s.output.chartFile}", getResourceID),
-			"provFile":  fmt.Sprintf("${has(%[1]s.output.provFile) ? %[1]s.output.provFile : null}", getResourceID),
+			"provFile":  fmt.Sprintf("${%[1]s.output.?provFile}", getResourceID),
 		}},
 	}
 	tgd.Transformations = append(tgd.Transformations, convertToOCITransform)
