@@ -1,6 +1,6 @@
 # OCM Conformance Scenario: Sovereign Cloud Delivery
 
-This conformance scenario validates OCM's core value proposition: **modeling, signing, transporting, and deploying a multi-service product into an air-gapped sovereign cloud environment**.
+This conformance scenario validates one of our core value statements: **modeling, signing, transporting, and deploying a multi-service product into an air-gapped sovereign cloud environment**.
 
 ## Overview
 
@@ -95,42 +95,6 @@ A successful conformance run validates:
 5. **Integration**: Notes service connects to PostgreSQL and serves traffic
 6. **Upgrade**: Version bump triggers automatic rolling update
 
-## Prerequisites
-
-| Tool | Version | Purpose |
-|------|---------|---------|
-| `ocm` | >= 0.18.0 | OCM CLI for component operations |
-| `kind` | >= 0.20.0 | Local Kubernetes cluster |
-| `flux` | >= 2.2.0 | GitOps deployment |
-| `task` | >= 3.0.0 | Build automation |
-| `kubectl` | >= 1.28.0 | Kubernetes CLI |
-| `docker` | >= 24.0.0 | Container runtime |
-
-## Troubleshooting
-
-### Common Issues
-
-- **Build failures**: Check Docker is running and OCM CLI is properly installed
-- **Registry connection**: Ensure kind cluster can reach localhost:5001 registry
-- **Component verification**: Verify signing keys are properly configured
-- **Deployment timeouts**: Check cluster resources and OCM controller logs
-
-### Debug Commands
-
-```bash
-# Check component status
-kubectl -n ocm-system get components
-
-# View controller logs  
-kubectl -n ocm-system logs -l app=ocm-controller
-
-# Verify signature status
-ocm verify cv ./transport-archive//acme.org/sovereign/product:1.0.0
-
-# Test application connectivity
-kubectl -n sovereign-product port-forward svc/notes 8080:80
-curl http://localhost:8080/notes
-```
 
 ## Integration Points
 

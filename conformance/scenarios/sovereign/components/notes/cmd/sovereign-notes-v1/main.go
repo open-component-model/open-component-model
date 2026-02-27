@@ -4,8 +4,10 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -56,8 +58,9 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := db.Ping(); err != nil {
-		log.Fatal("Failed to ping database:", err)
+	if err := db.PingContext(context.Background()); err != nil {
+		log.Println("Failed to ping database:", err)
+		return
 	}
 
 	// v1.0.0 ships with the initial schema directly.
@@ -84,7 +87,14 @@ func main() {
 	log.Printf("Starting sovereign-notes server on port %s", port)
 	log.Printf("Version: %s", version)
 
-	if err := http.ListenAndServe(":"+port, r); err != nil {
+	srv := &http.Server{
+		Addr:         ":" + port,
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal("Server failed to start:", err)
 	}
 }
@@ -93,12 +103,14 @@ func main() {
 // It records the schema version in a migrations table so that
 // future versions (v1.1.0+) can apply incremental migrations.
 func initSchema() error {
-	if _, err := db.Exec("SELECT pg_advisory_lock(1)"); err != nil {
+	ctx := context.Background()
+
+	if _, err := db.ExecContext(ctx, "SELECT pg_advisory_lock(1)"); err != nil {
 		return fmt.Errorf("failed to acquire advisory lock: %w", err)
 	}
-	defer db.Exec("SELECT pg_advisory_unlock(1)") //nolint:errcheck
+	defer db.ExecContext(ctx, "SELECT pg_advisory_unlock(1)") //nolint:errcheck
 
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS notes (
 			id SERIAL PRIMARY KEY,
 			content TEXT NOT NULL,
@@ -108,7 +120,7 @@ func initSchema() error {
 		return fmt.Errorf("failed to create notes table: %w", err)
 	}
 
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			id INTEGER PRIMARY KEY,
 			applied_at TIMESTAMP DEFAULT NOW()
@@ -118,7 +130,7 @@ func initSchema() error {
 	}
 
 	// Record initial schema so v1.1.0 migrations know where to start.
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		INSERT INTO schema_migrations (id) VALUES (1) ON CONFLICT DO NOTHING
 	`); err != nil {
 		return fmt.Errorf("failed to record initial schema version: %w", err)
@@ -130,25 +142,27 @@ func initSchema() error {
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+	w.Write([]byte("OK")) //nolint:errcheck
 }
 
-func readinessHandler(w http.ResponseWriter, _ *http.Request) {
-	if err := db.Ping(); err != nil {
+func readinessHandler(w http.ResponseWriter, r *http.Request) {
+	if err := db.PingContext(r.Context()); err != nil {
 		http.Error(w, "Database not ready: "+err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Ready"))
+	w.Write([]byte("Ready")) //nolint:errcheck
 }
 
 func versionHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(VersionInfo{Version: version})
+	if err := json.NewEncoder(w).Encode(VersionInfo{Version: version}); err != nil {
+		log.Printf("failed to encode version response: %v", err)
+	}
 }
 
-func listNotesHandler(w http.ResponseWriter, _ *http.Request) {
-	rows, err := db.Query("SELECT id, content, created_at FROM notes ORDER BY created_at DESC")
+func listNotesHandler(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.QueryContext(r.Context(), "SELECT id, content, created_at FROM notes ORDER BY created_at DESC")
 	if err != nil {
 		http.Error(w, "Failed to query notes: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -166,7 +180,9 @@ func listNotesHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(notes)
+	if err := json.NewEncoder(w).Encode(notes); err != nil {
+		log.Printf("failed to encode notes response: %v", err)
+	}
 }
 
 func createNoteHandler(w http.ResponseWriter, r *http.Request) {
@@ -181,7 +197,7 @@ func createNoteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := db.QueryRow(
+	err := db.QueryRowContext(r.Context(),
 		"INSERT INTO notes (content) VALUES ($1) RETURNING id, created_at",
 		note.Content,
 	).Scan(&note.ID, &note.CreatedAt)
@@ -192,7 +208,9 @@ func createNoteHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(note)
+	if err := json.NewEncoder(w).Encode(note); err != nil {
+		log.Printf("failed to encode note response: %v", err)
+	}
 }
 
 func getNoteHandler(w http.ResponseWriter, r *http.Request) {
@@ -204,11 +222,11 @@ func getNoteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var note Note
-	err = db.QueryRow(
+	err = db.QueryRowContext(r.Context(),
 		"SELECT id, content, created_at FROM notes WHERE id = $1", id,
 	).Scan(&note.ID, &note.Content, &note.CreatedAt)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "Note not found", http.StatusNotFound)
 		return
 	} else if err != nil {
@@ -217,7 +235,9 @@ func getNoteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(note)
+	if err := json.NewEncoder(w).Encode(note); err != nil {
+		log.Printf("failed to encode note response: %v", err)
+	}
 }
 
 func deleteNoteHandler(w http.ResponseWriter, r *http.Request) {
@@ -228,7 +248,7 @@ func deleteNoteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := db.Exec("DELETE FROM notes WHERE id = $1", id)
+	result, err := db.ExecContext(r.Context(), "DELETE FROM notes WHERE id = $1", id)
 	if err != nil {
 		http.Error(w, "Failed to delete note: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -316,7 +336,7 @@ func uiHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	t.Execute(w, VersionInfo{Version: version})
+	t.Execute(w, VersionInfo{Version: version}) //nolint:errcheck
 }
 
 func ordConfigHandler(w http.ResponseWriter, _ *http.Request) {
@@ -332,7 +352,9 @@ func ordConfigHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config)
+	if err := json.NewEncoder(w).Encode(config); err != nil {
+		log.Printf("failed to encode ORD config response: %v", err)
+	}
 }
 
 func ordDocumentHandler(w http.ResponseWriter, _ *http.Request) {
@@ -360,5 +382,7 @@ func ordDocumentHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(document)
+	if err := json.NewEncoder(w).Encode(document); err != nil {
+		log.Printf("failed to encode ORD document response: %v", err)
+	}
 }
