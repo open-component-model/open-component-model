@@ -19,8 +19,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
-	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
 )
 
 // CacheBackedRepository provides a cache-backed implementation of repository.ComponentVersionRepository.
@@ -30,7 +30,7 @@ import (
 type CacheBackedRepository struct {
 	resolver        resolvers.ComponentVersionRepositoryResolver
 	cfg             *configuration.Configuration
-	Verifications   []ocm.Verification
+	Verifications   []verification.Verification
 	Digest          *v2.Digest
 	SigningRegistry *signinghandler.SigningRegistry
 	workerPool      *workerpool.WorkerPool
@@ -52,7 +52,7 @@ func newCacheBackedRepository(
 	wp *workerpool.WorkerPool,
 	requesterFunc func() workerpool.RequesterInfo,
 	baseRepoSpec runtime.Typed,
-	verifications []ocm.Verification,
+	verifications []verification.Verification,
 	digest *v2.Digest,
 	signingRegistry *signinghandler.SigningRegistry,
 ) *CacheBackedRepository {
@@ -192,7 +192,7 @@ func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
 // and a digest spec.
 // It canonicalizes the repository spec and verifications using JCS (RFC 8785) before hashing to ensure consistent keys
 // regardless of field ordering in the JSON representation.
-func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string, verifications []ocm.Verification, digestSpec *v2.Digest) (string, error) {
+func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string, verifications []verification.Verification, digestSpec *v2.Digest) (string, error) {
 	repoJSON, err := json.Marshal(repoSpec)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal repository spec: %w", err)
@@ -204,7 +204,7 @@ func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version
 	}
 
 	// copy verifications to avoid mutating the original slice
-	verificationsCopy := make([]ocm.Verification, len(verifications))
+	verificationsCopy := make([]verification.Verification, len(verifications))
 	copy(verificationsCopy, verifications)
 
 	// sort verifications by signature to ensure deterministic cache key

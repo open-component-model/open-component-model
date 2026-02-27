@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
-	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
 )
 
 func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
@@ -125,10 +125,10 @@ func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
 		component := "test-component"
 		version := "v1.0.0"
 
-		verifications1 := []ocm.Verification{
+		verifications1 := []verification.Verification{
 			{Signature: "sig1"},
 		}
-		verifications2 := []ocm.Verification{
+		verifications2 := []verification.Verification{
 			{Signature: "sig2"},
 		}
 
@@ -149,11 +149,11 @@ func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
 		component := "test-component"
 		version := "v1.0.0"
 
-		verifications1 := []ocm.Verification{
+		verifications1 := []verification.Verification{
 			{Signature: "sig1"},
 			{Signature: "sig2"},
 		}
-		verifications2 := []ocm.Verification{
+		verifications2 := []verification.Verification{
 			{Signature: "sig2"},
 			{Signature: "sig1"},
 		}

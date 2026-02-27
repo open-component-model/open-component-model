@@ -36,6 +36,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
+	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
 )
 
 // Reconciler reconciles a Component object.
@@ -258,7 +259,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to determine effective version: %w", err)
 	}
 
-	verifications, err := ocm.GetVerifications(ctx, r.Client, component)
+	verifications, err := verification.GetVerifications(ctx, r.Client, component)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 

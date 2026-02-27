@@ -21,7 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/signing"
-	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
 )
 
 // RequesterInfo contains information about the object requesting resolution.
@@ -36,7 +36,7 @@ type ResolveOptions struct {
 	Component       string
 	Version         string
 	Repository      repository.ComponentVersionRepository
-	Verifications   []ocm.Verification
+	Verifications   []verification.Verification
 	Digest          *v2.Digest
 	SigningRegistry *signinghandler.SigningRegistry
 	KeyFunc         func() (string, error)
@@ -455,7 +455,7 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 	return desc, nil
 }
 
-func verificationState(verifications []ocm.Verification, digest *v2.Digest) string {
+func verificationState(verifications []verification.Verification, digest *v2.Digest) string {
 	switch {
 	// We expect EITHER verifications OR a digest to be present for a verified component
 	case (len(verifications) != 0 && digest == nil) || (len(verifications) == 0 && digest != nil):

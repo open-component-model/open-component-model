@@ -16,9 +16,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
-	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
+	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
 )
 
 // ErrResolutionInProgress is returned when a component version is being resolved in the background.
@@ -61,7 +61,7 @@ type RepositoryOptions struct {
 	Namespace         string
 	RequesterFunc     func() workerpool.RequesterInfo
 	// Verifications are used to create a cache key to distinguish between verified and unverified component versions
-	Verifications []ocm.Verification
+	Verifications []verification.Verification
 	// Digest is used to create a cache key for component versions from component references resolved in the resource
 	// controller. It is used to distinguish between integrity-checked and unchecked component versions. The integrity
 	// can only be checked if the component reference provides a digest specification.
