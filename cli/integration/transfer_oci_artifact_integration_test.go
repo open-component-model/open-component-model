@@ -19,6 +19,7 @@ import (
 	blobfs "ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/http/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -142,7 +143,7 @@ configurations:
 
 	// Upload the resource to the source oci registry where the constructor
 	// image reference is pointing to.
-	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
+	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{}, &httpv1alpha1.Config{})
 	id, err := resourceRepo.GetResourceCredentialConsumerIdentity(ctx, &resource)
 	r.NoError(err, "should be able to get credential consumer identity for resource")
 	creds, err := credentialResolver.Resolve(ctx, id)
@@ -236,9 +237,10 @@ components:
 		r.NoError(v2.Scheme.Convert(desc.Component.Resources[0].Access, &localBlobAccess))
 		r.Equal("test-oci-resource:v1.0.0", localBlobAccess.ReferenceName)
 
-		r.Equal("test-localblob-oci-resource", desc.Component.Resources[1].Name)
-		var localBlobAccess2 v2.LocalBlob
-		r.NoError(v2.Scheme.Convert(desc.Component.Resources[1].Access, &localBlobAccess2))
+	resourceRepo := ocires.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
+	newRes, err := resourceRepo.UploadResource(ctx, &resource, blob, map[string]string{
+		"username": sourceRegistry.User,
+		"password": sourceRegistry.Password,
 	})
 
 	t.Run("transfer with --upload-as localBlob", func(t *testing.T) {
@@ -478,7 +480,7 @@ configurations:
 	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", sourceRegistry.Reference("test-signed:v1.0.0"))
 	resource.Access = targetAccess
 
-	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
+	resourceRepo := ocires.NewResourceRepository(ociinmemory.New(), ociinmemory.New(), &filesystemv1alpha1.Config{})
 	newRes, err := resourceRepo.UploadResource(ctx, &resource, inmemory.New(bytes.NewReader(data)), map[string]string{
 		"username": sourceRegistry.User,
 		"password": sourceRegistry.Password,
