@@ -96,7 +96,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 	if err := srv.ListenAndServe(); err != nil {
-		log.Fatal("Server failed to start:", err)
+		log.Println("Server failed to start:", err)
 	}
 }
 
