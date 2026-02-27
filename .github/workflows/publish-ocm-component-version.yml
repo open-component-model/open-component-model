@@ -46,7 +46,7 @@ jobs:
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: ${{ inputs.build_artifact_name }}
-          path: ${{ github.workspace }}
+          path: ${{ github.workspace }}/constructor
 
       - name: Verify artifacts
         env:
@@ -59,7 +59,7 @@ jobs:
           test -f "${CONSTRUCTOR_FILE}" || (echo "❌ component-constructor missing: ${CONSTRUCTOR_FILE}" && exit 1)
 
           if [ -n "${{ inputs.build_artifact_name }}" ]; then
-            test -d "${GITHUB_WORKSPACE}/bin" || (echo "❌ bin directory missing after artifact download" && exit 1)
+            test -d "${GITHUB_WORKSPACE}/constructor/bin" || (echo "❌ bin directory missing after artifact download" && exit 1)
           fi
 
           echo "✅ Required artifacts are present"
@@ -96,8 +96,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          test -f "${WORKDIR}/constructor/${{ inputs.constructor_filename }}" || (echo "constructor not found: ${WORKDIR}/constructor/${{ inputs.constructor_filename }}" && exit 1)
 
           docker run --rm \
             -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
