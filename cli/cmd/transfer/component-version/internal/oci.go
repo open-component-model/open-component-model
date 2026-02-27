@@ -18,7 +18,10 @@ import (
 
 type ociArtifactProcessor struct{}
 
-var _ processor = (*ociArtifactProcessor)(nil)
+var (
+	_ processor          = (*ociArtifactProcessor)(nil)
+	_ ociUploadSupported = (*ociArtifactProcessor)(nil)
+)
 
 func init() {
 	registerProcessor(&ociv1.OCIImage{}, &ociArtifactProcessor{})

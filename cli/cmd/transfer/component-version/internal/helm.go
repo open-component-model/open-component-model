@@ -18,6 +18,11 @@ import (
 
 type helmChartProcessor struct{}
 
+var (
+	_ processor          = (*helmChartProcessor)(nil)
+	_ ociUploadSupported = (*helmChartProcessor)(nil)
+)
+
 func init() {
 	registerProcessor(&helmv1.Helm{}, &helmChartProcessor{})
 }
