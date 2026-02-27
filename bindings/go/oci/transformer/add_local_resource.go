@@ -83,7 +83,7 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	var creds map[string]string
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec); err == nil {
-			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && errors.Is(err, credentials.ErrNotFound) {
+			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
 				return nil, fmt.Errorf("failed resolving credentials: %w", err)
 			}
 		}
