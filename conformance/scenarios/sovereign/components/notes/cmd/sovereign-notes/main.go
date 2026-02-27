@@ -69,7 +69,8 @@ func main() {
 
 	// Run database migrations
 	if err := runMigrations(); err != nil {
-		log.Fatal("Failed to run database migrations:", err)
+		log.Println("Failed to run database migrations:", err)
+		return
 	}
 
 	// Setup routes
@@ -140,7 +141,7 @@ func runMigrations() error {
 	if _, err := db.ExecContext(ctx, "SELECT pg_advisory_lock(1)"); err != nil {
 		return fmt.Errorf("failed to acquire advisory lock: %w", err)
 	}
-	defer db.ExecContext(ctx, "SELECT pg_advisory_unlock(1)") //nolint:errcheck
+	defer db.ExecContext(ctx, "SELECT pg_advisory_unlock(1)") //nolint:errcheck // best-effort cleanup/response write
 
 	// Create migrations tracking table
 	if _, err := db.ExecContext(ctx, `
@@ -186,7 +187,7 @@ func runMigrations() error {
 // Health check endpoint
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK")) //nolint:errcheck
+	w.Write([]byte("OK")) //nolint:errcheck // best-effort cleanup/response write
 }
 
 // Readiness check endpoint (includes database connectivity)
@@ -196,7 +197,7 @@ func readinessHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Ready")) //nolint:errcheck
+	w.Write([]byte("Ready")) //nolint:errcheck // best-effort cleanup/response write
 }
 
 // Version endpoint
@@ -395,7 +396,7 @@ func uiHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	t.Execute(w, VersionInfo{Version: version}) //nolint:errcheck
+	t.Execute(w, VersionInfo{Version: version}) //nolint:errcheck // best-effort cleanup/response write
 }
 
 // ORD configuration endpoint

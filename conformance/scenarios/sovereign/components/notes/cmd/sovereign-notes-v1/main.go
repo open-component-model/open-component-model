@@ -65,7 +65,8 @@ func main() {
 
 	// v1.0.0 ships with the initial schema directly.
 	if err := initSchema(); err != nil {
-		log.Fatal("Failed to initialize database schema:", err)
+		log.Println("Failed to initialize database schema:", err)
+		return
 	}
 
 	r := mux.NewRouter()
@@ -108,7 +109,7 @@ func initSchema() error {
 	if _, err := db.ExecContext(ctx, "SELECT pg_advisory_lock(1)"); err != nil {
 		return fmt.Errorf("failed to acquire advisory lock: %w", err)
 	}
-	defer db.ExecContext(ctx, "SELECT pg_advisory_unlock(1)") //nolint:errcheck
+	defer db.ExecContext(ctx, "SELECT pg_advisory_unlock(1)") //nolint:errcheck // best-effort cleanup/response write
 
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS notes (
@@ -142,7 +143,7 @@ func initSchema() error {
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK")) //nolint:errcheck
+	w.Write([]byte("OK")) //nolint:errcheck // best-effort cleanup/response write
 }
 
 func readinessHandler(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +152,7 @@ func readinessHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Ready")) //nolint:errcheck
+	w.Write([]byte("Ready")) //nolint:errcheck // best-effort cleanup/response write
 }
 
 func versionHandler(w http.ResponseWriter, _ *http.Request) {
@@ -336,7 +337,7 @@ func uiHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	t.Execute(w, VersionInfo{Version: version}) //nolint:errcheck
+	t.Execute(w, VersionInfo{Version: version}) //nolint:errcheck // best-effort cleanup/response write
 }
 
 func ordConfigHandler(w http.ResponseWriter, _ *http.Request) {
