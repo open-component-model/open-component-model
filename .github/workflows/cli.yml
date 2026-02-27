@@ -214,11 +214,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "Verifying downloaded CLI binaries..."
+          echo "✅ Verifying downloaded CLI binaries..."
           shopt -s nullglob
           files=(bin/ocm-*)
           (( ${#files[@]} > 0 )) || { echo "❌ No CLI binaries found under ./bin"; ls -la; exit 1; }
-
+          echo "✅ Required artifacts are present"
           mkdir -p ocm-publish
 
           cat > ocm-publish/component-constructor.yaml <<EOF
@@ -275,5 +275,3 @@ jobs:
     with:
       constructor_artifact_name: cli-constructor-artifact
       build_artifact_name: ${{ needs.build.outputs.artifact_name }}
-      workdir: ocm-publish
-      constructor_path: component-constructor.yaml

@@ -11,14 +11,10 @@ on:
         description: "Optional artifact containing file-based resources referenced by the constructor"
         required: false
         type: string
-      constructor_path:
-        description: "Path to component-constructor.yaml inside downloaded artifact"
-        required: true
-        type: string
-      workdir:
-        description: "Working directory inside workspace"
+      constructor_filename:
+        description: "Constructor filename inside constructor artifact"
         required: false
-        default: "."
+        default: "component-constructor.yaml"
         type: string
       ocm_repository:
         description: "Target OCM repository root"
@@ -43,7 +39,7 @@ jobs:
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: ${{ inputs.constructor_artifact_name }}
-          path: ${{ github.workspace }}
+          path: ${{ github.workspace }}/constructor
 
       - name: Download build artifact (optional)
         if: ${{ inputs.build_artifact_name != '' }}
@@ -54,14 +50,13 @@ jobs:
 
       - name: Verify artifacts
         env:
-          WORKDIR: ${{ github.workspace }}/${{ inputs.workdir }}
-          CONSTRUCTOR_PATH: ${{ inputs.constructor_path }}
+          CONSTRUCTOR_FILE: ${{ github.workspace }}/constructor/${{ inputs.constructor_filename }}
         shell: bash
         run: |
           set -euo pipefail
 
           echo "✅ Verifying artifacts..."
-          test -f "${WORKDIR}/${CONSTRUCTOR_PATH}" || (echo "❌ component-constructor missing: ${WORKDIR}/${CONSTRUCTOR_PATH}" && exit 1)
+          test -f "${CONSTRUCTOR_FILE}" || (echo "❌ component-constructor missing: ${CONSTRUCTOR_FILE}" && exit 1)
 
           if [ -n "${{ inputs.build_artifact_name }}" ]; then
             test -d "${GITHUB_WORKSPACE}/bin" || (echo "❌ bin directory missing after artifact download" && exit 1)
@@ -96,13 +91,13 @@ jobs:
         env:
           OCM_REPOSITORY: ${{ inputs.ocm_repository }}
           CLI_IMAGE: ${{ inputs.cli_image }}
-          WORKDIR: ${{ github.workspace }}/${{ inputs.workdir }}
-          CONSTRUCTOR_PATH: ${{ inputs.constructor_path }}
+          WORKDIR: ${{ github.workspace }}
+          CONSTRUCTOR_PATH: ./constructor/${{ inputs.constructor_filename }}
         shell: bash
         run: |
           set -euo pipefail
 
-          test -f "${WORKDIR}/${CONSTRUCTOR_PATH}" || (echo "constructor not found: ${WORKDIR}/${CONSTRUCTOR_PATH}" && exit 1)
+          test -f "${WORKDIR}/constructor/${{ inputs.constructor_filename }}" || (echo "constructor not found: ${WORKDIR}/constructor/${{ inputs.constructor_filename }}" && exit 1)
 
           docker run --rm \
             -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \

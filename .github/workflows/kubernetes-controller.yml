@@ -438,8 +438,6 @@ jobs:
     secrets: inherit
     with:
       constructor_artifact_name: controller-ocm-publish-artifacts
-      workdir: ocm-publish
-      constructor_path: component-constructor.yaml
 
   status-check:
     name: Status Check
