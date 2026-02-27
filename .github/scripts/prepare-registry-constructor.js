@@ -1,7 +1,7 @@
 // @ts-check
 import fs from 'fs';
 import yaml from 'js-yaml';
-import {computeNextVersions} from "./compute-rc-version.js";
+import {computeNextVersions} from "./release-versioning.js";
 import {execSync} from "child_process";
 import {dirname} from "path";
 
