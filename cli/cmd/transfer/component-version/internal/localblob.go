@@ -17,7 +17,10 @@ import (
 
 type localBlobProcessor struct{}
 
-var _ processor = (*localBlobProcessor)(nil)
+var (
+	_ processor          = (*localBlobProcessor)(nil)
+	_ ociUploadSupported = (*localBlobProcessor)(nil)
+)
 
 func init() {
 	registerProcessor(&descriptorv2.LocalBlob{}, &localBlobProcessor{})
