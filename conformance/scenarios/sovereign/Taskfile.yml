@@ -38,7 +38,6 @@ tasks:
       - task: prepare:credentials
 
   run:
-    dir: scenarios/sovereign
     deps:
       - check
       - clean
@@ -52,7 +51,6 @@ tasks:
       - task: cluster:bootstrap
 
   upgrade:
-    dir: scenarios/sovereign
     desc: Test upgrade scenario
     vars:
       NEW_VERSION: "1.1.0"
@@ -73,7 +71,7 @@ tasks:
   # === BUILD TASKS ===
   build:notes:
     desc: Build notes OCM component
-    dir: scenarios/sovereign/components/notes
+    dir: components/notes
     vars:
       NAME: acme.org/sovereign/notes
       OCI_LAYOUT: './deploy/notes.tar.gz'
@@ -95,10 +93,10 @@ tasks:
             --repository {{.CTF}} \
             --component-version-conflict-policy=replace \
             --constructor component-constructor.yaml
-  
+
   build:postgres:
     desc: Build postgres OCM component
-    dir: scenarios/sovereign/components/postgres
+    dir: components/postgres
     env:
       NAME: acme.org/sovereign/postgres
       VERSION: '{{.VERSION}}'
@@ -120,7 +118,7 @@ tasks:
         vars:
           VERSION: '{{.VERSION}}'
       - task: product:keys
-    dir: scenarios/sovereign/components/product
+    dir: components/product
     env:
       NAME: '{{.NAME}}'
       VERSION: '{{.VERSION}}'
@@ -141,14 +139,14 @@ tasks:
       - test -f acme-private.pem
       - test -f acme-public.pem
     desc: Generate RSA key pair for signing
-    dir: scenarios/sovereign/keys
+    dir: tmp/keys
     cmds:
       - cmd: |
           openssl genpkey -algorithm RSA -out acme-private.pem -pkeyopt rsa_keygen_bits:4096
           openssl rsa -pubout -in acme-private.pem -out acme-public.pem
   sign:
     desc: Sign all components with RSA key
-    dir: scenarios/sovereign/components/product
+    dir: components/product
     env:
       OCM_CONFIG: './config/sign.yaml'
     requires:
@@ -156,7 +154,7 @@ tasks:
     cmd: '{{ .ocm }} sign componentversion {{.COMPONENT}}'
   verify:
     desc: Verify component signatures
-    dir: scenarios/sovereign/components/product
+    dir: components/product
     env:
       OCM_CONFIG: './config/verify.yaml'
     requires:
@@ -251,14 +249,17 @@ tasks:
       - cluster:install:kro
       - cluster:install:flux
   cluster:install:toolkit:
+    silent: true
     desc: Install OCM controller on cluster
     vars:
       TOOLKIT_NAMESPACE: ocm-k8s-toolkit-system
     cmd: |
+      echo "Installing OCM controller..."
       helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/charts/ocm-k8s-toolkit \
         --namespace {{ .TOOLKIT_NAMESPACE }} \
         --create-namespace
   cluster:install:kro:
+    silent: true
     desc: Install kro (ResourceGraphDefinition controller) via Helm
     cmd: |
       echo "Installing kro..."
@@ -267,8 +268,11 @@ tasks:
         --create-namespace \
         --version={{.KRO_VERSION}}
   cluster:install:flux:
+    silent: true
     desc: Install Flux and wait for readiness
-    cmd: flux install --components=source-controller,helm-controller
+    cmd: |
+      echo "Installing flux..."
+      flux install --components=source-controller,helm-controller
 
   cluster:setup:
     desc: Set up air-gapped kind cluster with registry, kro, and flux
@@ -289,12 +293,11 @@ tasks:
 
   cluster:bootstrap:
     desc: Bootstrap Components and Wait for Product to be Ready
-    dir: scenarios/sovereign
     cmds:
     - cmd: kubectl apply -f deploy/namespace.yaml
     - cmd: |
         kubectl -n sovereign-product create secret generic acme-signing-key \
-        --from-file=default=keys/acme-public.pem || true
+        --from-file=default=tmp/keys/acme-public.pem || true
     - cmd: kubectl apply -f deploy/bootstrap.yaml
     - cmd: kubectl wait --for=condition=Ready deployer/sovereign-product-deployer --timeout=300s
     - cmd: kubectl wait --for=condition=Ready ResourceGraphDefinition/sovereign-product --timeout=300s
@@ -330,7 +333,7 @@ tasks:
     desc: Clean up generated data
     cmds:
       - rm -rf {{ .OCM_TMPDIR }}
-      - rm -rf scenarios/sovereign/keys
+      - rm -rf tmp/keys
       - kind delete cluster --name {{.CLUSTER_NAME}} || true
       - docker rm -f registry || true
 
@@ -345,11 +348,11 @@ tasks:
       - cmd: |
           SRC="${HOME}/.docker/config.json"
           DST="{{ .OCM_TMPDIR }}/docker-config.json"
-          
+
           [ -f "$SRC" ] || { echo "No Docker config, skipping"; exit 0; }
-          
+
           HELPER="docker-credential-$(jq -r '.credsStore // empty' "$SRC")"
-          
+
           if command -v "$HELPER" >/dev/null 2>&1; then
             "$HELPER" list 2>/dev/null | jq -r 'keys[]' | while IFS= read -r reg; do
               echo "$reg" | "$HELPER" get 2>/dev/null
@@ -358,7 +361,7 @@ tasks:
           else
             cp "$SRC" "$DST"
           fi
-          
+
           cat > "{{ .OCM_CREDENTIALS_CONFIG }}" <<EOF
           type: generic.config.ocm.software/v1
           configurations:

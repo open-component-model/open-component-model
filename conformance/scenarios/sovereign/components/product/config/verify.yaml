@@ -9,4 +9,4 @@ configurations:
       credentials:
         - type: Credentials/v1
           properties:
-            public_key_pem_file: ../../keys/acme-public.pem
+            public_key_pem_file: ../../tmp/keys/acme-public.pem

@@ -1,9 +1,3 @@
-# Signing keys - never commit private keys
-keys/*-private.pem
-*.key
-*.p12
-*.pfx
-
 # Build artifacts
 transport-archive/
 airgap-archive/

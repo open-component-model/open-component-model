@@ -30,6 +30,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: conformance/scenarios/sovereign
       - uses: actions/setup-go@v6
         with:
           go-version-file: conformance/scenarios/sovereign/components/notes/go.mod
@@ -50,22 +52,22 @@ jobs:
       - name: Install kind
         run: go install sigs.k8s.io/kind@v0.31.0
       - name: Check dependencies
-        working-directory: conformance
+        working-directory: conformance/scenarios/sovereign
         run: task check
       - name: Run conformance scenario
-        working-directory: conformance
+        working-directory: conformance/scenarios/sovereign
         run: task run
       - name: Run upgrade scenario
-        working-directory: conformance
+        working-directory: conformance/scenarios/sovereign
         run: task upgrade
       - name: Verify upgrade
-        working-directory: conformance
+        working-directory: conformance/scenarios/sovereign
         run: task verify:deployment
       - name: Show status
         if: always()
-        working-directory: conformance
+        working-directory: conformance/scenarios/sovereign
         run: task status
       - name: Cleanup
         if: always()
-        working-directory: conformance
+        working-directory: conformance/scenarios/sovereign
         run: task clean
