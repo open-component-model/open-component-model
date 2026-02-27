@@ -40,6 +40,10 @@ type SampleType struct {
 
 	// NestedPointerComment
 	NestedPointer *NestedType `json:"nestedPointer"`
+
+	// NullableNestedComment
+	// +nullable
+	NullableNested *NestedType `json:"nullableNested,omitempty"`
 }
 
 // NestedType is a nested struct used for testing.

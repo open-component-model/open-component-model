@@ -78,6 +78,17 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.generator.jsonschemagen.test.NestedType",
       "description": "NestedPointerComment"
     },
+    "nullableNested": {
+      "description": "NullableNestedComment",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.generator.jsonschemagen.test.NestedType"
+        }
+      ]
+    },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
     }
