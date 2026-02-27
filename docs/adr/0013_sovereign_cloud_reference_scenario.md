@@ -62,6 +62,7 @@
 This document describes a reference scenario demonstrating a core OCM value proposition: **modeling, signing, transporting, and deploying a multi-service product into an air-gapped sovereign cloud environment**.
 
 The implementation lives in [`conformance/scenarios/sovereign/`](../../conformance/scenarios/sovereign).
+
 ### 1.1 What This Scenario Covers
 
 Two genuinely interdependent services:

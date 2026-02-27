@@ -2,205 +2,219 @@
 
 ## Quick Start
 
-Run the complete sovereign scenario with default settings:
+Run the complete sovereign scenario end-to-end:
+
 ```bash
-task demo
+task run
 ```
+
+This single command checks prerequisites, sets up a Kind cluster with a local registry, builds and signs all OCM components, transfers them through a simulated air-gap, imports them into the cluster registry, and bootstraps the deployment.
+
+### Prerequisites
+
+The following tools must be available on your PATH:
+
+- `docker` — container runtime and buildx
+- `kubectl` — Kubernetes CLI
+- `kind` — local Kubernetes clusters
+- `helm` — Kubernetes package manager
+- `flux` — FluxCD CLI
+- `openssl` — RSA key generation
+
+Run `task check` to verify all prerequisites are installed.
 
 ## Configuration Options
 
-### Image Registry Configuration
+Override variables on the command line (e.g., `VERSION=2.0.0 task run`):
 
-The scenario supports configurable image registry settings for flexibility in different environments:
+| Variable           | Default                                                        | Description                                                      |
+|--------------------|----------------------------------------------------------------|------------------------------------------------------------------|
+| `VERSION`          | `1.0.0`                                                        | Component version (use `1.0.0` for initial, `1.1.0` for upgrade) |
+| `POSTGRES_VERSION` | `18`                                                           | PostgreSQL image tag                                             |
+| `CLUSTER_NAME`     | `sovereign-conformance`                                        | Kind cluster name                                                |
+| `REGISTRY_NAME`    | `registry`                                                     | Local registry container name                                    |
+| `REGISTRY_PORT`    | `5001`                                                         | Local registry host port                                         |
+| `PLATFORMS`        | `linux/amd64`                                                  | Docker buildx target platform                                    |
+| `KRO_VERSION`      | `0.8.5`                                                        | kro Helm chart version                                           |
+| `CLI_IMAGE`        | `ghcr.io/open-component-model/cli:main`                        | OCM CLI container image                                          |
+| `TOOLKIT_IMAGE`    | `ghcr.io/open-component-model/kubernetes/controller/chart:...` | OCM toolkit Helm chart OCI reference                             |
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `IMAGE_REGISTRY` | `localhost:5001` | Registry URL for pushing/pulling images |
-| `IMAGE_PREFIX` | `acme.org/sovereign` | Image name prefix/organization |
-| `PUSH_IMAGE` | `true` | Whether to push images to registry |
-| `VERSION` | `1.0.0` | Component version |
-| `POSTGRES_VERSION` | `15` | PostgreSQL version to use |
+## End-to-End Flow
 
-### Usage Examples
+`task run` executes the following stages in order:
 
-#### Use Local Registry (Default)
+### 1. `check` — Verify prerequisites
+
+Confirms that `docker`, `kubectl`, `kind`, `helm`, `flux`, and `openssl` are on PATH.
+
+### 2. `clean` — Remove prior state
+
+Deletes the `./tmp` directory, removes any existing Kind cluster, and stops the local registry container.
+
+### 3. `prepare` — Initialize working directory
+
+Creates the `tmp/` directory and extracts Docker credentials from `~/.docker/config.json` into a format the containerized OCM CLI can use.
+
+### 4. `cluster:setup` — Create cluster infrastructure
+
+Runs four sub-tasks in sequence:
+
+1. **`cluster:registry`** — Starts a local Docker registry container on `127.0.0.1:5001`
+2. **`cluster:create`** — Creates a Kind cluster with containerd registry configuration and ingress port mappings
+3. **`cluster:registry:configure`** — Configures containerd on all cluster nodes to reach the local registry and connects the registry to the Kind Docker network
+4. **`cluster:install:controllers`** — Installs three controllers in parallel:
+   - OCM Kubernetes Toolkit (Helm chart)
+   - kro — ResourceGraphDefinition controller (Helm chart)
+   - FluxCD — source-controller and helm-controller
+
+### 5. `build:product` — Build all OCM components
+
+Builds in parallel then assembles:
+
+1. **`build:notes`** — Builds the notes Go application image via `docker buildx`, then adds it as an OCM component to the CTF archive
+2. **`build:postgres`** — Adds the PostgreSQL OCM component (references the official postgres image) to the CTF archive
+3. **`product:keys`** — Generates an RSA 4096-bit key pair (`tmp/keys/acme-private.pem`, `tmp/keys/acme-public.pem`) if not already present
+4. Assembles the product meta-component referencing both sub-components
+5. **`sign`** — Signs the product component with the generated RSA key
+
+### 6. `transfer:airgap` — Simulate air-gap transfer
+
+1. Verifies the signature on the source CTF archive
+2. Copies the component with all resources into a separate air-gap CTF archive
+
+### 7. `cluster:import` — Push into cluster registry
+
+Transfers components from the air-gap CTF archive into the in-cluster registry (`registry:5000`).
+
+### 8. `cluster:bootstrap` — Deploy to Kubernetes
+
+1. Applies RBAC rules (`deploy/rbac.yaml`)
+2. Creates the `sovereign-product` namespace (`deploy/namespace.yaml`)
+3. Creates a Kubernetes secret with the public signing key
+4. Applies OCM bootstrap resources — Repository, Component, Resource, and Deployer CRs (`deploy/bootstrap.yaml`)
+5. Waits for the Deployer and ResourceGraphDefinition to become Ready
+6. Applies the SovereignProduct custom resource (`deploy/sample-product-1.0.0.yaml`)
+7. Waits for the SovereignProduct to become Ready
+
+## Step-by-Step Testing
+
+Run each stage independently to test incrementally:
+
 ```bash
-# Uses localhost:5001 (started automatically)
-task demo
-```
-
-#### Use External Registry
-```bash
-# Use Docker Hub
-IMAGE_REGISTRY=docker.io IMAGE_PREFIX=myorg/sovereign task demo
-
-# Use GitHub Container Registry
-IMAGE_REGISTRY=ghcr.io IMAGE_PREFIX=myorg/sovereign task demo
-
-# Use custom private registry
-IMAGE_REGISTRY=registry.example.com:5000 IMAGE_PREFIX=team/sovereign task demo
-```
-
-#### Build Without Pushing
-```bash
-# Build images locally without pushing to registry
-PUSH_IMAGE=false task build:app
-
-# For testing/development
-PUSH_IMAGE=false task test:build
-```
-
-#### Custom Versions
-```bash
-# Build with specific version
-VERSION=2.0.0 task demo
-
-# Use different PostgreSQL version
-POSTGRES_VERSION=16 task demo
-```
-
-## Testing Phases
-
-### Incremental Testing
-Test each phase independently:
-```bash
-# 1. Check dependencies
 task check
-
-# 2. Start local registry if needed
-task registry:start
-
-# 3. Build and push images
-task build:app
-
-# 4. Build OCM components
-task build:notes
-task build:postgres
+task clean
+task prepare
+task cluster:setup
 task build:product
-
-# 5. Sign components
-task sign
-
-# 6. Verify signatures
-task verify
-
-# 7. Create cluster
-task cluster:create
-
-# 8. Deploy components
-task cluster:deploy
-
-# 9. Verify deployment
+task transfer:airgap
+task cluster:import
+task cluster:bootstrap
 task verify:deployment
 ```
 
-### Test Commands
+## Upgrade Workflow
+
+After a successful initial deployment (`task run`), test the upgrade path:
+
 ```bash
-# Run all tests incrementally
-task test:incremental
-
-# Test specific phases
-task test:build    # Test building only
-task test:sign     # Test signing/verification
-task test:cluster  # Test cluster setup
-
-# Debug tools
-task validate:ctf      # Inspect CTF archive
-task inspect:component # Show component descriptor
-task logs             # View controller logs
-task debug            # Debug failed deployment
+task upgrade
 ```
+
+### What changes between v1.0.0 and v1.1.0
+
+The upgrade exercises a real schema migration in the notes service:
+
+- **v1.0.0** (`cmd/sovereign-notes-v1`) — ships an initial database schema directly with no migration tracking. The `Note` model has `id`, `content`, and `created_at` fields.
+- **v1.1.0** (`cmd/sovereign-notes`) — introduces incremental migrations to evolve the schema created by v1.0.0. Adds a `title` field to the `Note` model.
+
+The Dockerfile selects the correct entrypoint binary based on the `VERSION` build arg, so the same image build pipeline produces either version.
+
+### What `task upgrade` does
+
+1. **Clears archives** — removes the existing CTF (`tmp/transport-archive`) and air-gap CTF (`tmp/airgap-archive`) so components are rebuilt from scratch
+2. **`build:product`** — rebuilds all three OCM components (notes, postgres, product) at version `1.1.0`, generates keys if missing, and signs the product
+3. **`transfer:airgap`** — verifies the v1.1.0 signature and copies resources into a fresh air-gap archive
+4. **`cluster:import`** — pushes the v1.1.0 components from the air-gap archive into the in-cluster registry
+5. **Applies `deploy/sample-product-1.1.0.yaml`** — updates the SovereignProduct CR, changing `spec.version` from `1.0.0` to `1.1.0`. This triggers the OCM Controller to reconcile the new component version, which causes:
+   - The Component CR to fetch the updated descriptor
+   - The Resource CRs to resolve new image references
+   - FluxCD to deploy the updated Helm releases
+   - The notes service to perform a rolling update with the database migration
+6. **Waits for readiness** — blocks until the SovereignProduct CR reports Ready (timeout: 300s)
+
+### Prerequisites
+
+The upgrade task assumes `task run` has already completed successfully — the Kind cluster, registry, controllers, and initial v1.0.0 deployment must all be in place.
+
+### Verifying the upgrade
+
+After `task upgrade` completes, verify the new version is running:
+
+```bash
+# Check that pods are running the updated image
+kubectl -n sovereign-product get pods -o wide
+
+# Test connectivity (the /notes endpoint now supports title field)
+task test:connectivity
+
+# Inspect the component version in the cluster
+task status
+```
+
+## Useful Commands
+
+### Check cluster state
+
+```bash
+task status
+```
+
+Dumps all OCM custom resources (Repositories, Components, Resources, Deployers) and a full cluster-info dump of the `sovereign-product` namespace.
+
+### Test application connectivity
+
+```bash
+task test:connectivity
+```
+
+Port-forwards the notes service and verifies the `/readyz` and `/notes` endpoints respond successfully.
+
+### Verify component signatures
+
+```bash
+task verify COMPONENT='tmp/transport-archive//acme.org/sovereign/product:1.0.0'
+```
+
+The `COMPONENT` variable is required and specifies the component reference to verify.
 
 ## Cleanup
 
 ```bash
-# Clean everything
 task clean
-
-# Clean specific resources
-task clean:docker     # Remove Docker images
-task registry:stop    # Stop local registry
-kind delete cluster --name sovereign-conformance
 ```
 
-## Common Scenarios
+This removes:
 
-### Air-Gapped Deployment
-```bash
-# Build with local registry, then transfer to air-gap
-task demo
-```
-
-### CI/CD Pipeline
-```bash
-# Use CI registry
-IMAGE_REGISTRY=${CI_REGISTRY} \
-IMAGE_PREFIX=${CI_PROJECT_PATH} \
-VERSION=${CI_COMMIT_TAG} \
-task demo
-```
-
-### Development Mode
-```bash
-# Fast iteration without push
-PUSH_IMAGE=false task test:build
-task validate:ctf
-```
-
-### Multi-Environment Testing
-```bash
-# Dev environment
-IMAGE_REGISTRY=dev-registry.local:5000 VERSION=dev task demo
-
-# Staging environment  
-IMAGE_REGISTRY=stage-registry.local:5000 VERSION=stage task demo
-
-# Production environment
-IMAGE_REGISTRY=prod-registry.local:5000 VERSION=v1.0.0 task demo
-```
+- `./tmp` directory (CTF archives, credentials, keys)
+- The Kind cluster (`sovereign-conformance`)
+- The local Docker registry container
 
 ## Troubleshooting
 
-### Registry Connection Issues
 ```bash
-# Test registry connectivity
-docker pull ${IMAGE_REGISTRY}/hello-world:latest
+# Check OCM resource status
+task status
 
-# Check local registry
-docker ps | grep local-registry
-curl -X GET http://localhost:5001/v2/_catalog
-```
-
-### Build Failures
-```bash
-# Build with verbose output
-task build:app --verbose
-
-# Check Docker daemon
-docker info
-
-# Check disk space
-df -h
-```
-
-### Component Issues
-```bash
-# Validate component descriptors
-task inspect:component
-
-# Check CTF archive contents
-task validate:ctf
-```
-
-### Deployment Issues
-```bash
-# Check controller logs
-task logs
-
-# Debug deployment
-task debug
-
-# Check pod status
+# Check pod status in the product namespace
 kubectl -n sovereign-product get pods -o wide
 kubectl -n sovereign-product describe pods
+
+# Check controller logs
+kubectl logs -n ocm-k8s-toolkit-system -l app.kubernetes.io/name=ocm-k8s-toolkit --tail=50
+kubectl logs -n kro -l app.kubernetes.io/name=kro --tail=50
+
+# Test connectivity manually
+kubectl -n sovereign-product port-forward svc/sovereign-notes 8085:80
+curl http://localhost:8085/readyz
+curl http://localhost:8085/notes
 ```

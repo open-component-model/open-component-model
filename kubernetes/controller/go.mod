@@ -10,7 +10,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/fluxcd/pkg/apis/event v0.22.0
 	github.com/fluxcd/pkg/apis/meta v1.25.0
-	github.com/fluxcd/pkg/runtime v0.94.0
+	github.com/fluxcd/pkg/runtime v0.97.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/cel-go v0.27.0
 	github.com/onsi/ginkgo/v2 v2.27.5
@@ -36,15 +36,15 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.10
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260225072540-1154d8351b1e
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260225072540-1154d8351b1e
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260227135858-afdad9e0f886
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260227135858-afdad9e0f886
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/oci v0.0.33
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260225072540-1154d8351b1e
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260227135858-afdad9e0f886
 	ocm.software/open-component-model/bindings/go/runtime v0.0.6
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260225072540-1154d8351b1e
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260227135858-afdad9e0f886
 	sigs.k8s.io/release-utils v0.12.3
 )
 

@@ -8,17 +8,11 @@ on:
         type: string
         required: false
         default: ""
-      toolkit_chart:
-        description: "OCI reference to the controller Helm chart"
+      toolkit_image:
+        description: "OCI reference to the controller Helm chart (with optional :version tag)"
         type: string
         required: false
         default: ""
-      toolkit_version:
-        description: "Version of the controller Helm chart"
-        type: string
-        required: false
-        default: ""
-  workflow_dispatch:
   push:
     branches:
       - main
@@ -36,8 +30,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: conformance-${{ github.workflow }}-${{ github.ref }}-${{ inputs.cli_image || 'default-cli' }}-${{ inputs.toolkit_chart || 'default-chart' }}
+  group: conformance-${{ github.workflow }}-${{ github.ref }}-${{ inputs.cli_image || 'default-cli' }}-${{ inputs.toolkit_image || 'default-toolkit' }}
   cancel-in-progress: true
+
+env:
+  CLI_IMAGE: ${{ inputs.cli_image || 'ghcr.io/open-component-model/cli:main' }}
+  TOOLKIT_IMAGE: ${{ inputs.toolkit_image || 'ghcr.io/open-component-model/kubernetes/controller/chart:0.0.0-c837a09' }}
 
 jobs:
   conformance:
@@ -74,17 +72,11 @@ jobs:
       - name: Run conformance scenario
         working-directory: conformance/scenarios/sovereign
         run: >-
-          task run
-          CLI_IMAGE='${{ inputs.cli_image }}'
-          TOOLKIT_CHART='${{ inputs.toolkit_chart }}'
-          TOOLKIT_VERSION='${{ inputs.toolkit_version }}'
+          task run CLI_IMAGE='${{ env.CLI_IMAGE }}' TOOLKIT_IMAGE='${{ env.TOOLKIT_IMAGE }}'
       - name: Run upgrade scenario
         working-directory: conformance/scenarios/sovereign
         run: >-
-          task upgrade
-          CLI_IMAGE='${{ inputs.cli_image }}'
-          TOOLKIT_CHART='${{ inputs.toolkit_chart }}'
-          TOOLKIT_VERSION='${{ inputs.toolkit_version }}'
+          task upgrade CLI_IMAGE='${{ env.CLI_IMAGE }}' TOOLKIT_IMAGE='${{ env.TOOLKIT_IMAGE }}'
       - name: Verify upgrade
         working-directory: conformance/scenarios/sovereign
         run: >-

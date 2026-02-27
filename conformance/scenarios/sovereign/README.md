@@ -20,22 +20,96 @@ The scenario deploys a minimal notes application with PostgreSQL backend:
 - **PostgreSQL**: Official postgres image deployed as StatefulSet
 - **sovereign-product**: Meta component that orchestrates both services
 
+### Air-Gap Transport Flow
+
+Artifacts move from the developer workstation across an air-gap boundary into the cluster registry. The developer builds components into a CTF archive and signs them with a private key. The transfer step verifies the signature before copying into a separate air-gap CTF. Only the public key enters the cluster (as a Kubernetes secret) — the private key never leaves the developer workstation.
+
+```mermaid
+flowchart LR
+    subgraph dev["Developer Workstation"]
+        build["build:product"] --> ctf["CTF Archive\n(signed)"]
+        keys["RSA Key Pair"]
+    end
+
+    subgraph airgap["Air-Gap Boundary"]
+        ctf -- "verify + copy" --> agctf["Air-Gap CTF"]
+    end
+
+    subgraph cluster["Kind Cluster"]
+        agctf -- "cluster:import" --> reg["OCI Registry\nregistry:5000"]
+        secret["K8s Secret\n(public key only)"]
+    end
+
+    keys -. "public key" .-> secret
+```
+
+### Bootstrap and Self-Management Lifecycle
+
+The system has a two-phase lifecycle. In Phase 1, `kubectl apply bootstrap.yaml` creates the OCM CR chain (Repository, Component, Resource, Deployer) which delivers the ResourceGraphDefinition into the cluster. In Phase 2, a user creates a `SovereignProduct` CR. kro processes it via the RGD, which regenerates the same bootstrap CRs (idempotently) plus application resources. The system is now self-managing — changing `spec.version` triggers the full reconciliation chain automatically.
+
+```mermaid
+flowchart TD
+    subgraph phase1["Phase 1: Bootstrap (manual, one-time)"]
+        apply["kubectl apply bootstrap.yaml"]
+        apply --> repo["Repository\nsovereign-repo"]
+        repo --> comp["Component\nsovereign-product-component\n(verify signature)"]
+        comp --> res["Resource\nsovereign-product-resource-rgd\n(extract RGD blob)"]
+        res --> deployer["Deployer\nsovereign-product-deployer\n(apply RGD to cluster)"]
+    end
+
+    deployer --> rgd["ResourceGraphDefinition\n(installed in cluster)"]
+
+    subgraph phase2["Phase 2: Self-Management (automatic)"]
+        sp["SovereignProduct CR\nspec.version: 1.0.0"] --> rgd
+        rgd --> bootstrap_crs["Repository → Component →\nResource → Deployer\n(same CRs, idempotent)"]
+        rgd --> pg_chain["postgres:\nResource CRs → OCIRepository → HelmRelease"]
+        rgd --> notes_chain["notes:\nResource CRs → OCIRepository → HelmRelease"]
+        rgd --> config["ConfigMap + Secret\n(app configuration)"]
+    end
+```
+
+### Controller Reconciliation Chain
+
+Three controllers divide responsibilities across the deployment pipeline. The OCM Controller manages component resolution and signature verification. kro processes the ResourceGraphDefinition to expand `SovereignProduct` CRs into the full resource tree. FluxCD handles the final-mile deployment of Helm charts and container images into the cluster.
+
+```mermaid
+flowchart LR
+    subgraph ocm["OCM Controller"]
+        repository["Repository"] --> component["Component\n(verify sig)"]
+        component --> res_rgd["Resource\n(product-rgd)"]
+        component --> res_chart["Resource\n(helm-chart)"]
+        component --> res_image["Resource\n(image)"]
+        res_rgd --> deployer["Deployer"]
+    end
+
+    subgraph kro["kro"]
+        deployer --> rgd2["RGD"]
+        rgd2 --> sp2["SovereignProduct\nprocessing"]
+    end
+
+    subgraph flux["FluxCD"]
+        res_chart -. "registry/repo/digest" .-> oci_repo["OCIRepository"]
+        oci_repo --> helm["HelmRelease"]
+        res_image -. "image ref" .-> helm
+        helm --> workload["Deployment /\nStatefulSet"]
+    end
+```
+
 ## Quick Start
 
+See [USAGE.md](USAGE.md) for prerequisites, configuration options, and step-by-step instructions.
+
 ```bash
-# Prerequisites: kind, flux CLI, ocm CLI, task
-# Install instructions: https://ocm.software/dev/docs/getting-started/install-the-ocm-cli/
+# Run the complete scenario end-to-end
+task run
 
-# Run full conformance scenario
-task demo
-
-# Or run step-by-step
-task build:ctf
-task sign
+# Or run each stage independently — see USAGE.md for details
+task check && task clean && task prepare
+task cluster:setup
+task build:product
 task transfer:airgap
-task cluster:create
-task cluster:load
-task cluster:deploy
+task cluster:import
+task cluster:bootstrap
 task verify:deployment
 ```
 
@@ -69,19 +143,12 @@ task verify:deployment
 ```
 sovereign-scenario/
 ├── README.md                    # This file
-├── Taskfile.yml                # Build and deployment automation
-├── settings.yaml               # Version configuration
-├── keys/                       # Signing keys (public key committed)
-├── components/                 # OCM component definitions
-│   ├── notes/                 # Notes application component
-│   ├── postgres/              # PostgreSQL component  
-│   └── product/               # Meta component
-├── deploy/                    # OCM controller deployment manifests
-├── scripts/                   # Setup and utility scripts
-└── tests/                     # Test suites
-    ├── integration/          # Integration tests
-    ├── conformance/          # Conformance validation
-    └── e2e/                  # End-to-end tests
+├── Taskfile.yml                 # Build and deployment automation
+├── components/                  # OCM component definitions
+│   ├── notes/                   # Notes application component
+│   ├── postgres/                # PostgreSQL component  
+│   └── product/                 # Meta component
+├── deploy/                      # OCM controller deployment manifests and bootstrap apis
 ```
 
 ## Success Criteria
@@ -94,7 +161,6 @@ A successful conformance run validates:
 4. **Deployment**: OCM Controller successfully deploys all components
 5. **Integration**: Notes service connects to PostgreSQL and serves traffic
 6. **Upgrade**: Version bump triggers automatic rolling update
-
 
 ## Integration Points
 

@@ -34,6 +34,9 @@ on:
       artifact_id:
         description: "The artifact id that was built."
         value: ${{ jobs.build.outputs.artifact_id }}
+      image_digest:
+        description: "The digest of the pushed OCI image (sha256:...)."
+        value: ${{ jobs.publish.outputs.image_digest }}
 
 env:
   LOCATION: "cli"                       # Folder containing the CLI source
@@ -144,12 +147,13 @@ jobs:
             ${{ env.LOCATION }}/tmp/oci/*      
 
   publish:
-    name: Push & Attest
+    name: Publish and Attest
     needs: build
     if: ${{ needs.build.outputs.should_push_oci_image == 'true' }}  # Skip unless we should push
     runs-on: ubuntu-latest
     outputs:
-      cli_image_tag: ${{ steps.set-tag.outputs.tag }}
+      image_digest: ${{ steps.digest.outputs.digest }}
+      image_tag: ${{ steps.set-tag.outputs.tag }}
     permissions:
       actions: read           # Needed for artifact download
       packages: write         # Needed for pushing OCI images and provenance layers
@@ -197,15 +201,6 @@ jobs:
         id: push-oci
         run: oras cp --from-oci-layout "${LAYOUT}:${TAG}" "${TARGET_REPO}:${TAG}"
 
-      # This is only convenience so when we push to main there is a CLI image that always points to main as well
-      # technically we already have a tagged version called 0.0.0-main but this is more standard
-      - name: Tag Image as branch when default ( :${{ env.REF }} )
-        if: ${{ env.REF == github.event.repository.default_branch }}
-        env:
-          FROM: ${{ env.TAG }}
-          TO: ${{ env.REF }}
-        run: oras tag "${TARGET_REPO}:${FROM}" "${TARGET_REPO}:${TO}"
-
       # Attest pushed OCI image with provenance metadata
       - name: Resolve Pushed Digest for Attestation
         id: digest
@@ -223,5 +218,5 @@ jobs:
     needs: publish
     uses: ./.github/workflows/conformance.yml
     with:
-      cli_image: "ghcr.io/open-component-model/cli:${{ needs.publish.outputs.cli_image_tag }}"
+      cli_image: "ghcr.io/open-component-model/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
     secrets: inherit
