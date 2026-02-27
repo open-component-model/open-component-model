@@ -52,6 +52,23 @@ jobs:
           name: ${{ inputs.build_artifact_name }}
           path: ${{ github.workspace }}
 
+      - name: Verify artifacts
+        env:
+          WORKDIR: ${{ github.workspace }}/${{ inputs.workdir }}
+          CONSTRUCTOR_PATH: ${{ inputs.constructor_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "✅ Verifying artifacts..."
+          test -f "${WORKDIR}/${CONSTRUCTOR_PATH}" || (echo "❌ component-constructor missing: ${WORKDIR}/${CONSTRUCTOR_PATH}" && exit 1)
+
+          if [ -n "${{ inputs.build_artifact_name }}" ]; then
+            test -d "${GITHUB_WORKSPACE}/bin" || (echo "❌ bin directory missing after artifact download" && exit 1)
+          fi
+
+          echo "✅ Required artifacts are present"
+
       - name: Login to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:

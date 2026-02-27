@@ -215,7 +215,9 @@ jobs:
           set -euo pipefail
 
           echo "Verifying downloaded CLI binaries..."
-          test -e bin/ocm-* || { echo "No CLI binaries found under ./bin"; ls -la; exit 1; }
+          shopt -s nullglob
+          files=(bin/ocm-*)
+          (( ${#files[@]} > 0 )) || { echo "❌ No CLI binaries found under ./bin"; ls -la; exit 1; }
 
           mkdir -p ocm-publish
 
