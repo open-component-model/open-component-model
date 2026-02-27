@@ -377,6 +377,29 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 		return nil, fmt.Errorf("failed to get component version %s:%s: %w", opts.Component, opts.Version, err)
 	}
 
+	// The provided digest is from the component reference from the parent component and must match the calculated
+	// digest of the resolved component version to ensure integrity.
+	// Additionally, either a digest OR verifications can be provided, hence, we can return after the integrity check as
+	// we do not have any verifications to check again.
+	if opts.Digest != nil {
+		logger.Info("verifying integrity with against provided digest",
+			"component", opts.Component, "version", opts.Version)
+
+		digest, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)),
+			opts.Digest.NormalisationAlgorithm, opts.Digest.HashAlgorithm)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate digest for component version %s:%s: %w",
+				opts.Component, opts.Version, err)
+		}
+
+		if opts.Digest.Value != digest.Value {
+			return nil, fmt.Errorf("digest mismatch (%s/%s) for component version %s:%s: %w",
+				digest.NormalisationAlgorithm, digest.HashAlgorithm, opts.Component, opts.Version, err)
+		}
+
+		return desc, nil
+	}
+
 	// Early return if no verifications are requested and to prevent returning ErrNotSafelyDigestible if not needed
 	if len(opts.Verifications) == 0 {
 		logger.Info("no verifications requested, skipping signature verification")
@@ -384,7 +407,7 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 		return desc, nil
 	}
 
-	// If verifications are requested, we need to verify that the component version is safely digestible
+	// If verifications are requested, we need to verify that the component version is safely digestible.
 	// Anything that comes after this will, in case of an error, always be skipped until cache TTL expires
 	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
 		return desc, ErrNotSafelyDigestible
@@ -409,11 +432,7 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 			return nil, fmt.Errorf("digest verification failed for signature %q: %w", descSig.Name, err)
 		}
 
-		cfg := &signingv1alpha1.Config{
-			SignatureAlgorithm: signingv1alpha1.SignatureAlgorithm(descSig.Signature.Algorithm),
-		}
-
-		signingHandler, err := opts.SigningRegistry.GetPlugin(ctx, cfg)
+		signingHandler, err := opts.SigningRegistry.GetPlugin(ctx, &signingv1alpha1.Config{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get signing handler plugin: %w", err)
 		}
@@ -428,7 +447,7 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 			return nil, fmt.Errorf("unsupported signature algorithm: %q", descSig.Signature.Algorithm)
 		}
 
-		if err := signingHandler.Verify(ctx, *descSig, cfg, credentials); err != nil {
+		if err := signingHandler.Verify(ctx, *descSig, &signingv1alpha1.Config{}, credentials); err != nil {
 			return nil, fmt.Errorf("signature verification failed for signature %s: %w", verification.Signature, err)
 		}
 	}

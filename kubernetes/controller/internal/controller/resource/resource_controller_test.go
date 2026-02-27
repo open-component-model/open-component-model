@@ -1531,6 +1531,162 @@ var _ = Describe("Resource Controller", func() {
 					nestedComponent)
 			}
 		})
+
+		It("reconcile a nested component with digest spec but unsigned by reference path", func(ctx SpecContext) {
+			By("creating a CTF")
+			ctfName := "nested-component"
+			nestedComponentName := "ocm.software/nested-component-with-digest-spec"
+			nestedComponentReference := "some-reference"
+			ctfPath := filepath.Join(tempDir, ctfName)
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+			By("creating the child component")
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    nestedComponentName,
+								Version: componentVersion,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.0",
+									},
+								},
+								Type:     "ociArtifact",
+								Relation: descruntime.ExternalRelation,
+								Access: &runtime.Raw{
+									Type: runtime.Type{
+										Name:    "ociArtifact",
+										Version: "v1",
+									},
+									Data: mustMarshalJSON(map[string]any{
+										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.23.0",
+									}),
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+			descNested, err := repo.GetComponentVersion(ctx, nestedComponentName, componentVersion)
+			Expect(err).NotTo(HaveOccurred())
+			digestChild, err := signing.GenerateDigest(ctx, descNested, slog.New(logr.ToSlogHandler(log.FromContext(ctx))), signing.LegacyNormalisationAlgo, crypto.SHA256.String())
+			Expect(err).ToNot(HaveOccurred())
+
+			By("creating the parent component with component reference containing a digest spec")
+			_, _ = test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersion,
+							},
+						},
+						References: []descruntime.Reference{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    nestedComponentReference,
+										Version: componentVersion,
+									},
+								},
+								Component: nestedComponentName,
+								Digest: descruntime.Digest{
+									HashAlgorithm:          digestChild.HashAlgorithm,
+									Value:                  digestChild.Value,
+									NormalisationAlgorithm: digestChild.NormalisationAlgorithm,
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("mocking a component")
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+					Repository: repositoryName,
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
+			By("creating a resource")
+			resourceObj := &v1alpha1.Resource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: namespace.GetName(),
+				},
+				Spec: v1alpha1.ResourceSpec{
+					ComponentRef: corev1.LocalObjectReference{
+						Name: componentObj.GetName(),
+					},
+					Resource: v1alpha1.ResourceID{
+						ByReference: v1alpha1.ResourceReference{
+							Resource:      runtime.Identity{"name": resourceName},
+							ReferencePath: []runtime.Identity{{"name": nestedComponentReference}},
+						},
+					},
+					AdditionalStatusFields: map[string]string{
+						"reference": "resource.access.toOCI().reference",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
+
+			By("checking that the resource has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
+				"Status.Additional": map[string]apiextensionsv1.JSON{
+					"reference": mustToJSON("0.23.0"),
+				},
+				"Status.Component.Component": nestedComponentName,
+				"Status.Component.Version":   componentVersion,
+			})
+
+			By("checking the metrics for cache hits and misses")
+			parentComponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(parentComponentMissCounter)).To(Equal(float64(1)))
+			parentComponentHitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			// Hit 1 after this component version was stored in the cache (ErrResolutionInProgress)
+			// Hit 2 after the nested component returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
+			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(Equal(float64(2)))
+
+			childComponentMissCount, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(childComponentMissCount)).To(Equal(float64(0)))
+
+			childComponentVerifiedMissCount, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "verified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(childComponentVerifiedMissCount)).To(Equal(float64(1)))
+			childComponentVerifiedHitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "verified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(childComponentVerifiedHitCounter)).To(Equal(float64(1)))
+		})
 	})
 
 	Context("ocm config propagation from component to resource", func() {
