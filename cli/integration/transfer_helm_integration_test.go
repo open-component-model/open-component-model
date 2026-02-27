@@ -2,14 +2,17 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -33,6 +36,81 @@ func newHelmChartRepoServer(t *testing.T, dir string) *httptest.Server {
 	return srv
 }
 
+// downloadAndVerifyResource downloads a resource from the given target repository
+// and verifies the downloaded blob matches the original helm chart.
+// If originalProvPath is non-empty, it also verifies the provenance layer.
+func downloadAndVerifyResource(t *testing.T, ctx context.Context, targetRef, componentName, componentVersion, cfgPath, originalChartPath, originalProvPath string) {
+	t.Helper()
+	r := require.New(t)
+
+	downloadDir := filepath.Join(t.TempDir(), "downloaded")
+	componentRef := fmt.Sprintf("%s//%s:%s", targetRef, componentName, componentVersion)
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"resource",
+		componentRef,
+		"--identity", "name=mychart,version=0.1.0",
+		"--output", downloadDir,
+		"--config", cfgPath,
+	})
+	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource should succeed")
+
+	// Parse the OCI index to find the manifest digest
+	indexData, err := os.ReadFile(filepath.Join(downloadDir, "index.json"))
+	r.NoError(err, "should be able to read OCI index.json")
+
+	var index ocispec.Index
+	r.NoError(json.Unmarshal(indexData, &index), "should be able to parse OCI index")
+	r.NotEmpty(index.Manifests, "OCI index should contain at least one manifest")
+
+	// Read the manifest to find the helm chart layer
+	manifestDesc := index.Manifests[0]
+	manifestPath := filepath.Join(downloadDir, "blobs", manifestDesc.Digest.Algorithm().String(), manifestDesc.Digest.Encoded())
+	manifestData, err := os.ReadFile(manifestPath)
+	r.NoError(err, "should be able to read OCI manifest")
+
+	var manifest ocispec.Manifest
+	r.NoError(json.Unmarshal(manifestData, &manifest), "should be able to parse OCI manifest")
+
+	// Find the helm chart layer (application/vnd.cncf.helm.chart.content.v1.tar+gzip)
+	var chartLayer *ocispec.Descriptor
+	var provLayer *ocispec.Descriptor
+	for i, layer := range manifest.Layers {
+		if strings.Contains(layer.MediaType, "helm.chart.content") {
+			chartLayer = &manifest.Layers[i]
+		}
+		if strings.Contains(layer.MediaType, "helm.chart.provenance") {
+			provLayer = &manifest.Layers[i]
+		}
+	}
+	r.NotNil(chartLayer, "should find helm chart content layer in manifest")
+
+	// Compare the chart layer blob with the original helm chart
+	expected, err := os.ReadFile(originalChartPath)
+	r.NoError(err, "should be able to read original helm chart")
+
+	chartBlobPath := filepath.Join(downloadDir, "blobs", chartLayer.Digest.Algorithm().String(), chartLayer.Digest.Encoded())
+	actual, err := os.ReadFile(chartBlobPath)
+	r.NoError(err, "should be able to read downloaded chart blob")
+
+	r.Equal(expected, actual, "downloaded chart blob should match original helm chart")
+
+	// Optionally compare the provenance layer
+	if originalProvPath != "" {
+		r.NotNil(provLayer, "should find helm chart provenance layer in manifest")
+
+		expectedProv, err := os.ReadFile(originalProvPath)
+		r.NoError(err, "should be able to read original prov file")
+
+		provBlobPath := filepath.Join(downloadDir, "blobs", provLayer.Digest.Algorithm().String(), provLayer.Digest.Encoded())
+		actualProv, err := os.ReadFile(provBlobPath)
+		r.NoError(err, "should be able to read downloaded prov blob")
+
+		r.Equal(expectedProv, actualProv, "downloaded prov blob should match original prov file")
+	}
+}
+
 func Test_Integration_Transfer_HelmChart(t *testing.T) {
 	ctx := t.Context()
 	r := require.New(t)
@@ -41,7 +119,9 @@ func Test_Integration_Transfer_HelmChart(t *testing.T) {
 	// 1. Locate the test helm chart and start an HTTP server to host it
 	root := getRepoRootBasedOnGit(t)
 	chartDir := filepath.Join(root, "bindings/go/helm/testdata/provenance")
-	_, err := os.Stat(filepath.Join(chartDir, "mychart-0.1.0.tgz"))
+	chartFile := filepath.Join(chartDir, "mychart-0.1.0.tgz")
+	provFile := filepath.Join(chartDir, "mychart-0.1.0.tgz.prov")
+	_, err := os.Stat(chartFile)
 	r.NoError(err, "test helm chart should exist")
 
 	srv := newHelmChartRepoServer(t, chartDir)
@@ -161,6 +241,8 @@ configurations:
 		r.NoError(ociaccess.Scheme.Convert(desc.Component.Resources[0].Access, &ociAccess),
 			"resource access should be convertible to OCIImage")
 		r.NotEmpty(ociAccess.ImageReference, "image reference should not be empty")
+
+		downloadAndVerifyResource(t, ctx, targetRef, componentName, componentVersion, cfgPath, chartFile, provFile)
 	})
 
 	t.Run("transfer helm chart with --upload-as ociArtifact", func(t *testing.T) {
@@ -198,13 +280,14 @@ configurations:
 			"resource access should be an OCI artifact")
 		r.Contains(ociAccess.ImageReference, targetRef,
 			"image reference should point to the target registry")
+
+		downloadAndVerifyResource(t, ctx, targetRef, componentName, componentVersion, cfgPath, chartFile, provFile)
 	})
 
 	t.Run("transfer helm chart with local input to OCI registry", func(t *testing.T) {
 		r := require.New(t)
 
 		// Create a separate CTF using helm input (local path) instead of access
-		chartPath := filepath.Join(root, "bindings/go/helm/testdata/provenance/mychart-0.1.0.tgz")
 		localConstructor := fmt.Sprintf(`components:
 - name: %s
   version: %s
@@ -217,7 +300,7 @@ configurations:
     input:
       type: helm/v1
       path: %s
-`, componentName, componentVersion, chartPath)
+`, componentName, componentVersion, chartFile)
 
 		localTempDir := t.TempDir()
 		localConstructorPath := filepath.Join(localTempDir, "constructor.yaml")
@@ -265,5 +348,7 @@ configurations:
 		var localBlobAccess v2.LocalBlob
 		r.NoError(v2.Scheme.Convert(desc.Component.Resources[0].Access, &localBlobAccess),
 			"resource should have local blob access after transfer")
+
+		downloadAndVerifyResource(t, ctx, targetRef, componentName, componentVersion, cfgPath, chartFile, provFile)
 	})
 }
