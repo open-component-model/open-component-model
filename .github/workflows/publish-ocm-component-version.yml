@@ -1,0 +1,100 @@
+name: Publish OCM Component Version
+
+on:
+  workflow_call:
+    inputs:
+      constructor_artifact_name:
+        description: "Artifact containing component-constructor.yaml"
+        required: true
+        type: string
+      build_artifact_name:
+        description: "Optional artifact containing file-based resources referenced by the constructor"
+        required: false
+        type: string
+      constructor_path:
+        description: "Path to component-constructor.yaml inside downloaded artifact"
+        required: true
+        type: string
+      workdir:
+        description: "Working directory inside workspace"
+        required: false
+        default: "."
+        type: string
+      ocm_repository:
+        description: "Target OCM repository root"
+        required: false
+        default: "ghcr.io/open-component-model"
+        type: string
+      cli_image:
+        description: "OCI image containing OCM CLI"
+        required: false
+        default: "ghcr.io/open-component-model/cli:0.0.0-main"
+        type: string
+
+jobs:
+  publish:
+    name: Publish Component Version
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      packages: write
+    steps:
+      - name: Download constructor artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ inputs.constructor_artifact_name }}
+          path: ${{ github.workspace }}
+
+      - name: Download build artifact (optional)
+        if: ${{ inputs.build_artifact_name != '' }}
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ inputs.build_artifact_name }}
+          path: ${{ github.workspace }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate OCM config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > "${HOME}/.ocmconfig" <<EOF
+          type: generic.config.ocm.software/v1
+          configurations:
+            - type: credentials.config.ocm.software
+              repositories:
+                - repository:
+                    type: DockerConfig/v1
+                    dockerConfigFile: /.docker/config.json
+                    propagateConsumerIdentity: true
+          EOF
+
+      - name: Publish OCM component version
+        env:
+          OCM_REPOSITORY: ${{ inputs.ocm_repository }}
+          CLI_IMAGE: ${{ inputs.cli_image }}
+          WORKDIR: ${{ github.workspace }}/${{ inputs.workdir }}
+          CONSTRUCTOR_PATH: ${{ inputs.constructor_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f "${WORKDIR}/${CONSTRUCTOR_PATH}" || (echo "constructor not found: ${WORKDIR}/${CONSTRUCTOR_PATH}" && exit 1)
+
+          docker run --rm \
+            -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
+            -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
+            -v /etc/ssl/certs/:/etc/ssl/certs/:ro \
+            -v "${WORKDIR}:${WORKDIR}" \
+            -w "${WORKDIR}" \
+            "${CLI_IMAGE}" \
+              add component-version \
+              --config "/.ocmconfig" \
+              --repository "${OCM_REPOSITORY}" \
+              --constructor "${CONSTRUCTOR_PATH}"

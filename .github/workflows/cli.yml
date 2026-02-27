@@ -207,3 +207,71 @@ jobs:
           subject-digest: ${{ steps.digest.outputs.digest }}
           subject-name: ${{ env.TARGET_REPO }}
           push-to-registry: true
+
+      # Generate OCM component constructor using CLI binaries and a reference to the pushed image
+      - name: Generate OCM component constructor
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Verifying downloaded CLI binaries..."
+          test -e bin/ocm-* || { echo "No CLI binaries found under ./bin"; ls -la; exit 1; }
+
+          mkdir -p ocm-publish
+
+          cat > ocm-publish/component-constructor.yaml <<EOF
+          name: ocm.software/cli
+          version: ${TAG}
+          provider:
+            name: ocm.software
+          resources:
+          EOF
+
+          for f in bin/ocm-*; do
+            b="$(basename "$f")"
+            os="$(echo "$b" | cut -d- -f2)"
+            arch="$(echo "$b" | cut -d- -f3)"
+            cat >> ocm-publish/component-constructor.yaml <<EOF
+          - name: cli
+            type: executable
+            version: ${TAG}
+            labels:
+              - name: downloadName
+                value: ocm
+            extraIdentity:
+              os: ${os}
+              architecture: ${arch}
+            relation: local
+            input:
+              type: file
+              path: ./bin/${b}
+          EOF
+          done
+
+          cat >> ocm-publish/component-constructor.yaml <<EOF
+          - name: image
+            type: ociImage
+            version: ${TAG}
+            access:
+              type: ociArtifact
+              imageReference: ${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/cli:${TAG}
+          EOF
+
+      - name: Upload component constructor as artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: cli-constructor-artifact
+          if-no-files-found: error
+          path: ocm-publish/component-constructor.yaml
+
+  publish-component:
+    name: Publish OCM Component Version
+    needs: [build, publish]
+    if: ${{ needs.build.outputs.should_push_oci_image == 'true' }}
+    uses: ./.github/workflows/publish-ocm-component-version.yml
+    secrets: inherit
+    with:
+      constructor_artifact_name: cli-constructor-artifact
+      build_artifact_name: ${{ needs.build.outputs.artifact_name }}
+      workdir: ocm-publish
+      constructor_path: component-constructor.yaml

@@ -390,14 +390,61 @@ jobs:
           path: ${{ env.LOCATION }}/dist/ocm-k8s-toolkit-*.tgz
           if-no-files-found: error
 
+      - name: Generate OCM component constructor
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p ocm-publish
+
+          cat > ocm-publish/component-constructor.yaml <<EOF
+          name: ocm.software/kubernetes/controller
+          version: ${VERSION}
+          provider:
+            name: ocm.software
+          resources:
+            - name: controller-image
+              version: ${VERSION}
+              type: ociImage
+              access:
+                type: ociArtifact
+                imageReference: ${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/kubernetes/controller:${VERSION}
+            - name: controller-chart
+              version: ${VERSION}
+              type: helmChart
+              access:
+                type: ociArtifact
+                imageReference: ${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/kubernetes/controller/chart/ocm-k8s-toolkit:${VERSION}
+          EOF
+
+      - name: Upload OCM publish artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: controller-ocm-publish-artifacts
+          if-no-files-found: error
+          path: ocm-publish/
+
       - name: Cleanup
         if: always()
         run: docker system prune --force
 
+  publish-component:
+    name: Publish OCM Component Version
+    needs: [build, publish]
+    if: ${{ needs.build.outputs.should_publish == 'true' }}
+    uses: ./.github/workflows/publish-ocm-component-version.yml
+    secrets: inherit
+    with:
+      constructor_artifact_name: controller-ocm-publish-artifacts
+      workdir: ocm-publish
+      constructor_path: component-constructor.yaml
+
   status-check:
     name: Status Check
     runs-on: ubuntu-latest
-    needs: [E2E, publish]
+    needs: [E2E, publish, publish-component]
     if: always()
     steps:
       - name: Fail if E2E did not succeed
@@ -406,4 +453,10 @@ jobs:
             echo "::error::E2E tests did not pass (result: ${{ needs.E2E.result }})"
             exit 1
           fi
+
+      - name: Fail if OCM publish did not succeed
+        if: ${{ needs.publish.result == 'success' && needs.publish-component.result != 'success' }}
+        run: |
+          echo "::error::OCM component publish did not pass (result: ${{ needs.publish-component.result }})"
+          exit 1
 
