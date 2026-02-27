@@ -275,4 +275,4 @@ jobs:
     with:
       constructor_artifact_name: cli-constructor-artifact
       build_artifact_name: ${{ needs.build.outputs.artifact_name }}
-      ocm_repository: ${{ env.REGISTRY }}/${{ github.repository_owner }}
+      ocm_repository: ghcr.io/${{ github.repository_owner }}
