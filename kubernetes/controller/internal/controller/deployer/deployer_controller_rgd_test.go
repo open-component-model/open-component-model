@@ -513,7 +513,16 @@ spec:
 			_, specDataUpdated, err := setupCTFWithResource(ctx, updatedTempDir, componentName, componentVersionUpdated, resourceName, resourceVersionUpdated, rgdUpdated)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("updating the mocked resource")
+			By("updating the mocked component and resource")
+			componentObjNotReady := &v1alpha1.Component{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(componentObj), componentObjNotReady)).To(Succeed())
+			status.MarkNotReady(recorder, componentObjNotReady, v1alpha1.ResourceIsNotAvailable, "mock component is not ready")
+			Expect(k8sClient.Status().Update(ctx, componentObjNotReady)).To(Succeed())
+			componentObjNotReady.Status.Component.Version = componentVersionUpdated
+			componentObjNotReady.Status.Component.RepositorySpec = &apiextensionsv1.JSON{Raw: specDataUpdated}
+			status.MarkReady(recorder, componentObjNotReady, "updated mock component")
+			Expect(k8sClient.Status().Update(ctx, componentObjNotReady)).To(Succeed())
+
 			resourceObjNotReady := &v1alpha1.Resource{}
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(resourceObj), resourceObjNotReady)).To(Succeed())
 			status.MarkNotReady(recorder, resourceObjNotReady, v1alpha1.ResourceIsNotAvailable, "mock resource is not ready")
@@ -634,6 +643,16 @@ spec:
 			updatedTempDir := GinkgoT().TempDir()
 			_, specDataUpdated, err := setupCTFWithResource(ctx, updatedTempDir, componentName, componentVersionUpdated, resourceName, resourceVersionUpdated, invalidRgd)
 			Expect(err).NotTo(HaveOccurred())
+
+			By("updating the mocked component and resource")
+			componentObjNotReady := &v1alpha1.Component{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(componentObj), componentObjNotReady)).To(Succeed())
+			status.MarkNotReady(recorder, componentObjNotReady, v1alpha1.ResourceIsNotAvailable, "mock component is not ready")
+			Expect(k8sClient.Status().Update(ctx, componentObjNotReady)).To(Succeed())
+			componentObjNotReady.Status.Component.Version = componentVersionUpdated
+			componentObjNotReady.Status.Component.RepositorySpec = &apiextensionsv1.JSON{Raw: specDataUpdated}
+			status.MarkReady(recorder, componentObjNotReady, "updated mock component")
+			Expect(k8sClient.Status().Update(ctx, componentObjNotReady)).To(Succeed())
 
 			By("updating the mocked resource")
 			resourceObjNotReady := &v1alpha1.Resource{}

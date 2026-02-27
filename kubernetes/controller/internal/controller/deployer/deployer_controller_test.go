@@ -638,8 +638,6 @@ consumers:
 
 	Context("verified component cache behavior", func() {
 		It("uses separate cache entries for verified and unverified component versions", Serial, func(ctx SpecContext) {
-			workerpool.CacheMissCounterTotal.Reset()
-			workerpool.CacheHitCounterTotal.Reset()
 
 			componentName := "ocm.software/deployer-verified-cache-test"
 			componentObjName := "deployer-verified-cache-test"
@@ -828,9 +826,6 @@ data:
 		})
 
 		It("maintains integrity chain for referenced component via reference path", Serial, func(ctx SpecContext) {
-			workerpool.CacheMissCounterTotal.Reset()
-			workerpool.CacheHitCounterTotal.Reset()
-
 			parentComponentName := "ocm.software/deployer-ref-chain-parent"
 			childComponentName := "ocm.software/deployer-ref-chain-child"
 			childRefName := "child-ref"
@@ -1054,6 +1049,10 @@ data:
 			Expect(err).ToNot(HaveOccurred())
 			Expect(testutil.ToFloat64(parentMissVerified)).To(Equal(float64(1)),
 				"expected 1 cache miss for the verified parent component on first resolution")
+			parentHitVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(parentComponentName, componentVersion, "verified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(parentHitVerified)).To(Equal(float64(1)),
+				"expected 1 cache hit for the verified parent component on first resolution")
 
 			parentMissUnverified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(parentComponentName, componentVersion, "unverified")
 			Expect(err).ToNot(HaveOccurred())
@@ -1061,14 +1060,18 @@ data:
 				"expected 0 unverified cache misses for the parent — it should always be resolved with verifications")
 
 			By("checking cache metrics for child component resolved via integrity chain")
-			childMissVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "verified")
+			referencedMissVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "verified")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(childMissVerified)).To(Equal(float64(1)),
+			Expect(testutil.ToFloat64(referencedMissVerified)).To(Equal(float64(1)),
 				"expected 1 cache miss for the child component resolved via digest from parent reference")
-
-			childMissUnverified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "unverified")
+			referencedHitVerified, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "verified")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(childMissUnverified)).To(Equal(float64(0)),
+			Expect(testutil.ToFloat64(referencedHitVerified)).To(Equal(float64(1)),
+				"expected 1 cache hit for the child component resolved via digest from parent reference")
+
+			referencedMissUnverified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(referencedMissUnverified)).To(Equal(float64(0)),
 				"expected 0 unverified cache misses for the child — it should be resolved via integrity chain digest")
 
 			By("deleting the Deployer")
