@@ -3,6 +3,8 @@ version: '3'
 
 vars:
   CLI_IMAGE: '{{ .CLI_IMAGE | default "ghcr.io/open-component-model/cli:main" }}'
+  TOOLKIT_CHART: '{{ .TOOLKIT_CHART | default "oci://ghcr.io/open-component-model/charts/ocm-k8s-toolkit" }}'
+  TOOLKIT_VERSION: '{{ .TOOLKIT_VERSION | default "" }}'
   DOCKER_NETWORK: '{{ .DOCKER_NETWORK | default "kind" }}'
   VERSION: '1.0.0'
   POSTGRES_VERSION: '{{.POSTGRES_VERSION | default "18"}}'
@@ -255,9 +257,10 @@ tasks:
       TOOLKIT_NAMESPACE: ocm-k8s-toolkit-system
     cmd: |
       echo "Installing OCM controller..."
-      helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/charts/ocm-k8s-toolkit \
+      helm install ocm-k8s-toolkit {{ .TOOLKIT_CHART }} \
         --namespace {{ .TOOLKIT_NAMESPACE }} \
-        --create-namespace
+        --create-namespace \
+        {{ if .TOOLKIT_VERSION }}--version {{ .TOOLKIT_VERSION }}{{ end }}
   cluster:install:kro:
     silent: true
     desc: Install kro (ResourceGraphDefinition controller) via Helm

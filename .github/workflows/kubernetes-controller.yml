@@ -107,6 +107,8 @@ jobs:
     name: "Publish Latest Image"
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    outputs:
+      chart_version: ${{ steps.version.outputs.version }}
     permissions:
       # Needed to push the image to GitHub Packages.
       # this token is the repo token, not the user token
@@ -162,3 +164,12 @@ jobs:
         shell: bash
         run: |
           docker system prune --force
+
+  conformance:
+    name: Conformance
+    needs: publish_latest
+    uses: ./.github/workflows/conformance.yml
+    with:
+      toolkit_chart: "oci://ghcr.io/open-component-model/kubernetes/controller/chart/ocm-k8s-toolkit"
+      toolkit_version: ${{ needs.publish_latest.outputs.chart_version }}
+    secrets: inherit

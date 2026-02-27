@@ -1,6 +1,23 @@
 name: Conformance
 
 on:
+  workflow_call:
+    inputs:
+      cli_image:
+        description: "CLI Docker image reference"
+        type: string
+        required: false
+        default: ""
+      toolkit_chart:
+        description: "OCI reference to the controller Helm chart"
+        type: string
+        required: false
+        default: ""
+      toolkit_version:
+        description: "Version of the controller Helm chart"
+        type: string
+        required: false
+        default: ""
   workflow_dispatch:
   push:
     branches:
@@ -19,7 +36,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: conformance-${{ github.workflow }}-${{ github.ref }}
+  group: conformance-${{ github.workflow }}-${{ github.ref }}-${{ inputs.cli_image || 'default-cli' }}-${{ inputs.toolkit_chart || 'default-chart' }}
   cancel-in-progress: true
 
 jobs:
@@ -56,13 +73,22 @@ jobs:
         run: task check
       - name: Run conformance scenario
         working-directory: conformance/scenarios/sovereign
-        run: task run
+        run: >-
+          task run
+          CLI_IMAGE='${{ inputs.cli_image }}'
+          TOOLKIT_CHART='${{ inputs.toolkit_chart }}'
+          TOOLKIT_VERSION='${{ inputs.toolkit_version }}'
       - name: Run upgrade scenario
         working-directory: conformance/scenarios/sovereign
-        run: task upgrade
+        run: >-
+          task upgrade
+          CLI_IMAGE='${{ inputs.cli_image }}'
+          TOOLKIT_CHART='${{ inputs.toolkit_chart }}'
+          TOOLKIT_VERSION='${{ inputs.toolkit_version }}'
       - name: Verify upgrade
         working-directory: conformance/scenarios/sovereign
-        run: task verify:deployment
+        run: >-
+          task verify:deployment
       - name: Show status
         if: always()
         working-directory: conformance/scenarios/sovereign
