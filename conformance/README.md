@@ -23,7 +23,7 @@ Conformance testing ensures that OCM implementations correctly handle:
 
 ## Current Scenarios
 
-- [`sovereign-scenario/`](scenarios/sovereign-scenario/) - Demonstrates modeling, signing, transporting, and deploying a multi-service product into an air-gapped sovereign cloud environment (ADR-0013)
+- [`sovereign/`](./scenarios/sovereign) - Demonstrates modeling, signing, transporting, and deploying a multi-service product into an air-gapped sovereign cloud environment (ADR-0013)
 
 ## Running Conformance Tests
 
