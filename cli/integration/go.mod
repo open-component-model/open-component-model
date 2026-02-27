@@ -19,7 +19,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260225072540-1154d8351b1e
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260225072540-1154d8351b1e
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
-	ocm.software/open-component-model/bindings/go/oci v0.0.32
+	ocm.software/open-component-model/bindings/go/oci v0.0.33
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
 	ocm.software/open-component-model/bindings/go/runtime v0.0.6
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260225072540-1154d8351b1e
@@ -173,7 +173,7 @@ require (
 	k8s.io/kubectl v0.35.0 // indirect
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570 // indirect
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260225072540-1154d8351b1e // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.5 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260225072540-1154d8351b1e // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2 // indirect

@@ -185,45 +185,6 @@ var _ = Describe("Resource Controller", func() {
 
 				test.WaitForReadyObject(ctx, k8sClient, resourceObj, fields)
 			},
-
-			Entry("plain text", func() ([]*descruntime.Descriptor, string) {
-				ctfName := "plainText"
-				ctfPath := filepath.Join(tempDir, ctfName)
-				return []*descruntime.Descriptor{
-					{
-						Component: descruntime.Component{
-							ComponentMeta: descruntime.ComponentMeta{
-								ObjectMeta: descruntime.ObjectMeta{
-									Name:    componentName,
-									Version: componentVersion,
-								},
-							},
-							Resources: []descruntime.Resource{
-								{
-									ElementMeta: descruntime.ElementMeta{
-										ObjectMeta: descruntime.ObjectMeta{
-											Name:    resourceName,
-											Version: "1.0.0",
-										},
-									},
-									Type:     "plainText",
-									Relation: descruntime.LocalRelation,
-									Access: &v2.LocalBlob{
-										Type: runtime.Type{
-											Name:    v2.LocalBlobAccessType,
-											Version: v2.LocalBlobAccessTypeVersion,
-										},
-										LocalReference: "sha256:1234567890",
-										MediaType:      "text/plain",
-									},
-								},
-							},
-							Provider: descruntime.Provider{Name: "ocm.software"},
-						},
-					},
-				}, ctfPath
-			},
-				nil),
 			Entry("OCI artifact access", func() ([]*descruntime.Descriptor, string) {
 				ctfName := "ociArtifactAccess"
 				ctfPath := filepath.Join(tempDir, ctfName)
@@ -432,13 +393,12 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "plainText",
 								Relation: descruntime.LocalRelation,
-								Access: &v2.LocalBlob{
+								Access: &ocispec.OCIImage{
 									Type: runtime.Type{
-										Name:    v2.LocalBlobAccessType,
-										Version: v2.LocalBlobAccessTypeVersion,
+										Name:    "ociArtifact",
+										Version: "v1",
 									},
-									LocalReference: "sha256:1234567890",
-									MediaType:      "text/plain",
+									ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 								},
 							},
 						},
@@ -532,13 +492,12 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "plainText",
 								Relation: descruntime.LocalRelation,
-								Access: &v2.LocalBlob{
+								Access: &ocispec.OCIImage{
 									Type: runtime.Type{
-										Name:    v2.LocalBlobAccessType,
-										Version: v2.LocalBlobAccessTypeVersion,
+										Name:    "ociArtifact",
+										Version: "v1",
 									},
-									LocalReference: "sha256:1234567890",
-									MediaType:      "text/plain",
+									ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 								},
 							},
 						},
@@ -1732,13 +1691,12 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "plainText",
 								Relation: descruntime.LocalRelation,
-								Access: &v2.LocalBlob{
+								Access: &ocispec.OCIImage{
 									Type: runtime.Type{
-										Name:    v2.LocalBlobAccessType,
-										Version: v2.LocalBlobAccessTypeVersion,
+										Name:    "ociArtifact",
+										Version: "v1",
 									},
-									LocalReference: "sha256:1234567890",
-									MediaType:      "text/plain",
+									ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 								},
 							},
 						},
@@ -1881,13 +1839,12 @@ consumers:
 								},
 								Type:     "plainText",
 								Relation: descruntime.LocalRelation,
-								Access: &v2.LocalBlob{
+								Access: &ocispec.OCIImage{
 									Type: runtime.Type{
-										Name:    v2.LocalBlobAccessType,
-										Version: v2.LocalBlobAccessTypeVersion,
+										Name:    "ociArtifact",
+										Version: "v1",
 									},
-									LocalReference: "sha256:1234567890",
-									MediaType:      "text/plain",
+									ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 								},
 							},
 						},
