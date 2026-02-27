@@ -140,9 +140,9 @@ func staticReferenceName(referenceName string) referenceNameOption {
 	}
 }
 
-func celExpReferenceName(fromResourceID, referenceName string) referenceNameOption {
+func imageReferenceFromAccess(id string) referenceNameOption {
 	return func(targetRepoBaseURL string) string {
-		return fmt.Sprintf("%s/%s:${%s.output.resource.access.version}", targetRepoBaseURL, referenceName, fromResourceID)
+		return fmt.Sprintf("%s/${%s.output.resource.access.imageReference}", targetRepoBaseURL, id)
 	}
 }
 

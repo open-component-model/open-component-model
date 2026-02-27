@@ -43,11 +43,6 @@ func (h helmChartProcessor) Process(ctx context.Context, resource v2.Resource, i
 		return fmt.Errorf("cannot unmarshal Helm access: %w", err)
 	}
 
-	referenceName, err := ParseReferenceName(helmAccess.ChartReference())
-	if err != nil {
-		return fmt.Errorf("cannot get reference name: %w", err)
-	}
-
 	jRes, err := json.Marshal(resource)
 	if err != nil {
 		return fmt.Errorf("cannot marshal resource: %w", err)
@@ -86,7 +81,7 @@ func (h helmChartProcessor) Process(ctx context.Context, resource v2.Resource, i
 	// Create AddLocalResource transformation
 	var addResourceTransform transformv1alpha1.GenericTransformation
 	if uploadAsOCIArtifact {
-		if addResourceTransform, err = ociUploadAsArtifact(toSpec, addResourceID, convertResourceID, celExpReferenceName(convertResourceID, referenceName)); err != nil {
+		if addResourceTransform, err = ociUploadAsArtifact(toSpec, addResourceID, convertResourceID, imageReferenceFromAccess(convertResourceID)); err != nil {
 			return fmt.Errorf("failed to create oci upload transformation: %w", err)
 		}
 	} else {
