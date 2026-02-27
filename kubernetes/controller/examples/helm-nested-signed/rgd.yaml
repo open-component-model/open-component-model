@@ -31,7 +31,7 @@ spec:
           interval: 10m
     - id: ocirepository
       template:
-        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        apiVersion: source.toolkit.fluxcd.io/v1
         kind: OCIRepository
         metadata:
           name: "${schema.spec.prefix}-oci-repository-name"
