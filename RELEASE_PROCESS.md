@@ -113,7 +113,7 @@ gitGraph TB:
 A new release branch marks the cut-off point for that minor release line.
 Once created, only bug fixes and documentation changes are allowed.
 
-1. Run workflow **[Release Branch Creation](./.github/workflows/release-branch.yml)**.
+1. Run workflow **[Release Branch Creation](https://github.com/open-component-model/open-component-model/actions/workflows/release-branch.yml)**.
 2. Set target branch to `releases/vX.Y`.
 3. Confirm the branch was created successfully.
 
@@ -140,7 +140,7 @@ Once created, only bug fixes and documentation changes are allowed.
 
 Release candidates are created for both components sequentially, in lock-step.
 
-1. Run workflow **[CLI Release](./.github/workflows/cli-release.yml)** with:
+1. Run workflow **[CLI Release](https://github.com/open-component-model/open-component-model/actions/workflows/cli-release.yml)** with:
    - `dry_run = true` first to validate
    - `dry_run = false` for actual release
    - `Branch to release from` set to the release branch created in step 1 (e.g., `releases/v0.17`)
