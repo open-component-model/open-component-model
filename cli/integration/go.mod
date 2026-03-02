@@ -133,7 +133,7 @@ require (
 	github.com/tetratelabs/wazero v1.11.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
-	github.com/veqryn/slog-context v0.8.0 // indirect
+	github.com/veqryn/slog-context v0.9.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect

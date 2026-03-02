@@ -310,8 +310,8 @@ github.com/tklauser/go-sysconf v0.3.16 h1:frioLaCQSsF5Cy1jgRBrzr6t502KIIwQ0MArYI
 github.com/tklauser/go-sysconf v0.3.16/go.mod h1:/qNL9xxDhc7tx3HSRsLWNnuzbVfh3e7gh/BmM179nYI=
 github.com/tklauser/numcpus v0.11.0 h1:nSTwhKH5e1dMNsCdVBukSZrURJRoHbSEQjdEbY+9RXw=
 github.com/tklauser/numcpus v0.11.0/go.mod h1:z+LwcLq54uWZTX0u/bGobaV34u6V7KNlTZejzM6/3MQ=
-github.com/veqryn/slog-context v0.8.0 h1:lDhwAgjwx52K5StqqQzi5d0Y/F4SNyGZbsXGd8MtucM=
-github.com/veqryn/slog-context v0.8.0/go.mod h1:8rsT72p0kzzN9lmkwtabIhxg7ZkpnKblt9x3Eix8Tc0=
+github.com/veqryn/slog-context v0.9.0 h1:VNXHBWufRGfKiumi7cYoh7p2iElquZ4v8AnAumFOhEI=
+github.com/veqryn/slog-context v0.9.0/go.mod h1:l953waOLsWW6hArZeJDGGKZYLrsOIPBeJ/QQnOA8RU0=
 github.com/wk8/go-ordered-map/v2 v2.1.8 h1:5h/BUHu93oj4gIdvHHHGsScSTMijfx5PeYkE/fJgbpc=
 github.com/wk8/go-ordered-map/v2 v2.1.8/go.mod h1:5nJHM5DyteebpVlHnWMV0rPz6Zp7+xBAnxjb1X5vnTw=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
