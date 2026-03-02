@@ -1,5 +1,5 @@
 apiVersion: v2
-name: ocm-k8s-toolkit
+name: chart
 description: A Helm chart for deploying the OCM Kubernetes Toolkit controller
 type: application
 version: 0.1.0

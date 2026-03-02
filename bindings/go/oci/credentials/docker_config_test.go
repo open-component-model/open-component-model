@@ -1,7 +1,6 @@
 package credentials
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -95,7 +94,7 @@ func TestCredentialFunc(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			credFunc := CredentialFunc(tt.identity, tt.credentials)
-			cred, err := credFunc(context.Background(), tt.hostport)
+			cred, err := credFunc(t.Context(), tt.hostport)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -164,6 +163,19 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 			},
 			identity: runtime.Identity{
 				runtime.IdentityAttributeHostname: "registry.example.com",
+			},
+			wantCreds: map[string]string{
+				CredentialKeyUsername: "testuser",
+				CredentialKeyPassword: "testpass",
+			},
+		},
+		{
+			name: "docker.io special case",
+			dockerConfig: credentialsv1.DockerConfig{
+				DockerConfig: `{"auths":{"https://index.docker.io/v1/":{"username":"testuser","password":"testpass"}}}`,
+			},
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "docker.io",
 			},
 			wantCreds: map[string]string{
 				CredentialKeyUsername: "testuser",

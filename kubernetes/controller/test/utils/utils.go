@@ -161,29 +161,6 @@ func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, im
 	return nil
 }
 
-// CheckOCMComponent executes the OCM CLI command 'ocm check cv' with the passed component reference.
-// If credentials are required, the path to the OCM configuration file can be supplied as the second parameter.
-// Options are optional. For possible values see:
-// https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_check_componentversions.md
-func CheckOCMComponent(ctx context.Context, componentReference, ocmConfigPath string, options ...string) error {
-	c := []string{"ocm"}
-	if len(ocmConfigPath) > 0 {
-		c = append(c, "--config", ocmConfigPath)
-	}
-	c = append(c, "check", "cv")
-	if len(options) > 0 {
-		c = append(c, options[0:]...)
-	}
-	c = append(c, componentReference)
-
-	cmd := exec.CommandContext(ctx, c[0], c[1:]...) //nolint:gosec // The argument list is constructed right above.
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // DumpLogs dumps pod logs and resource status for the given namespace and resource type.
 // Intended for use in AfterEach to capture state on test failure.
 // Creates its own context with a 30s timeout to survive parent context cancellation.

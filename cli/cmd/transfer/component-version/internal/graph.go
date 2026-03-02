@@ -108,8 +108,19 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 			}
 
 			if copyMode == CopyModeLocalBlobResources && !descriptorv2.IsLocalBlob(access) {
-				slog.Info("Skipping copy of resource since its access type is not a local blob. Only resources with local blob access are copied when CopyModeLocalBlobResources is set.",
-					"component", ref.Component, "version", ref.Version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
+				logLevel := slog.LevelInfo
+				if uploadType == UploadAsOciArtifact {
+					// check if the user wants to upload as ociArtifact
+					// if sure, make sure they see that copy-resources is missing
+					logLevel = slog.LevelWarn
+				}
+				slog.Log(ctx, logLevel,
+					"Skipping copy of resource since its access type is not a local blob. Only resources with local blob access are copied when CopyModeLocalBlobResources is set.",
+					"component", ref.Component,
+					"version", ref.Version,
+					"resource", resource.ToIdentity().String(),
+					"accessType", resource.Access.Type.String(),
+					"copyMode", copyMode)
 				continue
 			}
 
