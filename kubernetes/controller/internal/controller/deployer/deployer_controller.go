@@ -435,7 +435,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, cacheBackedRepo, deployer, resource, configs)
+	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, configs)
 	if err != nil {
 		switch {
 		case errors.Is(err, workerpool.ErrResolutionInProgress):
@@ -813,23 +813,21 @@ func (r *Reconciler) track(ctx context.Context, deployer *deliveryv1alpha1.Deplo
 // The resource status tells us which component version was resolved for the resource. However, making sure the
 // integrity of that component version is still intact is tricky.
 //
-//   - If the resource is from the same component version as the component, we need to check for verifications on the
-//     component CR and add them to the cache-backed repository to make sure they are included in the cache key and used
-//     for verification (if any).
-//   - If the resource is from a component version that was resolved through a reference path, we need to resolve
-//     the path again starting from the component specified in the component CR, to make sure we get the same component
-//     version with an intact integrity chain.
-//     This operation should be cheap as we expect the component to be in cache already
+//   - If the resource is from the same component version as the component from the component CR, we need to check for
+//     verifications on the component CR and add them to the cache-backed repository to make sure they are included in
+//     the cache key and used for verification (if any).
+//   - If the resource is from a component version that was resolved through a reference path in the resource
+//     controller, we need to resolve the path again starting from the component specified in the component CR, to make
+//     sure we get the same component version with an intact integrity chain (if a digest was provided to check it).
+//     This operation should be cheap as we expect the component to be in cache already.
 func (r *Reconciler) getEffectiveComponentDescriptor(
 	ctx context.Context,
-	repoResource *resolution.CacheBackedRepository,
 	deployer *deliveryv1alpha1.Deployer,
 	resource *deliveryv1alpha1.Resource,
 	configs []deliveryv1alpha1.OCMConfiguration,
 ) (*descriptor.Descriptor, error) {
-	// If the component version name in the resource spec and status are the same, we know that the component version
-	// was not resolved through a reference path. We can add verifications from the component CR to the cache-backed
-	// repository of the resource and get the component descriptor directly.
+	// We get the (ready) component CR to (1) get any verifications needed to resolve the component version and (2) to
+	// compare the component version used in the component and resource controller.
 	component, err := util.GetReadyObject[deliveryv1alpha1.Component, *deliveryv1alpha1.Component](ctx, r.Client, client.ObjectKey{
 		Namespace: resource.GetNamespace(),
 		Name:      resource.Spec.ComponentRef.Name,
@@ -884,10 +882,15 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		return componentDescriptorComponent, nil
 	}
 
-	// If the component name and version from the component and resource status differ, we know that the component
-	// version from the resource status is resolved through a reference path.
+	// If the component CR got an update while the deployer reconciler is already running, it is possible that the
+	// component version in the component and resource CR are different, but the component version from the resource
+	// status is not resolved through a reference path.
+	// In this case we do nothing and wait for the resource.
 	if len(resource.Spec.Resource.ByReference.ReferencePath) == 0 {
-		return nil, fmt.Errorf("expected a reference path, but got none")
+		return nil, fmt.Errorf(
+			"component version from resource status differs from component version from component, but no reference path provided: %s:%s != %s:%s",
+			resource.Status.Component.Component, resource.Status.Component.Version,
+			component.Status.Component.Component, component.Status.Component.Version)
 	}
 
 	resourceDescriptor, _, err := ocm.ResolveReferencePath(
