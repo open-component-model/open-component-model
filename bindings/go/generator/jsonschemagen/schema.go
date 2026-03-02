@@ -259,7 +259,7 @@ func (g *generation) buildStructProperties(st *ast.StructType, ti *universe.Type
 
 		sch := g.schemaForExpr(field.Type, ti, field)
 
-		// allow null values for pointer types by defaulr
+		// allow null values for pointer types by default
 		if _, ok := field.Type.(*ast.StarExpr); ok {
 			sch = &JSONSchemaDraft202012{
 				OneOf: []*JSONSchemaDraft202012{
