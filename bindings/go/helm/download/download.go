@@ -123,7 +123,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 	if result.ChartBlob, err = filesystem.GetBlobFromOSPath(savedPath); err != nil {
 		return nil, fmt.Errorf("error creating blob from downloaded chart %q: %w", savedPath, err)
 	} else {
-		result.ChatBlobPath = savedPath
+		result.ChartBlobPath = savedPath
 	}
 	provPath := savedPath + ".prov"
 	if _, err := os.Stat(provPath); err == nil {
