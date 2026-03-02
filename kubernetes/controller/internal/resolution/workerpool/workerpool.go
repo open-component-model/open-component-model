@@ -33,10 +33,12 @@ var ErrNotSafelyDigestible = fmt.Errorf("component version is not safely digesti
 
 // ResolveOptions contains all the options the resolution service requires to perform a resolve operation.
 type ResolveOptions struct {
-	Component       string
-	Version         string
-	Repository      repository.ComponentVersionRepository
-	Verifications   []verification.Verification
+	Component  string
+	Version    string
+	Repository repository.ComponentVersionRepository
+	// Verifications are used to verify against component version signatures and used a cache-key.
+	Verifications []verification.Verification
+	// Digest is used to verify the integrity of a referenced component version and is used as part of the cache key.
 	Digest          *v2.Digest
 	SigningRegistry *signinghandler.SigningRegistry
 	KeyFunc         func() (string, error)
