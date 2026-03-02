@@ -36,7 +36,7 @@ type ResolveOptions struct {
 	Component  string
 	Version    string
 	Repository repository.ComponentVersionRepository
-	// Verifications are used to verify against component version signatures and used a cache-key.
+	// Verifications are used to verify against component version signatures and used a cache key.
 	Verifications []verification.Verification
 	// Digest is used to verify the integrity of a referenced component version and is used as part of the cache key.
 	Digest          *v2.Digest
@@ -384,7 +384,7 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 	// Additionally, either a digest OR verifications can be provided, hence, we can return after the integrity check as
 	// we do not have any verifications to check again.
 	if opts.Digest != nil {
-		logger.Info("verifying integrity with against provided digest",
+		logger.Info("verifying integrity with provided digest",
 			"component", opts.Component, "version", opts.Version)
 
 		digest, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)),

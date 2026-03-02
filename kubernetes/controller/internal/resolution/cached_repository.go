@@ -30,7 +30,7 @@ import (
 type CacheBackedRepository struct {
 	resolver resolvers.ComponentVersionRepositoryResolver
 	cfg      *configuration.Configuration
-	// Verifications are used to verify against component version signatures and used a cache-key.
+	// Verifications are used to verify against component version signatures and used a cache key.
 	Verifications []verification.Verification
 	// Digest is used to verify the integrity of a referenced component version and is used as part of the cache key.
 	Digest          *v2.Digest

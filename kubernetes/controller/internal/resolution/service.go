@@ -60,11 +60,9 @@ type RepositoryOptions struct {
 	OCMConfigurations []v1alpha1.OCMConfiguration
 	Namespace         string
 	RequesterFunc     func() workerpool.RequesterInfo
-	// Verifications are used to create a cache key to distinguish between verified and unverified component versions
+	// Verifications are used to verify against component version signatures and used a cache key.
 	Verifications []verification.Verification
-	// Digest is used to create a cache key for component versions from component references resolved in the resource
-	// controller. It is used to distinguish between integrity-checked and unchecked component versions. The integrity
-	// can only be checked if the component reference provides a digest specification.
+	// Digest is used to verify the integrity of a referenced component version and is used as part of the cache key.
 	Digest          *v2.Digest
 	SigningRegistry *signinghandler.SigningRegistry
 }
