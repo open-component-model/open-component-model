@@ -95,6 +95,10 @@ jobs:
     name: Build CLI for ${{ needs.prepare.outputs.new_tag }}
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
     needs: [prepare, tag_rc]
+      actions: read           # Needed for artifact download
+      packages: write         # Needed for pushing OCI images and provenance layers
+      id-token: write         # Needed for provenance attestation identity
+      attestations: write     # Allows storing provenance attestation
     uses: ./.github/workflows/cli.yml
     secrets: inherit
     with:
