@@ -44,8 +44,15 @@
       }
     },
     "myRaw": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",
-      "description": "MyRawComment"
+      "description": "MyRawComment",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw"
+        }
+      ]
     },
     "myRuntime": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Typed",
@@ -75,11 +82,7 @@
       "description": "NestedComment"
     },
     "nestedPointer": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.generator.jsonschemagen.test.NestedType",
-      "description": "NestedPointerComment"
-    },
-    "nullableNested": {
-      "description": "NullableNestedComment",
+      "description": "NestedPointerComment",
       "oneOf": [
         {
           "type": "null"

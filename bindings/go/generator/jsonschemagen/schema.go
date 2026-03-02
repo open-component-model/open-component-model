@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"go/ast"
-	"log/slog"
 	"slices"
-	"strings"
 
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
@@ -261,16 +259,13 @@ func (g *generation) buildStructProperties(st *ast.StructType, ti *universe.Type
 
 		sch := g.schemaForExpr(field.Type, ti, field)
 
-		if isNullable(field) {
-			if _, ok := field.Type.(*ast.StarExpr); ok {
-				sch = &JSONSchemaDraft202012{
-					OneOf: []*JSONSchemaDraft202012{
-						{Type: "null"},
-						sch,
-					},
-				}
-			} else {
-				slog.Warn("field is marked as +nullable but is not a pointer type, ignoring +nullable", "field", name)
+		// allow null values for pointer types by defaulr
+		if _, ok := field.Type.(*ast.StarExpr); ok {
+			sch = &JSONSchemaDraft202012{
+				OneOf: []*JSONSchemaDraft202012{
+					{Type: "null"},
+					sch,
+				},
 			}
 		}
 
@@ -308,18 +303,6 @@ func (g *generation) buildStructRequired(st *ast.StructType, ti *universe.TypeIn
 		req = append(req, name)
 	}
 	return req
-}
-
-func isNullable(field *ast.Field) bool {
-	if field == nil || field.Doc == nil {
-		return false
-	}
-	for _, c := range field.Doc.List {
-		if strings.Contains(c.Text, "+nullable") {
-			return true
-		}
-	}
-	return false
 }
 
 func unwrapStar(expr ast.Expr) ast.Expr {
