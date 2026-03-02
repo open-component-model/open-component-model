@@ -34,6 +34,9 @@ on:
       artifact_id:
         description: "The artifact id that was built."
         value: ${{ jobs.build.outputs.artifact_id }}
+      image_digest:
+        description: "The digest of the pushed OCI image (sha256:...)."
+        value: ${{ jobs.publish.outputs.image_digest }}
 
 env:
   LOCATION: "cli"                       # Folder containing the CLI source
@@ -73,7 +76,7 @@ jobs:
           ref: ${{ env.REF }}
 
       - name: Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum  # Cache dependencies by go.sum
@@ -144,10 +147,12 @@ jobs:
             ${{ env.LOCATION }}/tmp/oci/*      
 
   publish:
-    name: Push & Attest
+    name: Publish and Attest
     needs: build
     if: ${{ needs.build.outputs.should_push_oci_image == 'true' }}  # Skip unless we should push
     runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.digest.outputs.digest }}
     permissions:
       actions: read           # Needed for artifact download
       packages: write         # Needed for pushing OCI images and provenance layers
@@ -190,15 +195,6 @@ jobs:
       - name: Push OCI image
         id: push-oci
         run: oras cp --from-oci-layout "${LAYOUT}:${TAG}" "${TARGET_REPO}:${TAG}"
-
-      # This is only convenience so when we push to main there is a CLI image that always points to main as well
-      # technically we already have a tagged version called 0.0.0-main but this is more standard
-      - name: Tag Image as branch when default ( :${{ env.REF }} )
-        if: ${{ env.REF == github.event.repository.default_branch }}
-        env:
-          FROM: ${{ env.TAG }}
-          TO: ${{ env.REF }}
-        run: oras tag "${TARGET_REPO}:${FROM}" "${TARGET_REPO}:${TO}"
 
       # Attest pushed OCI image with provenance metadata
       - name: Resolve Pushed Digest for Attestation

@@ -1,4 +1,4 @@
-# ocm-k8s-toolkit
+# chart
 
 ![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.1.0](https://img.shields.io/badge/AppVersion-0.1.0-informational?style=flat-square)
 
@@ -18,7 +18,7 @@ It provides controllers for:
 ## Installation
 
 ```bash
-helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/charts/ocm-k8s-toolkit \
+helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/controller/chart \
   --namespace ocm-system \
   --create-namespace
 ```
@@ -26,7 +26,7 @@ helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/charts/ocm-k8s-t
 ## Upgrading
 
 ```bash
-helm upgrade ocm-k8s-toolkit oci://ghcr.io/open-component-model/charts/ocm-k8s-toolkit \
+helm upgrade ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/controller/chart \
   --namespace ocm-system
 ```
 
@@ -152,7 +152,7 @@ task helm/package APP_VERSION=1.0.0                  # Override app version (ima
 task helm/package VERSION=1.0.0 APP_VERSION=1.0.0   # Override both
 ```
 
-The packaged chart is saved to `dist/ocm-k8s-toolkit-<version>.tgz`.
+The packaged chart is saved to `dist/chart-<version>.tgz`.
 
 ### Other useful tasks
 
