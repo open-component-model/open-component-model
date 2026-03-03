@@ -872,6 +872,14 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		component.Status.Component.Component,
 		component.Status.Component.Version)
 	if err != nil {
+		if errors.Is(err, workerpool.ErrNotSafelyDigestible) {
+			// If it's non-digestible, we still return the component descriptor
+			// because even though the error is there, `ErrNotSafelyDigestible`
+			// is a fallthrough with an error event. Meaning, if we return nil
+			// here, the calling code would panic trying to use the descriptor.
+			return componentDescriptorComponent, err
+		}
+
 		return nil, fmt.Errorf("failed to get component version from cache-backed repository: %w", err)
 	}
 
