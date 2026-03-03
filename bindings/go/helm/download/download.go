@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
@@ -19,7 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 )
 
-func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Option) (result *helm.ReadOnlyChart, err error) {
+func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Option) (result *helm.ChartData, err error) {
 	opt := &option{}
 	for _, o := range opts {
 		o(opt)
@@ -85,9 +86,9 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 		Verify:  verify,
 		Getters: getterProviders(),
 		// set by ocm v1 originally.
-		RepositoryCache:  "/tmp/.helmcache",
-		RepositoryConfig: "/tmp/.helmrepo",
-		ContentCache:     "/tmp/.helmcontent",
+		RepositoryCache:  filepath.Join(opt.TempDir, ".helmcache"),
+		RepositoryConfig: filepath.Join(opt.TempDir, ".helmrepo"),
+		ContentCache:     filepath.Join(opt.TempDir, ".helmcontent"),
 		RegistryClient:   regClient,
 		Options:          getterOpts,
 		Keyring:          keyring,
@@ -114,7 +115,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 		return nil, fmt.Errorf("error loading downloaded chart from %q: %w", savedPath, err)
 	}
 
-	result = &helm.ReadOnlyChart{
+	result = &helm.ChartData{
 		Name:         chart.Name(),
 		Version:      chart.Metadata.Version,
 		ChartTempDir: tmpDir,
@@ -122,15 +123,11 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 
 	if result.ChartBlob, err = filesystem.GetBlobFromOSPath(savedPath); err != nil {
 		return nil, fmt.Errorf("error creating blob from downloaded chart %q: %w", savedPath, err)
-	} else {
-		result.ChartBlobPath = savedPath
 	}
 	provPath := savedPath + ".prov"
 	if _, err := os.Stat(provPath); err == nil {
 		if result.ProvBlob, err = filesystem.GetBlobFromOSPath(provPath); err != nil {
 			return nil, fmt.Errorf("error creating blob from provenance file %q: %w", provPath, err)
-		} else {
-			result.ProvBlobPath = provPath
 		}
 	}
 

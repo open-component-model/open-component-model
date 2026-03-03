@@ -163,9 +163,9 @@ func TestCopyChartToOCILayout_ConfigContent(t *testing.T) {
 	assert.Equal(t, chart.Version, config["version"], "config version should match chart version")
 }
 
-// newReadOnlyChart creates a helm.ReadOnlyChart from a path to testdata.
+// newReadOnlyChart creates a helm.ChartData from a path to testdata.
 // It handles both directory charts (by packaging them) and pre-packaged tgz charts.
-func newReadOnlyChart(t *testing.T, path string) *helm.ReadOnlyChart {
+func newReadOnlyChart(t *testing.T, path string) *helm.ChartData {
 	t.Helper()
 
 	ch, err := loader.Load(path)
@@ -174,7 +174,7 @@ func newReadOnlyChart(t *testing.T, path string) *helm.ReadOnlyChart {
 	fi, err := os.Stat(path)
 	require.NoError(t, err)
 
-	result := &helm.ReadOnlyChart{
+	result := &helm.ChartData{
 		Name:    ch.Name(),
 		Version: ch.Metadata.Version,
 	}
