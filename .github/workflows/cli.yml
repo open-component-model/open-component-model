@@ -219,7 +219,7 @@ jobs:
 
           TARGET_CONSTRUCTOR="ocm-publish/cli-component-constructor.yaml"
 
-          echo "✅ Verifying downloaded CLI binaries..."
+          echo "Verifying downloaded CLI binaries..."
           shopt -s nullglob
           files=(bin/ocm-*)
           (( ${#files[@]} > 0 )) || { echo "❌ No CLI binaries found under ./bin"; ls -la; exit 1; }

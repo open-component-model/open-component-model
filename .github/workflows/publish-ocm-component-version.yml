@@ -109,7 +109,7 @@ jobs:
               --repository "${OCM_REPOSITORY}" \
               --constructor "${CONSTRUCTOR_PATH}"
 
-      - name: Show published component version
+      - name: Summarize published component version
         env:
           OCM_REPOSITORY: ${{ inputs.ocm_repository }}
           CLI_IMAGE: ${{ inputs.cli_image }}
@@ -123,18 +123,9 @@ jobs:
           COMPONENT_VERSION=$(sed -n 's/^version:[[:space:]]*//p' "${CONSTRUCTOR_FILE}" | head -n 1)
 
           COMPONENT_REF="${OCM_REPOSITORY}//${COMPONENT_NAME}:${COMPONENT_VERSION}"
+          PKG_PATH="component-descriptors%2F${COMPONENT_NAME//\//%2F}"
+          PACKAGE_URL="https://github.com/${GITHUB_REPOSITORY}/pkgs/container/${PKG_PATH}"
           echo "📦 Published component: ${COMPONENT_REF}"
 
-          docker run --rm \
-            -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
-            -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
-            -v /etc/ssl/certs/:/etc/ssl/certs/:ro \
-            -v "${WORKDIR}:${WORKDIR}" \
-            -w "${WORKDIR}" \
-            "${CLI_IMAGE}" \
-              get cv "${COMPONENT_REF}" \
-              --config "/.ocmconfig" \
-              -oyaml
-
           echo "## Published OCM Component Version" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Reference: ${COMPONENT_REF}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Reference: [${COMPONENT_REF}](${PACKAGE_URL})" >> "$GITHUB_STEP_SUMMARY"
