@@ -10,14 +10,7 @@
       "type": "string"
     },
     "output": {
-      "oneOf": [
-        {
-          "type": "null"
-        },
-        {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.transformation.v1alpha1.CTFAddLocalResourceOutput"
-        }
-      ]
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.transformation.v1alpha1.CTFAddLocalResourceOutput"
     },
     "spec": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.transformation.v1alpha1.CTFAddLocalResourceSpec"
@@ -215,15 +208,8 @@
           "description": "Access defines the type of access this resource requires."
         },
         "digest": {
-          "description": "Digest is the optional digest of the referenced resource.",
-          "oneOf": [
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Digest"
-            }
-          ]
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Digest",
+          "description": "Digest is the optional digest of the referenced resource."
         },
         "extraIdentity": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",

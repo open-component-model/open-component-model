@@ -10,14 +10,7 @@
       "type": "string"
     },
     "output": {
-      "oneOf": [
-        {
-          "type": "null"
-        },
-        {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.transformation.v1alpha1.OCIAddComponentVersionOutput"
-        }
-      ]
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.transformation.v1alpha1.OCIAddComponentVersionOutput"
     },
     "spec": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.transformation.v1alpha1.OCIAddComponentVersionSpec"

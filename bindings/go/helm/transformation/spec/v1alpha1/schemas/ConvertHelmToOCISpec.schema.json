@@ -15,15 +15,8 @@
       "description": "OutputPath is the optional output the OCI artifact should be stored at.\nIf not specified, a temporary directory will be created."
     },
     "provFile": {
-      "description": "ProvFile is the file access specification for the downloaded prov file, if it exists",
-      "oneOf": [
-        {
-          "type": "null"
-        },
-        {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.blob.filesystem.spec.access.v1alpha1.File"
-        }
-      ]
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.blob.filesystem.spec.access.v1alpha1.File",
+      "description": "ProvFile is the file access specification for the downloaded prov file, if it exists"
     },
     "resource": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Resource",
@@ -213,15 +206,8 @@
           "description": "Access defines the type of access this resource requires."
         },
         "digest": {
-          "description": "Digest is the optional digest of the referenced resource.",
-          "oneOf": [
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Digest"
-            }
-          ]
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Digest",
+          "description": "Digest is the optional digest of the referenced resource."
         },
         "extraIdentity": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",

@@ -10,14 +10,7 @@
       "type": "string"
     },
     "output": {
-      "oneOf": [
-        {
-          "type": "null"
-        },
-        {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transform.graph.internal.testutils.MockAddObjectTransformerOutput"
-        }
-      ]
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transform.graph.internal.testutils.MockAddObjectTransformerOutput"
     },
     "spec": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transform.graph.internal.testutils.MockAddObjectTransformerSpec"

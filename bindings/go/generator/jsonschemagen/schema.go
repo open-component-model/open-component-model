@@ -259,16 +259,6 @@ func (g *generation) buildStructProperties(st *ast.StructType, ti *universe.Type
 
 		sch := g.schemaForExpr(field.Type, ti, field)
 
-		// allow null values for pointer types with omitempty
-		if _, ok := field.Type.(*ast.StarExpr); ok && slices.Contains(opts, "omitempty") {
-			sch = &JSONSchemaDraft202012{
-				OneOf: []*JSONSchemaDraft202012{
-					{Type: "null"},
-					sch,
-				},
-			}
-		}
-
 		desc, deprecated := extractFieldDoc(field)
 		if desc != "" {
 			sch.Description = desc
