@@ -242,6 +242,7 @@ jobs:
             (.resources[] | select(.name == "image") | .version) = env(TAG) |
             (.resources[] | select(.name == "image") | .access.type) = "ociArtifact" |
             (.resources[] | select(.name == "image") | .access.imageReference) = env(IMAGE_REF) |
+            del(.resources[] | select(.name == "image") | .relation)
             del(.resources[] | select(.name == "image") | .input)
           ' "${TARGET_CONSTRUCTOR}"
 
