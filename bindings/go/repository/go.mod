@@ -6,12 +6,12 @@ require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/gobwas/glob v0.2.3
 	github.com/stretchr/testify v1.11.1
-	github.com/veqryn/slog-context v0.8.0
+	github.com/veqryn/slog-context v0.9.0
 	golang.org/x/sync v0.19.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/configuration v0.0.10
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260225072540-1154d8351b1e
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260227135858-afdad9e0f886
 	ocm.software/open-component-model/bindings/go/runtime v0.0.6
 )
 

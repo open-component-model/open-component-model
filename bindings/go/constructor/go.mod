@@ -10,10 +10,10 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260225072540-1154d8351b1e
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260225072540-1154d8351b1e
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260227135858-afdad9e0f886
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260227135858-afdad9e0f886
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/oci v0.0.31
+	ocm.software/open-component-model/bindings/go/oci v0.0.33
 	ocm.software/open-component-model/bindings/go/repository v0.0.7
 	ocm.software/open-component-model/bindings/go/runtime v0.0.6
 	sigs.k8s.io/yaml v1.6.0
@@ -27,7 +27,7 @@ require (
 	github.com/nlepage/go-tarfs v1.2.1 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/veqryn/slog-context v0.8.0 // indirect
+	github.com/veqryn/slog-context v0.9.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/text v0.33.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

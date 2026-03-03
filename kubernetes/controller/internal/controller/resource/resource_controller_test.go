@@ -1,10 +1,11 @@
 package resource
 
 import (
-	_ "embed"
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	_ "embed"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -17,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
@@ -171,45 +171,6 @@ var _ = Describe("Resource Controller", func() {
 
 				test.WaitForReadyObject(ctx, k8sClient, resourceObj, fields)
 			},
-
-			Entry("plain text", func() ([]*descruntime.Descriptor, string) {
-				ctfName := "plainText"
-				ctfPath := filepath.Join(tempDir, ctfName)
-				return []*descruntime.Descriptor{
-					{
-						Component: descruntime.Component{
-							ComponentMeta: descruntime.ComponentMeta{
-								ObjectMeta: descruntime.ObjectMeta{
-									Name:    componentName,
-									Version: componentVersion,
-								},
-							},
-							Resources: []descruntime.Resource{
-								{
-									ElementMeta: descruntime.ElementMeta{
-										ObjectMeta: descruntime.ObjectMeta{
-											Name:    resourceName,
-											Version: "1.0.0",
-										},
-									},
-									Type:     "plainText",
-									Relation: descruntime.LocalRelation,
-									Access: &v2.LocalBlob{
-										Type: runtime.Type{
-											Name:    v2.LocalBlobAccessType,
-											Version: v2.LocalBlobAccessTypeVersion,
-										},
-										LocalReference: "sha256:1234567890",
-										MediaType:      "text/plain",
-									},
-								},
-							},
-							Provider: descruntime.Provider{Name: "ocm.software"},
-						},
-					},
-				}, ctfPath
-			},
-				nil),
 			Entry("OCI artifact access", func() ([]*descruntime.Descriptor, string) {
 				ctfName := "ociArtifactAccess"
 				ctfPath := filepath.Join(tempDir, ctfName)
@@ -418,13 +379,12 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "plainText",
 								Relation: descruntime.LocalRelation,
-								Access: &v2.LocalBlob{
+								Access: &ocispec.OCIImage{
 									Type: runtime.Type{
-										Name:    v2.LocalBlobAccessType,
-										Version: v2.LocalBlobAccessTypeVersion,
+										Name:    "ociArtifact",
+										Version: "v1",
 									},
-									LocalReference: "sha256:1234567890",
-									MediaType:      "text/plain",
+									ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 								},
 							},
 						},
@@ -518,13 +478,12 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "plainText",
 								Relation: descruntime.LocalRelation,
-								Access: &v2.LocalBlob{
+								Access: &ocispec.OCIImage{
 									Type: runtime.Type{
-										Name:    v2.LocalBlobAccessType,
-										Version: v2.LocalBlobAccessTypeVersion,
+										Name:    "ociArtifact",
+										Version: "v1",
 									},
-									LocalReference: "sha256:1234567890",
-									MediaType:      "text/plain",
+									ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 								},
 							},
 						},
@@ -582,7 +541,6 @@ var _ = Describe("Resource Controller", func() {
 
 			By("checking that the resource has been reconciled successfully")
 			test.WaitForNotReadyObject(ctx, k8sClient, resourceObj, v1alpha1.GetOCMResourceFailedReason)
-
 		})
 
 		It("should not reconcile when the component is not ready", func(ctx SpecContext) {
@@ -1058,7 +1016,6 @@ var _ = Describe("Resource Controller", func() {
 					"reference": mustToJSON(expected.Reference),
 				},
 			})
-
 		})
 
 		It("reconcile a nested component by reference path", func(ctx SpecContext) {
@@ -1181,7 +1138,6 @@ var _ = Describe("Resource Controller", func() {
 				"Status.Component.Version":   componentVersion,
 			})
 		})
-
 	})
 
 	Context("ocm config propagation from component to resource", func() {
@@ -1227,13 +1183,12 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "plainText",
 								Relation: descruntime.LocalRelation,
-								Access: &v2.LocalBlob{
+								Access: &ocispec.OCIImage{
 									Type: runtime.Type{
-										Name:    v2.LocalBlobAccessType,
-										Version: v2.LocalBlobAccessTypeVersion,
+										Name:    "ociArtifact",
+										Version: "v1",
 									},
-									LocalReference: "sha256:1234567890",
-									MediaType:      "text/plain",
+									ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 								},
 							},
 						},
@@ -1376,13 +1331,12 @@ consumers:
 								},
 								Type:     "plainText",
 								Relation: descruntime.LocalRelation,
-								Access: &v2.LocalBlob{
+								Access: &ocispec.OCIImage{
 									Type: runtime.Type{
-										Name:    v2.LocalBlobAccessType,
-										Version: v2.LocalBlobAccessTypeVersion,
+										Name:    "ociArtifact",
+										Version: "v1",
 									},
-									LocalReference: "sha256:1234567890",
-									MediaType:      "text/plain",
+									ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 								},
 							},
 						},

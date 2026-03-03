@@ -28,7 +28,6 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
-	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -192,7 +191,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ociResourceRepoPlugin := ocires.NewResourceRepository(inmemory.New(), inmemory.New(), &filesystemv1alpha1.Config{}, ocires.WithUserAgent(creator))
+	ociResourceRepoPlugin := ocires.NewResourceRepository(&filesystemv1alpha1.Config{}, ocires.WithUserAgent(creator))
 	if err := pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin); err != nil {
 		setupLog.Error(err, "failed to register internal resource repository plugin")
 		os.Exit(1)
