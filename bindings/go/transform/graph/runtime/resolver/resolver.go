@@ -51,36 +51,18 @@ type Resolver struct {
 	// responsible for providing this only with available data aka CEL Expressions
 	// we've been able to resolve.
 	data map[string]interface{}
-	// schema is the JSON schema for the resource map. It is used to determine
-	// whether a nil-resolved value should be removed from the map (for optional
-	// pointer fields) rather than stored as null.
+	// schema is used to identify optional pointer fields whose nil values
+	// should be removed rather than stored as null.
 	schema *jsonschema.Schema
 }
 
-// NewResolver creates a new Resolver instance. The schema parameter is the full
-// transformation schema (with properties like type, id, spec, output). The
-// resolver extracts the spec sub-schema to handle nil values for optional
-// pointer-to-struct fields.
+// NewResolver creates a new Resolver instance.
 func NewResolver(resource map[string]interface{}, data map[string]interface{}, schema *jsonschema.Schema) *Resolver {
 	return &Resolver{
 		resource: resource,
 		data:     data,
-		schema:   specSchemaFrom(schema),
+		schema:   schema,
 	}
-}
-
-// specSchemaFrom extracts the spec sub-schema from a transformation schema.
-// The transformation schema has properties like {type, id, spec, output} where
-// spec is typically a $ref. This follows the $ref to return the actual spec schema.
-func specSchemaFrom(schema *jsonschema.Schema) *jsonschema.Schema {
-	if schema == nil || schema.Properties == nil {
-		return nil
-	}
-	spec := schema.Properties["spec"]
-	if spec != nil && spec.Ref != nil {
-		return spec.Ref
-	}
-	return spec
 }
 
 // Resolve processes all the given ExpressionFields and resolves their CEL expressions.
@@ -134,10 +116,8 @@ func (r *Resolver) resolveField(field variable.FieldDescriptor) ResolutionResult
 			result.Error = fmt.Errorf("no data provided for expression: %s", field.Expressions[0])
 			return result
 		}
-		// If a CEL expression resolved to nil and the schema indicates this is
-		// an optional pointer-to-struct field (not required + $ref), remove the
-		// key instead of writing null. This prevents schema validation from
-		// rejecting null for a field typed as an object reference.
+		// Remove nil values for optional pointer-to-struct fields instead of
+		// writing null, which would fail schema validation.
 		if resolvedValue == nil && r.isOptionalRefField(field.Path) {
 			err = r.deleteValueAtPath(field.Path)
 			if err != nil {
@@ -331,15 +311,16 @@ func updateParent(parent interface{}, key string, index int, value interface{}) 
 	}
 }
 
-// isOptionalRefField checks whether the field at the given path represents
-// an optional pointer-to-struct in the JSON schema. This is true when the
-// property is NOT in the parent schema's required list and its schema is a
-// $ref (corresponding to a Go pointer-to-struct with omitempty).
+// isOptionalRefField checks whether the field at the given path is a
+// non-required $ref property (i.e. an optional pointer-to-struct).
 func (r *Resolver) isOptionalRefField(path fieldpath.Path) bool {
 	if r.schema == nil || len(path) == 0 {
 		return false
 	}
-	current := r.schema
+	current := r.resolveSchemaRoot(path[0].Name)
+	if current == nil {
+		return false
+	}
 	for i, segment := range path {
 		if segment.Index != nil || current == nil || current.Properties == nil {
 			return false
@@ -360,8 +341,30 @@ func (r *Resolver) isOptionalRefField(path fieldpath.Path) bool {
 	return false
 }
 
-// deleteValueAtPath removes the key at the final segment of the given path
-// from the resource map.
+// resolveSchemaRoot finds the schema whose properties contain the given name,
+// searching through sub-schemas (following $refs) if needed.
+func (r *Resolver) resolveSchemaRoot(name string) *jsonschema.Schema {
+	if r.schema.Properties == nil {
+		return nil
+	}
+	if _, ok := r.schema.Properties[name]; ok {
+		return r.schema
+	}
+	for _, propSchema := range r.schema.Properties {
+		resolved := propSchema
+		if resolved != nil && resolved.Ref != nil {
+			resolved = resolved.Ref
+		}
+		if resolved != nil && resolved.Properties != nil {
+			if _, ok := resolved.Properties[name]; ok {
+				return resolved
+			}
+		}
+	}
+	return nil
+}
+
+// deleteValueAtPath removes the key at the final path segment from the resource.
 func (r *Resolver) deleteValueAtPath(path fieldpath.Path) error {
 	if len(path) == 0 {
 		return nil

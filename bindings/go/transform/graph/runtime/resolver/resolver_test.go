@@ -615,20 +615,13 @@ func TestResolveField_NilOptionalPointer(t *testing.T) {
 	stringSchema := &jsonschema.Schema{}
 
 	t.Run("deletes nil value for non-required ref field", func(t *testing.T) {
-		// Schema: spec has a non-required $ref property "provFile"
-		specSchema := &jsonschema.Schema{
-			Properties: map[string]*jsonschema.Schema{
-				"provFile": refSchema,
-			},
-		}
-		// Wrap in transformation-level schema with spec.$ref
 		schema := &jsonschema.Schema{
 			Properties: map[string]*jsonschema.Schema{
-				"spec": {Ref: specSchema},
+				"optionalObj": refSchema,
 			},
 		}
 		resource := map[string]interface{}{
-			"provFile": "${expr}",
+			"optionalObj": "${expr}",
 		}
 		data := map[string]interface{}{
 			"expr": nil,
@@ -636,30 +629,25 @@ func TestResolveField_NilOptionalPointer(t *testing.T) {
 
 		r := NewResolver(resource, data, schema)
 		result := r.resolveField(variable.FieldDescriptor{
-			Path:                 fieldpath.MustParse("provFile"),
+			Path:                 fieldpath.MustParse("optionalObj"),
 			Expressions:         []variable.Expression{{Value: "expr"}},
 			StandaloneExpression: true,
 		})
 
 		require.NoError(t, result.Error)
 		require.True(t, result.Resolved)
-		require.NotContains(t, resource, "provFile", "nil value for optional ref should be deleted")
+		require.NotContains(t, resource, "optionalObj", "nil value for optional ref should be deleted")
 	})
 
 	t.Run("keeps nil value for required ref field", func(t *testing.T) {
-		specSchema := &jsonschema.Schema{
-			Properties: map[string]*jsonschema.Schema{
-				"resource": refSchema,
-			},
-			Required: []string{"resource"},
-		}
 		schema := &jsonschema.Schema{
 			Properties: map[string]*jsonschema.Schema{
-				"spec": {Ref: specSchema},
+				"requiredObj": refSchema,
 			},
+			Required: []string{"requiredObj"},
 		}
 		resource := map[string]interface{}{
-			"resource": "${expr}",
+			"requiredObj": "${expr}",
 		}
 		data := map[string]interface{}{
 			"expr": nil,
@@ -667,26 +655,21 @@ func TestResolveField_NilOptionalPointer(t *testing.T) {
 
 		r := NewResolver(resource, data, schema)
 		result := r.resolveField(variable.FieldDescriptor{
-			Path:                 fieldpath.MustParse("resource"),
+			Path:                 fieldpath.MustParse("requiredObj"),
 			Expressions:         []variable.Expression{{Value: "expr"}},
 			StandaloneExpression: true,
 		})
 
 		require.NoError(t, result.Error)
 		require.True(t, result.Resolved)
-		require.Contains(t, resource, "resource", "nil value for required ref should be kept")
-		require.Nil(t, resource["resource"])
+		require.Contains(t, resource, "requiredObj", "nil value for required ref should be kept")
+		require.Nil(t, resource["requiredObj"])
 	})
 
 	t.Run("keeps nil value for non-required non-ref field", func(t *testing.T) {
-		specSchema := &jsonschema.Schema{
-			Properties: map[string]*jsonschema.Schema{
-				"version": stringSchema,
-			},
-		}
 		schema := &jsonschema.Schema{
 			Properties: map[string]*jsonschema.Schema{
-				"spec": {Ref: specSchema},
+				"version": stringSchema,
 			},
 		}
 		resource := map[string]interface{}{
@@ -731,34 +714,29 @@ func TestResolveField_NilOptionalPointer(t *testing.T) {
 	})
 
 	t.Run("preserves non-nil value for optional ref field", func(t *testing.T) {
-		specSchema := &jsonschema.Schema{
-			Properties: map[string]*jsonschema.Schema{
-				"provFile": refSchema,
-			},
-		}
 		schema := &jsonschema.Schema{
 			Properties: map[string]*jsonschema.Schema{
-				"spec": {Ref: specSchema},
+				"optionalObj": refSchema,
 			},
 		}
 		resource := map[string]interface{}{
-			"provFile": "${expr}",
+			"optionalObj": "${expr}",
 		}
-		val := map[string]interface{}{"uri": "/tmp/chart.tgz"}
+		val := map[string]interface{}{"key": "value"}
 		data := map[string]interface{}{
 			"expr": val,
 		}
 
 		r := NewResolver(resource, data, schema)
 		result := r.resolveField(variable.FieldDescriptor{
-			Path:                 fieldpath.MustParse("provFile"),
+			Path:                 fieldpath.MustParse("optionalObj"),
 			Expressions:         []variable.Expression{{Value: "expr"}},
 			StandaloneExpression: true,
 		})
 
 		require.NoError(t, result.Error)
 		require.True(t, result.Resolved)
-		require.Equal(t, val, resource["provFile"])
+		require.Equal(t, val, resource["optionalObj"])
 	})
 
 	t.Run("deletes nil for nested optional ref field", func(t *testing.T) {
@@ -767,16 +745,11 @@ func TestResolveField_NilOptionalPointer(t *testing.T) {
 				"nested": refSchema,
 			},
 		}
-		specSchema := &jsonschema.Schema{
+		schema := &jsonschema.Schema{
 			Properties: map[string]*jsonschema.Schema{
 				"wrapper": {Ref: innerSchema},
 			},
 			Required: []string{"wrapper"},
-		}
-		schema := &jsonschema.Schema{
-			Properties: map[string]*jsonschema.Schema{
-				"spec": {Ref: specSchema},
-			},
 		}
 		resource := map[string]interface{}{
 			"wrapper": map[string]interface{}{
@@ -800,6 +773,229 @@ func TestResolveField_NilOptionalPointer(t *testing.T) {
 		wrapper := resource["wrapper"].(map[string]interface{})
 		require.NotContains(t, wrapper, "nested", "nested nil optional ref should be deleted")
 		require.Equal(t, "keep", wrapper["name"])
+	})
+}
+
+func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) {
+	// Simulates a full transformation schema where the top-level properties use
+	// custom names (not "spec"/"output"). The resolver dynamically finds the
+	// sub-schema that matches the resource keys.
+	refTarget := &jsonschema.Schema{}
+	refSchema := &jsonschema.Schema{Ref: refTarget}
+	stringSchema := &jsonschema.Schema{}
+	numberSchema := &jsonschema.Schema{}
+
+	// Deep nested schema:
+	//   config.input.optional   → optional $ref (should be stripped when nil)
+	//   config.input.endpoint   → required string (nil should be kept)
+	//   config.input.credentials → optional $ref (should be stripped when nil)
+	//   config.target           → required $ref (nil should be kept)
+	//   config.annotations.tags → optional $ref (should be stripped when nil)
+	//   config.annotations.name → required string
+	//   config.replicas         → non-ref number (nil should be kept)
+	tagsTarget := &jsonschema.Schema{}
+	tagsSchema := &jsonschema.Schema{Ref: tagsTarget}
+
+	inputSchema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"optional":    refSchema,
+			"endpoint":    stringSchema,
+			"credentials": refSchema,
+		},
+		Required: []string{"endpoint"},
+	}
+	targetObjTarget := &jsonschema.Schema{}
+	targetObjSchema := &jsonschema.Schema{Ref: targetObjTarget}
+
+	annotationsSchema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"tags": tagsSchema,
+			"name": stringSchema,
+		},
+		Required: []string{"name"},
+	}
+
+	// The "config" sub-schema (what the resolver's resource maps to).
+	configSchema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"input":       {Ref: inputSchema},
+			"target":      targetObjSchema,
+			"annotations": {Ref: annotationsSchema},
+			"replicas":    numberSchema,
+		},
+		Required: []string{"input", "target"},
+	}
+
+	// Full transformation schema with non-standard property names.
+	fullSchema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"kind":   stringSchema,
+			"id":     stringSchema,
+			"config": {Ref: configSchema},
+			"result": {Ref: &jsonschema.Schema{}},
+		},
+		Required: []string{"kind", "id", "config"},
+	}
+
+	t.Run("strips nil optional ref at depth 1", func(t *testing.T) {
+		resource := map[string]interface{}{
+			"input": map[string]interface{}{
+				"optional": "${optExpr}",
+				"endpoint": "https://api.example.com",
+			},
+			"target":   map[string]interface{}{"name": "my-target"},
+			"replicas": 3,
+		}
+		data := map[string]interface{}{"optExpr": nil}
+
+		r := NewResolver(resource, data, fullSchema)
+		result := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("input.optional"),
+			Expressions:         []variable.Expression{{Value: "optExpr"}},
+			StandaloneExpression: true,
+		})
+
+		require.NoError(t, result.Error)
+		require.True(t, result.Resolved)
+		input := resource["input"].(map[string]interface{})
+		require.NotContains(t, input, "optional", "nil optional $ref should be deleted")
+		require.Equal(t, "https://api.example.com", input["endpoint"])
+	})
+
+	t.Run("keeps nil for required ref at depth 1", func(t *testing.T) {
+		resource := map[string]interface{}{
+			"input":  map[string]interface{}{"endpoint": "https://api.example.com"},
+			"target": "${targetExpr}",
+		}
+		data := map[string]interface{}{"targetExpr": nil}
+
+		r := NewResolver(resource, data, fullSchema)
+		result := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("target"),
+			Expressions:         []variable.Expression{{Value: "targetExpr"}},
+			StandaloneExpression: true,
+		})
+
+		require.NoError(t, result.Error)
+		require.True(t, result.Resolved)
+		require.Contains(t, resource, "target", "nil required $ref should be kept")
+		require.Nil(t, resource["target"])
+	})
+
+	t.Run("strips nil optional ref at depth 2", func(t *testing.T) {
+		resource := map[string]interface{}{
+			"input":  map[string]interface{}{"endpoint": "https://api.example.com"},
+			"target": map[string]interface{}{"name": "my-target"},
+			"annotations": map[string]interface{}{
+				"tags": "${tagsExpr}",
+				"name": "my-annotation",
+			},
+		}
+		data := map[string]interface{}{"tagsExpr": nil}
+
+		r := NewResolver(resource, data, fullSchema)
+		result := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("annotations.tags"),
+			Expressions:         []variable.Expression{{Value: "tagsExpr"}},
+			StandaloneExpression: true,
+		})
+
+		require.NoError(t, result.Error)
+		require.True(t, result.Resolved)
+		ann := resource["annotations"].(map[string]interface{})
+		require.NotContains(t, ann, "tags", "nil optional $ref at depth 2 should be deleted")
+		require.Equal(t, "my-annotation", ann["name"])
+	})
+
+	t.Run("keeps nil for required string and strips optional ref at depth 2", func(t *testing.T) {
+		resource := map[string]interface{}{
+			"input": map[string]interface{}{
+				"endpoint":    "${endpointExpr}",
+				"credentials": "${credExpr}",
+			},
+			"target": map[string]interface{}{"name": "my-target"},
+		}
+		data := map[string]interface{}{"endpointExpr": nil, "credExpr": nil}
+
+		r := NewResolver(resource, data, fullSchema)
+
+		endpointResult := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("input.endpoint"),
+			Expressions:         []variable.Expression{{Value: "endpointExpr"}},
+			StandaloneExpression: true,
+		})
+		require.NoError(t, endpointResult.Error)
+		require.True(t, endpointResult.Resolved)
+
+		credResult := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("input.credentials"),
+			Expressions:         []variable.Expression{{Value: "credExpr"}},
+			StandaloneExpression: true,
+		})
+		require.NoError(t, credResult.Error)
+		require.True(t, credResult.Resolved)
+
+		input := resource["input"].(map[string]interface{})
+		require.Contains(t, input, "endpoint", "nil required string should be kept")
+		require.Nil(t, input["endpoint"])
+		require.NotContains(t, input, "credentials", "nil optional $ref should be deleted")
+	})
+
+	t.Run("keeps nil for non-ref field", func(t *testing.T) {
+		resource := map[string]interface{}{
+			"input":    map[string]interface{}{"endpoint": "https://api.example.com"},
+			"target":   map[string]interface{}{"name": "my-target"},
+			"replicas": "${replicasExpr}",
+		}
+		data := map[string]interface{}{"replicasExpr": nil}
+
+		r := NewResolver(resource, data, fullSchema)
+		result := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("replicas"),
+			Expressions:         []variable.Expression{{Value: "replicasExpr"}},
+			StandaloneExpression: true,
+		})
+
+		require.NoError(t, result.Error)
+		require.True(t, result.Resolved)
+		require.Contains(t, resource, "replicas", "nil non-ref field should be kept")
+		require.Nil(t, resource["replicas"])
+	})
+
+	t.Run("preserves non-nil values for optional ref fields", func(t *testing.T) {
+		optionalData := map[string]interface{}{"key": "val", "count": 42}
+		credData := map[string]interface{}{"user": "admin", "pass": "secret"}
+		resource := map[string]interface{}{
+			"input": map[string]interface{}{
+				"optional":    "${optExpr}",
+				"endpoint":    "https://api.example.com",
+				"credentials": "${credExpr}",
+			},
+			"target": map[string]interface{}{"name": "my-target"},
+		}
+		data := map[string]interface{}{"optExpr": optionalData, "credExpr": credData}
+
+		r := NewResolver(resource, data, fullSchema)
+
+		optResult := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("input.optional"),
+			Expressions:         []variable.Expression{{Value: "optExpr"}},
+			StandaloneExpression: true,
+		})
+		require.NoError(t, optResult.Error)
+		require.True(t, optResult.Resolved)
+
+		credResult := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("input.credentials"),
+			Expressions:         []variable.Expression{{Value: "credExpr"}},
+			StandaloneExpression: true,
+		})
+		require.NoError(t, credResult.Error)
+		require.True(t, credResult.Resolved)
+
+		input := resource["input"].(map[string]interface{})
+		require.Equal(t, optionalData, input["optional"])
+		require.Equal(t, credData, input["credentials"])
 	})
 }
 
