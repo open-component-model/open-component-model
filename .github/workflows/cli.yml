@@ -144,7 +144,8 @@ jobs:
           # OCI layout files
           path: |
             ${{ env.LOCATION }}/tmp/bin/ocm-*    
-            ${{ env.LOCATION }}/tmp/oci/*      
+            ${{ env.LOCATION }}/tmp/oci/*
+            ${{ env.LOCATION }}/tmp/component-constructor.yaml
 
   publish:
     name: Publish and Attest
@@ -208,7 +209,7 @@ jobs:
           subject-name: ${{ env.TARGET_REPO }}
           push-to-registry: true
 
-      # Generate OCM component constructor using CLI binaries and a reference to the pushed image
+      # Reuse generated constructor from build artifacts and only patch the image resource access
       - name: Generate OCM component constructor
         shell: bash
         run: |
@@ -218,46 +219,24 @@ jobs:
           shopt -s nullglob
           files=(bin/ocm-*)
           (( ${#files[@]} > 0 )) || { echo "❌ No CLI binaries found under ./bin"; ls -la; exit 1; }
+          
+          CONSTRUCTOR_SOURCE="$(find . -type f -name component-constructor.yaml | head -n 1)"
+          test -n "${CONSTRUCTOR_SOURCE}" || { echo "❌ component-constructor.yaml not found in downloaded artifacts"; ls -la; exit 1; }
           echo "✅ Required artifacts are present"
+          
           mkdir -p ocm-publish
+          cp "${CONSTRUCTOR_SOURCE}" ocm-publish/component-constructor.yaml
 
-          cat > ocm-publish/component-constructor.yaml <<EOF
-          name: ocm.software/cli
-          version: ${TAG}
-          provider:
-            name: ocm.software
-          resources:
-          EOF
+          IMAGE_REF="${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/cli:${TAG}"
 
-          for f in bin/ocm-*; do
-            b="$(basename "$f")"
-            os="$(echo "$b" | cut -d- -f2)"
-            arch="$(echo "$b" | cut -d- -f3)"
-            cat >> ocm-publish/component-constructor.yaml <<EOF
-          - name: cli
-            type: executable
-            version: ${TAG}
-            labels:
-              - name: downloadName
-                value: ocm
-            extraIdentity:
-              os: ${os}
-              architecture: ${arch}
-            relation: local
-            input:
-              type: file
-              path: ./bin/${b}
-          EOF
-          done
+          yq -e '.resources[] | select(.name == "image")' ocm-publish/component-constructor.yaml >/dev/null
 
-          cat >> ocm-publish/component-constructor.yaml <<EOF
-          - name: image
-            type: ociImage
-            version: ${TAG}
-            access:
-              type: ociArtifact
-              imageReference: ${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/cli:${TAG}
-          EOF
+          yq -i '
+            (.resources[] | select(.name == "image") | .type) = "ociImage" |
+            (.resources[] | select(.name == "image") | .version) = env(TAG) |
+            (.resources[] | select(.name == "image") | .access.type) = "ociArtifact" |
+            (.resources[] | select(.name == "image") | .access.imageReference) = env(IMAGE_REF)
+          ' ocm-publish/component-constructor.yaml
 
       - name: Upload component constructor as artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
