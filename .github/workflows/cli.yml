@@ -179,9 +179,6 @@ jobs:
       - name: Setup ORAS
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
 
-      - name: Setup yq
-        uses: mikefarah/yq@e0e79c1f7ebdd09336fe3350595bec89601f79e2 # v4.44.3
-
       # use discovered tag from layout
       - name: Set TAG
         run: echo "TAG=$(oras repo tags --oci-layout ${LAYOUT} | head -n 1)" >> "$GITHUB_ENV"
