@@ -17,6 +17,8 @@ on:
     paths:
       - 'cli/**'
       - '.github/workflows/cli.yml'
+      - '.github/workflows/cli-release.yml'
+      - '.github/workflows/publish-ocm-component-version.yml'
   workflow_call:
     inputs:
       artifact_name:
