@@ -338,15 +338,15 @@ jobs:
             .github/workflows/ci.yml
             ${{ matrix.project }}
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@45580472a5bb82c4681c4ac726cfdb60060c2ee1 # v3
+        uses: github/codeql-action/init@ae9ef3a1d2e3413523c3741725c30064970cc0d4 # v3
         with:
           languages: go
           queries: security-extended
       - name: Autobuild
-        uses: github/codeql-action/autobuild@45580472a5bb82c4681c4ac726cfdb60060c2ee1 # v3
+        uses: github/codeql-action/autobuild@ae9ef3a1d2e3413523c3741725c30064970cc0d4 # v3
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@45580472a5bb82c4681c4ac726cfdb60060c2ee1 # v3
+        uses: github/codeql-action/analyze@ae9ef3a1d2e3413523c3741725c30064970cc0d4 # v3
         with:
           category: "/language:go"
 
