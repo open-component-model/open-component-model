@@ -63,7 +63,9 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 			return fmt.Errorf("failed to create oci upload transformation: %w", err)
 		}
 	} else {
-		addResourceTransform = ociUploadAsLocalResource(toSpec, ref, addResourceID, getResourceID, referenceName)
+		if addResourceTransform, err = ociUploadAsLocalResource(toSpec, ref, addResourceID, getResourceID, referenceName); err != nil {
+			return fmt.Errorf("failed to create local resource upload transformation: %w", err)
+		}
 	}
 
 	tgd.Transformations = append(tgd.Transformations, addResourceTransform)
@@ -76,10 +78,15 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 
 // ociUploadAsLocalResource creates an AddLocalResource transformation that uploads the OCI artifact as a local resource to the target repository.
 // It uses the output of the GetOCIArtifact transformation to populate the fields of the AddLocalResource transformation, ensuring that the same resource is referenced and uploaded.
-func ociUploadAsLocalResource(toSpec runtime.Typed, ref *compref.Ref, addResourceID string, getResourceID string, referenceName string) transformv1alpha1.GenericTransformation {
+func ociUploadAsLocalResource(toSpec runtime.Typed, ref *compref.Ref, addResourceID string, getResourceID string, referenceName string) (transformv1alpha1.GenericTransformation, error) {
+	addLocalResourceType, err := ChooseAddLocalResourceType(toSpec)
+	if err != nil {
+		return transformv1alpha1.GenericTransformation{}, fmt.Errorf("choosing add local resource type for target repository: %w", err)
+	}
+
 	addResourceTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type: ChooseAddLocalResourceType(toSpec),
+			Type: addLocalResourceType,
 			ID:   addResourceID,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
@@ -103,7 +110,7 @@ func ociUploadAsLocalResource(toSpec runtime.Typed, ref *compref.Ref, addResourc
 			"file": fmt.Sprintf("${%s.output.file}", getResourceID),
 		}},
 	}
-	return addResourceTransform
+	return addResourceTransform, nil
 }
 
 // ociUploadAsArtifact creates an AddOCIArtifact transformation that uploads the OCI artifact to the target repository as an OCI artifact.

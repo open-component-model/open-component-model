@@ -28,10 +28,15 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 		resourceIdentityMap[k] = v
 	}
 
+	getLocalResourceType, err := ChooseGetLocalResourceType(sourceRepo)
+	if err != nil {
+		return fmt.Errorf("choosing get local resource type for source repository: %w", err)
+	}
+
 	// Create GetLocalResource transformation
 	getResourceTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type: ChooseGetLocalResourceType(sourceRepo),
+			Type: getLocalResourceType,
 			ID:   getResourceID,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
@@ -45,10 +50,15 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 
 	var addResourceTransform transformv1alpha1.GenericTransformation
 	if !uploadAsOCIArtifact {
+		addLocalResourceType, err := ChooseAddLocalResourceType(toSpec)
+		if err != nil {
+			return fmt.Errorf("choosing add local resource type for target repository: %w", err)
+		}
+
 		// Create AddLocalResource transformation
 		addResourceTransform = transformv1alpha1.GenericTransformation{
 			TransformationMeta: meta.TransformationMeta{
-				Type: ChooseAddLocalResourceType(toSpec),
+				Type: addLocalResourceType,
 				ID:   addResourceID,
 			},
 			Spec: &runtime.Unstructured{Data: map[string]any{

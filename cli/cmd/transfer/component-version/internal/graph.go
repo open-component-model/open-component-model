@@ -231,9 +231,14 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 			descriptorSpec = fmt.Sprintf("${environment.%s}", id)
 		}
 
+		addType, err := ChooseAddType(toSpec)
+		if err != nil {
+			return fmt.Errorf("choosing add type for target repository: %w", err)
+		}
+
 		upload := transformv1alpha1.GenericTransformation{
 			TransformationMeta: meta.TransformationMeta{
-				Type: ChooseAddType(toSpec),
+				Type: addType,
 				ID:   id + "Upload",
 			},
 			Spec: &runtime.Unstructured{Data: map[string]any{

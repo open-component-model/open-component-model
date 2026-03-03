@@ -44,48 +44,48 @@ func convertToConcreteRepo(repo runtime.Typed) (runtime.Typed, error) {
 	}
 }
 
-func ChooseAddType(repo runtime.Typed) runtime.Type {
+func ChooseAddType(repo runtime.Typed) (runtime.Type, error) {
 	concreteRepo, err := convertToConcreteRepo(repo)
 	if err != nil {
-		panic(err)
+		return runtime.Type{}, fmt.Errorf("converting repository spec: %w", err)
 	}
 	switch concreteRepo.(type) {
 	case *oci.Repository:
-		return ociv1alpha1.OCIAddComponentVersionV1alpha1
+		return ociv1alpha1.OCIAddComponentVersionV1alpha1, nil
 	case *ctfv1.Repository:
-		return ociv1alpha1.CTFAddComponentVersionV1alpha1
+		return ociv1alpha1.CTFAddComponentVersionV1alpha1, nil
 	default:
-		panic(fmt.Sprintf("unknown repository type %T", concreteRepo))
+		return runtime.Type{}, fmt.Errorf("unsupported repository type %T for add operation", concreteRepo)
 	}
 }
 
-func ChooseGetLocalResourceType(repo runtime.Typed) runtime.Type {
+func ChooseGetLocalResourceType(repo runtime.Typed) (runtime.Type, error) {
 	concreteRepo, err := convertToConcreteRepo(repo)
 	if err != nil {
-		panic(err)
+		return runtime.Type{}, fmt.Errorf("converting repository spec: %w", err)
 	}
 	switch concreteRepo.(type) {
 	case *oci.Repository:
-		return ociv1alpha1.OCIGetLocalResourceV1alpha1
+		return ociv1alpha1.OCIGetLocalResourceV1alpha1, nil
 	case *ctfv1.Repository:
-		return ociv1alpha1.CTFGetLocalResourceV1alpha1
+		return ociv1alpha1.CTFGetLocalResourceV1alpha1, nil
 	default:
-		panic(fmt.Sprintf("unknown repository type %T", concreteRepo))
+		return runtime.Type{}, fmt.Errorf("unsupported repository type %T for get local resource operation", concreteRepo)
 	}
 }
 
-func ChooseAddLocalResourceType(repo runtime.Typed) runtime.Type {
+func ChooseAddLocalResourceType(repo runtime.Typed) (runtime.Type, error) {
 	concreteRepo, err := convertToConcreteRepo(repo)
 	if err != nil {
-		panic(err)
+		return runtime.Type{}, fmt.Errorf("converting repository spec: %w", err)
 	}
 	switch concreteRepo.(type) {
 	case *oci.Repository:
-		return ociv1alpha1.OCIAddLocalResourceV1alpha1
+		return ociv1alpha1.OCIAddLocalResourceV1alpha1, nil
 	case *ctfv1.Repository:
-		return ociv1alpha1.CTFAddLocalResourceV1alpha1
+		return ociv1alpha1.CTFAddLocalResourceV1alpha1, nil
 	default:
-		panic(fmt.Sprintf("unknown repository type %T", concreteRepo))
+		return runtime.Type{}, fmt.Errorf("unsupported repository type %T for add local resource operation", concreteRepo)
 	}
 }
 
