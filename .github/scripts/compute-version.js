@@ -15,7 +15,7 @@
  *
  * @param {string} ref - Git ref (branch name, tag name, or other ref)
  * @param {string} tagPrefix - Tag prefix pattern (e.g., "cli/v" or "bindings/go/helm/v")
- * @param {{ now?: Date, gitSha?: string }} [options] - Optional inputs for testing or overrides
+ * @param {{ now?: Date, gitSha?: string }} [options] - Optional deterministic inputs for testing or overrides
  * @returns {string} Computed version string
  *
  * @example
