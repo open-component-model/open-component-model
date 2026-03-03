@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/cel-go/cel"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -109,6 +111,7 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 	}
 
 	unstructuredTransformationData := transformation.GenericTransformation.AsUnstructured().Data
+	stripNullPointerValues(unstructuredTransformationData, transformation.Schema)
 	fieldDescriptors, err := stv6jsonschema.ParseResource(
 		unstructuredTransformationData,
 		transformation.Schema,
@@ -139,6 +142,7 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 		return fmt.Errorf("failed to convert updated transformation %q to generic transformation: %w", transformation.ID, err)
 	}
 	evaluatedTransformation := updated.AsUnstructured().Data
+	stripNullPointerValues(evaluatedTransformation, transformation.Schema)
 
 	fieldDescriptors, err = stv6jsonschema.ParseResource(
 		evaluatedTransformation,
@@ -153,4 +157,49 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 
 	b.EvaluatedTransformations[transformation.ID] = evaluatedTransformation
 	return nil
+}
+
+// stripNullPointerValues recursively removes nil entries from maps where the
+// corresponding schema property represents a pointer type with omitempty.
+// At the JSON-Schema level this means the property is NOT in the required
+// array (omitempty) and its schema is a $ref (Go struct pointer).
+func stripNullPointerValues(m map[string]any, schema *jsonschema.Schema) {
+	if schema == nil {
+		return
+	}
+	for key, val := range m {
+		propSchema := schemaForProperty(schema, key)
+
+		if val == nil {
+			if propSchema != nil && !slices.Contains(schema.Required, key) && isRefSchema(propSchema) {
+				delete(m, key)
+			}
+			continue
+		}
+		if nested, ok := val.(map[string]any); ok && propSchema != nil {
+			stripNullPointerValues(nested, resolveSchema(propSchema))
+		}
+	}
+}
+
+// schemaForProperty returns the sub-schema for the named property, or nil.
+func schemaForProperty(schema *jsonschema.Schema, name string) *jsonschema.Schema {
+	if schema == nil || schema.Properties == nil {
+		return nil
+	}
+	return schema.Properties[name]
+}
+
+// isRefSchema returns true if the schema is a $ref to another type,
+// which corresponds to a Go pointer-to-struct field.
+func isRefSchema(s *jsonschema.Schema) bool {
+	return s != nil && s.Ref != nil
+}
+
+// resolveSchema follows a $ref if present, returning the referenced schema.
+func resolveSchema(s *jsonschema.Schema) *jsonschema.Schema {
+	if s != nil && s.Ref != nil {
+		return s.Ref
+	}
+	return s
 }

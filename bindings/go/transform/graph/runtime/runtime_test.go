@@ -67,6 +67,116 @@ func newTestTransformation(t *testing.T) graph.Transformation {
 	}
 }
 
+func TestStripNullPointerValues(t *testing.T) {
+	// Helper: a $ref schema (represents Go pointer-to-struct).
+	refTarget := &jsonschema.Schema{}
+	refSchema := &jsonschema.Schema{Ref: refTarget}
+
+	// Helper: a string schema (represents Go value type).
+	stringSchema := &jsonschema.Schema{}
+
+	t.Run("strips nil for non-required ref property", func(t *testing.T) {
+		schema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"provFile": refSchema,
+			},
+			// provFile is NOT in Required → omitempty
+		}
+		m := map[string]any{"provFile": nil, "other": "keep"}
+		stripNullPointerValues(m, schema)
+
+		require.NotContains(t, m, "provFile", "nil ref property not in required should be stripped")
+		require.Equal(t, "keep", m["other"])
+	})
+
+	t.Run("keeps nil for required ref property", func(t *testing.T) {
+		schema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"resource": refSchema,
+			},
+			Required: []string{"resource"},
+		}
+		m := map[string]any{"resource": nil}
+		stripNullPointerValues(m, schema)
+
+		require.Contains(t, m, "resource", "nil required ref property should be kept")
+		require.Nil(t, m["resource"])
+	})
+
+	t.Run("keeps nil for non-required string property", func(t *testing.T) {
+		schema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"version": stringSchema,
+			},
+		}
+		m := map[string]any{"version": nil}
+		stripNullPointerValues(m, schema)
+
+		require.Contains(t, m, "version", "nil string property should be kept even if not required")
+		require.Nil(t, m["version"])
+	})
+
+	t.Run("keeps nil for property not in schema", func(t *testing.T) {
+		schema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{},
+		}
+		m := map[string]any{"unknown": nil}
+		stripNullPointerValues(m, schema)
+
+		require.Contains(t, m, "unknown", "nil property not in schema should be kept")
+	})
+
+	t.Run("recurses into nested objects", func(t *testing.T) {
+		innerSchema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"nested": refSchema,
+			},
+		}
+		schema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"spec": {Ref: innerSchema},
+			},
+			Required: []string{"spec"},
+		}
+		m := map[string]any{
+			"spec": map[string]any{
+				"nested": nil,
+				"name":   "keep",
+			},
+		}
+		stripNullPointerValues(m, schema)
+
+		spec := m["spec"].(map[string]any)
+		require.NotContains(t, spec, "nested", "nested nil ref should be stripped")
+		require.Equal(t, "keep", spec["name"])
+	})
+
+	t.Run("no-op with nil schema", func(t *testing.T) {
+		m := map[string]any{"foo": nil}
+		stripNullPointerValues(m, nil)
+
+		require.Contains(t, m, "foo", "nil schema should be a no-op")
+	})
+
+	t.Run("preserves non-nil values", func(t *testing.T) {
+		schema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"provFile": refSchema,
+				"name":     stringSchema,
+			},
+		}
+		m := map[string]any{
+			"provFile": map[string]any{"uri": "/tmp/chart.tgz"},
+			"name":     "test",
+		}
+		stripNullPointerValues(m, schema)
+
+		require.Contains(t, m, "provFile")
+		require.Contains(t, m, "name")
+		require.Equal(t, "test", m["name"])
+	})
+}
+
 func TestProcessValueEvents(t *testing.T) {
 	transformation := newTestTransformation(t)
 
