@@ -188,8 +188,8 @@ func TestPathMatcherProvider_GetRepositoryForSpecification_Caching(t *testing.T)
 	}
 }
 
-// TestGetRepositorySpecForComponent tests both path matcher and fallback resolvers
-func TestGetRepositorySpecForComponent(t *testing.T) {
+// TestGetRepositorySpecificationForComponent tests both path matcher and fallback resolvers
+func TestGetRepositorySpecificationForComponent(t *testing.T) {
 	ctx := context.Background()
 
 	repoSpecA := &runtime.Raw{
