@@ -235,9 +235,9 @@ func TestGetRepositorySpecForComponent(t *testing.T) {
 	runTests := func(t *testing.T, resolver ComponentVersionRepositoryResolver) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				spec, err := resolver.GetRepositorySpecForComponent(ctx, tt.component, tt.version)
+				spec, err := resolver.GetRepositorySpecificationForComponent(ctx, tt.component, tt.version)
 				if (err != nil) != tt.wantErr {
-					t.Errorf("GetRepositorySpecForComponent() error = %v, wantErr %v", err, tt.wantErr)
+					t.Errorf("GetRepositorySpecificationForComponent() error = %v, wantErr %v", err, tt.wantErr)
 					return
 				}
 				if err != nil {
@@ -247,11 +247,11 @@ func TestGetRepositorySpecForComponent(t *testing.T) {
 				wantRaw := tt.wantSpec.(*runtime.Raw)
 				gotRaw, ok := spec.(*runtime.Raw)
 				if !ok {
-					t.Errorf("GetRepositorySpecForComponent() returned type %T, want *runtime.Raw", spec)
+					t.Errorf("GetRepositorySpecificationForComponent() returned type %T, want *runtime.Raw", spec)
 					return
 				}
 				if string(gotRaw.Data) != string(wantRaw.Data) {
-					t.Errorf("GetRepositorySpecForComponent() = %s, want %s", string(gotRaw.Data), string(wantRaw.Data))
+					t.Errorf("GetRepositorySpecificationForComponent() = %s, want %s", string(gotRaw.Data), string(wantRaw.Data))
 				}
 			})
 		}

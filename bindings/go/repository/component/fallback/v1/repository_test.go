@@ -605,7 +605,7 @@ func Test_GetRepositorySpecForComponent(t *testing.T) {
 			fb, err := fallback.NewFallbackRepository(ctx, MockProvider{}, nil, tc.resolvers)
 			r.NoError(err)
 
-			repoSpec, err := fb.GetRepositorySpecForComponent(ctx, tc.component, tc.version)
+			repoSpec, err := fb.GetRepositorySpecificationForComponent(ctx, tc.component, tc.version)
 			if !tc.assertErr(t, err) {
 				return
 			}

@@ -27,7 +27,7 @@ func (f *fallbackResolver) GetComponentVersionRepositoryForComponent(ctx context
 	return f.repo, nil
 }
 
-func (f *fallbackResolver) GetRepositorySpecForComponent(ctx context.Context, component, version string) (runtime.Typed, error) {
+func (f *fallbackResolver) GetRepositorySpecificationForComponent(ctx context.Context, component, version string) (runtime.Typed, error) {
 	//nolint:staticcheck // compatibility mode for deprecated resolvers
-	return f.repo.GetRepositorySpecForComponent(ctx, component, version)
+	return f.repo.GetRepositorySpecificationForComponent(ctx, component, version)
 }

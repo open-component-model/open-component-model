@@ -380,7 +380,7 @@ func (f *FallbackRepository) GetComponentVersionRepositoryForSpecification(ctx c
 	return f.getRepositoryFromCache(ctx, specification)
 }
 
-// GetRepositorySpecForComponent probes repositories in priority order and returns
+// GetRepositorySpecificationForComponent probes repositories in priority order and returns
 // the spec of the first repository that contains the component version.
 // Note: This does NOT cache results to maintain consistency with the existing
 // non-deterministic fallback behavior.
@@ -390,7 +390,7 @@ func (f *FallbackRepository) GetComponentVersionRepositoryForSpecification(ctx c
 // and only added for backwards compatibility.
 // Use the path matcher resolver (ocm.software/open-component-model/bindings/go/repository/component/pathmatcher)
 // with "resolvers.ocm.software/v1alpha1" configuration instead.
-func (f *FallbackRepository) GetRepositorySpecForComponent(ctx context.Context, component, version string) (runtime.Typed, error) {
+func (f *FallbackRepository) GetRepositorySpecificationForComponent(ctx context.Context, component, version string) (runtime.Typed, error) {
 	for _, resolver := range f.resolvers {
 		if resolver.Prefix != "" && resolver.Prefix != component &&
 			!strings.HasPrefix(component, strings.TrimSuffix(resolver.Prefix, "/")+"/") {
