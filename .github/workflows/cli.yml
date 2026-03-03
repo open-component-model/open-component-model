@@ -255,7 +255,7 @@ jobs:
           path: ocm-publish/cli-component-constructor.yaml
 
   publish-component:
-    name: Publish OCM Component Version
+    name: Publish Component Version
     needs: [build, publish]
     if: ${{ needs.build.outputs.should_push_oci_image == 'true' }}
     uses: ./.github/workflows/publish-ocm-component-version.yml

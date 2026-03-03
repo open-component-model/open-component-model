@@ -87,7 +87,7 @@ jobs:
                     propagateConsumerIdentity: true
           EOF
 
-      - name: Publish OCM component version
+      - name: Publish component version
         env:
           OCM_REPOSITORY: ${{ inputs.ocm_repository }}
           CLI_IMAGE: ${{ inputs.cli_image }}

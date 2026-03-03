@@ -431,7 +431,7 @@ jobs:
         run: docker system prune --force
 
   publish-component:
-    name: Publish OCM Component Version
+    name: Publish Component Version
     needs: [build, publish]
     if: ${{ needs.build.outputs.should_publish == 'true' }}
     uses: ./.github/workflows/publish-ocm-component-version.yml
