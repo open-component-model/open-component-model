@@ -170,6 +170,11 @@ func Parse(input string, opts ...Option) (*Ref, error) {
 		input = input[idx+2:]
 	}
 
+	if isWindowsAbsPath(input) {
+		// normalize Windows backslash path separators
+		input = strings.ReplaceAll(input, `\`, `/`)
+	}
+
 	// Step 2: Extract optional digest (e.g., @sha256:...)
 	var digestPart string
 	if idx := strings.LastIndex(input, "@"); idx != -1 && !strings.Contains(input[idx:], "/") {
@@ -354,6 +359,11 @@ func ParseRepository(repoRef string, opts ...Option) (runtime.Typed, error) {
 //   - If it looks like a domain (contains dots like ".com", ".io", etc.), assume OCI
 //   - Otherwise fallback to CTF
 func guessType(repository string) (string, error) {
+	// Windows absolute paths (e.g., C:\path or D:/path) must be detected before URL parsing
+	if isWindowsAbsPath(repository) {
+		return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
+	}
+
 	// Try parsing as URL first
 	if u, err := url.Parse(repository); err == nil {
 		if u.Scheme == "file" {
@@ -401,6 +411,14 @@ func looksLikeArchive(s string) bool {
 		}
 	}
 	return false
+}
+
+// isWindowsAbsPath checks if the string looks like a Windows absolute path (e.g., C:\foo or D:/bar).
+// This is needed because url.Parse interprets the single-letter drive prefix as a URL scheme.
+// This will only be relevant when running on Windows, but it doesn't hurt to have this check in place for cross-platform compatibility.
+// TODO(matthiasbruns) Move os dependant code into _windows.go files https://github.com/open-component-model/ocm-project/issues/902
+func isWindowsAbsPath(s string) bool {
+	return len(s) >= 3 && unicode.IsLetter(rune(s[0])) && s[1] == ':' && (s[2] == '\\' || s[2] == '/')
 }
 
 // looksLikeDomain checks if the string contains a dot with non-numeric parts (heuristic).
