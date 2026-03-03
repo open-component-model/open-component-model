@@ -24,6 +24,8 @@ import (
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/helm/access"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -131,7 +133,14 @@ var _ = BeforeSuite(func() {
 	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
-	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{v1.Type}))
+	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
+		&ocicredentials.OCICredentialRepository{},
+		[]ocmruntime.Type{
+			v1.Type,
+			ocmruntime.NewUnversionedType(access.LegacyHelmChartConsumerType),
+			ocmruntime.NewVersionedType(access.LegacyHelmChartConsumerType, helmv1.Version),
+		},
+	)).To(Succeed())
 
 	ociResourceRepoPlugin := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
 	Expect(pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin)).To(Succeed())
