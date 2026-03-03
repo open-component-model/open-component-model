@@ -5,7 +5,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
 )
@@ -118,7 +120,7 @@ func TestGetValueFromPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := NewResolver(tt.resource, nil)
+			r := NewResolver(tt.resource, nil, nil)
 			got, err := r.getValueFromPath(fieldpath.MustParse(tt.path))
 
 			if (err != nil) != tt.wantErr {
@@ -308,7 +310,7 @@ func TestSetValueAtPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := NewResolver(tt.resource, nil)
+			r := NewResolver(tt.resource, nil, nil)
 			err := r.setValueAtPath(fieldpath.MustParse(tt.path), tt.value)
 
 			if (err != nil) != tt.wantErr {
@@ -583,7 +585,7 @@ func TestResolveField(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := NewResolver(tt.resource, tt.data)
+			r := NewResolver(tt.resource, tt.data, nil)
 			got := r.resolveField(tt.field)
 
 			assert.Equal(t, tt.want.Path, got.Path)
@@ -604,6 +606,201 @@ func TestResolveField(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveField_NilOptionalPointer(t *testing.T) {
+	// Helper schemas: $ref represents Go pointer-to-struct, plain schema represents value type.
+	refTarget := &jsonschema.Schema{}
+	refSchema := &jsonschema.Schema{Ref: refTarget}
+	stringSchema := &jsonschema.Schema{}
+
+	t.Run("deletes nil value for non-required ref field", func(t *testing.T) {
+		// Schema: spec has a non-required $ref property "provFile"
+		specSchema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"provFile": refSchema,
+			},
+		}
+		// Wrap in transformation-level schema with spec.$ref
+		schema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"spec": {Ref: specSchema},
+			},
+		}
+		resource := map[string]interface{}{
+			"provFile": "${expr}",
+		}
+		data := map[string]interface{}{
+			"expr": nil,
+		}
+
+		r := NewResolver(resource, data, schema)
+		result := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("provFile"),
+			Expressions:         []variable.Expression{{Value: "expr"}},
+			StandaloneExpression: true,
+		})
+
+		require.NoError(t, result.Error)
+		require.True(t, result.Resolved)
+		require.NotContains(t, resource, "provFile", "nil value for optional ref should be deleted")
+	})
+
+	t.Run("keeps nil value for required ref field", func(t *testing.T) {
+		specSchema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"resource": refSchema,
+			},
+			Required: []string{"resource"},
+		}
+		schema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"spec": {Ref: specSchema},
+			},
+		}
+		resource := map[string]interface{}{
+			"resource": "${expr}",
+		}
+		data := map[string]interface{}{
+			"expr": nil,
+		}
+
+		r := NewResolver(resource, data, schema)
+		result := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("resource"),
+			Expressions:         []variable.Expression{{Value: "expr"}},
+			StandaloneExpression: true,
+		})
+
+		require.NoError(t, result.Error)
+		require.True(t, result.Resolved)
+		require.Contains(t, resource, "resource", "nil value for required ref should be kept")
+		require.Nil(t, resource["resource"])
+	})
+
+	t.Run("keeps nil value for non-required non-ref field", func(t *testing.T) {
+		specSchema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"version": stringSchema,
+			},
+		}
+		schema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"spec": {Ref: specSchema},
+			},
+		}
+		resource := map[string]interface{}{
+			"version": "${expr}",
+		}
+		data := map[string]interface{}{
+			"expr": nil,
+		}
+
+		r := NewResolver(resource, data, schema)
+		result := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("version"),
+			Expressions:         []variable.Expression{{Value: "expr"}},
+			StandaloneExpression: true,
+		})
+
+		require.NoError(t, result.Error)
+		require.True(t, result.Resolved)
+		require.Contains(t, resource, "version", "nil value for non-ref field should be kept")
+		require.Nil(t, resource["version"])
+	})
+
+	t.Run("keeps nil value when no schema provided", func(t *testing.T) {
+		resource := map[string]interface{}{
+			"field": "${expr}",
+		}
+		data := map[string]interface{}{
+			"expr": nil,
+		}
+
+		r := NewResolver(resource, data, nil)
+		result := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("field"),
+			Expressions:         []variable.Expression{{Value: "expr"}},
+			StandaloneExpression: true,
+		})
+
+		require.NoError(t, result.Error)
+		require.True(t, result.Resolved)
+		require.Contains(t, resource, "field", "nil value without schema should be kept")
+		require.Nil(t, resource["field"])
+	})
+
+	t.Run("preserves non-nil value for optional ref field", func(t *testing.T) {
+		specSchema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"provFile": refSchema,
+			},
+		}
+		schema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"spec": {Ref: specSchema},
+			},
+		}
+		resource := map[string]interface{}{
+			"provFile": "${expr}",
+		}
+		val := map[string]interface{}{"uri": "/tmp/chart.tgz"}
+		data := map[string]interface{}{
+			"expr": val,
+		}
+
+		r := NewResolver(resource, data, schema)
+		result := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("provFile"),
+			Expressions:         []variable.Expression{{Value: "expr"}},
+			StandaloneExpression: true,
+		})
+
+		require.NoError(t, result.Error)
+		require.True(t, result.Resolved)
+		require.Equal(t, val, resource["provFile"])
+	})
+
+	t.Run("deletes nil for nested optional ref field", func(t *testing.T) {
+		innerSchema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"nested": refSchema,
+			},
+		}
+		specSchema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"wrapper": {Ref: innerSchema},
+			},
+			Required: []string{"wrapper"},
+		}
+		schema := &jsonschema.Schema{
+			Properties: map[string]*jsonschema.Schema{
+				"spec": {Ref: specSchema},
+			},
+		}
+		resource := map[string]interface{}{
+			"wrapper": map[string]interface{}{
+				"nested": "${expr}",
+				"name":   "keep",
+			},
+		}
+		data := map[string]interface{}{
+			"expr": nil,
+		}
+
+		r := NewResolver(resource, data, schema)
+		result := r.resolveField(variable.FieldDescriptor{
+			Path:                 fieldpath.MustParse("wrapper.nested"),
+			Expressions:         []variable.Expression{{Value: "expr"}},
+			StandaloneExpression: true,
+		})
+
+		require.NoError(t, result.Error)
+		require.True(t, result.Resolved)
+		wrapper := resource["wrapper"].(map[string]interface{})
+		require.NotContains(t, wrapper, "nested", "nested nil optional ref should be deleted")
+		require.Equal(t, "keep", wrapper["name"])
+	})
 }
 
 func TestResolveDynamicArrayIndexes(t *testing.T) {
@@ -629,7 +826,7 @@ func TestResolveDynamicArrayIndexes(t *testing.T) {
 		StandaloneExpression: true,
 	}
 
-	r := NewResolver(resource, data)
+	r := NewResolver(resource, data, nil)
 	got := r.resolveField(field)
 
 	assert.True(t, got.Resolved)
@@ -654,6 +851,7 @@ func TestResolver(t *testing.T) {
 			"value":  "resolved",
 			"suffix": "done",
 		},
+		nil,
 	)
 
 	summary := r.Resolve([]variable.FieldDescriptor{
@@ -782,7 +980,7 @@ func TestResolveFieldWithEmptyBraces(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := NewResolver(tt.resource, tt.data)
+			r := NewResolver(tt.resource, tt.data, nil)
 			got := r.resolveField(tt.field)
 
 			assert.Equal(t, tt.want.Path, got.Path)

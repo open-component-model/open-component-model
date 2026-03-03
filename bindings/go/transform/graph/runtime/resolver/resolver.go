@@ -16,7 +16,10 @@ package resolver
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
@@ -48,14 +51,36 @@ type Resolver struct {
 	// responsible for providing this only with available data aka CEL Expressions
 	// we've been able to resolve.
 	data map[string]interface{}
+	// schema is the JSON schema for the resource map. It is used to determine
+	// whether a nil-resolved value should be removed from the map (for optional
+	// pointer fields) rather than stored as null.
+	schema *jsonschema.Schema
 }
 
-// NewResolver creates a new Resolver instance.
-func NewResolver(resource map[string]interface{}, data map[string]interface{}) *Resolver {
+// NewResolver creates a new Resolver instance. The schema parameter is the full
+// transformation schema (with properties like type, id, spec, output). The
+// resolver extracts the spec sub-schema to handle nil values for optional
+// pointer-to-struct fields.
+func NewResolver(resource map[string]interface{}, data map[string]interface{}, schema *jsonschema.Schema) *Resolver {
 	return &Resolver{
 		resource: resource,
 		data:     data,
+		schema:   specSchemaFrom(schema),
 	}
+}
+
+// specSchemaFrom extracts the spec sub-schema from a transformation schema.
+// The transformation schema has properties like {type, id, spec, output} where
+// spec is typically a $ref. This follows the $ref to return the actual spec schema.
+func specSchemaFrom(schema *jsonschema.Schema) *jsonschema.Schema {
+	if schema == nil || schema.Properties == nil {
+		return nil
+	}
+	spec := schema.Properties["spec"]
+	if spec != nil && spec.Ref != nil {
+		return spec.Ref
+	}
+	return spec
 }
 
 // Resolve processes all the given ExpressionFields and resolves their CEL expressions.
@@ -107,6 +132,20 @@ func (r *Resolver) resolveField(field variable.FieldDescriptor) ResolutionResult
 		resolvedValue, ok := r.data[field.Expressions[0].String()]
 		if !ok {
 			result.Error = fmt.Errorf("no data provided for expression: %s", field.Expressions[0])
+			return result
+		}
+		// If a CEL expression resolved to nil and the schema indicates this is
+		// an optional pointer-to-struct field (not required + $ref), remove the
+		// key instead of writing null. This prevents schema validation from
+		// rejecting null for a field typed as an object reference.
+		if resolvedValue == nil && r.isOptionalRefField(field.Path) {
+			err = r.deleteValueAtPath(field.Path)
+			if err != nil {
+				result.Error = fmt.Errorf("error deleting nil value: %w", err)
+				return result
+			}
+			result.Resolved = true
+			result.Replaced = nil
 			return result
 		}
 		err = r.setValueAtPath(field.Path, resolvedValue)
@@ -290,4 +329,58 @@ func updateParent(parent interface{}, key string, index int, value interface{}) 
 	case []interface{}:
 		p[index] = value
 	}
+}
+
+// isOptionalRefField checks whether the field at the given path represents
+// an optional pointer-to-struct in the JSON schema. This is true when the
+// property is NOT in the parent schema's required list and its schema is a
+// $ref (corresponding to a Go pointer-to-struct with omitempty).
+func (r *Resolver) isOptionalRefField(path fieldpath.Path) bool {
+	if r.schema == nil || len(path) == 0 {
+		return false
+	}
+	current := r.schema
+	for i, segment := range path {
+		if segment.Index != nil || current == nil || current.Properties == nil {
+			return false
+		}
+		propSchema := current.Properties[segment.Name]
+		if propSchema == nil {
+			return false
+		}
+		if i == len(path)-1 {
+			return !slices.Contains(current.Required, segment.Name) && propSchema.Ref != nil
+		}
+		if propSchema.Ref != nil {
+			current = propSchema.Ref
+		} else {
+			current = propSchema
+		}
+	}
+	return false
+}
+
+// deleteValueAtPath removes the key at the final segment of the given path
+// from the resource map.
+func (r *Resolver) deleteValueAtPath(path fieldpath.Path) error {
+	if len(path) == 0 {
+		return nil
+	}
+	current := interface{}(r.resource)
+	for i, segment := range path {
+		if i == len(path)-1 {
+			currentMap, ok := current.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("expected map at path segment: %v", segment)
+			}
+			delete(currentMap, segment.Name)
+			return nil
+		}
+		currentMap, ok := current.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("expected map at path segment: %v", segment)
+		}
+		current = currentMap[segment.Name]
+	}
+	return nil
 }
