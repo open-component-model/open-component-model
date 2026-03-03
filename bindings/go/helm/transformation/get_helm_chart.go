@@ -38,11 +38,9 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		return nil, fmt.Errorf("spec is required for get helm transformation")
 	}
 
-	var output *v1alpha1.GetHelmChartOutput
 	if transformation.Output == nil {
 		transformation.Output = &v1alpha1.GetHelmChartOutput{}
 	}
-	output = transformation.Output
 
 	chartOutputPath, err := DetermineOutputPath(transformation.Spec.OutputPath, "chart")
 	if err != nil {
@@ -126,9 +124,9 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	}
 
 	// Populate output
-	output.ChartFile = *chartFileSpec
-	output.ProvFile = provFileSpec
-	output.Resource = v2Resource
+	transformation.Output.ChartFile = *chartFileSpec
+	transformation.Output.ProvFile = provFileSpec
+	transformation.Output.Resource = v2Resource
 
 	return &transformation, nil
 }

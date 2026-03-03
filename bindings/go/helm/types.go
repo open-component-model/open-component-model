@@ -4,14 +4,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
-// ReadOnlyChart contains Helm chart contents as tgz archive, some metadata and optionally a provenance file.
-type ReadOnlyChart struct {
-	Name          string
-	Version       string
-	ChartBlob     *filesystem.Blob
-	ChartBlobPath string
-	ProvBlob      *filesystem.Blob
-	ProvBlobPath  string
+// ChartData contains Helm chart contents as tgz archive, some metadata and optionally a provenance file.
+type ChartData struct {
+	Name      string
+	Version   string
+	ChartBlob *filesystem.Blob
+	ProvBlob  *filesystem.Blob
 
 	// ChartTempDir is the temporary directory where the chart is downloaded to. This is cleaned after the writer
 	// has finished with copying it later in copyChartToOCILayoutAsync.

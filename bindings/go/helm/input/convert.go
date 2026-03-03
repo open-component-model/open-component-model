@@ -4,7 +4,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm"
 )
 
-func ConvertFromReadOnlyChart(chart *helm.ReadOnlyChart) *ReadOnlyChart {
+func ConvertFromReadOnlyChart(chart *helm.ChartData) *ReadOnlyChart {
 	return &ReadOnlyChart{
 		Name:         chart.Name,
 		Version:      chart.Version,
@@ -14,8 +14,8 @@ func ConvertFromReadOnlyChart(chart *helm.ReadOnlyChart) *ReadOnlyChart {
 	}
 }
 
-func ConvertToReadOnlyChart(chart *ReadOnlyChart) *helm.ReadOnlyChart {
-	return &helm.ReadOnlyChart{
+func ConvertToReadOnlyChart(chart *ReadOnlyChart) *helm.ChartData {
+	return &helm.ChartData{
 		Name:         chart.Name,
 		Version:      chart.Version,
 		ChartBlob:    chart.ChartBlob,

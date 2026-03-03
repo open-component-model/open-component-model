@@ -1,13 +1,14 @@
 package oci
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -40,18 +41,22 @@ type descriptorOrError struct {
 // Descriptor returns the OCI image manifest descriptor.
 // It blocks until the blob-producing goroutine has finished.
 // The blob MUST be fully consumed before calling this method, otherwise it will deadlock.
-func (r *Result) Descriptor() (ociImageSpecV1.Descriptor, error) {
-	result := <-r.desc
-	return result.Descriptor, result.Err
+func (r *Result) Descriptor(ctx context.Context) (ociImageSpecV1.Descriptor, error) {
+	select {
+	case <-ctx.Done():
+		return ociImageSpecV1.Descriptor{}, ctx.Err()
+	case result := <-r.desc:
+		return result.Descriptor, result.Err
+	}
 }
 
-// CopyChartToOCILayout takes a ReadOnlyChart helper object and creates an OCI layout from it.
+// CopyChartToOCILayout takes a ChartData helper object and creates an OCI layout from it.
 // Three OCI layers are expected: config, tgz contents and optionally a provenance file.
 // The result is tagged with the helm chart version.
 // The returned Result contains the blob and provides access to the manifest descriptor
 // after the blob has been fully consumed.
 // See also: https://github.com/helm/community/blob/main/hips/hip-0006.md#2-support-for-provenance-files
-func CopyChartToOCILayout(ctx context.Context, chart *helm.ReadOnlyChart) *Result {
+func CopyChartToOCILayout(ctx context.Context, chart *helm.ChartData) *Result {
 	// Why we cannot simply wait for the write to finish:
 	// io.Pipe is unbuffered. The goroutine's writes block until someone reads from the other end.
 	// If CopyChartToOCILayout waited for the goroutine to finish before returning, nobody would be reading the
@@ -70,7 +75,7 @@ func CopyChartToOCILayout(ctx context.Context, chart *helm.ReadOnlyChart) *Resul
 	}
 }
 
-func copyChartToOCILayoutAsync(ctx context.Context, chart *helm.ReadOnlyChart, w *io.PipeWriter, descCh chan<- descriptorOrError) {
+func copyChartToOCILayoutAsync(ctx context.Context, chart *helm.ChartData, w *io.PipeWriter, descCh chan<- descriptorOrError) {
 	// err accumulates any error from copy, gzip, or layout writing.
 	var err error
 	defer func() {
@@ -123,7 +128,7 @@ func copyChartToOCILayoutAsync(ctx context.Context, chart *helm.ReadOnlyChart, w
 	descCh <- descriptorOrError{Descriptor: imgDesc}
 }
 
-func pushChartAndGenerateLayers(ctx context.Context, chart *helm.ReadOnlyChart, target oras.Target) (
+func pushChartAndGenerateLayers(ctx context.Context, chart *helm.ChartData, target oras.Target) (
 	configLayer *ociImageSpecV1.Descriptor,
 	chartLayer *ociImageSpecV1.Descriptor,
 	provLayer *ociImageSpecV1.Descriptor,
@@ -149,13 +154,23 @@ func pushChartAndGenerateLayers(ctx context.Context, chart *helm.ReadOnlyChart, 
 }
 
 func pushConfigLayer(ctx context.Context, name, version string, target oras.Target) (_ *ociImageSpecV1.Descriptor, err error) {
-	configContent := fmt.Sprintf(`{"name": "%s", "version": "%s"}`, name, version)
+	type chartConfig struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	}
+
+	config := chartConfig{Name: name, Version: version}
+	jsonConfig, err := json.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal helm chart config to JSON: %w", err)
+	}
+
 	configLayer := &ociImageSpecV1.Descriptor{
 		MediaType: registry.ConfigMediaType,
-		Digest:    digest.FromString(configContent),
-		Size:      int64(len(configContent)),
+		Digest:    digest.FromBytes(jsonConfig),
+		Size:      int64(len(jsonConfig)),
 	}
-	if err = target.Push(ctx, *configLayer, strings.NewReader(configContent)); err != nil {
+	if err = target.Push(ctx, *configLayer, bytes.NewReader(jsonConfig)); err != nil {
 		return nil, fmt.Errorf("failed to push helm chart config layer: %w", err)
 	}
 	return configLayer, nil

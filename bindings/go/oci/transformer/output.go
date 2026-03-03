@@ -18,7 +18,9 @@ func DetermineOutputPath(outputPath string, filePrefix string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("failed creating temporary file: %w", err)
 		}
-		_ = tempFile.Close() // Close immediately, caller will overwrite it
+		defer func() {
+			_ = tempFile.Close()
+		}()
 		return tempFile.Name(), nil
 	}
 
@@ -31,10 +33,12 @@ func DetermineOutputPath(outputPath string, filePrefix string) (string, error) {
 		return "", fmt.Errorf("output path %q is a file, not a directory", outputPath)
 	}
 
-	tmpFile, err := os.CreateTemp(outputPath, filePrefix+"-*")
+	tempFile, err := os.CreateTemp(outputPath, filePrefix+"-*")
 	if err != nil {
 		return "", fmt.Errorf("failed creating temporary file in output directory: %w", err)
 	}
-	_ = tmpFile.Close()
-	return tmpFile.Name(), nil
+	defer func() {
+		_ = tempFile.Close()
+	}()
+	return tempFile.Name(), nil
 }

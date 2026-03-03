@@ -33,11 +33,9 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		return nil, fmt.Errorf("spec is required for convert helm transformation")
 	}
 
-	var output *v1alpha1.ConvertHelmToOCIOutput
 	if transformation.Output == nil {
 		transformation.Output = &v1alpha1.ConvertHelmToOCIOutput{}
 	}
-	output = transformation.Output
 
 	var helmAccess v1.Helm
 	if err := access.Scheme.Convert(transformation.Spec.Resource.Access, &helmAccess); err != nil {
@@ -68,7 +66,7 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		return nil, fmt.Errorf("error getting OCI output path: %w", err)
 	}
 
-	result := oci.CopyChartToOCILayout(ctx, &helm.ReadOnlyChart{
+	result := oci.CopyChartToOCILayout(ctx, &helm.ChartData{
 		Name:      helmAccess.GetChartName(),
 		Version:   helmAccess.GetVersion(),
 		ChartBlob: chartSpec,
@@ -83,18 +81,18 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	}
 
 	// Now that the blob is consumed, we can safely retrieve the descriptor.
-	ociDesc, err := result.Descriptor()
+	ociDesc, err := result.Descriptor(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get OCI manifest descriptor: %w", err)
 	}
 
-	output.File = *spec
-	output.Resource = transformation.Spec.Resource
+	transformation.Output.File = *spec
+	transformation.Output.Resource = transformation.Spec.Resource
 	// Update output.Resource.Type to ociImage
-	output.Resource.Type = "ociImage"
+	transformation.Output.Resource.Type = "ociImage"
 
 	// Use digest of top-level-manifest
-	output.Resource.Digest = &descv2.Digest{
+	transformation.Output.Resource.Digest = &descv2.Digest{
 		HashAlgorithm:          string(ociDesc.Digest.Algorithm()),
 		NormalisationAlgorithm: descv2.ExcludeFromSignature,
 		Value:                  ociDesc.Digest.Encoded(),
@@ -116,8 +114,8 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	if err = ociaccess.Scheme.Convert(&ociAccess, &updatedAccess); err != nil {
 		return nil, fmt.Errorf("failed converting ociv2.OCIImage access back to resource access format: %w", err)
 	}
-	output.Resource.Relation = descv2.LocalRelation
-	output.Resource.Access = &updatedAccess
+	transformation.Output.Resource.Relation = descv2.LocalRelation
+	transformation.Output.Resource.Access = &updatedAccess
 
 	return &transformation, nil
 }
@@ -148,13 +146,13 @@ func referenceFromHelmAccess(helmAccess v1.Helm) (string, error) {
 }
 
 func dirFromURI(uri string) string {
-	uri = strings.ReplaceAll(uri, "file://", "")
+	uri = strings.TrimPrefix(uri, "file://")
 	// only return path to dir, not including the file name
 	return filepath.Dir(uri)
 }
 
 func fileFromURI(uri string) string {
-	uri = strings.ReplaceAll(uri, "file://", "")
+	uri = strings.TrimPrefix(uri, "file://")
 	// only return file name, not including the path to the dir
 	return filepath.Base(uri)
 }
