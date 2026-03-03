@@ -103,6 +103,9 @@ func ResolveReferencePath(
 				refIdentity, currentDesc.Component.Name, currentDesc.Component.Version, i+1)
 		}
 
+		// If the reference contains a digest spec, we pass it to the cache-backed repository, so it is used for the
+		// cache-key creation and digest integrity check in the resolution service. This is the digest of the
+		// referenced component from the component reference of the parent component.
 		var refDigest *v2.Digest
 		if matchedRef.Digest.Value != "" && matchedRef.Digest.HashAlgorithm != "" && matchedRef.Digest.NormalisationAlgorithm != "" {
 			refDigest = &v2.Digest{

@@ -280,6 +280,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
+	// Add verifications from the component to the cache-backed repository to make sure they are included in the
+	// cache key and used for verification.
 	verifications, err := verification.GetVerifications(ctx, r.Client, component)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())

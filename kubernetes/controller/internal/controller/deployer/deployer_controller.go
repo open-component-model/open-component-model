@@ -842,6 +842,8 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
+	// Add verifications from the component to the cache-backed repository to make sure they are included in the
+	// cache key and used for verification (if any).
 	verifications, err := verification.GetVerifications(ctx, r.Client, component)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get verifications: %w", err)

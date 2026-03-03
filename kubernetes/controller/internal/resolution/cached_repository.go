@@ -28,9 +28,11 @@ import (
 // routing where different components can be served by different repositories.
 // This is a READ-ONLY cache. Writing operations are delegated directly to the resolved repository.
 type CacheBackedRepository struct {
-	resolver        resolvers.ComponentVersionRepositoryResolver
-	cfg             *configuration.Configuration
-	verifications   []verification.Verification
+	resolver resolvers.ComponentVersionRepositoryResolver
+	cfg      *configuration.Configuration
+	// verifications are used to verify against component version signatures and used as a cache key.
+	verifications []verification.Verification
+	// digest is used to verify the integrity of a referenced component version and is used as part of the cache key.
 	digest          *v2.Digest
 	signingRegistry *signinghandler.SigningRegistry
 	workerPool      *workerpool.WorkerPool
