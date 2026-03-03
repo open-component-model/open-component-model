@@ -28,13 +28,11 @@ import (
 // routing where different components can be served by different repositories.
 // This is a READ-ONLY cache. Writing operations are delegated directly to the resolved repository.
 type CacheBackedRepository struct {
-	resolver resolvers.ComponentVersionRepositoryResolver
-	cfg      *configuration.Configuration
-	// Verifications are used to verify against component version signatures and used a cache key.
-	Verifications []verification.Verification
-	// Digest is used to verify the integrity of a referenced component version and is used as part of the cache key.
-	Digest          *v2.Digest
-	SigningRegistry *signinghandler.SigningRegistry
+	resolver        resolvers.ComponentVersionRepositoryResolver
+	cfg             *configuration.Configuration
+	verifications   []verification.Verification
+	digest          *v2.Digest
+	signingRegistry *signinghandler.SigningRegistry
 	workerPool      *workerpool.WorkerPool
 	logger          *logr.Logger
 	// requesterFunc is used to get a collection of types.NamespacedNames that want to listen to reconcile events
@@ -65,9 +63,9 @@ func newCacheBackedRepository(
 		workerPool:      wp,
 		requesterFunc:   requesterFunc,
 		baseRepoSpec:    baseRepoSpec,
-		Verifications:   verifications,
-		Digest:          digest,
-		SigningRegistry: signingRegistry,
+		verifications:   verifications,
+		digest:          digest,
+		signingRegistry: signingRegistry,
 	}
 }
 
@@ -96,7 +94,7 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 		// The actual repository is determined by the providers resolver
 		// configuration (which is represented through the config hash) and
 		// the base repository.
-		return buildCacheKey(configHash, c.baseRepoSpec, component, version, c.Verifications, c.Digest)
+		return buildCacheKey(configHash, c.baseRepoSpec, component, version, c.verifications, c.digest)
 	}
 
 	repo, err := c.resolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
@@ -107,9 +105,9 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 	wpOpts := workerpool.ResolveOptions{
 		Component:       component,
 		Version:         version,
-		Verifications:   c.Verifications,
-		Digest:          c.Digest,
-		SigningRegistry: c.SigningRegistry,
+		Verifications:   c.verifications,
+		Digest:          c.digest,
+		SigningRegistry: c.signingRegistry,
 		Repository:      repo,
 		KeyFunc:         keyFunc,
 		Requester:       c.requesterFunc(),
@@ -224,19 +222,33 @@ func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version
 		return "", fmt.Errorf("failed to canonicalize verifications: %w", err)
 	}
 
-	digestJson, err := json.Marshal(digestSpec)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal digest spec: %w", err)
+	var canonicalDigestJSON []byte
+	if digestSpec != nil {
+		digestJSON, err := json.Marshal(digestSpec)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal digest spec: %w", err)
+		}
+
+		canonicalDigestJSON, err = jsoncanonicalizer.Transform(digestJSON)
+		if err != nil {
+			return "", fmt.Errorf("failed to canonicalize digest spec: %w", err)
+		}
 	}
 
+	sep := []byte{0}
 	hasher := fnv.New64a()
 	// can safely ignore because fnv.Write never actually returns an error
 	_, _ = hasher.Write(configHash)
+	_, _ = hasher.Write(sep)
 	_, _ = hasher.Write(canonicalRepoJSON)
+	_, _ = hasher.Write(sep)
 	_, _ = hasher.Write([]byte(component))
+	_, _ = hasher.Write(sep)
 	_, _ = hasher.Write([]byte(version))
+	_, _ = hasher.Write(sep)
 	_, _ = hasher.Write(canonicalVerificationsJSON)
-	_, _ = hasher.Write(digestJson)
+	_, _ = hasher.Write(sep)
+	_, _ = hasher.Write(canonicalDigestJSON)
 
 	return fmt.Sprintf("%016x", hasher.Sum64()), nil
 }

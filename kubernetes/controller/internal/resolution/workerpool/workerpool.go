@@ -395,8 +395,9 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 		}
 
 		if opts.Digest.Value != digest.Value {
-			return nil, fmt.Errorf("digest mismatch (%s/%s) for component version %s:%s: %w",
-				digest.NormalisationAlgorithm, digest.HashAlgorithm, opts.Component, opts.Version, err)
+			return nil, fmt.Errorf("digest mismatch (%s/%s) for component version %s:%s: expected %s, got %s",
+				digest.NormalisationAlgorithm, digest.HashAlgorithm, opts.Component, opts.Version,
+				opts.Digest.Value, digest.Value)
 		}
 
 		return desc, nil

@@ -103,28 +103,27 @@ func ResolveReferencePath(
 				refIdentity, currentDesc.Component.Name, currentDesc.Component.Version, i+1)
 		}
 
+		var refDigest *v2.Digest
+		if matchedRef.Digest.Value != "" && matchedRef.Digest.HashAlgorithm != "" && matchedRef.Digest.NormalisationAlgorithm != "" {
+			refDigest = &v2.Digest{
+				HashAlgorithm:          matchedRef.Digest.HashAlgorithm,
+				Value:                  matchedRef.Digest.Value,
+				NormalisationAlgorithm: matchedRef.Digest.NormalisationAlgorithm,
+			}
+		}
+
 		refRepo, err := resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
 			RepositorySpec:    currentRepoSpec,
 			OCMConfigurations: configs,
 			Namespace:         reqInfo.NamespacedName.Namespace,
 			SigningRegistry:   signingRegistry,
+			Digest:            refDigest,
 			RequesterFunc: func() workerpool.RequesterInfo {
 				return reqInfo
 			},
 		})
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create cache-backed repository for reference: %w", err)
-		}
-
-		// If the reference contains a digest spec, we set it for the cache-backed repository, so it is used for the
-		// cache-key creation and digest integrity check in the resolution service. This is the digest of the
-		// referenced component from the component reference of the parent component.
-		if matchedRef.Digest.Value != "" && matchedRef.Digest.HashAlgorithm != "" && matchedRef.Digest.NormalisationAlgorithm != "" {
-			refRepo.Digest = &v2.Digest{
-				HashAlgorithm:          matchedRef.Digest.HashAlgorithm,
-				Value:                  matchedRef.Digest.Value,
-				NormalisationAlgorithm: matchedRef.Digest.NormalisationAlgorithm,
-			}
 		}
 
 		refDesc, err := refRepo.GetComponentVersion(ctx, matchedRef.Component, matchedRef.Version)
