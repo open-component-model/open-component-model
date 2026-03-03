@@ -229,6 +229,16 @@ spec:
             byReference:
               resource:
                 name: helm-resource
+          additionalStatusFields:
+            # The additional status fields are useful for splitting the imageReference into its components, so that
+            # they can be used in depending deployers
+            # Example: ghcr.io/stefanprodan/charts/podinfo:6.7.1 would be
+            # registry: ghcr.io
+            # repository: stefanprodan/charts/podinfo
+            # reference/tag: 6.7.1
+            registry: resource.access.imageReference.toOCI().registry
+            repository: resource.access.imageReference.toOCI().repository
+            tag: resource.access.imageReference.toOCI().tag
           interval: 1m
           # ocmConfig is required, if the OCM repository requires credentials to access it.
           # ocmConfig:
@@ -251,7 +261,7 @@ spec:
           additionalStatusFields:
             # The additional status fields are useful for splitting the imageReference into its components, so that
             # they can be used in depending deployers
-            # Example: ghcr.io/stefanprodan/charts/podinfo:6.7.1 would be 
+            # Example: ghcr.io/stefanprodan/charts/podinfo:6.7.1 would be
             # registry: ghcr.io
             # repository: stefanprodan/charts/podinfo
             # reference/tag: 6.7.1

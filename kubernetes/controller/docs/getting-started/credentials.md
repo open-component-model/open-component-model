@@ -118,8 +118,16 @@ spec:
       name: ocm-secret
 ```
 
-By default, the `ocmConfig` of a resource is propagated and can be consumed by other resources. So, instead of
-specifying the secret or configmap again, you can reference the resource in the `ocmConfig` field:
+> [!IMPORTANT]
+> `ocmConfig` is propagated by default and the `Component`, `Resource`, and `Deployer` custom resources will
+> automatically consume the `ocmConfig` from the custom resource they are referencing if they do not specify their own
+> `ocmConfig`.
+> This means that if you specify the `ocmConfig` in a `Repository`, the `Component` that references this
+> `Repository` will automatically consume the same `ocmConfig` and you do not need to specify it again in the
+> `Component`.
+
+If you want to consume the `ocmConfig` of a `Repository` in  a `Component` in addition to another `ocmConfig` that is
+specified in the `Component`, you need to specify the `ocmConfig` reference to the repository as well:
 
 ```yaml
 apiVersion: delivery.ocm.software/v1alpha1
@@ -147,39 +155,31 @@ spec:
   semver: 1.0.0
   interval: 1m
   ocmConfig:
+    - kind: Secret
+      name: another-ocm-secret
     - kind: Repository
       apiVersion: delivery.ocm.software/v1alpha1
       name: guide-repository
       namespace: default
 ```
 
-The above example shows how to use the `ocmConfig` field in an `Repository` and a `Component`. The `Repository`
-references a secret named `ocm-secret` that contains the credentials for accessing the private OCM repository.
-The `Component` then references the `Repository` in `ocmConfig`and uses the same credentials.
-
-However, you always need to specify a reference to the credentials either as secret, configmap, or as OCM K8s Toolkit
-resource for *each resource*. The credentials will not be propagated automatically to all OCM K8s Toolkit resources in
-the cluster.
-
-In some cases, you do not want to propagate the `ocmConfig` of a resource. To do so, you can set the `policy` to
+In some cases, you do not want to propagate the `ocmConfig` of a custom resource. To do so, you can set the `policy` to
 `DoNotPropagate`:
 
 ```yaml
 apiVersion: delivery.ocm.software/v1alpha1
-kind: Component
+kind: Repository
 metadata:
-  name: guide-component
+  name: guide-repository
+  namespace: default
 spec:
-  component: ocm.software/ocm-k8s-toolkit/guide-component
-  repositoryRef:
-    name: guide-repository
-  semver: 1.0.0
+  repositorySpec:
+    baseUrl: ghcr.io/<your-namespace>
+    type: OCIRegistry
   interval: 1m
   ocmConfig:
-    - kind: Repository
-      apiVersion: delivery.ocm.software/v1alpha1
-      name: guide-repository
-      namespace: default
+    - kind: Secret
+      name: ocm-secret
       policy: DoNotPropagate
 ```
 
