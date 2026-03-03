@@ -458,4 +458,3 @@ jobs:
         run: |
           echo "::error::OCM component publish did not pass (result: ${{ needs.publish-component.result }})"
           exit 1
-
