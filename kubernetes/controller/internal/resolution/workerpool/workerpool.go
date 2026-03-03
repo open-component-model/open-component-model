@@ -413,7 +413,7 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 	// If verifications are requested, we need to verify that the component version is safely digestible.
 	// Anything that comes after this will, in case of an error, always be skipped until cache TTL expires
 	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
-		return desc, ErrNotSafelyDigestible
+		return desc, fmt.Errorf("%w: %w", ErrNotSafelyDigestible, err)
 	}
 
 	logger.Info("verifying signature", "component", opts.Component, "version", opts.Version)

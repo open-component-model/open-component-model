@@ -40,7 +40,7 @@ func GetVerifications(ctx context.Context, client ctrl.Reader,
 		if verification.Value != "" {
 			internal.PublicKey, err = base64.StdEncoding.DecodeString(verification.Value)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to decode public key value for signature %q: %w", verification.Signature, err)
 			}
 		}
 		if verification.SecretRef.Name != "" {

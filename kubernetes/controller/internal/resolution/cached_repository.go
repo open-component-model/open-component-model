@@ -117,9 +117,9 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 	if err != nil {
 		if errors.Is(err, workerpool.ErrNotSafelyDigestible) {
 			return desc, err
-		} else {
-			return nil, err
 		}
+
+		return nil, err
 	}
 
 	return desc, nil
