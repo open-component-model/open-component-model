@@ -211,7 +211,7 @@ jobs:
           subject-name: ${{ env.TARGET_REPO }}
           push-to-registry: true
 
-      # Reuse generated constructor from build artifacts and only patch the image resource access
+      # Reuse generated constructor from build artifacts, normalize file paths, and patch only image access
       - name: Generate OCM component constructor
         shell: bash
         run: |
@@ -235,10 +235,12 @@ jobs:
           yq -e '.resources[] | select(.name == "image")' ocm-publish/component-constructor.yaml >/dev/null
 
           yq -i '
+            (.resources[] | select(.name == "cli" and .input.type == "file") | .input.path) |= ("bin/" + (split("/") | .[-1])) |
             (.resources[] | select(.name == "image") | .type) = "ociImage" |
             (.resources[] | select(.name == "image") | .version) = env(TAG) |
             (.resources[] | select(.name == "image") | .access.type) = "ociArtifact" |
-            (.resources[] | select(.name == "image") | .access.imageReference) = env(IMAGE_REF)
+            (.resources[] | select(.name == "image") | .access.imageReference) = env(IMAGE_REF) |
+            del(.resources[] | select(.name == "image") | .input)
           ' ocm-publish/component-constructor.yaml
 
           yq -e '.resources[] | select(.name == "image") | .access.imageReference == env(IMAGE_REF)' ocm-publish/component-constructor.yaml >/dev/null
