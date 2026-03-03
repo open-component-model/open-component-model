@@ -358,6 +358,12 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 	return repo, nil
 }
 
+// GetComponentVersionRepositoryForSpecification returns a repository for the given specification.
+//
+// Deprecated: FallbackRepository is an implementation for the deprecated config
+// type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
+// and only added for backwards compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
 func (f *FallbackRepository) GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
 	return f.getRepositoryFromCache(ctx, specification)
 }

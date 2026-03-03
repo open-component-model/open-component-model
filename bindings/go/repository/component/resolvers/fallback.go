@@ -19,6 +19,7 @@ type fallbackResolver struct {
 var _ ComponentVersionRepositoryResolver = (*fallbackResolver)(nil)
 
 func (f *fallbackResolver) GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
+	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	return f.repo.GetComponentVersionRepositoryForSpecification(ctx, specification)
 }
 
@@ -27,5 +28,6 @@ func (f *fallbackResolver) GetComponentVersionRepositoryForComponent(ctx context
 }
 
 func (f *fallbackResolver) GetRepositorySpecForComponent(ctx context.Context, component, version string) (runtime.Typed, error) {
+	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	return f.repo.GetRepositorySpecForComponent(ctx, component, version)
 }
