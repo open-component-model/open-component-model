@@ -94,3 +94,10 @@ func (p *pathMatcherResolver) GetComponentVersionRepositoryForComponent(ctx cont
 func (p *pathMatcherResolver) GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
 	return p.getRepository(ctx, specification)
 }
+
+func (p *pathMatcherResolver) GetRepositorySpecificationForComponent(ctx context.Context, component, version string) (runtime.Typed, error) {
+	return p.specProvider.GetRepositorySpec(ctx, runtime.Identity{
+		descruntime.IdentityAttributeName:    component,
+		descruntime.IdentityAttributeVersion: version,
+	})
+}
