@@ -217,6 +217,8 @@ jobs:
         run: |
           set -euo pipefail
 
+          TARGET_CONSTRUCTOR="ocm-publish/cli-component-constructor.yaml"
+
           echo "✅ Verifying downloaded CLI binaries..."
           shopt -s nullglob
           files=(bin/ocm-*)
@@ -227,12 +229,12 @@ jobs:
           echo "✅ Required artifacts are present"
           
           mkdir -p ocm-publish
-          cp "${CONSTRUCTOR_SOURCE}" ocm-publish/component-constructor.yaml
+          cp "${CONSTRUCTOR_SOURCE}" "${TARGET_CONSTRUCTOR}"
 
           IMAGE_REF="${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/cli:${TAG}"
           export IMAGE_REF
 
-          yq -e '.resources[] | select(.name == "image")' ocm-publish/component-constructor.yaml >/dev/null
+          yq -e '.resources[] | select(.name == "image")' "${TARGET_CONSTRUCTOR}" >/dev/null
 
           yq -i '
             (.resources[] | select(.name == "cli" and .input.type == "file") | .input.path) |= ("bin/" + (split("/") | .[-1])) |
@@ -241,16 +243,16 @@ jobs:
             (.resources[] | select(.name == "image") | .access.type) = "ociArtifact" |
             (.resources[] | select(.name == "image") | .access.imageReference) = env(IMAGE_REF) |
             del(.resources[] | select(.name == "image") | .input)
-          ' ocm-publish/component-constructor.yaml
+          ' "${TARGET_CONSTRUCTOR}"
 
-          yq -e '.resources[] | select(.name == "image") | .access.imageReference == env(IMAGE_REF)' ocm-publish/component-constructor.yaml >/dev/null
+          yq -e '.resources[] | select(.name == "image") | .access.imageReference == env(IMAGE_REF)' "${TARGET_CONSTRUCTOR}" >/dev/null
 
       - name: Upload component constructor as artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: cli-constructor-artifact
           if-no-files-found: error
-          path: ocm-publish/component-constructor.yaml
+          path: ocm-publish/cli-component-constructor.yaml
 
   publish-component:
     name: Publish OCM Component Version
@@ -260,5 +262,6 @@ jobs:
     secrets: inherit
     with:
       constructor_artifact_name: cli-constructor-artifact
+      constructor_filename: cli-component-constructor.yaml
       build_artifact_name: ${{ needs.build.outputs.artifact_name }}
       ocm_repository: ghcr.io/${{ github.repository_owner }}
