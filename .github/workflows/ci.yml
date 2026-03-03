@@ -214,8 +214,8 @@ jobs:
     permissions:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       checks: write
-    # Run for all modules when .env changed, else only for changed modules)
-    if: ${{ fromJSON(needs.discover_modules.outputs.lint_modules_json)[0] != null }}
+    # Run for all modules when .env changed, else only for changed modules
+    if: ${{ needs.discover_modules.outputs.lint_modules_json != '[]' }}
     strategy:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.lint_modules_json) }}
