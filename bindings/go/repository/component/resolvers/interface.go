@@ -18,4 +18,9 @@ type ComponentVersionRepositoryResolver interface {
 	// GetComponentVersionRepositoryForSpecification returns a [repository.ComponentVersionRepository]
 	// based on a given repository specification.
 	GetComponentVersionRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error)
+
+	// GetRepositorySpecificationForComponent returns the repository specification that should be used
+	// to access the given component version. This is useful for operations that need to know
+	// the actual source repository of a component (e.g., transfer operations).
+	GetRepositorySpecificationForComponent(ctx context.Context, component, version string) (runtime.Typed, error)
 }
