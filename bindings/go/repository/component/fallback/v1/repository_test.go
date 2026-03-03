@@ -440,8 +440,23 @@ func (m MockRepository) AddComponentVersion(ctx context.Context, descriptor *des
 }
 
 func (m MockRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
-	//TODO implement me
-	panic("implement me")
+	if versions, ok := m.Components[component]; ok {
+		for _, v := range versions {
+			if v == version {
+				return &descriptor.Descriptor{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    component,
+								Version: version,
+							},
+						},
+					},
+				}, nil
+			}
+		}
+	}
+	return nil, repository.ErrNotFound
 }
 
 func (m MockRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
@@ -467,4 +482,143 @@ func (m MockRepository) AddLocalSource(ctx context.Context, component, version s
 func (m MockRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
 	//TODO implement me
 	panic("implement me")
+}
+
+func Test_GetRepositorySpecForComponent(t *testing.T) {
+	ctx := context.Background()
+
+	cases := []struct {
+		name         string
+		component    string
+		version      string
+		resolvers    []*resolverruntime.Resolver
+		expectedRepo string
+		assertErr    assert.ErrorAssertionFunc
+	}{
+		{
+			name:      "component found in first repository",
+			component: "ocm.software/test",
+			version:   "v1.0.0",
+			resolvers: []*resolverruntime.Resolver{
+				{
+					Repository: NewRepositorySpec("repo-a", map[string][]string{
+						"ocm.software/test": {"v1.0.0"},
+					}),
+					Prefix:   "",
+					Priority: 2,
+				},
+				{
+					Repository: NewRepositorySpec("repo-b", map[string][]string{
+						"ocm.software/other": {"v1.0.0"},
+					}),
+					Prefix:   "",
+					Priority: 1,
+				},
+			},
+			expectedRepo: "repo-a",
+			assertErr:    assert.NoError,
+		},
+		{
+			name:      "component found in second repository (not first)",
+			component: "ocm.software/other",
+			version:   "v1.0.0",
+			resolvers: []*resolverruntime.Resolver{
+				{
+					Repository: NewRepositorySpec("repo-a", map[string][]string{
+						"ocm.software/test": {"v1.0.0"},
+					}),
+					Prefix:   "",
+					Priority: 2,
+				},
+				{
+					Repository: NewRepositorySpec("repo-b", map[string][]string{
+						"ocm.software/other": {"v1.0.0"},
+					}),
+					Prefix:   "",
+					Priority: 1,
+				},
+			},
+			expectedRepo: "repo-b",
+			assertErr:    assert.NoError,
+		},
+		{
+			name:      "component with prefix match",
+			component: "prefixA/component",
+			version:   "v1.0.0",
+			resolvers: []*resolverruntime.Resolver{
+				{
+					Repository: NewRepositorySpec("repo-a", map[string][]string{
+						"prefixA/component": {"v1.0.0"},
+					}),
+					Prefix:   "prefixA",
+					Priority: 1,
+				},
+				{
+					Repository: NewRepositorySpec("repo-b", map[string][]string{
+						"prefixB/component": {"v1.0.0"},
+					}),
+					Prefix:   "prefixB",
+					Priority: 1,
+				},
+			},
+			expectedRepo: "repo-a",
+			assertErr:    assert.NoError,
+		},
+		{
+			name:      "component not found in any repository",
+			component: "ocm.software/missing",
+			version:   "v1.0.0",
+			resolvers: []*resolverruntime.Resolver{
+				{
+					Repository: NewRepositorySpec("repo-a", map[string][]string{
+						"ocm.software/test": {"v1.0.0"},
+					}),
+					Prefix:   "",
+					Priority: 1,
+				},
+			},
+			expectedRepo: "",
+			assertErr:    assert.Error,
+		},
+		{
+			name:      "version not found in repository",
+			component: "ocm.software/test",
+			version:   "v2.0.0",
+			resolvers: []*resolverruntime.Resolver{
+				{
+					Repository: NewRepositorySpec("repo-a", map[string][]string{
+						"ocm.software/test": {"v1.0.0"},
+					}),
+					Prefix:   "",
+					Priority: 1,
+				},
+			},
+			expectedRepo: "",
+			assertErr:    assert.Error,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+
+			fb, err := fallback.NewFallbackRepository(ctx, MockProvider{}, nil, tc.resolvers)
+			r.NoError(err)
+
+			repoSpec, err := fb.GetRepositorySpecificationForComponent(ctx, tc.component, tc.version)
+			if !tc.assertErr(t, err) {
+				return
+			}
+
+			if tc.expectedRepo == "" {
+				assert.Nil(t, repoSpec)
+				return
+			}
+
+			require.NotNil(t, repoSpec)
+			spec, ok := repoSpec.(*RepositorySpec)
+			require.True(t, ok, "expected *RepositorySpec, got %T", repoSpec)
+			assert.Equal(t, tc.expectedRepo, spec.Name)
+		})
+	}
 }
