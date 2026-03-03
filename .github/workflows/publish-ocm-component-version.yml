@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "✅ Verifying artifacts..."
+          echo "Verifying artifacts..."
           test -f "${CONSTRUCTOR_FILE}" || (echo "❌ component-constructor missing: ${CONSTRUCTOR_FILE}" && exit 1)
 
           if [ -n "${{ inputs.build_artifact_name }}" ]; then
@@ -108,3 +108,33 @@ jobs:
               --config "/.ocmconfig" \
               --repository "${OCM_REPOSITORY}" \
               --constructor "${CONSTRUCTOR_PATH}"
+
+      - name: Show published component version
+        env:
+          OCM_REPOSITORY: ${{ inputs.ocm_repository }}
+          CLI_IMAGE: ${{ inputs.cli_image }}
+          WORKDIR: ${{ github.workspace }}
+          CONSTRUCTOR_FILE: ${{ github.workspace }}/constructor/${{ inputs.constructor_filename }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          COMPONENT_NAME=$(sed -n 's/^name:[[:space:]]*//p' "${CONSTRUCTOR_FILE}" | head -n 1)
+          COMPONENT_VERSION=$(sed -n 's/^version:[[:space:]]*//p' "${CONSTRUCTOR_FILE}" | head -n 1)
+
+          COMPONENT_REF="${OCM_REPOSITORY}//${COMPONENT_NAME}:${COMPONENT_VERSION}"
+          echo "📦 Published component: ${COMPONENT_REF}"
+
+          docker run --rm \
+            -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
+            -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
+            -v /etc/ssl/certs/:/etc/ssl/certs/:ro \
+            -v "${WORKDIR}:${WORKDIR}" \
+            -w "${WORKDIR}" \
+            "${CLI_IMAGE}" \
+              get cv "${COMPONENT_REF}" \
+              --config "/.ocmconfig" \
+              -oyaml
+
+          echo "## Published OCM Component Version" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Reference: ${COMPONENT_REF}" >> "$GITHUB_STEP_SUMMARY"

@@ -177,6 +177,9 @@ jobs:
       - name: Setup ORAS
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
 
+      - name: Setup yq
+        uses: mikefarah/yq@e0e79c1f7ebdd09336fe3350595bec89601f79e2 # v4.44.3
+
       # use discovered tag from layout
       - name: Set TAG
         run: echo "TAG=$(oras repo tags --oci-layout ${LAYOUT} | head -n 1)" >> "$GITHUB_ENV"
@@ -228,6 +231,7 @@ jobs:
           cp "${CONSTRUCTOR_SOURCE}" ocm-publish/component-constructor.yaml
 
           IMAGE_REF="${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/cli:${TAG}"
+          export IMAGE_REF
 
           yq -e '.resources[] | select(.name == "image")' ocm-publish/component-constructor.yaml >/dev/null
 
@@ -237,6 +241,8 @@ jobs:
             (.resources[] | select(.name == "image") | .access.type) = "ociArtifact" |
             (.resources[] | select(.name == "image") | .access.imageReference) = env(IMAGE_REF)
           ' ocm-publish/component-constructor.yaml
+
+          yq -e '.resources[] | select(.name == "image") | .access.imageReference == env(IMAGE_REF)' ocm-publish/component-constructor.yaml >/dev/null
 
       - name: Upload component constructor as artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
