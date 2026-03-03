@@ -39,7 +39,8 @@
     * [6.2 What the RGD Creates](#62-what-the-rgd-creates)
     * [6.3 RGD Instance](#63-rgd-instance)
   * [7. Build & Publish Pipeline](#7-build--publish-pipeline)
-    * [7.1 Taskfile](#71-taskfile)
+    * [7.1 Build Steps](#71-build-steps)
+    * [7.2 Taskfile](#72-taskfile)
   * [8. Deployment Manifests (Bootstrap)](#8-deployment-manifests-bootstrap)
     * [8.1 Bootstrap Pattern](#81-bootstrap-pattern)
     * [8.2 Bootstrap Resources](#82-bootstrap-resources)
@@ -59,7 +60,7 @@
 
 ## 1. Overview
 
-This document describes a reference scenario demonstrating a core OCM value proposition: **modeling, signing, transporting, and deploying a multi-service product into an air-gapped sovereign cloud environment**.
+This document designs a reference scenario demonstrating one of our core value propositioning statements: **modeling, signing, transporting, and deploying a multi-service product into an air-gapped sovereign cloud environment**.
 
 The implementation lives in [`conformance/scenarios/sovereign/`](../../conformance/scenarios/sovereign).
 
@@ -194,7 +195,7 @@ The [Dockerfile](../../conformance/scenarios/sovereign/components/notes/Dockerfi
 
 ### 3.2 PostgreSQL (Database)
 
-The official `postgres` image (default version 18, configurable via `POSTGRES_VERSION`). Deployed as a StatefulSet via Helm chart. See [`components/postgres/deploy/chart/`](../../conformance/scenarios/sovereign/components/postgres/deploy/chart).
+The official `postgres` image (default version 18, configurable via `POSTGRES_VERSION`). Deployed as a StatefulSet via a **custom Helm chart** included in the scenario at [`components/postgres/deploy/chart/`](../../conformance/scenarios/sovereign/components/postgres/deploy/chart) (not the Bitnami chart). This chart creates a minimal StatefulSet and Service tailored to the scenario's needs.
 
 ---
 
@@ -268,8 +269,8 @@ The Taskfile's `product:keys` task handles this with a status check to avoid reg
 
 Signing and verification use the `OCM_CONFIG` environment variable pointing to config files:
 
-- **Sign config:** [`components/product/config/sign.yaml`](../../conformance/scenarios/sovereign/components/product/config/sign.yaml) — references `private_key_pem_file`
-- **Verify config:** [`components/product/config/verify.yaml`](../../conformance/scenarios/sovereign/components/product/config/verify.yaml) — references `public_key_pem_file`
+- **Sign config:** [`components/product/config/sign.yaml`](../../conformance/scenarios/sovereign/components/product/config/sign.yaml) — references `private_key_pem_file` (the **private key** is used to create signatures)
+- **Verify config:** [`components/product/config/verify.yaml`](../../conformance/scenarios/sovereign/components/product/config/verify.yaml) — references `public_key_pem_file` (the **public key** is used to verify signatures)
 
 Both use the credential consumer pattern:
 
@@ -379,7 +380,19 @@ Environment-specific configuration is applied by creating a `SovereignProduct` C
 
 ## 7. Build & Publish Pipeline
 
-### 7.1 Taskfile
+### 7.1 Build Steps
+
+The build pipeline performs the following:
+
+1. **Build container images** — `docker buildx build --output type=oci` produces OCI layout tarballs for the notes service (postgres uses the official image as an external reference)
+2. **Construct OCM components** — `ocm add componentversion --constructor component-constructor.yaml` packages images, Helm charts, and metadata into a CTF archive
+3. **Sign** — `ocm sign componentversion` signs the product component (and transitively its references) using the private key
+4. **Verify** — `ocm verify componentversion` confirms signatures before transfer
+5. **Transfer** — `ocm transfer cv --copy-resources --recursive` copies the signed archive to an air-gap CTF, then imports into the cluster registry
+
+For step-by-step instructions, see the [README](../../conformance/scenarios/sovereign/README.md). For the full implementation, see the [Taskfile](../../conformance/scenarios/sovereign/Taskfile.yml).
+
+### 7.2 Taskfile
 
 All build, sign, transfer, and cluster operations are driven by a single [Taskfile](../../conformance/scenarios/sovereign/Taskfile.yml).
 
@@ -396,6 +409,8 @@ All build, sign, transfer, and cluster operations are driven by a single [Taskfi
 
 ## 8. Deployment Manifests (Bootstrap)
 
+> **Prerequisites:** The cluster must have the [OCM Kubernetes Toolkit](https://github.com/open-component-model/ocm-k8s-toolkit), [kro](https://kro.run), and [FluxCD](https://fluxcd.io/) installed. The `task cluster:setup` command handles all of this — it creates the kind cluster with an in-cluster registry, then installs the OCM controllers, kro, and FluxCD. See the [README](../../conformance/scenarios/sovereign/README.md) for details.
+
 The cluster-side deployment uses a minimal bootstrap pattern. Only four files are needed in [`deploy/`](../../conformance/scenarios/sovereign/deploy):
 
 | File                                                                            | Purpose                                                        |
@@ -405,14 +420,18 @@ The cluster-side deployment uses a minimal bootstrap pattern. Only four files ar
 
 ### 8.1 Bootstrap Pattern
 
-The bootstrap creates the absolute minimum needed to deliver the product RGD into the cluster:
+The bootstrap creates the absolute minimum needed to deliver the product RGD into the cluster. The `task cluster:bootstrap` command runs these steps (see the [Taskfile](../../conformance/scenarios/sovereign/Taskfile.yml) for implementation):
 
-```
-kubectl apply namespace.yaml          # Create namespace
-kubectl create secret ...             # Public signing key
-kubectl apply bootstrap.yaml          # Repository + Component + Resource + Deployer
-kubectl wait Deployer ready            # RGD is now installed by the Deployer
-kubectl apply sample-product-1.0.0.yaml  # Create SovereignProduct instance
+```bash
+kubectl apply -f deploy/rbac.yaml                      # RBAC for cross-namespace access
+kubectl apply -f deploy/namespace.yaml                  # Create namespace
+kubectl create secret generic acme-signing-key \
+  --from-file=default=tmp/keys/acme-public.pem          # Public signing key for verification
+kubectl apply -f deploy/bootstrap.yaml                  # Repository + Component + Resource + Deployer
+kubectl wait --for=condition=Ready deployer/...          # RGD is now installed by the Deployer
+kubectl wait --for=condition=Ready ResourceGraphDefinition/...
+kubectl apply -f deploy/sample-product-1.0.0.yaml       # Create SovereignProduct instance
+kubectl wait --for=condition=Ready sovereignproduct/...  # Wait for full deployment
 ```
 
 Once the Deployer installs the RGD, the RGD takes over: it recreates the same Repository/Component/Resource/Deployer objects (kro reconciles idempotently) and adds all the sub-component pipelines, config, and HelmReleases.

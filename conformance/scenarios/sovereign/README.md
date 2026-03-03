@@ -68,6 +68,19 @@ flowchart TD
     end
 ```
 
+### Why kro?
+
+[kro](https://kro.run) is a Kubernetes controller that turns a ResourceGraphDefinition (RGD) into a custom resource — in this case `SovereignProduct` — and manages the full tree of child resources declared in the RGD.
+
+This scenario uses kro because it solves four problems at once:
+
+- **Single configuration surface.** Operators create one `SovereignProduct` CR instead of applying 15 individual resources. The RGD schema exposes only the knobs that matter (version, replicas, DB credentials, resource limits).
+- **Dependency ordering.** kro evaluates `readyWhen` CEL expressions to gate resource creation — Repository must be Ready before Component, Component before Resource, and so on — so resources are never created before their dependencies exist.
+- **Self-management.** The RGD includes the same Repository / Component / Resource / Deployer CRs that delivered it. After bootstrap, kro reconciles these idempotently, so the system manages its own delivery pipeline.
+- **Bridge between controllers.** kro translates OCM Resource status fields (registry, repository, digest) into FluxCD inputs (OCIRepository URLs, HelmRelease chart refs, image tags) via CEL expressions. Neither the OCM Controller nor FluxCD needs to know about the other.
+
+In practice, the flow works like this: the OCM Deployer CR installs the RGD into the cluster. kro registers the `SovereignProduct` CRD. When a `SovereignProduct` CR is created, kro creates all 15 resources in dependency order, interpolating CEL expressions like `${postgresChartResource.status.additional.registry}` to wire OCM outputs into FluxCD inputs.
+
 ### Controller Reconciliation Chain
 
 Three controllers divide responsibilities across the deployment pipeline. The OCM Controller manages component resolution and signature verification. kro processes the ResourceGraphDefinition to expand `SovereignProduct` CRs into the full resource tree. FluxCD handles the final-mile deployment of Helm charts and container images into the cluster.

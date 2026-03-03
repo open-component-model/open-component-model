@@ -25,14 +25,11 @@ Conformance testing ensures that OCM implementations correctly handle:
 
 - [`sovereign/`](./scenarios/sovereign) - Demonstrates modeling, signing, transporting, and deploying a multi-service product into an air-gapped sovereign cloud environment (ADR-0013)
 
-## Running Conformance Tests
+## Running Conformance Tests based on a scenario
 
 ```bash
-# Run all conformance scenarios
-task conformance:all
-
-# Run specific scenario
-task conformance:sovereign-scenario
+cd scenarios/sovereign
+task run
 ```
 
 ## Contributing
