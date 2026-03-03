@@ -34,7 +34,7 @@ func (r *resolver) Resolve(ctx context.Context, key string) (*discoveryValue, er
 		return nil, fmt.Errorf("failed to parse reference %q: %w", key, err)
 	}
 
-	repoSpec, err := r.repoResolver.GetRepositorySpecForComponent(ctx, ref.Component, ref.Version)
+	repoSpec, err := r.repoResolver.GetRepositorySpecificationForComponent(ctx, ref.Component, ref.Version)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting repository spec for component %s:%s: %w", ref.Component, ref.Version, err)
 	}
