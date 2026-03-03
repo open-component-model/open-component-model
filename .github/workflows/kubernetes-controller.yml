@@ -365,14 +365,14 @@ jobs:
           IMAGE_DIGEST: ${{ steps.image-digest.outputs.digest }}
         run: |
           task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_DIGEST="${IMAGE_DIGEST}"
-          helm push dist/ocm-k8s-toolkit-${VERSION}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart
+          helm push dist/chart-${VERSION}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
 
       - name: Resolve chart digest
         id: chart-digest
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          CHART_REPO="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart/ocm-k8s-toolkit"
+          CHART_REPO="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart"
           echo "digest=$(oras resolve ${CHART_REPO}:${VERSION})" >> "$GITHUB_OUTPUT"
 
       - name: Attest chart
@@ -380,14 +380,14 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.chart-digest.outputs.digest }}
-          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart/ocm-k8s-toolkit
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart
           push-to-registry: true
 
       - name: Upload chart artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: controller-chart-${{ needs.build.outputs.version }}
-          path: ${{ env.LOCATION }}/dist/ocm-k8s-toolkit-*.tgz
+          path: ${{ env.LOCATION }}/dist/chart-*.tgz
           if-no-files-found: error
 
       - name: Generate OCM component constructor
@@ -416,7 +416,7 @@ jobs:
               type: helmChart
               access:
                 type: ociArtifact
-                imageReference: ${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/kubernetes/controller/chart/ocm-k8s-toolkit:${VERSION}
+                imageReference: ${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/kubernetes/controller/chart:${VERSION}
           EOF
 
       - name: Upload OCM publish artifacts

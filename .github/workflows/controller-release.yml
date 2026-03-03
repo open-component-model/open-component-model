@@ -148,7 +148,7 @@ jobs:
           body_path: ${{ runner.temp }}/CHANGELOG.md
           fail_on_unmatched_files: true
           prerelease: true
-          files: ${{ runner.temp }}/assets/ocm-k8s-toolkit-*.tgz
+          files: ${{ runner.temp }}/assets/chart-*.tgz
 
       - name: Summarize RC release
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
@@ -224,7 +224,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHART_DIGEST: ${{ needs.build.outputs.chart_digest }}
         run: |
-          CHART_REPO="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart/ocm-k8s-toolkit"
+          CHART_REPO="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart"
           gh attestation verify "oci://${CHART_REPO}@${CHART_DIGEST}" --repo "${{ github.repository }}"
 
   # ---------------------------------------------------------------------------
@@ -346,14 +346,14 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
         run: |
           task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_DIGEST="${IMAGE_DIGEST}"
-          helm push dist/ocm-k8s-toolkit-${VERSION}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart
+          helm push dist/chart-${VERSION}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
 
       - name: Resolve chart digest
         id: chart-digest
         env:
           VERSION: ${{ needs.prepare.outputs.base_version }}
         run: |
-          CHART_REPO="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart/ocm-k8s-toolkit"
+          CHART_REPO="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart"
           echo "digest=$(oras resolve ${CHART_REPO}:${VERSION})" >> "$GITHUB_OUTPUT"
 
       - name: Attest final chart
@@ -361,7 +361,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.chart-digest.outputs.digest }}
-          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart/ocm-k8s-toolkit
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart
           push-to-registry: true
 
       - name: Get RC release notes
@@ -378,7 +378,7 @@ jobs:
           FINAL_TAG: ${{ needs.prepare.outputs.promotion_tag }}
           FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
           IMAGE_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
-          CHART_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart/ocm-k8s-toolkit
+          CHART_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart
           IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
           CHART_DIR: ${{ env.COMPONENT_PATH }}/dist
           NOTES_FILE: ${{ runner.temp }}/CHANGELOG.md
