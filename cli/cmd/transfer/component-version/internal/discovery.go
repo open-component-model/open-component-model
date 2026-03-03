@@ -39,9 +39,9 @@ func (r *resolver) Resolve(ctx context.Context, key string) (*discoveryValue, er
 		return nil, fmt.Errorf("failed getting repository spec for component %s:%s: %w", ref.Component, ref.Version, err)
 	}
 
-	repo, err := r.repoResolver.GetComponentVersionRepositoryForComponent(ctx, ref.Component, ref.Version)
+	repo, err := r.repoResolver.GetComponentVersionRepositoryForSpecification(ctx, repoSpec)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting component version repository: %w", err)
+		return nil, fmt.Errorf("failed getting component version repository for spec %v: %w", repoSpec, err)
 	}
 
 	desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
