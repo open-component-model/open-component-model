@@ -242,7 +242,7 @@ jobs:
             (.resources[] | select(.name == "image") | .version) = env(TAG) |
             (.resources[] | select(.name == "image") | .access.type) = "ociArtifact" |
             (.resources[] | select(.name == "image") | .access.imageReference) = env(IMAGE_REF) |
-            del(.resources[] | select(.name == "image") | .relation)
+            del(.resources[] | select(.name == "image") | .relation) |
             del(.resources[] | select(.name == "image") | .input)
           ' "${TARGET_CONSTRUCTOR}"
 
@@ -266,3 +266,15 @@ jobs:
       constructor_filename: cli-component-constructor.yaml
       build_artifact_name: ${{ needs.build.outputs.artifact_name }}
       ocm_repository: ghcr.io/${{ github.repository_owner }}
+
+  status-check:
+    name: Status Check
+    runs-on: ubuntu-latest
+    needs: [publish, publish-component]
+    if: always()
+    steps:
+      - name: Fail if OCM publish did not succeed
+        if: ${{ needs.publish.result == 'success' && needs.publish-component.result != 'success' }}
+        run: |
+          echo "::error::OCM component publish did not pass (result: ${{ needs.publish-component.result }})"
+          exit 1
