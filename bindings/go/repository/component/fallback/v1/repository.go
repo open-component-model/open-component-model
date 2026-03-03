@@ -362,6 +362,40 @@ func (f *FallbackRepository) GetComponentVersionRepositoryForSpecification(ctx c
 	return f.getRepositoryFromCache(ctx, specification)
 }
 
+// GetRepositorySpecForComponent probes repositories in priority order and returns
+// the spec of the first repository that contains the component version.
+// Note: This does NOT cache results to maintain consistency with the existing
+// non-deterministic fallback behavior.
+//
+// Deprecated: FallbackRepository is an implementation for the deprecated config
+// type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
+// and only added for backwards compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
+func (f *FallbackRepository) GetRepositorySpecForComponent(ctx context.Context, component, version string) (runtime.Typed, error) {
+	for _, resolver := range f.resolvers {
+		if resolver.Prefix != "" && resolver.Prefix != component &&
+			!strings.HasPrefix(component, strings.TrimSuffix(resolver.Prefix, "/")+"/") {
+			continue
+		}
+		repo, err := f.getRepositoryFromCache(ctx, resolver.Repository)
+		if err != nil {
+			return nil, fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err)
+		}
+		_, err = repo.GetComponentVersion(ctx, component, version)
+		if errors.Is(err, repository.ErrNotFound) {
+			slog.DebugContext(ctx, "component version not found in repository during spec resolution",
+				"realm", Realm, "repository", resolver.Repository, "component", component, "version", version)
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("probing component version %s/%s in repository %v failed: %w",
+				component, version, resolver.Repository, err)
+		}
+		return resolver.Repository, nil
+	}
+	return nil, fmt.Errorf("component version %s/%s not found in any repository", component, version)
+}
+
 func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
 	specdata, err := json.Marshal(specification)
 	if err != nil {

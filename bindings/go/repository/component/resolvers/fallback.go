@@ -25,3 +25,7 @@ func (f *fallbackResolver) GetComponentVersionRepositoryForSpecification(ctx con
 func (f *fallbackResolver) GetComponentVersionRepositoryForComponent(ctx context.Context, _, _ string) (repository.ComponentVersionRepository, error) {
 	return f.repo, nil
 }
+
+func (f *fallbackResolver) GetRepositorySpecForComponent(ctx context.Context, component, version string) (runtime.Typed, error) {
+	return f.repo.GetRepositorySpecForComponent(ctx, component, version)
+}
