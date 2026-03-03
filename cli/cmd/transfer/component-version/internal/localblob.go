@@ -13,7 +13,8 @@ import (
 )
 
 func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
-	ref := val.Ref
+	component := val.Descriptor.Component.Name
+	version := val.Descriptor.Component.Version
 	sourceRepo := val.SourceRepository
 
 	// Generate transformation IDs
@@ -41,8 +42,8 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
 			"repository":       AsUnstructured(sourceRepo).Data,
-			"component":        ref.Component,
-			"version":          ref.Version,
+			"component":        component,
+			"version":          version,
 			"resourceIdentity": resourceIdentityMap,
 		}},
 	}
@@ -63,8 +64,8 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 			},
 			Spec: &runtime.Unstructured{Data: map[string]any{
 				"repository": AsUnstructured(toSpec).Data,
-				"component":  ref.Component,
-				"version":    ref.Version,
+				"component":  component,
+				"version":    version,
 				"resource":   fmt.Sprintf("${%s.output.resource}", getResourceID),
 				"file":       fmt.Sprintf("${%s.output.file}", getResourceID),
 			}},

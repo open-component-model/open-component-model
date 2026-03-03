@@ -12,11 +12,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
 func processOCIArtifact(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
-	ref := val.Ref
+	component := val.Descriptor.Component.Name
+	version := val.Descriptor.Component.Version
 
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
@@ -63,7 +63,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 			return fmt.Errorf("failed to create oci upload transformation: %w", err)
 		}
 	} else {
-		if addResourceTransform, err = ociUploadAsLocalResource(toSpec, ref, addResourceID, getResourceID, referenceName); err != nil {
+		if addResourceTransform, err = ociUploadAsLocalResource(toSpec, component, version, addResourceID, getResourceID, referenceName); err != nil {
 			return fmt.Errorf("failed to create local resource upload transformation: %w", err)
 		}
 	}
@@ -78,7 +78,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 
 // ociUploadAsLocalResource creates an AddLocalResource transformation that uploads the OCI artifact as a local resource to the target repository.
 // It uses the output of the GetOCIArtifact transformation to populate the fields of the AddLocalResource transformation, ensuring that the same resource is referenced and uploaded.
-func ociUploadAsLocalResource(toSpec runtime.Typed, ref *compref.Ref, addResourceID string, getResourceID string, referenceName string) (transformv1alpha1.GenericTransformation, error) {
+func ociUploadAsLocalResource(toSpec runtime.Typed, component, version, addResourceID, getResourceID, referenceName string) (transformv1alpha1.GenericTransformation, error) {
 	addLocalResourceType, err := ChooseAddLocalResourceType(toSpec)
 	if err != nil {
 		return transformv1alpha1.GenericTransformation{}, fmt.Errorf("choosing add local resource type for target repository: %w", err)
@@ -91,8 +91,8 @@ func ociUploadAsLocalResource(toSpec runtime.Typed, ref *compref.Ref, addResourc
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
 			"repository": AsUnstructured(toSpec).Data,
-			"component":  ref.Component,
-			"version":    ref.Version,
+			"component":  component,
+			"version":    version,
 			"resource": map[string]any{
 				"name":     fmt.Sprintf("${%s.output.resource.name}", getResourceID),
 				"version":  fmt.Sprintf("${%s.output.resource.version}", getResourceID),

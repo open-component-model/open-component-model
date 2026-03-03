@@ -9,6 +9,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/dag"
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -51,7 +52,7 @@ func BuildGraphDefinition(
 		},
 	}
 
-	root := fromSpec.String()
+	root := fromSpec.Component + ":" + fromSpec.Version
 
 	dr := dagsync.NewGraphDiscoverer(&dagsync.GraphDiscovererOptions[string, *discoveryValue]{
 		Roots:      []string{root},
@@ -85,9 +86,13 @@ func BuildGraphDefinition(
 func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.DirectedAcyclicGraph[string], toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, copyMode CopyMode, uploadType UploadType) error {
 	for _, v := range d.Vertices {
 		val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
-		ref := val.Ref
+		component := val.Descriptor.Component.Name
+		version := val.Descriptor.Component.Version
 
-		id := identityToTransformationID(ref.Identity())
+		id := identityToTransformationID(runtime.Identity{
+			descruntime.IdentityAttributeName:    component,
+			descruntime.IdentityAttributeVersion: version,
+		})
 
 		v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), val.Descriptor)
 		if err != nil {
@@ -116,8 +121,8 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 				}
 				slog.Log(ctx, logLevel,
 					"Skipping copy of resource since its access type is not a local blob. Only resources with local blob access are copied when CopyModeLocalBlobResources is set.",
-					"component", ref.Component,
-					"version", ref.Version,
+					"component", component,
+					"version", version,
 					"resource", resource.ToIdentity().String(),
 					"accessType", resource.Access.Type.String(),
 					"copyMode", copyMode)
@@ -156,7 +161,7 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 			default:
 				// No transformation configured for resource with access types not listed above
 				slog.Info("Unsupported resource access type, skipping resource. Only local blob and OCI artifact resources are supported for transformation.",
-					"component", ref.Component, "version", ref.Version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
+					"component", component, "version", version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 			}
 		}
 
