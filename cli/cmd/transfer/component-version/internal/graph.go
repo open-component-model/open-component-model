@@ -139,7 +139,7 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 						}
 					}
 				}
-				if err := processLocalBlob(resource, acc, id, ref, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact); err != nil {
+				if err := processLocalBlob(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact); err != nil {
 					return fmt.Errorf("failed processing local blob resource: %w", err)
 				}
 			case *ociv1.OCIImage:
@@ -149,7 +149,7 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 						uploadAsOCIArtifact = true
 					}
 				}
-				err := processOCIArtifact(resource, id, ref, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact)
+				err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact)
 				if err != nil {
 					return fmt.Errorf("cannot process OCI artifact resource: %w", err)
 				}

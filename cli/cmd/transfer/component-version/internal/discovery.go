@@ -17,9 +17,10 @@ import (
 )
 
 type discoveryValue struct {
-	Ref        *compref.Ref
-	Descriptor *descriptor.Descriptor
-	Digest     *descriptorv2.Digest
+	Ref              *compref.Ref
+	Descriptor       *descriptor.Descriptor
+	Digest           *descriptorv2.Digest
+	SourceRepository runtime.Typed
 }
 
 type resolver struct {
@@ -31,6 +32,11 @@ func (r *resolver) Resolve(ctx context.Context, key string) (*discoveryValue, er
 	ref, err := compref.Parse(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse reference %q: %w", key, err)
+	}
+
+	repoSpec, err := r.repoResolver.GetRepositorySpecForComponent(ctx, ref.Component, ref.Version)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting repository spec for component %s:%s: %w", ref.Component, ref.Version, err)
 	}
 
 	repo, err := r.repoResolver.GetComponentVersionRepositoryForComponent(ctx, ref.Component, ref.Version)
@@ -52,8 +58,9 @@ func (r *resolver) Resolve(ctx context.Context, key string) (*discoveryValue, er
 	}
 
 	return &discoveryValue{
-		Ref:        ref,
-		Descriptor: desc,
+		Ref:              ref,
+		Descriptor:       desc,
+		SourceRepository: repoSpec,
 	}, nil
 }
 

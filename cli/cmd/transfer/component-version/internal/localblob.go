@@ -10,10 +10,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-func processLocalBlob(resource descriptorv2.Resource, access *descriptorv2.LocalBlob, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+	ref := val.Ref
+	sourceRepo := val.SourceRepository
+
 	// Generate transformation IDs
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
@@ -29,11 +31,11 @@ func processLocalBlob(resource descriptorv2.Resource, access *descriptorv2.Local
 	// Create GetLocalResource transformation
 	getResourceTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type: ChooseGetLocalResourceType(ref.Repository),
+			Type: ChooseGetLocalResourceType(sourceRepo),
 			ID:   getResourceID,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
-			"repository":       AsUnstructured(ref.Repository).Data,
+			"repository":       AsUnstructured(sourceRepo).Data,
 			"component":        ref.Component,
 			"version":          ref.Version,
 			"resourceIdentity": resourceIdentityMap,

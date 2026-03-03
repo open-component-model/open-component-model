@@ -25,36 +25,67 @@ func AsUnstructured(typed runtime.Typed) *runtime.Unstructured {
 	return &unstructured
 }
 
+// convertToConcreteRepo converts a runtime.Typed (which may be *runtime.Raw) to a concrete repository type.
+func convertToConcreteRepo(repo runtime.Typed) (runtime.Typed, error) {
+	switch r := repo.(type) {
+	case *oci.Repository, *ctfv1.Repository:
+		return repo, nil
+	case *runtime.Raw:
+		obj, err := Scheme.NewObject(r.Type)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create object for type %s: %w", r.Type, err)
+		}
+		if err := Scheme.Convert(r, obj); err != nil {
+			return nil, fmt.Errorf("cannot convert raw to concrete type: %w", err)
+		}
+		return obj, nil
+	default:
+		return nil, fmt.Errorf("unknown repository type %T", repo)
+	}
+}
+
 func ChooseAddType(repo runtime.Typed) runtime.Type {
-	switch repo.(type) {
+	concreteRepo, err := convertToConcreteRepo(repo)
+	if err != nil {
+		panic(err)
+	}
+	switch concreteRepo.(type) {
 	case *oci.Repository:
 		return ociv1alpha1.OCIAddComponentVersionV1alpha1
 	case *ctfv1.Repository:
 		return ociv1alpha1.CTFAddComponentVersionV1alpha1
 	default:
-		panic(fmt.Sprintf("unknown repository type %T", repo))
+		panic(fmt.Sprintf("unknown repository type %T", concreteRepo))
 	}
 }
 
 func ChooseGetLocalResourceType(repo runtime.Typed) runtime.Type {
-	switch repo.(type) {
+	concreteRepo, err := convertToConcreteRepo(repo)
+	if err != nil {
+		panic(err)
+	}
+	switch concreteRepo.(type) {
 	case *oci.Repository:
 		return ociv1alpha1.OCIGetLocalResourceV1alpha1
 	case *ctfv1.Repository:
 		return ociv1alpha1.CTFGetLocalResourceV1alpha1
 	default:
-		panic(fmt.Sprintf("unknown repository type %T", repo))
+		panic(fmt.Sprintf("unknown repository type %T", concreteRepo))
 	}
 }
 
 func ChooseAddLocalResourceType(repo runtime.Typed) runtime.Type {
-	switch repo.(type) {
+	concreteRepo, err := convertToConcreteRepo(repo)
+	if err != nil {
+		panic(err)
+	}
+	switch concreteRepo.(type) {
 	case *oci.Repository:
 		return ociv1alpha1.OCIAddLocalResourceV1alpha1
 	case *ctfv1.Repository:
 		return ociv1alpha1.CTFAddLocalResourceV1alpha1
 	default:
-		panic(fmt.Sprintf("unknown repository type %T", repo))
+		panic(fmt.Sprintf("unknown repository type %T", concreteRepo))
 	}
 }
 
