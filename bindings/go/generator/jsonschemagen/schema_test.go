@@ -199,7 +199,7 @@ func TestGenerate_MixedFieldTypes(t *testing.T) {
 	// Name is string
 	require.Equal(t, "string", props["Name"].Schema.Type)
 
-	// PtrRef should be a $ref to local
+	// PtrRef should be a $ref to local (no +optional, so no null wrapping)
 	require.Equal(t, "#/$defs/"+universe.Definition(local.Key), props["PtrRef"].Schema.Ref)
 
 	// SelRef should be a $ref to external
@@ -447,24 +447,21 @@ func TestGenerate_StructInlineAndExplicitFieldSameName_ExplicitWinsWhenLater(t *
 	require.Equal(t, "integer", s.Properties["A"].Schema.Type)
 }
 
-func TestGenerate_NullableRefField(t *testing.T) {
+func TestGenerate_OmitemptyPointerRefFieldIsNullable(t *testing.T) {
 	u := universe.New()
 
 	// Register a referenced type
 	other := mkTypeInfo("example.com/pkg", "Other", &ast.Ident{Name: "string"}, nil)
 	u.Types[other.Key] = other
 
-	// Build a struct with a +nullable pointer field referencing Other
-	nullableField := &ast.Field{
+	// Build a struct with an omitempty pointer field referencing Other
+	ptrField := &ast.Field{
 		Names: []*ast.Ident{{Name: "OptRef"}},
 		Type:  &ast.StarExpr{X: &ast.Ident{Name: "Other"}},
 		Tag:   &ast.BasicLit{Value: "`json:\"optRef,omitempty\"`"},
-		Doc: &ast.CommentGroup{List: []*ast.Comment{
-			{Text: "// +nullable"},
-		}},
 	}
-	st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{nullableField}}}
-	root := mkTypeInfo("example.com/pkg", "WithNullable", nil, st)
+	st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{ptrField}}}
+	root := mkTypeInfo("example.com/pkg", "WithOmitemptyPointerRef", nil, st)
 	u.Types[root.Key] = root
 
 	g := jsonschemagen.New(u)
@@ -473,27 +470,24 @@ func TestGenerate_NullableRefField(t *testing.T) {
 	prop, ok := s.Properties["optRef"]
 	require.True(t, ok)
 
-	// Should be wrapped in oneOf: [{"type":"null"}, {"$ref":"..."}]
+	// omitempty pointer fields should be wrapped in oneOf: [{"type":"null"}, {"$ref":"..."}]
 	require.NotNil(t, prop.Schema.OneOf)
 	require.Len(t, prop.Schema.OneOf, 2)
 	require.Equal(t, "null", prop.Schema.OneOf[0].Type)
 	require.Equal(t, "#/$defs/"+universe.Definition(other.Key), prop.Schema.OneOf[1].Ref)
 }
 
-func TestGenerate_NullablePrimitiveField(t *testing.T) {
+func TestGenerate_OmitemptyPointerPrimitiveFieldIsNullable(t *testing.T) {
 	u := universe.New()
 
-	// Build a struct with a +nullable primitive pointer field
-	nullableField := &ast.Field{
+	// Build a struct with an omitempty primitive pointer field
+	ptrField := &ast.Field{
 		Names: []*ast.Ident{{Name: "OptStr"}},
 		Type:  &ast.StarExpr{X: &ast.Ident{Name: "string"}},
 		Tag:   &ast.BasicLit{Value: "`json:\"optStr,omitempty\"`"},
-		Doc: &ast.CommentGroup{List: []*ast.Comment{
-			{Text: "// +nullable"},
-		}},
 	}
-	st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{nullableField}}}
-	root := mkTypeInfo("example.com/pkg", "WithNullablePrimitive", nil, st)
+	st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{ptrField}}}
+	root := mkTypeInfo("example.com/pkg", "WithOmitemptyPointerPrimitive", nil, st)
 	u.Types[root.Key] = root
 
 	g := jsonschemagen.New(u)
@@ -502,24 +496,24 @@ func TestGenerate_NullablePrimitiveField(t *testing.T) {
 	prop, ok := s.Properties["optStr"]
 	require.True(t, ok)
 
-	// Should be wrapped in oneOf: [{"type":"null"}, {"type":"string"}]
+	// omitempty pointer fields should be wrapped in oneOf: [{"type":"null"}, {"type":"string"}]
 	require.NotNil(t, prop.Schema.OneOf)
 	require.Len(t, prop.Schema.OneOf, 2)
 	require.Equal(t, "null", prop.Schema.OneOf[0].Type)
 	require.Equal(t, "string", prop.Schema.OneOf[1].Type)
 }
 
-func TestGenerate_NonNullableFieldNotWrapped(t *testing.T) {
+func TestGenerate_PointerFieldWithoutOmitemptyNotWrapped(t *testing.T) {
 	u := universe.New()
 
-	// Build a struct with a regular pointer field (no +nullable)
-	regularField := &ast.Field{
+	// Build a struct with a pointer field WITHOUT omitempty
+	ptrField := &ast.Field{
 		Names: []*ast.Ident{{Name: "Regular"}},
 		Type:  &ast.StarExpr{X: &ast.Ident{Name: "string"}},
-		Tag:   &ast.BasicLit{Value: "`json:\"regular,omitempty\"`"},
+		Tag:   &ast.BasicLit{Value: "`json:\"regular\"`"},
 	}
-	st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{regularField}}}
-	root := mkTypeInfo("example.com/pkg", "WithoutNullable", nil, st)
+	st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{ptrField}}}
+	root := mkTypeInfo("example.com/pkg", "WithoutOmitempty", nil, st)
 	u.Types[root.Key] = root
 
 	g := jsonschemagen.New(u)
@@ -528,7 +522,31 @@ func TestGenerate_NonNullableFieldNotWrapped(t *testing.T) {
 	prop, ok := s.Properties["regular"]
 	require.True(t, ok)
 
-	// Should NOT be wrapped in oneOf
+	// Pointer fields without omitempty should NOT be wrapped in oneOf
+	require.Nil(t, prop.Schema.OneOf)
+	require.Equal(t, "string", prop.Schema.Type)
+}
+
+func TestGenerate_ValueTypeFieldNotWrapped(t *testing.T) {
+	u := universe.New()
+
+	// Build a struct with a non-pointer field (value type)
+	valueField := &ast.Field{
+		Names: []*ast.Ident{{Name: "Regular"}},
+		Type:  &ast.Ident{Name: "string"},
+		Tag:   &ast.BasicLit{Value: "`json:\"regular\"`"},
+	}
+	st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{valueField}}}
+	root := mkTypeInfo("example.com/pkg", "WithValueType", nil, st)
+	u.Types[root.Key] = root
+
+	g := jsonschemagen.New(u)
+	s := g.GenerateJSONSchemaDraft202012(root)
+
+	prop, ok := s.Properties["regular"]
+	require.True(t, ok)
+
+	// Non-pointer fields should NOT be wrapped in oneOf
 	require.Nil(t, prop.Schema.OneOf)
 	require.Equal(t, "string", prop.Schema.Type)
 }

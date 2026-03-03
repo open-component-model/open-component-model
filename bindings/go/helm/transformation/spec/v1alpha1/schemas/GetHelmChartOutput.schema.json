@@ -11,8 +11,15 @@
       "description": "ChartFile is the file access specification for the downloaded helm chart"
     },
     "provFile": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.blob.filesystem.spec.access.v1alpha1.File",
-      "description": "ProvFile is the file access specification for the downloaded prov file, if it exists"
+      "description": "ProvFile is the file access specification for the downloaded prov file, if it exists",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.blob.filesystem.spec.access.v1alpha1.File"
+        }
+      ]
     },
     "resource": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Resource",
@@ -202,8 +209,15 @@
           "description": "Access defines the type of access this resource requires."
         },
         "digest": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Digest",
-          "description": "Digest is the optional digest of the referenced resource."
+          "description": "Digest is the optional digest of the referenced resource.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Digest"
+            }
+          ]
         },
         "extraIdentity": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",
