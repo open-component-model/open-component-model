@@ -788,7 +788,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 		require.NotContains(t, input, "credentials", "nil optional $ref should be deleted")
 	})
 
-	t.Run("keeps nil for non-ref field", func(t *testing.T) {
+	t.Run("strips nil for optional non-ref field", func(t *testing.T) {
 		resource := map[string]interface{}{
 			"input":    map[string]interface{}{"endpoint": "https://api.example.com"},
 			"target":   map[string]interface{}{"name": "my-target"},
@@ -805,8 +805,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 
 		require.NoError(t, result.Error)
 		require.True(t, result.Resolved)
-		require.Contains(t, resource, "replicas", "nil non-ref field should be kept")
-		require.Nil(t, resource["replicas"])
+		require.NotContains(t, resource, "replicas", "nil optional non-ref field should be deleted")
 	})
 
 	t.Run("preserves non-nil values for optional ref fields", func(t *testing.T) {

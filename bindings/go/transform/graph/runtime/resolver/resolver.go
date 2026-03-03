@@ -116,9 +116,9 @@ func (r *Resolver) resolveField(field variable.FieldDescriptor) ResolutionResult
 			result.Error = fmt.Errorf("no data provided for expression: %s", field.Expressions[0])
 			return result
 		}
-		// Remove nil values for optional pointer-to-struct fields instead of
-		// writing null, which would fail schema validation.
-		if resolvedValue == nil && r.isOptionalRefField(field.Path) {
+		// Remove nil values for optional fields instead of writing null,
+		// which would fail schema validation.
+		if resolvedValue == nil && r.isOptionalField(field.Path) {
 			err = r.deleteValueAtPath(field.Path)
 			if err != nil {
 				result.Error = fmt.Errorf("error deleting nil value: %w", err)
@@ -311,9 +311,9 @@ func updateParent(parent interface{}, key string, index int, value interface{}) 
 	}
 }
 
-// isOptionalRefField checks whether the field at the given path is a
-// non-required $ref property (i.e. an optional pointer-to-struct).
-func (r *Resolver) isOptionalRefField(path fieldpath.Path) bool {
+// isOptionalField checks whether the field at the given path is a
+// non-required property.
+func (r *Resolver) isOptionalField(path fieldpath.Path) bool {
 	if r.schema == nil || len(path) == 0 {
 		return false
 	}
@@ -330,7 +330,7 @@ func (r *Resolver) isOptionalRefField(path fieldpath.Path) bool {
 			return false
 		}
 		if i == len(path)-1 {
-			return !slices.Contains(current.Required, segment.Name) && propSchema.Ref != nil
+			return !slices.Contains(current.Required, segment.Name)
 		}
 		if propSchema.Ref != nil {
 			current = propSchema.Ref
