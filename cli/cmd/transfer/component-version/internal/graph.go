@@ -8,7 +8,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -34,11 +33,11 @@ func BuildGraphDefinition(
 
 	disc := &discoverer{
 		recursive:         o.Recursive,
-		discoveredDigests: make(map[string]descriptor.Digest),
+		discoveredDigests: make(map[string]descruntime.Digest),
 	}
 	res := &resolver{
 		repoResolver: repoResolver,
-		expectedDigest: func(id runtime.Identity) *descriptor.Digest {
+		expectedDigest: func(id runtime.Identity) *descruntime.Digest {
 			disc.mu.Lock()
 			defer disc.mu.Unlock()
 			if !disc.recursive {
@@ -94,7 +93,7 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 			descruntime.IdentityAttributeVersion: version,
 		})
 
-		v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), val.Descriptor)
+		v2desc, err := descruntime.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), val.Descriptor)
 		if err != nil {
 			return fmt.Errorf("cannot convert to v2: %w", err)
 		}
