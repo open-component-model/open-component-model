@@ -213,8 +213,15 @@
           "description": "Access defines the type of access this resource requires."
         },
         "digest": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Digest",
-          "description": "Digest is the optional digest of the referenced resource."
+          "description": "Digest is the optional digest of the referenced resource.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Digest"
+            }
+          ]
         },
         "extraIdentity": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",
