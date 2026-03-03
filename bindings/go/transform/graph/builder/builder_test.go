@@ -163,12 +163,12 @@ transformations:
 - id: add1
   type: MockAddObjectTransformer/v1alpha1
   spec:
-    object: 
+    object:
       name: "object"
 - id: add2
   type: MockAddObjectTransformer/v1alpha1
   spec:
-    object: 
+    object:
       name: "object2"
       version: ${add1.spec.object.?version}
 `,

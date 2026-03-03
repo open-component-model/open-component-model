@@ -352,3 +352,138 @@ configurations:
 		downloadAndVerifyResource(t, ctx, targetRef, componentName, componentVersion, cfgPath, chartFile, provFile)
 	})
 }
+
+func Test_Integration_Transfer_HelmChart_WithoutProvenance(t *testing.T) {
+	ctx := t.Context()
+	r := require.New(t)
+	t.Parallel()
+
+	// 1. Locate the test helm chart without provenance file
+	// The root testdata directory has mychart-0.1.0.tgz but no .prov file
+	root := getRepoRootBasedOnGit(t)
+	chartDir := filepath.Join(root, "bindings/go/helm/testdata")
+	chartFile := filepath.Join(chartDir, "mychart-0.1.0.tgz")
+	_, err := os.Stat(chartFile)
+	r.NoError(err, "test helm chart should exist")
+
+	srv := newHelmChartRepoServer(t, chartDir)
+	t.Logf("Helm chart repo server at %s", srv.URL)
+
+	// 2. Setup target OCI registry
+	targetRegistry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err, "should be able to start target registry container")
+
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRepository
+      hostname: %[1]q
+      port: %[2]q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[3]q
+        password: %[4]q
+`, targetRegistry.Host, targetRegistry.Port, targetRegistry.User, targetRegistry.Password)
+
+	tempdir := t.TempDir()
+	cfgPath := filepath.Join(tempdir, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
+	// Set up repository provider and credential resolver to verify transfers
+	repoProvider := provider.NewComponentVersionRepositoryProvider()
+	ocmconf, err := configuration.GetConfigFromPath(cfgPath)
+	r.NoError(err)
+	credconf, err := runtime.LookupCredentialConfig(ocmconf)
+	r.NoError(err)
+	credentialResolver, err := credentials.ToGraph(ctx, credconf, credentials.Options{
+		RepositoryPluginProvider: credentials.GetRepositoryPluginFn(func(ctx context.Context, typed ocmruntime.Typed) (credentials.RepositoryPlugin, error) {
+			return nil, fmt.Errorf("no repository plugin configured for type %s", typed.GetType().String())
+		}),
+		CredentialPluginProvider: credentials.GetCredentialPluginFn(func(ctx context.Context, typed ocmruntime.Typed) (credentials.CredentialPlugin, error) {
+			return nil, fmt.Errorf("no credential plugin configured for type %s", typed.GetType().String())
+		}),
+		CredentialRepositoryTypeScheme: ocmruntime.NewScheme(),
+	})
+	r.NoError(err)
+
+	// 3. Create a constructor that references the helm chart via access
+	componentName := "ocm.software/test-helm-noprov-component"
+	componentVersion := "v1.0.0"
+
+	constructorContent := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: mychart
+    version: 0.1.0
+    type: helmChart
+    access:
+      type: helm/v1
+      helmRepository: %s
+      helmChart: mychart-0.1.0.tgz
+`, componentName, componentVersion, srv.URL)
+
+	constructorPath := filepath.Join(tempdir, "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	sourceCTF := filepath.Join(tempdir, "source-ctf")
+
+	// 4. Create source CTF
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("ctf::%s", sourceCTF),
+		"--constructor", constructorPath,
+		"--skip-reference-digest-processing",
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "creation of component version should succeed")
+
+	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion)
+
+	t.Run("transfer helm chart without provenance to OCI registry", func(t *testing.T) {
+		r := require.New(t)
+		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "helm-noprov-transfer")
+
+		transferCMD := cmd.New()
+		transferCMD.SetArgs([]string{
+			"transfer",
+			"component-version",
+			sourceRef,
+			targetRef,
+			"--config", cfgPath,
+			"--copy-resources",
+		})
+
+		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+		defer cancel()
+
+		r.NoError(transferCMD.ExecuteContext(ctx), "transfer should succeed")
+
+		// Check if component exists in target registry
+		targetRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ociv1.Repository{BaseUrl: targetRef})
+		r.NoError(err, "should be able to create target repository")
+
+		desc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+		r.NoError(err, "should be able to retrieve transferred component")
+		r.Equal(componentName, desc.Component.Name)
+		r.Equal(componentVersion, desc.Component.Version)
+		r.Len(desc.Component.Resources, 1)
+		r.Equal("mychart", desc.Component.Resources[0].Name)
+
+		var ociAccess ociaccessv1.OCIImage
+		r.NoError(ociaccess.Scheme.Convert(desc.Component.Resources[0].Access, &ociAccess),
+			"resource access should be convertible to OCIImage")
+		r.NotEmpty(ociAccess.ImageReference, "image reference should not be empty")
+
+		// No provenance file — pass empty string for originalProvPath
+		downloadAndVerifyResource(t, ctx, targetRef, componentName, componentVersion, cfgPath, chartFile, "")
+	})
+}

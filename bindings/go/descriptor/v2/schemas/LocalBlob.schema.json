@@ -7,15 +7,8 @@
   "description": "LocalBlob describes the access for a local blob.",
   "properties": {
     "globalAccess": {
-      "description": "GlobalAccess is an optional field describing a possibility\nfor a global access. If given, it MUST describe a global access method.",
-      "oneOf": [
-        {
-          "type": "null"
-        },
-        {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw"
-        }
-      ]
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",
+      "description": "GlobalAccess is an optional field describing a possibility\nfor a global access. If given, it MUST describe a global access method."
     },
     "localReference": {
       "type": "string",
