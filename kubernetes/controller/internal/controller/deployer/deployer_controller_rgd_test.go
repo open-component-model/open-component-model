@@ -253,11 +253,11 @@ spec:
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(rgdObj), rgdObjApplied)).To(Succeed())
 			Expect(rgdObjApplied.Object["spec"]).To(Equal(rgdObj.Object["spec"]))
 
-			By("deleting the deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
-
 			By("mocking the GC")
 			test.DeleteObject(ctx, k8sClient, rgdObj)
+
+			By("deleting the deployer")
+			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
 
 		It("does not reconcile a deployer with an invalid RGD", func(ctx SpecContext) {
@@ -482,11 +482,11 @@ spec:
 				g.Expect(rgdObjUpdated.Object["spec"]).To(Equal(rgdObjApplied.Object["spec"]))
 			}, "15s").WithContext(ctx).Should(Succeed())
 
-			By("deleting the deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
-
 			By("mocking the GC")
 			test.DeleteObject(ctx, k8sClient, rgdObj)
+
+			By("deleting the deployer")
+			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
 
 		It("fails when the resource is updated with an invalid change", func(ctx SpecContext) {

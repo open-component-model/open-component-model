@@ -222,6 +222,10 @@ stringData:
 			// stringData is converted by API server into data (base64); compare the decoded value.
 			Expect(string(gotSec.Data["password"])).To(Equal("s3cr3t"))
 
+			By("cleaning up applied resources")
+			test.DeleteObject(ctx, k8sClient, gotCM)
+			test.DeleteObject(ctx, k8sClient, gotSec)
+
 			By("deleting the Deployer")
 			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
@@ -438,6 +442,9 @@ data:
 				)),
 			)
 
+			By("cleaning up applied resources")
+			test.DeleteObject(ctx, k8sClient, gotCM)
+
 			By("deleting the Deployer")
 			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
@@ -550,6 +557,12 @@ consumers:
 					},
 				)),
 			)
+
+			By("cleaning up applied resources")
+			_ = k8sClient.Delete(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+				Name:      "deployed-cm",
+				Namespace: namespace.GetName(),
+			}})
 
 			By("deleting the Deployer")
 			_ = k8sClient.Delete(ctx, deployerSecret)
