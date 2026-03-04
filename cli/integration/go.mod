@@ -27,6 +27,8 @@ require (
 	oras.land/oras-go/v2 v2.6.0
 )
 
+replace ocm.software/open-component-model/bindings/go/helm => ../../bindings/go/helm
+
 require (
 	cel.dev/expr v0.25.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect

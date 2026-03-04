@@ -12,7 +12,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
 type localBlobProcessor struct{}
@@ -46,7 +45,7 @@ func (p *localBlobProcessor) ShouldUploadAsOCIArtifact(ctx context.Context, reso
 	return false, nil
 }
 
-func (p *localBlobProcessor) Process(ctx context.Context, resource descriptorv2.Resource, id string, ref *compref.Ref, val *discoveryValue,tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+func (p *localBlobProcessor) Process(ctx context.Context, resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 	sourceRepo := val.SourceRepository

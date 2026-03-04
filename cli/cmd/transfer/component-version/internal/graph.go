@@ -136,10 +136,10 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 				}
 			}
 			if proc, ok := lookupProcessor(access); !ok {
-				slog.Warn("Unsupported resource access type...", "component", ref.Component, "version", ref.Version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
+				slog.Warn("Unsupported resource access type...", "component", val.Descriptor.Component.Name, "version", val.Descriptor.Component.Version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 				continue
 			} else {
-				if err := proc.Process(ctx, resource, id, ref, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact); err != nil {
+				if err := proc.Process(ctx, resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact); err != nil {
 					return fmt.Errorf("failed processing resource with access type %q: %w", resource.Access.Type.String(), err)
 				}
 			}

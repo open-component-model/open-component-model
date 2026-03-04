@@ -8,12 +8,11 @@ import (
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
 // processor is implemented by types that can process a resource of a specific access type and add the necessary transformations to the graph definition.
 type processor interface {
-	Process(ctx context.Context, resource descriptorv2.Resource, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error
+	Process(ctx context.Context, resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error
 }
 
 // ociUploadSupported is implemented by processors that support optionally uploading the resource as an OCI artifact.
