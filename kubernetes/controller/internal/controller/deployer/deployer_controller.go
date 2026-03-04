@@ -8,6 +8,7 @@ import (
 	"io"
 	"runtime"
 	"slices"
+	"time"
 
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/go-logr/logr"
@@ -209,7 +210,10 @@ func (r *Reconciler) setupDynamicResourceWatcherWithManager(mgr ctrl.Manager) (*
 
 // Untrack removes the deployer from the tracked objects and stops the resource watch if it is still running.
 // It also removes the finalizer from the deployer if there are no more tracked objects.
-func (r *Reconciler) Untrack(ctx context.Context, deployer *deliveryv1alpha1.Deployer) error {
+// Untrack sends stop events for all active resource watches on the deployer.
+// Returns true if all watches are already stopped, false if stop events were
+// sent and another reconcile is needed to verify completion.
+func (r *Reconciler) Untrack(ctx context.Context, deployer *deliveryv1alpha1.Deployer) (bool, error) {
 	logger := log.FromContext(ctx)
 	var atLeastOneResourceNeededStopWatch bool
 	for _, obj := range r.resourceWatches(deployer) {
@@ -221,26 +225,29 @@ func (r *Reconciler) Untrack(ctx context.Context, deployer *deliveryv1alpha1.Dep
 				Child:  obj,
 			}:
 			case <-ctx.Done():
-				return fmt.Errorf("context canceled while unregistering resource watch for deployer %s: %w", deployer.Name, ctx.Err())
+				return false, fmt.Errorf("context canceled while unregistering resource watch for deployer %s: %w", deployer.Name, ctx.Err())
 			}
 			atLeastOneResourceNeededStopWatch = true
 		}
 	}
 	if atLeastOneResourceNeededStopWatch {
-		return fmt.Errorf("waiting for at least one resource watch to be removed")
+		return false, nil
 	}
 
-	return nil
+	return true, nil
 }
 
-func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1alpha1.Deployer) error {
+// pruneWithApplySet prunes all resources managed by the deployer's ApplySet.
+// Returns true if pruning is complete (nothing left to prune), false if resources
+// are still being pruned and another reconcile is needed.
+func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1alpha1.Deployer) (bool, error) {
 	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
 
 	set := r.createApplySet(deployer, logger)
 
 	metadata, err := set.Project(nil)
 	if err != nil {
-		return fmt.Errorf("failed to project ApplySet: %w", err)
+		return false, fmt.Errorf("failed to project ApplySet: %w", err)
 	}
 
 	logger.Info("pruning ApplySet", "scope", metadata.PruneScope())
@@ -250,21 +257,17 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 		Concurrency: runtime.NumCPU(),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to prune ApplySet: %w", err)
+		return false, fmt.Errorf("failed to prune ApplySet: %w", err)
 	}
 
-	// Log results
 	logger.Info("ApplySet prune operation complete", "pruned", len(result.Pruned))
 
-	// Prune calls delete on every resource found, even if its already being deleted.
-	// If we were to remove this check, the deployer might be deleted while a child is stuck in terminating state.
 	if result.HasPruned() {
 		logger.Info("resources still being pruned, waiting for them to be fully removed")
-		return fmt.Errorf("waiting for all resources to be pruned")
+		return false, nil
 	}
 
-	// nothing more to prune, remove finalizer
-	return nil
+	return true, nil
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, err error) {
@@ -364,26 +367,38 @@ func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *d
 
 		if hasPruneSetFinalizer {
 			logger.Info("pruning ApplySet before removing finalizer")
-			if err := r.pruneWithApplySet(ctx, deployer); err != nil {
+			done, err := r.pruneWithApplySet(ctx, deployer)
+			if err != nil {
 				logger.Error(err, "waiting for ApplySet to be pruned before removing finalizer")
 				errs = append(errs, err)
-			} else {
-				logger.Info("successfully pruned ApplySet for deployer")
-				controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
+			} else if !done {
+				return ctrl.Result{RequeueAfter: time.Second}, nil, true
 			}
+			logger.Info("successfully pruned ApplySet for deployer")
+			controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
 		} else if controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
 			logger.Info("untracking resources before removing finalizer")
-			if err := r.Untrack(ctx, deployer); err != nil {
+			done, err := r.Untrack(ctx, deployer)
+			if err != nil {
 				logger.Error(err, "waiting for tracked resources to be unregistered before pruning")
 				errs = append(errs, err)
-			} else {
-				logger.Info("successfully unregistered all resource watches for deployer")
-				controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
+			} else if !done {
+				return ctrl.Result{RequeueAfter: time.Second}, nil, true
 			}
+			logger.Info("successfully unregistered all resource watches for deployer")
+			controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
 		}
 
 		if len(errs) > 0 {
 			return ctrl.Result{}, fmt.Errorf("failed to cleanup deployer before deletion: %w", errors.Join(errs...)), true
+		}
+
+		// Requeue if there are still finalizers to process. Metadata-only changes
+		// (like finalizer removal) do not trigger the GenerationChangedPredicate,
+		// so an explicit requeue is needed.
+		if controllerutil.ContainsFinalizer(deployer, applySetPruneFinalizer) ||
+			controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
+			return ctrl.Result{Requeue: true}, nil, true
 		}
 
 		logger.Info("successfully cleaned up deployer before deletion")
