@@ -61,7 +61,7 @@ export function computeVersion(ref, tagPrefix, options = {}) {
  */
 function sanitizePrereleaseIdentifier(value) {
     return value
-        .toLocaleLowerCase()
+        .toLowerCase()
         .replace(/[^0-9a-z.-]/g, "-")
         .replace(/-+/g, "-")
         .replace(/^-|-$/g, "");
@@ -84,7 +84,7 @@ function toUtcCompactTimestamp(date) {
  * @returns {string}
  */
 function normalizeSha(sha) {
-    return sha.toLocaleLowerCase().replace(/[^0-9a-f]/g, "").slice(0, 12);
+    return sha.toLowerCase().replace(/[^0-9a-f]/g, "").slice(0, 12);
 }
 
 /**

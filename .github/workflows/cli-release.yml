@@ -495,7 +495,7 @@ jobs:
   # --------------------------------------------------------
   publish_final_component:
     name: Publish Final OCM Component
-    needs: [prepare, build, prepare_final_constructor]
+    needs: [prepare, build, prepare_final_constructor, release_final]
     permissions:
       actions: read
       packages: write
