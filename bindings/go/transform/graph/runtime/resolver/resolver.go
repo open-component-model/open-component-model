@@ -39,6 +39,7 @@ type ResolutionResult struct {
 type ResolutionSummary struct {
 	TotalExpressions    int
 	ResolvedExpressions int
+	DeletedExpressions  int
 	Results             []ResolutionResult
 	Errors              []error
 }
@@ -79,6 +80,9 @@ func (r *Resolver) Resolve(expressions []variable.FieldDescriptor) ResolutionSum
 		summary.Results = append(summary.Results, result)
 		if result.Resolved {
 			summary.ResolvedExpressions++
+		}
+		if result.Deleted {
+			summary.DeletedExpressions++
 		}
 		if result.Error != nil {
 			summary.Errors = append(summary.Errors, result.Error)
@@ -332,15 +336,20 @@ func (r *Resolver) isOptionalField(path fieldpath.Path) bool {
 		if propSchema == nil {
 			return false
 		}
+
+		// last segment
 		if i == len(path)-1 {
 			return !isRequired(current, segment.Name, dataMap)
 		}
+
 		if propSchema.Ref != nil {
+			// if we have a ref, we need to resolve it before continuing to the next segment
 			current = propSchema.Ref
 		} else {
 			current = propSchema
 		}
 		if dataMap != nil {
+			// get the nested data for the given segment to iterate over it next run
 			currentData = dataMap[segment.Name]
 		} else {
 			currentData = nil
