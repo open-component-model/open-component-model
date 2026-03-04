@@ -5,8 +5,6 @@ on:
     branches:
       - main
       - 'releases/v**'
-    tags:
-      - 'kubernetes/controller/v**'
     paths:
       - kubernetes/controller/**/*
       - .github/workflows/kubernetes-controller.yml
