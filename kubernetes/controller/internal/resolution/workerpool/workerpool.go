@@ -417,6 +417,9 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 	}
 
 	logger.Info("verifying signature", "component", opts.Component, "version", opts.Version)
+	if opts.SigningRegistry == nil {
+		return nil, fmt.Errorf("signing registry is required when verifications are configured")
+	}
 
 	for _, verification := range opts.Verifications {
 		var descSig *descriptor.Signature
