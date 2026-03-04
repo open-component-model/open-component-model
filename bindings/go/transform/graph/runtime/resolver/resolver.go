@@ -29,6 +29,7 @@ import (
 type ResolutionResult struct {
 	Path     fieldpath.Path
 	Resolved bool
+	Deleted  bool
 	Original string
 	Replaced interface{}
 	Error    error
@@ -125,6 +126,7 @@ func (r *Resolver) resolveField(field variable.FieldDescriptor) ResolutionResult
 				return result
 			}
 			result.Resolved = true
+			result.Deleted = true
 			result.Replaced = nil
 			return result
 		}
@@ -312,56 +314,132 @@ func updateParent(parent interface{}, key string, index int, value interface{}) 
 }
 
 // isOptionalField checks whether the field at the given path is a
-// non-required property.
+// non-required property. The schema must be the spec sub-schema so that
+// paths match schema properties directly. The resource data is walked in
+// parallel to enable best-match selection for AnyOf/OneOf branches.
 func (r *Resolver) isOptionalField(path fieldpath.Path) bool {
 	if r.schema == nil || len(path) == 0 {
 		return false
 	}
-	current := r.resolveSchemaRoot(path[0].Name)
-	if current == nil {
-		return false
-	}
+	current := r.schema
+	currentData := interface{}(r.resource)
 	for i, segment := range path {
-		if segment.Index != nil || current == nil || current.Properties == nil {
+		if segment.Index != nil || current == nil {
 			return false
 		}
-		propSchema := current.Properties[segment.Name]
+		dataMap, _ := currentData.(map[string]interface{})
+		propSchema := schemaProperty(current, segment.Name, dataMap)
 		if propSchema == nil {
 			return false
 		}
 		if i == len(path)-1 {
-			return !slices.Contains(current.Required, segment.Name)
+			return !isRequired(current, segment.Name, dataMap)
 		}
 		if propSchema.Ref != nil {
 			current = propSchema.Ref
 		} else {
 			current = propSchema
 		}
+		if dataMap != nil {
+			currentData = dataMap[segment.Name]
+		} else {
+			currentData = nil
+		}
 	}
 	return false
 }
 
-// resolveSchemaRoot finds the schema whose properties contain the given name,
-// searching through sub-schemas (following $refs) if needed.
-func (r *Resolver) resolveSchemaRoot(name string) *jsonschema.Schema {
-	if r.schema.Properties == nil {
-		return nil
-	}
-	if _, ok := r.schema.Properties[name]; ok {
-		return r.schema
-	}
-	for _, propSchema := range r.schema.Properties {
-		resolved := propSchema
-		if resolved != nil && resolved.Ref != nil {
-			resolved = resolved.Ref
+// schemaProperty looks up a property by name in the schema's Properties map
+// and in AllOf/AnyOf/OneOf sub-schemas. For AnyOf/OneOf the best matching
+// branch is selected based on the resource data.
+func schemaProperty(s *jsonschema.Schema, name string, dataMap map[string]interface{}) *jsonschema.Schema {
+	if s.Properties != nil {
+		if p, ok := s.Properties[name]; ok {
+			return p
 		}
-		if resolved != nil && resolved.Properties != nil {
-			if _, ok := resolved.Properties[name]; ok {
-				return resolved
+	}
+	// AllOf: all branches apply, return the first match.
+	for _, sub := range s.AllOf {
+		if sub != nil && sub.Properties != nil {
+			if p, ok := sub.Properties[name]; ok {
+				return p
+			}
+		}
+	}
+	// AnyOf/OneOf: pick the best matching branch, then look up the property.
+	for _, branches := range [][]*jsonschema.Schema{s.AnyOf, s.OneOf} {
+		if best := bestMatchingBranch(branches, dataMap); best != nil {
+			if best.Properties != nil {
+				if p, ok := best.Properties[name]; ok {
+					return p
+				}
 			}
 		}
 	}
 	return nil
+}
+
+// isRequired checks whether the field is listed in Required on the schema
+// itself or in any composite sub-schemas. AllOf branches are all checked
+// (any branch requiring the field makes it required). For AnyOf/OneOf, the
+// best matching branch based on the resource data is used.
+func isRequired(s *jsonschema.Schema, name string, dataMap map[string]interface{}) bool {
+	if slices.Contains(s.Required, name) {
+		return true
+	}
+	// AllOf: all branches must be satisfied; if any requires it, it's required.
+	for _, sub := range s.AllOf {
+		if sub != nil && slices.Contains(sub.Required, name) {
+			return true
+		}
+	}
+	// AnyOf/OneOf: pick the best matching branch and use its requirements.
+	for _, branches := range [][]*jsonschema.Schema{s.AnyOf, s.OneOf} {
+		if best := bestMatchingBranch(branches, dataMap); best != nil {
+			if slices.Contains(best.Required, name) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// bestMatchingBranch selects the AnyOf/OneOf branch whose properties and
+// required fields best overlap with the keys present in the resource data.
+// Returns nil if no branches are provided or data is unavailable.
+func bestMatchingBranch(branches []*jsonschema.Schema, dataMap map[string]interface{}) *jsonschema.Schema {
+	if len(branches) == 0 {
+		return nil
+	}
+	var best *jsonschema.Schema
+	bestScore := -1
+	for _, branch := range branches {
+		if branch == nil {
+			continue
+		}
+		score := 0
+		if branch.Properties != nil {
+			for key := range branch.Properties {
+				if dataMap != nil {
+					if _, ok := dataMap[key]; ok {
+						score++
+					}
+				}
+			}
+		}
+		for _, req := range branch.Required {
+			if dataMap != nil {
+				if _, ok := dataMap[req]; ok {
+					score++
+				}
+			}
+		}
+		if score > bestScore {
+			bestScore = score
+			best = branch
+		}
+	}
+	return best
 }
 
 // deleteValueAtPath removes the key at the final path segment from the resource.

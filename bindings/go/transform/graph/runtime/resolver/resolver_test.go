@@ -626,14 +626,15 @@ func TestResolveField_NilOptionalPointer_NilSchema(t *testing.T) {
 
 	require.NoError(t, result.Error)
 	require.True(t, result.Resolved)
+	require.False(t, result.Deleted, "Deleted should be false when no schema is present")
 	require.Contains(t, resource, "field", "nil value without schema should be kept")
 	require.Nil(t, resource["field"])
 }
 
-func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) {
-	// Simulates a full transformation schema where the top-level properties use
-	// custom names (not "spec"/"output"). The resolver dynamically finds the
-	// sub-schema that matches the resource keys.
+func TestResolveField_NilOptionalPointer_SpecSchema(t *testing.T) {
+	// The resolver now receives the spec sub-schema directly (not the full
+	// transformation schema). Paths in FieldDescriptors are relative to spec,
+	// matching the schema properties exactly.
 	refTarget := &jsonschema.Schema{}
 	refSchema := &jsonschema.Schema{Ref: refTarget}
 	stringSchema := &jsonschema.Schema{}
@@ -662,8 +663,8 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 		Required: []string{"name"},
 	}
 
-	// The "config" sub-schema (what the resolver's resource maps to).
-	configSchema := &jsonschema.Schema{
+	// The spec sub-schema (what the resolver's resource maps to directly).
+	specSchema := &jsonschema.Schema{
 		Properties: map[string]*jsonschema.Schema{
 			"input":       {Ref: inputSchema},
 			"target":      targetObjSchema,
@@ -671,17 +672,6 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 			"replicas":    numberSchema,
 		},
 		Required: []string{"input", "target"},
-	}
-
-	// Full transformation schema with non-standard property names.
-	fullSchema := &jsonschema.Schema{
-		Properties: map[string]*jsonschema.Schema{
-			"kind":   stringSchema,
-			"id":     stringSchema,
-			"config": {Ref: configSchema},
-			"result": {Ref: &jsonschema.Schema{}},
-		},
-		Required: []string{"kind", "id", "config"},
 	}
 
 	t.Run("strips nil optional ref at depth 1", func(t *testing.T) {
@@ -695,7 +685,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 		}
 		data := map[string]interface{}{"optExpr": nil}
 
-		r := NewResolver(resource, data, fullSchema)
+		r := NewResolver(resource, data, specSchema)
 		result := r.resolveField(variable.FieldDescriptor{
 			Path:                 fieldpath.MustParse("input.optional"),
 			Expressions:          []variable.Expression{{Value: "optExpr"}},
@@ -704,6 +694,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 
 		require.NoError(t, result.Error)
 		require.True(t, result.Resolved)
+		require.True(t, result.Deleted, "Deleted should be true when nil optional field is removed")
 		input := resource["input"].(map[string]interface{})
 		require.NotContains(t, input, "optional", "nil optional $ref should be deleted")
 		require.Equal(t, "https://api.example.com", input["endpoint"])
@@ -716,7 +707,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 		}
 		data := map[string]interface{}{"targetExpr": nil}
 
-		r := NewResolver(resource, data, fullSchema)
+		r := NewResolver(resource, data, specSchema)
 		result := r.resolveField(variable.FieldDescriptor{
 			Path:                 fieldpath.MustParse("target"),
 			Expressions:          []variable.Expression{{Value: "targetExpr"}},
@@ -725,6 +716,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 
 		require.NoError(t, result.Error)
 		require.True(t, result.Resolved)
+		require.False(t, result.Deleted, "Deleted should be false when nil required field is kept")
 		require.Contains(t, resource, "target", "nil required $ref should be kept")
 		require.Nil(t, resource["target"])
 	})
@@ -740,7 +732,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 		}
 		data := map[string]interface{}{"tagsExpr": nil}
 
-		r := NewResolver(resource, data, fullSchema)
+		r := NewResolver(resource, data, specSchema)
 		result := r.resolveField(variable.FieldDescriptor{
 			Path:                 fieldpath.MustParse("annotations.tags"),
 			Expressions:          []variable.Expression{{Value: "tagsExpr"}},
@@ -749,6 +741,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 
 		require.NoError(t, result.Error)
 		require.True(t, result.Resolved)
+		require.True(t, result.Deleted)
 		ann := resource["annotations"].(map[string]interface{})
 		require.NotContains(t, ann, "tags", "nil optional $ref at depth 2 should be deleted")
 		require.Equal(t, "my-annotation", ann["name"])
@@ -764,7 +757,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 		}
 		data := map[string]interface{}{"endpointExpr": nil, "credExpr": nil}
 
-		r := NewResolver(resource, data, fullSchema)
+		r := NewResolver(resource, data, specSchema)
 
 		endpointResult := r.resolveField(variable.FieldDescriptor{
 			Path:                 fieldpath.MustParse("input.endpoint"),
@@ -773,6 +766,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 		})
 		require.NoError(t, endpointResult.Error)
 		require.True(t, endpointResult.Resolved)
+		require.False(t, endpointResult.Deleted)
 
 		credResult := r.resolveField(variable.FieldDescriptor{
 			Path:                 fieldpath.MustParse("input.credentials"),
@@ -781,6 +775,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 		})
 		require.NoError(t, credResult.Error)
 		require.True(t, credResult.Resolved)
+		require.True(t, credResult.Deleted)
 
 		input := resource["input"].(map[string]interface{})
 		require.Contains(t, input, "endpoint", "nil required string should be kept")
@@ -796,7 +791,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 		}
 		data := map[string]interface{}{"replicasExpr": nil}
 
-		r := NewResolver(resource, data, fullSchema)
+		r := NewResolver(resource, data, specSchema)
 		result := r.resolveField(variable.FieldDescriptor{
 			Path:                 fieldpath.MustParse("replicas"),
 			Expressions:          []variable.Expression{{Value: "replicasExpr"}},
@@ -805,6 +800,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 
 		require.NoError(t, result.Error)
 		require.True(t, result.Resolved)
+		require.True(t, result.Deleted)
 		require.NotContains(t, resource, "replicas", "nil optional non-ref field should be deleted")
 	})
 
@@ -821,7 +817,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 		}
 		data := map[string]interface{}{"optExpr": optionalData, "credExpr": credData}
 
-		r := NewResolver(resource, data, fullSchema)
+		r := NewResolver(resource, data, specSchema)
 
 		optResult := r.resolveField(variable.FieldDescriptor{
 			Path:                 fieldpath.MustParse("input.optional"),
@@ -830,6 +826,7 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 		})
 		require.NoError(t, optResult.Error)
 		require.True(t, optResult.Resolved)
+		require.False(t, optResult.Deleted)
 
 		credResult := r.resolveField(variable.FieldDescriptor{
 			Path:                 fieldpath.MustParse("input.credentials"),
@@ -838,11 +835,305 @@ func TestResolveField_NilOptionalPointer_FullTransformationSchema(t *testing.T) 
 		})
 		require.NoError(t, credResult.Error)
 		require.True(t, credResult.Resolved)
+		require.False(t, credResult.Deleted)
 
 		input := resource["input"].(map[string]interface{})
 		require.Equal(t, optionalData, input["optional"])
 		require.Equal(t, credData, input["credentials"])
 	})
+}
+
+func TestIsOptionalField_AllOf(t *testing.T) {
+	stringSchema := &jsonschema.Schema{}
+
+	// Schema using AllOf to compose properties and required fields.
+	// allOf[0] defines {name: required, description: optional}
+	// allOf[1] defines {version: required}
+	schema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"name":        stringSchema,
+			"description": stringSchema,
+			"version":     stringSchema,
+			"tags":        stringSchema,
+		},
+		AllOf: []*jsonschema.Schema{
+			{
+				Required: []string{"name"},
+			},
+			{
+				Required: []string{"version"},
+			},
+		},
+	}
+
+	r := NewResolver(nil, nil, schema)
+
+	assert.False(t, r.isOptionalField(fieldpath.MustParse("name")),
+		"name is required via AllOf[0]")
+	assert.False(t, r.isOptionalField(fieldpath.MustParse("version")),
+		"version is required via AllOf[1]")
+	assert.True(t, r.isOptionalField(fieldpath.MustParse("description")),
+		"description is not required anywhere")
+	assert.True(t, r.isOptionalField(fieldpath.MustParse("tags")),
+		"tags is not required anywhere")
+}
+
+func TestIsOptionalField_AnyOf(t *testing.T) {
+	stringSchema := &jsonschema.Schema{}
+
+	// AnyOf with two branches:
+	// branch 0: requires host+port (TCP config)
+	// branch 1: requires path (Unix socket)
+	// The best matching branch is selected based on resource data.
+	schema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"host":    stringSchema,
+			"port":    stringSchema,
+			"path":    stringSchema,
+			"timeout": stringSchema,
+		},
+		AnyOf: []*jsonschema.Schema{
+			{
+				Required: []string{"host", "port"},
+			},
+			{
+				Required: []string{"path"},
+			},
+		},
+	}
+
+	t.Run("matches TCP branch when host and port present", func(t *testing.T) {
+		resource := map[string]interface{}{
+			"host":    "localhost",
+			"port":    "8080",
+			"timeout": "${expr}",
+		}
+		r := NewResolver(resource, nil, schema)
+
+		assert.False(t, r.isOptionalField(fieldpath.MustParse("host")),
+			"host is required in matched TCP branch")
+		assert.False(t, r.isOptionalField(fieldpath.MustParse("port")),
+			"port is required in matched TCP branch")
+		assert.True(t, r.isOptionalField(fieldpath.MustParse("timeout")),
+			"timeout is not required in any branch")
+	})
+
+	t.Run("matches Unix socket branch when path present", func(t *testing.T) {
+		resource := map[string]interface{}{
+			"path":    "/var/run/socket",
+			"timeout": "${expr}",
+		}
+		r := NewResolver(resource, nil, schema)
+
+		assert.False(t, r.isOptionalField(fieldpath.MustParse("path")),
+			"path is required in matched Unix socket branch")
+		assert.True(t, r.isOptionalField(fieldpath.MustParse("timeout")),
+			"timeout is not required in any branch")
+	})
+}
+
+func TestIsOptionalField_AnyOf_Overlapping(t *testing.T) {
+	stringSchema := &jsonschema.Schema{}
+	numberSchema := &jsonschema.Schema{}
+
+	// AnyOf with overlapping branches that share "host":
+	// branch 0: HTTP — requires host+port, optional "headers"
+	// branch 1: gRPC — requires host+service, optional "metadata"
+	// Both branches require "host", so it's always required regardless of match.
+	// The differing fields (port vs service) disambiguate the branches.
+	schema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"host":     stringSchema,
+			"port":     numberSchema,
+			"headers":  stringSchema,
+			"service":  stringSchema,
+			"metadata": stringSchema,
+			"timeout":  numberSchema,
+		},
+		AnyOf: []*jsonschema.Schema{
+			{
+				Properties: map[string]*jsonschema.Schema{
+					"host":    stringSchema,
+					"port":    numberSchema,
+					"headers": stringSchema,
+				},
+				Required: []string{"host", "port"},
+			},
+			{
+				Properties: map[string]*jsonschema.Schema{
+					"host":     stringSchema,
+					"service":  stringSchema,
+					"metadata": stringSchema,
+				},
+				Required: []string{"host", "service"},
+			},
+		},
+	}
+
+	t.Run("matches HTTP branch when port present", func(t *testing.T) {
+		resource := map[string]interface{}{
+			"host":    "localhost",
+			"port":    8080,
+			"headers": "${headersExpr}",
+		}
+		r := NewResolver(resource, nil, schema)
+
+		assert.False(t, r.isOptionalField(fieldpath.MustParse("host")),
+			"host is required in both branches")
+		assert.False(t, r.isOptionalField(fieldpath.MustParse("port")),
+			"port is required in matched HTTP branch")
+		assert.True(t, r.isOptionalField(fieldpath.MustParse("headers")),
+			"headers is optional in matched HTTP branch")
+		assert.True(t, r.isOptionalField(fieldpath.MustParse("timeout")),
+			"timeout is not required in any branch")
+	})
+
+	t.Run("matches gRPC branch when service present", func(t *testing.T) {
+		resource := map[string]interface{}{
+			"host":     "localhost",
+			"service":  "my.Service",
+			"metadata": "${metaExpr}",
+		}
+		r := NewResolver(resource, nil, schema)
+
+		assert.False(t, r.isOptionalField(fieldpath.MustParse("host")),
+			"host is required in both branches")
+		assert.False(t, r.isOptionalField(fieldpath.MustParse("service")),
+			"service is required in matched gRPC branch")
+		assert.True(t, r.isOptionalField(fieldpath.MustParse("metadata")),
+			"metadata is optional in matched gRPC branch")
+		assert.True(t, r.isOptionalField(fieldpath.MustParse("timeout")),
+			"timeout is not required in any branch")
+	})
+}
+
+func TestIsOptionalField_OneOf(t *testing.T) {
+	stringSchema := &jsonschema.Schema{}
+	numberSchema := &jsonschema.Schema{}
+
+	// OneOf with two mutually exclusive branches:
+	// branch 0: inline config with "data" (required) and "format" (optional)
+	// branch 1: reference config with "ref" (required) and "version" (optional)
+	schema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"data":    stringSchema,
+			"format":  stringSchema,
+			"ref":     stringSchema,
+			"version": numberSchema,
+			"name":    stringSchema,
+		},
+		Required: []string{"name"},
+		OneOf: []*jsonschema.Schema{
+			{
+				Properties: map[string]*jsonschema.Schema{
+					"data":   stringSchema,
+					"format": stringSchema,
+				},
+				Required: []string{"data"},
+			},
+			{
+				Properties: map[string]*jsonschema.Schema{
+					"ref":     stringSchema,
+					"version": numberSchema,
+				},
+				Required: []string{"ref"},
+			},
+		},
+	}
+
+	t.Run("matches inline branch when data present", func(t *testing.T) {
+		resource := map[string]interface{}{
+			"name":   "my-config",
+			"data":   "inline-content",
+			"format": "${formatExpr}",
+		}
+		r := NewResolver(resource, nil, schema)
+
+		assert.False(t, r.isOptionalField(fieldpath.MustParse("name")),
+			"name is required at top level")
+		assert.False(t, r.isOptionalField(fieldpath.MustParse("data")),
+			"data is required in matched inline branch")
+		assert.True(t, r.isOptionalField(fieldpath.MustParse("format")),
+			"format is optional in matched inline branch")
+	})
+
+	t.Run("matches reference branch when ref present", func(t *testing.T) {
+		resource := map[string]interface{}{
+			"name":    "my-config",
+			"ref":     "some-ref",
+			"version": "${versionExpr}",
+		}
+		r := NewResolver(resource, nil, schema)
+
+		assert.False(t, r.isOptionalField(fieldpath.MustParse("name")),
+			"name is required at top level")
+		assert.False(t, r.isOptionalField(fieldpath.MustParse("ref")),
+			"ref is required in matched reference branch")
+		assert.True(t, r.isOptionalField(fieldpath.MustParse("version")),
+			"version is optional in matched reference branch")
+	})
+}
+
+func TestIsOptionalField_AllOfWithProperties(t *testing.T) {
+	stringSchema := &jsonschema.Schema{}
+
+	// AllOf sub-schemas can also define properties (not just required).
+	// The field should be found even if only defined in an AllOf branch.
+	allOfBranch := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"extraField": stringSchema,
+		},
+		Required: []string{},
+	}
+
+	schema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"name": stringSchema,
+		},
+		Required: []string{"name"},
+		AllOf:    []*jsonschema.Schema{allOfBranch},
+	}
+
+	r := NewResolver(nil, nil, schema)
+
+	assert.True(t, r.isOptionalField(fieldpath.MustParse("extraField")),
+		"extraField defined in AllOf branch should be found and optional")
+	assert.False(t, r.isOptionalField(fieldpath.MustParse("name")),
+		"name is required in the parent schema")
+}
+
+func TestIsOptionalField_NestedAllOf(t *testing.T) {
+	stringSchema := &jsonschema.Schema{}
+
+	// Nested object where the inner schema uses AllOf with multiple branches
+	// to define required fields. Each branch contributes its own requirements.
+	innerSchema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"host":    stringSchema,
+			"port":    stringSchema,
+			"timeout": stringSchema,
+		},
+		AllOf: []*jsonschema.Schema{
+			{Required: []string{"host"}},
+			{Required: []string{"port"}},
+		},
+	}
+
+	schema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"connection": {Ref: innerSchema},
+		},
+		Required: []string{"connection"},
+	}
+
+	r := NewResolver(nil, nil, schema)
+
+	assert.False(t, r.isOptionalField(fieldpath.MustParse("connection.host")),
+		"host is required via inner AllOf")
+	assert.False(t, r.isOptionalField(fieldpath.MustParse("connection.port")),
+		"port is required via inner AllOf")
+	assert.True(t, r.isOptionalField(fieldpath.MustParse("connection.timeout")),
+		"timeout is not required")
 }
 
 func TestResolveDynamicArrayIndexes(t *testing.T) {

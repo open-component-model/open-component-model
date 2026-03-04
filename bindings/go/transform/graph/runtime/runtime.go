@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/cel-go/cel"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -102,7 +103,7 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 			b.EvaluatedExpressionCache[expression.String()] = val
 		}
 	}
-	res := resolver.NewResolver(transformation.Spec.Data, b.EvaluatedExpressionCache, transformation.Schema)
+	res := resolver.NewResolver(transformation.Spec.Data, b.EvaluatedExpressionCache, specSubSchema(transformation.Schema))
 	summary := res.Resolve(transformation.FieldDescriptors)
 	if len(summary.Errors) > 0 {
 		return fmt.Errorf("failed to resolve transformation %q: %w", transformation.ID, errors.Join(summary.Errors...))
@@ -153,4 +154,22 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 
 	b.EvaluatedTransformations[transformation.ID] = evaluatedTransformation
 	return nil
+}
+
+// specSubSchema extracts the "spec" sub-schema from a full transformation
+// schema. The resolver works with Spec.Data (the contents of the spec field),
+// so the schema passed to it must match that level. Returns nil if the spec
+// property is not found.
+func specSubSchema(schema *jsonschema.Schema) *jsonschema.Schema {
+	if schema == nil || schema.Properties == nil {
+		return nil
+	}
+	sp := schema.Properties["spec"]
+	if sp == nil {
+		return nil
+	}
+	if sp.Ref != nil {
+		return sp.Ref
+	}
+	return sp
 }
