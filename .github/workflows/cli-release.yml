@@ -378,11 +378,15 @@ jobs:
             // Replace RC header with final release header by replacing the whole line
             // From: "[cli/v0.17.0-rc.1] - 2026-02-02"
             // To:   "[cli/v0.17.0] - promoted from [cli/v0.17.0-rc.1] on 2026-02-16"
-            // Assumption: There is only one line starting with "## [cli/" in the notes file, which is the RC header.
-            // If there are multiple, this will only replace the first one.
             const today = new Date().toISOString().split('T')[0];
+            // Regex to match the RC header line, ensuring it starts with "## [cli/v" and contains "-rc."
+            const rcHeaderPattern = /^## \[cli\/v\d+\.\d+\.\d+-rc\.\d+\].*$/m;
+            if (!rcHeaderPattern.test(notes)) {
+              core.setFailed(`RC header not found in release notes for ${rcTag}`);
+              return;
+            }
             notes = notes.replace(
-              /^## \[cli\/.*/,
+              rcHeaderPattern,
               `## [${finalTag}] - promoted from [${rcTag}] on ${today}`
             );
 
