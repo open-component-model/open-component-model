@@ -9,17 +9,14 @@ import (
 	"sync"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
 type discoveryValue struct {
-	Ref        *compref.Ref
-	Descriptor *descriptor.Descriptor
-	Digest     *descriptorv2.Digest
+	Descriptor       *descriptor.Descriptor
+	SourceRepository runtime.Typed
 }
 
 type resolver struct {
@@ -28,19 +25,25 @@ type resolver struct {
 }
 
 func (r *resolver) Resolve(ctx context.Context, key string) (*discoveryValue, error) {
-	ref, err := compref.Parse(key)
+	parts := strings.SplitN(key, ":", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid key format %q: expected component:version", key)
+	}
+	component, version := parts[0], parts[1]
+
+	repoSpec, err := r.repoResolver.GetRepositorySpecificationForComponent(ctx, component, version)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse reference %q: %w", key, err)
+		return nil, fmt.Errorf("failed getting repository spec for component %s:%s: %w", component, version, err)
 	}
 
-	repo, err := r.repoResolver.GetComponentVersionRepositoryForComponent(ctx, ref.Component, ref.Version)
+	repo, err := r.repoResolver.GetComponentVersionRepositoryForSpecification(ctx, repoSpec)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting component version repository: %w", err)
+		return nil, fmt.Errorf("failed getting component version repository for spec %v: %w", repoSpec, err)
 	}
 
-	desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
+	desc, err := repo.GetComponentVersion(ctx, component, version)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting component version %s:%s: %w", ref.Component, ref.Version, err)
+		return nil, fmt.Errorf("failed getting component version %s:%s: %w", component, version, err)
 	}
 
 	if expected := r.expectedDigest(desc.Component.ToIdentity()); expected != nil {
@@ -52,8 +55,8 @@ func (r *resolver) Resolve(ctx context.Context, key string) (*discoveryValue, er
 	}
 
 	return &discoveryValue{
-		Ref:        ref,
-		Descriptor: desc,
+		Descriptor:       desc,
+		SourceRepository: repoSpec,
 	}, nil
 }
 
@@ -70,22 +73,14 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 	}
 	var children []string
 	for _, ref := range parent.Descriptor.Component.References {
-		childRef := &compref.Ref{
-			Type:       parent.Ref.Type,
-			Repository: parent.Ref.Repository,
-			Prefix:     parent.Ref.Prefix,
-			Component:  ref.Component,
-			Version:    ref.Version,
-		}
-		base := childRef.String()
+		key := ref.Component + ":" + ref.Version
 
 		if ref.Digest.Value != "" {
 			d.mu.Lock()
-			// TODO Panic on differing digests
 			d.discoveredDigests[ref.ToComponentIdentity().String()] = ref.Digest
 			d.mu.Unlock()
 		}
-		children = append(children, base)
+		children = append(children, key)
 	}
 	return children, nil
 }
