@@ -1471,7 +1471,24 @@ var _ = Describe("Resource Controller", func() {
 			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(Equal(float64(5)),
 				"expected 5 cache hits for the verified parent component as it should be hit for both resources and the nested component reconciliations")
 
-			for _, nestedComponent := range []string{nestedComponentName1, nestedComponentName11, nestedComponentName2} {
+			nesteComponent1omponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName1, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(nesteComponent1omponentMissCounter)).To(Equal(float64(0)),
+				"expected 0 cache misses for the nested component as it should be verified")
+			nestedComponent1MissCounterVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName1, componentVersion, "verified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(nestedComponent1MissCounterVerified)).To(Equal(float64(1)),
+				"expected 1 cache miss for the verified nested component for the first run")
+			nestedComponent1HitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(nestedComponentName1, componentVersion, "verified")
+			Expect(err).ToNot(HaveOccurred())
+			// (Only the resource controller is running!)
+			// Hit 1 after this component version was stored in the cache
+			// Hit 2 when nested-component-11 is resolved as the reference path resolver will return the ErrResolutionInProgress for nested-component-11
+			//   which will then trigger another reconciliation where we will go the full path again.
+			Expect(testutil.ToFloat64(nestedComponent1HitCounter)).To(Equal(float64(2)),
+				"expected 2 cache hits for the verified nested component as it should be hit for the resolution of the nested component again")
+
+			for _, nestedComponent := range []string{nestedComponentName11, nestedComponentName2} {
 				nestedComponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponent, componentVersion, "unverified")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(testutil.ToFloat64(nestedComponentMissCounter)).To(Equal(float64(0)),
@@ -1482,7 +1499,7 @@ var _ = Describe("Resource Controller", func() {
 				Expect(testutil.ToFloat64(nestedComponentMissCounterVerified)).To(Equal(float64(1)),
 					"expected 1 cache miss for the verified nested-component on the first run",
 					nestedComponent)
-				nestedComponentHitCounterVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponent, componentVersion, "verified")
+				nestedComponentHitCounterVerified, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(nestedComponent, componentVersion, "verified")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(testutil.ToFloat64(nestedComponentHitCounterVerified)).To(Equal(float64(1)),
 					"expected 1 cache hit for the verified nested-component",
