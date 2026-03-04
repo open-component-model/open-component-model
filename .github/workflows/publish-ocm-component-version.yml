@@ -11,11 +11,6 @@ on:
         description: "Optional artifact containing file-based resources referenced by the constructor"
         required: false
         type: string
-      constructor_filename:
-        description: "Constructor filename inside constructor artifact"
-        required: false
-        default: "component-constructor.yaml"
-        type: string
       ocm_repository:
         description: "Target OCM repository root"
         required: false
@@ -46,11 +41,11 @@ jobs:
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: ${{ inputs.build_artifact_name }}
-          path: ${{ github.workspace }}/constructor
+          path: ${{ github.workspace }}/constructor/resources
 
       - name: Verify artifacts
         env:
-          CONSTRUCTOR_FILE: ${{ github.workspace }}/constructor/${{ inputs.constructor_filename }}
+          CONSTRUCTOR_FILE: ${{ github.workspace }}/constructor/component-constructor.yaml
         shell: bash
         run: |
           set -euo pipefail
@@ -59,7 +54,7 @@ jobs:
           test -f "${CONSTRUCTOR_FILE}" || (echo "❌ component-constructor missing: ${CONSTRUCTOR_FILE}" && exit 1)
 
           if [ -n "${{ inputs.build_artifact_name }}" ]; then
-            test -d "${GITHUB_WORKSPACE}/constructor/bin" || (echo "❌ bin directory missing after artifact download" && exit 1)
+            test -d "${GITHUB_WORKSPACE}/constructor/resources/bin" || (echo "❌ bin directory missing after artifact download" && exit 1)
           fi
 
           echo "✅ Required artifacts are present"
@@ -92,7 +87,7 @@ jobs:
           OCM_REPOSITORY: ${{ inputs.ocm_repository }}
           CLI_IMAGE: ${{ inputs.cli_image }}
           WORKDIR: ${{ github.workspace }}
-          CONSTRUCTOR_PATH: ./constructor/${{ inputs.constructor_filename }}
+          CONSTRUCTOR_PATH: ./constructor/component-constructor.yaml
         shell: bash
         run: |
           set -euo pipefail
@@ -114,7 +109,7 @@ jobs:
           OCM_REPOSITORY: ${{ inputs.ocm_repository }}
           CLI_IMAGE: ${{ inputs.cli_image }}
           WORKDIR: ${{ github.workspace }}
-          CONSTRUCTOR_FILE: ${{ github.workspace }}/constructor/${{ inputs.constructor_filename }}
+          CONSTRUCTOR_FILE: ${{ github.workspace }}/constructor/component-constructor.yaml
         shell: bash
         run: |
           set -euo pipefail

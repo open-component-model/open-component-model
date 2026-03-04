@@ -434,3 +434,66 @@ jobs:
               .addLink('View Release', releaseUrl)
               .addEOL()
               .write();
+
+  # ---------------------------------------------------------------------------
+  # PREPARE FINAL CONSTRUCTOR - Generate OCM constructor with final version
+  # ---------------------------------------------------------------------------
+  prepare_final_constructor:
+    name: Prepare Final OCM Constructor
+    needs: [prepare, build, promote_and_release_final]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate constructor with final version
+        env:
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller:${{ needs.prepare.outputs.base_version }}
+          CHART_REF: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart:${{ needs.prepare.outputs.base_version }}
+        run: |
+          set -euo pipefail
+
+          cat > component-constructor.yaml <<EOF
+          name: ocm.software/kubernetes/controller
+          version: ${VERSION}
+          provider:
+            name: ocm.software
+          resources:
+            - name: controller-image
+              version: ${VERSION}
+              type: ociImage
+              access:
+                type: ociArtifact
+                imageReference: ${IMAGE_REF}
+            - name: controller-chart
+              version: ${VERSION}
+              type: helmChart
+              access:
+                type: ociArtifact
+                imageReference: ${CHART_REF}
+          EOF
+
+          echo "--- Final constructor ---"
+          cat component-constructor.yaml
+          echo "---"
+          echo "✅ Constructor generated for ${VERSION}"
+
+      - name: Upload final constructor artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: controller-final-constructor-artifact
+          if-no-files-found: error
+          path: component-constructor.yaml
+
+  # ---------------------------------------------------------------------------
+  # PUBLISH FINAL COMPONENT - Publish final OCM component version
+  # ---------------------------------------------------------------------------
+  publish_final_component:
+    name: Publish Final OCM Component
+    needs: [prepare, build, prepare_final_constructor]
+    permissions:
+      actions: read
+      packages: write
+    uses: ./.github/workflows/publish-ocm-component-version.yml
+    secrets: inherit
+    with:
+      constructor_artifact_name: controller-final-constructor-artifact
+      ocm_repository: ghcr.io/${{ github.repository_owner }}

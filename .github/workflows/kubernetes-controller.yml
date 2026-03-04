@@ -419,12 +419,12 @@ jobs:
                 imageReference: ${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/kubernetes/controller/chart:${VERSION}
           EOF
 
-      - name: Upload OCM publish artifacts
+      - name: Upload constructor artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: controller-ocm-publish-artifacts
+          name: controller-constructor-artifact
           if-no-files-found: error
-          path: ocm-publish/
+          path: ocm-publish/component-constructor.yaml
 
       - name: Cleanup
         if: always()
@@ -437,7 +437,7 @@ jobs:
     uses: ./.github/workflows/publish-ocm-component-version.yml
     secrets: inherit
     with:
-      constructor_artifact_name: controller-ocm-publish-artifacts
+      constructor_artifact_name: controller-constructor-artifact
       ocm_repository: ghcr.io/${{ github.repository_owner }}
 
   status-check:
