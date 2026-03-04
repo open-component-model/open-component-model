@@ -327,8 +327,16 @@ func (r *Resolver) isOptionalField(path fieldpath.Path) bool {
 	current := r.schema
 	// Walk the segments and either check a property or the ref schema until we get to the last segment, where we check if it's required or not.
 	for i, segment := range path {
-		if segment.Index != nil || current == nil {
+		if current == nil {
 			return false
+		}
+		if segment.Index != nil {
+			itemSchema := schemaItems(current)
+			if itemSchema == nil {
+				return false
+			}
+			current = itemSchema
+			continue
 		}
 		propSchema := schemaProperty(current, segment.Name)
 		if propSchema == nil {
@@ -365,6 +373,19 @@ func isRequired(s *jsonschema.Schema, name string) bool {
 	return slices.Contains(s.Required, name)
 }
 
+// schemaItems returns the item schema for an array schema
+func schemaItems(s *jsonschema.Schema) *jsonschema.Schema {
+	// we have two items in here - Items2020, which we generally generate our schemas in and the older Items
+	// for the sake of it, we support both, otherwise, we might run into weird side-effects that nobody will expect
+	if s.Items2020 != nil {
+		return s.Items2020
+	}
+	if items, ok := s.Items.(*jsonschema.Schema); ok {
+		return items
+	}
+	return nil
+}
+
 // deleteValueAtPath removes the key at the final path segment from the resource.
 func (r *Resolver) deleteValueAtPath(path fieldpath.Path) error {
 	if len(path) == 0 {
@@ -373,6 +394,7 @@ func (r *Resolver) deleteValueAtPath(path fieldpath.Path) error {
 	current := interface{}(r.resource)
 	for i, segment := range path {
 		if i == len(path)-1 {
+			// final segment: always a map key deletion
 			currentMap, ok := current.(map[string]interface{})
 			if !ok {
 				return fmt.Errorf("expected map at path segment: %v", segment)
@@ -380,11 +402,23 @@ func (r *Resolver) deleteValueAtPath(path fieldpath.Path) error {
 			delete(currentMap, segment.Name)
 			return nil
 		}
-		currentMap, ok := current.(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("expected map at path segment: %v", segment)
+		// intermediate: handle both maps and arrays
+		if segment.Index != nil {
+			array, ok := current.([]interface{})
+			if !ok {
+				return fmt.Errorf("expected array at path segment: %v", segment)
+			}
+			if *segment.Index >= len(array) {
+				return fmt.Errorf("array index out of bounds: %d", *segment.Index)
+			}
+			current = array[*segment.Index]
+		} else {
+			currentMap, ok := current.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("expected map at path segment: %v", segment)
+			}
+			current = currentMap[segment.Name]
 		}
-		current = currentMap[segment.Name]
 	}
 	return nil
 }

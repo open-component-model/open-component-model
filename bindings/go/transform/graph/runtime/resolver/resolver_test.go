@@ -887,6 +887,31 @@ func TestIsOptionalField_NestedRefs(t *testing.T) {
 		"backend is required at top level")
 	assert.True(t, r.isOptionalField(fieldpath.MustParse("description")),
 		"description is optional at top level")
+
+	// --- array paths using Items2020 ---
+	itemSchema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"host":    stringSchema,
+			"timeout": stringSchema,
+		},
+		Required: []string{"host"},
+	}
+
+	arrayTopSchema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"servers": {Items2020: itemSchema},
+		},
+		Required: []string{"servers"},
+	}
+
+	rArr := NewResolver(nil, nil, arrayTopSchema)
+
+	assert.False(t, rArr.isOptionalField(fieldpath.MustParse("servers[0].host")),
+		"host is required inside array item (Items2020)")
+	assert.True(t, rArr.isOptionalField(fieldpath.MustParse("servers[0].timeout")),
+		"timeout is optional inside array item (Items2020)")
+	assert.True(t, rArr.isOptionalField(fieldpath.MustParse("servers[2].timeout")),
+		"timeout is optional regardless of array index")
 }
 
 func TestResolveDynamicArrayIndexes(t *testing.T) {
@@ -1125,6 +1150,48 @@ func TestDeleteValueAtPath(t *testing.T) {
 			},
 			path:    `spec.replicas`,
 			wantErr: true,
+		},
+		{
+			name: "delete field inside array element",
+			resource: map[string]interface{}{
+				"items": []interface{}{
+					map[string]interface{}{
+						"key":   "keep",
+						"extra": "remove",
+					},
+				},
+			},
+			path: `items[0].extra`,
+			want: map[string]interface{}{
+				"items": []interface{}{
+					map[string]interface{}{
+						"key": "keep",
+					},
+				},
+			},
+		},
+		{
+			name: "delete field inside nested array element",
+			resource: map[string]interface{}{
+				"spec": map[string]interface{}{
+					"containers": []interface{}{
+						map[string]interface{}{"name": "c0"},
+						map[string]interface{}{
+							"name":     "c1",
+							"optional": "gone",
+						},
+					},
+				},
+			},
+			path: `spec.containers[1].optional`,
+			want: map[string]interface{}{
+				"spec": map[string]interface{}{
+					"containers": []interface{}{
+						map[string]interface{}{"name": "c0"},
+						map[string]interface{}{"name": "c1"},
+					},
+				},
+			},
 		},
 	}
 
