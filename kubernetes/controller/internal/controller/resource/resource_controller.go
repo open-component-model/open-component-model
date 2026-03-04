@@ -284,7 +284,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	// cache key and used for verification.
 	verifications, err := verification.GetVerifications(ctx, r.Client, component)
 	if err != nil {
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
 	}
@@ -325,9 +325,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			return ctrl.Result{}, nil
 		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 			// Ignore error, but log event
-			event.New(r.EventRecorder, component, nil, eventv1.EventSeverityInfo, err.Error())
+			event.New(r.EventRecorder, resource, nil, eventv1.EventSeverityInfo, err.Error())
 		default:
-			status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 			return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
 		}
