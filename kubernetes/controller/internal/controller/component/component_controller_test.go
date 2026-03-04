@@ -651,6 +651,82 @@ var _ = Describe("Component Controller", func() {
 			test.DeleteObject(ctx, k8sClient, component)
 		})
 
+		It("allows deletion of a component when referencing resources are already deleting", func(ctx SpecContext) {
+			By("creating a component version")
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating a component")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    "1.0.0",
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+				},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
+				"Status.Component.Version": "1.0.0",
+			})
+
+			By("creating a resource that references the component with a custom finalizer")
+			resource := test.MockResource(ctx, "test-resource", component.GetNamespace(), &test.MockResourceOptions{
+				ComponentRef: corev1.LocalObjectReference{
+					Name: component.GetName(),
+				},
+				Clnt:     k8sClient,
+				Recorder: recorder,
+			})
+
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(resource), resource)).To(Succeed())
+			resource.Finalizers = append(resource.Finalizers, "test/block-deletion")
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			By("deleting the resource so it enters a deleting state")
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			Eventually(func(ctx context.Context) bool {
+				r := &v1alpha1.Resource{}
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(resource), r); err != nil {
+					return false
+				}
+				return !r.GetDeletionTimestamp().IsZero()
+			}, "15s").WithContext(ctx).Should(BeTrue())
+
+			By("deleting the component which should succeed since the resource is already deleting")
+			Expect(k8sClient.Delete(ctx, component)).To(Succeed())
+			Eventually(func(ctx context.Context) bool {
+				return errors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(component), &v1alpha1.Component{}))
+			}, "15s").WithContext(ctx).Should(BeTrue())
+
+			By("cleaning up the resource")
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(resource), resource)).To(Succeed())
+			resource.Finalizers = nil
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+		})
+
 		It("returns an error when specified semver is not found", func(ctx SpecContext) {
 			By("creating a component version")
 			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{

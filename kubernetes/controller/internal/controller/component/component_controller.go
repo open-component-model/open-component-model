@@ -322,10 +322,19 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, component *v1alpha1.Co
 		return fmt.Errorf("failed to list resource: %w", err)
 	}
 
-	if len(resourceList.Items) > 0 {
+	activeObjects := make([]client.Object, 0, len(resourceList.Items))
+	for _, resource := range resourceList.Items {
+		if !resource.GetDeletionTimestamp().IsZero() {
+			continue
+		}
+
+		activeObjects = append(activeObjects, &resource)
+	}
+
+	if len(activeObjects) > 0 {
 		var names []string
-		for _, res := range resourceList.Items {
-			names = append(names, fmt.Sprintf("%s/%s", res.Namespace, res.Name))
+		for _, res := range activeObjects {
+			names = append(names, fmt.Sprintf("%s/%s", res.GetNamespace(), res.GetName()))
 		}
 
 		msg := fmt.Sprintf(

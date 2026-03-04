@@ -201,10 +201,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			return ctrl.Result{}, fmt.Errorf("failed to list deployers: %w", err)
 		}
 
-		if len(deployerList.Items) > 0 {
+		activeObjects := make([]client.Object, 0, len(deployerList.Items))
+		for _, deployer := range deployerList.Items {
+			if !deployer.GetDeletionTimestamp().IsZero() {
+				continue
+			}
+
+			activeObjects = append(activeObjects, &deployer)
+		}
+
+		if len(activeObjects) > 0 {
 			var names []string
-			for _, deployer := range deployerList.Items {
-				names = append(names, deployer.Name)
+			for _, deployer := range activeObjects {
+				names = append(names, deployer.GetName())
 			}
 
 			msg := fmt.Sprintf(

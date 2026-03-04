@@ -1481,6 +1481,76 @@ consumers:
 			)
 		})
 	})
+
+	Context("resource deletion", func() {
+		It("allows deletion of a resource when referencing deployers are already deleting", func(ctx SpecContext) {
+			namespace := test.NamespaceForTest(ctx)
+			Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+
+			resourceName := "test-res-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
+
+			By("creating a resource")
+			resourceObj := &v1alpha1.Resource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: namespace.GetName(),
+				},
+				Spec: v1alpha1.ResourceSpec{
+					ComponentRef: corev1.LocalObjectReference{
+						Name: "nonexistent-component",
+					},
+					Resource: v1alpha1.ResourceID{
+						ByReference: v1alpha1.ResourceReference{
+							Resource: runtime.Identity{"name": resourceName},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+
+			By("waiting for the resource controller to add the finalizer")
+			Eventually(func(g Gomega) {
+				r := &v1alpha1.Resource{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(resourceObj), r)).To(Succeed())
+				g.Expect(r.Finalizers).To(ContainElement(v1alpha1.ResourceFinalizer))
+			}, "15s").Should(Succeed())
+
+			By("creating a deployer referencing the resource with a custom finalizer")
+			deployerName := "deployer-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
+			deployer := &v1alpha1.Deployer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       deployerName,
+					Finalizers: []string{"test/block-deletion"},
+				},
+				Spec: v1alpha1.DeployerSpec{
+					ResourceRef: v1alpha1.ObjectKey{
+						Namespace: namespace.GetName(),
+						Name:      resourceObj.GetName(),
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, deployer)).To(Succeed())
+
+			By("deleting the deployer so it enters a deleting state")
+			Expect(k8sClient.Delete(ctx, deployer)).To(Succeed())
+			Eventually(func(g Gomega) {
+				d := &v1alpha1.Deployer{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployer), d)).To(Succeed())
+				g.Expect(d.GetDeletionTimestamp().IsZero()).To(BeFalse())
+			}, "15s").Should(Succeed())
+
+			By("deleting the resource which should succeed since the deployer is already deleting")
+			Expect(k8sClient.Delete(ctx, resourceObj)).To(Succeed())
+			Eventually(func() error {
+				return k8sClient.Get(ctx, client.ObjectKeyFromObject(resourceObj), &v1alpha1.Resource{})
+			}, "15s").Should(MatchError(ContainSubstring("not found")))
+
+			By("cleaning up the deployer")
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployer), deployer)).To(Succeed())
+			deployer.Finalizers = nil
+			Expect(k8sClient.Update(ctx, deployer)).To(Succeed())
+		})
+	})
 })
 
 func mustToJSON(v string) apiextensionsv1.JSON {
