@@ -24,7 +24,7 @@ env:
   COMPONENT_PATH: kubernetes/controller
 
 concurrency:
-  cancel-in-progress: true
+  cancel-in-progress: false
   group: controller-release-${{ github.event.inputs.branch }}
 
 jobs:

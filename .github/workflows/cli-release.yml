@@ -20,7 +20,7 @@ env:
   COMPONENT_PATH: cli
 
 concurrency:
-  cancel-in-progress: true
+  cancel-in-progress: false
   group: cli-release-${{ github.event.inputs.branch }}
 
 jobs:
