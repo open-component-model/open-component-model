@@ -280,20 +280,24 @@ jobs:
               return;
             }
 
-            // Check if final tag already exists
-            try { 
-              execFileSync("git", ["rev-parse", `refs/tags/${finalTag}`], { stdio: "pipe" }); 
-              core.setFailed(`Tag ${finalTag} already exists`); 
-              return; 
-            } catch {
-              // Expected: tag doesn't exist, continue
-            }
-
             // Resolve RC commit
             const rcSha = execFileSync("git", ["rev-parse", `refs/tags/${rcTag}^{commit}`], { stdio: "pipe" }).toString().trim();
             if (!rcSha) {
               core.setFailed(`Could not resolve commit for RC tag ${rcTag}`);
               return;
+            }
+
+            // Check if final tag already exists (idempotent for reruns)
+            try {
+              const existingSha = execFileSync("git", ["rev-parse", `refs/tags/${finalTag}^{commit}`], { stdio: "pipe" }).toString().trim();
+              if (existingSha === rcSha) {
+                core.info(`Tag ${finalTag} already exists at expected commit ${rcSha.substring(0,7)}, continuing (idempotent rerun)`);
+                return;
+              }
+              core.setFailed(`Tag ${finalTag} already exists but points to ${existingSha.substring(0,7)}, expected ${rcSha.substring(0,7)}`);
+              return;
+            } catch {
+              // Expected: tag doesn't exist, continue
             }
 
             // Create and push final tag
