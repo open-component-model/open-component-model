@@ -373,9 +373,10 @@ func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *d
 				errs = append(errs, err)
 			} else if !done {
 				return ctrl.Result{RequeueAfter: time.Second}, nil, true
+			} else { // the else here isn't redundant, because control flow does not terminate above
+				logger.Info("successfully pruned ApplySet for deployer")
+				controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
 			}
-			logger.Info("successfully pruned ApplySet for deployer")
-			controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
 		} else if controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
 			logger.Info("untracking resources before removing finalizer")
 			done, err := r.Untrack(ctx, deployer)
@@ -384,9 +385,10 @@ func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *d
 				errs = append(errs, err)
 			} else if !done {
 				return ctrl.Result{RequeueAfter: time.Second}, nil, true
+			} else { // the else here isn't redundant, because control flow does not terminate above
+				logger.Info("successfully unregistered all resource watches for deployer")
+				controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
 			}
-			logger.Info("successfully unregistered all resource watches for deployer")
-			controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
 		}
 
 		if len(errs) > 0 {
