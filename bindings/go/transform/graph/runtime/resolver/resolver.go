@@ -331,11 +331,15 @@ func (r *Resolver) isOptionalField(path fieldpath.Path) bool {
 			return false
 		}
 		if segment.Index != nil {
-			itemSchema := schemaItems(current)
+			itemSchema := current.Items2020
 			if itemSchema == nil {
 				return false
 			}
-			current = itemSchema
+			if itemSchema.Ref != nil {
+				current = itemSchema.Ref
+			} else {
+				current = itemSchema
+			}
 			continue
 		}
 		propSchema := schemaProperty(current, segment.Name)
@@ -371,19 +375,6 @@ func schemaProperty(s *jsonschema.Schema, name string) *jsonschema.Schema {
 // isRequired checks whether the field is listed in Required on the schema.
 func isRequired(s *jsonschema.Schema, name string) bool {
 	return slices.Contains(s.Required, name)
-}
-
-// schemaItems returns the item schema for an array schema
-func schemaItems(s *jsonschema.Schema) *jsonschema.Schema {
-	// we have two items in here - Items2020, which we generally generate our schemas in and the older Items
-	// for the sake of it, we support both, otherwise, we might run into weird side-effects that nobody will expect
-	if s.Items2020 != nil {
-		return s.Items2020
-	}
-	if items, ok := s.Items.(*jsonschema.Schema); ok {
-		return items
-	}
-	return nil
 }
 
 // deleteValueAtPath removes the key at the final path segment from the resource.

@@ -912,6 +912,28 @@ func TestIsOptionalField_NestedRefs(t *testing.T) {
 		"timeout is optional inside array item (Items2020)")
 	assert.True(t, rArr.isOptionalField(fieldpath.MustParse("servers[2].timeout")),
 		"timeout is optional regardless of array index")
+
+	// --- array items with Ref ---
+	refTarget := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"port":    stringSchema,
+			"comment": stringSchema,
+		},
+		Required: []string{"port"},
+	}
+	arrayRefSchema := &jsonschema.Schema{
+		Properties: map[string]*jsonschema.Schema{
+			"endpoints": {Items2020: &jsonschema.Schema{Ref: refTarget}},
+		},
+		Required: []string{"endpoints"},
+	}
+
+	rRef := NewResolver(nil, nil, arrayRefSchema)
+
+	assert.False(t, rRef.isOptionalField(fieldpath.MustParse("endpoints[0].port")),
+		"port is required inside array item with Ref")
+	assert.True(t, rRef.isOptionalField(fieldpath.MustParse("endpoints[0].comment")),
+		"comment is optional inside array item with Ref")
 }
 
 func TestResolveDynamicArrayIndexes(t *testing.T) {
@@ -1189,6 +1211,29 @@ func TestDeleteValueAtPath(t *testing.T) {
 					"containers": []interface{}{
 						map[string]interface{}{"name": "c0"},
 						map[string]interface{}{"name": "c1"},
+					},
+				},
+			},
+		},
+		{
+			name: "delete field inside array element nested in array",
+			resource: map[string]interface{}{
+				"matrix": []interface{}{
+					[]interface{}{
+						map[string]interface{}{
+							"required": "stay",
+							"optional": "remove",
+						},
+					},
+				},
+			},
+			path: `matrix[0][0].optional`,
+			want: map[string]interface{}{
+				"matrix": []interface{}{
+					[]interface{}{
+						map[string]interface{}{
+							"required": "stay",
+						},
 					},
 				},
 			},
