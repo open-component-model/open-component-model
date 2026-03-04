@@ -39,6 +39,7 @@ type ResolutionResult struct {
 type ResolutionSummary struct {
 	TotalExpressions    int
 	ResolvedExpressions int
+	DeletedExpressions  int
 	Results             []ResolutionResult
 	Errors              []error
 }
@@ -79,6 +80,9 @@ func (r *Resolver) Resolve(expressions []variable.FieldDescriptor) ResolutionSum
 		summary.Results = append(summary.Results, result)
 		if result.Resolved {
 			summary.ResolvedExpressions++
+		}
+		if result.Deleted {
+			summary.DeletedExpressions++
 		}
 		if result.Error != nil {
 			summary.Errors = append(summary.Errors, result.Error)
@@ -315,131 +319,62 @@ func updateParent(parent interface{}, key string, index int, value interface{}) 
 
 // isOptionalField checks whether the field at the given path is a
 // non-required property. The schema must be the spec sub-schema so that
-// paths match schema properties directly. The resource data is walked in
-// parallel to enable best-match selection for AnyOf/OneOf branches.
+// paths match schema properties directly.
 func (r *Resolver) isOptionalField(path fieldpath.Path) bool {
 	if r.schema == nil || len(path) == 0 {
 		return false
 	}
 	current := r.schema
-	currentData := interface{}(r.resource)
+	// Walk the segments and either check a property or the ref schema until we get to the last segment, where we check if it's required or not.
 	for i, segment := range path {
-		if segment.Index != nil || current == nil {
+		if current == nil {
 			return false
 		}
-		dataMap, _ := currentData.(map[string]interface{})
-		propSchema := schemaProperty(current, segment.Name, dataMap)
+		if segment.Index != nil {
+			itemSchema := current.Items2020
+			if itemSchema == nil {
+				return false
+			}
+			if itemSchema.Ref != nil {
+				current = itemSchema.Ref
+			} else {
+				current = itemSchema
+			}
+			continue
+		}
+		propSchema := schemaProperty(current, segment.Name)
 		if propSchema == nil {
 			return false
 		}
+
+		// last segment
 		if i == len(path)-1 {
-			return !isRequired(current, segment.Name, dataMap)
+			return !isRequired(current, segment.Name)
 		}
+
 		if propSchema.Ref != nil {
+			// if we have a ref, we need to resolve it before continuing to the next segment
 			current = propSchema.Ref
 		} else {
 			current = propSchema
-		}
-		if dataMap != nil {
-			currentData = dataMap[segment.Name]
-		} else {
-			currentData = nil
 		}
 	}
 	return false
 }
 
-// schemaProperty looks up a property by name in the schema's Properties map
-// and in AllOf/AnyOf/OneOf sub-schemas. For AnyOf/OneOf the best matching
-// branch is selected based on the resource data.
-func schemaProperty(s *jsonschema.Schema, name string, dataMap map[string]interface{}) *jsonschema.Schema {
+// schemaProperty looks up a property by name in the schema's Properties map.
+func schemaProperty(s *jsonschema.Schema, name string) *jsonschema.Schema {
 	if s.Properties != nil {
 		if p, ok := s.Properties[name]; ok {
 			return p
 		}
 	}
-	// AllOf: all branches apply, return the first match.
-	for _, sub := range s.AllOf {
-		if sub != nil && sub.Properties != nil {
-			if p, ok := sub.Properties[name]; ok {
-				return p
-			}
-		}
-	}
-	// AnyOf/OneOf: pick the best matching branch, then look up the property.
-	for _, branches := range [][]*jsonschema.Schema{s.AnyOf, s.OneOf} {
-		if best := bestMatchingBranch(branches, dataMap); best != nil {
-			if best.Properties != nil {
-				if p, ok := best.Properties[name]; ok {
-					return p
-				}
-			}
-		}
-	}
 	return nil
 }
 
-// isRequired checks whether the field is listed in Required on the schema
-// itself or in any composite sub-schemas. AllOf branches are all checked
-// (any branch requiring the field makes it required). For AnyOf/OneOf, the
-// best matching branch based on the resource data is used.
-func isRequired(s *jsonschema.Schema, name string, dataMap map[string]interface{}) bool {
-	if slices.Contains(s.Required, name) {
-		return true
-	}
-	// AllOf: all branches must be satisfied; if any requires it, it's required.
-	for _, sub := range s.AllOf {
-		if sub != nil && slices.Contains(sub.Required, name) {
-			return true
-		}
-	}
-	// AnyOf/OneOf: pick the best matching branch and use its requirements.
-	for _, branches := range [][]*jsonschema.Schema{s.AnyOf, s.OneOf} {
-		if best := bestMatchingBranch(branches, dataMap); best != nil {
-			if slices.Contains(best.Required, name) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// bestMatchingBranch selects the AnyOf/OneOf branch whose properties and
-// required fields best overlap with the keys present in the resource data.
-// Returns nil if no branches are provided or data is unavailable.
-func bestMatchingBranch(branches []*jsonschema.Schema, dataMap map[string]interface{}) *jsonschema.Schema {
-	if len(branches) == 0 {
-		return nil
-	}
-	var best *jsonschema.Schema
-	bestScore := -1
-	for _, branch := range branches {
-		if branch == nil {
-			continue
-		}
-		score := 0
-		if branch.Properties != nil {
-			for key := range branch.Properties {
-				if dataMap != nil {
-					if _, ok := dataMap[key]; ok {
-						score++
-					}
-				}
-			}
-		}
-		for _, req := range branch.Required {
-			if dataMap != nil {
-				if _, ok := dataMap[req]; ok {
-					score++
-				}
-			}
-		}
-		if score > bestScore {
-			bestScore = score
-			best = branch
-		}
-	}
-	return best
+// isRequired checks whether the field is listed in Required on the schema.
+func isRequired(s *jsonschema.Schema, name string) bool {
+	return slices.Contains(s.Required, name)
 }
 
 // deleteValueAtPath removes the key at the final path segment from the resource.
@@ -450,6 +385,7 @@ func (r *Resolver) deleteValueAtPath(path fieldpath.Path) error {
 	current := interface{}(r.resource)
 	for i, segment := range path {
 		if i == len(path)-1 {
+			// final segment: always a map key deletion
 			currentMap, ok := current.(map[string]interface{})
 			if !ok {
 				return fmt.Errorf("expected map at path segment: %v", segment)
@@ -457,11 +393,23 @@ func (r *Resolver) deleteValueAtPath(path fieldpath.Path) error {
 			delete(currentMap, segment.Name)
 			return nil
 		}
-		currentMap, ok := current.(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("expected map at path segment: %v", segment)
+		// intermediate: handle both maps and arrays
+		if segment.Index != nil {
+			array, ok := current.([]interface{})
+			if !ok {
+				return fmt.Errorf("expected array at path segment: %v", segment)
+			}
+			if *segment.Index >= len(array) {
+				return fmt.Errorf("array index out of bounds: %d", *segment.Index)
+			}
+			current = array[*segment.Index]
+		} else {
+			currentMap, ok := current.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("expected map at path segment: %v", segment)
+			}
+			current = currentMap[segment.Name]
 		}
-		current = currentMap[segment.Name]
 	}
 	return nil
 }

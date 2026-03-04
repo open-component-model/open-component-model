@@ -360,7 +360,7 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 		transportArchivePath := filepath.Join(t.TempDir(), "transport-archive")
 
 		// The testing Helm chart should exist at the expected path, we reuse it for our test here
-		chartPath := filepath.Join(root, "bindings/go/helm/input/testdata/provenance/mychart-0.1.0.tgz")
+		chartPath := filepath.Join(root, "bindings/go/helm/testdata/provenance/mychart-0.1.0.tgz")
 		_, err := os.Stat(chartPath)
 		r.NoError(err, "Helm chart should exist at %s", chartPath)
 
