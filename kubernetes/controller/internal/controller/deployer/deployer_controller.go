@@ -258,8 +258,8 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 
 	// Prune calls delete on every resource found, even if its already being deleted.
 	// If we were to remove this check, the deployer might be deleted while a child is stuck in terminating state.
-	if !result.HasPruned() {
-		logger.Info("pruned resources, doing one more pruning until nothing more to prune")
+	if result.HasPruned() {
+		logger.Info("resources still being pruned, waiting for them to be fully removed")
 		return fmt.Errorf("waiting for all resources to be pruned")
 	}
 
@@ -302,10 +302,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, err.Error())
 
-		if errors.Is(err, util.NotReadyError{}) || errors.Is(err, util.DeletionError{}) {
-			logger.Info("stop reconciling as the resource is not available", "error", err.Error())
+		var notReadyErr util.NotReadyError
+		var deletionErr util.DeletionError
+		if errors.As(err, &notReadyErr) || errors.As(err, &deletionErr) {
+			logger.Info("resource is not available", "error", err)
 
-			// return no requeue as we watch the object for changes anyway
 			return ctrl.Result{}, nil
 		}
 
