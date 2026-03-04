@@ -47,7 +47,7 @@ export function computeVersion(ref, tagPrefix, options = {}) {
         // using current timestamp and git SHA for uniqueness
         const timestamp = toUtcCompactTimestamp(options.now ?? new Date());
         const sanitizedRef = sanitizePrereleaseIdentifier(ref) || "ref";
-        const shortSha = normalizeSha(options.gitSha ?? "unknown") || "unknown";
+        const shortSha = options.gitSha ? normalizeSha(options.gitSha) : "unknown";
 
         return `0.0.0-${sanitizedRef}.${timestamp}.${shortSha}`;
     }
@@ -84,7 +84,13 @@ function toUtcCompactTimestamp(date) {
  * @returns {string}
  */
 function normalizeSha(sha) {
-    return sha.toLowerCase().replace(/[^0-9a-f]/g, "").slice(0, 12);
+    const normalized = sha.toLowerCase().replace(/[^0-9a-f]/g, "").slice(0, 12);
+    if (normalized.length < 7) {
+        throw new Error(
+            `Invalid git SHA: expected at least 7 hex characters, got "${sha}" (normalized: "${normalized}")`
+        );
+    }
+    return normalized;
 }
 
 /**

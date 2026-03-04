@@ -480,7 +480,16 @@ jobs:
 
           # Verify patching was successful
           ACTUAL_VERSION=$(yq '.version' "${CONSTRUCTOR}")
-          test "${ACTUAL_VERSION}" = "${FINAL_VERSION}" || { echo "❌ Version mismatch: ${ACTUAL_VERSION} != ${FINAL_VERSION}"; exit 1; }
+          test "${ACTUAL_VERSION}" = "${FINAL_VERSION}" || { echo "❌ .version mismatch: ${ACTUAL_VERSION} != ${FINAL_VERSION}"; exit 1; }
+
+          # Verify all resource versions were patched
+          RESOURCE_VERSIONS=$(yq '[.resources[].version] | unique | .[]' "${CONSTRUCTOR}")
+          test "${RESOURCE_VERSIONS}" = "${FINAL_VERSION}" || { echo "❌ Resource version mismatch: ${RESOURCE_VERSIONS}"; exit 1; }
+
+          # Verify image reference uses final version tag
+          ACTUAL_IMAGE_REF=$(yq '.resources[] | select(.name == "image") | .access.imageReference' "${CONSTRUCTOR}")
+          test "${ACTUAL_IMAGE_REF}" = "${IMAGE_REF}" || { echo "❌ Image ref mismatch: ${ACTUAL_IMAGE_REF} != ${IMAGE_REF}"; exit 1; }
+
           echo "✅ Constructor patched to ${FINAL_VERSION}"
 
       - name: Upload final constructor artifact

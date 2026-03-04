@@ -319,6 +319,7 @@ jobs:
           IMAGE_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
         run: |
+          set -euo pipefail
           if [ "$SET_LATEST" = "true" ]; then
             oras tag "${IMAGE_REPO}:${RC_VERSION}" "${FINAL_VERSION}" "latest"
             echo "✅ Tagged :${FINAL_VERSION} and :latest"
@@ -345,6 +346,7 @@ jobs:
           VERSION: ${{ needs.prepare.outputs.base_version }}
           IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
         run: |
+          set -euo pipefail
           task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_DIGEST="${IMAGE_DIGEST}"
           helm push dist/chart-${VERSION}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
 
@@ -353,6 +355,7 @@ jobs:
         env:
           VERSION: ${{ needs.prepare.outputs.base_version }}
         run: |
+          set -euo pipefail
           CHART_REPO="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart"
           echo "digest=$(oras resolve ${CHART_REPO}:${VERSION})" >> "$GITHUB_OUTPUT"
 
@@ -368,6 +371,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           gh release view "${{ needs.prepare.outputs.new_tag }}" \
             --repo "${{ github.repository }}" --json body --jq '.body' > "${{ runner.temp }}/CHANGELOG.md"
 
