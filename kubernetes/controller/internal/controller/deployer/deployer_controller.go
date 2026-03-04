@@ -872,21 +872,19 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		component.Status.Component.Component,
 		component.Status.Component.Version)
 	if err != nil {
-		if errors.Is(err, workerpool.ErrNotSafelyDigestible) {
-			// If it's non-digestible, we still return the component descriptor
-			// because even though the error is there, `ErrNotSafelyDigestible`
-			// is a fallthrough with an error event. Meaning, if we return nil
-			// here, the calling code would panic trying to use the descriptor.
-			return componentDescriptorComponent, err
+		// Only return the error if it is not of type `ErrNotSafelyDigestible`. If it is of that type, we need to check
+		// if there is a reference path to check.
+		if !errors.Is(err, workerpool.ErrNotSafelyDigestible) {
+			return nil, fmt.Errorf("failed to get component version from cache-backed repository: %w", err)
 		}
-
-		return nil, fmt.Errorf("failed to get component version from cache-backed repository: %w", err)
 	}
 
 	// Early return if the component version from the component and resource status are the same.
 	if component.Status.Component.Component == resource.Status.Component.Component &&
 		component.Status.Component.Version == resource.Status.Component.Version {
-		return componentDescriptorComponent, nil
+		// Returning the error as well as this could be of type `ErrNotSafelyDigestible`, which is a fallthrough with
+		// an error event. The error will be checked in the calling code.
+		return componentDescriptorComponent, err
 	}
 
 	// If the component CR got an update while the deployer reconciler is already running, it is possible that the

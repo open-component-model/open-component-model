@@ -1049,10 +1049,12 @@ data:
 			Expect(err).ToNot(HaveOccurred())
 			Expect(testutil.ToFloat64(parentMissVerified)).To(Equal(float64(1)),
 				"expected 1 cache miss for the verified parent component on first resolution")
-			parentHitVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(parentComponentName, componentVersion, "verified")
+			parentHitVerified, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(parentComponentName, componentVersion, "verified")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(parentHitVerified)).To(Equal(float64(1)),
-				"expected 1 cache hit for the verified parent component on first resolution")
+			// Hit 1 from first resolution (only deployer controller is running)
+			// Hit 2 from the child component resolution via reference path
+			Expect(testutil.ToFloat64(parentHitVerified)).To(Equal(float64(2)),
+				"expected 2 cache hits for the verified parent component on first resolution")
 
 			parentMissUnverified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(parentComponentName, componentVersion, "unverified")
 			Expect(err).ToNot(HaveOccurred())
