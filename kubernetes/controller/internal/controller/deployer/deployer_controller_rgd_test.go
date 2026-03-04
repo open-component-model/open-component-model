@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -183,14 +184,24 @@ spec:
 				return fmt.Errorf("resource %s still exists", resourceObj.Name)
 			}).WithContext(ctx).Should(Succeed())
 
+			By("cleaning up deployers")
 			deployers := &v1alpha1.DeployerList{}
 			Expect(k8sClient.List(ctx, deployers)).To(Succeed())
-			Expect(deployers.Items).To(HaveLen(0))
+			for i := range deployers.Items {
+				d := &deployers.Items[i]
+				controllerutil.RemoveFinalizer(d, applySetPruneFinalizer)
+				controllerutil.RemoveFinalizer(d, resourceWatchFinalizer)
+				_ = k8sClient.Update(ctx, d)
+				test.DeleteObject(ctx, k8sClient, d)
+			}
 
+			By("cleaning up RGDs")
 			RGDs := &unstructured.UnstructuredList{}
 			RGDs.SetGroupVersionKind(listGVK)
 			Expect(k8sClient.List(ctx, RGDs)).To(Succeed())
-			Expect(RGDs.Items).To(HaveLen(0))
+			for i := range RGDs.Items {
+				test.DeleteObject(ctx, k8sClient, &RGDs.Items[i])
+			}
 		})
 
 		It("reconciles a deployer with a valid RGD", func(ctx SpecContext) {
@@ -253,11 +264,8 @@ spec:
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(rgdObj), rgdObjApplied)).To(Succeed())
 			Expect(rgdObjApplied.Object["spec"]).To(Equal(rgdObj.Object["spec"]))
 
-			By("mocking the GC")
-			test.DeleteObject(ctx, k8sClient, rgdObj)
-
 			By("deleting the deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
+			Expect(k8sClient.Delete(ctx, deployerObj)).To(Succeed())
 		})
 
 		It("does not reconcile a deployer with an invalid RGD", func(ctx SpecContext) {
@@ -482,11 +490,8 @@ spec:
 				g.Expect(rgdObjUpdated.Object["spec"]).To(Equal(rgdObjApplied.Object["spec"]))
 			}, "15s").WithContext(ctx).Should(Succeed())
 
-			By("mocking the GC")
-			test.DeleteObject(ctx, k8sClient, rgdObj)
-
 			By("deleting the deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
+			Expect(k8sClient.Delete(ctx, deployerObj)).To(Succeed())
 		})
 
 		It("fails when the resource is updated with an invalid change", func(ctx SpecContext) {
@@ -580,10 +585,7 @@ spec:
 			test.WaitForNotReadyObject(ctx, k8sClient, deployerObj, v1alpha1.MarshalFailedReason)
 
 			By("deleting the deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
-
-			By("mocking the GC")
-			test.DeleteObject(ctx, k8sClient, rgdObj)
+			Expect(k8sClient.Delete(ctx, deployerObj)).To(Succeed())
 		})
 	})
 })

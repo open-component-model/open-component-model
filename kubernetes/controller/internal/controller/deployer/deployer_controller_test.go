@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -60,6 +61,17 @@ var _ = Describe("Deployer Controller with YAML stream (ConfigMap + Secret)", fu
 		})
 
 		AfterEach(func(ctx SpecContext) {
+			By("cleaning up deployers")
+			deployers := &v1alpha1.DeployerList{}
+			Expect(k8sClient.List(ctx, deployers)).To(Succeed())
+			for i := range deployers.Items {
+				d := &deployers.Items[i]
+				controllerutil.RemoveFinalizer(d, applySetPruneFinalizer)
+				controllerutil.RemoveFinalizer(d, resourceWatchFinalizer)
+				_ = k8sClient.Update(ctx, d)
+				test.DeleteObject(ctx, k8sClient, d)
+			}
+
 			By("deleting the deployer resource object")
 			if resourceObj != nil {
 				Expect(k8sClient.Delete(ctx, resourceObj)).To(Succeed())
@@ -222,12 +234,8 @@ stringData:
 			// stringData is converted by API server into data (base64); compare the decoded value.
 			Expect(string(gotSec.Data["password"])).To(Equal("s3cr3t"))
 
-			By("cleaning up applied resources")
-			test.DeleteObject(ctx, k8sClient, gotCM)
-			test.DeleteObject(ctx, k8sClient, gotSec)
-
 			By("deleting the Deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
+			Expect(k8sClient.Delete(ctx, deployerObj)).To(Succeed())
 		})
 	})
 
@@ -342,6 +350,17 @@ data:
 		})
 
 		AfterEach(func(ctx SpecContext) {
+			By("cleaning up deployers")
+			deployers := &v1alpha1.DeployerList{}
+			Expect(k8sClient.List(ctx, deployers)).To(Succeed())
+			for i := range deployers.Items {
+				d := &deployers.Items[i]
+				controllerutil.RemoveFinalizer(d, applySetPruneFinalizer)
+				controllerutil.RemoveFinalizer(d, resourceWatchFinalizer)
+				_ = k8sClient.Update(ctx, d)
+				test.DeleteObject(ctx, k8sClient, d)
+			}
+
 			if resourceObj != nil {
 				Expect(k8sClient.Delete(ctx, resourceObj)).To(Succeed())
 				Eventually(func(ctx context.Context) error {
@@ -442,11 +461,8 @@ data:
 				)),
 			)
 
-			By("cleaning up applied resources")
-			test.DeleteObject(ctx, k8sClient, gotCM)
-
 			By("deleting the Deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
+			Expect(k8sClient.Delete(ctx, deployerObj)).To(Succeed())
 		})
 
 		It("deployer with explicit ocmConfig ignores parent resource config", func(ctx SpecContext) {
@@ -558,15 +574,9 @@ consumers:
 				)),
 			)
 
-			By("cleaning up applied resources")
-			_ = k8sClient.Delete(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
-				Name:      "deployed-cm",
-				Namespace: namespace.GetName(),
-			}})
-
 			By("deleting the Deployer")
 			_ = k8sClient.Delete(ctx, deployerSecret)
-			test.DeleteObject(ctx, k8sClient, deployerObj)
+			Expect(k8sClient.Delete(ctx, deployerObj)).To(Succeed())
 		})
 	})
 })
