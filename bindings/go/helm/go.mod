@@ -120,7 +120,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260227135858-afdad9e0f886 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260227135858-afdad9e0f886 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 // indirect
-	ocm.software/open-component-model/bindings/go/repository v0.0.7 // indirect
+	ocm.software/open-component-model/bindings/go/repository v0.0.8 // indirect
 	sigs.k8s.io/controller-runtime v0.23.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.0 // indirect
