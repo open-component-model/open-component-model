@@ -106,6 +106,7 @@ jobs:
     with:
       ref: ${{ needs.prepare.outputs.new_tag }}
       version: ${{ needs.prepare.outputs.base_version }}
+      build_version: ${{ needs.prepare.outputs.base_version }}
 
   # --------------------------------------------------------
   # 4. RELEASE RC: Create GitHub pre-release
