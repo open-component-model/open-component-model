@@ -314,7 +314,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	}
 
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
-	ref, err := compref.ParseRepository(repositoryRef, compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite))
+	ref, err := compref.ParseRepository(repositoryRef, compref.WithCTFAccessMode(ctfv1.AccessModeCreate+"|"+ctfv1.AccessModeReadWrite))
 	if err != nil {
 		return fmt.Errorf("parsing repository reference %q failed: %w", repositoryRef, err)
 	}

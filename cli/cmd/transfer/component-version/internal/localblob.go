@@ -10,10 +10,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-func processLocalBlob(resource descriptorv2.Resource, access *descriptorv2.LocalBlob, id string, ref *compref.Ref, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+	component := val.Descriptor.Component.Name
+	version := val.Descriptor.Component.Version
+	sourceRepo := val.SourceRepository
+
 	// Generate transformation IDs
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
@@ -26,16 +29,21 @@ func processLocalBlob(resource descriptorv2.Resource, access *descriptorv2.Local
 		resourceIdentityMap[k] = v
 	}
 
+	getLocalResourceType, err := ChooseGetLocalResourceType(sourceRepo)
+	if err != nil {
+		return fmt.Errorf("choosing get local resource type for source repository: %w", err)
+	}
+
 	// Create GetLocalResource transformation
 	getResourceTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type: ChooseGetLocalResourceType(ref.Repository),
+			Type: getLocalResourceType,
 			ID:   getResourceID,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
-			"repository":       AsUnstructured(ref.Repository).Data,
-			"component":        ref.Component,
-			"version":          ref.Version,
+			"repository":       AsUnstructured(sourceRepo).Data,
+			"component":        component,
+			"version":          version,
 			"resourceIdentity": resourceIdentityMap,
 		}},
 	}
@@ -43,16 +51,21 @@ func processLocalBlob(resource descriptorv2.Resource, access *descriptorv2.Local
 
 	var addResourceTransform transformv1alpha1.GenericTransformation
 	if !uploadAsOCIArtifact {
+		addLocalResourceType, err := ChooseAddLocalResourceType(toSpec)
+		if err != nil {
+			return fmt.Errorf("choosing add local resource type for target repository: %w", err)
+		}
+
 		// Create AddLocalResource transformation
 		addResourceTransform = transformv1alpha1.GenericTransformation{
 			TransformationMeta: meta.TransformationMeta{
-				Type: ChooseAddLocalResourceType(toSpec),
+				Type: addLocalResourceType,
 				ID:   addResourceID,
 			},
 			Spec: &runtime.Unstructured{Data: map[string]any{
 				"repository": AsUnstructured(toSpec).Data,
-				"component":  ref.Component,
-				"version":    ref.Version,
+				"component":  component,
+				"version":    version,
 				"resource":   fmt.Sprintf("${%s.output.resource}", getResourceID),
 				"file":       fmt.Sprintf("${%s.output.file}", getResourceID),
 			}},
