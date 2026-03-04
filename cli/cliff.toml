@@ -27,7 +27,7 @@ body = """
 To install the latest version of OCM, you can use the following command:
 
 ```bash
-curl -s https://ocm.software/install-cli.sh | sudo bash
+curl -fsSL https://ocm.software/install-cli.sh | sudo bash
 ```
 
 You can also use our container to run OCM without installing it:
