@@ -20,7 +20,7 @@ env:
   COMPONENT_PATH: cli
 
 concurrency:
-  cancel-in-progress: true
+  cancel-in-progress: false
   group: cli-release-${{ github.event.inputs.branch }}
 
 jobs:
@@ -105,6 +105,7 @@ jobs:
     secrets: inherit
     with:
       ref: ${{ needs.prepare.outputs.new_tag }}
+      build_version: ${{ needs.prepare.outputs.base_version }}
 
   # --------------------------------------------------------
   # 4. RELEASE RC: Create GitHub pre-release
@@ -444,3 +445,79 @@ jobs:
               .addLink(releaseUrl, releaseUrl)
               .addEOL()
               .write();
+
+  # --------------------------------------------------------
+  # 8. PREPARE FINAL CONSTRUCTOR: Patch RC constructor with final version
+  # --------------------------------------------------------
+  prepare_final_constructor:
+    name: Prepare Final OCM Constructor
+    needs: [prepare, build, promote_final]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download RC constructor artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: cli-constructor-artifact
+          path: ${{ runner.temp }}/constructor
+
+      - name: Patch constructor with final version
+        env:
+          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
+          CONSTRUCTOR: ${{ runner.temp }}/constructor/component-constructor.yaml
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ needs.prepare.outputs.base_version }}
+        run: |
+          set -euo pipefail
+
+          echo "Patching constructor from RC ${RC_VERSION} to final ${FINAL_VERSION}..."
+
+          # Replace all version fields with final version
+          yq -i "(.version) = \"${FINAL_VERSION}\"" "${CONSTRUCTOR}"
+          yq -i "(.resources[].version) = \"${FINAL_VERSION}\"" "${CONSTRUCTOR}"
+
+          # Patch image reference to use final version tag
+          export IMAGE_REF
+          yq -i '
+            (.resources[] | select(.name == "image") | .access.imageReference) = env(IMAGE_REF)
+          ' "${CONSTRUCTOR}"
+
+          echo "--- Patched constructor ---"
+          cat "${CONSTRUCTOR}"
+          echo "---"
+
+          # Verify patching was successful
+          ACTUAL_VERSION=$(yq '.version' "${CONSTRUCTOR}")
+          test "${ACTUAL_VERSION}" = "${FINAL_VERSION}" || { echo "❌ .version mismatch: ${ACTUAL_VERSION} != ${FINAL_VERSION}"; exit 1; }
+
+          # Verify all resource versions were patched
+          RESOURCE_VERSIONS=$(yq '[.resources[].version] | unique | .[]' "${CONSTRUCTOR}")
+          test "${RESOURCE_VERSIONS}" = "${FINAL_VERSION}" || { echo "❌ Resource version mismatch: ${RESOURCE_VERSIONS}"; exit 1; }
+
+          # Verify image reference uses final version tag
+          ACTUAL_IMAGE_REF=$(yq '.resources[] | select(.name == "image") | .access.imageReference' "${CONSTRUCTOR}")
+          test "${ACTUAL_IMAGE_REF}" = "${IMAGE_REF}" || { echo "❌ Image ref mismatch: ${ACTUAL_IMAGE_REF} != ${IMAGE_REF}"; exit 1; }
+
+          echo "✅ Constructor patched to ${FINAL_VERSION}"
+
+      - name: Upload final constructor artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: cli-final-constructor-artifact
+          if-no-files-found: error
+          path: ${{ runner.temp }}/constructor/component-constructor.yaml
+
+  # --------------------------------------------------------
+  # 9. PUBLISH FINAL COMPONENT: Publish final OCM component version
+  # --------------------------------------------------------
+  publish_final_component:
+    name: Publish Final OCM Component
+    needs: [prepare, build, prepare_final_constructor, release_final]
+    permissions:
+      actions: read
+      packages: write
+    uses: ./.github/workflows/publish-ocm-component-version.yml
+    secrets: inherit
+    with:
+      constructor_artifact_name: cli-final-constructor-artifact
+      build_artifact_name: ${{ needs.build.outputs.artifact_name }}
+      ocm_repository: ghcr.io/${{ github.repository_owner }}

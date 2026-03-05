@@ -1,7 +1,7 @@
 name: CLI
 
 on:
-  # Trigger workflow on pushes to main or release branches, and on PRs targeting main as well as release tags
+  # Trigger workflow on pushes to main or release branches, and on PRs targeting main
   # if we are on a PR, limit runtime and only build the cli if it has been modified.
   # if we are on a push, build the CLI regardless of what has changed to always be up to date
   # also allow manual triggering for rebuilds or failing jobs or rebuilding the artifact
@@ -9,14 +9,14 @@ on:
     branches:
       - main
       - 'releases/v**'
-    tags:
-      - 'cli/v**'
   pull_request:
     branches:
       - main
     paths:
       - 'cli/**'
       - '.github/workflows/cli.yml'
+      - '.github/workflows/cli-release.yml'
+      - '.github/workflows/publish-ocm-component-version.yml'
   workflow_call:
     inputs:
       artifact_name:
@@ -25,6 +25,10 @@ on:
         required: false
       ref:
         description: "The ref to build on (branch or tag). Defaults to the current ref."
+        type: string
+        required: false
+      build_version:
+        description: "Version to embed in binary (overrides computed version for ldflags only). Leading 'v' is stripped."
         type: string
         required: false
     outputs:
@@ -106,8 +110,12 @@ jobs:
       # use a version that includes the branch name to ensure uniqueness
       # make sure that the version doesn't contain invalid semver characters
       - name: Generate & Verify CTF
+        env:
+          BUILD_VERSION_OVERRIDE: ${{ inputs.build_version || '' }}
         run: |
-          task cli:generate/ctf VERSION="${VERSION}"
+          BUILD_VERSION="${BUILD_VERSION_OVERRIDE:+$(echo "$BUILD_VERSION_OVERRIDE" | sed 's/^v//')}"
+          BUILD_VERSION="${BUILD_VERSION:-$VERSION}"
+          task cli:generate/ctf VERSION="${VERSION}" BUILD_VERSION="${BUILD_VERSION}"
           task cli:verify/ctf
 
       # Attest built binaries with provenance metadata, but only if we're not on a PR
@@ -144,7 +152,8 @@ jobs:
           # OCI layout files
           path: |
             ${{ env.LOCATION }}/tmp/bin/ocm-*    
-            ${{ env.LOCATION }}/tmp/oci/*      
+            ${{ env.LOCATION }}/tmp/oci/*
+            ${{ env.LOCATION }}/tmp/component-constructor.yaml
 
   publish:
     name: Publish and Attest
@@ -213,6 +222,50 @@ jobs:
           subject-name: ${{ env.TARGET_REPO }}
           push-to-registry: true
 
+      # Reuse generated constructor from build artifacts, normalize file paths, and patch only image access
+      - name: Generate OCM component constructor
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET_CONSTRUCTOR="ocm-publish/component-constructor.yaml"
+
+          echo "Verifying downloaded CLI binaries..."
+          shopt -s nullglob
+          files=(bin/ocm-*)
+          (( ${#files[@]} > 0 )) || { echo "❌ No CLI binaries found under ./bin"; ls -la; exit 1; }
+          
+          CONSTRUCTOR_SOURCE="$(find . -type f -name component-constructor.yaml | head -n 1)"
+          test -n "${CONSTRUCTOR_SOURCE}" || { echo "❌ component-constructor.yaml not found in downloaded artifacts"; ls -la; exit 1; }
+          echo "✅ Required artifacts are present"
+          
+          mkdir -p ocm-publish
+          cp "${CONSTRUCTOR_SOURCE}" "${TARGET_CONSTRUCTOR}"
+
+          IMAGE_REF="${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/cli:${TAG}"
+          export IMAGE_REF
+
+          yq -e '.resources[] | select(.name == "image")' "${TARGET_CONSTRUCTOR}" >/dev/null
+
+          yq -i '
+            (.resources[] | select(.name == "cli" and .input.type == "file") | .input.path) |= ("resources/bin/" + (split("/") | .[-1])) |
+            (.resources[] | select(.name == "image") | .type) = "ociImage" |
+            (.resources[] | select(.name == "image") | .version) = env(TAG) |
+            (.resources[] | select(.name == "image") | .access.type) = "ociArtifact" |
+            (.resources[] | select(.name == "image") | .access.imageReference) = env(IMAGE_REF) |
+            del(.resources[] | select(.name == "image") | .relation) |
+            del(.resources[] | select(.name == "image") | .input)
+          ' "${TARGET_CONSTRUCTOR}"
+
+          yq -e '.resources[] | select(.name == "image") | .access.imageReference == env(IMAGE_REF)' "${TARGET_CONSTRUCTOR}" >/dev/null
+
+      - name: Upload component constructor as artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: cli-constructor-artifact
+          if-no-files-found: error
+          path: ocm-publish/component-constructor.yaml
+
   conformance:
     name: Conformance
     needs: publish
@@ -220,3 +273,26 @@ jobs:
     with:
       cli_image: "ghcr.io/open-component-model/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
     secrets: inherit
+
+  publish-component:
+    name: Publish Component Version
+    needs: [build, publish]
+    if: ${{ needs.build.outputs.should_push_oci_image == 'true' }}
+    uses: ./.github/workflows/publish-ocm-component-version.yml
+    secrets: inherit
+    with:
+      constructor_artifact_name: cli-constructor-artifact
+      build_artifact_name: ${{ needs.build.outputs.artifact_name }}
+      ocm_repository: ghcr.io/${{ github.repository_owner }}
+
+  status-check:
+    name: Status Check
+    runs-on: ubuntu-latest
+    needs: [publish, publish-component]
+    if: always()
+    steps:
+      - name: Fail if OCM publish did not succeed
+        if: ${{ needs.publish.result == 'success' && needs.publish-component.result != 'success' }}
+        run: |
+          echo "::error::OCM component publish did not pass (result: ${{ needs.publish-component.result }})"
+          exit 1
