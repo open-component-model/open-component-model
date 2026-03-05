@@ -375,13 +375,19 @@ jobs:
               ? fs.readFileSync(notesFile, 'utf8').trim()
               : `Promoted from ${rcTag}`;
 
-            // Replace RC header with final release header
+            // Replace RC header with final release header by replacing the whole line
             // From: "[cli/v0.17.0-rc.1] - 2026-02-02"
             // To:   "[cli/v0.17.0] - promoted from [cli/v0.17.0-rc.1] on 2026-02-16"
             const today = new Date().toISOString().split('T')[0];
+            // Regex to match the RC header line, ensuring it starts with "## [cli/v" and contains "-rc."
+            const rcHeaderPattern = /^## \[cli\/v\d+\.\d+\.\d+-rc\.\d+\].*$/m;
+            if (!rcHeaderPattern.test(notes)) {
+              core.setFailed(`RC header not found in release notes for ${rcTag}`);
+              return;
+            }
             notes = notes.replace(
-              /^\[([^\]]+)\]\s*-\s*[\d-]+/,
-              `[${finalTag}] - promoted from [${rcTag}] on ${today}`
+              rcHeaderPattern,
+              `## [${finalTag}] - promoted from [${rcTag}] on ${today}`
             );
 
             // Use make_latest to control whether this release is marked as "latest"
