@@ -45,6 +45,10 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		return nil, fmt.Errorf("failed converting resource spec to v1.Helm: %w", err)
 	}
 
+	if transformation.Spec.ChartFile.URI == "" {
+		return nil, fmt.Errorf("spec.chartFile.uri is required for convert helm transformation")
+	}
+
 	var (
 		chartSpec *filesystem.Blob
 		provSpec  *filesystem.Blob
@@ -56,7 +60,7 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	}
 	chartSpec = filesystem.NewFileBlob(fs, fileFromURI(transformation.Spec.ChartFile.URI))
 
-	if transformation.Spec.ProvFile != nil {
+	if transformation.Spec.ProvFile != nil && transformation.Spec.ProvFile.URI != "" {
 		fs, err := filesystem.NewFS(dirFromURI(transformation.Spec.ProvFile.URI), os.O_RDONLY)
 		if err != nil {
 			return nil, fmt.Errorf("failed creating filesystem from prov file spec: %w", err)
