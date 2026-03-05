@@ -425,7 +425,7 @@ The bootstrap creates the absolute minimum needed to deliver the product RGD int
 ```bash
 kubectl apply -f deploy/rbac.yaml                      # RBAC for cross-namespace access
 kubectl apply -f deploy/namespace.yaml                  # Create namespace
-kubectl create secret generic acme-signing-key \
+kubectl create secret generic acme-signing-key -n sovereign-product \
   --from-file=default=tmp/keys/acme-public.pem          # Public signing key for verification
 kubectl apply -f deploy/bootstrap.yaml                  # Repository + Component + Resource + Deployer
 kubectl wait --for=condition=Ready deployer/...          # RGD is now installed by the Deployer

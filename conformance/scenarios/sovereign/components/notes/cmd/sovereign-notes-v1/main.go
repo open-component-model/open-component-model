@@ -94,8 +94,8 @@ func main() {
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-	if err := srv.ListenAndServe(); err != nil {
-		log.Println("Server failed to start:", err)
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatal("Server failed to start:", err) //nolint:gocritic // db connections can fail here if we panic, but we dont mind for a demo
 	}
 }
 
