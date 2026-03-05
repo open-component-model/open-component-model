@@ -8,7 +8,7 @@
   "properties": {
     "helmChart": {
       "type": "string",
-      "description": "HelmChart if the name of the helm chart and its version separated by a colon."
+      "description": "HelmChart is the name of the helm chart and its version separated by a colon."
     },
     "helmRepository": {
       "type": "string",

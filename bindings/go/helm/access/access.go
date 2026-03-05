@@ -38,6 +38,13 @@ type HelmAccess struct{}
 
 // GetResourceCredentialConsumerIdentity returns the consumer identity for the given resource if the resource access is a Helm repository.
 func (h *HelmAccess) GetResourceCredentialConsumerIdentity(_ context.Context, resource *descruntime.Resource) (identity runtime.Identity, err error) {
+	if resource == nil {
+		return nil, fmt.Errorf("resource is required")
+	}
+	if resource.Access == nil {
+		return nil, fmt.Errorf("resource access is required")
+	}
+
 	helm := v1.Helm{}
 	if err := Scheme.Convert(resource.Access, &helm); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)

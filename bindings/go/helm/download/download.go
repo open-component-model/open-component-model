@@ -41,7 +41,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 	}
 
 	var getterOpts []getter.Option
-	tlsOption, err := constructTLSOptions(opt.Credentials)
+	tlsOption, err := constructTLSOptions(opt)
 	if err != nil {
 		return nil, fmt.Errorf("error setting up TLS options: %w", err)
 	}
@@ -67,9 +67,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 
 	var plainHTTP bool
 	if strings.HasPrefix(helmRepo, "http://") {
-		slog.WarnContext(ctx, "using plain HTTP for chart download",
-			"repository", helmRepo,
-		)
+		slog.WarnContext(ctx, "using plain HTTP for chart download")
 		plainHTTP = true
 	}
 
@@ -134,9 +132,36 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 	return result, nil
 }
 
-// constructTLSOptions sets up the TLS configuration files based on the credentials
-func constructTLSOptions(credentials map[string]string) (_ getter.Option, err error) {
-	var caFilePath, certFile, keyFile string
+// constructTLSOptions sets up the TLS configuration files based on the helm specification
+func constructTLSOptions(opts *option) (_ getter.Option, err error) {
+	var (
+		caFile                        *os.File
+		caFilePath, certFile, keyFile string
+		credentials                   = opts.Credentials
+		tmpDir                        = opts.TempDir
+	)
+
+	if credentials == nil {
+		credentials = make(map[string]string)
+	}
+
+	if opts.CACertFile != "" {
+		caFilePath = opts.CACertFile
+	} else if opts.CACert != "" {
+		caFile, err = os.CreateTemp(tmpDir, "caCert-*.pem")
+		if err != nil {
+			return nil, fmt.Errorf("error creating temporary CA certificate file: %w", err)
+		}
+		defer func() {
+			if cerr := caFile.Close(); cerr != nil {
+				err = errors.Join(err, cerr)
+			}
+		}()
+		if _, err = caFile.WriteString(opts.CACert); err != nil {
+			return nil, fmt.Errorf("error writing CA certificate to temp file: %w", err)
+		}
+		caFilePath = caFile.Name()
+	}
 
 	// set up certFile and keyFile if they are provided in the credentials
 	if v, ok := credentials[CredentialCertFile]; ok {
