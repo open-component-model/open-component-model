@@ -49,6 +49,7 @@ jobs:
   tag_rc:
     name: Create and Push RC Tag
     runs-on: ubuntu-latest
+    environment: release
     needs: [prepare]
     if: ${{ github.event.inputs.dry_run == 'false' }}
     permissions:
@@ -191,9 +192,6 @@ jobs:
   # Environment Gate:
   # The "controller/release" environment must be configured in GitHub Settings → Environments:
   # - Required reviewers: At least 1 reviewer must approve
-  # - Wait timer: 20160 minutes (14 days)
-  #
-  # This gate blocks all Phase 2 jobs until approved.
 
   # ---------------------------------------------------------------------------
   # VERIFY ATTESTATIONS - Ensure RC artifacts are attestable
@@ -203,7 +201,7 @@ jobs:
     needs: [prepare, build, release_rc]
     runs-on: ubuntu-latest
     environment:
-      name: controller/release
+      name: release
     permissions:
       contents: read
       packages: read
