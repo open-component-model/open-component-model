@@ -1,0 +1,39 @@
+# Custom RBAC for the OCM controller in the sovereign scenario.
+#
+# The Deployer controller uses server-side apply (ApplySet) to push
+# ResourceGraphDefinitions into the cluster. The default manager-role
+# shipped with the Helm chart does not include kro.run permissions,
+# so we add them here.
+#
+# See also: kubernetes/controller/docs/getting-started/custom-rbac.md
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ocm-controller-sovereign-scenario
+rules:
+  - apiGroups:
+      - kro.run
+    resources:
+      - resourcegraphdefinitions
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ocm-controller-sovereign-scenario
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ocm-controller-sovereign-scenario
+subjects:
+  - kind: ServiceAccount
+    name: ocm-k8s-toolkit-controller-manager
+    namespace: ocm-k8s-toolkit-system
