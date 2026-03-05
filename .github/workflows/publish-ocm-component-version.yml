@@ -117,6 +117,13 @@ jobs:
           COMPONENT_NAME=$(sed -n 's/^name:[[:space:]]*//p' "${CONSTRUCTOR_FILE}" | head -n 1)
           COMPONENT_VERSION=$(sed -n 's/^version:[[:space:]]*//p' "${CONSTRUCTOR_FILE}" | head -n 1)
 
+          if [ -z "${COMPONENT_NAME}" ]; then
+            echo "❌ Could not extract component name from ${CONSTRUCTOR_FILE}" && exit 1
+          fi
+          if [ -z "${COMPONENT_VERSION}" ]; then
+            echo "❌ Could not extract component version from ${CONSTRUCTOR_FILE}" && exit 1
+          fi
+
           COMPONENT_REF="${OCM_REPOSITORY}//${COMPONENT_NAME}:${COMPONENT_VERSION}"
           PKG_PATH="component-descriptors%2F${COMPONENT_NAME//\//%2F}"
           PACKAGE_URL="https://github.com/${GITHUB_REPOSITORY}/pkgs/container/${PKG_PATH}"
