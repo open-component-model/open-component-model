@@ -103,6 +103,13 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	if err != nil {
 		return nil, fmt.Errorf("error downloading helm chart from repository %q: %w", helmURL, err)
 	}
+	defer func() {
+		if resultData.ChartTempDir != "" {
+			if rmErr := os.RemoveAll(resultData.ChartTempDir); rmErr != nil {
+				slog.WarnContext(ctx, "failed cleaning up temporary helm chart directory", "path", resultData.ChartTempDir, "error", rmErr)
+			}
+		}
+	}()
 
 	// Convert chart blob to file spec
 	chartFileSpec, err := filesystem.BlobToSpec(resultData.ChartBlob, chartOutputPath)
