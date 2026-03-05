@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -30,7 +31,9 @@ import (
 // has been fully read (e.g. written to disk). Calling Descriptor before that will block.
 type Result struct {
 	*direct.Blob
-	desc chan descriptorOrError
+	desc   chan descriptorOrError
+	cached *descriptorOrError
+	mut    sync.Mutex
 }
 
 type descriptorOrError struct {
@@ -41,11 +44,21 @@ type descriptorOrError struct {
 // Descriptor returns the OCI image manifest descriptor.
 // It blocks until the blob-producing goroutine has finished.
 // The blob MUST be fully consumed before calling this method, otherwise it will deadlock.
+// Safe for repeated calls and concurrent use: the result is cached after the
+// first successful receive so subsequent calls return immediately.
+// Context cancellation does not poison the cache — future callers can still succeed.
 func (r *Result) Descriptor(ctx context.Context) (ociImageSpecV1.Descriptor, error) {
+	r.mut.Lock()
+	defer r.mut.Unlock()
+
+	if r.cached != nil {
+		return r.cached.Descriptor, r.cached.Err
+	}
 	select {
 	case <-ctx.Done():
 		return ociImageSpecV1.Descriptor{}, ctx.Err()
 	case result := <-r.desc:
+		r.cached = &result
 		return result.Descriptor, result.Err
 	}
 }
