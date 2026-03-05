@@ -134,7 +134,7 @@ assert.strictEqual(
         gitSha: "abcdef1234567890",
     }),
     "0.0.0-feature-issue-123.20260303123456.abcdef123456",
-    "Branch with # should be preserved"
+    "Branch with # should be sanitized"
 );
 
 assert.strictEqual(
