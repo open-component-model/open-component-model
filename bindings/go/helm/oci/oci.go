@@ -208,7 +208,7 @@ func pushProvenanceLayer(ctx context.Context, provenance *filesystem.Blob, targe
 		Size:      provenance.Size(),
 	}
 	if err = target.Push(ctx, provenanceLayer, provenanceReader); err != nil {
-		return nil, fmt.Errorf("failed to push helm chart content layer: %w", err)
+		return nil, fmt.Errorf("failed to push helm chart provenance layer: %w", err)
 	}
 
 	return &provenanceLayer, nil
