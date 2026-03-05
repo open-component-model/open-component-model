@@ -379,6 +379,13 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 		return nil, fmt.Errorf("failed to get component version %s:%s: %w", opts.Component, opts.Version, err)
 	}
 
+	if opts.Digest != nil && len(opts.Verifications) > 0 {
+		return nil, fmt.Errorf(
+			"invalid resolve options for %s:%s: digest and verifications are mutually exclusive",
+			opts.Component, opts.Version,
+		)
+	}
+
 	// The provided digest is from the component reference from the parent component and must match the calculated
 	// digest of the resolved component version to ensure integrity.
 	// Additionally, either a digest OR verifications can be provided, hence, we can return after the integrity check as
