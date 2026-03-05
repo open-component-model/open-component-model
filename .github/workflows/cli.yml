@@ -27,10 +27,6 @@ on:
         description: "The ref to build on (branch or tag). Defaults to the current ref."
         type: string
         required: false
-      version:
-        description: "Explicit version to embed (overrides computed version from ref). Leading 'v' is stripped automatically."
-        type: string
-        required: false
       build_version:
         description: "Version to embed in binary (overrides computed version for ldflags only). Leading 'v' is stripped."
         type: string
@@ -105,17 +101,8 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           TAG_PREFIX: "cli/v"
-          VERSION_OVERRIDE: ${{ inputs.version || '' }}
         with:
           script: |
-            const override = process.env.VERSION_OVERRIDE;
-            if (override) {
-              const version = override.replace(/^v/, "");
-              core.exportVariable("VERSION", version);
-              core.setOutput("version", version);
-              core.info(`✅ Using explicit VERSION=${version} (override)`);
-              return;
-            }
             const script = await import('${{ github.workspace }}/.github/scripts/compute-version.js');
             await script.default({ core });
 
