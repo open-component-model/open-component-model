@@ -57,6 +57,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           sparse-checkout: ${{ env.COMPONENT_PATH }}
+          fetch-tags: true
           ref: ${{ github.event.inputs.branch }}
 
       - name: Setup git config
@@ -244,6 +245,7 @@ jobs:
         with:
           sparse-checkout: ${{ env.COMPONENT_PATH }}
           fetch-depth: 0
+          fetch-tags: true
           ref: ${{ github.event.inputs.branch }}
 
       - name: Setup git config
