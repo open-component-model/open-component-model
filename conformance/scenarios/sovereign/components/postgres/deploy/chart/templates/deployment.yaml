@@ -67,10 +67,12 @@ spec:
             timeoutSeconds: 5
             successThreshold: 1
             failureThreshold: 6
+          {{- if .Values.postgresql.persistence.enabled }}
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql
               subPath: postgresql
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}

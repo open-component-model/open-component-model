@@ -203,7 +203,7 @@ The official `postgres` image (default version 18, configurable via `POSTGRES_VE
 
 ### 4.0 Component Structure
 
-```
+```text
 acme.org/sovereign/product (meta-component)
 ├── componentRef: notes → acme.org/sovereign/notes
 ├── componentRef: postgres → acme.org/sovereign/postgres
@@ -258,7 +258,7 @@ Key details:
 
 RSA 4096-bit key pair, generated once via `openssl` into `tmp/keys/`:
 
-```
+```bash
 openssl genpkey -algorithm RSA -out acme-private.pem -pkeyopt rsa_keygen_bits:4096
 openssl rsa -pubout -in acme-private.pem -out acme-public.pem
 ```
@@ -494,7 +494,7 @@ The actual `task upgrade` implementation:
 
 ## 10. Repository Layout
 
-```
+```text
 conformance/scenarios/sovereign/
 ├── Taskfile.yml                          # Build orchestration (all tasks)
 ├── components/
@@ -564,7 +564,7 @@ Testing is Taskfile-driven end-to-end only. There are no unit tests or Go integr
 | `task verify:deployment` | Component readiness + connectivity |
 | `task test:connectivity` | Port-forward + curl `/readyz` and `/notes` |
 
-The CI workflow (`.github/workflows/conformance.yml`) runs `task run` → `task upgrade` → `task verify:deployment` on every PR.
+The CI workflow (`.github/workflows/conformance.yml`) runs `task run` → `task upgrade` → `task verify:deployment` on PRs that modify `conformance/**` or the workflow file.
 
 ---
 

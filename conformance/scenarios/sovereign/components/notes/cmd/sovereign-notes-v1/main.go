@@ -56,18 +56,17 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
-	defer db.Close()
 
 	if err := db.PingContext(context.Background()); err != nil {
-		log.Println("Failed to ping database:", err)
-		return
+		log.Fatal("Failed to ping database:", err)
 	}
 
 	// v1.0.0 ships with the initial schema directly.
 	if err := initSchema(); err != nil {
-		log.Println("Failed to initialize database schema:", err)
-		return
+		log.Fatal("Failed to initialize database schema:", err)
 	}
+
+	defer db.Close()
 
 	r := mux.NewRouter()
 
@@ -178,6 +177,10 @@ func listNotesHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		notes = append(notes, note)
+	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, "Failed to iterate notes: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -297,6 +300,12 @@ func uiHandler(w http.ResponseWriter, _ *http.Request) {
     <div id="notes"></div>
 
     <script>
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
         async function loadNotes() {
             const response = await fetch('/notes');
             const notes = await response.json();
@@ -304,7 +313,7 @@ func uiHandler(w http.ResponseWriter, _ *http.Request) {
             notesDiv.innerHTML = notes.map(note =>
                 '<div class="note">' +
                 '<strong>Note #' + note.id + '</strong><br>' +
-                note.content + '<br>' +
+                escapeHtml(note.content) + '<br>' +
                 '<small>' + new Date(note.created_at).toLocaleString() + '</small>' +
                 '</div>'
             ).join('');

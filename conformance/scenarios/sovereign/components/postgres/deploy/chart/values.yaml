@@ -4,7 +4,7 @@ replicaCount: 1
 image:
   repository: postgres
   pullPolicy: IfNotPresent
-  tag: "15"
+  tag: "18"
 
 nameOverride: ""
 fullnameOverride: "postgres"
@@ -13,6 +13,8 @@ postgresql:
   # Database configuration
   postgresqlDatabase: sovereign_notes
   postgresqlUsername: sovereign_user
+  # NOTE: Demo-only default. Production deployments should use External Secrets
+  # Operator (ESO) or a similar secret management solution.
   postgresqlPassword: changeme
   
   # Additional configuration
@@ -60,7 +62,7 @@ podSecurityContext:
 containerSecurityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: false
-  runAsNonRoot: false
+  runAsNonRoot: true
 
 # Annotations
 podAnnotations: {}

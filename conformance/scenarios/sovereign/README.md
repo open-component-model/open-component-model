@@ -192,9 +192,8 @@ This scenario serves as a conformance test for:
 To extend this scenario:
 
 1. Modify components in `components/` directories
-2. Update version in `settings.yaml`  
-3. Add tests in appropriate `tests/` subdirectory
+2. Update versions in `Taskfile.yml` variables
+3. Run `task run` to verify the full conformance scenario passes
 4. Document changes in this README
-5. Verify full conformance run passes
 
 This scenario should remain a complete, working example that new OCM adopters can use as a reference implementation.

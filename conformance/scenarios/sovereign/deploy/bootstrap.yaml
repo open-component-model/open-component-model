@@ -7,7 +7,6 @@
 # Prerequisites (applied before this file):
 #   - Namespace: sovereign-product
 #   - Secret: acme-signing-key
-#   - Repository: sovereign-repo (deploy/repository.yaml)
 # OCM Repository pointing to local air-gapped registry
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Repository

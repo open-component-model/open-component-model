@@ -170,6 +170,5 @@ jobs:
     needs: publish_latest
     uses: ./.github/workflows/conformance.yml
     with:
-      toolkit_chart: "oci://ghcr.io/open-component-model/kubernetes/controller/chart/ocm-k8s-toolkit"
-      toolkit_version: ${{ needs.publish_latest.outputs.chart_version }}
+      toolkit_image: "ghcr.io/open-component-model/kubernetes/controller/chart:${{ needs.publish_latest.outputs.chart_version }}"
     secrets: inherit

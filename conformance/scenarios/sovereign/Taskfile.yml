@@ -257,7 +257,8 @@ tasks:
       echo "Installing OCM controller..."
       helm install ocm-k8s-toolkit oci://{{ .TOOLKIT_IMAGE }} \
         --namespace {{ .TOOLKIT_NAMESPACE }} \
-        --create-namespace
+        --create-namespace \
+        --wait --timeout=5m
   cluster:install:kro:
     silent: true
     desc: Install kro (ResourceGraphDefinition controller) via Helm
@@ -266,7 +267,8 @@ tasks:
       helm install kro oci://registry.k8s.io/kro/charts/kro \
         --namespace kro \
         --create-namespace \
-        --version={{.KRO_VERSION}}
+        --version={{.KRO_VERSION}} \
+        --wait --timeout=5m
   cluster:install:flux:
     silent: true
     desc: Install Flux and wait for readiness
@@ -298,7 +300,7 @@ tasks:
     - cmd: kubectl apply -f deploy/namespace.yaml
     - cmd: |
         kubectl -n sovereign-product create secret generic acme-signing-key \
-        --from-file=default=tmp/keys/acme-public.pem || true
+        --from-file=default=tmp/keys/acme-public.pem --dry-run=client -o yaml | kubectl apply -f -
     - cmd: kubectl apply -f deploy/bootstrap.yaml
     - cmd: kubectl wait --for=condition=Ready deployer/sovereign-product-deployer --timeout=300s
     - cmd: kubectl wait --for=condition=Ready ResourceGraphDefinition/sovereign-product --timeout=300s
@@ -382,6 +384,8 @@ tasks:
       - cmd: which helm || (echo "❌ Helm not found" && exit 1)
       - cmd: which flux || (echo "❌ flux CLI not found" && exit 1)
       - cmd: which openssl || (echo "❌ openssl not found" && exit 1)
+      - cmd: which jq || (echo "❌ jq not found" && exit 1)
+      - cmd: which curl || (echo "❌ curl not found" && exit 1)
   status:
     desc: Show status of all OCM resources
     silent: true

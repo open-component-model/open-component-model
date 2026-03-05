@@ -3,7 +3,7 @@ name: sovereign-postgres
 description: PostgreSQL database for OCM sovereign scenario
 type: application
 version: 1.0.0
-appVersion: "15"
+appVersion: "18"
 keywords:
   - postgresql
   - database

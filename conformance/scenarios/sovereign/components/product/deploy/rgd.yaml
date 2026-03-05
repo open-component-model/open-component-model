@@ -34,6 +34,7 @@ spec:
         database:
           name: string | default="sovereign_notes"
           username: string | default="sovereign_user"
+          # NOTE: Demo-only default. Production deployments should use ESO or similar.
           password: string | default="changeme"
         persistence:
           size: string | default="8Gi"

@@ -59,19 +59,18 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
-	defer db.Close()
 
 	// Test database connection
 	if err := db.PingContext(context.Background()); err != nil {
-		log.Println("Failed to ping database:", err)
-		return
+		log.Fatal("Failed to ping database:", err)
 	}
 
 	// Run database migrations
 	if err := runMigrations(); err != nil {
-		log.Println("Failed to run database migrations:", err)
-		return
+		log.Fatal("Failed to run database migrations:", err)
 	}
+
+	defer db.Close()
 
 	// Setup routes
 	r := mux.NewRouter()
@@ -230,6 +229,10 @@ func listNotesHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		notes = append(notes, note)
 	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, "Failed to iterate notes: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(notes); err != nil {
@@ -354,14 +357,20 @@ func uiHandler(w http.ResponseWriter, _ *http.Request) {
     <div id="notes"></div>
 
     <script>
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
         async function loadNotes() {
             const response = await fetch('/notes');
             const notes = await response.json();
             const notesDiv = document.getElementById('notes');
             notesDiv.innerHTML = notes.map(note =>
                 '<div class="note">' +
-                '<strong>' + (note.title || 'Note #' + note.id) + '</strong><br>' +
-                note.content + '<br>' +
+                '<strong>' + escapeHtml(note.title || 'Note #' + note.id) + '</strong><br>' +
+                escapeHtml(note.content) + '<br>' +
                 '<small>' + new Date(note.created_at).toLocaleString() + '</small>' +
                 '</div>'
             ).join('');

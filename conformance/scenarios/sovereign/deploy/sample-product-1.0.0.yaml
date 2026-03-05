@@ -22,6 +22,7 @@ spec:
     database:
       name: "sovereign_notes"
       username: "sovereign_user"
+      # NOTE: Demo-only default. Production should use ESO or similar.
       password: "changeme"
     persistence:
       size: "8Gi"
