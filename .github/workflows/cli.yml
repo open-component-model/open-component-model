@@ -235,8 +235,8 @@ jobs:
           files=(bin/ocm-*)
           (( ${#files[@]} > 0 )) || { echo "❌ No CLI binaries found under ./bin"; ls -la; exit 1; }
           
-          CONSTRUCTOR_SOURCE="$(find . -type f -name component-constructor.yaml | head -n 1)"
-          test -n "${CONSTRUCTOR_SOURCE}" || { echo "❌ component-constructor.yaml not found in downloaded artifacts"; ls -la; exit 1; }
+          CONSTRUCTOR_SOURCE="component-constructor.yaml"
+          test -f "${CONSTRUCTOR_SOURCE}" || { echo "❌ component-constructor.yaml not found in downloaded artifacts"; ls -la; exit 1; }
           echo "✅ Required artifacts are present"
           
           mkdir -p ocm-publish
