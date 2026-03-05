@@ -191,7 +191,7 @@ jobs:
   # PHASE 2: FINAL RELEASE (after environment gate)
   # ===========================================================================
   # Environment Gate:
-  # The "controller/release" environment must be configured in GitHub Settings → Environments:
+  # The "release" environment must be configured in GitHub Settings → Environments:
   # - Required reviewers: At least 1 reviewer must approve
 
   # ---------------------------------------------------------------------------
@@ -404,22 +404,50 @@ jobs:
             notes = notes.replace(/^\[([^\]]+)\]\s*-\s*[\d-]+/, `[${finalTag}] - promoted from [${rcTag}] on ${today}`);
             
             const isLatest = setLatest === 'true';
-            const created = await github.rest.repos.createRelease({
-              owner: context.repo.owner, repo: context.repo.repo,
-              tag_name: finalTag, name: `Controller ${finalVersion}`,
-              body: notes, prerelease: false, make_latest: isLatest ? 'true' : 'false',
-            });
             
-            // Upload chart from local dist/ directory (no registry pull needed)
+            // Get or create release (idempotent for reruns)
+            let release;
+            try {
+              release = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner, repo: context.repo.repo, tag: finalTag,
+              });
+              await github.rest.repos.updateRelease({
+                owner: context.repo.owner, repo: context.repo.repo,
+                release_id: release.data.id, tag_name: finalTag,
+                name: `Controller ${finalVersion}`, body: notes,
+                prerelease: false, make_latest: isLatest ? 'true' : 'false',
+              });
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              release = await github.rest.repos.createRelease({
+                owner: context.repo.owner, repo: context.repo.repo,
+                tag_name: finalTag, name: `Controller ${finalVersion}`,
+                body: notes, prerelease: false, make_latest: isLatest ? 'true' : 'false',
+              });
+            }
+            const releaseId = release.data.id;
+            
+            // Deduplicate assets before upload
+            const existing = (await github.rest.repos.listReleaseAssets({
+              owner: context.repo.owner, repo: context.repo.repo,
+              release_id: releaseId, per_page: 100,
+            })).data;
+            
             for (const file of fs.readdirSync(chartDir).filter(f => f.endsWith('.tgz'))) {
+              const dup = existing.find(a => a.name === file);
+              if (dup) {
+                await github.rest.repos.deleteReleaseAsset({
+                  owner: context.repo.owner, repo: context.repo.repo, asset_id: dup.id,
+                });
+              }
               const data = fs.readFileSync(path.join(chartDir, file));
               await github.rest.repos.uploadReleaseAsset({
-                owner: context.repo.owner, repo: context.repo.repo, release_id: created.data.id,
+                owner: context.repo.owner, repo: context.repo.repo, release_id: releaseId,
                 name: file, data, headers: { 'content-type': 'application/gzip', 'content-length': data.length },
               });
             }
             
-            const releaseUrl = created.data.html_url;
+            const releaseUrl = release.data.html_url;
             const imageTags = isLatest
               ? `${imageRepo}:${finalVersion}, ${imageRepo}:latest`
               : `${imageRepo}:${finalVersion}`;

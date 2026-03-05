@@ -451,6 +451,12 @@ jobs:
             exit 1
           fi
 
+      - name: Fail if publish did not succeed
+        if: ${{ needs.publish.result != 'success' && needs.publish.result != 'skipped' }}
+        run: |
+          echo "::error::Publish job did not pass (result: ${{ needs.publish.result }})"
+          exit 1
+
       - name: Fail if OCM publish did not succeed
         if: ${{ needs.publish.result == 'success' && needs.publish-component.result != 'success' }}
         run: |
