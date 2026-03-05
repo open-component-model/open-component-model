@@ -47,14 +47,10 @@ tolerations: []
 
 affinity: {}
 
-# Security context
-securityContext:
-  runAsUser: 999
-  runAsGroup: 999
-  fsGroup: 999
-
 podSecurityContext:
-  runAsNonRoot: true
+  # NOTE: The official postgres image starts as root and internally drops
+  # privileges to the postgres user (UID 999). runAsNonRoot must be false.
+  runAsNonRoot: false
   seccompProfile:
     type: RuntimeDefault
 
@@ -62,7 +58,7 @@ podSecurityContext:
 containerSecurityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: false
-  runAsNonRoot: true
+  runAsNonRoot: false
 
 # Annotations
 podAnnotations: {}

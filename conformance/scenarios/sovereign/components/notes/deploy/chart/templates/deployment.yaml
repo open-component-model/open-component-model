@@ -41,7 +41,7 @@ spec:
               protocol: TCP
           env:
             - name: PORT
-              value: "{{ .Values.service.targetPort | default 8080 }}"
+              value: "{{ .Values.env.PORT | default (toString .Values.service.targetPort) | default "8080" }}"
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
