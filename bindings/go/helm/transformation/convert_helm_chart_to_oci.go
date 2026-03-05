@@ -32,6 +32,9 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	if transformation.Spec == nil {
 		return nil, fmt.Errorf("spec is required for convert helm transformation")
 	}
+	if transformation.Spec.Resource == nil || transformation.Spec.Resource.Access == nil {
+		return nil, fmt.Errorf("spec.resource and spec.resource.access are required for convert helm transformation")
+	}
 
 	if transformation.Output == nil {
 		transformation.Output = &v1alpha1.ConvertHelmToOCIOutput{}

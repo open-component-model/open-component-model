@@ -35,13 +35,14 @@ type Helm struct {
 func (h *Helm) ChartReference() string {
 	parts := []string{
 		h.HelmRepository,
-		h.HelmChart,
+		h.GetChartName(),
 	}
 
 	chart := strings.Join(parts, "/")
 
-	if h.Version != "" {
-		chart = chart + ":" + h.Version
+	version := h.GetVersion()
+	if version != "" {
+		chart = chart + ":" + version
 	}
 
 	return chart

@@ -79,14 +79,19 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 		return nil, fmt.Errorf("error creating registry client: %w", err)
 	}
 
+	helmTmp, err := os.MkdirTemp(opt.TempDir, "helm*")
+	if err != nil {
+		return nil, fmt.Errorf("error creating temporary directory for helm operations: %w", err)
+	}
+
 	dl := &downloader.ChartDownloader{
 		Out:     os.Stderr,
 		Verify:  verify,
 		Getters: getterProviders(),
 		// set by ocm v1 originally.
-		RepositoryCache:  filepath.Join(opt.TempDir, ".helmcache"),
-		RepositoryConfig: filepath.Join(opt.TempDir, ".helmrepo"),
-		ContentCache:     filepath.Join(opt.TempDir, ".helmcontent"),
+		RepositoryCache:  filepath.Join(helmTmp, ".helmcache"),
+		RepositoryConfig: filepath.Join(helmTmp, ".helmrepo"),
+		ContentCache:     filepath.Join(helmTmp, ".helmcontent"),
 		RegistryClient:   regClient,
 		Options:          getterOpts,
 		Keyring:          keyring,

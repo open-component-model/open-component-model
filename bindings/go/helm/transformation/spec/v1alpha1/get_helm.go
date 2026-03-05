@@ -46,7 +46,7 @@ type GetHelmChartOutput struct {
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type GetHelmChartSpec struct {
-	// Resource is the resource descriptor to get the  artifact from.
+	// Resource is the resource descriptor to get the artifact from.
 	Resource *v2.Resource `json:"resource"`
 	// OutputPath is the path where the artifact should be downloaded to.
 	// If empty, a temporary file will be created.
