@@ -208,6 +208,9 @@ func pushChartLayer(ctx context.Context, chart *filesystem.Blob, target oras.Tar
 	if err != nil {
 		return nil, fmt.Errorf("failed to get a reader for helm chart blob: %w", err)
 	}
+	defer func() {
+		err = errors.Join(err, chartReader.Close())
+	}()
 
 	chartDigStr, known := chart.Digest()
 	if !known {
@@ -219,9 +222,6 @@ func pushChartLayer(ctx context.Context, chart *filesystem.Blob, target oras.Tar
 		Digest:    digest.Digest(chartDigStr),
 		Size:      chart.Size(),
 	}
-	defer func() {
-		err = errors.Join(err, chartReader.Close())
-	}()
 	if err = target.Push(ctx, chartLayer, chartReader); err != nil {
 		return nil, fmt.Errorf("failed to push helm chart content layer: %w", err)
 	}

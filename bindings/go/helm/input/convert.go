@@ -5,6 +5,9 @@ import (
 )
 
 func ConvertFromReadOnlyChart(chart *helm.ChartData) *ReadOnlyChart {
+	if chart == nil {
+		return nil
+	}
 	return &ReadOnlyChart{
 		Name:         chart.Name,
 		Version:      chart.Version,
@@ -15,6 +18,9 @@ func ConvertFromReadOnlyChart(chart *helm.ChartData) *ReadOnlyChart {
 }
 
 func ConvertToReadOnlyChart(chart *ReadOnlyChart) *helm.ChartData {
+	if chart == nil {
+		return nil
+	}
 	return &helm.ChartData{
 		Name:         chart.Name,
 		Version:      chart.Version,
