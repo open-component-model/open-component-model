@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
@@ -91,13 +90,6 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	if err != nil {
 		return nil, fmt.Errorf("error downloading helm chart from repository %q: %w", helmURL, err)
 	}
-	defer func() {
-		if resultData.ChartDir != "" {
-			if rmErr := os.RemoveAll(resultData.ChartDir); rmErr != nil {
-				slog.WarnContext(ctx, "failed cleaning up temporary helm chart directory", "path", resultData.ChartDir, "error", rmErr)
-			}
-		}
-	}()
 
 	// Convert chart blob to file spec
 	chartFileSpec, err := filesystem.BlobToSpec(resultData.ChartBlob, chartOutputPath)

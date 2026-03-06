@@ -8,10 +8,10 @@ import (
 
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
 	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
-	"ocm.software/open-component-model/bindings/go/helm"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/helm"
 	"ocm.software/open-component-model/bindings/go/helm/download"
 	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	"ocm.software/open-component-model/bindings/go/helm/oci"
@@ -27,10 +27,6 @@ type ReadOnlyChart struct {
 	Version   string
 	ChartBlob *filesystem.Blob
 	ProvBlob  *filesystem.Blob
-
-	// chartTempDir is the temporary directory where the chart is downloaded to. This is cleaned after the writer
-	// has finished with copying it later in copyChartToOCILayoutAsync.
-	chartTempDir string
 }
 
 // Option is a function that modifies Options.
@@ -92,7 +88,6 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 		Version:   chart.Version,
 		ChartBlob: chart.ChartBlob,
 		ProvBlob:  chart.ProvBlob,
-		ChartDir:  chart.chartTempDir,
 	})
 
 	return result, chart, nil
@@ -181,6 +176,5 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 		Version:      resultChart.Version,
 		ChartBlob:    resultChart.ChartBlob,
 		ProvBlob:     resultChart.ProvBlob,
-		chartTempDir: resultChart.ChartDir,
 	}, err
 }
