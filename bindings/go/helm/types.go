@@ -11,7 +11,7 @@ type ChartData struct {
 	ChartBlob *filesystem.Blob
 	ProvBlob  *filesystem.Blob
 
-	// ChartTempDir is the temporary directory where the chart is downloaded to. This is cleaned after the writer
+	// ChartDir is the directory where the chart is downloaded to. This is cleaned after the writer
 	// has finished with copying it later in copyChartToOCILayoutAsync.
-	ChartTempDir string
+	ChartDir string
 }
