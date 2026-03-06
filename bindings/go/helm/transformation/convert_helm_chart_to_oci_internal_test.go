@@ -123,38 +123,3 @@ func TestReferenceFromHelmAccess(t *testing.T) {
 		})
 	}
 }
-
-func TestPathFromURI(t *testing.T) {
-	tests := []struct {
-		name     string
-		uri      string
-		expected string
-	}{
-		{
-			name:     "file URI with absolute path",
-			uri:      "file:///tmp/charts/mychart-0.1.0.tgz",
-			expected: "/tmp/charts/mychart-0.1.0.tgz",
-		},
-		{
-			name:     "plain absolute path",
-			uri:      "/tmp/charts/mychart-0.1.0.tgz",
-			expected: "/tmp/charts/mychart-0.1.0.tgz",
-		},
-		{
-			name:     "file URI root file",
-			uri:      "file:///mychart-0.1.0.tgz",
-			expected: "/mychart-0.1.0.tgz",
-		},
-		{
-			name:     "nested directory",
-			uri:      "file:///a/b/c/d/chart.tgz",
-			expected: "/a/b/c/d/chart.tgz",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, pathFromURI(tt.uri))
-		})
-	}
-}

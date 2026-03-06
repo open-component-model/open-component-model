@@ -23,21 +23,25 @@ import (
 // NewReadOnlyChartFromRemote downloads a Helm chart from a remote repository and returns it as [helm.ChartData].
 // The helmRepo parameter accepts both OCI references (e.g. "oci://registry.example.com/charts/mychart:1.0.0")
 // and HTTP/S URLs (e.g. "https://example.com/charts/mychart-1.0.0.tgz").
-func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Option) (result *internal.ChartData, err error) {
+// The targetDir parameter specifies the directory where the chart will be downloaded and processed. The caller is responsible for cleaning up this directory after use.
+func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string, opts ...Option) (result *internal.ChartData, err error) {
+	if helmRepo == "" {
+		return nil, errors.New("helm repository must be specified")
+	}
+	if targetDir == "" {
+		return nil, errors.New("target directory must be specified")
+	}
+
 	opt := &option{}
 	for _, o := range opts {
 		o(opt)
-	}
-
-	if opt.TargetDir == "" {
-		opt.TargetDir = os.TempDir()
 	}
 
 	if opt.Credentials == nil {
 		opt.Credentials = make(map[string]string)
 	}
 
-	chartDir, err := os.MkdirTemp(opt.TargetDir, "helmRemoteChart*")
+	chartDir, err := os.MkdirTemp(targetDir, "helmRemoteChart*")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temporary directory: %w", err)
 	}
@@ -49,7 +53,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 		withCACert(opt.CACert),
 		withCredentials(opt.Credentials),
 	}
-	tlsOption, err := constructTLSOptions(opt.TargetDir, tlsOpts...)
+	tlsOption, err := constructTLSOptions(targetDir, tlsOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("error setting up TLS options: %w", err)
 	}
@@ -86,7 +90,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 		return nil, fmt.Errorf("error creating registry client: %w", err)
 	}
 
-	cacheDir, err := os.MkdirTemp(opt.TargetDir, "helm-cache*")
+	cacheDir, err := os.MkdirTemp(targetDir, "helm-cache*")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temporary directory for helm operations: %w", err)
 	}

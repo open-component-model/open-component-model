@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"path/filepath"
+	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
@@ -71,6 +71,14 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		return nil, fmt.Errorf("failed converting resource spec to Helm: %w", err)
 	}
 
+	downloadTemp, err := os.MkdirTemp("", "helm-download")
+	if err != nil {
+		return nil, fmt.Errorf("failed creating temporary directory for helm download: %w", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(downloadTemp)
+	}()
+
 	// Configure the downloader options based on the Helm access specification and resolved credentials
 	// We omit backwards compatibility options like certificates and keyrings and rely on the credentials approach.
 	opts := []helmdownload.Option{
@@ -78,7 +86,6 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		// If not specified, the downloader will use the default behavior which tries to get the version from helmAccess.HelmRepository
 		//nolint:staticcheck // downward compatibility for helm input
 		helmdownload.WithVersion(helmAccess.GetVersion()),
-		helmdownload.WithTargetDir(filepath.Dir(chartOutputPath)),
 		helmdownload.WithCredentials(creds),
 		// Override the default downloader behavior to always download the chart and prov files.
 		helmdownload.WithAlwaysDownloadProv(true),
@@ -92,7 +99,7 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	slog.InfoContext(ctx, "Getting helm chart", "url", helmURL)
 
 	// TODO(matthiasbruns): Introduce a helm based ResourceRepository and handle access in there https://github.com/open-component-model/ocm-project/issues/911
-	resultData, err := helmdownload.NewReadOnlyChartFromRemote(ctx, helmURL, opts...)
+	resultData, err := helmdownload.NewReadOnlyChartFromRemote(ctx, helmURL, downloadTemp, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading helm chart from repository %q: %w", helmURL, err)
 	}

@@ -164,7 +164,6 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBase string, credentials map[string]string) (result *ReadOnlyChart, err error) {
 	opts := []dlinternal.Option{
 		dlinternal.WithCredentials(credentials),
-		dlinternal.WithTargetDir(tmpDirBase),
 		//nolint:staticcheck // downward compatibility for helm input
 		dlinternal.WithVersion(helmSpec.Version),
 		//nolint:staticcheck // downward compatibility for helm input
@@ -172,7 +171,7 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 		//nolint:staticcheck // downward compatibility for helm input
 		dlinternal.WithCACertFile(helmSpec.CACertFile),
 	}
-	resultChart, err := dlinternal.NewReadOnlyChartFromRemote(ctx, helmSpec.HelmRepository, opts...)
+	resultChart, err := dlinternal.NewReadOnlyChartFromRemote(ctx, helmSpec.HelmRepository, tmpDirBase, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading helm chart from repository %q: %w", helmSpec.HelmRepository, err)
 	}

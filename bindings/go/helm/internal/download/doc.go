@@ -11,7 +11,6 @@
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
-//	defer os.RemoveAll(chartData.ChartDir)
 //
 // To download a chart from an HTTP/S repository:
 //

@@ -55,7 +55,12 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		provSpec  *filesystem.Blob
 	)
 
-	chartPath := pathFromURI(transformation.Spec.ChartFile.URI)
+	var chartPath string
+	if p, err := url.Parse(transformation.Spec.ChartFile.URI); err != nil {
+		return nil, fmt.Errorf("invalid chart file URI: %w", err)
+	} else {
+		chartPath = p.Path
+	}
 	fs, err := filesystem.NewFS(filepath.Dir(chartPath), os.O_RDONLY)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating filesystem from chart file spec: %w", err)
@@ -64,7 +69,12 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	chartSpec = filesystem.NewFileBlob(fs, filepath.Base(chartPath))
 
 	if transformation.Spec.ProvFile != nil && transformation.Spec.ProvFile.URI != "" {
-		provPath := pathFromURI(transformation.Spec.ProvFile.URI)
+		var provPath string
+		if p, err := url.Parse(transformation.Spec.ProvFile.URI); err != nil {
+			return nil, fmt.Errorf("invalid prov file URI: %w", err)
+		} else {
+			provPath = p.Path
+		}
 		fs, err := filesystem.NewFS(filepath.Dir(provPath), os.O_RDONLY)
 		if err != nil {
 			return nil, fmt.Errorf("failed creating filesystem from prov file spec: %w", err)
@@ -105,7 +115,7 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 
 	transformation.Output.File = *spec
 	transformation.Output.Resource = transformation.Spec.Resource
-	transformation.Output.Resource.Type = "helmChart"
+	transformation.Output.Resource.Type = access.HelmRepositoryType
 
 	// Use digest of top-level-manifest
 	transformation.Output.Resource.Digest = &descv2.Digest{
@@ -157,12 +167,4 @@ func imageReferenceFromHelmAccess(helmAccess v1.Helm) (string, error) {
 	}
 
 	return ref, nil
-}
-
-func pathFromURI(uri string) string {
-	u, err := url.Parse(uri)
-	if err != nil {
-		return uri
-	}
-	return u.Path
 }

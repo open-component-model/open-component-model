@@ -10,7 +10,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const LegacyHelmChartConsumerType = "HelmChartRepository"
+const (
+	LegacyHelmChartConsumerType = "HelmChartRepository"
+	HelmRepositoryType          = "helmChart"
+)
 
 var Scheme = runtime.NewScheme()
 

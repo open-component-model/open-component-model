@@ -45,10 +45,6 @@ type option struct {
 	// Deprecated: This field is deprecated in favor of using certificates through the credentials.
 	CACertFile string `json:"caCertFile,omitempty"`
 
-	// TargetDir is the directory where the chart will be downloaded to.
-	// If not set, the system default temporary directory will be used.
-	TargetDir string `json:"targetDir,omitempty"`
-
 	// Credentials is a map of credential keys to their values,
 	// used for authentication and TLS configuration when downloading charts from remote repositories.
 	Credentials map[string]string
@@ -88,14 +84,6 @@ func WithCACert(caCert string) Option {
 func WithCACertFile(caCertFile string) Option {
 	return func(t *option) {
 		t.CACertFile = caCertFile
-	}
-}
-
-// WithTargetDir sets the base directory for temporary files created during the download.
-// If not set, [os.TempDir] is used.
-func WithTargetDir(targetDir string) Option {
-	return func(t *option) {
-		t.TargetDir = targetDir
 	}
 }
 
