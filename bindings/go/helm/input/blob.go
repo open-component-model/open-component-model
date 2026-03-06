@@ -12,9 +12,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/helm"
-	"ocm.software/open-component-model/bindings/go/helm/download"
 	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
-	"ocm.software/open-component-model/bindings/go/helm/oci"
+	dlinternal "ocm.software/open-component-model/bindings/go/helm/internal/download"
+	"ocm.software/open-component-model/bindings/go/helm/internal/oci"
 )
 
 const (
@@ -83,14 +83,17 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 		return nil, nil, fmt.Errorf("either path or helmRepository must be specified")
 	}
 
-	result := oci.CopyChartToOCILayout(ctx, &helm.ChartData{
+	result, err := oci.CopyChartToOCILayout(ctx, &helm.ChartData{
 		Name:      chart.Name,
 		Version:   chart.Version,
 		ChartBlob: chart.ChartBlob,
 		ProvBlob:  chart.ProvBlob,
-	})
+	}, tmpDir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error converting helm chart to OCI layout: %w", err)
+	}
 
-	return result, chart, nil
+	return result.Blob, chart, nil
 }
 
 func validateInputSpec(helmSpec v1.Helm) error {
@@ -159,17 +162,17 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 // newReadOnlyChartFromRemote downloads a chart from a remote Helm repository
 // and creates a ReadOnlyChart from it.
 func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBase string, credentials map[string]string) (result *ReadOnlyChart, err error) {
-	opts := []download.Option{
-		download.WithCredentials(credentials),
-		download.WithTempDirBase(tmpDirBase),
+	opts := []dlinternal.Option{
+		dlinternal.WithCredentials(credentials),
+		dlinternal.WithTempDirBase(tmpDirBase),
 		//nolint:staticcheck // downward compatibility for helm input
-		download.WithVersion(helmSpec.Version),
+		dlinternal.WithVersion(helmSpec.Version),
 		//nolint:staticcheck // downward compatibility for helm input
-		download.WithCACert(helmSpec.CACert),
+		dlinternal.WithCACert(helmSpec.CACert),
 		//nolint:staticcheck // downward compatibility for helm input
-		download.WithCACertFile(helmSpec.CACertFile),
+		dlinternal.WithCACertFile(helmSpec.CACertFile),
 	}
-	resultChart, err := download.NewReadOnlyChartFromRemote(ctx, helmSpec.HelmRepository, opts...)
+	resultChart, err := dlinternal.NewReadOnlyChartFromRemote(ctx, helmSpec.HelmRepository, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading helm chart from repository %q: %w", helmSpec.HelmRepository, err)
 	}

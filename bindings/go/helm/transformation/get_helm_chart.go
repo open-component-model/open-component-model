@@ -13,7 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm"
 	"ocm.software/open-component-model/bindings/go/helm/access"
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
-	"ocm.software/open-component-model/bindings/go/helm/download"
+	download2 "ocm.software/open-component-model/bindings/go/helm/internal/download"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -46,6 +46,7 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	if err != nil {
 		return nil, fmt.Errorf("error getting chart output path: %w", err)
 	}
+	slog.DebugContext(ctx, "Going to use chart output path", "path", chartOutputPath)
 
 	// Convert resource to internal format
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
@@ -53,31 +54,33 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	// Resolve credentials if credential provider is available
 	var creds map[string]string
 	if t.CredentialProvider != nil && t.ResourceConsumerIdentityProvider != nil {
-		if consumerId, err := t.ResourceConsumerIdentityProvider.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
+		if consumerId, err := t.ResourceConsumerIdentityProvider.GetResourceCredentialConsumerIdentity(ctx, targetResource); err != nil {
+			return nil, fmt.Errorf("failed getting resource consumer identity for credential resolution: %w", err)
+		} else if consumerId != nil {
 			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
 				return nil, fmt.Errorf("failed resolving credentials: %w", err)
 			}
 		}
 	}
 
-	slog.Info("Getting helm chart", "resource", transformation.Spec.Resource)
+	slog.InfoContext(ctx, "Getting helm chart", "resource", transformation.Spec.Resource)
 
 	var helmAccess v1.Helm
 	if err := access.Scheme.Convert(transformation.Spec.Resource.Access, &helmAccess); err != nil {
-		return nil, fmt.Errorf("failed converting resource spec to v1.Helm: %w", err)
+		return nil, fmt.Errorf("failed converting resource spec to Helm: %w", err)
 	}
 
 	// Configure the downloader options based on the Helm access specification and resolved credentials
 	// We omit backwards compatibility options like certificates and keyrings and rely on the credentials approach.
-	opts := []download.Option{
+	opts := []download2.Option{
 		// If a version is specified in the Helm access spec, use it to ensure we get the correct chart version.
 		// If not specified, the downloader will use the default behavior which tries to get the version from helmAccess.HelmRepository
 		//nolint:staticcheck // downward compatibility for helm input
-		download.WithVersion(helmAccess.Version),
-		download.WithTempDirBase(transformation.Spec.OutputPath),
-		download.WithCredentials(creds),
+		download2.WithVersion(helmAccess.GetVersion()),
+		download2.WithTempDirBase(transformation.Spec.OutputPath),
+		download2.WithCredentials(creds),
 		// Override the default downloader behavior to always download the chart and prov files.
-		download.WithAlwaysDownloadProv(true),
+		download2.WithAlwaysDownloadProv(true),
 	}
 
 	helmURL := helmAccess.HelmRepository
@@ -85,9 +88,10 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		// if HelmChart is provided separately in the spec, append it to the repository URL to get the full URL for the chart.
 		helmURL = fmt.Sprintf("%s/%s", helmURL, helmAccess.HelmChart)
 	}
+	slog.InfoContext(ctx, "Getting helm chart", "url", helmURL)
 
 	// TODO(matthiasbruns): Introduce a helm based ResourceRepository and handle access in there https://github.com/open-component-model/ocm-project/issues/911
-	resultData, err := download.NewReadOnlyChartFromRemote(ctx, helmURL, opts...)
+	resultData, err := download2.NewReadOnlyChartFromRemote(ctx, helmURL, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading helm chart from repository %q: %w", helmURL, err)
 	}
@@ -97,6 +101,7 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	if err != nil {
 		return nil, fmt.Errorf("failed buffering chart blob to file: %w", err)
 	}
+	slog.DebugContext(ctx, "Converted chart blob to file spec", "uri", chartFileSpec.URI)
 
 	// Convert prov blob to file spec if it exists
 	var provFileSpec *blobv1alpha1.File
@@ -105,12 +110,14 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		if err != nil {
 			return nil, fmt.Errorf("failed buffering prov blob to file: %w", err)
 		}
+		slog.DebugContext(ctx, "Converted prov blob to file spec", "uri", provSpec.URI)
 		provFileSpec = provSpec
 	}
 
 	// Update access information with the retrieved chart data
 	helmAccess.HelmChart = resultData.Name
 	helmAccess.Version = resultData.Version
+	slog.InfoContext(ctx, "Successfully retrieved helm chart", "chart", resultData.Name, "version", resultData.Version)
 
 	updatedAccess := runtime.Raw{}
 	if err = access.Scheme.Convert(&helmAccess, &updatedAccess); err != nil {

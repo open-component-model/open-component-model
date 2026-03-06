@@ -3,16 +3,17 @@ package transformation
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/helm"
 	"ocm.software/open-component-model/bindings/go/helm/access"
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
-	"ocm.software/open-component-model/bindings/go/helm/oci"
+	"ocm.software/open-component-model/bindings/go/helm/internal/oci"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
@@ -54,44 +55,53 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		provSpec  *filesystem.Blob
 	)
 
-	fs, err := filesystem.NewFS(dirFromURI(transformation.Spec.ChartFile.URI), os.O_RDONLY)
+	chartPath := pathFromURI(transformation.Spec.ChartFile.URI)
+	fs, err := filesystem.NewFS(filepath.Dir(chartPath), os.O_RDONLY)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating filesystem from chart file spec: %w", err)
 	}
-	chartSpec = filesystem.NewFileBlob(fs, fileFromURI(transformation.Spec.ChartFile.URI))
+	slog.DebugContext(ctx, "Created filesystem for chart file", "uri", transformation.Spec.ChartFile.URI)
+	chartSpec = filesystem.NewFileBlob(fs, filepath.Base(chartPath))
 
 	if transformation.Spec.ProvFile != nil && transformation.Spec.ProvFile.URI != "" {
-		fs, err := filesystem.NewFS(dirFromURI(transformation.Spec.ProvFile.URI), os.O_RDONLY)
+		provPath := pathFromURI(transformation.Spec.ProvFile.URI)
+		fs, err := filesystem.NewFS(filepath.Dir(provPath), os.O_RDONLY)
 		if err != nil {
 			return nil, fmt.Errorf("failed creating filesystem from prov file spec: %w", err)
 		}
-		provSpec = filesystem.NewFileBlob(fs, fileFromURI(transformation.Spec.ProvFile.URI))
+		slog.DebugContext(ctx, "Created filesystem for prov file", "uri", transformation.Spec.ProvFile.URI)
+		provSpec = filesystem.NewFileBlob(fs, filepath.Base(provPath))
 	}
 
 	outputPath, err := DetermineOutputPath(transformation.Spec.OutputPath, "oci")
 	if err != nil {
 		return nil, fmt.Errorf("error getting OCI output path: %w", err)
 	}
+	slog.DebugContext(ctx, "Going to use oci output path", "path", outputPath)
 
-	result := oci.CopyChartToOCILayout(ctx, &helm.ChartData{
+	result, err := oci.CopyChartToOCILayout(ctx, &helm.ChartData{
 		Name:      helmAccess.GetChartName(),
 		Version:   helmAccess.GetVersion(),
 		ChartBlob: chartSpec,
 		ProvBlob:  provSpec,
-	})
+	}, transformation.Spec.OutputPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OCI layout from helm chart: %w", err)
+	}
 
-	// BlobToSpec fully consumes the blob (copies to disk), which allows the
-	// background goroutine to finish and makes the descriptor available.
-	spec, err := filesystem.BlobToSpec(result, outputPath)
+	if result.Blob == nil {
+		return nil, fmt.Errorf("OCI layout blob is required but was not returned from OCI layout creation")
+	}
+	if result.Desc == nil {
+		return nil, fmt.Errorf("OCI layout descriptor is required but was not returned from OCI layout creation")
+	}
+
+	spec, err := filesystem.BlobToSpec(result.Blob, outputPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting OCI layout blob to file spec: %w", err)
 	}
 
-	// Now that the blob is consumed, we can safely retrieve the descriptor.
-	ociDesc, err := result.Descriptor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get OCI manifest descriptor: %w", err)
-	}
+	slog.InfoContext(ctx, "Got OCI manifest descriptor")
 
 	transformation.Output.File = *spec
 	transformation.Output.Resource = transformation.Spec.Resource
@@ -99,41 +109,39 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 
 	// Use digest of top-level-manifest
 	transformation.Output.Resource.Digest = &descv2.Digest{
-		HashAlgorithm: string(ociDesc.Digest.Algorithm()),
-		Value:         ociDesc.Digest.Encoded(),
+		HashAlgorithm: string(result.Desc.Digest.Algorithm()),
+		Value:         result.Desc.Digest.Encoded(),
 	}
+	slog.DebugContext(ctx, "Set OCI image imageReference digest in output resource", "value", transformation.Output.Resource.Digest.Value)
 
-	reference, err := referenceFromHelmAccess(helmAccess)
+	imageReference, err := imageReferenceFromHelmAccess(helmAccess)
 	if err != nil {
-		return nil, fmt.Errorf("failed constructing OCI image reference from Helm access: %w", err)
+		return nil, fmt.Errorf("failed constructing OCI image imageReference from Helm access: %w", err)
 	}
+	slog.InfoContext(ctx, "Constructed OCI image imageReference from Helm access", "imageReference", imageReference)
 
 	ociAccess := ociv2.OCIImage{
 		Type: runtime.Type{
 			Version: ociv2.LegacyTypeVersion,
 			Name:    ociv2.LegacyType,
 		},
-		ImageReference: reference,
+		ImageReference: imageReference,
 	}
 	updatedAccess := runtime.Raw{}
 	if err = ociaccess.Scheme.Convert(&ociAccess, &updatedAccess); err != nil {
-		return nil, fmt.Errorf("failed converting ociv2.OCIImage access back to resource access format: %w", err)
+		return nil, fmt.Errorf("failed converting OCIImage access back to resource access format: %w", err)
 	}
-	transformation.Output.Resource.Relation = descv2.LocalRelation
 	transformation.Output.Resource.Access = &updatedAccess
 
 	return &transformation, nil
 }
 
-func referenceFromHelmAccess(helmAccess v1.Helm) (string, error) {
-	// if HelmChart is provided separately in the spec, append it to the repository URL to get the full URL for the chart.
-	parts := []string{helmAccess.HelmRepository, helmAccess.GetChartName()}
-	ref := strings.Join(parts, "/")
-	if helmAccess.GetVersion() != "" {
-		ref = ref + ":" + helmAccess.GetVersion()
+func imageReferenceFromHelmAccess(helmAccess v1.Helm) (string, error) {
+	reference, err := helmAccess.ChartReference()
+	if err != nil {
+		return "", fmt.Errorf("failed getting chart reference from Helm access: %w", err)
 	}
-
-	lref, err := looseref.ParseReference(ref)
+	lref, err := looseref.ParseReference(reference)
 	if err != nil {
 		return "", fmt.Errorf("failed parsing reference from Helm access: %w", err)
 	}
@@ -142,7 +150,8 @@ func referenceFromHelmAccess(helmAccess v1.Helm) (string, error) {
 		return "", fmt.Errorf("repository is required in Helm access to construct OCI image reference")
 	}
 
-	ref = lref.Repository
+	// Use only the repository path (without registry/domain) as the OCI image reference.
+	ref := lref.Repository
 	if lref.Tag != "" {
 		ref = ref + ":" + lref.Tag
 	}
@@ -150,14 +159,10 @@ func referenceFromHelmAccess(helmAccess v1.Helm) (string, error) {
 	return ref, nil
 }
 
-func dirFromURI(uri string) string {
-	uri = strings.TrimPrefix(uri, "file://")
-	// only return path to dir, not including the file name
-	return filepath.Dir(uri)
-}
-
-func fileFromURI(uri string) string {
-	uri = strings.TrimPrefix(uri, "file://")
-	// only return file name, not including the path to the dir
-	return filepath.Base(uri)
+func pathFromURI(uri string) string {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return uri
+	}
+	return u.Path
 }

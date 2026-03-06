@@ -79,13 +79,13 @@ func TestHelmAccess_GetResourceCredentialConsumerIdentity(t *testing.T) {
 		assert.Equal(t, "registry.example.com", identity["hostname"])
 	})
 
-	t.Run("returns error for local helm input without repository", func(t *testing.T) {
+	t.Run("returns nil for local helm input without repository", func(t *testing.T) {
 		resource := helmAccessResource(t, map[string]string{
 			"helmRepository": "",
 		})
 
 		identity, err := h.GetResourceCredentialConsumerIdentity(ctx, resource)
-		assert.ErrorIs(t, err, access.ErrLocalHelmInputDoesNotRequireCredentials)
+		assert.NoError(t, err)
 		assert.Nil(t, identity)
 	})
 

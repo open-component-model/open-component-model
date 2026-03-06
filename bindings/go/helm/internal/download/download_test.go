@@ -56,6 +56,12 @@ func TestGetVersion(t *testing.T) {
 			expectedVersion: "1.0.0",
 		},
 		{
+			name:            "HTTPS repo with version different override",
+			versionOverride: "1.2.0",
+			helmRepo:        "https://example.com/charts/mychart-1.0.0.tgz",
+			expectedVersion: "1.2.0",
+		},
+		{
 			name:            "HTTP repo with no override returns empty version",
 			versionOverride: "",
 			helmRepo:        "http://example.com/charts/mychart-1.0.0.tgz",
@@ -85,26 +91,22 @@ func TestGetVersion(t *testing.T) {
 }
 
 func TestConstructTLSOptions(t *testing.T) {
-	t.Run("empty options returns no error", func(t *testing.T) {
-		opts := &option{
-			TargetDir:   t.TempDir(),
-			Credentials: make(map[string]string),
-		}
-		tlsOpt, clearCache, err := constructTLSOptions(opts)
+	t.Run("no options returns no error", func(t *testing.T) {
+		tlsOpt, err := constructTLSOptions(t.TempDir())
 		require.NoError(t, err)
 		assert.NotNil(t, tlsOpt)
-		assert.NotNil(t, clearCache)
-		require.NoError(t, clearCache())
+	})
+
+	t.Run("empty targetDir returns error", func(t *testing.T) {
+		_, err := constructTLSOptions("")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "target directory")
 	})
 
 	t.Run("nil credentials returns no error", func(t *testing.T) {
-		opts := &option{
-			TargetDir: t.TempDir(),
-		}
-		tlsOpt, clearCache, err := constructTLSOptions(opts)
+		tlsOpt, err := constructTLSOptions(t.TempDir(), withCredentials(nil))
 		require.NoError(t, err)
 		assert.NotNil(t, tlsOpt)
-		require.NoError(t, clearCache())
 	})
 
 	t.Run("CACertFile is used when set", func(t *testing.T) {
@@ -112,23 +114,15 @@ func TestConstructTLSOptions(t *testing.T) {
 		caFile := filepath.Join(tmpDir, "ca.pem")
 		require.NoError(t, os.WriteFile(caFile, []byte("fake-ca-cert"), 0o600))
 
-		opts := &option{
-			TargetDir:  tmpDir,
-			CACertFile: caFile,
-		}
-		tlsOpt, clearCache, err := constructTLSOptions(opts)
+		tlsOpt, err := constructTLSOptions(tmpDir, withCACertFile(caFile))
 		require.NoError(t, err)
 		assert.NotNil(t, tlsOpt)
-		require.NoError(t, clearCache())
 	})
 
 	t.Run("CACert creates temp file", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		opts := &option{
-			TargetDir: tmpDir,
-			CACert:    "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----",
-		}
-		tlsOpt, clearCache, err := constructTLSOptions(opts)
+		caCert := "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
+		tlsOpt, err := constructTLSOptions(tmpDir, withCACert(caCert))
 		require.NoError(t, err)
 		assert.NotNil(t, tlsOpt)
 
@@ -136,59 +130,37 @@ func TestConstructTLSOptions(t *testing.T) {
 		matches, err := filepath.Glob(filepath.Join(tmpDir, "caCert-*.pem"))
 		require.NoError(t, err)
 		assert.Len(t, matches, 1, "expected one temporary CA cert file")
-
-		// clearCache should remove the temp file
-		require.NoError(t, clearCache())
-		_, err = os.Stat(matches[0])
-		assert.True(t, os.IsNotExist(err), "temp CA cert file should be removed after clearCache")
 	})
 
 	t.Run("CACertFile takes precedence over CACert", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		caFile := filepath.Join(tmpDir, "ca.pem")
 		require.NoError(t, os.WriteFile(caFile, []byte("fake-ca-cert"), 0o600))
-
-		opts := &option{
-			TargetDir:  tmpDir,
-			CACertFile: caFile,
-			CACert:     "should-be-ignored",
-		}
-		_, clearCache, err := constructTLSOptions(opts)
+		_, err := constructTLSOptions(tmpDir, withCACertFile(caFile), withCACert("should-be-ignored"))
 		require.NoError(t, err)
 
 		// No temp file should be created since CACertFile was used
 		matches, err := filepath.Glob(filepath.Join(tmpDir, "caCert-*.pem"))
 		require.NoError(t, err)
 		assert.Empty(t, matches, "no temp CA cert file should be created when CACertFile is set")
-		require.NoError(t, clearCache())
 	})
 
 	t.Run("certFile credential that does not exist returns error", func(t *testing.T) {
-		opts := &option{
-			TargetDir: t.TempDir(),
-			Credentials: map[string]string{
-				CredentialCertFile: "/nonexistent/cert.pem",
-			},
-		}
-		_, clearCache, err := constructTLSOptions(opts)
+		_, err := constructTLSOptions(t.TempDir(), withCredentials(map[string]string{
+			CredentialCertFile: "/nonexistent/cert.pem",
+		}))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "certFile")
 		assert.Contains(t, err.Error(), "does not exist")
-		require.NoError(t, clearCache())
 	})
 
 	t.Run("keyFile credential that does not exist returns error", func(t *testing.T) {
-		opts := &option{
-			TargetDir: t.TempDir(),
-			Credentials: map[string]string{
-				CredentialKeyFile: "/nonexistent/key.pem",
-			},
-		}
-		_, clearCache, err := constructTLSOptions(opts)
+		_, err := constructTLSOptions(t.TempDir(), withCredentials(map[string]string{
+			CredentialKeyFile: "/nonexistent/key.pem",
+		}))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "keyFile")
 		assert.Contains(t, err.Error(), "does not exist")
-		require.NoError(t, clearCache())
 	})
 
 	t.Run("valid certFile and keyFile credentials", func(t *testing.T) {
@@ -198,64 +170,11 @@ func TestConstructTLSOptions(t *testing.T) {
 		require.NoError(t, os.WriteFile(certFile, []byte("fake-cert"), 0o600))
 		require.NoError(t, os.WriteFile(keyFile, []byte("fake-key"), 0o600))
 
-		opts := &option{
-			TargetDir: tmpDir,
-			Credentials: map[string]string{
-				CredentialCertFile: certFile,
-				CredentialKeyFile:  keyFile,
-			},
-		}
-		tlsOpt, clearCache, err := constructTLSOptions(opts)
+		tlsOpt, err := constructTLSOptions(tmpDir, withCredentials(map[string]string{
+			CredentialCertFile: certFile,
+			CredentialKeyFile:  keyFile,
+		}))
 		require.NoError(t, err)
 		assert.NotNil(t, tlsOpt)
-		require.NoError(t, clearCache())
-	})
-}
-
-func TestGetterProviders(t *testing.T) {
-	providers := getterProviders()
-	require.Len(t, providers, 2, "expected two getter providers")
-
-	assert.Contains(t, providers[0].Schemes, "http")
-	assert.Contains(t, providers[0].Schemes, "https")
-	assert.Contains(t, providers[1].Schemes, "oci")
-}
-
-func TestOptions(t *testing.T) {
-	t.Run("WithVersion", func(t *testing.T) {
-		opt := &option{}
-		WithVersion("1.0.0")(opt)
-		assert.Equal(t, "1.0.0", opt.Version)
-	})
-
-	t.Run("WithCACert", func(t *testing.T) {
-		opt := &option{}
-		WithCACert("cert-data")(opt)
-		assert.Equal(t, "cert-data", opt.CACert)
-	})
-
-	t.Run("WithCACertFile", func(t *testing.T) {
-		opt := &option{}
-		WithCACertFile("/path/to/ca.pem")(opt)
-		assert.Equal(t, "/path/to/ca.pem", opt.CACertFile)
-	})
-
-	t.Run("WithTempDirBase", func(t *testing.T) {
-		opt := &option{}
-		WithTempDirBase("/tmp/custom")(opt)
-		assert.Equal(t, "/tmp/custom", opt.TargetDir)
-	})
-
-	t.Run("WithCredentials", func(t *testing.T) {
-		opt := &option{}
-		creds := map[string]string{"username": "user", "password": "pass"}
-		WithCredentials(creds)(opt)
-		assert.Equal(t, creds, opt.Credentials)
-	})
-
-	t.Run("WithAlwaysDownloadProv", func(t *testing.T) {
-		opt := &option{}
-		WithAlwaysDownloadProv(true)(opt)
-		assert.True(t, opt.AlwaysDownloadProv)
 	})
 }

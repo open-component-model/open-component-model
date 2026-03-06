@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"fmt"
+	"net/url"
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -32,20 +34,28 @@ type Helm struct {
 	Version string `json:"version,omitempty"`
 }
 
-func (h *Helm) ChartReference() string {
-	parts := []string{
-		h.HelmRepository,
-		h.GetChartName(),
-	}
-
-	chart := strings.Join(parts, "/")
-
+func (h *Helm) ChartReference() (string, error) {
+	repo := h.HelmRepository
+	chartName := h.GetChartName()
 	version := h.GetVersion()
-	if version != "" {
-		chart = chart + ":" + version
+
+	if chartName == "" {
+		return "", fmt.Errorf("chart name is required to construct chart reference")
 	}
 
-	return chart
+	u, err := url.Parse(repo)
+	if err != nil {
+		return "", fmt.Errorf("error parsing helm repository URL: %w", err)
+	}
+	u.Path, err = url.JoinPath(u.Path, chartName)
+	if err != nil {
+		return "", fmt.Errorf("error joining chart name to helm repository URL: %w", err)
+	}
+	ref := u.String()
+	if version != "" {
+		ref += ":" + version
+	}
+	return ref, nil
 }
 
 func (h *Helm) GetChartName() string {

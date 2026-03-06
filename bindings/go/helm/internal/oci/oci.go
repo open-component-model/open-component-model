@@ -7,15 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"sync"
+	"os"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"helm.sh/helm/v4/pkg/registry"
 	"oras.land/oras-go/v2"
 
-	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/helm"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
@@ -23,119 +21,64 @@ import (
 )
 
 // Result holds both the OCI layout blob and the manifest descriptor produced by CopyChartToOCILayout.
-//
-// The manifest descriptor is computed inside a goroutine that streams data through an io.Pipe.
-// That goroutine cannot finish (and thus cannot produce the descriptor) until the pipe is fully
-// drained, i.e. the blob is consumed. Therefore the descriptor is only available after the blob
-// has been fully read (e.g. written to disk). Calling Descriptor before that will block.
 type Result struct {
-	*direct.Blob
-	desc   chan descriptorOrError
-	cached *descriptorOrError
-	mut    sync.Mutex
-}
-
-type descriptorOrError struct {
-	Descriptor ociImageSpecV1.Descriptor
-	Err        error
-}
-
-// Descriptor returns the OCI image manifest descriptor.
-// It blocks until the blob-producing goroutine has finished.
-// The blob MUST be fully consumed before calling this method, otherwise it will deadlock.
-// Safe for repeated calls and concurrent use: the result is cached after the
-// first successful receive so subsequent calls return immediately.
-// Context cancellation does not poison the cache — future callers can still succeed.
-func (r *Result) Descriptor(ctx context.Context) (ociImageSpecV1.Descriptor, error) {
-	r.mut.Lock()
-	defer r.mut.Unlock()
-
-	if r.cached != nil {
-		return r.cached.Descriptor, r.cached.Err
-	}
-	select {
-	case <-ctx.Done():
-		return ociImageSpecV1.Descriptor{}, ctx.Err()
-	case result := <-r.desc:
-		r.cached = &result
-		return result.Descriptor, result.Err
-	}
+	Blob *filesystem.Blob
+	Desc *ociImageSpecV1.Descriptor
 }
 
 // CopyChartToOCILayout takes a ChartData helper object and creates an OCI layout from it.
 // Three OCI layers are expected: config, tgz contents and optionally a provenance file.
 // The result is tagged with the helm chart version.
-// The returned Result contains the blob and provides access to the manifest descriptor
-// after the blob has been fully consumed.
+// The OCI layout is written to a temporary file in dir and returned as a file-backed blob.
 // See also: https://github.com/helm/community/blob/main/hips/hip-0006.md#2-support-for-provenance-files
-func CopyChartToOCILayout(ctx context.Context, chart *helm.ChartData) *Result {
-	// Why we cannot simply wait for the write to finish:
-	// io.Pipe is unbuffered. The goroutine's writes block until someone reads from the other end.
-	// If CopyChartToOCILayout waited for the goroutine to finish before returning, nobody would be reading the
-	// pipe, so the goroutine would block on its first write. Deadlock.
-	// We do not want to lose the steaming benefits of io.Pipe.
-	r, w := io.Pipe()
-
-	desc := make(chan descriptorOrError, 1)
-
-	go copyChartToOCILayoutAsync(ctx, chart, w, desc)
-
-	return &Result{
-		Blob: direct.New(r, direct.WithMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)),
-		desc: desc,
+func CopyChartToOCILayout(ctx context.Context, chart *helm.ChartData, dir string) (*Result, error) {
+	tmpFile, err := os.CreateTemp(dir, "oci-layout-*.tar.gz")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp file for OCI layout: %w", err)
 	}
-}
+	defer func(tmpFile *os.File) {
+		_ = tmpFile.Close()
+	}(tmpFile)
 
-func copyChartToOCILayoutAsync(ctx context.Context, chart *helm.ChartData, w *io.PipeWriter, descCh chan<- descriptorOrError) {
-	// err accumulates any error from copy, gzip, or layout writing.
-	var err error
-	defer func() {
-		_ = w.CloseWithError(err) // Always returns nil.
-	}()
+	zippedBuf := gzip.NewWriter(tmpFile)
 
-	zippedBuf := gzip.NewWriter(w)
-	defer func() {
-		err = errors.Join(err, zippedBuf.Close())
-	}()
-
-	// Create an OCI layout writer over the gzip stream.
 	target := tar.NewOCILayoutWriter(zippedBuf)
-	defer func() {
-		err = errors.Join(err, target.Close())
-	}()
 
-	// Generate and Push layers based on the chart to the OCI layout.
+	// Generate and push layers based on the chart to the OCI layout.
 	configLayer, chartLayer, provLayer, err := pushChartAndGenerateLayers(ctx, chart, target)
 	if err != nil {
-		err = fmt.Errorf("failed to push chart layers: %w", err)
-		descCh <- descriptorOrError{Err: err}
-		return
+		return nil, fmt.Errorf("failed to push chart layers: %w", err)
 	}
 
 	layers := []ociImageSpecV1.Descriptor{*chartLayer}
 	if provLayer != nil {
-		// If a provenance file was provided, add it to the layers.
 		layers = append(layers, *provLayer)
 	}
 
 	// Create OCI image manifest.
-	imgDesc, perr := oras.PackManifest(ctx, target, oras.PackManifestVersion1_1, "", oras.PackManifestOptions{
+	imgDesc, err := oras.PackManifest(ctx, target, oras.PackManifestVersion1_1, "", oras.PackManifestOptions{
 		ConfigDescriptor: configLayer,
 		Layers:           layers,
 	})
-	if perr != nil {
-		err = fmt.Errorf("failed to create OCI image manifest: %w", perr)
-		descCh <- descriptorOrError{Err: err}
-		return
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OCI image manifest: %w", err)
 	}
 
-	if terr := target.Tag(ctx, imgDesc, chart.Version); terr != nil {
-		err = fmt.Errorf("failed to tag OCI image: %w", terr)
-		descCh <- descriptorOrError{Err: err}
-		return
+	if err := target.Tag(ctx, imgDesc, chart.Version); err != nil {
+		return nil, fmt.Errorf("failed to tag OCI image: %w", err)
 	}
 
-	descCh <- descriptorOrError{Descriptor: imgDesc}
+	if err := errors.Join(target.Close(), zippedBuf.Close()); err != nil {
+		return nil, fmt.Errorf("failed to finalize OCI layout: %w", err)
+	}
+
+	blob, err := filesystem.GetBlobFromOSPath(tmpFile.Name())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create blob from OCI layout file: %w", err)
+	}
+	blob.SetMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)
+
+	return &Result{Blob: blob, Desc: &imgDesc}, nil
 }
 
 func pushChartAndGenerateLayers(ctx context.Context, chart *helm.ChartData, target oras.Target) (

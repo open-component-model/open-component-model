@@ -18,14 +18,14 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/helm"
-	"ocm.software/open-component-model/bindings/go/helm/oci"
+	"ocm.software/open-component-model/bindings/go/helm/internal/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 
 func TestCopyChartToOCILayout_Success(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("..", "testdata")
+	testDataDir := filepath.Join("../../testdata")
 
 	tests := []struct {
 		name      string
@@ -53,10 +53,11 @@ func TestCopyChartToOCILayout_Success(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			chart := newReadOnlyChart(t, tt.path)
 
-			result := oci.CopyChartToOCILayout(ctx, chart)
+			result, err := oci.CopyChartToOCILayout(ctx, chart, t.TempDir())
+			require.NoError(t, err)
 			require.NotNil(t, result)
 
-			store, err := tar.ReadOCILayout(ctx, result)
+			store, err := tar.ReadOCILayout(ctx, result.Blob)
 			require.NoError(t, err)
 			require.NotNil(t, store)
 			t.Cleanup(func() {
@@ -110,14 +111,15 @@ func TestCopyChartToOCILayout_Success(t *testing.T) {
 
 func TestCopyChartToOCILayout_TagMatchesVersion(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("..", "testdata")
+	testDataDir := filepath.Join("../../testdata")
 
 	chart := newReadOnlyChart(t, filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
 
-	result := oci.CopyChartToOCILayout(ctx, chart)
+	result, err := oci.CopyChartToOCILayout(ctx, chart, t.TempDir())
+	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	store, err := tar.ReadOCILayout(ctx, result)
+	store, err := tar.ReadOCILayout(ctx, result.Blob)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, store.Close())
@@ -131,14 +133,15 @@ func TestCopyChartToOCILayout_TagMatchesVersion(t *testing.T) {
 
 func TestCopyChartToOCILayout_ConfigContent(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("..", "testdata")
+	testDataDir := filepath.Join("../../testdata")
 
 	chart := newReadOnlyChart(t, filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
 
-	result := oci.CopyChartToOCILayout(ctx, chart)
+	result, err := oci.CopyChartToOCILayout(ctx, chart, t.TempDir())
+	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	store, err := tar.ReadOCILayout(ctx, result)
+	store, err := tar.ReadOCILayout(ctx, result.Blob)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, store.Close())
@@ -167,7 +170,7 @@ func TestCopyChartToOCILayout_ConfigContent(t *testing.T) {
 
 func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("..", "testdata")
+	testDataDir := filepath.Join("../../testdata")
 	chartPath := filepath.Join(testDataDir, "mychart-0.1.0.tgz")
 
 	tests := []struct {
@@ -213,36 +216,26 @@ func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 			chart: func(t *testing.T) *helm.ChartData { t.Helper(); return newReadOnlyChart(t, chartPath) },
 			check: func(t *testing.T, result *oci.Result, _ *helm.ChartData) {
 				t.Helper()
-				mediaType, known := result.MediaType()
+				mediaType, known := result.Blob.MediaType()
 				assert.True(t, known, "media type should be known")
 				assert.Equal(t, layout.MediaTypeOCIImageLayoutTarGzipV1, mediaType)
-
-				// Consume the blob so the goroutine finishes
-				_, err := tar.ReadOCILayout(ctx, result)
-				require.NoError(t, err)
 			},
 		},
 		{
-			name:  "descriptor available after blob consumed",
+			name:  "descriptor is available immediately",
 			chart: func(t *testing.T) *helm.ChartData { t.Helper(); return newReadOnlyChart(t, chartPath) },
 			check: func(t *testing.T, result *oci.Result, _ *helm.ChartData) {
 				t.Helper()
-				store, err := tar.ReadOCILayout(ctx, result)
-				require.NoError(t, err)
-				t.Cleanup(func() { require.NoError(t, store.Close()) })
-
-				desc, err := result.Descriptor(ctx)
-				require.NoError(t, err)
-				assert.NotEmpty(t, desc.Digest, "descriptor digest should not be empty")
-				assert.Greater(t, desc.Size, int64(0), "descriptor size should be positive")
+				assert.NotEmpty(t, result.Desc.Digest, "descriptor digest should not be empty")
+				assert.Greater(t, result.Desc.Size, int64(0), "descriptor size should be positive")
 			},
 		},
 		{
-			name:  "empty chart dir does not cause cleanup failure",
+			name:  "OCI layout store has exactly one manifest",
 			chart: func(t *testing.T) *helm.ChartData { t.Helper(); return newReadOnlyChart(t, chartPath) },
 			check: func(t *testing.T, result *oci.Result, _ *helm.ChartData) {
 				t.Helper()
-				store, err := tar.ReadOCILayout(ctx, result)
+				store, err := tar.ReadOCILayout(ctx, result.Blob)
 				require.NoError(t, err)
 				t.Cleanup(func() { require.NoError(t, store.Close()) })
 				require.Len(t, store.Index.Manifests, 1)
@@ -253,7 +246,8 @@ func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			chart := tt.chart(t)
-			result := oci.CopyChartToOCILayout(ctx, chart)
+			result, err := oci.CopyChartToOCILayout(ctx, chart, t.TempDir())
+			require.NoError(t, err)
 			require.NotNil(t, result)
 			tt.check(t, result, chart)
 		})
@@ -269,27 +263,17 @@ func TestCopyChartToOCILayout_NilChartBlobReturnsError(t *testing.T) {
 		ChartBlob: nil,
 	}
 
-	result := oci.CopyChartToOCILayout(ctx, chart)
-	require.NotNil(t, result)
-
-	// Consume the blob to let the goroutine finish
-	rc, err := result.ReadCloser()
-	require.NoError(t, err)
-	_, _ = io.ReadAll(rc)
-	_ = rc.Close()
-
-	// The error should surface via Descriptor
-	_, descErr := result.Descriptor(ctx)
-	require.Error(t, descErr, "nil ChartBlob should cause an error")
-	assert.Contains(t, descErr.Error(), "chart blob must not be nil")
+	_, err := oci.CopyChartToOCILayout(ctx, chart, t.TempDir())
+	require.Error(t, err, "nil ChartBlob should cause an error")
+	assert.Contains(t, err.Error(), "chart blob must not be nil")
 }
 
-// readManifest is a test helper that consumes a Result, opens the OCI layout store,
+// readManifest is a test helper that opens the OCI layout store from a Result
 // and decodes the single manifest. It registers cleanup for the store and manifest reader.
 func readManifest(t *testing.T, ctx context.Context, result *oci.Result) (*tar.CloseableReadOnlyStore, ociImageSpecV1.Manifest) {
 	t.Helper()
 
-	store, err := tar.ReadOCILayout(ctx, result)
+	store, err := tar.ReadOCILayout(ctx, result.Blob)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	require.Len(t, store.Index.Manifests, 1)

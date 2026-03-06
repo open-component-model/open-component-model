@@ -2,8 +2,8 @@ package access
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log/slog"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
@@ -11,10 +11,6 @@ import (
 )
 
 const LegacyHelmChartConsumerType = "HelmChartRepository"
-
-// ErrLocalHelmInputDoesNotRequireCredentials is returned when credential-related operations are attempted
-// on local helm inputs, since those are based on local filesystem and do not require authentication or authorization.
-var ErrLocalHelmInputDoesNotRequireCredentials = errors.New("local helm inputs do not require credentials")
 
 var Scheme = runtime.NewScheme()
 
@@ -37,7 +33,7 @@ func MustAddToScheme(scheme *runtime.Scheme) {
 type HelmAccess struct{}
 
 // GetResourceCredentialConsumerIdentity returns the consumer identity for the given resource if the resource access is a Helm repository.
-func (h *HelmAccess) GetResourceCredentialConsumerIdentity(_ context.Context, resource *descruntime.Resource) (identity runtime.Identity, err error) {
+func (h *HelmAccess) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descruntime.Resource) (identity runtime.Identity, err error) {
 	if resource == nil {
 		return nil, fmt.Errorf("resource is required")
 	}
@@ -51,7 +47,8 @@ func (h *HelmAccess) GetResourceCredentialConsumerIdentity(_ context.Context, re
 	}
 
 	if helm.HelmRepository == "" {
-		return nil, ErrLocalHelmInputDoesNotRequireCredentials
+		slog.InfoContext(ctx, "local helm inputs do not require credentials")
+		return nil, nil
 	}
 
 	identity, err = runtime.ParseURLToIdentity(helm.HelmRepository)
