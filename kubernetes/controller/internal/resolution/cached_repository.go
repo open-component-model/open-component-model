@@ -90,12 +90,12 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 	}
 
 	keyFunc := func() (string, error) {
-		// Build cache key based on configuration hash, repository spec, component, version, verifications, and digest
-		// spec.
 		// The baseRepoSpec is not necessarily the repository used to resolve the component.
 		// The actual repository is determined by the providers resolver
 		// configuration (which is represented through the config hash) and
 		// the base repository.
+		// The verifications and digests are part of the cache-key to ensure that verified or integrity-checked
+		// component versions are cached under another cache-key than non-verified ones.
 		return buildCacheKey(configHash, c.baseRepoSpec, component, version, c.verifications, c.digest)
 	}
 
@@ -192,8 +192,10 @@ func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
 
 // buildCacheKey generates a cache key from the configuration hash, repository spec, component, version, verifications,
 // and a digest spec.
-// It canonicalizes the repository spec and verifications using JCS (RFC 8785) before hashing to ensure consistent keys
-// regardless of field ordering in the JSON representation.
+// The verifications and digest spec are included in the cache-key to ensure that different cache entries are created
+// for verified and unverified component versions of the same kind.
+// It canonicalizes the repository spec, verifications, and digest spec using JCS (RFC 8785) before hashing to ensure
+// consistent keys regardless of field ordering in the JSON representation.
 func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string, verifications []verification.Verification, digestSpec *v2.Digest) (string, error) {
 	repoJSON, err := json.Marshal(repoSpec)
 	if err != nil {
