@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 )
 
@@ -156,18 +157,18 @@ func TestGetReferenceName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
 
-			gotReference, gotErr := GetReferenceName(tt.ociImage)
+			gotReference, gotErr := ParseReferenceName(tt.ociImage.ImageReference)
 
 			if tt.wantErr {
-				r.Error(gotErr, "GetReferenceName() should return an error")
+				r.Error(gotErr, "ParseReferenceName() should return an error")
 				if tt.errContains != "" {
 					r.ErrorContains(gotErr, tt.errContains, "error message should contain expected text")
 				}
 			} else {
-				r.NoError(gotErr, "GetReferenceName() should not return an error")
+				r.NoError(gotErr, "ParseReferenceName() should not return an error")
 			}
 
-			r.Equal(tt.wantReference, gotReference, "GetReferenceName() returned unexpected reference")
+			r.Equal(tt.wantReference, gotReference, "ParseReferenceName() returned unexpected reference")
 		})
 	}
 }

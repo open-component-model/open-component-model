@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -14,7 +15,27 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-func processOCIArtifact(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+type ociArtifactProcessor struct{}
+
+var (
+	_ processor          = (*ociArtifactProcessor)(nil)
+	_ ociUploadSupported = (*ociArtifactProcessor)(nil)
+)
+
+func init() {
+	registerProcessor(&ociv1.OCIImage{}, &ociArtifactProcessor{})
+}
+
+func (p *ociArtifactProcessor) ShouldUploadAsOCIArtifact(ctx context.Context, resource descriptorv2.Resource, toSpec runtime.Typed, access runtime.Typed, uploadType UploadType) (bool, error) {
+	if _, isOCITarget := toSpec.(*ocirepo.Repository); isOCITarget {
+		if uploadType == UploadAsOciArtifact {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (p *ociArtifactProcessor) Process(ctx context.Context, resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 
@@ -30,7 +51,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 
 	// e.g. ghcr.io/open-component-model/helmexample/charts/mariadb:12.2.7
 	// strip the domain part and keep the rest
-	referenceName, err := GetReferenceName(ociAccess)
+	referenceName, err := ParseReferenceName(ociAccess.ImageReference)
 	if err != nil {
 		return fmt.Errorf("cannot get reference name: %w", err)
 	}
@@ -59,7 +80,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 	// Create AddLocalResource transformation
 	var addResourceTransform transformv1alpha1.GenericTransformation
 	if uploadAsOCIArtifact {
-		if addResourceTransform, err = ociUploadAsArtifact(toSpec, addResourceID, getResourceID, referenceName); err != nil {
+		if addResourceTransform, err = ociUploadAsArtifact(toSpec, addResourceID, getResourceID, staticReferenceName(referenceName)); err != nil {
 			return fmt.Errorf("failed to create oci upload transformation: %w", err)
 		}
 	} else {
@@ -113,9 +134,23 @@ func ociUploadAsLocalResource(toSpec runtime.Typed, component, version, addResou
 	return addResourceTransform, nil
 }
 
+type referenceNameOption func(targetRepoBaseURL string) string
+
+func staticReferenceName(referenceName string) referenceNameOption {
+	return func(targetRepoBaseURL string) string {
+		return fmt.Sprintf("%s/%s", targetRepoBaseURL, referenceName)
+	}
+}
+
+func imageReferenceFromAccess(id string) referenceNameOption {
+	return func(targetRepoBaseURL string) string {
+		return fmt.Sprintf("%s/${%s.output.resource.access.imageReference}", targetRepoBaseURL, id)
+	}
+}
+
 // ociUploadAsArtifact creates an AddOCIArtifact transformation that uploads the OCI artifact to the target repository as an OCI artifact.
 // It constructs the target image reference from the toSpec and referenceName, and uses the output of the GetOCIArtifact transformation to populate the fields of the AddOCIArtifact transformation, ensuring that the same resource is referenced and uploaded.
-func ociUploadAsArtifact(toSpec runtime.Typed, addResourceID string, getResourceID string, referenceName string) (transformv1alpha1.GenericTransformation, error) {
+func ociUploadAsArtifact(toSpec runtime.Typed, addResourceID string, getResourceID string, referenceName referenceNameOption) (transformv1alpha1.GenericTransformation, error) {
 	var ociSpec ocirepo.Repository
 	if err := Scheme.Convert(toSpec, &ociSpec); err != nil {
 		return transformv1alpha1.GenericTransformation{}, err
@@ -138,7 +173,7 @@ func ociUploadAsArtifact(toSpec runtime.Typed, addResourceID string, getResource
 				"relation": fmt.Sprintf("${%s.output.resource.relation}", getResourceID),
 				"access": map[string]interface{}{
 					"type":           runtime.NewVersionedType(ociv1.LegacyType, ociv1.LegacyTypeVersion).String(),
-					"imageReference": fmt.Sprintf("%s/%s", targetRepoBaseURL, referenceName),
+					"imageReference": referenceName(targetRepoBaseURL),
 				},
 				"digest":        fmt.Sprintf("${%s.output.resource.digest}", getResourceID),
 				"labels":        fmt.Sprintf("${has(%s.output.resource.labels) ? %s.output.resource.labels  : []}", getResourceID, getResourceID),

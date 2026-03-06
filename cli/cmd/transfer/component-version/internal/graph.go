@@ -10,8 +10,6 @@ import (
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -128,39 +126,20 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 				continue
 			}
 
-			switch acc := access.(type) {
-			case *descriptorv2.LocalBlob:
-				uploadAsOCIArtifact := false
-				if _, isOCITarget := toSpec.(*oci.Repository); isOCITarget {
-					if uploadType == UploadAsOciArtifact && IsOCICompliantManifest(acc.MediaType) {
-						// TODO(fabianburth): We currently do not support a way to specify a reference name
-						//  based on input type. Long term, this whole scenario should be redesigned through
-						//  a transfer config. Short term, we pray that we can neglect this scenario.
-						if acc.ReferenceName != "" {
-							uploadAsOCIArtifact = true
-						} else {
-							slog.DebugContext(ctx, "local blob resource is not uploaded to individual oci repository since it does not have a reference name", "resource", resource.ToIdentity().String())
-						}
-					}
-				}
-				if err := processLocalBlob(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact); err != nil {
-					return fmt.Errorf("failed processing local blob resource: %w", err)
-				}
-			case *ociv1.OCIImage:
-				uploadAsOCIArtifact := false
-				if _, isOCITarget := toSpec.(*oci.Repository); isOCITarget {
-					if uploadType == UploadAsOciArtifact {
-						uploadAsOCIArtifact = true
-					}
-				}
-				err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact)
+			uploadAsOCIArtifact := false
+			if uploader, ok := lookupOCIUploadSupported(access); ok {
+				uploadAsOCIArtifact, err = uploader.ShouldUploadAsOCIArtifact(ctx, resource, toSpec, access, uploadType)
 				if err != nil {
-					return fmt.Errorf("cannot process OCI artifact resource: %w", err)
+					return fmt.Errorf("failed to determine whether resource should be uploaded as OCI artifact: %w", err)
 				}
-			default:
-				// No transformation configured for resource with access types not listed above
-				slog.Info("Unsupported resource access type, skipping resource. Only local blob and OCI artifact resources are supported for transformation.",
-					"component", component, "version", version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
+			}
+			if proc, ok := lookupProcessor(access); !ok {
+				slog.Warn("Unsupported resource access type...", "component", val.Descriptor.Component.Name, "version", val.Descriptor.Component.Version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
+				continue
+			} else {
+				if err := proc.Process(ctx, resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact); err != nil {
+					return fmt.Errorf("failed processing resource with access type %q: %w", resource.Access.Type.String(), err)
+				}
 			}
 		}
 
