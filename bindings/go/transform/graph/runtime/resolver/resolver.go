@@ -53,7 +53,7 @@ type Resolver struct {
 	// responsible for providing this only with available data aka CEL Expressions
 	// we've been able to resolve.
 	data map[string]interface{}
-	// schema is used to identify optional pointer fields whose nil values
+	// schema is used to identify optional fields whose nil values
 	// should be removed rather than stored as null.
 	schema *jsonschema.Schema
 }
