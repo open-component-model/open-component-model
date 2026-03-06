@@ -97,7 +97,11 @@ spec:
                     {{- end }}
                   command:
                     - /manager
+                  {{- if .Values.manager.image.digest }}
+                  image: "{{ .Values.manager.image.repository }}@{{ .Values.manager.image.digest }}"
+                  {{- else }}
                   image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag }}"
+                  {{- end }}
                   imagePullPolicy: {{ .Values.manager.image.pullPolicy }}
                   livenessProbe:
                     httpGet:

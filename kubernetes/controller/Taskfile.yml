@@ -133,6 +133,12 @@ tasks:
         args+=(--push)
       fi
 
+      # If OCI_OUTPUT is set, write OCI layout tar to that path
+      if [ -n "{{.OCI_OUTPUT | default ""}}" ]; then
+        mkdir -p "$(dirname '{{.OCI_OUTPUT}}')"
+        args+=(--output "type=oci,dest={{.OCI_OUTPUT}},oci-mediatypes=true")
+      fi
+
       # Run docker (or podman) buildx with the constructed args
       {{.CONTAINER_TOOL}} buildx build "${args[@]}"
 
@@ -182,13 +188,54 @@ tasks:
           exit 1
         fi
 
+
   helm/package:
-    desc: "Package the Helm chart with the specified version"
+    desc: "Package the Helm chart with the specified version and/or digest"
     deps: [yq]
     cmds:
       - mkdir -p dist
       - '{{ if .VERSION }}{{.YQ}} -i ".manager.image.tag = \"{{.VERSION}}\"" chart/values.yaml{{end}}'
+      - '{{ if .IMAGE_DIGEST }}{{.YQ}} -i ".manager.image.digest = \"{{.IMAGE_DIGEST}}\"" chart/values.yaml{{end}}'
       - helm package chart/ --destination dist/ {{if .VERSION}}--version {{.VERSION}}{{end}} {{if .APP_VERSION}}--app-version {{.APP_VERSION}}{{end}}
+
+  helm/push:
+    desc: "Push packaged Helm chart to OCI registry"
+    requires:
+      vars: [VERSION, REGISTRY]
+    cmds:
+      - helm push dist/chart-{{.VERSION}}.tgz oci://{{.REGISTRY}}
+
+  helm/verify-promote:
+    desc: "Verify that the final chart only differs from the RC in allowed metadata fields (digest stay the same)"
+    requires:
+      vars: [RC_CHART, FINAL_CHART]
+    deps: [yq]
+    cmds:
+      - |
+        set -euo pipefail
+
+        work=$(mktemp -d)
+        mkdir -p "$work/rc" "$work/final"
+        trap 'rm -rf "$work"' EXIT
+
+        tar -xzf "{{.RC_CHART}}" -C "$work/rc" --strip-components=1
+        tar -xzf "{{.FINAL_CHART}}" -C "$work/final" --strip-components=1
+
+        # 1) All files except Chart.yaml and values.yaml must be identical
+        echo "--- Comparing non-metadata files ---"
+        diff -r --exclude=Chart.yaml --exclude=values.yaml "$work/rc" "$work/final"
+
+        # 2) Chart.yaml: only version and appVersion may differ
+        echo "--- Comparing Chart.yaml (version/appVersion masked) ---"
+        mask_chart() { sed -E 's/^(version|appVersion):.*/\1: MASKED/' "$1"; }
+        diff <(mask_chart "$work/rc/Chart.yaml") <(mask_chart "$work/final/Chart.yaml")
+
+        # 3) values.yaml: only manager.image.tag may differ; digest must match
+        echo "--- Comparing values.yaml (tag masked) ---"
+        mask_values() { {{.YQ}} '.manager.image.tag = "MASKED"' "$1"; }
+        diff <(mask_values "$work/rc/values.yaml") <(mask_values "$work/final/values.yaml")
+
+        echo "✅ Promote verification passed"
 
   helm/template:
     desc: "Render Helm chart templates with test values"
