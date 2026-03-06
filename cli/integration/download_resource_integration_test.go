@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 	orasoci "oras.land/oras-go/v2/content/oci"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -215,6 +217,132 @@ configurations:
 			r.Equal("foobar", string(layerData))
 		})
 	})
+
+	t.Run("download resource with extraction policy", func(t *testing.T) {
+		originalData := []byte("hello-decompress-test")
+
+		compressedBlob := compression.Compress(direct.NewFromBytes(originalData))
+
+		tests := []struct {
+			name               string
+			resourceName       string
+			component          string
+			blob               blob.ReadOnlyBlob
+			access             *v2.LocalBlob
+			extractionPolicy   string
+			expectUncompressed bool // true = output should match originalData
+		}{
+			{
+				name:               "compressed resource with disable extraction policy stays compressed",
+				resourceName:       "compressed-resource-disable",
+				component:          "ocm.software/test-extract-disable",
+				blob:               compressedBlob,
+				access:             &v2.LocalBlob{},
+				extractionPolicy:   resourceCMD.ExtractionPolicyDisable,
+				expectUncompressed: false,
+			},
+			{
+				name:               "uncompressed resource with disable extraction policy is unchanged",
+				resourceName:       "uncompressed-resource-disable",
+				component:          "ocm.software/test-extract-disable-noop",
+				blob:               direct.NewFromBytes(originalData),
+				access:             &v2.LocalBlob{},
+				extractionPolicy:   resourceCMD.ExtractionPolicyDisable,
+				expectUncompressed: true,
+			},
+			{
+				name:               "uncompressed resource with auto extraction policy is unchanged",
+				resourceName:       "uncompressed-resource-auto",
+				component:          "ocm.software/test-extract-auto-noop",
+				blob:               direct.NewFromBytes(originalData),
+				access:             &v2.LocalBlob{},
+				extractionPolicy:   resourceCMD.ExtractionPolicyAuto,
+				expectUncompressed: true,
+			},
+			{
+				name:               "compressed resource with auto extraction policy is decompressed",
+				resourceName:       "compressed-resource-auto",
+				component:          "ocm.software/test-extract-auto-decompress",
+				blob:               compressedBlob,
+				access:             &v2.LocalBlob{},
+				extractionPolicy:   resourceCMD.ExtractionPolicyAuto,
+				expectUncompressed: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				r := require.New(t)
+
+				version := "v1.0.0"
+				localResource := resource{
+					Resource: &descriptor.Resource{
+						ElementMeta: descriptor.ElementMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    tt.resourceName,
+								Version: version,
+							},
+						},
+						Type:         "some-arbitrary-type",
+						Access:       tt.access,
+						CreationTime: descriptor.CreationTime(time.Now()),
+					},
+					ReadOnlyBlob: tt.blob,
+				}
+
+				uploadComponentVersion(t, repo, tt.component, version, localResource)
+
+				output := filepath.Join(t.TempDir(), "output")
+
+				args := []string{
+					"download",
+					"resource",
+					fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, tt.component, version),
+					"--identity",
+					fmt.Sprintf("name=%s,version=%s", tt.resourceName, version),
+					"--output",
+					output,
+					"--config",
+					cfgPath,
+					"--extraction-policy",
+					tt.extractionPolicy,
+				}
+
+				downloadCMD := cmd.New()
+				downloadCMD.SetArgs(args)
+				r.NoError(downloadCMD.ExecuteContext(t.Context()))
+
+				outputBlob, err := filesystem.GetBlobFromOSPath(output)
+				r.NoError(err)
+
+				dataStream, err := outputBlob.ReadCloser()
+				r.NoError(err)
+				t.Cleanup(func() {
+					r.NoError(dataStream.Close())
+				})
+
+				data, err := io.ReadAll(dataStream)
+				r.NoError(err)
+
+				if tt.expectUncompressed {
+					r.Equal(string(originalData), string(data))
+				} else {
+					r.NotEqual(string(originalData), string(data),
+						"data should not equal the original uncompressed data")
+					// ensure data is the same as compressed
+					compressedDataRC, err := tt.blob.ReadCloser()
+					r.NoError(err)
+					defer func() {
+						r.NoError(compressedDataRC.Close())
+					}()
+					compressedData, err := io.ReadAll(compressedDataRC)
+					r.NoError(err)
+					r.Equal(compressedData, data, "data should match the original compressed data")
+
+				}
+			})
+		}
+	})
 }
 
 func Test_Integration_HelmTransformer(t *testing.T) {
@@ -290,6 +418,120 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 		r.Equal("mychart", chart.Name(), "the chart name should match the resource name")
 		r.Equal("0.1.0", chart.Metadata.Version, "the chart version should match the resource version")
 	})
+}
+
+func Test_Integration_ConstructorCompress(t *testing.T) {
+	originalContent := "This is the original file content for compress test."
+	name, version := "ocm.software/compress-test", "v1.0.0"
+	resourceName, resourceVersion := "myfile", "v1.0.0"
+
+	tests := []struct {
+		name             string
+		compress         bool
+		extractionPolicy string // "" means don't pass the flag (defaults to auto)
+		assertOutput     func(t *testing.T, data []byte)
+	}{
+		{
+			name:             "compressed resource with disable extraction stays compressed",
+			compress:         true,
+			extractionPolicy: "disable",
+			assertOutput: func(t *testing.T, data []byte) {
+				r := require.New(t)
+				r.NotEqual(originalContent, string(data),
+					"with disable extraction, output should be compressed (not match original)")
+
+				decomp, err := compression.Decompress(
+					direct.New(bytes.NewReader(data), direct.WithMediaType(compression.MediaTypeGzip)),
+				)
+				r.NoError(err)
+				rc, err := decomp.ReadCloser()
+				r.NoError(err)
+				defer func() { r.NoError(rc.Close()) }()
+				got, err := io.ReadAll(rc)
+				r.NoError(err)
+				r.Equal(originalContent, string(got), "decompressed data should match original content")
+			},
+		},
+		{
+			name:             "uncompressed resource with disable extraction is unchanged",
+			compress:         false,
+			extractionPolicy: "disable",
+			assertOutput: func(t *testing.T, data []byte) {
+				require.Equal(t, originalContent, string(data),
+					"uncompressed resource should match original content")
+			},
+		},
+		{
+			name:     "compressed resource with auto extraction is decompressed",
+			compress: true,
+			assertOutput: func(t *testing.T, data []byte) {
+				require.Equal(t, originalContent, string(data),
+					"auto extraction should decompress and match original content")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			tempDir := t.TempDir()
+
+			filePath := filepath.Join(tempDir, "testfile.txt")
+			r.NoError(os.WriteFile(filePath, []byte(originalContent), os.ModePerm))
+
+			constructorPath := filepath.Join(tempDir, "constructor.yaml")
+			transportArchivePath := filepath.Join(tempDir, "transport-archive")
+
+			constructor := buildConstructorYAML(name, version, resourceName, resourceVersion, filePath, tt.compress)
+			r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+
+			addCMD := cmd.New()
+			addCMD.SetArgs([]string{
+				"add", "component-version",
+				"--repository", transportArchivePath,
+				"--constructor", constructorPath,
+			})
+			r.NoError(addCMD.ExecuteContext(t.Context()), "adding the component-version must succeed")
+
+			output := filepath.Join(tempDir, "downloaded-resource")
+			downloadArgs := []string{
+				"download", "resource",
+				fmt.Sprintf("%s//%s:%s", transportArchivePath, name, version),
+				"--identity", fmt.Sprintf("name=%s,version=%s", resourceName, resourceVersion),
+				"--output", output,
+			}
+			if tt.extractionPolicy != "" {
+				downloadArgs = append(downloadArgs, "--extraction-policy", tt.extractionPolicy)
+			}
+			downloadCMD := cmd.New()
+			downloadCMD.SetArgs(downloadArgs)
+			r.NoError(downloadCMD.ExecuteContext(t.Context()), "downloading resource must succeed")
+
+			data, err := os.ReadFile(output)
+			r.NoError(err)
+			tt.assertOutput(t, data)
+		})
+	}
+}
+
+func buildConstructorYAML(name, version, resourceName, resourceVersion, filePath string, compress bool) string {
+	compressLine := ""
+	if compress {
+		compressLine = "\n        compress: true"
+	}
+	return fmt.Sprintf(`components:
+- name: %[1]s
+  version: %[2]s
+  provider:
+    name: acme.org
+  resources:
+    - name: %[3]s
+      version: %[4]s
+      type: blob
+      input:
+        type: file
+        path: %[5]s%[6]s
+`, name, version, resourceName, resourceVersion, filePath, compressLine)
 }
 
 type resource struct {
