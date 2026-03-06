@@ -170,6 +170,18 @@ jobs:
       id-token: write         # Needed for provenance attestation identity
       attestations: write     # Allows storing provenance attestation
     steps:
+      # Checkout scripts needed for the constructor patching step.
+      # Must happen BEFORE downloading artifacts, because checkout cleans the workspace.
+      - name: Checkout scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: 'false'
+
+      - name: Install script dependencies
+        run: npm ci
+        working-directory: ${{ github.workspace }}/.github/scripts
+
       # Retrieve artifacts produced by the build job
       - name: Download build artifacts
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -222,17 +234,6 @@ jobs:
           subject-digest: ${{ steps.digest.outputs.digest }}
           subject-name: ${{ env.TARGET_REPO }}
           push-to-registry: true
-
-      # Checkout scripts needed for the constructor patching step
-      - name: Checkout scripts
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          sparse-checkout: .github/scripts
-          persist-credentials: 'false'
-
-      - name: Install script dependencies
-        run: npm ci
-        working-directory: ${{ github.workspace }}/.github/scripts
 
       # Reuse generated constructor from build artifacts, normalize file paths,
       # and patch image access to reference the published image instead of a localBlob
