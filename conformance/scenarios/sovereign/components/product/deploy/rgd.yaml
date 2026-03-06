@@ -1,0 +1,366 @@
+# ResourceGraphDefinition for sovereign product orchestration.
+#
+# Single unified RGD that creates the entire deployment:
+#   1. Infrastructure (namespace, repository, config, secrets)
+#   2. OCM Components for notes and postgres
+#   3. OCM Resources to resolve helm charts and images
+#   4. FluxCD OCIRepositories and HelmReleases for deployment
+#
+# The product's own Component/Resource/Deployer must be bootstrapped
+# externally (see deploy/components.yaml) since this RGD is delivered
+# through that pipeline.
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: sovereign-product
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: SovereignProduct
+    spec:
+      version: string | default="1.0.0"
+      prefix: string | default="sovereign-product"
+      repository: object
+      notes:
+        replicas: integer | default=2
+        resources:
+          requests:
+            cpu: string | default="100m"
+            memory: string | default="64Mi"
+          limits:
+            cpu: string | default="200m"
+            memory: string | default="128Mi"
+      postgres:
+        database:
+          name: string | default="sovereign_notes"
+          username: string | default="sovereign_user"
+          # NOTE: Demo-only default. Production deployments should use ESO or similar.
+          password: string | default="changeme"
+        persistence:
+          size: string | default="8Gi"
+        resources:
+          requests:
+            cpu: string | default="250m"
+            memory: string | default="256Mi"
+          limits:
+            cpu: string | default="500m"
+            memory: string | default="512Mi"
+
+  resources:
+    # ==========================================================
+    # Bootstrap (Self Managed) Configuration
+    # Once this stuff is adopted, The Product will start managing
+    # itself.
+    # ==========================================================
+    - id: productNamespace
+      template:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: sovereign-product
+    # OCM Repository pointing to the local air-gapped registry.
+    # Also created during bootstrap (for the product Component);
+    # kro reconciles idempotently.
+    - id: repository
+      readyWhen:
+        - ${repository.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Repository
+        metadata:
+          name: sovereign-repo
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          repositorySpec: ${schema.spec.repository}
+          interval: 10m
+
+    - id: productComponent
+      readyWhen:
+        - ${productComponent.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Component
+        metadata:
+          name: sovereign-product-component
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          component: acme.org/sovereign/product
+          repositoryRef:
+            name: ${repository.metadata.name}
+          semver: ${schema.spec.version}
+          interval: 1m
+          verify:
+            - signature: default
+              secretRef:
+                name: acme-signing-key
+    - id: rgdResource
+      readyWhen:
+        - ${rgdResource.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: sovereign-product-resource-rgd
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          componentRef:
+            name: ${productComponent.metadata.name}
+          resource:
+            byReference:
+              resource:
+                name: product-rgd
+          interval: 1m
+    - id: rgdDeployer
+      readyWhen:
+        - ${rgdDeployer.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Deployer
+        metadata:
+          name: sovereign-product-deployer
+        spec:
+          resourceRef:
+            name: ${rgdResource.metadata.name}
+            namespace: ${productNamespace.metadata.name}
+    # ==========================================================
+    # Application Configuration
+    # ==========================================================
+    - id: config
+      template:
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: sovereign-product-config
+          namespace: ${productNamespace.metadata.name}
+        data:
+          database.host: "postgres"
+          database.port: "5432"
+          database.name: ${schema.spec.postgres.database.name}
+
+    - id: secrets
+      template:
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: sovereign-product-secrets
+          namespace: ${productNamespace.metadata.name}
+        type: Opaque
+        stringData:
+          database.username: ${schema.spec.postgres.database.username}
+          database.password: ${schema.spec.postgres.database.password}
+
+    # ==========================================================
+    # PostgreSQL: OCM Resources → FluxCD → HelmRelease
+    # ==========================================================
+
+    # Resolve helm chart from postgres component
+    - id: postgresChartResource
+      readyWhen:
+        - ${postgresChartResource.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: sovereign-postgres-resource-chart
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          componentRef:
+            name: ${productComponent.metadata.name}
+          resource:
+            byReference:
+              referencePath:
+                - name: postgres
+              resource:
+                name: helm-chart
+          additionalStatusFields:
+            registry: resource.access.globalAccess.imageReference.toOCI().registry
+            repository: resource.access.globalAccess.imageReference.toOCI().repository
+            digest: resource.access.globalAccess.imageReference.toOCI().digest
+          interval: 10m
+
+    # Resolve container image from postgres component
+    - id: postgresImageResource
+      readyWhen:
+        - ${postgresImageResource.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: sovereign-postgres-resource-image
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          componentRef:
+            name: ${productComponent.metadata.name}
+          resource:
+            byReference:
+              referencePath:
+                - name: postgres
+              resource:
+                name: image
+          additionalStatusFields:
+            registry: resource.access.globalAccess.imageReference.toOCI().registry
+            repository: resource.access.globalAccess.imageReference.toOCI().repository
+            tag: resource.access.globalAccess.imageReference.toOCI().tag
+            digest: resource.access.globalAccess.imageReference.toOCI().digest
+          interval: 10m
+
+    # FluxCD OCIRepository for postgres helm chart
+    - id: postgresOciRepository
+      readyWhen:
+        - ${postgresOciRepository.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+      template:
+        apiVersion: source.toolkit.fluxcd.io/v1
+        kind: OCIRepository
+        metadata:
+          name: sovereign-postgres-oci-repository
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          interval: 1m0s
+          insecure: true
+          layerSelector:
+            mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+            operation: copy
+          url: oci://${postgresChartResource.status.additional.registry}/${postgresChartResource.status.additional.repository}
+          ref:
+            digest: ${postgresChartResource.status.additional.digest}
+
+    # FluxCD HelmRelease for postgres
+    - id: postgresHelmRelease
+      readyWhen:
+        - ${postgresHelmRelease.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+      template:
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: sovereign-postgres
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          releaseName: sovereign-postgres
+          interval: 1m
+          timeout: 5m
+          chartRef:
+            kind: OCIRepository
+            name: ${postgresOciRepository.metadata.name}
+          values:
+            image:
+              repository: ${postgresImageResource.status.additional.registry}/${postgresImageResource.status.additional.repository}
+              tag: ${postgresImageResource.status.additional.tag}@${postgresImageResource.status.additional.digest}
+            postgresql:
+              postgresqlDatabase: ${schema.spec.postgres.database.name}
+              postgresqlUsername: ${schema.spec.postgres.database.username}
+              postgresqlPassword: ${schema.spec.postgres.database.password}
+              persistence:
+                size: ${schema.spec.postgres.persistence.size}
+            resources:
+              requests:
+                cpu: ${schema.spec.postgres.resources.requests.cpu}
+                memory: ${schema.spec.postgres.resources.requests.memory}
+              limits:
+                cpu: ${schema.spec.postgres.resources.limits.cpu}
+                memory: ${schema.spec.postgres.resources.limits.memory}
+
+    # ==========================================================
+    # Notes: OCM Resources → FluxCD → HelmRelease
+    # ==========================================================
+
+    # Resolve helm chart from notes component
+    - id: notesChartResource
+      readyWhen:
+        - ${notesChartResource.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: sovereign-notes-resource-chart
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          componentRef:
+            name: ${productComponent.metadata.name}
+          resource:
+            byReference:
+              referencePath:
+                - name: notes
+              resource:
+                name: helm-chart
+          additionalStatusFields:
+            registry: resource.access.globalAccess.imageReference.toOCI().registry
+            repository: resource.access.globalAccess.imageReference.toOCI().repository
+            digest: resource.access.globalAccess.imageReference.toOCI().digest
+          interval: 10m
+
+    # Resolve container image from notes component
+    - id: notesImageResource
+      readyWhen:
+        - ${notesImageResource.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: sovereign-notes-resource-image
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          componentRef:
+            name: ${productComponent.metadata.name}
+          resource:
+            byReference:
+              referencePath:
+                - name: notes
+              resource:
+                name: image
+          additionalStatusFields:
+            registry: resource.access.globalAccess.imageReference.toOCI().registry
+            repository: resource.access.globalAccess.imageReference.toOCI().repository
+            tag: resource.access.globalAccess.imageReference.toOCI().tag
+            digest: resource.access.globalAccess.imageReference.toOCI().digest
+          interval: 10m
+
+    # FluxCD OCIRepository for notes helm chart
+    - id: notesOciRepository
+      readyWhen:
+        - ${notesOciRepository.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+      template:
+        apiVersion: source.toolkit.fluxcd.io/v1
+        kind: OCIRepository
+        metadata:
+          name: sovereign-notes-oci-repository
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          interval: 1m0s
+          insecure: true
+          layerSelector:
+            mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+            operation: copy
+          url: oci://${notesChartResource.status.additional.registry}/${notesChartResource.status.additional.repository}
+          ref:
+            digest: ${notesChartResource.status.additional.digest}
+
+    # FluxCD HelmRelease for notes
+    - id: notesHelmRelease
+      readyWhen:
+        - ${notesHelmRelease.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+      template:
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: sovereign-notes
+          namespace: ${productNamespace.metadata.name}
+        spec:
+          releaseName: sovereign-notes
+          interval: 1m
+          timeout: 5m
+          chartRef:
+            kind: OCIRepository
+            name: ${notesOciRepository.metadata.name}
+          values:
+            replicaCount: ${schema.spec.notes.replicas}
+            image:
+              repository: ${notesImageResource.status.additional.registry}/${notesImageResource.status.additional.repository}
+              tag: ${notesImageResource.status.additional.tag}@${notesImageResource.status.additional.digest}
+            databaseSecretRef: ${secrets.metadata.name}
+            resources:
+              requests:
+                memory: ${schema.spec.notes.resources.requests.memory}
+                cpu: ${schema.spec.notes.resources.requests.cpu}
+              limits:
+                memory: ${schema.spec.notes.resources.limits.memory}
+                cpu: ${schema.spec.notes.resources.limits.cpu}
