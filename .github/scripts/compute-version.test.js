@@ -25,29 +25,20 @@ assert.strictEqual(
 );
 
 assert.strictEqual(
-    computeVersion("main", "cli/v", {
-        now: new Date("2026-03-03T12:34:56Z"),
-        gitSha: "abcdef1234567890",
-    }),
-    "0.0.0-main.20260303123456.abcdef123456",
-    "CLI main branch should create unique pseudo version"
+    computeVersion("main", "cli/v"),
+    "0.0.0-main",
+    "CLI main branch should create pseudo version"
 );
 
 assert.strictEqual(
-    computeVersion("releases/v0.1", "cli/v", {
-        now: new Date("2026-03-03T12:34:56Z"),
-        gitSha: "abcdef1234567890",
-    }),
-    "0.0.0-releases-v0.1.20260303123456.abcdef123456",
+    computeVersion("releases/v0.1", "cli/v"),
+    "0.0.0-releases-v0.1",
     "CLI release branch should create pseudo version"
 );
 
 assert.strictEqual(
-    computeVersion("feature/my-branch", "cli/v", {
-        now: new Date("2026-03-03T12:34:56Z"),
-        gitSha: "abcdef1234567890",
-    }),
-    "0.0.0-feature-my-branch.20260303123456.abcdef123456",
+    computeVersion("feature/my-branch", "cli/v"),
+    "0.0.0-feature-my-branch",
     "CLI feature branch should sanitize slashes"
 );
 
@@ -69,20 +60,14 @@ assert.strictEqual(
 );
 
 assert.strictEqual(
-    computeVersion("main", "bindings/go/helm/v", {
-        now: new Date("2026-03-03T12:34:56Z"),
-        gitSha: "abcdef1234567890",
-    }),
-    "0.0.0-main.20260303123456.abcdef123456",
+    computeVersion("main", "bindings/go/helm/v"),
+    "0.0.0-main",
     "Helm plugin main branch should create pseudo version"
 );
 
 assert.strictEqual(
-    computeVersion("feat/new-feature", "bindings/go/helm/v", {
-        now: new Date("2026-03-03T12:34:56Z"),
-        gitSha: "abcdef1234567890",
-    }),
-    "0.0.0-feat-new-feature.20260303123456.abcdef123456",
+    computeVersion("feat/new-feature", "bindings/go/helm/v"),
+    "0.0.0-feat-new-feature",
     "Helm plugin feature branch should sanitize slashes"
 );
 
@@ -110,39 +95,27 @@ assert.strictEqual(
 );
 
 assert.strictEqual(
-    computeVersion("pr/123/merge", "cli/v", {
-        now: new Date("2026-03-03T12:34:56Z"),
-        gitSha: "abcdef1234567890",
-    }),
-    "0.0.0-pr-123-merge.20260303123456.abcdef123456",
+    computeVersion("pr/123/merge", "cli/v"),
+    "0.0.0-pr-123-merge",
     "PR refs should be sanitized"
 );
 
 assert.strictEqual(
-    computeVersion("refs/heads/main", "cli/v", {
-        now: new Date("2026-03-03T12:34:56Z"),
-        gitSha: "abcdef1234567890",
-    }),
-    "0.0.0-refs-heads-main.20260303123456.abcdef123456",
+    computeVersion("refs/heads/main", "cli/v"),
+    "0.0.0-refs-heads-main",
     "Full ref paths should be sanitized"
 );
 
 // Special characters in branch names
 assert.strictEqual(
-    computeVersion("feature/issue#123", "cli/v", {
-        now: new Date("2026-03-03T12:34:56Z"),
-        gitSha: "abcdef1234567890",
-    }),
-    "0.0.0-feature-issue-123.20260303123456.abcdef123456",
-    "Branch with # should be sanitized"
+    computeVersion("feature/issue#123", "cli/v"),
+    "0.0.0-feature-issue-123",
+    "Branch with # should be preserved"
 );
 
 assert.strictEqual(
-    computeVersion("hotfix/v1.2.3-fix", "cli/v", {
-        now: new Date("2026-03-03T12:34:56Z"),
-        gitSha: "abcdef1234567890",
-    }),
-    "0.0.0-hotfix-v1.2.3-fix.20260303123456.abcdef123456",
+    computeVersion("hotfix/v1.2.3-fix", "cli/v"),
+    "0.0.0-hotfix-v1.2.3-fix",
     "Branch that looks like version should not be treated as tag"
 );
 
@@ -197,20 +170,14 @@ console.log("Testing regex escaping for security...");
 
 // These should NOT match as tags even though they contain regex special chars
 assert.strictEqual(
-    computeVersion("cli.*v1.2.3", "cli/v", {
-        now: new Date("2026-03-03T12:34:56Z"),
-        gitSha: "abcdef1234567890",
-    }),
-    "0.0.0-cli.-v1.2.3.20260303123456.abcdef123456",
+    computeVersion("cli.*v1.2.3", "cli/v"),
+    "0.0.0-cli.*v1.2.3",
     "Ref with regex chars should not match tag pattern"
 );
 
 assert.strictEqual(
-    computeVersion("v1.2.3", "cli/v", {
-        now: new Date("2026-03-03T12:34:56Z"),
-        gitSha: "abcdef1234567890",
-    }),
-    "0.0.0-v1.2.3.20260303123456.abcdef123456",
+    computeVersion("v1.2.3", "cli/v"),
+    "0.0.0-v1.2.3",
     "Ref without correct prefix should not match"
 );
 
@@ -225,17 +192,6 @@ const prefix1 = "cli/v";
 const result1a = computeVersion(ref1, prefix1);
 const result1b = computeVersion(ref1, prefix1);
 assert.strictEqual(result1a, result1b, "Same inputs should produce same output");
-
-// Same non-tag input should produce same output when deterministic options are provided
-const branchResultA = computeVersion("main", "cli/v", {
-    now: new Date("2026-03-03T12:34:56Z"),
-    gitSha: "abcdef1234567890",
-});
-const branchResultB = computeVersion("main", "cli/v", {
-    now: new Date("2026-03-03T12:34:56Z"),
-    gitSha: "abcdef1234567890",
-});
-assert.strictEqual(branchResultA, branchResultB, "Deterministic inputs should produce same output");
 
 // Different prefixes should not interfere
 assert.notStrictEqual(

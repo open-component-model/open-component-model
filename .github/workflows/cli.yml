@@ -63,6 +63,7 @@ jobs:
       artifact_name: ${{ env.ARTIFACT_NAME }}
       artifact_id: ${{ steps.upload-artifacts.outputs.artifact_id }}
       should_push_oci_image: ${{ steps.branch-check.outputs.should_push_oci_image }}  # Used by publish job
+      version: ${{ steps.version.outputs.version }}
     permissions:
       contents: read
       id-token: write         # Needed for provenance attestations
@@ -271,7 +272,7 @@ jobs:
     needs: publish
     uses: ./.github/workflows/conformance.yml
     with:
-      cli_image: "ghcr.io/open-component-model/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
+      cli_image: "ghcr.io/${{ github.repository_owner }}/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
     secrets: inherit
 
   publish-component:
@@ -284,6 +285,7 @@ jobs:
       constructor_artifact_name: cli-constructor-artifact
       build_artifact_name: ${{ needs.build.outputs.artifact_name }}
       ocm_repository: ghcr.io/${{ github.repository_owner }}
+      version_conflict_policy: ${{ startsWith(needs.build.outputs.version, '0.0.0-') && 'replace' || '' }}
 
   status-check:
     name: Status Check
