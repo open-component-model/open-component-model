@@ -148,6 +148,30 @@ assert.throws(
     "Should throw when resources array is missing"
 );
 
+// patchCliConstructor: missing input.path on CLI file resource
+assert.throws(
+    () => patchCliConstructor({
+        resources: [
+            { name: "cli", input: { type: "file" } },
+            { name: "image", type: "ociImage", relation: "local", input: { type: "file", path: "x" } },
+        ],
+    }, "ref", "tag"),
+    /missing required field 'input\.path'/,
+    "Should throw when CLI file resource has no input.path"
+);
+
+// patchCliConstructor: empty input.path on CLI file resource
+assert.throws(
+    () => patchCliConstructor({
+        resources: [
+            { name: "cli", input: { type: "file", path: "" } },
+            { name: "image", type: "ociImage", relation: "local", input: { type: "file", path: "x" } },
+        ],
+    }, "ref", "tag"),
+    /missing required field 'input\.path'/,
+    "Should throw when CLI file resource has empty input.path"
+);
+
 // patchCliConstructor: non-file CLI resources are left untouched
 {
     const constructor = {

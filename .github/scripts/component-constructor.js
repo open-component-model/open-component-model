@@ -76,6 +76,9 @@ export function patchCliConstructor(constructor, imageRef, imageTag) {
             resource.name === "cli" &&
             resource.input?.type === "file"
         ) {
+            if (typeof resource.input.path !== "string" || resource.input.path.length === 0) {
+                throw new Error("CLI file resource is missing required field 'input.path'");
+            }
             const parts = resource.input.path.split("/");
             const filename = parts[parts.length - 1];
             resource.input.path = `resources/bin/${filename}`;
