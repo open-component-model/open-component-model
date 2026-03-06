@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
-      packages: write
+      packages: write    # Required for pushing to GHCR via docker login + OCM CLI
     steps:
       - name: Download constructor artifact
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -76,7 +76,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          cat > "${HOME}/.ocmconfig" <<EOF
+          cat > "${HOME}/.ocmconfig" <<'EOF'
           type: generic.config.ocm.software/v1
           configurations:
             - type: credentials.config.ocm.software
@@ -87,6 +87,8 @@ jobs:
                     propagateConsumerIdentity: true
           EOF
 
+      # WORKDIR is mounted into the Docker container so the OCM CLI can access
+      # the constructor and resource files at the same absolute paths used on the runner.
       - name: Publish component version
         env:
           OCM_REPOSITORY: ${{ inputs.ocm_repository }}
@@ -116,30 +118,20 @@ jobs:
               --constructor "${CONSTRUCTOR_PATH}" \
               ${POLICY_FLAG}
 
+      - name: Checkout scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: 'false'
+          path: repo
+
       - name: Summarize published component version
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           OCM_REPOSITORY: ${{ inputs.ocm_repository }}
-          CLI_IMAGE: ${{ inputs.cli_image }}
-          WORKDIR: ${{ github.workspace }}
           CONSTRUCTOR_FILE: ${{ github.workspace }}/constructor/component-constructor.yaml
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          COMPONENT_NAME=$(sed -n 's/^name:[[:space:]]*//p' "${CONSTRUCTOR_FILE}" | head -n 1)
-          COMPONENT_VERSION=$(sed -n 's/^version:[[:space:]]*//p' "${CONSTRUCTOR_FILE}" | head -n 1)
-
-          if [ -z "${COMPONENT_NAME}" ]; then
-            echo "❌ Could not extract component name from ${CONSTRUCTOR_FILE}" && exit 1
-          fi
-          if [ -z "${COMPONENT_VERSION}" ]; then
-            echo "❌ Could not extract component version from ${CONSTRUCTOR_FILE}" && exit 1
-          fi
-
-          COMPONENT_REF="${OCM_REPOSITORY}//${COMPONENT_NAME}:${COMPONENT_VERSION}"
-          PKG_PATH="component-descriptors%2F${COMPONENT_NAME//\//%2F}"
-          PACKAGE_URL="https://github.com/${GITHUB_REPOSITORY}/pkgs/container/${PKG_PATH}"
-          echo "📦 Published component: ${COMPONENT_REF}"
-
-          echo "## Published OCM Component Version" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Reference: [${COMPONENT_REF}](${PACKAGE_URL})" >> "$GITHUB_STEP_SUMMARY"
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/repo/.github/scripts/component-constructor.js');
+            await script.summarizeComponentVersion({ core });
