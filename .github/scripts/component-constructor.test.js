@@ -8,6 +8,7 @@ import {
     buildPackageUrl,
     patchCliConstructor,
     parseConstructorFile,
+    promoteConstructorVersion,
 } from "./component-constructor.js";
 
 // ----------------------------------------------------------
@@ -230,6 +231,114 @@ assert.throws(
 
     fs.unlinkSync(tmpFile);
     fs.rmdirSync(tmpDir);
+}
+
+// ----------------------------------------------------------
+// promoteConstructorVersion
+// ----------------------------------------------------------
+console.log("Testing promoteConstructorVersion...");
+
+// Happy path: promotes version, resource versions, and image reference
+{
+    const constructor = {
+        name: "ocm.software/cli",
+        version: "0.17.0-rc.1",
+        resources: [
+            {
+                name: "cli",
+                type: "executable",
+                version: "0.17.0-rc.1",
+                input: { type: "file", path: "resources/bin/ocm-linux-amd64" },
+            },
+            {
+                name: "cli",
+                type: "executable",
+                version: "0.17.0-rc.1",
+                input: { type: "file", path: "resources/bin/ocm-darwin-arm64" },
+            },
+            {
+                name: "image",
+                type: "ociImage",
+                version: "0.17.0-rc.1",
+                access: {
+                    type: "ociArtifact",
+                    imageReference: "ghcr.io/ocm/cli:0.17.0-rc.1",
+                },
+            },
+        ],
+    };
+
+    const result = promoteConstructorVersion(constructor, "0.17.0", "ghcr.io/ocm/cli:0.17.0");
+
+    assert.strictEqual(result.version, "0.17.0", "Top-level version should be updated");
+    assert.strictEqual(result.resources[0].version, "0.17.0", "First CLI resource version should be updated");
+    assert.strictEqual(result.resources[1].version, "0.17.0", "Second CLI resource version should be updated");
+    assert.strictEqual(result.resources[2].version, "0.17.0", "Image resource version should be updated");
+    assert.strictEqual(
+        result.resources[2].access.imageReference,
+        "ghcr.io/ocm/cli:0.17.0",
+        "Image reference should be updated"
+    );
+    // Ensure non-image fields are untouched
+    assert.strictEqual(result.resources[0].input.path, "resources/bin/ocm-linux-amd64", "CLI path should be unchanged");
+    assert.strictEqual(result.name, "ocm.software/cli", "Name should be unchanged");
+}
+
+// Mutates in place and returns the same object
+{
+    const constructor = {
+        version: "1.0.0-rc.1",
+        resources: [
+            { name: "image", version: "1.0.0-rc.1", access: { type: "ociArtifact", imageReference: "old" } },
+        ],
+    };
+    const result = promoteConstructorVersion(constructor, "1.0.0", "new-ref");
+    assert.strictEqual(result, constructor, "Should return the same object (mutate in place)");
+}
+
+// Error: missing resources array
+assert.throws(
+    () => promoteConstructorVersion({ name: "test", version: "1.0.0" }, "2.0.0", "ref"),
+    /no 'resources' array/,
+    "Should throw when resources array is missing"
+);
+
+// Error: no image resource
+assert.throws(
+    () => promoteConstructorVersion({
+        version: "1.0.0-rc.1",
+        resources: [
+            { name: "cli", version: "1.0.0-rc.1", input: { type: "file", path: "bin/ocm" } },
+        ],
+    }, "1.0.0", "ref"),
+    /No image resource with 'access' found/,
+    "Should throw when no image resource exists"
+);
+
+// Error: image resource exists but has no access field
+assert.throws(
+    () => promoteConstructorVersion({
+        version: "1.0.0-rc.1",
+        resources: [
+            { name: "image", version: "1.0.0-rc.1" },
+        ],
+    }, "1.0.0", "ref"),
+    /No image resource with 'access' found/,
+    "Should throw when image resource has no access field"
+);
+
+// Edge: single resource that is the image
+{
+    const constructor = {
+        version: "0.1.0-rc.2",
+        resources: [
+            { name: "image", version: "0.1.0-rc.2", access: { type: "ociArtifact", imageReference: "old:rc2" } },
+        ],
+    };
+    promoteConstructorVersion(constructor, "0.1.0", "new:final");
+    assert.strictEqual(constructor.version, "0.1.0");
+    assert.strictEqual(constructor.resources[0].version, "0.1.0");
+    assert.strictEqual(constructor.resources[0].access.imageReference, "new:final");
 }
 
 console.log("✅ All component-constructor tests passed.");
