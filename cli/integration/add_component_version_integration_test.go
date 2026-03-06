@@ -3,6 +3,8 @@ package integration
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -396,4 +398,121 @@ components:
 		_, err := os.Stat(ctfArchivePath)
 		r.NoError(err, "CTF archive should be created with explicit type")
 	})
+}
+
+func Test_Integration_HelmInput_LocalPath(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	root := getRepoRootBasedOnGit(t)
+	chartPath := filepath.Join(root, "bindings/go/helm/testdata/mychart")
+
+	componentName := "ocm.software/helm-input-local"
+	componentVersion := "0.1.0"
+
+	constructor := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: mychart
+    version: 0.1.0
+    type: helmChart
+    input:
+      type: helm/v1
+      path: %s
+`, componentName, componentVersion, chartPath)
+
+	tempDir := t.TempDir()
+	constructorPath := filepath.Join(tempDir, "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+
+	ctfDir := filepath.Join(tempDir, "ctf")
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
+		"--constructor", constructorPath,
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "add cv with local helm input should succeed")
+
+	// Download the resource from the CTF to verify it was stored correctly
+	downloadDir := filepath.Join(tempDir, "downloaded")
+	componentRef := fmt.Sprintf("ctf::%s//%s:%s", ctfDir, componentName, componentVersion)
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"resource",
+		componentRef,
+		"--identity", "name=mychart,version=0.1.0",
+		"--output", downloadDir,
+	})
+	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource from CTF should succeed")
+
+	layout := internal.ParseHelmOCILayout(t, downloadDir)
+	layout.AssertHelmChartLayer(t)
+}
+
+func Test_Integration_HelmInput_RemoteRepository(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	// Serve the test chart from a local HTTP server
+	root := getRepoRootBasedOnGit(t)
+	chartDir := filepath.Join(root, "bindings/go/helm/testdata/provenance")
+	srv := httptest.NewServer(http.FileServer(http.Dir(chartDir)))
+	t.Cleanup(srv.Close)
+
+	componentName := "ocm.software/helm-input-remote"
+	componentVersion := "0.1.0"
+
+	constructor := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: mychart
+    version: 0.1.0
+    type: helmChart
+    input:
+      type: helm/v1
+      helmRepository: %s/mychart-0.1.0.tgz
+`, componentName, componentVersion, srv.URL)
+
+	tempDir := t.TempDir()
+	constructorPath := filepath.Join(tempDir, "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+
+	ctfDir := filepath.Join(tempDir, "ctf")
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
+		"--constructor", constructorPath,
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "add cv with remote helm input should succeed")
+
+	// Download the resource from the CTF to verify it was stored correctly
+	downloadDir := filepath.Join(tempDir, "downloaded")
+	componentRef := fmt.Sprintf("ctf::%s//%s:%s", ctfDir, componentName, componentVersion)
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"resource",
+		componentRef,
+		"--identity", "name=mychart,version=0.1.0",
+		"--output", downloadDir,
+	})
+	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource from CTF should succeed")
+
+	layout := internal.ParseHelmOCILayout(t, downloadDir)
+	layout.AssertHelmChartLayer(t)
 }

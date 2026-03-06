@@ -2,17 +2,14 @@ package integration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -56,58 +53,11 @@ func downloadAndVerifyResource(t *testing.T, ctx context.Context, targetRef, com
 	})
 	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource should succeed")
 
-	// Parse the OCI index to find the manifest digest
-	indexData, err := os.ReadFile(filepath.Join(downloadDir, "index.json"))
-	r.NoError(err, "should be able to read OCI index.json")
+	layout := internal.ParseHelmOCILayout(t, downloadDir)
+	layout.AssertChartContentEquals(t, originalChartPath)
 
-	var index ocispec.Index
-	r.NoError(json.Unmarshal(indexData, &index), "should be able to parse OCI index")
-	r.NotEmpty(index.Manifests, "OCI index should contain at least one manifest")
-
-	// Read the manifest to find the helm chart layer
-	manifestDesc := index.Manifests[0]
-	manifestPath := filepath.Join(downloadDir, "blobs", manifestDesc.Digest.Algorithm().String(), manifestDesc.Digest.Encoded())
-	manifestData, err := os.ReadFile(manifestPath)
-	r.NoError(err, "should be able to read OCI manifest")
-
-	var manifest ocispec.Manifest
-	r.NoError(json.Unmarshal(manifestData, &manifest), "should be able to parse OCI manifest")
-
-	// Find the helm chart layer (application/vnd.cncf.helm.chart.content.v1.tar+gzip)
-	var chartLayer *ocispec.Descriptor
-	var provLayer *ocispec.Descriptor
-	for i, layer := range manifest.Layers {
-		if strings.Contains(layer.MediaType, "helm.chart.content") {
-			chartLayer = &manifest.Layers[i]
-		}
-		if strings.Contains(layer.MediaType, "helm.chart.provenance") {
-			provLayer = &manifest.Layers[i]
-		}
-	}
-	r.NotNil(chartLayer, "should find helm chart content layer in manifest")
-
-	// Compare the chart layer blob with the original helm chart
-	expected, err := os.ReadFile(originalChartPath)
-	r.NoError(err, "should be able to read original helm chart")
-
-	chartBlobPath := filepath.Join(downloadDir, "blobs", chartLayer.Digest.Algorithm().String(), chartLayer.Digest.Encoded())
-	actual, err := os.ReadFile(chartBlobPath)
-	r.NoError(err, "should be able to read downloaded chart blob")
-
-	r.Equal(expected, actual, "downloaded chart blob should match original helm chart")
-
-	// Optionally compare the provenance layer
 	if originalProvPath != "" {
-		r.NotNil(provLayer, "should find helm chart provenance layer in manifest")
-
-		expectedProv, err := os.ReadFile(originalProvPath)
-		r.NoError(err, "should be able to read original prov file")
-
-		provBlobPath := filepath.Join(downloadDir, "blobs", provLayer.Digest.Algorithm().String(), provLayer.Digest.Encoded())
-		actualProv, err := os.ReadFile(provBlobPath)
-		r.NoError(err, "should be able to read downloaded prov blob")
-
-		r.Equal(expectedProv, actualProv, "downloaded prov blob should match original prov file")
+		layout.AssertProvContentEquals(t, originalProvPath)
 	}
 }
 
