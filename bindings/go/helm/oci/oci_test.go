@@ -279,8 +279,6 @@ func TestCopyChartToOCILayout_EmptyChartDir(t *testing.T) {
 	testDataDir := filepath.Join("..", "testdata")
 
 	chart := newReadOnlyChart(t, filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
-	// Empty ChartDir means cleanup (os.RemoveAll) should be a no-op
-	chart.ChartDir = ""
 
 	result := oci.CopyChartToOCILayout(ctx, chart)
 	require.NotNil(t, result)
@@ -337,7 +335,6 @@ func newReadOnlyChart(t *testing.T, path string) *helm.ChartData {
 		tmpDir := t.TempDir()
 		path, err = chartutil.Save(ch, tmpDir)
 		require.NoError(t, err, "failed to save chart to temp dir")
-		result.ChartDir = tmpDir
 	}
 
 	result.ChartBlob, err = filesystem.GetBlobFromOSPath(path)

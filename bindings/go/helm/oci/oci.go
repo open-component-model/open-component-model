@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"sync"
 
 	"github.com/opencontainers/go-digest"
@@ -91,8 +90,7 @@ func copyChartToOCILayoutAsync(ctx context.Context, chart *helm.ChartData, w *io
 	// err accumulates any error from copy, gzip, or layout writing.
 	var err error
 	defer func() {
-		_ = w.CloseWithError(err)        // Always returns nil.
-		_ = os.RemoveAll(chart.ChartDir) // Always remove the created temp folder for the chart.
+		_ = w.CloseWithError(err) // Always returns nil.
 	}()
 
 	zippedBuf := gzip.NewWriter(w)

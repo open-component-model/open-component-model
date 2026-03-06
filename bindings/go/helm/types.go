@@ -10,8 +10,4 @@ type ChartData struct {
 	Version   string
 	ChartBlob *filesystem.Blob
 	ProvBlob  *filesystem.Blob
-
-	// ChartDir is the directory where the chart is downloaded to. This is cleaned after the writer
-	// has finished with copying it later in copyChartToOCILayoutAsync.
-	ChartDir string
 }
