@@ -43,6 +43,7 @@ type ObjectKey struct {
 }
 
 type Verification struct {
+	// Signature defines the name of the signature to be verified in the component version.
 	// +required
 	Signature string `json:"signature,omitempty"`
 	// Public Key Secret Format

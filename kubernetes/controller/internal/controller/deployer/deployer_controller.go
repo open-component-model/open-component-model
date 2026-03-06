@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"slices"
 
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
@@ -37,12 +38,14 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
+	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
+	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
 )
 
 const (
@@ -416,6 +419,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		RepositorySpec:    repoSpec,
 		OCMConfigurations: configs,
 		Namespace:         deployer.GetNamespace(),
+		SigningRegistry:   r.PluginManager.SigningRegistry,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: k8stypes.NamespacedName{
@@ -431,19 +435,22 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	componentDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
-		resource.Status.Component.Component,
-		resource.Status.Component.Version)
-	if errors.Is(err, resolution.ErrResolutionInProgress) {
-		// resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
-
-		return nil, resolution.ErrResolutionInProgress
-	}
+	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, configs)
 	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+		switch {
+		case errors.Is(err, workerpool.ErrResolutionInProgress):
+			// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
 
-		return nil, fmt.Errorf("failed to get component version: %w", err)
+			return nil, workerpool.ErrResolutionInProgress
+		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+			// Ignore error, but log event
+			event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityInfo, err.Error())
+		default:
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+
+			return nil, fmt.Errorf("failed to get effective component version: %w", err)
+		}
 	}
 
 	resourceIdentity := makeResourceIdentity(resource.Status.Resource)
@@ -800,6 +807,117 @@ func (r *Reconciler) track(ctx context.Context, deployer *deliveryv1alpha1.Deplo
 	}
 
 	return nil
+}
+
+// getEffectiveComponentDescriptor retrieves the effective component descriptor for the resource.
+// The resource status tells us which component version was resolved for the resource. However, making sure the
+// integrity of that component version is still intact is tricky.
+//
+//   - If the resource is from the same component version as the component from the component CR, we need to check for
+//     verifications on the component CR and add them to the cache-backed repository to make sure they are included in
+//     the cache key and used for verification (if any).
+//   - If the resource is from a component version that was resolved through a reference path in the resource
+//     controller, we need to resolve the path again starting from the component specified in the component CR, to make
+//     sure we get the same component version with an intact integrity chain (if a digest was provided to check it).
+//     This operation should be cheap as we expect the component to be in cache already.
+func (r *Reconciler) getEffectiveComponentDescriptor(
+	ctx context.Context,
+	deployer *deliveryv1alpha1.Deployer,
+	resource *deliveryv1alpha1.Resource,
+	configs []deliveryv1alpha1.OCMConfiguration,
+) (*descriptor.Descriptor, error) {
+	// We get the (ready) component CR to (1) get any verifications needed to resolve the component version and (2) to
+	// compare the component version used in the component and resource controller.
+	component, err := util.GetReadyObject[deliveryv1alpha1.Component, *deliveryv1alpha1.Component](ctx, r.Client, client.ObjectKey{
+		Namespace: resource.GetNamespace(),
+		Name:      resource.Spec.ComponentRef.Name,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ready component: %w", err)
+	}
+
+	repoSpecComponent := &ocmruntime.Raw{}
+	if err := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()).Decode(
+		bytes.NewReader(component.Status.Component.RepositorySpec.Raw), repoSpecComponent); err != nil {
+		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
+	}
+
+	// Add verifications from the component to the cache-backed repository to make sure they are included in the
+	// cache key and used for verification (if any).
+	verifications, err := verification.GetVerifications(ctx, r.Client, component)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get verifications: %w", err)
+	}
+
+	repoComponent, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+		RepositorySpec:    repoSpecComponent,
+		OCMConfigurations: configs,
+		Namespace:         component.GetNamespace(),
+		SigningRegistry:   r.PluginManager.SigningRegistry,
+		Verifications:     verifications,
+		RequesterFunc: func() workerpool.RequesterInfo {
+			return workerpool.RequesterInfo{
+				NamespacedName: k8stypes.NamespacedName{
+					Namespace: deployer.GetNamespace(),
+					Name:      deployer.GetName(),
+				},
+			}
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
+	}
+
+	componentDescriptorComponent, err := repoComponent.GetComponentVersion(ctx,
+		component.Status.Component.Component,
+		component.Status.Component.Version)
+	if err != nil {
+		// Only return the error if it is not of type `ErrNotSafelyDigestible`. If it is of that type, we need to check
+		// if there is a reference path to check.
+		if !errors.Is(err, workerpool.ErrNotSafelyDigestible) {
+			return nil, fmt.Errorf("failed to get component version from cache-backed repository: %w", err)
+		}
+	}
+
+	// Early return if the component version from the component and resource status are the same.
+	if component.Status.Component.Component == resource.Status.Component.Component &&
+		component.Status.Component.Version == resource.Status.Component.Version {
+		// Returning the error as well as this could be of type `ErrNotSafelyDigestible`, which is a fallthrough with
+		// an error event. The error will be checked in the calling code.
+		return componentDescriptorComponent, err
+	}
+
+	// If the component CR got an update while the deployer reconciler is already running, it is possible that the
+	// component version in the component and resource CR are different, but the component version from the resource
+	// status is not resolved through a reference path.
+	// In this case we do nothing and wait for the resource.
+	if len(resource.Spec.Resource.ByReference.ReferencePath) == 0 {
+		return nil, fmt.Errorf(
+			"component version from resource status differs from component version from component, but no reference path provided: %s:%s != %s:%s",
+			resource.Status.Component.Component, resource.Status.Component.Version,
+			component.Status.Component.Component, component.Status.Component.Version)
+	}
+
+	resourceDescriptor, _, err := ocm.ResolveReferencePath(
+		ctx,
+		r.Resolver,
+		r.PluginManager.SigningRegistry,
+		componentDescriptorComponent,
+		repoSpecComponent,
+		resource.Spec.Resource.ByReference.ReferencePath,
+		configs,
+		workerpool.RequesterInfo{
+			NamespacedName: k8stypes.NamespacedName{
+				Namespace: deployer.GetNamespace(),
+				Name:      deployer.GetName(),
+			},
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve resource reference path: %w", err)
+	}
+
+	return resourceDescriptor, nil
 }
 
 func updateDeployedObjectStatusReferences[T client.Object](objs []T, deployer *deliveryv1alpha1.Deployer) {
