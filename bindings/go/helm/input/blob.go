@@ -162,8 +162,11 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 	opts := []download.Option{
 		download.WithCredentials(credentials),
 		download.WithTempDirBase(tmpDirBase),
+		//nolint:staticcheck // downward compatibility for helm input
 		download.WithVersion(helmSpec.Version),
+		//nolint:staticcheck // downward compatibility for helm input
 		download.WithCACert(helmSpec.CACert),
+		//nolint:staticcheck // downward compatibility for helm input
 		download.WithCACertFile(helmSpec.CACertFile),
 	}
 	resultChart, err := download.NewReadOnlyChartFromRemote(ctx, helmSpec.HelmRepository, opts...)
@@ -172,9 +175,9 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 	}
 
 	return &ReadOnlyChart{
-		Name:         resultChart.Name,
-		Version:      resultChart.Version,
-		ChartBlob:    resultChart.ChartBlob,
-		ProvBlob:     resultChart.ProvBlob,
+		Name:      resultChart.Name,
+		Version:   resultChart.Version,
+		ChartBlob: resultChart.ChartBlob,
+		ProvBlob:  resultChart.ProvBlob,
 	}, err
 }

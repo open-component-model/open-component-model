@@ -72,6 +72,7 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	opts := []download.Option{
 		// If a version is specified in the Helm access spec, use it to ensure we get the correct chart version.
 		// If not specified, the downloader will use the default behavior which tries to get the version from helmAccess.HelmRepository
+		//nolint:staticcheck // downward compatibility for helm input
 		download.WithVersion(helmAccess.Version),
 		download.WithTempDirBase(transformation.Spec.OutputPath),
 		download.WithCredentials(creds),
