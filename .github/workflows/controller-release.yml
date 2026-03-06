@@ -1,0 +1,442 @@
+name: Controller Release
+run-name: Controller Release from ${{ github.event.inputs.branch }}${{ github.event.inputs.dry_run == 'true' && ' (dry-run)' || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to release from (e.g., releases/v0.21)"
+        required: true
+        type: string
+      dry_run:
+        description: "Dry-run RC phase without pushing tags or creating releases."
+        required: false
+        default: true
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  COMPONENT_PATH: kubernetes/controller
+
+concurrency:
+  cancel-in-progress: false
+  group: controller-release-${{ github.event.inputs.branch }}
+
+jobs:
+  # ===========================================================================
+  # PHASE 1: RELEASE CANDIDATE
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # PREPARE - Computes next RC version and generates changelog
+  # ---------------------------------------------------------------------------
+  prepare:
+    name: Prepare Release Metadata
+    uses: ./.github/workflows/release-candidate-version.yml
+    with:
+      branch: ${{ github.event.inputs.branch }}
+      component_path: kubernetes/controller
+    secrets: inherit
+
+  # ---------------------------------------------------------------------------
+  # TAG RC - Creates RC git tag with changelog as annotation message.
+  # ---------------------------------------------------------------------------
+  tag_rc:
+    name: Create and Push RC Tag
+    runs-on: ubuntu-latest
+    environment: release
+    needs: [prepare]
+    if: ${{ github.event.inputs.dry_run == 'false' }}
+    permissions:
+      contents: write
+    outputs:
+      pushed: ${{ steps.tag.outputs.pushed }}
+    steps:
+      - name: Generate App Token
+        # App token required to push tags that trigger other workflows
+        id: get_token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          sparse-checkout: ${{ env.COMPONENT_PATH }}
+          ref: ${{ github.event.inputs.branch }}
+          token: ${{ steps.get_token.outputs.token }}
+          fetch-tags: true
+
+      - name: Setup git config
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Download changelog artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ needs.prepare.outputs.changelog_artifact }}
+          path: ${{ runner.temp }}
+
+      - name: Create RC tag
+        # Creates annotated tag with changelog; skips if already exists
+        id: tag
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          TAG: ${{ needs.prepare.outputs.new_tag }}
+          CHANGELOG_FILE: ${{ runner.temp }}/CHANGELOG.md
+        with:
+          github-token: ${{ steps.get_token.outputs.token }}
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
+            await script.createRcTag({ core });
+
+  # ---------------------------------------------------------------------------
+  # BUILD - Calls main controller build workflow
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build Controller
+    if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
+    needs: [prepare, tag_rc]
+    uses: ./.github/workflows/kubernetes-controller.yml
+    secrets: inherit
+    with:
+      ref: ${{ needs.prepare.outputs.new_tag }}
+
+  # ---------------------------------------------------------------------------
+  # RELEASE RC - Creates GitHub pre-release with Helm chart as asset.
+  # ---------------------------------------------------------------------------
+  release_rc:
+    name: Create RC Pre-Release
+    if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
+    needs: [prepare, tag_rc, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Download changelog artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ needs.prepare.outputs.changelog_artifact }}
+          path: ${{ runner.temp }}
+
+      - name: Download chart artifact
+        # Use artifact from build instead of pulling from registry
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ needs.build.outputs.chart_artifact_name }}
+          path: ${{ runner.temp }}/assets
+
+      - name: Create RC Release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        with:
+          name: Controller ${{ needs.prepare.outputs.new_version }}
+          tag_name: ${{ needs.prepare.outputs.new_tag }}
+          body_path: ${{ runner.temp }}/CHANGELOG.md
+          fail_on_unmatched_files: true
+          prerelease: true
+          files: ${{ runner.temp }}/assets/chart-*.tgz
+
+      - name: Summarize RC release
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+          IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
+          CHART_DIGEST: ${{ needs.build.outputs.chart_digest }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const release = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: process.env.RC_TAG,
+            });
+            const releaseUrl = release.data.html_url;
+            const assetsCount = Array.isArray(release.data.assets) ? release.data.assets.length : 0;
+            const chartName = release.data.assets.find(a => a.name.endsWith('.tgz'))?.name || 'N/A';
+
+            await core.summary
+              .addHeading('RC Release Published')
+              .addTable([
+                [{ data: 'Field', header: true }, { data: 'Value', header: true }],
+                ['RC Tag', process.env.RC_TAG],
+                ['RC Version', process.env.RC_VERSION],
+                ['Helm Chart', chartName],
+                ['Image Digest', process.env.IMAGE_DIGEST ? process.env.IMAGE_DIGEST.substring(0, 19) + '...' : 'N/A'],
+                ['Chart Digest', process.env.CHART_DIGEST ? process.env.CHART_DIGEST.substring(0, 19) + '...' : 'N/A'],
+                ['Uploaded Assets', String(assetsCount)],
+              ])
+              .addEOL()
+              .addLink('View Release', releaseUrl)
+              .addEOL()
+              .write();
+
+  # ===========================================================================
+  # PHASE 2: FINAL RELEASE (after environment gate)
+  # ===========================================================================
+  # Environment Gate:
+  # The "release" environment must be configured in GitHub Settings → Environments:
+  # - Required reviewers: At least 1 reviewer must approve
+
+  # ---------------------------------------------------------------------------
+  # VERIFY ATTESTATIONS - Ensure RC artifacts are attestable
+  # ---------------------------------------------------------------------------
+  verify_attestations:
+    name: Verify RC Attestations
+    needs: [prepare, build, release_rc]
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Verify image attestation
+        # Validates SLSA provenance was created by this repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
+        run: |
+          gh attestation verify \
+            "oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller@${IMAGE_DIGEST}" \
+            --repo "${{ github.repository }}"
+
+      - name: Verify chart attestation
+        # Uses chart digest from build output (no need to resolve again)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHART_DIGEST: ${{ needs.build.outputs.chart_digest }}
+        run: |
+          CHART_REPO="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart"
+          gh attestation verify "oci://${CHART_REPO}@${CHART_DIGEST}" --repo "${{ github.repository }}"
+
+  # ---------------------------------------------------------------------------
+  # PROMOTE AND RELEASE FINAL - Promotes RC artifacts and creates final release
+  # ---------------------------------------------------------------------------
+  # Combined job: Avoids duplicate tool setup and registry pull.
+  # The chart is built locally and used directly for both push and release asset.
+  promote_and_release_final:
+    name: Promote and Release Final
+    needs: [prepare, build, verify_attestations]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          sparse-checkout: ${{ env.COMPONENT_PATH }}
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.branch }}
+          token: ${{ steps.get_token.outputs.token }}
+          fetch-tags: true
+
+      - name: Setup git config
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Create final tag
+        # Points final tag to same commit as RC tag (no rebuild needed)
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          FINAL_TAG: ${{ needs.prepare.outputs.promotion_tag }}
+        with:
+          github-token: ${{ steps.get_token.outputs.token }}
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
+            await script.createFinalTag({ core });
+
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote image tags
+        # Re-tags existing image; adds 'latest' only if this is the highest version
+        env:
+          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
+          IMAGE_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
+          SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
+        run: |
+          set -euo pipefail
+          if [ "$SET_LATEST" = "true" ]; then
+            oras tag "${IMAGE_REPO}:${RC_VERSION}" "${FINAL_VERSION}" "latest"
+            echo "✅ Tagged :${FINAL_VERSION} and :latest"
+          else
+            oras tag "${IMAGE_REPO}:${RC_VERSION}" "${FINAL_VERSION}"
+            echo "⚠️ Tagged :${FINAL_VERSION} (not setting :latest)"
+          fi
+
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.14.0
+
+      - name: Download RC chart artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ needs.build.outputs.chart_artifact_name }}
+          path: ${{ runner.temp }}/rc-chart
+
+      - name: Package final chart
+        working-directory: ${{ env.COMPONENT_PATH }}
+        env:
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+          IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
+        run: |
+          set -euo pipefail
+          task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_DIGEST="${IMAGE_DIGEST}"
+
+      - name: Verify promote
+        # Ensures the final chart only differs from the RC in allowed fields
+        # (Chart.yaml version/appVersion, values.yaml tag) while digest stays identical
+        working-directory: ${{ env.COMPONENT_PATH }}
+        env:
+          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+        run: |
+          set -euo pipefail
+          RC_CHART="${{ runner.temp }}/rc-chart/chart-${RC_VERSION}.tgz"
+          task helm/verify-promote RC_CHART="${RC_CHART}" FINAL_CHART="dist/chart-${VERSION}.tgz"
+
+      - name: Push final chart
+        working-directory: ${{ env.COMPONENT_PATH }}
+        env:
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+        run: |
+          set -euo pipefail
+          task helm/push VERSION="${VERSION}" REGISTRY="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller"
+
+      - name: Resolve chart digest
+        id: chart-digest
+        env:
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+        run: |
+          set -euo pipefail
+          CHART_REPO="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart"
+          echo "digest=$(oras resolve ${CHART_REPO}:${VERSION})" >> "$GITHUB_OUTPUT"
+
+      - name: Attest final chart
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          subject-digest: ${{ steps.chart-digest.outputs.digest }}
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart
+          push-to-registry: true
+
+      - name: Get RC release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release view "${{ needs.prepare.outputs.new_tag }}" \
+            --repo "${{ github.repository }}" --json body --jq '.body' > "${{ runner.temp }}/CHANGELOG.md"
+
+      - name: Publish final release
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          FINAL_TAG: ${{ needs.prepare.outputs.promotion_tag }}
+          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
+          IMAGE_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
+          CHART_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart
+          IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
+          CHART_DIR: ${{ env.COMPONENT_PATH }}/dist
+          NOTES_FILE: ${{ runner.temp }}/CHANGELOG.md
+          SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
+          HIGHEST_FINAL_VERSION: ${{ needs.prepare.outputs.highest_final_version }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/publish-final-release.js');
+            await script.default({ github, context, core });
+
+  # ---------------------------------------------------------------------------
+  # PREPARE FINAL CONSTRUCTOR - Generate OCM constructor with final version
+  # ---------------------------------------------------------------------------
+  prepare_final_constructor:
+    name: Prepare Final OCM Constructor
+    needs: [prepare, build, promote_and_release_final]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate constructor with final version
+        env:
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller:${{ needs.prepare.outputs.base_version }}
+          CHART_REF: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart:${{ needs.prepare.outputs.base_version }}
+        run: |
+          set -euo pipefail
+
+          cat > component-constructor.yaml <<EOF
+          name: ocm.software/kubernetes/controller
+          version: ${VERSION}
+          provider:
+            name: ocm.software
+          resources:
+            - name: controller-image
+              version: ${VERSION}
+              type: ociImage
+              access:
+                type: ociArtifact
+                imageReference: ${IMAGE_REF}
+            - name: controller-chart
+              version: ${VERSION}
+              type: helmChart
+              access:
+                type: ociArtifact
+                imageReference: ${CHART_REF}
+          EOF
+
+          echo "--- Final constructor ---"
+          cat component-constructor.yaml
+          echo "---"
+          echo "✅ Constructor generated for ${VERSION}"
+
+      - name: Upload final constructor artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: controller-final-constructor-artifact
+          if-no-files-found: error
+          path: component-constructor.yaml
+
+  # ---------------------------------------------------------------------------
+  # PUBLISH FINAL COMPONENT - Publish final OCM component version
+  # ---------------------------------------------------------------------------
+  publish_final_component:
+    name: Publish Final OCM Component
+    needs: [prepare, build, prepare_final_constructor]
+    permissions:
+      actions: read
+      packages: write
+    uses: ./.github/workflows/publish-ocm-component-version.yml
+    secrets: inherit
+    with:
+      constructor_artifact_name: controller-final-constructor-artifact
+      ocm_repository: ghcr.io/${{ github.repository_owner }}
