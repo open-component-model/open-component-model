@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
 )
@@ -165,5 +166,61 @@ func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, key1, key2, "cache keys should be same for different order of verifications")
+	})
+
+	t.Run("different keys for different digests", func(t *testing.T) {
+		configHash := []byte("test-config-hash")
+		spec := &ociv1.Repository{
+			BaseUrl: "localhost:5000/test",
+		}
+		component := "test-component"
+		version := "v1.0.0"
+
+		digest1 := &v2.Digest{
+			HashAlgorithm:          "sha256",
+			Value:                  "digest1",
+			NormalisationAlgorithm: "normalisation1",
+		}
+		digest2 := &v2.Digest{
+			HashAlgorithm:          "sha256",
+			Value:                  "digest2",
+			NormalisationAlgorithm: "normalisation2",
+		}
+
+		key1, err := buildCacheKey(configHash, spec, component, version, nil, digest1)
+		require.NoError(t, err)
+
+		key2, err := buildCacheKey(configHash, spec, component, version, nil, digest2)
+		require.NoError(t, err)
+
+		assert.NotEqual(t, key1, key2, "cache keys should differ for different digests")
+	})
+
+	t.Run("same keys for same digests", func(t *testing.T) {
+		configHash := []byte("test-config-hash")
+		spec := &ociv1.Repository{
+			BaseUrl: "localhost:5000/test",
+		}
+		component := "test-component"
+		version := "v1.0.0"
+
+		digest1 := &v2.Digest{
+			NormalisationAlgorithm: "normalisation",
+			HashAlgorithm:          "sha256",
+			Value:                  "digest",
+		}
+		digest2 := &v2.Digest{
+			Value:                  "digest",
+			NormalisationAlgorithm: "normalisation",
+			HashAlgorithm:          "sha256",
+		}
+
+		key1, err := buildCacheKey(configHash, spec, component, version, nil, digest1)
+		require.NoError(t, err)
+
+		key2, err := buildCacheKey(configHash, spec, component, version, nil, digest2)
+		require.NoError(t, err)
+
+		assert.Equal(t, key1, key2, "cache keys should not differ for same digests")
 	})
 }
