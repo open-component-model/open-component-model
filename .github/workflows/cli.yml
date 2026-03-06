@@ -223,42 +223,30 @@ jobs:
           subject-name: ${{ env.TARGET_REPO }}
           push-to-registry: true
 
-      # Reuse generated constructor from build artifacts, normalize file paths, and patch only image access
+      # Checkout scripts needed for the constructor patching step
+      - name: Checkout scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: 'false'
+
+      - name: Install script dependencies
+        run: npm ci
+        working-directory: ${{ github.workspace }}/.github/scripts
+
+      # Reuse generated constructor from build artifacts, normalize file paths,
+      # and patch image access to reference the published image instead of a localBlob
       - name: Generate OCM component constructor
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          TARGET_CONSTRUCTOR="ocm-publish/component-constructor.yaml"
-
-          echo "Verifying downloaded CLI binaries..."
-          shopt -s nullglob
-          files=(bin/ocm-*)
-          (( ${#files[@]} > 0 )) || { echo "❌ No CLI binaries found under ./bin"; ls -la; exit 1; }
-          
-          CONSTRUCTOR_SOURCE="component-constructor.yaml"
-          test -f "${CONSTRUCTOR_SOURCE}" || { echo "❌ component-constructor.yaml not found in downloaded artifacts"; ls -la; exit 1; }
-          echo "✅ Required artifacts are present"
-          
-          mkdir -p ocm-publish
-          cp "${CONSTRUCTOR_SOURCE}" "${TARGET_CONSTRUCTOR}"
-
-          IMAGE_REF="${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/cli:${TAG}"
-          export IMAGE_REF
-
-          yq -e '.resources[] | select(.name == "image")' "${TARGET_CONSTRUCTOR}" >/dev/null
-
-          yq -i '
-            (.resources[] | select(.name == "cli" and .input.type == "file") | .input.path) |= ("resources/bin/" + (split("/") | .[-1])) |
-            (.resources[] | select(.name == "image") | .type) = "ociImage" |
-            (.resources[] | select(.name == "image") | .version) = env(TAG) |
-            (.resources[] | select(.name == "image") | .access.type) = "ociArtifact" |
-            (.resources[] | select(.name == "image") | .access.imageReference) = env(IMAGE_REF) |
-            del(.resources[] | select(.name == "image") | .relation) |
-            del(.resources[] | select(.name == "image") | .input)
-          ' "${TARGET_CONSTRUCTOR}"
-
-          yq -e '.resources[] | select(.name == "image") | .access.imageReference == env(IMAGE_REF)' "${TARGET_CONSTRUCTOR}" >/dev/null
+        env:
+          CONSTRUCTOR_SOURCE: component-constructor.yaml
+          TARGET_CONSTRUCTOR: ocm-publish/component-constructor.yaml
+          IMAGE_REF: "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ env.TAG }}"
+          IMAGE_TAG: "${{ env.TAG }}"
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/component-constructor.js');
+            await script.patchCliConstructorAction({ core });
 
       - name: Upload component constructor as artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -267,6 +255,11 @@ jobs:
           if-no-files-found: error
           path: ocm-publish/component-constructor.yaml
 
+  # --------------------------------------------------------
+  # CONFORMANCE: Run OCM conformance tests against the published CLI image.
+  # This validates that the pushed OCI image works correctly before
+  # the component version is published to the OCM repository.
+  # --------------------------------------------------------
   conformance:
     name: Conformance
     needs: publish
@@ -275,6 +268,24 @@ jobs:
       cli_image: "ghcr.io/${{ github.repository_owner }}/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
     secrets: inherit
 
+  # --------------------------------------------------------
+  # PUBLISH COMPONENT VERSION: Publish the OCM component descriptor.
+  #
+  # The constructor artifact (cli-constructor-artifact) was patched in the
+  # publish job's "Generate OCM component constructor" step using
+  # .github/scripts/component-constructor.js. That script:
+  #   1. Rewrites CLI binary input paths to use resources/bin/<filename>
+  #   2. Converts the local OCI image resource to an ociArtifact access
+  #      pointing at the image pushed to GHCR
+  #
+  # The publish-ocm-component-version workflow then uses the patched
+  # constructor together with the build artifacts to create and push the
+  # final OCM component version.
+  #
+  # For releases, the cli-release.yml workflow (step 8 "prepare_final_constructor")
+  # takes this RC constructor and patches it again to replace the RC version
+  # with the final version before publishing the final component.
+  # --------------------------------------------------------
   publish-component:
     name: Publish Component Version
     needs: [build, publish]

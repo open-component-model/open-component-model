@@ -1,5 +1,6 @@
 // @ts-check
 import fs from "fs";
+import path from "path";
 import yaml from "js-yaml";
 
 /**
@@ -104,6 +105,179 @@ export function patchCliConstructor(constructor, imageRef, imageTag) {
     }
 
     return constructor;
+}
+
+/**
+ * GitHub Actions entrypoint: patch the CLI component constructor for publishing.
+ *
+ * Verifies that CLI binaries exist, parses the constructor YAML, patches paths
+ * and image access, and writes the result to the target location.
+ *
+ * Environment variables:
+ * - CONSTRUCTOR_SOURCE: Path to the source component-constructor.yaml (required)
+ * - TARGET_CONSTRUCTOR: Path to write the patched constructor (required)
+ * - IMAGE_REF: Full OCI image reference, e.g. "ghcr.io/owner/cli:tag" (required)
+ * - IMAGE_TAG: Image tag / version string (required)
+ *
+ * @param {import('@actions/github-script').AsyncFunctionArguments} args
+ */
+export async function patchCliConstructorAction({ core }) {
+    const constructorSource = process.env.CONSTRUCTOR_SOURCE;
+    const targetConstructor = process.env.TARGET_CONSTRUCTOR;
+    const imageRef = process.env.IMAGE_REF;
+    const imageTag = process.env.IMAGE_TAG;
+
+    if (!constructorSource) {
+        core.setFailed("CONSTRUCTOR_SOURCE environment variable is required");
+        return;
+    }
+    if (!targetConstructor) {
+        core.setFailed("TARGET_CONSTRUCTOR environment variable is required");
+        return;
+    }
+    if (!imageRef) {
+        core.setFailed("IMAGE_REF environment variable is required");
+        return;
+    }
+    if (!imageTag) {
+        core.setFailed("IMAGE_TAG environment variable is required");
+        return;
+    }
+
+    try {
+        // Verify CLI binaries exist
+        const binDir = "bin";
+        const entries = fs.readdirSync(binDir).filter(f => f.startsWith("ocm-"));
+        if (entries.length === 0) {
+            throw new Error(`No CLI binaries found under ./${binDir}`);
+        }
+        core.info(`✅ Found ${entries.length} CLI binary(ies): ${entries.join(", ")}`);
+
+        // Verify source constructor exists
+        if (!fs.existsSync(constructorSource)) {
+            throw new Error(`Constructor source not found: ${constructorSource}`);
+        }
+
+        // Parse, patch, and write
+        const constructor = parseConstructorFile(constructorSource);
+        patchCliConstructor(constructor, imageRef, imageTag);
+
+        const targetDir = path.dirname(targetConstructor);
+        fs.mkdirSync(targetDir, { recursive: true });
+        fs.writeFileSync(targetConstructor, yaml.dump(constructor), "utf8");
+
+        core.info(`✅ Patched constructor written to ${targetConstructor}`);
+
+        // Validate round-trip
+        const written = parseConstructorFile(targetConstructor);
+        const imageResource = written.resources.find(r => r.name === "image");
+        if (!imageResource || imageResource.access?.imageReference !== imageRef) {
+            throw new Error("Validation failed: patched constructor does not contain expected image reference");
+        }
+        core.info(`✅ Validated image reference: ${imageRef}`);
+    } catch (error) {
+        core.setFailed(error.message);
+    }
+}
+
+/**
+ * Promote a constructor from RC to final version:
+ * - Replace the top-level version
+ * - Replace all resource versions
+ * - Update the image resource's access.imageReference
+ *
+ * @param {Object} constructor - Parsed constructor YAML object (mutated in place)
+ * @param {string} finalVersion - Final version string (e.g. "0.17.0")
+ * @param {string} imageRef - Full OCI image reference with final tag (e.g. "ghcr.io/owner/cli:0.17.0")
+ * @returns {Object} The mutated constructor object
+ * @throws {Error} If expected resources or access fields are not found
+ */
+export function promoteConstructorVersion(constructor, finalVersion, imageRef) {
+    if (!Array.isArray(constructor.resources)) {
+        throw new Error("Constructor has no 'resources' array");
+    }
+
+    constructor.version = finalVersion;
+
+    for (const resource of constructor.resources) {
+        resource.version = finalVersion;
+    }
+
+    const imageResource = constructor.resources.find(r => r.name === "image");
+    if (!imageResource || !imageResource.access) {
+        throw new Error("No image resource with 'access' found — was the constructor patched by patchCliConstructor first?");
+    }
+    imageResource.access.imageReference = imageRef;
+
+    return constructor;
+}
+
+/**
+ * GitHub Actions entrypoint: promote an RC constructor to final version.
+ *
+ * Reads the RC constructor, replaces all version fields with the final version,
+ * updates the image reference, validates the result, and writes it back.
+ *
+ * Environment variables:
+ * - CONSTRUCTOR: Path to the component-constructor.yaml (read and written in place) (required)
+ * - FINAL_VERSION: Final version string, e.g. "0.17.0" (required)
+ * - IMAGE_REF: Full OCI image reference with final tag (required)
+ *
+ * @param {import('@actions/github-script').AsyncFunctionArguments} args
+ */
+export async function promoteConstructorVersionAction({ core }) {
+    const constructorPath = process.env.CONSTRUCTOR;
+    const finalVersion = process.env.FINAL_VERSION;
+    const imageRef = process.env.IMAGE_REF;
+
+    if (!constructorPath) {
+        core.setFailed("CONSTRUCTOR environment variable is required");
+        return;
+    }
+    if (!finalVersion) {
+        core.setFailed("FINAL_VERSION environment variable is required");
+        return;
+    }
+    if (!imageRef) {
+        core.setFailed("IMAGE_REF environment variable is required");
+        return;
+    }
+
+    try {
+        if (!fs.existsSync(constructorPath)) {
+            throw new Error(`Constructor not found: ${constructorPath}`);
+        }
+
+        const constructor = parseConstructorFile(constructorPath);
+        const rcVersion = constructor.version;
+        core.info(`Promoting constructor from ${rcVersion} to ${finalVersion}...`);
+
+        promoteConstructorVersion(constructor, finalVersion, imageRef);
+
+        fs.writeFileSync(constructorPath, yaml.dump(constructor), "utf8");
+        core.info(`✅ Patched constructor written to ${constructorPath}`);
+
+        // Validate round-trip
+        const written = parseConstructorFile(constructorPath);
+
+        if (written.version !== finalVersion) {
+            throw new Error(`Validation failed: .version is '${written.version}', expected '${finalVersion}'`);
+        }
+
+        const resourceVersions = [...new Set(written.resources.map(r => r.version))];
+        if (resourceVersions.length !== 1 || resourceVersions[0] !== finalVersion) {
+            throw new Error(`Validation failed: resource versions are [${resourceVersions}], expected all '${finalVersion}'`);
+        }
+
+        const imageResource = written.resources.find(r => r.name === "image");
+        if (!imageResource || imageResource.access?.imageReference !== imageRef) {
+            throw new Error(`Validation failed: image reference is '${imageResource?.access?.imageReference}', expected '${imageRef}'`);
+        }
+
+        core.info(`✅ Validated: version=${finalVersion}, image=${imageRef}`);
+    } catch (error) {
+        core.setFailed(error.message);
+    }
 }
 
 /**
