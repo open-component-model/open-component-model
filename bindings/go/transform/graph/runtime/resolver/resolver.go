@@ -16,7 +16,10 @@ package resolver
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
@@ -26,6 +29,7 @@ import (
 type ResolutionResult struct {
 	Path     fieldpath.Path
 	Resolved bool
+	Deleted  bool
 	Original string
 	Replaced interface{}
 	Error    error
@@ -35,6 +39,7 @@ type ResolutionResult struct {
 type ResolutionSummary struct {
 	TotalExpressions    int
 	ResolvedExpressions int
+	DeletedExpressions  int
 	Results             []ResolutionResult
 	Errors              []error
 }
@@ -48,13 +53,17 @@ type Resolver struct {
 	// responsible for providing this only with available data aka CEL Expressions
 	// we've been able to resolve.
 	data map[string]interface{}
+	// schema is used to identify optional fields whose nil values
+	// should be removed rather than stored as null.
+	schema *jsonschema.Schema
 }
 
 // NewResolver creates a new Resolver instance.
-func NewResolver(resource map[string]interface{}, data map[string]interface{}) *Resolver {
+func NewResolver(resource map[string]interface{}, data map[string]interface{}, schema *jsonschema.Schema) *Resolver {
 	return &Resolver{
 		resource: resource,
 		data:     data,
+		schema:   schema,
 	}
 }
 
@@ -71,6 +80,9 @@ func (r *Resolver) Resolve(expressions []variable.FieldDescriptor) ResolutionSum
 		summary.Results = append(summary.Results, result)
 		if result.Resolved {
 			summary.ResolvedExpressions++
+		}
+		if result.Deleted {
+			summary.DeletedExpressions++
 		}
 		if result.Error != nil {
 			summary.Errors = append(summary.Errors, result.Error)
@@ -107,6 +119,19 @@ func (r *Resolver) resolveField(field variable.FieldDescriptor) ResolutionResult
 		resolvedValue, ok := r.data[field.Expressions[0].String()]
 		if !ok {
 			result.Error = fmt.Errorf("no data provided for expression: %s", field.Expressions[0])
+			return result
+		}
+		// Remove nil values for optional fields instead of writing null,
+		// which would fail schema validation.
+		if resolvedValue == nil && r.isOptionalField(field.Path) {
+			err = r.deleteValueAtPath(field.Path)
+			if err != nil {
+				result.Error = fmt.Errorf("error deleting nil value: %w", err)
+				return result
+			}
+			result.Resolved = true
+			result.Deleted = true
+			result.Replaced = nil
 			return result
 		}
 		err = r.setValueAtPath(field.Path, resolvedValue)
@@ -290,4 +315,101 @@ func updateParent(parent interface{}, key string, index int, value interface{}) 
 	case []interface{}:
 		p[index] = value
 	}
+}
+
+// isOptionalField checks whether the field at the given path is a
+// non-required property. The schema must be the spec sub-schema so that
+// paths match schema properties directly.
+func (r *Resolver) isOptionalField(path fieldpath.Path) bool {
+	if r.schema == nil || len(path) == 0 {
+		return false
+	}
+	current := r.schema
+	// Walk the segments and either check a property or the ref schema until we get to the last segment, where we check if it's required or not.
+	for i, segment := range path {
+		if current == nil {
+			return false
+		}
+		if segment.Index != nil {
+			itemSchema := current.Items2020
+			if itemSchema == nil {
+				return false
+			}
+			if itemSchema.Ref != nil {
+				current = itemSchema.Ref
+			} else {
+				current = itemSchema
+			}
+			continue
+		}
+		propSchema := schemaProperty(current, segment.Name)
+		if propSchema == nil {
+			return false
+		}
+
+		// last segment
+		if i == len(path)-1 {
+			return !isRequired(current, segment.Name)
+		}
+
+		if propSchema.Ref != nil {
+			// if we have a ref, we need to resolve it before continuing to the next segment
+			current = propSchema.Ref
+		} else {
+			current = propSchema
+		}
+	}
+	return false
+}
+
+// schemaProperty looks up a property by name in the schema's Properties map.
+func schemaProperty(s *jsonschema.Schema, name string) *jsonschema.Schema {
+	if s.Properties != nil {
+		if p, ok := s.Properties[name]; ok {
+			return p
+		}
+	}
+	return nil
+}
+
+// isRequired checks whether the field is listed in Required on the schema.
+func isRequired(s *jsonschema.Schema, name string) bool {
+	return slices.Contains(s.Required, name)
+}
+
+// deleteValueAtPath removes the key at the final path segment from the resource.
+func (r *Resolver) deleteValueAtPath(path fieldpath.Path) error {
+	if len(path) == 0 {
+		return nil
+	}
+	current := interface{}(r.resource)
+	for i, segment := range path {
+		if i == len(path)-1 {
+			// final segment: always a map key deletion
+			currentMap, ok := current.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("expected map at path segment: %v", segment)
+			}
+			delete(currentMap, segment.Name)
+			return nil
+		}
+		// intermediate: handle both maps and arrays
+		if segment.Index != nil {
+			array, ok := current.([]interface{})
+			if !ok {
+				return fmt.Errorf("expected array at path segment: %v", segment)
+			}
+			if *segment.Index >= len(array) {
+				return fmt.Errorf("array index out of bounds: %d", *segment.Index)
+			}
+			current = array[*segment.Index]
+		} else {
+			currentMap, ok := current.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("expected map at path segment: %v", segment)
+			}
+			current = currentMap[segment.Name]
+		}
+	}
+	return nil
 }
