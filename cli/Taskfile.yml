@@ -15,6 +15,7 @@ vars:
     sh: |
       echo "0.0.0-$(date -u +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)"
   VERSION: '{{ .VERSION | default .DEFAULT_VERSION }}'
+  BUILD_VERSION: '{{ .BUILD_VERSION | default .VERSION }}'
   COMPONENT_CONSTRUCTOR_FILE: "{{ .TASKFILE_DIR }}/tmp/component-constructor.yaml"
   CTF_LOCATION: '{{ .TASKFILE_DIR }}/tmp/transport-archive'
   GOOS:
@@ -102,7 +103,7 @@ tasks:
     cmds:
       - cmd: |
           CGO_ENABLED=0 GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
-            -ldflags "-s -w -X ocm.software/open-component-model/cli/cmd/version.BuildVersion={{ .VERSION }}" \
+            -ldflags "-s -w -X ocm.software/open-component-model/cli/cmd/version.BuildVersion={{ .BUILD_VERSION }}" \
             -o {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/resources

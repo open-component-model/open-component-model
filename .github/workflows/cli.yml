@@ -1,7 +1,7 @@
 name: CLI
 
 on:
-  # Trigger workflow on pushes to main or release branches, and on PRs targeting main as well as release tags
+  # Trigger workflow on pushes to main or release branches, and on PRs targeting main
   # if we are on a PR, limit runtime and only build the cli if it has been modified.
   # if we are on a push, build the CLI regardless of what has changed to always be up to date
   # also allow manual triggering for rebuilds or failing jobs or rebuilding the artifact
@@ -9,14 +9,14 @@ on:
     branches:
       - main
       - 'releases/v**'
-    tags:
-      - 'cli/v**'
   pull_request:
     branches:
       - main
     paths:
       - 'cli/**'
       - '.github/workflows/cli.yml'
+      - '.github/workflows/cli-release.yml'
+      - '.github/workflows/publish-ocm-component-version.yml'
   workflow_call:
     inputs:
       artifact_name:
@@ -25,6 +25,10 @@ on:
         required: false
       ref:
         description: "The ref to build on (branch or tag). Defaults to the current ref."
+        type: string
+        required: false
+      build_version:
+        description: "Version to embed in binary (overrides computed version for ldflags only). Leading 'v' is stripped."
         type: string
         required: false
     outputs:
@@ -59,6 +63,7 @@ jobs:
       artifact_name: ${{ env.ARTIFACT_NAME }}
       artifact_id: ${{ steps.upload-artifacts.outputs.artifact_id }}
       should_push_oci_image: ${{ steps.branch-check.outputs.should_push_oci_image }}  # Used by publish job
+      version: ${{ steps.version.outputs.version }}
     permissions:
       contents: read
       id-token: write         # Needed for provenance attestations
@@ -106,8 +111,12 @@ jobs:
       # use a version that includes the branch name to ensure uniqueness
       # make sure that the version doesn't contain invalid semver characters
       - name: Generate & Verify CTF
+        env:
+          BUILD_VERSION_OVERRIDE: ${{ inputs.build_version || '' }}
         run: |
-          task cli:generate/ctf VERSION="${VERSION}"
+          BUILD_VERSION="${BUILD_VERSION_OVERRIDE:+$(echo "$BUILD_VERSION_OVERRIDE" | sed 's/^v//')}"
+          BUILD_VERSION="${BUILD_VERSION:-$VERSION}"
+          task cli:generate/ctf VERSION="${VERSION}" BUILD_VERSION="${BUILD_VERSION}"
           task cli:verify/ctf
 
       # Attest built binaries with provenance metadata, but only if we're not on a PR
@@ -144,7 +153,8 @@ jobs:
           # OCI layout files
           path: |
             ${{ env.LOCATION }}/tmp/bin/ocm-*    
-            ${{ env.LOCATION }}/tmp/oci/*      
+            ${{ env.LOCATION }}/tmp/oci/*
+            ${{ env.LOCATION }}/tmp/component-constructor.yaml
 
   publish:
     name: Publish and Attest
@@ -160,6 +170,18 @@ jobs:
       id-token: write         # Needed for provenance attestation identity
       attestations: write     # Allows storing provenance attestation
     steps:
+      # Checkout scripts needed for the constructor patching step.
+      # Must happen BEFORE downloading artifacts, because checkout cleans the workspace.
+      - name: Checkout scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: 'false'
+
+      - name: Install script dependencies
+        run: npm ci
+        working-directory: ${{ github.workspace }}/.github/scripts
+
       # Retrieve artifacts produced by the build job
       - name: Download build artifacts
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -213,10 +235,66 @@ jobs:
           subject-name: ${{ env.TARGET_REPO }}
           push-to-registry: true
 
+      # Reuse generated constructor from build artifacts, normalize file paths,
+      # and patch image access to reference the published image instead of a localBlob
+      - name: Generate OCM component constructor
+        env:
+          CONSTRUCTOR_SOURCE: component-constructor.yaml
+          TARGET_CONSTRUCTOR: ocm-publish/component-constructor.yaml
+          IMAGE_REF: "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ env.TAG }}"
+          IMAGE_TAG: "${{ env.TAG }}"
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/component-constructor.js');
+            await script.patchCliConstructorAction({ core });
+
+      - name: Upload component constructor as artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: cli-constructor-artifact
+          if-no-files-found: error
+          path: ocm-publish/component-constructor.yaml
+
+  # --------------------------------------------------------
+  # CONFORMANCE: Run OCM conformance tests against the published CLI image.
+  # This validates that the pushed OCI image works correctly before
+  # the component version is published to the OCM repository.
+  # --------------------------------------------------------
   conformance:
     name: Conformance
     needs: publish
     uses: ./.github/workflows/conformance.yml
     with:
-      cli_image: "ghcr.io/open-component-model/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
+      cli_image: "ghcr.io/${{ github.repository_owner }}/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
     secrets: inherit
+
+  # --------------------------------------------------------
+  # PUBLISH COMPONENT VERSION: Publish the OCM component descriptor.
+  #
+  # The constructor artifact (cli-constructor-artifact) was patched in the
+  # publish job's "Generate OCM component constructor" step using
+  # .github/scripts/component-constructor.js. That script:
+  #   1. Rewrites CLI binary input paths to use resources/bin/<filename>
+  #   2. Converts the local OCI image resource to an ociArtifact access
+  #      pointing at the image pushed to GHCR
+  #
+  # The publish-ocm-component-version workflow then uses the patched
+  # constructor together with the build artifacts to create and push the
+  # final OCM component version.
+  #
+  # For releases, the cli-release.yml workflow (step 8 "prepare_final_constructor")
+  # takes this RC constructor and patches it again to replace the RC version
+  # with the final version before publishing the final component.
+  # --------------------------------------------------------
+  publish-component:
+    name: Publish Component Version
+    needs: [build, publish]
+    if: ${{ needs.build.outputs.should_push_oci_image == 'true' }}
+    uses: ./.github/workflows/publish-ocm-component-version.yml
+    secrets: inherit
+    with:
+      constructor_artifact_name: cli-constructor-artifact
+      build_artifact_name: ${{ needs.build.outputs.artifact_name }}
+      ocm_repository: ghcr.io/${{ github.repository_owner }}
+      version_conflict_policy: ${{ startsWith(needs.build.outputs.version, '0.0.0-') && 'replace' || '' }}

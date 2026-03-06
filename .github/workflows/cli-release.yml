@@ -20,7 +20,7 @@ env:
   COMPONENT_PATH: cli
 
 concurrency:
-  cancel-in-progress: true
+  cancel-in-progress: false
   group: cli-release-${{ github.event.inputs.branch }}
 
 jobs:
@@ -37,7 +37,6 @@ jobs:
     with:
       branch: ${{ github.event.inputs.branch }}
       component_path: cli # cannot use env here
-    secrets: inherit
 
   # --------------------------------------------------------
   # 2. TAG RC: Create and push RC tag (skipped on dry-run)
@@ -45,6 +44,7 @@ jobs:
   tag_rc:
     name: Create and Push RC Tag
     runs-on: ubuntu-latest
+    environment: release
     needs: [prepare]
     if: ${{ github.event.inputs.dry_run == 'false' }}
     permissions:
@@ -56,6 +56,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           sparse-checkout: ${{ env.COMPONENT_PATH }}
+          fetch-tags: true
           ref: ${{ github.event.inputs.branch }}
 
       - name: Setup git config
@@ -105,6 +106,7 @@ jobs:
     secrets: inherit
     with:
       ref: ${{ needs.prepare.outputs.new_tag }}
+      build_version: ${{ needs.prepare.outputs.base_version }}
 
   # --------------------------------------------------------
   # 4. RELEASE RC: Create GitHub pre-release
@@ -178,9 +180,8 @@ jobs:
   # PHASE 2: FINAL RELEASE (after environment gate)
   # ================================================
   # Environment Gate:
-  # The "cli/release" environment must be configured in GitHub Settings → Environments:
+  # The "release" environment must be configured in GitHub Settings → Environments:
   # - Required reviewers: At least 1 reviewer must approve
-  # - Wait timer: 20160 minutes (14 days)
   #
   # This gate blocks all Phase 2 jobs until approved.
 
@@ -192,7 +193,7 @@ jobs:
     needs: [prepare, build, release_rc]
     runs-on: ubuntu-latest
     environment:
-      name: cli/release
+      name: release
     permissions:
       contents: read
       packages: read
@@ -243,6 +244,7 @@ jobs:
         with:
           sparse-checkout: ${{ env.COMPONENT_PATH }}
           fetch-depth: 0
+          fetch-tags: true
           ref: ${{ github.event.inputs.branch }}
 
       - name: Setup git config
@@ -444,3 +446,71 @@ jobs:
               .addLink(releaseUrl, releaseUrl)
               .addEOL()
               .write();
+
+  # --------------------------------------------------------
+  # 8. PREPARE FINAL CONSTRUCTOR: Patch RC constructor with final version.
+  #
+  # The RC constructor was produced by cli.yml's publish job using
+  # .github/scripts/component-constructor.js (patchCliConstructorAction),
+  # which rewrites binary paths and converts the image resource to an
+  # ociArtifact access. That structural patching only needs to happen once.
+  #
+  # This step performs a simpler version-only patch: it replaces the RC
+  # version string with the final version in all version fields and updates
+  # the image reference tag accordingly. Uses yq for straightforward
+  # field-level replacements.
+  # --------------------------------------------------------
+  prepare_final_constructor:
+    name: Prepare Final OCM Constructor
+    needs: [prepare, build, promote_final]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download RC constructor artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: cli-constructor-artifact
+          path: ${{ runner.temp }}/constructor
+
+      - name: Checkout scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: 'false'
+          path: repo
+
+      - name: Install script dependencies
+        run: npm ci --prefix repo/.github/scripts
+
+      - name: Promote constructor to final version
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          CONSTRUCTOR: ${{ runner.temp }}/constructor/component-constructor.yaml
+          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ needs.prepare.outputs.base_version }}
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/repo/.github/scripts/component-constructor.js');
+            await script.promoteConstructorVersionAction({ core });
+
+      - name: Upload final constructor artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: cli-final-constructor-artifact
+          if-no-files-found: error
+          path: ${{ runner.temp }}/constructor/component-constructor.yaml
+
+  # --------------------------------------------------------
+  # 9. PUBLISH FINAL COMPONENT: Publish final OCM component version
+  # --------------------------------------------------------
+  publish_final_component:
+    name: Publish Final OCM Component
+    needs: [prepare, build, prepare_final_constructor, release_final]
+    permissions:
+      actions: read
+      packages: write
+    uses: ./.github/workflows/publish-ocm-component-version.yml
+    secrets: inherit
+    with:
+      constructor_artifact_name: cli-final-constructor-artifact
+      build_artifact_name: ${{ needs.build.outputs.artifact_name }}
+      ocm_repository: ghcr.io/${{ github.repository_owner }}
