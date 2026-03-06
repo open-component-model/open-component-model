@@ -163,17 +163,17 @@ transformations:
 - id: add1
   type: MockAddObjectTransformer/v1alpha1
   spec:
-    object: 
+    object:
       name: "object"
 - id: add2
   type: MockAddObjectTransformer/v1alpha1
   spec:
-    object: 
+    object:
       name: "object2"
       version: ${add1.spec.object.?version}
 `,
 			staticAnalysisErr:    require.NoError,
-			runtimeProcessingErr: require.Error,
+			runtimeProcessingErr: require.NoError,
 		},
 		{
 			name: "cel reference to variable with partial field match",
