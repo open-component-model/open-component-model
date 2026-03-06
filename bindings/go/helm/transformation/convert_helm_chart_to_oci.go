@@ -10,9 +10,9 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/helm"
 	"ocm.software/open-component-model/bindings/go/helm/access"
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
+	"ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/helm/internal/oci"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
@@ -79,7 +79,7 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	}
 	slog.DebugContext(ctx, "Going to use oci output path", "path", outputPath)
 
-	result, err := oci.CopyChartToOCILayout(ctx, &helm.ChartData{
+	result, err := oci.CopyChartToOCILayout(ctx, &internal.ChartData{
 		Name:      helmAccess.GetChartName(),
 		Version:   helmAccess.GetVersion(),
 		ChartBlob: chartSpec,

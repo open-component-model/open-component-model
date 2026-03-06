@@ -11,8 +11,8 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/helm"
 	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	"ocm.software/open-component-model/bindings/go/helm/internal"
 	dlinternal "ocm.software/open-component-model/bindings/go/helm/internal/download"
 	"ocm.software/open-component-model/bindings/go/helm/internal/oci"
 )
@@ -83,7 +83,7 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 		return nil, nil, fmt.Errorf("either path or helmRepository must be specified")
 	}
 
-	result, err := oci.CopyChartToOCILayout(ctx, &helm.ChartData{
+	result, err := oci.CopyChartToOCILayout(ctx, &internal.ChartData{
 		Name:      chart.Name,
 		Version:   chart.Version,
 		ChartBlob: chart.ChartBlob,
@@ -164,7 +164,7 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBase string, credentials map[string]string) (result *ReadOnlyChart, err error) {
 	opts := []dlinternal.Option{
 		dlinternal.WithCredentials(credentials),
-		dlinternal.WithTempDirBase(tmpDirBase),
+		dlinternal.WithTargetDir(tmpDirBase),
 		//nolint:staticcheck // downward compatibility for helm input
 		dlinternal.WithVersion(helmSpec.Version),
 		//nolint:staticcheck // downward compatibility for helm input

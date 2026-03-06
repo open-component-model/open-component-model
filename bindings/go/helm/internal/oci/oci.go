@@ -15,7 +15,7 @@ import (
 	"oras.land/oras-go/v2"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/helm"
+	"ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
@@ -31,7 +31,7 @@ type Result struct {
 // The result is tagged with the helm chart version.
 // The OCI layout is written to a temporary file in dir and returned as a file-backed blob.
 // See also: https://github.com/helm/community/blob/main/hips/hip-0006.md#2-support-for-provenance-files
-func CopyChartToOCILayout(ctx context.Context, chart *helm.ChartData, dir string) (*Result, error) {
+func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, dir string) (*Result, error) {
 	tmpFile, err := os.CreateTemp(dir, "oci-layout-*.tar.gz")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file for OCI layout: %w", err)
@@ -81,7 +81,7 @@ func CopyChartToOCILayout(ctx context.Context, chart *helm.ChartData, dir string
 	return &Result{Blob: blob, Desc: &imgDesc}, nil
 }
 
-func pushChartAndGenerateLayers(ctx context.Context, chart *helm.ChartData, target oras.Target) (
+func pushChartAndGenerateLayers(ctx context.Context, chart *internal.ChartData, target oras.Target) (
 	configLayer *ociImageSpecV1.Descriptor,
 	chartLayer *ociImageSpecV1.Descriptor,
 	provLayer *ociImageSpecV1.Descriptor,

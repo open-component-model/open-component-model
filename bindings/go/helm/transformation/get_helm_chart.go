@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
@@ -13,7 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm"
 	"ocm.software/open-component-model/bindings/go/helm/access"
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
-	download2 "ocm.software/open-component-model/bindings/go/helm/internal/download"
+	helmdownload "ocm.software/open-component-model/bindings/go/helm/internal/download"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -72,15 +73,15 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 
 	// Configure the downloader options based on the Helm access specification and resolved credentials
 	// We omit backwards compatibility options like certificates and keyrings and rely on the credentials approach.
-	opts := []download2.Option{
+	opts := []helmdownload.Option{
 		// If a version is specified in the Helm access spec, use it to ensure we get the correct chart version.
 		// If not specified, the downloader will use the default behavior which tries to get the version from helmAccess.HelmRepository
 		//nolint:staticcheck // downward compatibility for helm input
-		download2.WithVersion(helmAccess.GetVersion()),
-		download2.WithTempDirBase(transformation.Spec.OutputPath),
-		download2.WithCredentials(creds),
+		helmdownload.WithVersion(helmAccess.GetVersion()),
+		helmdownload.WithTargetDir(filepath.Dir(chartOutputPath)),
+		helmdownload.WithCredentials(creds),
 		// Override the default downloader behavior to always download the chart and prov files.
-		download2.WithAlwaysDownloadProv(true),
+		helmdownload.WithAlwaysDownloadProv(true),
 	}
 
 	helmURL := helmAccess.HelmRepository
@@ -91,7 +92,7 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	slog.InfoContext(ctx, "Getting helm chart", "url", helmURL)
 
 	// TODO(matthiasbruns): Introduce a helm based ResourceRepository and handle access in there https://github.com/open-component-model/ocm-project/issues/911
-	resultData, err := download2.NewReadOnlyChartFromRemote(ctx, helmURL, opts...)
+	resultData, err := helmdownload.NewReadOnlyChartFromRemote(ctx, helmURL, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading helm chart from repository %q: %w", helmURL, err)
 	}

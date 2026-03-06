@@ -15,7 +15,7 @@ import (
 	"helm.sh/helm/v4/pkg/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/helm"
+	"ocm.software/open-component-model/bindings/go/helm/internal"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 )
@@ -23,7 +23,7 @@ import (
 // NewReadOnlyChartFromRemote downloads a Helm chart from a remote repository and returns it as [helm.ChartData].
 // The helmRepo parameter accepts both OCI references (e.g. "oci://registry.example.com/charts/mychart:1.0.0")
 // and HTTP/S URLs (e.g. "https://example.com/charts/mychart-1.0.0.tgz").
-func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Option) (result *helm.ChartData, err error) {
+func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Option) (result *internal.ChartData, err error) {
 	opt := &option{}
 	for _, o := range opts {
 		o(opt)
@@ -128,7 +128,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 		return nil, fmt.Errorf("error loading downloaded chart from %q: %w", savedPath, err)
 	}
 
-	result = &helm.ChartData{
+	result = &internal.ChartData{
 		Name:    chart.Name(),
 		Version: chart.Metadata.Version,
 	}

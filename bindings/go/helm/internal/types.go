@@ -1,4 +1,4 @@
-package helm
+package internal
 
 import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"

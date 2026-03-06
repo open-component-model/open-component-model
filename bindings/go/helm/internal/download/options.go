@@ -91,11 +91,11 @@ func WithCACertFile(caCertFile string) Option {
 	}
 }
 
-// WithTempDirBase sets the base directory for temporary files created during the download.
+// WithTargetDir sets the base directory for temporary files created during the download.
 // If not set, [os.TempDir] is used.
-func WithTempDirBase(tmpDirBase string) Option {
+func WithTargetDir(targetDir string) Option {
 	return func(t *option) {
-		t.TargetDir = tmpDirBase
+		t.TargetDir = targetDir
 	}
 }
 

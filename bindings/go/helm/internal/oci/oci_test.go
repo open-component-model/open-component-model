@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +18,7 @@ import (
 	"helm.sh/helm/v4/pkg/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/helm"
+	"ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/helm/internal/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
@@ -175,18 +176,18 @@ func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		chart func(t *testing.T) *helm.ChartData
-		check func(t *testing.T, result *oci.Result, chart *helm.ChartData)
+		chart func(t *testing.T) *internal.ChartData
+		check func(t *testing.T, result *oci.Result, chart *internal.ChartData)
 	}{
 		{
 			name: "exactly one layer without provenance",
-			chart: func(t *testing.T) *helm.ChartData {
+			chart: func(t *testing.T) *internal.ChartData {
 				t.Helper()
 				c := newReadOnlyChart(t, chartPath)
 				c.ProvBlob = nil
 				return c
 			},
-			check: func(t *testing.T, result *oci.Result, _ *helm.ChartData) {
+			check: func(t *testing.T, result *oci.Result, _ *internal.ChartData) {
 				t.Helper()
 				_, manifest := readManifest(t, ctx, result)
 				require.Len(t, manifest.Layers, 1, "chart without provenance should have exactly one layer")
@@ -195,8 +196,8 @@ func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 		},
 		{
 			name:  "chart layer data matches original tgz",
-			chart: func(t *testing.T) *helm.ChartData { t.Helper(); return newReadOnlyChart(t, chartPath) },
-			check: func(t *testing.T, result *oci.Result, _ *helm.ChartData) {
+			chart: func(t *testing.T) *internal.ChartData { t.Helper(); return newReadOnlyChart(t, chartPath) },
+			check: func(t *testing.T, result *oci.Result, _ *internal.ChartData) {
 				t.Helper()
 				originalData, err := os.ReadFile(chartPath)
 				require.NoError(t, err)
@@ -213,8 +214,8 @@ func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 		},
 		{
 			name:  "blob media type is OCI layout tar gzip",
-			chart: func(t *testing.T) *helm.ChartData { t.Helper(); return newReadOnlyChart(t, chartPath) },
-			check: func(t *testing.T, result *oci.Result, _ *helm.ChartData) {
+			chart: func(t *testing.T) *internal.ChartData { t.Helper(); return newReadOnlyChart(t, chartPath) },
+			check: func(t *testing.T, result *oci.Result, _ *internal.ChartData) {
 				t.Helper()
 				mediaType, known := result.Blob.MediaType()
 				assert.True(t, known, "media type should be known")
@@ -223,8 +224,8 @@ func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 		},
 		{
 			name:  "descriptor is available immediately",
-			chart: func(t *testing.T) *helm.ChartData { t.Helper(); return newReadOnlyChart(t, chartPath) },
-			check: func(t *testing.T, result *oci.Result, _ *helm.ChartData) {
+			chart: func(t *testing.T) *internal.ChartData { t.Helper(); return newReadOnlyChart(t, chartPath) },
+			check: func(t *testing.T, result *oci.Result, _ *internal.ChartData) {
 				t.Helper()
 				assert.NotEmpty(t, result.Desc.Digest, "descriptor digest should not be empty")
 				assert.Greater(t, result.Desc.Size, int64(0), "descriptor size should be positive")
@@ -232,8 +233,8 @@ func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 		},
 		{
 			name:  "OCI layout store has exactly one manifest",
-			chart: func(t *testing.T) *helm.ChartData { t.Helper(); return newReadOnlyChart(t, chartPath) },
-			check: func(t *testing.T, result *oci.Result, _ *helm.ChartData) {
+			chart: func(t *testing.T) *internal.ChartData { t.Helper(); return newReadOnlyChart(t, chartPath) },
+			check: func(t *testing.T, result *oci.Result, _ *internal.ChartData) {
 				t.Helper()
 				store, err := tar.ReadOCILayout(ctx, result.Blob)
 				require.NoError(t, err)
@@ -254,10 +255,93 @@ func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 	}
 }
 
+func TestCopyChartToOCILayout_DigestsMatchContent(t *testing.T) {
+	ctx := t.Context()
+	testDataDir := filepath.Join("../../testdata")
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{
+			name: "packaged helm chart",
+			path: filepath.Join(testDataDir, "mychart-0.1.0.tgz"),
+		},
+		{
+			name: "packaged helm chart with provenance",
+			path: filepath.Join(testDataDir, "provenance", "mychart-0.1.0.tgz"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chart := newReadOnlyChart(t, tt.path)
+
+			result, err := oci.CopyChartToOCILayout(ctx, chart, t.TempDir())
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			store, err := tar.ReadOCILayout(ctx, result.Blob)
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+			require.Len(t, store.Index.Manifests, 1)
+			indexDesc := store.Index.Manifests[0]
+
+			// Validate the manifest digest matches the index descriptor.
+			manifestRaw, err := store.Fetch(ctx, indexDesc)
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, manifestRaw.Close()) })
+			manifestBytes, err := io.ReadAll(manifestRaw)
+			require.NoError(t, err)
+
+			assert.Equal(t, indexDesc.Digest, digest.FromBytes(manifestBytes),
+				"index descriptor digest should match manifest content")
+			assert.Equal(t, indexDesc.Size, int64(len(manifestBytes)),
+				"index descriptor size should match manifest content length")
+
+			var manifest ociImageSpecV1.Manifest
+			require.NoError(t, json.Unmarshal(manifestBytes, &manifest))
+
+			// Validate config layer digest.
+			configRaw, err := store.Fetch(ctx, manifest.Config)
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, configRaw.Close()) })
+			configBytes, err := io.ReadAll(configRaw)
+			require.NoError(t, err)
+
+			assert.Equal(t, manifest.Config.Digest, digest.FromBytes(configBytes),
+				"config descriptor digest should match config content")
+			assert.Equal(t, manifest.Config.Size, int64(len(configBytes)),
+				"config descriptor size should match config content length")
+
+			// Validate all layer digests.
+			for i, layerDesc := range manifest.Layers {
+				layerReader, err := store.Fetch(ctx, layerDesc)
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, layerReader.Close()) })
+				layerBytes, err := io.ReadAll(layerReader)
+				require.NoError(t, err)
+
+				assert.Equal(t, layerDesc.Digest, digest.FromBytes(layerBytes),
+					"layer[%d] descriptor digest should match layer content", i)
+				assert.Equal(t, layerDesc.Size, int64(len(layerBytes)),
+					"layer[%d] descriptor size should match layer content length", i)
+			}
+
+			// Validate result descriptor matches the index descriptor.
+			assert.Equal(t, indexDesc.Digest, result.Desc.Digest,
+				"result descriptor digest should match index descriptor digest")
+			assert.Equal(t, indexDesc.Size, result.Desc.Size,
+				"result descriptor size should match index descriptor size")
+		})
+	}
+}
+
 func TestCopyChartToOCILayout_NilChartBlobReturnsError(t *testing.T) {
 	ctx := t.Context()
 
-	chart := &helm.ChartData{
+	chart := &internal.ChartData{
 		Name:      "test",
 		Version:   "1.0.0",
 		ChartBlob: nil,
@@ -289,7 +373,7 @@ func readManifest(t *testing.T, ctx context.Context, result *oci.Result) (*tar.C
 
 // newReadOnlyChart creates a helm.ChartData from a path to testdata.
 // It handles both directory charts (by packaging them) and pre-packaged tgz charts.
-func newReadOnlyChart(t *testing.T, path string) *helm.ChartData {
+func newReadOnlyChart(t *testing.T, path string) *internal.ChartData {
 	t.Helper()
 
 	ch, err := loader.Load(path)
@@ -298,7 +382,7 @@ func newReadOnlyChart(t *testing.T, path string) *helm.ChartData {
 	fi, err := os.Stat(path)
 	require.NoError(t, err)
 
-	result := &helm.ChartData{
+	result := &internal.ChartData{
 		Name:    ch.Name(),
 		Version: ch.Metadata.Version,
 	}
