@@ -27,6 +27,10 @@ on:
         description: "The ref to build on (branch or tag). Defaults to the current ref."
         type: string
         required: false
+      build_version:
+        description: "Version to embed in binary (overrides computed version for ldflags only). Leading 'v' is stripped."
+        type: string
+        required: false
     outputs:
       artifact_name:
         description: "The artifact name that was built."
@@ -106,8 +110,12 @@ jobs:
       # use a version that includes the branch name to ensure uniqueness
       # make sure that the version doesn't contain invalid semver characters
       - name: Generate & Verify CTF
+        env:
+          BUILD_VERSION_OVERRIDE: ${{ inputs.build_version || '' }}
         run: |
-          task cli:generate/ctf VERSION="${VERSION}"
+          BUILD_VERSION="${BUILD_VERSION_OVERRIDE:+$(echo "$BUILD_VERSION_OVERRIDE" | sed 's/^v//')}"
+          BUILD_VERSION="${BUILD_VERSION:-$VERSION}"
+          task cli:generate/ctf VERSION="${VERSION}" BUILD_VERSION="${BUILD_VERSION}"
           task cli:verify/ctf
 
       # Attest built binaries with provenance metadata, but only if we're not on a PR
