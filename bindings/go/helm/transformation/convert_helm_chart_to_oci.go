@@ -95,14 +95,12 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 
 	transformation.Output.File = *spec
 	transformation.Output.Resource = transformation.Spec.Resource
-	// Update output.Resource.Type to ociImage
-	transformation.Output.Resource.Type = "ociImage"
+	transformation.Output.Resource.Type = "helmChart"
 
 	// Use digest of top-level-manifest
 	transformation.Output.Resource.Digest = &descv2.Digest{
-		HashAlgorithm:          string(ociDesc.Digest.Algorithm()),
-		NormalisationAlgorithm: descv2.ExcludeFromSignature,
-		Value:                  ociDesc.Digest.Encoded(),
+		HashAlgorithm: string(ociDesc.Digest.Algorithm()),
+		Value:         ociDesc.Digest.Encoded(),
 	}
 
 	reference, err := referenceFromHelmAccess(helmAccess)

@@ -45,9 +45,9 @@ type option struct {
 	// Deprecated: This field is deprecated in favor of using certificates through the credentials.
 	CACertFile string `json:"caCertFile,omitempty"`
 
-	// TempDir is the directory where the chart will be downloaded to.
+	// TargetDir is the directory where the chart will be downloaded to.
 	// If not set, the system default temporary directory will be used.
-	TempDir string `json:"tempDir,omitempty"`
+	TargetDir string `json:"targetDir,omitempty"`
 
 	// Credentials is a map of credential keys to their values,
 	// used for authentication and TLS configuration when downloading charts from remote repositories.
@@ -58,38 +58,59 @@ type option struct {
 	AlwaysDownloadProv bool `json:"alwaysDownloadProv,omitempty"`
 }
 
+// Option configures the behavior of [NewReadOnlyChartFromRemote].
 type Option func(t *option)
 
+// WithVersion sets an explicit chart version for the download.
+//
+// Deprecated: This option should not be used. Instead, rely on the full HTTP/S URL
+// or an OCI reference with a tag to specify the version.
 func WithVersion(version string) Option {
 	return func(t *option) {
 		t.Version = version
 	}
 }
 
+// WithCACert sets an inline PEM-encoded CA certificate for TLS verification
+// when connecting to the Helm repository.
+//
+// Deprecated: Use certificates through the credentials instead.
 func WithCACert(caCert string) Option {
 	return func(t *option) {
 		t.CACert = caCert
 	}
 }
 
+// WithCACertFile sets the path to a PEM-encoded CA certificate file for TLS verification
+// when connecting to the Helm repository.
+//
+// Deprecated: Use certificates through the credentials instead.
 func WithCACertFile(caCertFile string) Option {
 	return func(t *option) {
 		t.CACertFile = caCertFile
 	}
 }
 
+// WithTempDirBase sets the base directory for temporary files created during the download.
+// If not set, [os.TempDir] is used.
 func WithTempDirBase(tmpDirBase string) Option {
 	return func(t *option) {
-		t.TempDir = tmpDirBase
+		t.TargetDir = tmpDirBase
 	}
 }
 
+// WithCredentials sets the credentials map used for authentication and TLS configuration.
+// Supported keys include username/password for basic auth, [CredentialCertFile] and [CredentialKeyFile]
+// for client TLS certificates, and [CredentialKeyring] for chart provenance verification.
 func WithCredentials(credentials map[string]string) Option {
 	return func(t *option) {
 		t.Credentials = credentials
 	}
 }
 
+// WithAlwaysDownloadProv controls whether the provenance (.prov) file is always downloaded
+// alongside the chart. When a keyring is provided via [CredentialKeyring], Helm will
+// additionally attempt to verify the chart's integrity using the provenance file.
 func WithAlwaysDownloadProv(dl bool) Option {
 	return func(t *option) {
 		t.AlwaysDownloadProv = dl

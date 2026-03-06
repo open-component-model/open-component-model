@@ -8,6 +8,7 @@ import (
 
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
 	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
+	"ocm.software/open-component-model/bindings/go/helm"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -86,7 +87,13 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 		return nil, nil, fmt.Errorf("either path or helmRepository must be specified")
 	}
 
-	result := oci.CopyChartToOCILayout(ctx, ConvertToReadOnlyChart(chart))
+	result := oci.CopyChartToOCILayout(ctx, &helm.ChartData{
+		Name:      chart.Name,
+		Version:   chart.Version,
+		ChartBlob: chart.ChartBlob,
+		ProvBlob:  chart.ProvBlob,
+		ChartDir:  chart.chartTempDir,
+	})
 
 	return result, chart, nil
 }
@@ -164,10 +171,16 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 		download.WithCACert(helmSpec.CACert),
 		download.WithCACertFile(helmSpec.CACertFile),
 	}
-	resultBlob, err := download.NewReadOnlyChartFromRemote(ctx, helmSpec.HelmRepository, opts...)
+	resultChart, err := download.NewReadOnlyChartFromRemote(ctx, helmSpec.HelmRepository, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading helm chart from repository %q: %w", helmSpec.HelmRepository, err)
 	}
 
-	return ConvertFromReadOnlyChart(resultBlob), err
+	return &ReadOnlyChart{
+		Name:         resultChart.Name,
+		Version:      resultChart.Version,
+		ChartBlob:    resultChart.ChartBlob,
+		ProvBlob:     resultChart.ProvBlob,
+		chartTempDir: resultChart.ChartDir,
+	}, err
 }

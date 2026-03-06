@@ -20,28 +20,40 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 )
 
+// NewReadOnlyChartFromRemote downloads a Helm chart from a remote repository and returns it as [helm.ChartData].
+// The helmRepo parameter accepts both OCI references (e.g. "oci://registry.example.com/charts/mychart:1.0.0")
+// and HTTP/S URLs (e.g. "https://example.com/charts/mychart-1.0.0.tgz").
+//
+// The caller is responsible for cleaning up [helm.ChartData.ChartTempDir] when the chart data is no longer needed.
 func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Option) (result *helm.ChartData, err error) {
 	opt := &option{}
 	for _, o := range opts {
 		o(opt)
 	}
 
-	if opt.TempDir == "" {
-		opt.TempDir = os.TempDir()
+	if opt.TargetDir == "" {
+		opt.TargetDir = os.TempDir()
 	}
 
 	if opt.Credentials == nil {
 		opt.Credentials = make(map[string]string)
 	}
 
-	// Since this temporary folder is created with tmpDirBase as a prefix, it will be cleaned up by the caller.
-	tmpDir, err := os.MkdirTemp(opt.TempDir, "helmRemoteChart*")
+	chartDir, err := os.MkdirTemp(opt.TargetDir, "helmRemoteChart*")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temporary directory: %w", err)
 	}
 
 	var getterOpts []getter.Option
-	tlsOption, err := constructTLSOptions(opt)
+	tlsOption, clearCache, err := constructTLSOptions(opt)
+	defer func() {
+		if clearCache != nil {
+			// clear tmp files created during constructTLSOptions
+			if cerr := clearCache(); cerr != nil {
+				slog.WarnContext(ctx, "error clearing TLS options cache", "error", cerr)
+			}
+		}
+	}()
 	if err != nil {
 		return nil, fmt.Errorf("error setting up TLS options: %w", err)
 	}
@@ -79,19 +91,22 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 		return nil, fmt.Errorf("error creating registry client: %w", err)
 	}
 
-	helmTmp, err := os.MkdirTemp(opt.TempDir, "helm*")
+	cacheDir, err := os.MkdirTemp(opt.TargetDir, "helm-cache*")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temporary directory for helm operations: %w", err)
 	}
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(cacheDir)
 
 	dl := &downloader.ChartDownloader{
 		Out:     os.Stderr,
 		Verify:  verify,
 		Getters: getterProviders(),
 		// set by ocm v1 originally.
-		RepositoryCache:  filepath.Join(helmTmp, ".helmcache"),
-		RepositoryConfig: filepath.Join(helmTmp, ".helmrepo"),
-		ContentCache:     filepath.Join(helmTmp, ".helmcontent"),
+		RepositoryCache:  filepath.Join(cacheDir, ".helmcache"),
+		RepositoryConfig: filepath.Join(cacheDir, ".helmrepo"),
+		ContentCache:     filepath.Join(cacheDir, ".helmcontent"),
 		RegistryClient:   regClient,
 		Options:          getterOpts,
 		Keyring:          keyring,
@@ -108,7 +123,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 		return nil, fmt.Errorf("error determining chart version: %w", err)
 	}
 
-	savedPath, _, err := dl.DownloadTo(helmRepo, version, tmpDir)
+	savedPath, _, err := dl.DownloadTo(helmRepo, version, chartDir)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading chart %q version %q: %w", helmRepo, version, err)
 	}
@@ -119,9 +134,9 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 	}
 
 	result = &helm.ChartData{
-		Name:         chart.Name(),
-		Version:      chart.Metadata.Version,
-		ChartTempDir: tmpDir,
+		Name:     chart.Name(),
+		Version:  chart.Metadata.Version,
+		ChartDir: chartDir,
 	}
 
 	if result.ChartBlob, err = filesystem.GetBlobFromOSPath(savedPath); err != nil {
@@ -138,13 +153,20 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo string, opts ...Op
 }
 
 // constructTLSOptions sets up the TLS configuration files based on the helm specification
-func constructTLSOptions(opts *option) (_ getter.Option, err error) {
+func constructTLSOptions(opts *option) (_ getter.Option, clearCache func() error, err error) {
 	var (
 		caFile                        *os.File
 		caFilePath, certFile, keyFile string
 		credentials                   = opts.Credentials
-		tmpDir                        = opts.TempDir
+		targetDir                     = opts.TargetDir
 	)
+
+	clearCache = func() error {
+		if caFile != nil {
+			return os.Remove(caFile.Name())
+		}
+		return nil
+	}
 
 	if credentials == nil {
 		credentials = make(map[string]string)
@@ -153,9 +175,9 @@ func constructTLSOptions(opts *option) (_ getter.Option, err error) {
 	if opts.CACertFile != "" {
 		caFilePath = opts.CACertFile
 	} else if opts.CACert != "" {
-		caFile, err = os.CreateTemp(tmpDir, "caCert-*.pem")
+		caFile, err = os.CreateTemp(targetDir, "caCert-*.pem")
 		if err != nil {
-			return nil, fmt.Errorf("error creating temporary CA certificate file: %w", err)
+			return nil, clearCache, fmt.Errorf("error creating temporary CA certificate file: %w", err)
 		}
 		defer func() {
 			if cerr := caFile.Close(); cerr != nil {
@@ -163,7 +185,7 @@ func constructTLSOptions(opts *option) (_ getter.Option, err error) {
 			}
 		}()
 		if _, err = caFile.WriteString(opts.CACert); err != nil {
-			return nil, fmt.Errorf("error writing CA certificate to temp file: %w", err)
+			return nil, clearCache, fmt.Errorf("error writing CA certificate to temp file: %w", err)
 		}
 		caFilePath = caFile.Name()
 	}
@@ -172,20 +194,20 @@ func constructTLSOptions(opts *option) (_ getter.Option, err error) {
 	if v, ok := credentials[CredentialCertFile]; ok {
 		certFile = v
 		if _, err := os.Stat(certFile); err != nil {
-			return nil, fmt.Errorf("certFile %q does not exist", certFile)
+			return nil, clearCache, fmt.Errorf("certFile %q does not exist", certFile)
 		}
 	}
 
 	if v, ok := credentials[CredentialKeyFile]; ok {
 		keyFile = v
 		if _, err := os.Stat(keyFile); err != nil {
-			return nil, fmt.Errorf("keyFile %q does not exist", keyFile)
+			return nil, clearCache, fmt.Errorf("keyFile %q does not exist", keyFile)
 		}
 	}
 
 	// it's safe to always add this option even with empty values
 	// because the default is empty.
-	return getter.WithTLSClientConfig(certFile, keyFile, caFilePath), nil
+	return getter.WithTLSClientConfig(certFile, keyFile, caFilePath), clearCache, nil
 }
 
 // getterProviders returns the available getter providers.

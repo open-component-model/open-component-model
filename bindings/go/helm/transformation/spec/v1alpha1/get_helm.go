@@ -34,7 +34,6 @@ type GetHelmChartOutput struct {
 	// ChartFile is the file access specification for the downloaded helm chart
 	ChartFile v1alpha1.File `json:"chartFile"`
 	// ProvFile is the file access specification for the downloaded prov file, if it exists
-	// +optional
 	ProvFile *v1alpha1.File `json:"provFile,omitempty"`
 	// Resource is the resource descriptor from the component
 	Resource *v2.Resource `json:"resource"`

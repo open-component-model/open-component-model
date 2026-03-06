@@ -18,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/helm"
 	"ocm.software/open-component-model/bindings/go/helm/oci"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 
@@ -163,6 +164,159 @@ func TestCopyChartToOCILayout_ConfigContent(t *testing.T) {
 	assert.Equal(t, chart.Version, config["version"], "config version should match chart version")
 }
 
+func TestCopyChartToOCILayout_ExactlyOneLayerWithoutProvenance(t *testing.T) {
+	ctx := t.Context()
+	testDataDir := filepath.Join("..", "testdata")
+
+	chart := newReadOnlyChart(t, filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
+	// Explicitly ensure no provenance blob
+	chart.ProvBlob = nil
+
+	result := oci.CopyChartToOCILayout(ctx, chart)
+	require.NotNil(t, result)
+
+	store, err := tar.ReadOCILayout(ctx, result)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, store.Close())
+	})
+	require.Len(t, store.Index.Manifests, 1)
+
+	manifestRaw, err := store.Fetch(ctx, store.Index.Manifests[0])
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, manifestRaw.Close())
+	})
+	manifest := ociImageSpecV1.Manifest{}
+	require.NoError(t, json.NewDecoder(manifestRaw).Decode(&manifest))
+
+	require.Len(t, manifest.Layers, 1, "chart without provenance should have exactly one layer")
+	assert.Equal(t, registry.ChartLayerMediaType, manifest.Layers[0].MediaType)
+}
+
+func TestCopyChartToOCILayout_ChartLayerDataIntegrity(t *testing.T) {
+	ctx := t.Context()
+	testDataDir := filepath.Join("..", "testdata")
+	chartPath := filepath.Join(testDataDir, "mychart-0.1.0.tgz")
+
+	chart := newReadOnlyChart(t, chartPath)
+
+	// Read original chart bytes for comparison
+	originalData, err := os.ReadFile(chartPath)
+	require.NoError(t, err)
+
+	result := oci.CopyChartToOCILayout(ctx, chart)
+	require.NotNil(t, result)
+
+	store, err := tar.ReadOCILayout(ctx, result)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, store.Close())
+	})
+
+	manifestRaw, err := store.Fetch(ctx, store.Index.Manifests[0])
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, manifestRaw.Close())
+	})
+	manifest := ociImageSpecV1.Manifest{}
+	require.NoError(t, json.NewDecoder(manifestRaw).Decode(&manifest))
+
+	chartLayer, err := store.Fetch(ctx, manifest.Layers[0])
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, chartLayer.Close())
+	})
+
+	layerData, err := io.ReadAll(chartLayer)
+	require.NoError(t, err)
+	assert.Equal(t, originalData, layerData, "chart layer data should match original tgz file")
+}
+
+func TestCopyChartToOCILayout_BlobMediaType(t *testing.T) {
+	ctx := t.Context()
+	testDataDir := filepath.Join("..", "testdata")
+
+	chart := newReadOnlyChart(t, filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
+
+	result := oci.CopyChartToOCILayout(ctx, chart)
+	require.NotNil(t, result)
+
+	mediaType, known := result.MediaType()
+	assert.True(t, known, "media type should be known")
+	assert.Equal(t, layout.MediaTypeOCIImageLayoutTarGzipV1, mediaType)
+
+	// Consume the blob so the goroutine finishes
+	_, err := tar.ReadOCILayout(ctx, result)
+	require.NoError(t, err)
+}
+
+func TestCopyChartToOCILayout_DescriptorAvailableAfterBlobConsumed(t *testing.T) {
+	ctx := t.Context()
+	testDataDir := filepath.Join("..", "testdata")
+
+	chart := newReadOnlyChart(t, filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
+
+	result := oci.CopyChartToOCILayout(ctx, chart)
+	require.NotNil(t, result)
+
+	// Consume the blob first
+	store, err := tar.ReadOCILayout(ctx, result)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, store.Close())
+	})
+
+	// Now Descriptor should be available without blocking
+	desc, err := result.Descriptor(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, desc.Digest, "descriptor digest should not be empty")
+	assert.Greater(t, desc.Size, int64(0), "descriptor size should be positive")
+}
+
+func TestCopyChartToOCILayout_EmptyChartDir(t *testing.T) {
+	ctx := t.Context()
+	testDataDir := filepath.Join("..", "testdata")
+
+	chart := newReadOnlyChart(t, filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
+	// Empty ChartDir means cleanup (os.RemoveAll) should be a no-op
+	chart.ChartDir = ""
+
+	result := oci.CopyChartToOCILayout(ctx, chart)
+	require.NotNil(t, result)
+
+	store, err := tar.ReadOCILayout(ctx, result)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, store.Close())
+	})
+	require.Len(t, store.Index.Manifests, 1)
+}
+
+func TestCopyChartToOCILayout_NilChartBlobReturnsError(t *testing.T) {
+	ctx := t.Context()
+
+	chart := &helm.ChartData{
+		Name:      "test",
+		Version:   "1.0.0",
+		ChartBlob: nil,
+	}
+
+	result := oci.CopyChartToOCILayout(ctx, chart)
+	require.NotNil(t, result)
+
+	// Consume the blob to let the goroutine finish
+	rc, err := result.ReadCloser()
+	require.NoError(t, err)
+	_, _ = io.ReadAll(rc)
+	_ = rc.Close()
+
+	// The error should surface via Descriptor
+	_, descErr := result.Descriptor(ctx)
+	require.Error(t, descErr, "nil ChartBlob should cause an error")
+	assert.Contains(t, descErr.Error(), "chart blob must not be nil")
+}
+
 // newReadOnlyChart creates a helm.ChartData from a path to testdata.
 // It handles both directory charts (by packaging them) and pre-packaged tgz charts.
 func newReadOnlyChart(t *testing.T, path string) *helm.ChartData {
@@ -183,7 +337,7 @@ func newReadOnlyChart(t *testing.T, path string) *helm.ChartData {
 		tmpDir := t.TempDir()
 		path, err = chartutil.Save(ch, tmpDir)
 		require.NoError(t, err, "failed to save chart to temp dir")
-		result.ChartTempDir = tmpDir
+		result.ChartDir = tmpDir
 	}
 
 	result.ChartBlob, err = filesystem.GetBlobFromOSPath(path)

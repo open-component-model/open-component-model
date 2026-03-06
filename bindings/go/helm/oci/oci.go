@@ -81,7 +81,6 @@ func CopyChartToOCILayout(ctx context.Context, chart *helm.ChartData) *Result {
 
 	go copyChartToOCILayoutAsync(ctx, chart, w, desc)
 
-	// TODO(ikhandamirov): replace this with a direct/unbuffered blob.
 	return &Result{
 		Blob: direct.New(r, direct.WithMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)),
 		desc: desc,
@@ -92,8 +91,8 @@ func copyChartToOCILayoutAsync(ctx context.Context, chart *helm.ChartData, w *io
 	// err accumulates any error from copy, gzip, or layout writing.
 	var err error
 	defer func() {
-		_ = w.CloseWithError(err)            // Always returns nil.
-		_ = os.RemoveAll(chart.ChartTempDir) // Always remove the created temp folder for the chart.
+		_ = w.CloseWithError(err)        // Always returns nil.
+		_ = os.RemoveAll(chart.ChartDir) // Always remove the created temp folder for the chart.
 	}()
 
 	zippedBuf := gzip.NewWriter(w)
@@ -215,6 +214,9 @@ func pushProvenanceLayer(ctx context.Context, provenance *filesystem.Blob, targe
 }
 
 func pushChartLayer(ctx context.Context, chart *filesystem.Blob, target oras.Target) (_ *ociImageSpecV1.Descriptor, err error) {
+	if chart == nil {
+		return nil, fmt.Errorf("chart blob must not be nil")
+	}
 	// We get the reader first because Digest only returns a boolean and no error.
 	// This hides errors like, "file not found" or "permission denied" on downloaded content.
 	chartReader, err := chart.ReadCloser()
