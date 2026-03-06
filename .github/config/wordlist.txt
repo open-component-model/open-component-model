@@ -338,6 +338,7 @@ ocmify
 ocmops
 ocmresourcereference
 ocms
+ocm's
 odg
 offboarding
 onboarded
@@ -599,4 +600,15 @@ warroom
 wgs
 kubermatic
 baseUrl
+krm
+kv
+ord
+openmcp
+resourcegraphdefinitions
+rgds
+kustomizations
+ecdsa
+integrators
+taskfile
 ociimage
+statefulset
