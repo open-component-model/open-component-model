@@ -37,7 +37,6 @@ jobs:
     with:
       branch: ${{ github.event.inputs.branch }}
       component_path: cli # cannot use env here
-    secrets: inherit
 
   # --------------------------------------------------------
   # 2. TAG RC: Create and push RC tag (skipped on dry-run)
