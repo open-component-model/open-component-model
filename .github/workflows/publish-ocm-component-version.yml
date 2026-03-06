@@ -21,6 +21,11 @@ on:
         required: false
         default: "ghcr.io/open-component-model/cli:0.0.0-main"
         type: string
+      version_conflict_policy:
+        description: "Component version conflict policy (e.g. 'replace'). If empty, no policy flag is passed."
+        required: false
+        default: ""
+        type: string
 
 jobs:
   publish:
@@ -88,9 +93,15 @@ jobs:
           CLI_IMAGE: ${{ inputs.cli_image }}
           WORKDIR: ${{ github.workspace }}
           CONSTRUCTOR_PATH: ./constructor/component-constructor.yaml
+          VERSION_CONFLICT_POLICY: ${{ inputs.version_conflict_policy }}
         shell: bash
         run: |
           set -euo pipefail
+
+          POLICY_FLAG=""
+          if [ -n "${VERSION_CONFLICT_POLICY}" ]; then
+            POLICY_FLAG="--component-version-conflict-policy ${VERSION_CONFLICT_POLICY}"
+          fi
 
           docker run --rm \
             -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
@@ -102,7 +113,8 @@ jobs:
               add component-version \
               --config "/.ocmconfig" \
               --repository "${OCM_REPOSITORY}" \
-              --constructor "${CONSTRUCTOR_PATH}"
+              --constructor "${CONSTRUCTOR_PATH}" \
+              ${POLICY_FLAG}
 
       - name: Summarize published component version
         env:
