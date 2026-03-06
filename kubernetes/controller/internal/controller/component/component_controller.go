@@ -209,10 +209,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		// However, as the component is hard-dependant on the repository, we decided to mark it not ready as well.
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetResourceFailedReason, "OCM Repository is not ready")
 
-		if errors.Is(err, util.NotReadyError{}) || errors.Is(err, util.DeletionError{}) {
-			logger.Info(err.Error())
+		var notReadyErr util.NotReadyError
+		var deletionErr util.DeletionError
+		if errors.As(err, &notReadyErr) || errors.As(err, &deletionErr) {
+			logger.Info("repository is not available", "error", err)
 
-			// return no requeue as we watch the object for changes anyway
 			return ctrl.Result{}, nil
 		}
 
