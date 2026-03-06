@@ -125,6 +125,10 @@ jobs:
           persist-credentials: 'false'
           path: repo
 
+      # Install Node.js (required for running the summary script)
+      - name: Install script dependencies
+        run: npm ci --prefix repo/.github/scripts
+
       - name: Summarize published component version
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
