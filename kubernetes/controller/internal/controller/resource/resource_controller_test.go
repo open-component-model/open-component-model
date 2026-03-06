@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "embed"
 
@@ -141,6 +142,7 @@ var _ = Describe("Resource Controller", func() {
 								Resource: runtime.Identity{"name": resourceName},
 							},
 						},
+						Interval:               metav1.Duration{Duration: 30 * time.Second},
 						AdditionalStatusFields: additionalStatusFields,
 					},
 				}
@@ -444,6 +446,7 @@ var _ = Describe("Resource Controller", func() {
 							Resource: identity,
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -545,6 +548,7 @@ var _ = Describe("Resource Controller", func() {
 							Resource: identity,
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -600,6 +604,7 @@ var _ = Describe("Resource Controller", func() {
 							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -695,6 +700,7 @@ var _ = Describe("Resource Controller", func() {
 							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 					AdditionalStatusFields: map[string]string{
 						"registry":   "resource.access.toOCI().registry",
 						"repository": "resource.access.toOCI().repository",
@@ -828,6 +834,7 @@ var _ = Describe("Resource Controller", func() {
 							Resource: runtime.Identity{"name": resourceName, "version": "1.0.0"},
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 					AdditionalStatusFields: map[string]string{
 						"reference": "resource.access.toOCI().reference",
 					},
@@ -943,6 +950,7 @@ var _ = Describe("Resource Controller", func() {
 							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 					AdditionalStatusFields: map[string]string{
 						"reference": "resource.access.toOCI().reference",
 					},
@@ -1132,6 +1140,7 @@ var _ = Describe("Resource Controller", func() {
 							ReferencePath: []runtime.Identity{{"name": nestedComponentReference}},
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 					AdditionalStatusFields: map[string]string{
 						"reference": "resource.access.toOCI().reference",
 					},
@@ -1395,6 +1404,7 @@ var _ = Describe("Resource Controller", func() {
 							},
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 					AdditionalStatusFields: map[string]string{
 						"reference": "resource.access.toOCI().reference",
 					},
@@ -1432,6 +1442,7 @@ var _ = Describe("Resource Controller", func() {
 							},
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 					AdditionalStatusFields: map[string]string{
 						"reference": "resource.access.toOCI().reference",
 					},
@@ -1622,6 +1633,7 @@ var _ = Describe("Resource Controller", func() {
 							ReferencePath: []runtime.Identity{{"name": nestedComponentReference}},
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 					AdditionalStatusFields: map[string]string{
 						"reference": "resource.access.toOCI().reference",
 					},
@@ -1804,6 +1816,7 @@ consumers:
 							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -1966,6 +1979,7 @@ consumers:
 							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
 							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
