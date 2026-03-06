@@ -57,7 +57,7 @@ type Graph struct {
 // Resolve attempts to resolve credentials for the given identity.
 // It first tries direct resolution through the DAG, and if that fails,
 // falls back to indirect resolution through plugins.
-func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
+func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
 	if _, err := identity.ParseType(); err != nil {
 		err = errors.Join(ErrUnknown, err)
 		return nil, fmt.Errorf("to be resolved from the credential graph, a consumer identity type is required: %w", err)
