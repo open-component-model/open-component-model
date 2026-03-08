@@ -1,0 +1,141 @@
+name: Publish OCM Component Version
+
+on:
+  workflow_call:
+    inputs:
+      constructor_artifact_name:
+        description: "Artifact containing component-constructor.yaml"
+        required: true
+        type: string
+      build_artifact_name:
+        description: "Optional artifact containing file-based resources referenced by the constructor"
+        required: false
+        type: string
+      ocm_repository:
+        description: "Target OCM repository root"
+        required: false
+        default: "ghcr.io/open-component-model"
+        type: string
+      cli_image:
+        description: "OCI image containing OCM CLI"
+        required: false
+        default: "ghcr.io/open-component-model/cli:0.0.0-main"
+        type: string
+      version_conflict_policy:
+        description: "Component version conflict policy (e.g. 'replace'). If empty, no policy flag is passed."
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  publish:
+    name: Publish Component Version
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      packages: write # Required for pushing to GHCR
+    steps:
+      - name: Download constructor artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ inputs.constructor_artifact_name }}
+          path: ${{ github.workspace }}/constructor
+
+      - name: Download build artifact (optional)
+        if: ${{ inputs.build_artifact_name != '' }}
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ inputs.build_artifact_name }}
+          path: ${{ github.workspace }}/constructor/resources
+
+      - name: Verify artifacts
+        env:
+          CONSTRUCTOR_FILE: ${{ github.workspace }}/constructor/component-constructor.yaml
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Verifying artifacts..."
+          test -f "${CONSTRUCTOR_FILE}" || (echo "❌ component-constructor missing: ${CONSTRUCTOR_FILE}" && exit 1)
+
+          if [ -n "${{ inputs.build_artifact_name }}" ]; then
+            test -d "${GITHUB_WORKSPACE}/constructor/resources/bin" || (echo "❌ bin directory missing after artifact download" && exit 1)
+          fi
+
+          echo "✅ Required artifacts are present"
+
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate OCM config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > "${HOME}/.ocmconfig" <<'EOF'
+          type: generic.config.ocm.software/v1
+          configurations:
+            - type: credentials.config.ocm.software
+              repositories:
+                - repository:
+                    type: DockerConfig/v1
+                    dockerConfigFile: /.docker/config.json
+                    propagateConsumerIdentity: true
+          EOF
+
+      # WORKDIR is mounted into the Docker container so the OCM CLI can access
+      # the constructor and resource files at the same absolute paths used on the runner.
+      - name: Publish component version
+        env:
+          OCM_REPOSITORY: ${{ inputs.ocm_repository }}
+          CLI_IMAGE: ${{ inputs.cli_image }}
+          WORKDIR: ${{ github.workspace }}
+          CONSTRUCTOR_PATH: ./constructor/component-constructor.yaml
+          VERSION_CONFLICT_POLICY: ${{ inputs.version_conflict_policy }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          POLICY_FLAG=""
+          if [ -n "${VERSION_CONFLICT_POLICY}" ]; then
+            POLICY_FLAG="--component-version-conflict-policy ${VERSION_CONFLICT_POLICY}"
+          fi
+
+          docker run --rm \
+            -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
+            -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
+            -v /etc/ssl/certs/:/etc/ssl/certs/:ro \
+            -v "${WORKDIR}:${WORKDIR}" \
+            -w "${WORKDIR}" \
+            "${CLI_IMAGE}" \
+              add component-version \
+              --config "/.ocmconfig" \
+              --repository "${OCM_REPOSITORY}" \
+              --constructor "${CONSTRUCTOR_PATH}" \
+              ${POLICY_FLAG}
+
+      - name: Checkout scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: 'false'
+          path: repo
+
+      # Install Node.js (required for running the summary script)
+      - name: Install script dependencies
+        run: npm ci --prefix repo/.github/scripts
+
+      - name: Summarize published component version
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          OCM_REPOSITORY: ${{ inputs.ocm_repository }}
+          CONSTRUCTOR_FILE: ${{ github.workspace }}/constructor/component-constructor.yaml
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/repo/.github/scripts/component-constructor.js');
+            await script.summarizeComponentVersion({ core });

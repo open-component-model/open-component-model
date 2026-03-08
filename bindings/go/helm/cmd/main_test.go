@@ -68,7 +68,7 @@ func TestHelmPluginLifecycle(t *testing.T) {
 func TestHelmPluginProcessResource(t *testing.T) {
 	setup := newPluginTestSetup(t)
 
-	chartPath, err := filepath.Abs("../input/testdata/mychart")
+	chartPath, err := filepath.Abs("../testdata/mychart")
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(chartPath, "Chart.yaml"))
 	require.NoError(t, err, "test chart should exist")
