@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/input/file
 
-go 1.25.7
+go 1.26.1
 
 require (
 	github.com/gabriel-vasile/mimetype v1.4.13

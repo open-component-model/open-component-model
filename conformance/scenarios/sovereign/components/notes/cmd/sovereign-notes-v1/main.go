@@ -84,7 +84,7 @@ func main() {
 	r.HandleFunc("/.well-known/open-resource-discovery", ordConfigHandler).Methods("GET")
 	r.HandleFunc("/ord/v1/document", ordDocumentHandler).Methods("GET")
 
-	log.Printf("Starting sovereign-notes server on port %s", port)
+	log.Printf("Starting sovereign-notes server on port %s", port) //nolint:gosec // G706 - port from env var, logged intentionally
 	log.Printf("Version: %s", version)
 
 	srv := &http.Server{
