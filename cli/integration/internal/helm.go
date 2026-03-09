@@ -80,7 +80,7 @@ func (l *HelmOCILayout) AssertHelmChartLayer(t *testing.T) {
 	require.NotNil(t, chartLayer, "manifest should contain a helm chart content layer")
 
 	data := l.ReadLayerBlob(t, chartLayer)
-	assert.Greater(t, len(data), 0, "chart blob should not be empty")
+	assert.NotEmpty(t, data, "chart blob should not be empty")
 }
 
 // AssertChartContentEquals verifies the chart content layer matches the expected file.

@@ -156,9 +156,9 @@ configurations:
 
 	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion)
 
-	t.Run("transfer helm chart to OCI registry", func(t *testing.T) {
+	t.Run("transfer with default (no --upload-as flag)", func(t *testing.T) {
 		r := require.New(t)
-		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "helm-transfer")
+		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "helm-transfer-default")
 
 		transferCMD := cmd.New()
 		transferCMD.SetArgs([]string{
@@ -186,11 +186,46 @@ configurations:
 		r.Len(desc.Component.Resources, 1)
 		r.Equal("mychart", desc.Component.Resources[0].Name)
 
-		// The helm chart should have been converted to an OCI artifact during transfer
-		var ociAccess ociaccessv1.OCIImage
-		r.NoError(ociaccess.Scheme.Convert(desc.Component.Resources[0].Access, &ociAccess),
-			"resource access should be convertible to OCIImage")
-		r.NotEmpty(ociAccess.ImageReference, "image reference should not be empty")
+		var localBlobAccess v2.LocalBlob
+		r.NoError(v2.Scheme.Convert(desc.Component.Resources[0].Access, &localBlobAccess),
+			"resource access should be a local blob by default")
+
+		downloadAndVerifyResource(t, ctx, targetRef, componentName, componentVersion, cfgPath, chartFile, provFile)
+	})
+
+	t.Run("transfer helm chart with --upload-as localBlob", func(t *testing.T) {
+		r := require.New(t)
+		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "helm-transfer-local")
+
+		transferCMD := cmd.New()
+		transferCMD.SetArgs([]string{
+			"transfer",
+			"component-version",
+			sourceRef,
+			targetRef,
+			"--config", cfgPath,
+			"--copy-resources",
+			"--upload-as", "localBlob",
+		})
+
+		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+		defer cancel()
+
+		r.NoError(transferCMD.ExecuteContext(ctx), "transfer should succeed")
+
+		targetRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ociv1.Repository{BaseUrl: targetRef})
+		r.NoError(err, "should be able to create target repository")
+
+		desc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+		r.NoError(err, "should be able to retrieve transferred component")
+		r.Equal(componentName, desc.Component.Name)
+		r.Equal(componentVersion, desc.Component.Version)
+		r.Len(desc.Component.Resources, 1)
+		r.Equal("mychart", desc.Component.Resources[0].Name)
+
+		var localBlobAccess v2.LocalBlob
+		r.NoError(v2.Scheme.Convert(desc.Component.Resources[0].Access, &localBlobAccess),
+			"resource access should be a local blob after transfer with --upload-as localBlob")
 
 		downloadAndVerifyResource(t, ctx, targetRef, componentName, componentVersion, cfgPath, chartFile, provFile)
 	})
@@ -232,6 +267,76 @@ configurations:
 			"image reference should point to the target registry")
 
 		downloadAndVerifyResource(t, ctx, targetRef, componentName, componentVersion, cfgPath, chartFile, provFile)
+	})
+
+	t.Run("two-hop transfer: CTF to registry (default) then registry to registry (ociArtifact)", func(t *testing.T) {
+		r := require.New(t)
+
+		// First hop: transfer from CTF to an intermediate OCI registry (default = localBlob)
+		intermediateRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "helm-twohop-intermediate")
+
+		transferCMD1 := cmd.New()
+		transferCMD1.SetArgs([]string{
+			"transfer",
+			"component-version",
+			sourceRef,
+			intermediateRef,
+			"--config", cfgPath,
+			"--copy-resources",
+		})
+
+		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+		defer cancel()
+
+		r.NoError(transferCMD1.ExecuteContext(ctx), "first hop transfer should succeed")
+
+		// Verify intermediate has localBlob access
+		intermediateRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ociv1.Repository{BaseUrl: intermediateRef})
+		r.NoError(err, "should be able to create intermediate repository")
+
+		intermediateDesc, err := intermediateRepo.GetComponentVersion(ctx, componentName, componentVersion)
+		r.NoError(err, "should be able to retrieve component from intermediate registry")
+		r.Len(intermediateDesc.Component.Resources, 1)
+
+		var localBlobAccess v2.LocalBlob
+		r.NoError(v2.Scheme.Convert(intermediateDesc.Component.Resources[0].Access, &localBlobAccess),
+			"intermediate resource should have local blob access")
+
+		// Second hop: transfer from intermediate registry to final registry with --upload-as ociArtifact
+		intermediateSourceRef := fmt.Sprintf("%s//%s:%s", intermediateRef, componentName, componentVersion)
+		finalRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "helm-twohop-final")
+
+		transferCMD2 := cmd.New()
+		transferCMD2.SetArgs([]string{
+			"transfer",
+			"component-version",
+			intermediateSourceRef,
+			finalRef,
+			"--config", cfgPath,
+			"--copy-resources",
+			"--upload-as", "ociArtifact",
+		})
+
+		r.NoError(transferCMD2.ExecuteContext(ctx), "second hop transfer should succeed")
+
+		// Verify final registry has OCI artifact access
+		finalRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ociv1.Repository{BaseUrl: finalRef})
+		r.NoError(err, "should be able to create final repository")
+
+		finalDesc, err := finalRepo.GetComponentVersion(ctx, componentName, componentVersion)
+		r.NoError(err, "should be able to retrieve component from final registry")
+		r.Equal(componentName, finalDesc.Component.Name)
+		r.Equal(componentVersion, finalDesc.Component.Version)
+		r.Len(finalDesc.Component.Resources, 1)
+		r.Equal("mychart", finalDesc.Component.Resources[0].Name)
+
+		var ociAccess ociaccessv1.OCIImage
+		r.NoError(ociaccess.Scheme.Convert(finalDesc.Component.Resources[0].Access, &ociAccess),
+			"resource access should be an OCI artifact after second hop")
+		r.Equal(fmt.Sprintf("%s/%s", finalRef, "mychart:0.1.0"), ociAccess.ImageReference,
+			"image reference should point to the final registry")
+
+		downloadAndVerifyResource(t, ctx, finalRef, componentName, componentVersion, cfgPath, chartFile, provFile)
 	})
 
 	t.Run("transfer helm chart with local input to OCI registry", func(t *testing.T) {
@@ -428,10 +533,10 @@ configurations:
 		r.Len(desc.Component.Resources, 1)
 		r.Equal("mychart", desc.Component.Resources[0].Name)
 
-		var ociAccess ociaccessv1.OCIImage
-		r.NoError(ociaccess.Scheme.Convert(desc.Component.Resources[0].Access, &ociAccess),
-			"resource access should be convertible to OCIImage")
-		r.NotEmpty(ociAccess.ImageReference, "image reference should not be empty")
+		var localBlobAccess v2.LocalBlob
+		r.NoError(v2.Scheme.Convert(desc.Component.Resources[0].Access, &localBlobAccess),
+			"resource access should be a local blob by default")
+		r.NotEmpty(localBlobAccess.ReferenceName, "image reference should not be empty")
 
 		// No provenance file — pass empty string for originalProvPath
 		downloadAndVerifyResource(t, ctx, targetRef, componentName, componentVersion, cfgPath, chartFile, "")
