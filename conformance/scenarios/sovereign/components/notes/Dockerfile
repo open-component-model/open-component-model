@@ -1,5 +1,5 @@
 # Multi-stage build for sovereign-notes application
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25-alpine@sha256:f6751d823c26342f9506c03797d2527668d095b0a15f1862cddb4d927a7a4ced AS builder
 
 # Set working directory
 WORKDIR /app
