@@ -2,14 +2,13 @@ package resource
 
 import (
 	"crypto"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
-
-	_ "embed"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -1168,7 +1167,13 @@ var _ = Describe("Resource Controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Hit 1 after this component version was stored in the cache (ErrResolutionInProgress)
 			// Hit 2 after the nested component returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
-			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(Equal(float64(2)))
+			//
+			// The Component watch (Watches(&v1alpha1.Component{})) has no predicate, so any Component change
+			// (including the status patch from MockComponent) enqueues a reconcile for referencing Resources.
+			// If the informer delivers that Component event after the Resource is created and indexed,
+			// it triggers an extra reconcile that hits the parent cache again. This is timing-dependent —
+			// on CI runners it can produce additional cache hits beyond the expected minimum.
+			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(BeNumerically(">=", float64(2)))
 
 			childComponentMissCount, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "unverified")
 			Expect(err).ToNot(HaveOccurred())
@@ -1479,8 +1484,13 @@ var _ = Describe("Resource Controller", func() {
 			// Hit 3 after the nested-component-11 returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
 			// Hit 4 after the second resource got applied and queued for reconciliation
 			// Hit 5 after the nested-component-2 returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
-			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(Equal(float64(5)),
-				"expected 5 cache hits for the verified parent component as it should be hit for both resources and the nested component reconciliations")
+			// The Component watch (Watches(&v1alpha1.Component{})) has no predicate, so any Component change
+			// (including the status patch from MockComponent) enqueues a reconcile for referencing Resources.
+			// If the informer delivers that Component event after the Resource is created and indexed,
+			// it triggers an extra reconcile that hits the parent cache again. This is timing-dependent —
+			// on CI runners it can produce additional cache hits beyond the expected minimum.
+			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(BeNumerically(">=", float64(5)),
+				"expected at least 5 cache hits for the verified parent component as it should be hit for both resources and the nested component reconciliations")
 
 			nesteComponent1omponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName1, componentVersion, "unverified")
 			Expect(err).ToNot(HaveOccurred())
@@ -1661,7 +1671,13 @@ var _ = Describe("Resource Controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Hit 1 after this component version was stored in the cache (ErrResolutionInProgress)
 			// Hit 2 after the nested component returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
-			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(Equal(float64(2)))
+			//
+			// The Component watch (Watches(&v1alpha1.Component{})) has no predicate, so any Component change
+			// (including the status patch from MockComponent) enqueues a reconcile for referencing Resources.
+			// If the informer delivers that Component event after the Resource is created and indexed,
+			// it triggers an extra reconcile that hits the parent cache again. This is timing-dependent —
+			// on CI runners it can produce additional cache hits beyond the expected minimum.
+			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(BeNumerically(">=", float64(2)))
 
 			childComponentMissCount, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "unverified")
 			Expect(err).ToNot(HaveOccurred())

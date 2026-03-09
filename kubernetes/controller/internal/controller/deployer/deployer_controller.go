@@ -445,7 +445,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 			return nil, workerpool.ErrResolutionInProgress
 		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 			// Ignore error, but log event
-			event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityInfo, err.Error())
+			event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityError, err.Error())
 		default:
 			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
 
