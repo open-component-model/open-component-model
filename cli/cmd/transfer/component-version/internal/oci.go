@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
@@ -15,27 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-type ociArtifactProcessor struct{}
-
-var (
-	_ processor          = (*ociArtifactProcessor)(nil)
-	_ ociUploadSupported = (*ociArtifactProcessor)(nil)
-)
-
-func init() {
-	registerProcessor(&ociv1.OCIImage{}, &ociArtifactProcessor{})
-}
-
-func (p *ociArtifactProcessor) ShouldUploadAsOCIArtifact(ctx context.Context, resource descriptorv2.Resource, toSpec runtime.Typed, access runtime.Typed, uploadType UploadType) (bool, error) {
-	if _, isOCITarget := toSpec.(*ocirepo.Repository); isOCITarget {
-		if uploadType == UploadAsOciArtifact {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func (p *ociArtifactProcessor) Process(ctx context.Context, resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+func processOCIArtifact(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 
@@ -51,7 +30,7 @@ func (p *ociArtifactProcessor) Process(ctx context.Context, resource descriptorv
 
 	// e.g. ghcr.io/open-component-model/helmexample/charts/mariadb:12.2.7
 	// strip the domain part and keep the rest
-	referenceName, err := ParseReferenceName(ociAccess.ImageReference)
+	referenceName, err := GetReferenceName(ociAccess.ImageReference)
 	if err != nil {
 		return fmt.Errorf("cannot get reference name: %w", err)
 	}
@@ -130,8 +109,11 @@ func ociUploadAsLocalResource(toSpec runtime.Typed, component, version, addResou
 	return addResourceTransform, nil
 }
 
+// referenceNameOption is an option providing targetRepoBaseURL to construct the reference name for the OCI artifact in the target repository.
 type referenceNameOption func(targetRepoBaseURL string) string
 
+// staticReferenceName returns a referenceNameOption that constructs the reference name by combining the target repository base URL and the given reference name.
+// If the target repository base URL is empty, it returns the given reference name as is.
 func staticReferenceName(referenceName string) referenceNameOption {
 	return func(targetRepoBaseURL string) string {
 		if targetRepoBaseURL == "" {
@@ -141,6 +123,10 @@ func staticReferenceName(referenceName string) referenceNameOption {
 	}
 }
 
+// imageReferenceFromAccess returns a referenceNameOption that constructs the reference name by combining the target repository base URL and the image reference from the OCI access.
+// If the target repository base URL is empty, it returns the image reference from the OCI access as is.
+// id is the transformation ID of a previous step. The output of that step is expected to contain a resource with an OCI access, and the imageReference from that access will be used.
+// The generated CEL expression will look like "${id.output.resource.access.imageReference}"
 func imageReferenceFromAccess(id string) referenceNameOption {
 	return func(targetRepoBaseURL string) string {
 		if targetRepoBaseURL == "" {

@@ -1,39 +1,16 @@
 package internal
 
 import (
-	"context"
 	"fmt"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	helmv1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
-	ocirepo "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-type helmChartProcessor struct{}
-
-var (
-	_ processor          = (*helmChartProcessor)(nil)
-	_ ociUploadSupported = (*helmChartProcessor)(nil)
-)
-
-func init() {
-	registerProcessor(&helmv1.Helm{}, &helmChartProcessor{})
-}
-
-func (h helmChartProcessor) ShouldUploadAsOCIArtifact(ctx context.Context, resource v2.Resource, toSpec runtime.Typed, access runtime.Typed, uploadType UploadType) (bool, error) {
-	if _, isOCITarget := toSpec.(*ocirepo.Repository); isOCITarget {
-		if uploadType == UploadAsOciArtifact {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func (h helmChartProcessor) Process(ctx context.Context, resource v2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+func processHelm(resource v2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
@@ -44,7 +21,7 @@ func (h helmChartProcessor) Process(ctx context.Context, resource v2.Resource, i
 		"resource": resource,
 	})
 	if err != nil {
-		return fmt.Errorf("cannot create unstructured spec for GetOCIArtifact transformation: %w", err)
+		return fmt.Errorf("cannot create unstructured spec for GetHelmChartV1alpha1 transformation: %w", err)
 	}
 
 	// Create GetHelmChart transformation

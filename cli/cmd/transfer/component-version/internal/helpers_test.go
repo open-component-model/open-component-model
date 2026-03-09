@@ -157,18 +157,18 @@ func TestGetReferenceName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
 
-			gotReference, gotErr := ParseReferenceName(tt.ociImage.ImageReference)
+			gotReference, gotErr := GetReferenceName(tt.ociImage.ImageReference)
 
 			if tt.wantErr {
-				r.Error(gotErr, "ParseReferenceName() should return an error")
+				r.Error(gotErr, "GetReferenceName() should return an error")
 				if tt.errContains != "" {
 					r.ErrorContains(gotErr, tt.errContains, "error message should contain expected text")
 				}
 			} else {
-				r.NoError(gotErr, "ParseReferenceName() should not return an error")
+				r.NoError(gotErr, "GetReferenceName() should not return an error")
 			}
 
-			r.Equal(tt.wantReference, gotReference, "ParseReferenceName() returned unexpected reference")
+			r.Equal(tt.wantReference, gotReference, "GetReferenceName() returned unexpected reference")
 		})
 	}
 }

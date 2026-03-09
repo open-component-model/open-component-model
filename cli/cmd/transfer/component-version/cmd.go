@@ -16,8 +16,6 @@ import (
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/access"
 	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformation"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
-	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformer"
-	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformer/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -57,11 +55,14 @@ func New() *cobra.Command {
 a target repository using an internally generated transformation graph.
 
 This command constructs a TransformationGraphDefinition consisting of:
-  1. CTFGetComponentVersion / OCIGetComponentVersion
-  2. CTFAddComponentVersion / OCIAddComponentVersion
-  3. GetOCIArtifact / OCIAddLocalResource
+  1. CTFGetComponentVersion -> OCIGetComponentVersion
+  2. CTFAddComponentVersion -> OCIAddComponentVersion
+  3. GetOCIArtifact -> OCIAddLocalResource / AddOCIArtifact
+  4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact
 
-We support OCI and CTF repositories as source and target, and the graph is built accordingly based on the provided references. 
+We support OCI and CTF as well as Helm repositories as transfer sources.
+OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
+The graph is built accordingly based on the provided references. 
 By default, only the component version itself is transferred, but with --copy-resources, all resources are also copied and transformed if necessary.
 
 The graph is validated, and then executed unless --dry-run is set.`,
@@ -76,6 +77,9 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as localBlob
 
 # Transfer from one OCI to another using OCI artifacts (default)
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as ociArtifact
+
+# Transfer a component version containing Helm charts (access-type: helm/v1) as an OCI artifact
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as ociArtifact
 
 # Transfer including all resources (e.g. OCI artifacts)

@@ -1,9 +1,7 @@
 package internal
 
 import (
-	"context"
 	"fmt"
-	"log/slog"
 
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -14,38 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-type localBlobProcessor struct{}
-
-var (
-	_ processor          = (*localBlobProcessor)(nil)
-	_ ociUploadSupported = (*localBlobProcessor)(nil)
-)
-
-func init() {
-	registerProcessor(&descriptorv2.LocalBlob{}, &localBlobProcessor{})
-}
-
-func (p *localBlobProcessor) ShouldUploadAsOCIArtifact(ctx context.Context, resource descriptorv2.Resource, toSpec runtime.Typed, access runtime.Typed, uploadType UploadType) (bool, error) {
-	acc, ok := access.(*descriptorv2.LocalBlob)
-	if !ok {
-		return false, fmt.Errorf("unexpected access type %s, expected LocalBlob", access.GetType().String())
-	}
-	if _, isOCITarget := toSpec.(*ocirepo.Repository); isOCITarget {
-		if uploadType == UploadAsOciArtifact && IsOCICompliantManifest(acc.MediaType) {
-			// TODO(fabianburth): We currently do not support a way to specify a reference name
-			//  based on input type. Long term, this whole scenario should be redesigned through
-			//  a transfer config. Short term, we pray that we can neglect this scenario.
-			if acc.ReferenceName != "" {
-				return true, nil
-			}
-
-			slog.DebugContext(ctx, "local blob resource is not uploaded to individual oci repository since it does not have a reference name", "resource", resource.ToIdentity().String())
-		}
-	}
-	return false, nil
-}
-
-func (p *localBlobProcessor) Process(ctx context.Context, resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 	sourceRepo := val.SourceRepository

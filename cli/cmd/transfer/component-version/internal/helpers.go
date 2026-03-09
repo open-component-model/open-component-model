@@ -88,7 +88,7 @@ func ChooseAddLocalResourceType(repo runtime.Typed) (runtime.Type, error) {
 	}
 }
 
-func ParseReferenceName(imageReference string) (string, error) {
+func GetReferenceName(imageReference string) (string, error) {
 	if imageReference == "" {
 		return "", fmt.Errorf("cannot get reference name from empty image reference")
 	}
