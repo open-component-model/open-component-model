@@ -170,5 +170,5 @@ jobs:
     needs: publish_latest
     uses: ./.github/workflows/conformance.yml
     with:
-      toolkit_image: "ghcr.io/open-component-model/kubernetes/controller/chart:${{ needs.publish_latest.outputs.chart_version }}"
+      toolkit_image: "ghcr.io/${{ github.repository_owner }}/kubernetes/controller/chart:${{ needs.publish_latest.outputs.chart_version }}"
     secrets: inherit

@@ -34,8 +34,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CLI_IMAGE: ${{ inputs.cli_image || 'ghcr.io/open-component-model/cli:main' }}
-  TOOLKIT_IMAGE: ${{ inputs.toolkit_image || 'ghcr.io/open-component-model/kubernetes/controller/chart:0.0.0-c837a09' }}
+  CLI_IMAGE: ${{ inputs.cli_image || 'ghcr.io/open-component-model/cli:0.0.0-main' }}
+  TOOLKIT_IMAGE: ${{ inputs.toolkit_image || 'ghcr.io/open-component-model/kubernetes/controller/chart:0.0.0-main' }}
 
 jobs:
   conformance:

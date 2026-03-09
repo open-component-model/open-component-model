@@ -218,5 +218,5 @@ jobs:
     needs: publish
     uses: ./.github/workflows/conformance.yml
     with:
-      cli_image: "ghcr.io/open-component-model/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
+      cli_image: "ghcr.io/${{ github.repository_owner }}/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
     secrets: inherit
