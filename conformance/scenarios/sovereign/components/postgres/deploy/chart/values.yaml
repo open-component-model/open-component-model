@@ -1,0 +1,69 @@
+# Default values for sovereign-postgres
+replicaCount: 1
+
+image:
+  repository: postgres
+  pullPolicy: IfNotPresent
+  tag: "18@sha256:69e8582b781cb44fa4557b98ed586fe68361e320d9b12f9707494335634f4f3d"
+
+nameOverride: ""
+fullnameOverride: "postgres"
+
+postgresql:
+  # Database configuration
+  postgresqlDatabase: sovereign_notes
+  postgresqlUsername: sovereign_user
+  # NOTE: Demo-only default. Production deployments should use External Secrets
+  # Operator (ESO) or a similar secret management solution.
+  postgresqlPassword: changeme
+  
+  # Additional configuration
+  postgresqlMaxConnections: 100
+  postgresqlSharedPreloadLibraries: ""
+  
+  # Persistence
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 8Gi
+
+service:
+  type: ClusterIP
+  port: 5432
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+podSecurityContext:
+  # NOTE: The official postgres image starts as root and internally drops
+  # privileges to the postgres user (UID 999). runAsNonRoot must be false.
+  runAsNonRoot: false
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container security context
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: false
+
+# Annotations
+podAnnotations: {}
+serviceAnnotations: {}
+
+# Labels
+labels:
+  app.kubernetes.io/component: database
