@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -84,6 +85,16 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	helm := v1.Helm{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &helm); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
+	}
+
+	if i.TempFolder == "" {
+		// we cannot delete the temp folder since it will hold the downloaded helm chart blobs
+		// and we do not want to break existing fallback behavior for users who do not set the TempFolder field before
+		temp, err := os.MkdirTemp("", "helm-input-*")
+		if err != nil {
+			return nil, fmt.Errorf("error creating temporary directory for helm input processing: %w", err)
+		}
+		i.TempFolder = temp
 	}
 
 	helmBlob, chart, err := GetV1HelmBlob(ctx, helm, i.TempFolder, WithCredentials(credentials))

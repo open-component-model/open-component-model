@@ -98,7 +98,7 @@ func TestInputMethodGetResourceCredentialConsumerIdentity(t *testing.T) {
 }
 
 func TestInputMethodProcessResourceLocalChart(t *testing.T) {
-	testDataDir := filepath.Join("testdata", "mychart")
+	testDataDir := filepath.Join("../testdata", "mychart")
 	helmSpec := v1.Helm{
 		Type: runtime.Type{
 			Name: v1.Type,
@@ -268,7 +268,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 func TestInputMethodProcessResourceBothPathAndRepo(t *testing.T) {
 	ctx := context.Background()
 
-	testDataDir := filepath.Join("testdata", "mychart")
+	testDataDir := filepath.Join("../testdata", "mychart")
 
 	helmSpec := v1.Helm{
 		Type: runtime.Type{

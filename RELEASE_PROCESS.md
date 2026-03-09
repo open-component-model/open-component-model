@@ -128,7 +128,8 @@ Once created, only bug fixes and documentation changes are allowed.
 
 </details>
 
-> [!CAUTION] **Cut-off policy for this release branch**
+> [!CAUTION] 
+> **Cut-off policy for this release branch**
 >
 >- No feature or breaking-change work is accepted.
 >- Non-bugfix and non-documentation changes require release responsible approval.
