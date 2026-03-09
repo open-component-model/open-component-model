@@ -6,9 +6,9 @@ Hey there! Most-likely you've ended up here looking for information about the Op
 
 | Date       | Recording + Transcript                                                                                      |
 |------------|-------------------------------------------------------------------------------------------------------------|
-| 2026-03-04 | https://zoom.us/rec/share/aoFnLPOBYxRYZ7XQo7brYj3KkzBAYlO0Ql3Anf5bd1FCz9Sa7Y0L1N77w7aDeNf7.AhYZcg344tkUiScJ |
-| 2026-02-04 | https://zoom.us/rec/share/kgp3G9nWpidW8CGhIFGYqbkuxbCUT5NonY6mqMNvJrHA5b9Q5mfkSUwRuO0Y3o_O.mUL01yhE0MtA8Vqs |
 | 2026-01-07 | https://zoom.us/rec/share/rk0eduz6B-swgnT7Zlea-O815AwVonZzaQNELe6Vy8YnMlZ9kYHbPwDfMb92QPg.uoe1ID-5AeFbRSFN  |
+| 2026-02-04 | https://zoom.us/rec/share/kgp3G9nWpidW8CGhIFGYqbkuxbCUT5NonY6mqMNvJrHA5b9Q5mfkSUwRuO0Y3o_O.mUL01yhE0MtA8Vqs |
+| 2026-03-04 | https://zoom.us/rec/share/aoFnLPOBYxRYZ7XQo7brYj3KkzBAYlO0Ql3Anf5bd1FCz9Sa7Y0L1N77w7aDeNf7.AhYZcg344tkUiScJ |
 
 ## 2025
 
