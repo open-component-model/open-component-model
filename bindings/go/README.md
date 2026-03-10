@@ -47,6 +47,7 @@ The [`examples/`](examples/) directory contains runnable, tested examples for th
 - **Credentials** — resolving credentials by identity using the static resolver
 - **Signing** — generating and verifying digests, RSA signing (plain and PEM), tamper detection
 - **Repository** — creating CTF-backed repositories, storing and retrieving component versions, resources, and sources
+- **OCI Registry** — full round-trip against a real OCI registry using testcontainers (skipped with `-short`)
 
 All examples are self-contained (no external services required) and run as part of CI:
 
