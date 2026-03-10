@@ -60,6 +60,8 @@ const (
 	deployerManager = "deployer.delivery.ocm.software"
 )
 
+var ErrComponentVersionSkew = errors.New("component version skew: resource status has not yet caught up with component")
+
 // Reconciler reconciles a Deployer object.
 type Reconciler struct {
 	*ocm.BaseReconciler
@@ -325,7 +327,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
 		return r.DownloadResourceWithOCM(ctx, deployer, resource)
 	})
-	if errors.Is(err, resolution.ErrResolutionInProgress) {
+	if errors.Is(err, resolution.ErrResolutionInProgress) || errors.Is(err, ErrComponentVersionSkew) {
 		return ctrl.Result{}, nil
 	}
 	if err != nil {
@@ -443,6 +445,10 @@ func (r *Reconciler) DownloadResourceWithOCM(
 			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
 
 			return nil, workerpool.ErrResolutionInProgress
+		case errors.Is(err, ErrComponentVersionSkew):
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ComponentSkewResolutionInProgress, err.Error())
+
+			return nil, ErrComponentVersionSkew
 		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 			// Ignore error, but log event
 			event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityError, err.Error())
@@ -892,10 +898,11 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 	// status is not resolved through a reference path.
 	// In this case we do nothing and wait for the resource.
 	if len(resource.Spec.Resource.ByReference.ReferencePath) == 0 {
-		return nil, fmt.Errorf(
-			"component version from resource status differs from component version from component, but no reference path provided: %s:%s != %s:%s",
+		log.FromContext(ctx).Info("component version from resource status differs from component version from component, but no reference path provided: %s:%s != %s:%s",
 			resource.Status.Component.Component, resource.Status.Component.Version,
 			component.Status.Component.Component, component.Status.Component.Version)
+
+		return nil, ErrComponentVersionSkew
 	}
 
 	resourceDescriptor, _, err := ocm.ResolveReferencePath(
