@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/blob
 
-go 1.25.7
+go 1.26.1
 
 require (
 	github.com/opencontainers/go-digest v1.0.0
