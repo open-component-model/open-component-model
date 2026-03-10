@@ -9,9 +9,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/oci/compref"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
 // mockRepositoryProvider implements repository.ComponentVersionRepositoryProvider for testing
