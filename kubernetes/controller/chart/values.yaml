@@ -12,7 +12,7 @@ manager:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
     # -- Controller image tag
-    tag: latest@sha256:9e625b7ed7485f43dbd32ed78a905eb25b916d904577f405349f8bb4faf886f7
+    tag: latest@sha256:48e5edf92f2033e702becd12853eda9be1bba11e5256a4d5a034e1f79de89ba3
     # -- Image pull policy
     pullPolicy: IfNotPresent
   ## Controller concurrency settings
