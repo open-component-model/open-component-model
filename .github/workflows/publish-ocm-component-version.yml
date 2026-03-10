@@ -27,6 +27,9 @@ on:
         default: ""
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   publish:
     name: Publish Component Version
