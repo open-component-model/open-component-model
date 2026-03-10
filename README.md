@@ -49,6 +49,7 @@ The code for the CLI can be found in [`cli`](cli).
 We supply language bindings for:
 
 - [go](bindings/go). These Bindings are also used by the OCM CLI and are our primary Focus.
+- Looking for usage examples? Check out the [tested examples](bindings/go/examples/) covering blobs, descriptors, credentials, signing, and repository operations.
 
 > We are open to discussing and implementing bindings for other languages. If you are interested in a specific language, please open an issue or contact us directly. Contributions are always welcome!
 

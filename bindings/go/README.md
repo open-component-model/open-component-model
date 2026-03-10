@@ -38,6 +38,22 @@ import (
 )
 ```
 
+## Examples
+
+The [`examples/`](examples/) directory contains runnable, tested examples for the most common OCM operations:
+
+- **Blobs** — creating in-memory and filesystem blobs, copying with digest verification
+- **Descriptors** — building component descriptors with resources, sources, references, and labels
+- **Credentials** — resolving credentials by identity using the static resolver
+- **Signing** — generating and verifying digests, RSA signing (plain and PEM), tamper detection
+- **Repository** — creating CTF-backed repositories, storing and retrieving component versions, resources, and sources
+
+All examples are self-contained (no external services required) and run as part of CI:
+
+```bash
+task bindings/go/examples:test
+```
+
 ## Testing
 
 ```bash
