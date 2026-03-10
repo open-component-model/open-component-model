@@ -86,10 +86,13 @@ kro                  kro-86d5b5b5bd-6gmvr                         1/1     Runnin
 To install the OCM K8s Toolkit, you can use the Helm chart:
 
 ```bash
-helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/charts/ocm-k8s-toolkit \
+helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/controller/chart:<pre-release> \
   --namespace ocm-k8s-toolkit-system \
   --create-namespace
 ```
+
+You can check out this [list](https://github.com/open-component-model/open-component-model/pkgs/container/kubernetes%2Fcontroller%2Fchart/versions?filters%5Bversion_type%5D=tagged)
+to pick the latest pre-release version until an official release was published.
 
 For local development, you can install directly from the source:
 
