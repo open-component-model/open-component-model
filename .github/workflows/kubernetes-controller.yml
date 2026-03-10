@@ -416,4 +416,4 @@ jobs:
     needs: publish
     uses: ./.github/workflows/conformance.yml
     with:
-      toolkit_image: "ghcr.io/${{ github.repository_owner }}/kubernetes/controller/chart:${{ needs.publish.outputs.chart_version }}
+      toolkit_image: "ghcr.io/${{ github.repository_owner }}/kubernetes/controller/chart:${{ needs.publish.outputs.chart_version }}"
