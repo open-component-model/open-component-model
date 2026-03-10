@@ -167,8 +167,7 @@ export async function writeSummary(core, data) {
     chartRepo,
     imageDigest,
     isLatest,
-    isStable,
-    highestStableVersion,
+    highestFinalVersion,
     uploadedCount,
     releaseUrl,
   } = data;
@@ -181,28 +180,27 @@ export async function writeSummary(core, data) {
     ["Component", componentName],
     ["Final Tag", finalTag],
     ["Promoted from RC", rcTag],
-    ["Highest Stable Version", highestStableVersion || "(none)"],
-    ["Latest (incl. RC)", isLatest ? "Yes" : "No"],
-    ["Stable", isStable ? "Yes" : "No"],
     ["Uploaded Assets", String(uploadedCount)],
   ];
 
+  if (highestFinalVersion) {
+    rows.push(["Highest Final Version", highestFinalVersion]);
+  }
+
   // Add optional OCI/Helm fields when present
   if (imageRepo) {
-    let imageTags = `${imageRepo}:${finalVersion}`;
-    if (isLatest) imageTags += `, ${imageRepo}:latest`;
-    if (isStable) imageTags += `, ${imageRepo}:stable`;
+    const imageTags = isLatest
+      ? `${imageRepo}:${finalVersion}, ${imageRepo}:latest`
+      : `${imageRepo}:${finalVersion}`;
     rows.push(["Image Tags", imageTags]);
   }
   if (imageDigest) {
     rows.push(["Image Digest", imageDigest.substring(0, 19) + "..."]);
   }
   if (chartRepo) {
-    let chartTags = `${chartRepo}:${finalVersion}`;
-    if (isLatest) chartTags += `, ${chartRepo}:latest`;
-    if (isStable) chartTags += `, ${chartRepo}:stable`;
-    rows.push(["Helm Chart", chartTags]);
+    rows.push(["Helm Chart", `${chartRepo}:${finalVersion}`]);
   }
+  rows.push(["GitHub Latest", isLatest ? "✅ yes" : "⚠️ no"]);
 
   await core.summary
     .addHeading("Final Release Published")
@@ -221,8 +219,7 @@ export async function writeSummary(core, data) {
  * Publish a final GitHub release by promoting an RC.
  *
  * Required env vars:
- *   FINAL_TAG, FINAL_VERSION, RC_TAG, COMPONENT_NAME, ASSETS_DIR, NOTES_FILE,
- *   SET_LATEST, SET_STABLE, HIGHEST_STABLE_VERSION
+ *   FINAL_TAG, FINAL_VERSION, RC_TAG, COMPONENT_NAME, ASSETS_DIR, NOTES_FILE
  *
  * Optional env vars (for summary):
  *   IMAGE_REPO, IMAGE_DIGEST, CHART_REPO
@@ -237,13 +234,13 @@ export default async function publishFinalRelease({ github, context, core }) {
     COMPONENT_NAME: componentName,
     ASSETS_DIR: assetsDir,
     NOTES_FILE: notesFile,
-    SET_LATEST: setLatest,
-    SET_STABLE: setStable,
-    HIGHEST_STABLE_VERSION: highestStableVersion,
     // Optional — only used in summary
     IMAGE_REPO: imageRepo,
     IMAGE_DIGEST: imageDigest,
     CHART_REPO: chartRepo,
+    // Optional — controls GitHub "Latest" badge and :latest OCI tag
+    SET_LATEST: setLatest,
+    HIGHEST_FINAL_VERSION: highestFinalVersion,
   } = process.env;
 
   if (!finalTag || !finalVersion || !rcTag || !componentName || !assetsDir || !notesFile) {
@@ -254,7 +251,6 @@ export default async function publishFinalRelease({ github, context, core }) {
   }
 
   const isLatest = setLatest === "true";
-  const isStable = setStable === "true";
   const notes = prepareReleaseNotes(notesFile, rcTag, finalTag);
   const release = await getOrCreateRelease(github, context, {
     finalTag,
@@ -273,8 +269,7 @@ export default async function publishFinalRelease({ github, context, core }) {
     chartRepo,
     imageDigest,
     isLatest,
-    isStable,
-    highestStableVersion,
+    highestFinalVersion: highestFinalVersion || "",
     uploadedCount,
     releaseUrl: release.html_url,
   });

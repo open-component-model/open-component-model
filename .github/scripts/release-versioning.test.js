@@ -4,11 +4,8 @@ import {
     isStableNewer,
     parseBranch,
     parseVersion,
-    compareSemver,
-    extractHighestStableVersion,
-    extractHighestVersion,
+    extractHighestFinalVersion,
     shouldSetLatest,
-    shouldSetStable,
 } from "./release-versioning.js";
 
 // ----------------------------------------------------------
@@ -130,29 +127,7 @@ assert.ok(
 );
 
 // ----------------------------------------------------------
-// compareSemver tests
-// ----------------------------------------------------------
-assert.strictEqual(compareSemver("0.2.0", "0.1.0"), 1, "0.2.0 > 0.1.0");
-assert.strictEqual(compareSemver("0.1.0", "0.2.0"), -1, "0.1.0 < 0.2.0");
-assert.strictEqual(compareSemver("0.2.0", "0.2.0"), 0, "0.2.0 == 0.2.0");
-assert.strictEqual(compareSemver("1.0.0", "0.9.9"), 1, "1.0.0 > 0.9.9");
-assert.strictEqual(compareSemver("0.10.0", "0.9.0"), 1, "0.10.0 > 0.9.0 (numeric)");
-
-// Final version beats same-base RC (per semver spec)
-assert.strictEqual(compareSemver("0.2.0", "0.2.0-rc.1"), 1, "final > RC with same base");
-assert.strictEqual(compareSemver("0.2.0-rc.1", "0.2.0"), -1, "RC < final with same base");
-
-// RC ordering
-assert.strictEqual(compareSemver("0.2.0-rc.2", "0.2.0-rc.1"), 1, "rc.2 > rc.1");
-assert.strictEqual(compareSemver("0.2.0-rc.1", "0.2.0-rc.2"), -1, "rc.1 < rc.2");
-assert.strictEqual(compareSemver("0.2.0-rc.1", "0.2.0-rc.1"), 0, "rc.1 == rc.1");
-
-// RC of higher base beats final of lower base
-assert.strictEqual(compareSemver("0.3.0-rc.1", "0.2.0"), 1, "0.3.0-rc.1 > 0.2.0");
-assert.strictEqual(compareSemver("0.2.0", "0.3.0-rc.1"), -1, "0.2.0 < 0.3.0-rc.1");
-
-// ----------------------------------------------------------
-// extractHighestStableVersion tests
+// extractHighestFinalVersion tests
 // ----------------------------------------------------------
 const mockReleases = [
     { prerelease: false, tag_name: "cli/v0.1.0" },
@@ -164,80 +139,35 @@ const mockReleases = [
 ];
 
 assert.strictEqual(
-    extractHighestStableVersion(mockReleases, "cli/v"),
+    extractHighestFinalVersion(mockReleases, "cli/v"),
     "0.2.0",
     "Should return highest non-prerelease version for prefix"
 );
 
 assert.strictEqual(
-    extractHighestStableVersion(mockReleases, "other/v"),
+    extractHighestFinalVersion(mockReleases, "other/v"),
     "1.0.0",
     "Should filter by tag prefix"
 );
 
 assert.strictEqual(
-    extractHighestStableVersion([], "cli/v"),
+    extractHighestFinalVersion([], "cli/v"),
     "",
     "Should return empty string for no releases"
 );
 
 assert.strictEqual(
-    extractHighestStableVersion([{ prerelease: true, tag_name: "cli/v0.1.0-rc.1" }], "cli/v"),
+    extractHighestFinalVersion([{ prerelease: true, tag_name: "cli/v0.1.0-rc.1" }], "cli/v"),
     "",
     "Should return empty string if only prereleases exist"
 );
 
 // ----------------------------------------------------------
-// extractHighestVersion tests (includes RCs)
-// ----------------------------------------------------------
-assert.strictEqual(
-    extractHighestVersion(mockReleases, "cli/v"),
-    "0.3.0-rc.1",
-    "Should return highest version including RCs"
-);
-
-assert.strictEqual(
-    extractHighestVersion(mockReleases, "other/v"),
-    "1.0.0",
-    "Should filter by tag prefix (no RCs for other/v)"
-);
-
-assert.strictEqual(
-    extractHighestVersion([], "cli/v"),
-    "",
-    "Should return empty string for no releases"
-);
-
-assert.strictEqual(
-    extractHighestVersion(
-        [
-            { prerelease: false, tag_name: "cli/v0.2.0" },
-            { prerelease: true, tag_name: "cli/v0.2.0-rc.1" },
-        ],
-        "cli/v"
-    ),
-    "0.2.0",
-    "Final 0.2.0 should beat 0.2.0-rc.1"
-);
-
-assert.strictEqual(
-    extractHighestVersion(
-        [
-            { prerelease: true, tag_name: "cli/v0.3.0-rc.2" },
-            { prerelease: true, tag_name: "cli/v0.3.0-rc.1" },
-        ],
-        "cli/v"
-    ),
-    "0.3.0-rc.2",
-    "Should pick the higher RC number"
-);
-
-// ----------------------------------------------------------
-// shouldSetLatest tests (RC-inclusive comparison)
+// shouldSetLatest tests
 // ----------------------------------------------------------
 assert.ok(
     shouldSetLatest("0.2.0", ""),
-    "Should return true if no existing version"
+    "Should return true if no existing final version"
 );
 
 assert.ok(
@@ -257,50 +187,6 @@ assert.ok(
 
 assert.ok(
     shouldSetLatest("0.10.0", "0.9.0"),
-    "Should handle numeric comparison correctly (0.10 > 0.9)"
-);
-
-// RC-specific cases for shouldSetLatest
-assert.ok(
-    shouldSetLatest("0.2.0", "0.2.0-rc.1"),
-    "Final 0.2.0 should set latest over 0.2.0-rc.1"
-);
-
-assert.ok(
-    !shouldSetLatest("0.2.0", "0.3.0-rc.1"),
-    "0.2.0 should NOT set latest when 0.3.0-rc.1 exists"
-);
-
-assert.ok(
-    shouldSetLatest("0.3.0-rc.2", "0.3.0-rc.1"),
-    "rc.2 should set latest over rc.1"
-);
-
-// ----------------------------------------------------------
-// shouldSetStable tests (final-only comparison)
-// ----------------------------------------------------------
-assert.ok(
-    shouldSetStable("0.2.0", ""),
-    "Should return true if no existing stable version"
-);
-
-assert.ok(
-    shouldSetStable("0.2.0", "0.1.0"),
-    "Should return true if promotion > highest stable"
-);
-
-assert.ok(
-    shouldSetStable("0.2.0", "0.2.0"),
-    "Should return true if promotion == highest stable"
-);
-
-assert.ok(
-    !shouldSetStable("0.1.0", "0.2.0"),
-    "Should return false if promotion < highest stable"
-);
-
-assert.ok(
-    shouldSetStable("0.10.0", "0.9.0"),
     "Should handle numeric comparison correctly (0.10 > 0.9)"
 );
 
