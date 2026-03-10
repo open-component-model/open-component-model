@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/cel
 
-go 1.25.7
+go 1.26.1
 
 require (
 	github.com/google/cel-go v0.27.0
