@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "embed"
 
@@ -1497,7 +1498,7 @@ var _ = Describe("Resource Controller Error Handling", func() {
 				RepositoryRef: corev1.LocalObjectReference{Name: "test-repo"},
 				Component:     "ocm.software/test",
 				Semver:        "1.0.0",
-				Interval:      metav1.Duration{Duration: 10 * 60_000_000_000},
+				Interval:      metav1.Duration{Duration: 10 * time.Minute},
 			},
 		}
 		Expect(k8sClient.Create(ctx, component)).To(Succeed())
@@ -1512,8 +1513,12 @@ var _ = Describe("Resource Controller Error Handling", func() {
 			},
 			Spec: v1alpha1.ResourceSpec{
 				ComponentRef: corev1.LocalObjectReference{Name: "not-ready-component"},
-				Resource:     v1alpha1.ResourceID{},
-				Interval:     metav1.Duration{Duration: 10 * 60_000_000_000},
+				Resource: v1alpha1.ResourceID{
+					ByReference: v1alpha1.ResourceReference{
+						Resource: runtime.Identity{"name": "test-resource-not-ready"},
+					},
+				},
+				Interval: metav1.Duration{Duration: 10 * time.Minute},
 			},
 		}
 		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -1528,6 +1533,7 @@ var _ = Describe("Resource Controller Error Handling", func() {
 		namespace := test.NamespaceForTest(ctx)
 		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
 
+		repoSpec := apiextensionsv1.JSON{Raw: []byte(`{"type":"ociRegistry","url":"ghcr.io/test"}`)}
 		component := &v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "deleting-component",
@@ -1537,11 +1543,16 @@ var _ = Describe("Resource Controller Error Handling", func() {
 				RepositoryRef: corev1.LocalObjectReference{Name: "test-repo"},
 				Component:     "ocm.software/test",
 				Semver:        "1.0.0",
-				Interval:      metav1.Duration{Duration: 10 * 60_000_000_000},
+				Interval:      metav1.Duration{Duration: 10 * time.Minute},
 			},
 		}
 		Expect(k8sClient.Create(ctx, component)).To(Succeed())
 
+		component.Status.Component = v1alpha1.ComponentInfo{
+			Component:      "ocm.software/test",
+			Version:        "1.0.0",
+			RepositorySpec: &repoSpec,
+		}
 		status.MarkReady(recorder, component, "ready")
 		Expect(k8sClient.Status().Update(ctx, component)).To(Succeed())
 
@@ -1552,8 +1563,12 @@ var _ = Describe("Resource Controller Error Handling", func() {
 			},
 			Spec: v1alpha1.ResourceSpec{
 				ComponentRef: corev1.LocalObjectReference{Name: "deleting-component"},
-				Resource:     v1alpha1.ResourceID{},
-				Interval:     metav1.Duration{Duration: 10 * 60_000_000_000},
+				Resource: v1alpha1.ResourceID{
+					ByReference: v1alpha1.ResourceReference{
+						Resource: runtime.Identity{"name": "test-resource-deleting"},
+					},
+				},
+				Interval: metav1.Duration{Duration: 10 * time.Minute},
 			},
 		}
 		Expect(k8sClient.Create(ctx, resource)).To(Succeed())

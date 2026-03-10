@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -574,8 +575,12 @@ var _ = Describe("Deployer Controller Error Handling", func() {
 			},
 			Spec: v1alpha1.ResourceSpec{
 				ComponentRef: corev1.LocalObjectReference{Name: "test-component"},
-				Resource:     v1alpha1.ResourceID{},
-				Interval:     metav1.Duration{Duration: 10 * 60_000_000_000},
+				Resource: v1alpha1.ResourceID{
+					ByReference: v1alpha1.ResourceReference{
+						Resource: runtime.Identity{"name": "not-ready-resource"},
+					},
+				},
+				Interval: metav1.Duration{Duration: 10 * time.Minute},
 			},
 		}
 		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -617,8 +622,12 @@ var _ = Describe("Deployer Controller Error Handling", func() {
 			},
 			Spec: v1alpha1.ResourceSpec{
 				ComponentRef: corev1.LocalObjectReference{Name: "test-component"},
-				Resource:     v1alpha1.ResourceID{},
-				Interval:     metav1.Duration{Duration: 10 * 60_000_000_000},
+				Resource: v1alpha1.ResourceID{
+					ByReference: v1alpha1.ResourceReference{
+						Resource: runtime.Identity{"name": "deleting-resource"},
+					},
+				},
+				Interval: metav1.Duration{Duration: 10 * time.Minute},
 			},
 		}
 		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
