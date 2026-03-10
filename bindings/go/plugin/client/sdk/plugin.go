@@ -105,12 +105,11 @@ func (p *Plugin) Start(ctx context.Context) error {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	go func() {
+	go func() { //nolint:gosec // G118 - intentionally using context.Background for shutdown timeout independent of request context
 		sig := <-sigs
 
 		p.logger.InfoContext(ctx, "Received signal. Shutting down.", "signal", sig)
 
-		// wait for 5 seconds for the server to shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := p.GracefulShutdown(ctx); err != nil {

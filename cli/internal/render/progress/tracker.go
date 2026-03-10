@@ -64,7 +64,7 @@ type VisualizerFactory[T any] func(out io.Writer, total int) Visualizer[T]
 // IsTerminal reports whether the writer is connected to a terminal.
 func IsTerminal(w io.Writer) bool {
 	if f, ok := w.(*os.File); ok {
-		return term.IsTerminal(int(f.Fd()))
+		return term.IsTerminal(int(f.Fd())) //nolint:gosec // G115 - fd conversion is standard for terminal operations
 	}
 	return false
 }
