@@ -1483,6 +1483,90 @@ consumers:
 	})
 })
 
+var _ = Describe("Resource Controller Error Handling", func() {
+	It("should not requeue when the component is not ready", func(ctx SpecContext) {
+		namespace := test.NamespaceForTest(ctx)
+		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+
+		component := &v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "not-ready-component",
+				Namespace: namespace.GetName(),
+			},
+			Spec: v1alpha1.ComponentSpec{
+				RepositoryRef: corev1.LocalObjectReference{Name: "test-repo"},
+				Component:     "ocm.software/test",
+				Semver:        "1.0.0",
+				Interval:      metav1.Duration{Duration: 10 * 60_000_000_000},
+			},
+		}
+		Expect(k8sClient.Create(ctx, component)).To(Succeed())
+		DeferCleanup(func(ctx SpecContext) {
+			test.DeleteObject(ctx, k8sClient, component)
+		})
+
+		resource := &v1alpha1.Resource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-resource-not-ready",
+				Namespace: namespace.GetName(),
+			},
+			Spec: v1alpha1.ResourceSpec{
+				ComponentRef: corev1.LocalObjectReference{Name: "not-ready-component"},
+				Resource:     v1alpha1.ResourceID{},
+				Interval:     metav1.Duration{Duration: 10 * 60_000_000_000},
+			},
+		}
+		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		DeferCleanup(func(ctx SpecContext) {
+			test.DeleteObject(ctx, k8sClient, resource)
+		})
+
+		test.WaitForNotReadyObject(ctx, k8sClient, resource, v1alpha1.ResourceIsNotAvailable)
+	})
+
+	It("should not requeue when the component is being deleted", func(ctx SpecContext) {
+		namespace := test.NamespaceForTest(ctx)
+		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+
+		component := &v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "deleting-component",
+				Namespace: namespace.GetName(),
+			},
+			Spec: v1alpha1.ComponentSpec{
+				RepositoryRef: corev1.LocalObjectReference{Name: "test-repo"},
+				Component:     "ocm.software/test",
+				Semver:        "1.0.0",
+				Interval:      metav1.Duration{Duration: 10 * 60_000_000_000},
+			},
+		}
+		Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+		status.MarkReady(recorder, component, "ready")
+		Expect(k8sClient.Status().Update(ctx, component)).To(Succeed())
+
+		resource := &v1alpha1.Resource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-resource-deleting",
+				Namespace: namespace.GetName(),
+			},
+			Spec: v1alpha1.ResourceSpec{
+				ComponentRef: corev1.LocalObjectReference{Name: "deleting-component"},
+				Resource:     v1alpha1.ResourceID{},
+				Interval:     metav1.Duration{Duration: 10 * 60_000_000_000},
+			},
+		}
+		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		DeferCleanup(func(ctx SpecContext) {
+			test.DeleteObject(ctx, k8sClient, resource)
+		})
+
+		Expect(k8sClient.Delete(ctx, component)).To(Succeed())
+
+		test.WaitForNotReadyObject(ctx, k8sClient, resource, v1alpha1.ResourceIsNotAvailable)
+	})
+})
+
 func mustToJSON(v string) apiextensionsv1.JSON {
 	raw, err := json.Marshal(v)
 	Expect(err).ToNot(HaveOccurred())
