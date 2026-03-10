@@ -612,3 +612,7 @@ integrators
 taskfile
 ociimage
 statefulset
+csl
+async
+netlify
+oss
