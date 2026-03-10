@@ -45,7 +45,9 @@ func ToOCI() cel.EnvOption {
 // of those components as strings.
 // If the input is:
 //   - string: the entire value is treated as the reference string
-//   - map[string]any: must contain an "imageReference" key with a string value
+//   - map[string]any with "imageReference": treated as an OCIImage access
+//   - map[string]any with "globalAccess": treated as a localBlob access,
+//     the "imageReference" is extracted from the nested "globalAccess" map
 //
 // The function returns an error if parsing fails or the map is malformed.
 func BindingToOCI(lhs ref.Val) ref.Val {
@@ -56,16 +58,11 @@ func BindingToOCI(lhs ref.Val) ref.Val {
 	case string:
 		reference = v
 	case map[string]any:
-		// Expect a key "imageReference"
-		fromMap, ok := v["imageReference"]
-		if !ok {
-			return types.NewErr("expected map with key 'imageReference', got %v", v)
+		ref, err := extractImageReference(v)
+		if err != nil {
+			return types.NewErr("%s", err)
 		}
-		// Ensure the value is a string
-		reference, ok = fromMap.(string)
-		if !ok {
-			return types.NewErr("expected map with key 'imageReference' to be a string, got %T", fromMap)
-		}
+		reference = ref
 	default:
 		return types.NewErr("expected string or map with key 'imageReference', got %T", lhs.Value())
 	}
@@ -130,4 +127,47 @@ func BindingToOCI(lhs ref.Val) ref.Val {
 	})
 
 	return mv
+}
+
+// extractImageReference extracts an OCI image reference from a map.
+// It supports both OCIImage access (with "imageReference" key) and localBlob
+// access (with "globalAccess" containing an "imageReference" key, or
+// "referenceName" as a fallback).
+func extractImageReference(m map[string]any) (string, error) {
+	// Direct imageReference (OCIImage access)
+	if imgRef, ok := m["imageReference"]; ok {
+		ref, ok := imgRef.(string)
+		if !ok {
+			return "", fmt.Errorf("expected 'imageReference' to be a string, got %T", imgRef)
+		}
+		return ref, nil
+	}
+
+	// localBlob access: prefer globalAccess.imageReference, fall back to referenceName
+	if ga, ok := m["globalAccess"]; ok {
+		gaMap, ok := ga.(map[string]any)
+		if !ok {
+			return "", fmt.Errorf("expected 'globalAccess' to be a map, got %T", ga)
+		}
+		if imgRef, ok := gaMap["imageReference"]; ok {
+			ref, ok := imgRef.(string)
+			if !ok {
+				return "", fmt.Errorf("expected 'globalAccess.imageReference' to be a string, got %T", imgRef)
+			}
+			return ref, nil
+		}
+	}
+
+	// localBlob access: fall back to referenceName
+	if refName, ok := m["referenceName"]; ok {
+		ref, ok := refName.(string)
+		if !ok {
+			return "", fmt.Errorf("expected 'referenceName' to be a string, got %T", refName)
+		}
+		if ref != "" {
+			return ref, nil
+		}
+	}
+
+	return "", fmt.Errorf("expected map with key 'imageReference', 'globalAccess.imageReference', or 'referenceName', got %v", m)
 }
