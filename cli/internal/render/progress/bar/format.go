@@ -39,10 +39,10 @@ func TreeErrorFormatter(err error) string {
 				continue
 			}
 			if j == 0 {
-				sb.WriteString(fmt.Sprintf("%s%s%s↳%s %s\n", base, indent, dim, reset, line))
+				fmt.Fprintf(&sb, "%s%s%s↳%s %s\n", base, indent, dim, reset, line)
 			} else {
 				// Continuation lines get extra indent
-				sb.WriteString(fmt.Sprintf("%s%s  %s%s\n", base, indent, dim, line+reset))
+				fmt.Fprintf(&sb, "%s%s  %s%s\n", base, indent, dim, line+reset)
 			}
 		}
 	}
@@ -68,9 +68,9 @@ func FramedText(title string, content string, baseIndent int) string {
 		titleLines := strings.Split(title, "\n")
 		for i, line := range titleLines {
 			if i == 0 {
-				sb.WriteString(fmt.Sprintf("%s▶ %s\n", indent, line))
+				fmt.Fprintf(&sb, "%s▶ %s\n", indent, line)
 			} else {
-				sb.WriteString(fmt.Sprintf("%s  %s\n", indent, line)) // align with icon width
+				fmt.Fprintf(&sb, "%s  %s\n", indent, line) // align with icon width
 			}
 		}
 	}
@@ -87,16 +87,16 @@ func FramedText(title string, content string, baseIndent int) string {
 	}
 
 	// Top border
-	sb.WriteString(fmt.Sprintf("%s┌%s┐\n", indent, strings.Repeat("─", maxWidth+2)))
+	fmt.Fprintf(&sb, "%s┌%s┐\n", indent, strings.Repeat("─", maxWidth+2))
 
 	// Content lines
 	for _, line := range lines {
 		padding := strings.Repeat(" ", maxWidth-len(line))
-		sb.WriteString(fmt.Sprintf("%s│ %s%s │\n", indent, line, padding))
+		fmt.Fprintf(&sb, "%s│ %s%s │\n", indent, line, padding)
 	}
 
 	// Bottom border
-	sb.WriteString(fmt.Sprintf("%s└%s┘\n", indent, strings.Repeat("─", maxWidth+2)))
+	fmt.Fprintf(&sb, "%s└%s┘\n", indent, strings.Repeat("─", maxWidth+2))
 
 	return sb.String()
 }
