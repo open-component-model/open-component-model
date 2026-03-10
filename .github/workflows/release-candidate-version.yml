@@ -28,11 +28,17 @@ on:
         description: "Name of the changelog artifact"
         value: ${{ jobs.prepare.outputs.changelog_artifact }}
       set_latest:
-        description: "Whether to set :latest tag (true if this version >= highest existing final)"
+        description: "Whether to set latest tag (true if this version >= highest existing version incl. RCs)"
         value: ${{ jobs.prepare.outputs.set_latest }}
-      highest_final_version:
-        description: "Highest existing final version for this component (for logging)"
-        value: ${{ jobs.prepare.outputs.highest_final_version }}
+      set_stable:
+        description: "Whether to set stable tag (true if this version >= highest existing final version)"
+        value: ${{ jobs.prepare.outputs.set_stable }}
+      highest_version:
+        description: "Highest existing version including RCs for this component (for logging)"
+        value: ${{ jobs.prepare.outputs.highest_version }}
+      highest_stable_version:
+        description: "Highest existing final (non-prerelease) version for this component (for logging)"
+        value: ${{ jobs.prepare.outputs.highest_stable_version }}
 
 jobs:
   prepare:
@@ -47,7 +53,9 @@ jobs:
       promotion_tag: ${{ steps.compute.outputs.promotion_tag }}
       changelog_artifact: changelog-${{ steps.compute.outputs.new_version }}
       set_latest: ${{ steps.latest.outputs.set_latest }}
-      highest_final_version: ${{ steps.latest.outputs.highest_final_version }}
+      set_stable: ${{ steps.latest.outputs.set_stable }}
+      highest_version: ${{ steps.latest.outputs.highest_version }}
+      highest_stable_version: ${{ steps.latest.outputs.highest_stable_version }}
     steps:
       # Checkout the repository and target branch
       - name: Checkout Repository
@@ -124,7 +132,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
-      - name: Determine if release should be latest
+      - name: Determine floating tags (latest, stable)
         id: latest
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
@@ -134,4 +142,4 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
-            await script.determineLatestRelease({ core, github, context });
+            await script.determineFloatingTags({ core, github, context });

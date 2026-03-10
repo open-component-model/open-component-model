@@ -34,3 +34,6 @@ go.work.sum
 dist/
 output/
 /.project
+
+# helm/package backup (restored by trap, but gitignore as safety net)
+chart/values.yaml.bak

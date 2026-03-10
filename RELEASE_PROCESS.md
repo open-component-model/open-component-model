@@ -145,9 +145,10 @@ Release candidates are created for both components sequentially, in lock-step.
    - `dry_run = true` first to validate
    - `dry_run = false` for actual release
    - `Branch to release from` set to the release branch created in step 1 (e.g., `releases/v0.17`)
-2. Run workflow **Controller Release** with equivalent inputs
-   (once `controller-release.yml` is available).
+2. Run workflow **[Controller Release](https://github.com/open-component-model/open-component-model/actions/workflows/controller-release.yml)** with equivalent inputs.
 3. Verify both pre-releases were created successfully on the GitHub Releases page.
+   - CLI assets: platform binaries (`ocm-*`) and OCI tarballs
+   - Controller assets: Helm chart (`.tgz`)
 
 > [!CAUTION]
 > **Always do a dry-run first** before the actual release.
@@ -189,9 +190,12 @@ users from accidentally downgrading when pulling `latest`.
    - `prepare`: compute next RC metadata + changelog.
    - `tag_rc`: create/push RC tag (skipped on dry-run).
    - `build`: call `cli.yml` to build binaries and OCI artifacts.
-   - `release_rc`: publish GitHub pre-release with artifacts.
+   - `release_rc`: publish GitHub pre-release with binary and OCI tarball assets.
 - **Controller path (`controller-release.yml`)**
-   - Mirrors the same RC flow for controller artifacts (image + Helm chart).
+   - `prepare`: compute next RC metadata + changelog (shared `release-candidate-version.yml`).
+   - `tag_rc`: create/push RC tag via `release` environment gate (skipped on dry-run).
+   - `build`: call `kubernetes-controller.yml` to build the controller image and Helm chart.
+   - `release_rc`: publish GitHub pre-release with Helm chart `.tgz` as asset.
 - If one component fails, do not proceed to final promotion.
 
 </details>
@@ -202,32 +206,46 @@ Final promotion takes an existing RC and promotes it to a stable release.
 The workflow verifies attestations before creating any final artifacts.
 
 The final promotion is triggered automatically after the RC phase completes
-and the `cli/release` environment gate is approved.
+and the respective environment gate is approved.
 
 1. Wait for the RC to be tested (typically 1 sprint).
-2. Go to the workflow run in GitHub Actions.
+2. Go to the **[CLI Release](https://github.com/open-component-model/open-component-model/actions/workflows/cli-release.yml)** workflow run in GitHub Actions.
 3. Approve the `cli/release` environment gate (requires reviewer approval + wait timer).
-4. The workflow will automatically:
-   - Verify RC attestations
+4. The CLI workflow will automatically:
+   - Verify binary and OCI image attestations
    - Create final tag from RC commit
    - Promote OCI image tags
-   - Publish final GitHub release
-5. Repeat for **Controller Release** once `controller-release.yml` is available.
-6. Verify both final releases are published on the GitHub Releases page.
+   - Publish final GitHub release with binaries
+5. Go to the **[Controller Release](https://github.com/open-component-model/open-component-model/actions/workflows/controller-release.yml)** workflow run.
+6. Approve the `release` environment gate (requires reviewer approval).
+7. The Controller workflow will automatically:
+   - Verify image and Helm chart attestations
+   - Create final tag from RC commit
+   - Promote controller image tags
+   - Re-package the Helm chart with the final version, push it to OCI, and attest it
+   - Publish final GitHub release with the final Helm chart
+8. Verify both final releases are published on the GitHub Releases page.
 
-> 🔐 **Security:** The workflow automatically verifies all attestations from the RC release
-> before proceeding. If verification fails, the promotion is aborted.
+> [!IMPORTANT]
+> 🔐 **Security:** Both workflows automatically verify all attestations from their
+> respective RC releases before proceeding. If verification fails, the promotion is aborted.
 
 <details>
 <summary>What happens in the background?</summary>
 
 - **CLI path (`cli-release.yml`)**
-   - `verify_attestations`: verify binary and OCI image attestations (gated by environment approval).
+   - `verify_attestations`: verify binary and OCI image attestations (gated by `cli/release` environment).
    - `promote_final`: create final tag from RC commit, promote OCI image tags.
    - `release_final`: publish final GitHub release with assets from RC.
 - **Controller path (`controller-release.yml`)**
-   - Mirrors the same final promotion pattern for controller image + Helm chart.
-   - Due to Helm specifics, the chart cannot be promoted from RC to Final, but is re-packaged, re-attested and released directly in the final promotion step.
+   - `verify_attestations`: verify controller image and Helm chart attestations (gated by `release` environment).
+   - `promote_and_release_final` (single combined job):
+     - Create final tag from RC commit.
+     - Promote controller image tags via ORAS.
+     - Re-package Helm chart with final version strings (`Chart.yaml`, `values.yaml`), push to OCI registry, and create build-provenance attestation.
+     - Run `helm/verify-promote` to validate RC-to-Final chart consistency.
+     - Publish final GitHub release with the re-packaged Helm chart.
+   - Due to Helm specifics, the chart cannot simply be re-tagged from RC to Final — it must be re-packaged and re-attested because it embeds version strings.
 - Final is only valid when both components are promoted in the same cycle.
 
 </details>
@@ -237,6 +255,7 @@ and the `cli/release` environment gate is approved.
 Patch releases address critical fixes for an already-released version.
 The fix must always land on `main` first, then be cherry-picked to the release branch.
 
+> [!IMPORTANT]
 > ⚠️ **Older version lines:** When creating a patch for an older release line
 > (e.g., `v0.16.1` when `v0.17.0` exists), the release will NOT be marked as "latest"
 > on GitHub and the `latest` OCI tags will remain on the newer version.
@@ -303,8 +322,10 @@ If something goes wrong during a release, check the following common issues:
 **Attestation verification failed**
 - Verify that the RC release binaries have valid build provenance attestations.
 - Check that the OCI image was pushed to GHCR with attestation metadata.
-- Use `gh attestation verify <file> --repo <repo>` to manually verify binaries.
+- Use `gh attestation verify <file> --repo <repo>` to manually verify CLI binaries.
 - Use `gh attestation verify oci://<image>@<digest> --repo <repo>` to verify OCI images.
+- For the controller, also verify the Helm chart OCI artifact:
+  `gh attestation verify oci://<chart-repo>@<chart-digest> --repo <repo>`
 - If attestations are missing, create a new RC (attestations are generated during build).
 
 **Retracting a release**

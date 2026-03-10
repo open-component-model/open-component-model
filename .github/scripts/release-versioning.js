@@ -217,11 +217,74 @@ export function parseVersion(tag) {
 }
 
 // --------------------------
-// Latest release determination
+// Semver comparison with prerelease support
 // --------------------------
 
-/** GitHub Actions entrypoint for determining if release should be latest */
-export async function determineLatestRelease({ core, github, context }) {
+/**
+ * Compare two semver version strings, including RC prerelease suffixes.
+ * Returns a negative number if a < b, positive if a > b, 0 if equal.
+ *
+ * Comparison rules (per semver spec):
+ *  - Major.minor.patch are compared numerically.
+ *  - A prerelease version (e.g., 0.2.0-rc.1) has lower precedence
+ *    than the same version without prerelease (e.g., 0.2.0).
+ *  - RC numbers are compared numerically (rc.2 > rc.1).
+ *
+ * @param {string} a - Version string (e.g., "0.2.0", "0.2.0-rc.1")
+ * @param {string} b - Version string
+ * @returns {number} Comparison result (-1, 0, or 1)
+ */
+export function compareSemver(a, b) {
+    const partsA = parseVersion(`v${a}`);
+    const partsB = parseVersion(`v${b}`);
+
+    // Compare major.minor.patch
+    for (let i = 0; i < 3; i++) {
+        const va = partsA[i] || 0;
+        const vb = partsB[i] || 0;
+        if (va > vb) return 1;
+        if (va < vb) return -1;
+    }
+
+    // Same base version — compare prerelease:
+    // no prerelease > any prerelease (per semver spec)
+    const rcA = extractRcNumber(a);
+    const rcB = extractRcNumber(b);
+
+    if (rcA === 0 && rcB === 0) return 0;  // both final
+    if (rcA === 0) return 1;               // a is final, b is RC → a wins
+    if (rcB === 0) return -1;              // b is final, a is RC → b wins
+
+    // Both are RCs — compare RC numbers
+    if (rcA > rcB) return 1;
+    if (rcA < rcB) return -1;
+    return 0;
+}
+
+/**
+ * Extract RC number from a version string. Returns 0 for non-RC versions.
+ * @param {string} version - e.g., "0.2.0-rc.3" or "0.2.0"
+ * @returns {number}
+ */
+function extractRcNumber(version) {
+    const match = version?.match(/-rc\.(\d+)/);
+    return match ? parseInt(match[1], 10) : 0;
+}
+
+// --------------------------
+// Floating tag determination
+// --------------------------
+
+/**
+ * GitHub Actions entrypoint for determining which floating tags to set.
+ *
+ * Outputs:
+ *   set_latest      - "true" if this version >= the highest existing version (including RCs)
+ *   set_stable      - "true" if this version >= the highest existing final (non-prerelease) version
+ *   highest_version - Highest existing version including RCs, for logging
+ *   highest_stable_version - Highest existing final version, for logging
+ */
+export async function determineFloatingTags({ core, github, context }) {
     const { COMPONENT_PATH: componentPath, PROMOTION_VERSION: promotionVersion } = process.env;
     if (!componentPath || !promotionVersion) return core.setFailed("Missing COMPONENT_PATH or PROMOTION_VERSION");
 
@@ -234,26 +297,90 @@ export async function determineLatestRelease({ core, github, context }) {
         return;
     }
 
-    const highestFinal = extractHighestFinalVersion(releases, tagPrefix);
-    const setLatest = shouldSetLatest(promotionVersion, highestFinal);
+    const highestStable = extractHighestStableVersion(releases, tagPrefix);
+    const highestVersion = extractHighestVersion(releases, tagPrefix);
+    const setStable = shouldSetStable(promotionVersion, highestStable);
+    const setLatest = shouldSetLatest(promotionVersion, highestVersion);
 
     core.setOutput('set_latest', setLatest ? 'true' : 'false');
-    core.setOutput('highest_final_version', highestFinal || '(none)');
-    core.info(setLatest ? `✅ Will set :latest (${promotionVersion} >= ${highestFinal || 'none'})` : `⚠️ Will NOT set :latest (${promotionVersion} < ${highestFinal})`);
+    core.setOutput('set_stable', setStable ? 'true' : 'false');
+    core.setOutput('highest_version', highestVersion || '(none)');
+    core.setOutput('highest_stable_version', highestStable || '(none)');
 
-    await core.summary.addRaw('---').addEOL().addHeading('Latest Tag Decision', 2)
-        .addTable([[{ data: 'Field', header: true }, { data: 'Value', header: true }], ['Final Version', promotionVersion], ['Highest Final Version', highestFinal || '(none)'], ['Will Set Latest', setLatest ? '✅ Yes' : '⚠️ No']]).write();
+    core.info(setLatest
+        ? `✅ Will set :latest (${promotionVersion} >= ${highestVersion || 'none'})`
+        : `⚠️ Will NOT set :latest (${promotionVersion} < ${highestVersion})`);
+    core.info(setStable
+        ? `✅ Will set :stable (${promotionVersion} >= ${highestStable || 'none'})`
+        : `⚠️ Will NOT set :stable (${promotionVersion} < ${highestStable})`);
+
+    await core.summary.addRaw('---').addEOL().addHeading('Floating Tag Decision', 2)
+        .addTable([
+            [{ data: 'Field', header: true }, { data: 'Value', header: true }],
+            ['Promotion Version', promotionVersion],
+            ['Highest Version (incl. RC)', highestVersion || '(none)'],
+            ['Highest Stable Version', highestStable || '(none)'],
+            ['Will Set :latest', setLatest ? '✅ Yes' : '⚠️ No'],
+            ['Will Set :stable', setStable ? '✅ Yes' : '⚠️ No'],
+        ]).write();
 }
 
-/** Extract highest final (non-prerelease) version from releases */
-export function extractHighestFinalVersion(releases, tagPrefix) {
-    const versions = releases.filter(r => !r.prerelease && r.tag_name.startsWith(tagPrefix))
-        .map(r => r.tag_name.replace(tagPrefix, '')).filter(v => /^\d+\.\d+\.\d+$/.test(v));
+/**
+ * Extract highest final (non-prerelease) version from GitHub releases.
+ * Only considers versions matching the given tag prefix.
+ *
+ * @param {Array<{prerelease: boolean, tag_name: string}>} releases
+ * @param {string} tagPrefix - e.g., "kubernetes/controller/v"
+ * @returns {string} Highest stable version (e.g., "0.2.0") or empty string
+ */
+export function extractHighestStableVersion(releases, tagPrefix) {
+    const versions = releases
+        .filter(r => !r.prerelease && r.tag_name.startsWith(tagPrefix))
+        .map(r => r.tag_name.replace(tagPrefix, ''))
+        .filter(v => /^\d+\.\d+\.\d+$/.test(v));
     if (!versions.length) return '';
-    return versions.sort((a, b) => isStableNewer(`v${a}`, `v${b}`) ? 1 : -1).pop();
+    return versions.sort((a, b) => compareSemver(a, b)).pop();
 }
 
-/** Determine if promotion version should be tagged as latest */
-export function shouldSetLatest(promotionVersion, highestFinal) {
-    return !highestFinal || !isStableNewer(`v${highestFinal}`, `v${promotionVersion}`);
+/**
+ * Extract highest version (including RC prereleases) from GitHub releases.
+ * Only considers versions matching the given tag prefix.
+ *
+ * @param {Array<{prerelease: boolean, tag_name: string}>} releases
+ * @param {string} tagPrefix - e.g., "kubernetes/controller/v"
+ * @returns {string} Highest version (e.g., "0.3.0-rc.1" or "0.2.0") or empty string
+ */
+export function extractHighestVersion(releases, tagPrefix) {
+    const versions = releases
+        .filter(r => r.tag_name.startsWith(tagPrefix))
+        .map(r => r.tag_name.replace(tagPrefix, ''))
+        .filter(v => /^\d+\.\d+\.\d+(-rc\.\d+)?$/.test(v));
+    if (!versions.length) return '';
+    return versions.sort((a, b) => compareSemver(a, b)).pop();
+}
+
+/**
+ * Determine if the promotion version should receive the :latest floating tag.
+ * Returns true when the promotion version is >= the highest existing version (including RCs).
+ *
+ * @param {string} promotionVersion - Version being promoted (e.g., "0.2.0")
+ * @param {string} highestVersion - Current highest version including RCs (e.g., "0.3.0-rc.1")
+ * @returns {boolean}
+ */
+export function shouldSetLatest(promotionVersion, highestVersion) {
+    if (!highestVersion) return true;
+    return compareSemver(promotionVersion, highestVersion) >= 0;
+}
+
+/**
+ * Determine if the promotion version should receive the :stable floating tag.
+ * Returns true when the promotion version is >= the highest existing final (non-prerelease) version.
+ *
+ * @param {string} promotionVersion - Version being promoted (e.g., "0.2.0")
+ * @param {string} highestStable - Current highest stable version (e.g., "0.1.0")
+ * @returns {boolean}
+ */
+export function shouldSetStable(promotionVersion, highestStable) {
+    if (!highestStable) return true;
+    return compareSemver(promotionVersion, highestStable) >= 0;
 }
