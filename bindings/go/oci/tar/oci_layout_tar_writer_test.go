@@ -632,17 +632,28 @@ func BenchmarkOCILayoutWriter_Push_Concurrent(b *testing.B) {
 				}
 				writer := NewOCILayoutWriter(io.Discard, tmpFile)
 
-				var wg sync.WaitGroup
+				var (
+					wg       sync.WaitGroup
+					mu       sync.Mutex
+					firstErr error
+				)
 				for j := range numBlobs {
 					wg.Add(1)
 					go func(idx int) {
 						defer wg.Done()
 						if err := writer.Push(b.Context(), blobs[idx].desc, bytes.NewReader(blobs[idx].data)); err != nil {
-							b.Error(err)
+							mu.Lock()
+							if firstErr == nil {
+								firstErr = err
+							}
+							mu.Unlock()
 						}
 					}(j)
 				}
 				wg.Wait()
+				if firstErr != nil {
+					b.Fatal(firstErr)
+				}
 				if err := writer.Close(); err != nil {
 					b.Fatal(err)
 				}

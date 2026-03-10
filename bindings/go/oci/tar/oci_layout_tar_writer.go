@@ -280,6 +280,13 @@ func (s *OCILayoutWriter) Exists(_ context.Context, target ociImageSpecV1.Descri
 }
 
 func (s *OCILayoutWriter) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
+	s.closedMu.Lock()
+	closed := s.closed
+	s.closedMu.Unlock()
+	if closed {
+		return fmt.Errorf("tag on closed writer: %w", errdef.ErrUnsupported)
+	}
+
 	if reference == "" {
 		return errdef.ErrMissingReference
 	}

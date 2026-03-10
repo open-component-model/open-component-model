@@ -49,9 +49,9 @@ func BenchmarkRealImage_CopyGraph(b *testing.B) {
 
 	b.Logf("image: %s, manifest: %s, size: %d", ref, desc.Digest, desc.Size)
 
-	benchCopy := func(b *testing.B, src oras.ReadOnlyGraphTarget, root ociImageSpecV1.Descriptor, concurrency int) {
+	benchCopy := func(b *testing.B, src oras.ReadOnlyGraphTarget, root ociImageSpecV1.Descriptor, concurrency int, scratchDir string) {
 		b.Helper()
-		writer, err := NewOCILayoutWriterWithTempFile(io.Discard, b.TempDir())
+		writer, err := NewOCILayoutWriterWithTempFile(io.Discard, scratchDir)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -67,9 +67,10 @@ func BenchmarkRealImage_CopyGraph(b *testing.B) {
 
 	for _, concurrency := range []int{1, 4, 8} {
 		b.Run(fmt.Sprintf("concurrency_%d", concurrency), func(b *testing.B) {
+			scratchDir := b.TempDir()
 			b.ResetTimer()
 			for range b.N {
-				benchCopy(b, repo, desc, concurrency)
+				benchCopy(b, repo, desc, concurrency, scratchDir)
 			}
 		})
 	}
