@@ -284,8 +284,7 @@ func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *ty
 	}
 
 	// start log streaming once the plugin is up and running.
-	// use the baseCtx here from the manager here so the streaming isn't stopped when the request is stopped.
-	go plugins.StartLogStreamer(context.TODO(), plugin)
+	go plugins.StartLogStreamer(context.TODO(), plugin) //nolint:gosec // G118 - using context.TODO() because plugin baseCtx is not yet exposed.
 
 	repoPlugin := NewConstructionRepositoryPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{

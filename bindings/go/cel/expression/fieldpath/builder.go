@@ -16,7 +16,7 @@ func Build(segments []Segment) string {
 
 	for i, segment := range segments {
 		if segment.Index != nil {
-			b.WriteString(fmt.Sprintf("[%d]", *segment.Index))
+			b.WriteString(fmt.Sprintf("[%d]", *segment.Index)) //nolint:staticcheck // leave it consistent with the rest
 			continue
 		}
 		if segment.Name == "" {
