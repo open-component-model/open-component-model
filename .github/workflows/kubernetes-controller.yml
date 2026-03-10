@@ -105,6 +105,7 @@ jobs:
             git status && git diff
             exit 1
           fi
+          echo "No uncommitted changes detected"
 
   build:
     name: Build Controller
@@ -415,5 +416,4 @@ jobs:
     needs: publish
     uses: ./.github/workflows/conformance.yml
     with:
-      toolkit_image: "ghcr.io/${{ github.repository_owner }}/kubernetes/controller/chart:${{ needs.publish.outputs.chart_version }}"
-    secrets: inherit
+      toolkit_image: "ghcr.io/${{ github.repository_owner }}/kubernetes/controller/chart:${{ needs.publish.outputs.chart_version }}
