@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/cli
 
-go 1.25.7
+go 1.26.1
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
@@ -29,7 +29,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260304112256-b1226ed291db
-	ocm.software/open-component-model/bindings/go/oci v0.0.33
+	ocm.software/open-component-model/bindings/go/oci v0.0.34
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260304112256-b1226ed291db

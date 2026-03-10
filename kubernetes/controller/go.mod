@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/kubernetes/controller
 
-go 1.25.7
+go 1.26.1
 
 // Replace digest lib to master to gather access to BLAKE3.
 // xref: https://github.com/opencontainers/go-digest/pull/66
@@ -39,7 +39,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260304112256-b1226ed291db
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260304112256-b1226ed291db
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/oci v0.0.33
+	ocm.software/open-component-model/bindings/go/oci v0.0.34
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260304112256-b1226ed291db

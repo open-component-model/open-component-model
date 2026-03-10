@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/oci/integration
 
-go 1.25.7
+go 1.26.1
 
 require (
 	github.com/nlepage/go-tarfs v1.2.1
@@ -16,7 +16,7 @@ require (
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260304112256-b1226ed291db
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/oci v0.0.33
+	ocm.software/open-component-model/bindings/go/oci v0.0.34
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/runtime v0.0.6
 	oras.land/oras-go/v2 v2.6.0

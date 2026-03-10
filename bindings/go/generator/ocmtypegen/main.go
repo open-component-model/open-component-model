@@ -72,11 +72,11 @@ func main() {
 		if len(types) == 0 {
 			continue
 		}
-		slog.Debug("Generating", "pkg", pkgName, "dir", pkgDir, "types", types)
+		slog.Debug("Generating", "pkg", pkgName, "dir", pkgDir, "types", types) //nolint:gosec // G706 - values from internal AST parsing, not user-controlled
 
 		err = generateCode(pkgDir, pkgName, types)
 		if err != nil {
-			slog.Error("Error generating", "pkg", pkgName, "dir", pkgDir, "error", err)
+			slog.Error("Error generating", "pkg", pkgName, "dir", pkgDir, "error", err) //nolint:gosec // G706 - values from internal AST parsing
 		}
 	}
 }
@@ -121,7 +121,7 @@ func scanSinglePackage(folder string) (string, []string, error) {
 
 				structType, ok := typeSpec.Type.(*ast.StructType)
 				if !ok || !hasRuntimeTypeField(structType) {
-					slog.Info("skipping type", "name", typeSpec.Name.Name, "reason", "not a struct with runtime.Type field")
+					slog.Info("skipping type", "name", typeSpec.Name.Name, "reason", "not a struct with runtime.Type field") //nolint:gosec // G706 - type name from parsed Go AST
 					continue
 				}
 
@@ -137,6 +137,7 @@ func scanSinglePackage(folder string) (string, []string, error) {
 func findGoPackages(root string) ([]string, error) {
 	var packages []string
 
+	root = filepath.Clean(root)
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil || !info.IsDir() {
 			return err
@@ -203,7 +204,7 @@ func getImportPath(folder string) (string, error) {
 
 	dir := absFolder
 	for {
-		goModPath := filepath.Join(dir, "go.mod")
+		goModPath := filepath.Clean(filepath.Join(dir, "go.mod"))
 		if _, err := os.Stat(goModPath); err == nil {
 			modulePath, err := readModulePath(goModPath)
 			if err != nil {
@@ -230,7 +231,7 @@ func getImportPath(folder string) (string, error) {
 
 // readModulePath reads the module path declared in a go.mod file.
 func readModulePath(goModPath string) (string, error) {
-	file, err := os.Open(goModPath)
+	file, err := os.Open(filepath.Clean(goModPath))
 	if err != nil {
 		return "", err
 	}
@@ -248,7 +249,7 @@ func readModulePath(goModPath string) (string, error) {
 
 // generateCode creates a file with SetType and GetType methods for the provided types.
 func generateCode(folder, pkg string, types []string) error {
-	outputPath := filepath.Join(folder, generatedFile)
+	outputPath := filepath.Clean(filepath.Join(folder, generatedFile))
 	out, err := os.Create(outputPath)
 	if err != nil {
 		return err

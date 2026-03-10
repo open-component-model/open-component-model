@@ -162,7 +162,7 @@ func GetOCMConfigPaths() ([]string, error) {
 //   - string: The file path if valid; otherwise, an empty string.
 func getFromEnvironment() string {
 	if env := os.Getenv(OCMConfigEnvironmentKey); env != "" {
-		if _, err := os.Stat(env); err == nil {
+		if _, err := os.Stat(filepath.Clean(env)); err == nil {
 			return env
 		}
 	}
@@ -229,7 +229,7 @@ func getFromExecutableDir() string {
 //   - string: The path of the first valid config file found; otherwise, an empty string.
 func checkConfigPaths(base string) string {
 	for _, name := range []string{OCMConfigFileName, NestedOCMConfigFileName} {
-		path := filepath.Join(base, name)
+		path := filepath.Clean(filepath.Join(base, name))
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}

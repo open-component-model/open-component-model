@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/helm
 
-go 1.25.7
+go 1.26.1
 
 require (
 	github.com/opencontainers/go-digest v1.0.0
@@ -13,7 +13,7 @@ require (
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260304112256-b1226ed291db
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/oci v0.0.33
+	ocm.software/open-component-model/bindings/go/oci v0.0.34
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/runtime v0.0.6
 	oras.land/oras-go/v2 v2.6.0
