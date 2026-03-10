@@ -327,7 +327,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
 		return r.DownloadResourceWithOCM(ctx, deployer, resource)
 	})
-	if errors.Is(err, resolution.ErrResolutionInProgress) || errors.Is(err, ErrComponentVersionSkew) {
+	if errors.Is(err, resolution.ErrResolutionInProgress) {
 		return ctrl.Result{}, nil
 	}
 	if err != nil {
