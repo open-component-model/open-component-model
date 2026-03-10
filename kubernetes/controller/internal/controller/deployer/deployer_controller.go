@@ -898,9 +898,11 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 	// status is not resolved through a reference path.
 	// In this case we do nothing and wait for the resource.
 	if len(resource.Spec.Resource.ByReference.ReferencePath) == 0 {
-		log.FromContext(ctx).Info("component version from resource status differs from component version from component, but no reference path provided: %s:%s != %s:%s",
-			resource.Status.Component.Component, resource.Status.Component.Version,
-			component.Status.Component.Component, component.Status.Component.Version)
+		log.FromContext(ctx).Info("component version from resource status differs from component version from component, but no reference path provided",
+			"resourceComponent", resource.Status.Component.Component,
+			"resourceVersion", resource.Status.Component.Version,
+			"componentComponent", component.Status.Component.Component,
+			"componentVersion", component.Status.Component.Version)
 
 		return nil, ErrComponentVersionSkew
 	}
