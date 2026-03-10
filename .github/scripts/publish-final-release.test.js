@@ -256,8 +256,7 @@ function mockCore() {
     chartRepo: "ghcr.io/org/chart",
     imageDigest: "sha256:abc123def456789012345",
     isLatest: true,
-    isStable: true,
-    highestStableVersion: "0.9.0",
+    highestFinalVersion: "0.9.0",
     uploadedCount: 2,
     releaseUrl: "https://example.com",
   });
@@ -278,8 +277,7 @@ function mockCore() {
     chartRepo: "",
     imageDigest: "",
     isLatest: false,
-    isStable: false,
-    highestStableVersion: "",
+    highestFinalVersion: "",
     uploadedCount: 0,
     releaseUrl: "https://example.com",
   });
@@ -300,8 +298,7 @@ function mockCore() {
     chartRepo: "ghcr.io/org/chart",
     imageDigest: "sha256:abc123def456789012345",
     isLatest: true,
-    isStable: false,
-    highestStableVersion: "1.1.0",
+    highestFinalVersion: "1.1.0",
     uploadedCount: 1,
     releaseUrl: "https://example.com",
   });
