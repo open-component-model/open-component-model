@@ -85,7 +85,7 @@ roleRef:
   name: ocm-controller-custom
 subjects:
   - kind: ServiceAccount
-    name: ocm-k8s-toolkit-chart-controller-manager
+    name: ocm-k8s-toolkit-controller-manager
     namespace: ocm-k8s-toolkit-system
 ```
 
