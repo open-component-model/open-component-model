@@ -3,14 +3,12 @@ name: Kubernetes Controller
 on:
   workflow_dispatch:
     inputs:
-      publish:
-        description: "Publish image and chart to registry (use for release branch builds)."
-        type: boolean
-        default: false
       debug:
         description: "Show cluster debug info after E2E tests (auto-enabled on failure)."
         type: boolean
         default: false
+  # Pushes on 'releases/v**' don't automatically publish,
+  # they just run the build and e2e test to validate the release branch
   push:
     branches:
       - main
