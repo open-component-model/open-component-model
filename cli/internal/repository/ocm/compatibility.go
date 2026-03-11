@@ -5,11 +5,11 @@ import (
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
 // NewComponentRepositoryResolver creates a provider that resolves and returns

@@ -1325,3 +1325,98 @@ data:
 		})
 	})
 })
+
+var _ = Describe("Deployer Controller Error Handling", func() {
+	It("should not requeue when the resource is not ready", func(ctx SpecContext) {
+		namespace := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "deployer-err-not-ready",
+			},
+		}
+		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+
+		resource := &v1alpha1.Resource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "not-ready-resource",
+				Namespace: namespace.GetName(),
+			},
+			Spec: v1alpha1.ResourceSpec{
+				ComponentRef: corev1.LocalObjectReference{Name: "test-component"},
+				Resource: v1alpha1.ResourceID{
+					ByReference: v1alpha1.ResourceReference{
+						Resource: runtime.Identity{"name": "not-ready-resource"},
+					},
+				},
+				Interval: metav1.Duration{Duration: 10 * time.Minute},
+			},
+		}
+		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		DeferCleanup(func(ctx SpecContext) {
+			test.DeleteObject(ctx, k8sClient, resource)
+		})
+
+		deployer := &v1alpha1.Deployer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-deployer-not-ready",
+			},
+			Spec: v1alpha1.DeployerSpec{
+				ResourceRef: v1alpha1.ObjectKey{
+					Name:      "not-ready-resource",
+					Namespace: namespace.GetName(),
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, deployer)).To(Succeed())
+		DeferCleanup(func(ctx SpecContext) {
+			test.DeleteObject(ctx, k8sClient, deployer)
+		})
+
+		test.WaitForNotReadyObject(ctx, k8sClient, deployer, v1alpha1.ResourceIsNotAvailable)
+	})
+
+	It("should not requeue when the resource is being deleted", func(ctx SpecContext) {
+		namespace := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "deployer-err-deleting",
+			},
+		}
+		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+
+		resource := &v1alpha1.Resource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "deleting-resource",
+				Namespace: namespace.GetName(),
+			},
+			Spec: v1alpha1.ResourceSpec{
+				ComponentRef: corev1.LocalObjectReference{Name: "test-component"},
+				Resource: v1alpha1.ResourceID{
+					ByReference: v1alpha1.ResourceReference{
+						Resource: runtime.Identity{"name": "deleting-resource"},
+					},
+				},
+				Interval: metav1.Duration{Duration: 10 * time.Minute},
+			},
+		}
+		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+		deployer := &v1alpha1.Deployer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-deployer-deleting",
+			},
+			Spec: v1alpha1.DeployerSpec{
+				ResourceRef: v1alpha1.ObjectKey{
+					Name:      "deleting-resource",
+					Namespace: namespace.GetName(),
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, deployer)).To(Succeed())
+		DeferCleanup(func(ctx SpecContext) {
+			test.DeleteObject(ctx, k8sClient, deployer)
+		})
+
+		Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+		test.WaitForNotReadyObject(ctx, k8sClient, deployer, v1alpha1.ResourceIsNotAvailable)
+	})
+})

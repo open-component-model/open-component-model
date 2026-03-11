@@ -612,3 +612,10 @@ integrators
 taskfile
 ociimage
 statefulset
+ConvertHelmToOCI
+GetHelmChart
+AddOCIArtifact
+csl
+async
+netlify
+oss

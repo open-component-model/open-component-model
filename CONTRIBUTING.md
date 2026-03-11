@@ -61,6 +61,7 @@ task cli:build
 ## Working with Modules
 
 This is a multi-module Go workspace. Each module in `bindings/go/` has its own:
+
 - `go.mod`
 - `Taskfile.yml` with `test`, `test/integration` (if applicable)
 
@@ -74,8 +75,8 @@ task test
 ## Code Style
 
 - Run `golangci-lint` before committing (CI enforces this)
-  - Convenience task to run over all modules: `task tools:lint`
-  - If you want to apply auto-fixing: `task tools:lint -- --fix`
+    - Convenience task to run over all modules: `task tools:lint`
+    - If you want to apply auto-fixing: `task tools:lint -- --fix`
 - Generated code lives alongside source — run `task generate` if you change schemas
 
 ## Pull Requests
@@ -90,10 +91,20 @@ CI will run linting, tests, and CodeQL analysis automatically.
 
 ## Architecture Decisions
 
-Design decisions are documented in [`docs/adr/`](docs/adr). If you're proposing a significant change, consider writing an ADR first.
+Design decisions are documented in [`docs/adr/`](docs/adr). If you're proposing a significant change, consider writing
+an ADR first.
 
 ## Questions?
 
 - Check existing [issues](https://github.com/open-component-model/open-component-model/issues)
-- See the [community docs](docs/community/) for SIGs and meetings or check out how to engage with us on our [website](https://ocm.software/community/engagement/)!
+- See the [community docs](docs/community/) for SIGs and meetings or check out how to engage with us on
+  our [website](https://ocm.software/community/engagement/)!
 - Review the [Code of Conduct](https://github.com/cncf/foundation/blob/main/code-of-conduct.md)
+
+| Variable           | Default              | Description                             |
+|--------------------|----------------------|-----------------------------------------|
+| `IMAGE_REGISTRY`   | `localhost:5001`     | Registry URL for pushing/pulling images |
+| `IMAGE_PREFIX`     | `acme.org/sovereign` | Image name prefix/organization          |
+| `PUSH_IMAGE`       | `true`               | Whether to push images to registry      |
+| `VERSION`          | `1.0.0`              | Component version                       |
+| `POSTGRES_VERSION` | `15`                 | PostgreSQL version to use               |

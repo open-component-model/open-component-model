@@ -254,14 +254,21 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResourceIsNotAvailable, err.Error())
 
-		if errors.Is(err, util.NotReadyError{}) || errors.Is(err, util.DeletionError{}) {
+		var notReadyErr util.NotReadyError
+		var deletionErr util.DeletionError
+		if errors.As(err, &notReadyErr) || errors.As(err, &deletionErr) {
 			logger.Info("component is not available", "error", err)
 
-			// return no requeue as we watch the object for changes anyway
 			return ctrl.Result{}, nil
 		}
 
 		return ctrl.Result{}, fmt.Errorf("failed to get ready component: %w", err)
+	}
+
+	if component.Status.Component.RepositorySpec == nil {
+		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResourceIsNotAvailable, "repository spec in component status must not be nil")
+
+		return ctrl.Result{}, fmt.Errorf("repository spec in component status must not be nil for component: %s", component.Name)
 	}
 
 	logger.Info("reconciling resource")
