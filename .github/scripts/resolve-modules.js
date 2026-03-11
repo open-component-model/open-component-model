@@ -33,7 +33,7 @@ export function getChangedFiles(baseRef) {
   }
 
   execSync(`git fetch origin ${baseRef} --depth=1`, { stdio: "pipe" });
-  const diff = execSync(`git diff --name-only origin/${baseRef}...HEAD`, {
+  const diff = execSync(`git diff --name-only origin/${baseRef}..HEAD`, {
     encoding: "utf-8",
   });
   return diff.split("\n").filter(Boolean);
