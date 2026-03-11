@@ -33,7 +33,9 @@ type CacheBackedRepository struct {
 	// verifications are used to verify against component version signatures and used as a cache key.
 	verifications []verification.Verification
 	// digest is used to verify the integrity of a referenced component version and is used as part of the cache key.
-	digest          *v2.Digest
+	digest *v2.Digest
+	// signingRegistry holds all plugins that implement capabilities to verify signatures and is used during resolution
+	// to verify component versions based on their signatures.
 	signingRegistry *signinghandler.SigningRegistry
 	workerPool      *workerpool.WorkerPool
 	logger          *logr.Logger
