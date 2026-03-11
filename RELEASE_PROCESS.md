@@ -210,7 +210,7 @@ and the respective environment gate is approved.
 
 1. Wait for the RC to be tested (typically 1 sprint).
 2. Go to the **[CLI Release](https://github.com/open-component-model/open-component-model/actions/workflows/cli-release.yml)** workflow run in GitHub Actions.
-3. Approve the `cli/release` environment gate (requires reviewer approval + wait timer).
+3. Approve the `release` environment gate (requires reviewer approval + wait timer).
 4. The CLI workflow will automatically:
    - Verify binary and OCI image attestations
    - Create final tag from RC commit
@@ -234,7 +234,7 @@ and the respective environment gate is approved.
 <summary>What happens in the background?</summary>
 
 - **CLI path (`cli-release.yml`)**
-   - `verify_attestations`: verify binary and OCI image attestations (gated by `cli/release` environment).
+   - `verify_attestations`: verify binary and OCI image attestations (gated by `release` environment).
    - `promote_final`: create final tag from RC commit, promote OCI image tags.
    - `release_final`: publish final GitHub release with assets from RC.
 - **Controller path (`controller-release.yml`)**
