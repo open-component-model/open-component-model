@@ -48,6 +48,8 @@ func ToOCI() cel.EnvOption {
 //   - map[string]any with "imageReference": treated as an OCIImage access
 //   - map[string]any with "globalAccess": treated as a localBlob access,
 //     the "imageReference" is extracted from the nested "globalAccess" map
+//   - map[string]any with "referenceName": treated as a localBlob access,
+//     the "referenceName" is used as the reference string
 //
 // The function returns an error if parsing fails or the map is malformed.
 func BindingToOCI(lhs ref.Val) ref.Val {
@@ -64,7 +66,7 @@ func BindingToOCI(lhs ref.Val) ref.Val {
 		}
 		reference = imgRef
 	default:
-		return types.NewErr("expected string or map with key 'imageReference', got %T", lhs.Value())
+		return types.NewErr("expected string or map with key 'imageReference', 'globalAccess', or 'referenceName', got %T", lhs.Value())
 	}
 
 	// Parse the OCI reference using the oci.ParseRef helper because if a reference consists of a tag and a digest,
@@ -145,27 +147,25 @@ func extractImageReference(m map[string]any) (string, error) {
 
 	// localBlob access: prefer globalAccess.imageReference, fall back to referenceName
 	if ga, ok := m["globalAccess"]; ok {
-		gaMap, ok := ga.(map[string]any)
-		if !ok {
-			return "", fmt.Errorf("expected 'globalAccess' to be a map, got %T", ga)
-		}
-		if imgRef, ok := gaMap["imageReference"]; ok {
-			imgRefStr, ok := imgRef.(string)
-			if !ok {
-				return "", fmt.Errorf("expected 'globalAccess.imageReference' to be a string, got %T", imgRef)
+		if gaMap, ok := ga.(map[string]any); ok {
+			if imgRef, ok := gaMap["imageReference"]; ok {
+				imgRefStr, ok := imgRef.(string)
+				if !ok {
+					return "", fmt.Errorf("expected 'globalAccess.imageReference' to be a string, got %T", imgRef)
+				}
+				return imgRefStr, nil
 			}
-			return imgRefStr, nil
 		}
 	}
 
 	// localBlob access: fall back to referenceName
 	if refName, ok := m["referenceName"]; ok {
-		imgRefStref, ok := refName.(string)
+		imRefStr, ok := refName.(string)
 		if !ok {
 			return "", fmt.Errorf("expected 'referenceName' to be a string, got %T", refName)
 		}
-		if imgRefStref != "" {
-			return imgRefStref, nil
+		if imRefStr != "" {
+			return imRefStr, nil
 		}
 	}
 
