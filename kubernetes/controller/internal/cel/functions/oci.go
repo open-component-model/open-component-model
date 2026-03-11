@@ -1,7 +1,6 @@
 package functions
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -10,11 +9,7 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 	"k8s.io/apiserver/pkg/cel/lazy"
 
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
-	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	ociaccessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const ToOCIFunctionName = "toOCI"
@@ -135,42 +130,44 @@ func BindingToOCI(lhs ref.Val) ref.Val {
 }
 
 // extractImageReference extracts an OCI image reference from a map.
-// It supports both OCIImage access (with ImageReference field) and localBlob
-// access (with GlobalAccess containing an ImageReference, or ReferenceName
-// as a fallback).
+// It supports both OCIImage access (with "imageReference" key) and localBlob
+// access (with "globalAccess" containing an "imageReference" key, or
+// "referenceName" as a fallback).
 func extractImageReference(m map[string]any) (string, error) {
-	data, err := json.Marshal(m)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal access map: %w", err)
+	// Direct imageReference (OCIImage access)
+	if imgRef, ok := m["imageReference"]; ok {
+		imRefStr, ok := imgRef.(string)
+		if !ok {
+			return "", fmt.Errorf("expected 'imageReference' to be a string, got %T", imgRef)
+		}
+		return imRefStr, nil
 	}
 
-	raw := &runtime.Raw{}
-	if err := json.Unmarshal(data, raw); err != nil {
-		return "", fmt.Errorf("failed to unmarshal access into raw: %w", err)
-	}
-
-	// Try OCIImage access
-	var ociImage ociaccessv1.OCIImage
-	if err := ociaccess.Scheme.Convert(raw, &ociImage); err == nil && ociImage.ImageReference != "" {
-		return ociImage.ImageReference, nil
-	}
-
-	// Try localBlob access
-	var localBlob v2.LocalBlob
-	if err := v2.Scheme.Convert(raw, &localBlob); err == nil {
-		// Prefer globalAccess.imageReference
-		if localBlob.GlobalAccess != nil {
-			var globalOCIImage ociaccessv1.OCIImage
-			if err := ociaccess.Scheme.Convert(localBlob.GlobalAccess, &globalOCIImage); err == nil && globalOCIImage.ImageReference != "" {
-				return globalOCIImage.ImageReference, nil
+	// localBlob access: prefer globalAccess.imageReference, fall back to referenceName
+	if ga, ok := m["globalAccess"]; ok {
+		gaMap, ok := ga.(map[string]any)
+		if !ok {
+			return "", fmt.Errorf("expected 'globalAccess' to be a map, got %T", ga)
+		}
+		if imgRef, ok := gaMap["imageReference"]; ok {
+			imgRefStr, ok := imgRef.(string)
+			if !ok {
+				return "", fmt.Errorf("expected 'globalAccess.imageReference' to be a string, got %T", imgRef)
 			}
-		}
-
-		// Fall back to referenceName
-		if localBlob.ReferenceName != "" {
-			return localBlob.ReferenceName, nil
+			return imgRefStr, nil
 		}
 	}
 
-	return "", fmt.Errorf("unable to extract OCI reference from access: %s", string(data))
+	// localBlob access: fall back to referenceName
+	if refName, ok := m["referenceName"]; ok {
+		imgRefStref, ok := refName.(string)
+		if !ok {
+			return "", fmt.Errorf("expected 'referenceName' to be a string, got %T", refName)
+		}
+		if imgRefStref != "" {
+			return imgRefStref, nil
+		}
+	}
+
+	return "", fmt.Errorf("expected map with key 'imageReference', 'globalAccess.imageReference', or 'referenceName', got %v", m)
 }
