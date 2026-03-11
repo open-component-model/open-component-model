@@ -92,6 +92,12 @@ jobs:
     name: Build Controller
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
     needs: [prepare, tag_rc]
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/kubernetes-controller.yml
     with:
       ref: ${{ needs.prepare.outputs.new_tag }}
