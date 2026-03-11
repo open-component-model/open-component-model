@@ -1482,9 +1482,9 @@ var _ = Describe("Resource Controller", func() {
 			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(BeNumerically("==", float64(5)),
 				"expected at least 5 cache hits for the verified parent component as it should be hit for both resources and the nested component reconciliations")
 
-			nesteComponent1omponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName1, componentVersion, "unverified")
+			nestedComponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName1, componentVersion, "unverified")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(nesteComponent1omponentMissCounter)).To(Equal(float64(0)),
+			Expect(testutil.ToFloat64(nestedComponentMissCounter)).To(Equal(float64(0)),
 				"expected 0 cache misses for the nested component as it should be verified")
 			nestedComponent1MissCounterVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName1, componentVersion, "verified")
 			Expect(err).ToNot(HaveOccurred())
