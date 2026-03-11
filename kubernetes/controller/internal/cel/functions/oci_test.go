@@ -150,8 +150,12 @@ func TestBindingToOCI_MapReference(t *testing.T) {
 					"value": tc.input,
 				})
 				if tc.err != nil {
-					r.IsType(&types.Err{}, val)
-					tc.err(t, val.(*types.Err))
+					if err != nil {
+						tc.err(t, err)
+					} else {
+						r.IsType(&types.Err{}, val)
+						tc.err(t, val.(*types.Err))
+					}
 					return
 				}
 
@@ -244,8 +248,12 @@ func TestBindingToOCI_StringReference(t *testing.T) {
 					"value": tc.input,
 				})
 				if tc.err != nil {
-					r.IsType(&types.Err{}, val)
-					tc.err(t, val.(*types.Err))
+					if err != nil {
+						tc.err(t, err)
+					} else {
+						r.IsType(&types.Err{}, val)
+						tc.err(t, val.(*types.Err))
+					}
 					return
 				}
 
