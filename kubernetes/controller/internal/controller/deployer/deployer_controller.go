@@ -458,21 +458,21 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	}
 
 	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, configs)
-	if err != nil {
-		switch {
-		case errors.Is(err, workerpool.ErrResolutionInProgress):
-			// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
 
-			return nil, workerpool.ErrResolutionInProgress
-		case errors.Is(err, ErrComponentVersionDrift):
-			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ComponentDriftResolutionInProgress, err.Error())
+		return nil, workerpool.ErrResolutionInProgress
+	case errors.Is(err, ErrComponentVersionDrift):
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ComponentDriftResolutionInProgress, err.Error())
 
-			return nil, ErrComponentVersionDrift
-		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
-			// Ignore error, but log event
-			event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityError, err.Error())
-		default:
+		return nil, ErrComponentVersionDrift
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityError, err.Error())
+	default:
+		if err != nil {
 			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
 
 			return nil, fmt.Errorf("failed to get effective component version: %w", err)

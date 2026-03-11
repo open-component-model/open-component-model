@@ -269,20 +269,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	desc, err := cacheBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)
-	if err != nil {
-		switch {
-		case errors.Is(err, workerpool.ErrResolutionInProgress):
-			// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-			status.MarkNotReady(r.EventRecorder, component, v1alpha1.ResolutionInProgress, err.Error())
-			logger.Info("component version resolution in progress, waiting for event notification",
-				"component", component.Spec.Component,
-				"version", version)
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.ResolutionInProgress, err.Error())
+		logger.Info("component version resolution in progress, waiting for event notification",
+			"component", component.Spec.Component,
+			"version", version)
 
-			return ctrl.Result{}, nil
-		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
-			// Ignore error, but log event
-			event.New(r.EventRecorder, component, nil, eventv1.EventSeverityError, err.Error())
-		default:
+		return ctrl.Result{}, nil
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, component, nil, eventv1.EventSeverityError, err.Error())
+	default:
+		if err != nil {
 			status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 			return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)

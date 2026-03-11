@@ -222,18 +222,19 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 	// InProgress key.
 	if cached, ok := wp.Cache.Get(key); ok {
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version, verificationState(opts.Verifications, opts.Digest)).Inc()
-		if cached.Error != nil {
-			// In case of an error of type ErrNotSafelyDigestible we return the cached error and value because we want
-			// to pass through the information that this component version is not safely digestible to the controller
-			// but still use the value.
-			if errors.Is(cached.Error, ErrNotSafelyDigestible) {
-				res, ok := cached.Value.(T)
-				if !ok {
-					return result, fmt.Errorf("unable to assert cache value for key %s into requested type, was: %T", key, cached.Value)
-				}
-
-				return res, cached.Error
+		// In case of an error of type ErrNotSafelyDigestible we return the cached error and value because we want
+		// to pass through the information that this component version is not safely digestible to the controller
+		// but still use the value.
+		if errors.Is(cached.Error, ErrNotSafelyDigestible) {
+			res, ok := cached.Value.(T)
+			if !ok {
+				return result, fmt.Errorf("unable to assert cache value for key %s into requested type, was: %T", key, cached.Value)
 			}
+
+			return res, cached.Error
+		}
+
+		if cached.Error != nil {
 
 			// we remove error results from the cache, so the controller can immediately retry.
 			wp.Cache.Remove(key)
