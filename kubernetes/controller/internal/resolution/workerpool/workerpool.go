@@ -428,6 +428,11 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 		return nil, fmt.Errorf("signing registry is required when verifications are configured")
 	}
 
+	signingHandler, err := opts.SigningRegistry.GetPlugin(ctx, &signingv1alpha1.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get signing handler plugin: %w", err)
+	}
+
 	for _, verification := range opts.Verifications {
 		var descSig *descriptor.Signature
 		for i := range desc.Signatures {
@@ -443,11 +448,6 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 
 		if err := signing.VerifyDigestMatchesDescriptor(ctx, desc, *descSig, slog.New(logr.ToSlogHandler(logger))); err != nil {
 			return nil, fmt.Errorf("digest verification failed for signature %q: %w", descSig.Name, err)
-		}
-
-		signingHandler, err := opts.SigningRegistry.GetPlugin(ctx, &signingv1alpha1.Config{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get signing handler plugin: %w", err)
 		}
 
 		// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
