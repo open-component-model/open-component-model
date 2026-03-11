@@ -61,7 +61,7 @@ const (
 	deployerManager = "deployer.delivery.ocm.software"
 )
 
-var ErrComponentVersionSkew = errors.New("component version skew: resource status has not yet caught up with component")
+var ErrComponentVersionDrift = errors.New("component version drift: resource status has not yet caught up with component")
 
 // Reconciler reconciles a Deployer object.
 type Reconciler struct {
@@ -465,10 +465,10 @@ func (r *Reconciler) DownloadResourceWithOCM(
 			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
 
 			return nil, workerpool.ErrResolutionInProgress
-		case errors.Is(err, ErrComponentVersionSkew):
-			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ComponentSkewResolutionInProgress, err.Error())
+		case errors.Is(err, ErrComponentVersionDrift):
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ComponentDriftResolutionInProgress, err.Error())
 
-			return nil, ErrComponentVersionSkew
+			return nil, ErrComponentVersionDrift
 		case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 			// Ignore error, but log event
 			event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityError, err.Error())
@@ -924,7 +924,7 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 			"componentComponent", component.Status.Component.Component,
 			"componentVersion", component.Status.Component.Version)
 
-		return nil, ErrComponentVersionSkew
+		return nil, ErrComponentVersionDrift
 	}
 
 	resourceDescriptor, _, err := ocm.ResolveReferencePath(

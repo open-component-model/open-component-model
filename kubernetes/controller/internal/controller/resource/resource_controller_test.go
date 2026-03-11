@@ -2,13 +2,14 @@ package resource
 
 import (
 	"crypto"
-	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
+
+	_ "embed"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

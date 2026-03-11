@@ -46,6 +46,6 @@ const (
 	// ResolutionInProgress is used when resolution is still in progress.
 	ResolutionInProgress = "ResolutionInProgress"
 
-	// ComponentSkewResolutionInProgress the component and the deployer are catching up.
-	ComponentSkewResolutionInProgress = "ComponentSkewResolutionInProgress"
+	// ComponentDriftResolutionInProgress the component and the deployer are catching up.
+	ComponentDriftResolutionInProgress = "ComponentDriftResolutionInProgress"
 )
