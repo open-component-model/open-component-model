@@ -7,6 +7,10 @@ on:
         description: "Publish image and chart to registry (use for release branch builds)."
         type: boolean
         default: false
+      debug:
+        description: "Show cluster debug info after E2E tests (auto-enabled on failure)."
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -277,6 +281,25 @@ jobs:
           bash ${{ env.LOCATION }}/test/e2e/hacks/setup.sh
           kind load image-archive "${{ env.LOCATION }}/tmp/docker/controller-amd64.tar"
           task ${{ env.LOCATION }}:test/e2e
+
+      - name: Debug cluster state
+        if: failure() || inputs.debug == true
+        run: |
+          echo "::group::Controller pods"
+          kubectl -n ocm-k8s-toolkit-system get pods -o wide
+          echo "::endgroup::"
+
+          echo "::group::Controller logs (last 80 lines)"
+          kubectl -n ocm-k8s-toolkit-system logs deploy/ocm-k8s-toolkit-controller-manager --tail=80 --all-containers || true
+          echo "::endgroup::"
+
+          echo "::group::Namespace events"
+          kubectl -n ocm-k8s-toolkit-system get events --sort-by=.lastTimestamp || true
+          echo "::endgroup::"
+
+          echo "::group::Helm release"
+          helm list -n ocm-k8s-toolkit-system
+          echo "::endgroup::"
 
   publish:
     name: Publish and Attest Image & Chart
