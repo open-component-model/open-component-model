@@ -411,68 +411,54 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 		)
 	}
 
-	// The provided digest is from the component reference from the parent component and must match the calculated
-	// digest of the resolved component version to ensure integrity.
-	// Additionally, either a digest OR verifications can be provided, hence, we can return after the integrity check as
-	// we do not have any verifications to check again.
-	if opts.Digest != nil {
-		logger.Info("verifying integrity with provided digest",
+	switch {
+	case opts.Digest != nil:
+		return compareDigest(ctx, desc, opts.Digest)
+	case len(opts.Verifications) > 0:
+		// If verifications are requested, we need to verify that the component version is safely digestible.
+		// Anything that comes after this will, in case of an error, always be skipped until cache TTL expires
+		if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
+			return desc, fmt.Errorf("%w: %w", ErrNotSafelyDigestible, err)
+		}
+
+		if opts.SigningRegistry == nil {
+			return nil, fmt.Errorf("signing registry is required when verifications are configured")
+		}
+
+		return verifySignatures(ctx, desc, opts.Verifications, opts.SigningRegistry)
+	default:
+		logger.Info("no digest or verifications provided, skipping integrity and signature verification",
 			"component", opts.Component, "version", opts.Version)
-
-		digest, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)),
-			opts.Digest.NormalisationAlgorithm, opts.Digest.HashAlgorithm)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate digest for component version %s:%s: %w",
-				opts.Component, opts.Version, err)
-		}
-
-		if opts.Digest.Value != digest.Value {
-			return nil, fmt.Errorf("digest mismatch (%s/%s) for component version %s:%s: expected %s, got %s",
-				digest.NormalisationAlgorithm, digest.HashAlgorithm, opts.Component, opts.Version,
-				opts.Digest.Value, digest.Value)
-		}
-
 		return desc, nil
 	}
+}
 
-	// Early return if no verifications are requested and to prevent returning ErrNotSafelyDigestible if not needed
-	if len(opts.Verifications) == 0 {
-		logger.Info("no verifications requested, skipping signature verification")
+// verifySignatures performs signature verification for the provided component version descriptor and the list of
+// verifications.
+func verifySignatures(ctx context.Context, desc *descriptor.Descriptor, verifications []verification.Verification, signingRegistry *signinghandler.SigningRegistry) (*descriptor.Descriptor, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("verifying signature", "component", desc.Component.Name, "version", desc.Component.Version)
 
-		return desc, nil
-	}
-
-	// If verifications are requested, we need to verify that the component version is safely digestible.
-	// Anything that comes after this will, in case of an error, always be skipped until cache TTL expires
-	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
-		return desc, fmt.Errorf("%w: %w", ErrNotSafelyDigestible, err)
-	}
-
-	logger.Info("verifying signature", "component", opts.Component, "version", opts.Version)
-	if opts.SigningRegistry == nil {
-		return nil, fmt.Errorf("signing registry is required when verifications are configured")
-	}
-
-	signingHandler, err := opts.SigningRegistry.GetPlugin(ctx, &signingv1alpha1.Config{})
+	signingHandler, err := signingRegistry.GetPlugin(ctx, &signingv1alpha1.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get signing handler plugin: %w", err)
 	}
 
-	for _, verification := range opts.Verifications {
+	for _, v := range verifications {
 		var descSig *descriptor.Signature
 		for i := range desc.Signatures {
-			if desc.Signatures[i].Name == verification.Signature {
+			if desc.Signatures[i].Name == v.Signature {
 				descSig = &desc.Signatures[i]
 				break
 			}
 		}
 
 		if descSig == nil {
-			return nil, fmt.Errorf("signature %s not found in component %s", verification.Signature, opts.Component)
+			return nil, fmt.Errorf("signature %s not found in component %s", v.Signature, desc.Component.Name)
 		}
 
 		if err := signing.VerifyDigestMatchesDescriptor(ctx, desc, *descSig, slog.New(logr.ToSlogHandler(logger))); err != nil {
-			return nil, fmt.Errorf("digest verification failed for signature %q: %w", descSig.Name, err)
+			return nil, fmt.Errorf("digest v failed for signature %q: %w", descSig.Name, err)
 		}
 
 		// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
@@ -480,14 +466,38 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 		credentials := map[string]string{}
 		switch signingv1alpha1.SignatureAlgorithm(descSig.Signature.Algorithm) {
 		case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
-			credentials["public_key_pem"] = string(verification.PublicKey)
+			credentials["public_key_pem"] = string(v.PublicKey)
 		default:
 			return nil, fmt.Errorf("unsupported signature algorithm: %q", descSig.Signature.Algorithm)
 		}
 
 		if err := signingHandler.Verify(ctx, *descSig, &signingv1alpha1.Config{}, credentials); err != nil {
-			return nil, fmt.Errorf("signature verification failed for signature %s: %w", verification.Signature, err)
+			return nil, fmt.Errorf("signature v failed for signature %s: %w", v.Signature, err)
 		}
+	}
+
+	return desc, nil
+}
+
+// compareDigest performs integrity verification using the provided digest against a fresh calculated digest of
+// the passed descriptor.
+func compareDigest(ctx context.Context, desc *descriptor.Descriptor, digest *v2.Digest) (*descriptor.Descriptor, error) {
+	logger := log.FromContext(ctx)
+
+	logger.Info("verifying integrity with provided digest",
+		"component", desc.Component.Name, "version", desc.Component.Version)
+
+	digestDesc, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)),
+		digest.NormalisationAlgorithm, digest.HashAlgorithm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate digest for component version %s:%s: %w",
+			desc.Component.Name, desc.Component.Version, err)
+	}
+
+	if digestDesc.Value != digest.Value {
+		return nil, fmt.Errorf("digest mismatch (%s/%s) for component version %s:%s: expected %s, got %s",
+			digest.NormalisationAlgorithm, digest.HashAlgorithm, desc.Component.Name, desc.Component.Version,
+			digest.Value, digestDesc.Value)
 	}
 
 	return desc, nil
