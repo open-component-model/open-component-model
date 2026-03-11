@@ -1,0 +1,99 @@
+# Static registry of all Go modules in the repository.
+# Used by CI to drive module discovery, test categorization, and sparse-checkout.
+#
+# Fields:
+#   path            - module directory (relative to repo root)
+#   test            - "unit", "integration", or "none"
+#   extra-checkout  - additional paths needed for sparse checkout (e.g. replace directive siblings)
+#
+# Keep this file in sync with the actual go.mod files in the repository.
+# The CI verify step will fail if a module is added or removed without updating this file.
+
+modules:
+  # ── Foundation (Layer 1) ──────────────────────────────────────────────
+  - path: bindings/go/runtime
+    test: unit
+  - path: bindings/go/blob
+    test: unit
+  - path: bindings/go/dag
+    test: unit
+  - path: bindings/go/generator
+    test: unit
+  - path: bindings/go/cel
+    test: unit
+
+  # ── Base Abstractions (Layer 2) ───────────────────────────────────────
+  - path: bindings/go/configuration
+    test: unit
+  - path: bindings/go/credentials
+    test: unit
+  - path: bindings/go/descriptor/v2
+    test: unit
+  - path: bindings/go/descriptor/runtime
+    test: unit
+  - path: bindings/go/descriptor/normalisation
+    test: unit
+  - path: bindings/go/signing
+    test: unit
+  - path: bindings/go/rsa
+    test: unit
+
+  # ── Repository Abstraction (Layer 3) ──────────────────────────────────
+  - path: bindings/go/repository
+    test: unit
+
+  # ── Repository Implementations (Layer 4) ──────────────────────────────
+  - path: bindings/go/oci
+    test: unit
+  - path: bindings/go/oci/integration
+    test: integration
+  - path: bindings/go/ctf
+    test: unit
+  - path: bindings/go/transform
+    test: unit
+
+  # ── High-Level Features (Layer 5) ─────────────────────────────────────
+  - path: bindings/go/constructor
+    test: unit
+  - path: bindings/go/plugin
+    test: unit
+  - path: bindings/go/helm
+    test: unit
+  - path: bindings/go/input/dir
+    test: unit
+  - path: bindings/go/input/file
+    test: unit
+  - path: bindings/go/input/utf8
+    test: unit
+
+  # ── Examples ──────────────────────────────────────────────────────────
+  - path: bindings/go/examples
+    test: unit
+    extra-checkout:
+      - bindings/go/blob
+      - bindings/go/configuration
+      - bindings/go/credentials
+      - bindings/go/ctf
+      - bindings/go/dag
+      - bindings/go/descriptor/normalisation
+      - bindings/go/descriptor/runtime
+      - bindings/go/descriptor/v2
+      - bindings/go/oci
+      - bindings/go/repository
+      - bindings/go/rsa
+      - bindings/go/runtime
+      - bindings/go/signing
+
+  # ── CLI ───────────────────────────────────────────────────────────────
+  - path: cli
+    test: unit
+  - path: cli/integration
+    test: integration
+
+  # ── Conformance ───────────────────────────────────────────────────────
+  - path: conformance/scenarios/sovereign/components/notes
+    test: none
+
+  # ── Kubernetes Controller ─────────────────────────────────────────────
+  - path: kubernetes/controller
+    test: unit

@@ -1,18 +1,14 @@
 name: CI
 
 on:
-  pull_request_target:
+  pull_request:
   push:
     branches:
     - main
 
 env:
-  # Check Only Changed Modules
-  # If true, only changed modules will be analyzed.
-  # If false, all discovered modules will be analyzed.
-  check_only_changed: ${{ github.event_name == 'pull_request_target' }}
-  REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.ref || github.ref }}
-  REPO: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
+  REF: ${{ github.event.pull_request.head.ref || github.ref }}
+  REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
 permissions:
   contents: read
@@ -25,157 +21,32 @@ jobs:
     permissions:
       pull-requests: read
     outputs:
-      # modules_json = changed modules only (filtered by paths)
-      modules_json: ${{ steps.filtered.outputs.modules_json }}
-      # lint_modules_json = all modules when .env changed, else changed modules
-      lint_modules_json: ${{ steps.filtered.outputs.lint_modules_json }}
-      integration_test_modules_json: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
-      unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
-      env_changed: ${{ steps.env_changes.outputs.env }}
-    env:
-      DIR: ${{ github.workspace }}
+      modules_json: ${{ steps.resolve.outputs.modules_json }}
+      lint_modules_json: ${{ steps.resolve.outputs.lint_modules_json }}
+      integration_test_modules_json: ${{ steps.resolve.outputs.integration_test_modules_json }}
+      unit_test_modules_json: ${{ steps.resolve.outputs.unit_test_modules_json }}
+      sparse_extras_json: ${{ steps.resolve.outputs.sparse_extras_json }}
+      env_changed: ${{ steps.resolve.outputs.env_changed }}
     steps:
-      - name: Install Task
-        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
-      # Detect .env changes to decide whether to run golangci-lint on all or only changed modules
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: env_changes
-        with:
-          filters: |
-            env:
-              - '.env'
-      - name: Discover Go Modules
-        id: discover
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
-        with:
-          script: |
-            const { execSync } = require('child_process');
-            
-            // Get all Go modules using task
-            const modulesOutput = execSync('task go_modules --output interleaved', { encoding: 'utf-8' });
-            const modules = modulesOutput.split('\n').filter(Boolean);
-            
-            // Generate filters for paths-filter
-            const filters = modules.map(module => {
-              const lines = [`${module}:`];
-              
-              // Add the module's own path
-              lines.push(` - "${module}/**"`);
-              
-              // If this is an integration module, add its parent module path
-              if (module.includes('/integration')) {
-                const parentModule = module.split('/integration')[0];
-                lines.push(` - "${parentModule}/**"`);
-                console.log(`🔍 Detected integration test module: ${module}`);
-                console.log(`   └─ Linked to parent module: ${parentModule}`);
-              }
-              
-              return lines.join('\n');
-            }).join('\n');
-            
-            // Set outputs
-            core.setOutput('modules_json', JSON.stringify(modules));
-            core.setOutput('filters', filters);
-            
-            // Log for debugging
-            console.log('📦 Detected modules:', modules);
-            console.log('🎯 Generated filters:', filters);
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: changes
-        with:
-          filters: ${{ steps.discover.outputs.filters }}
-      - name: Filter JSONs Based on Changes
-        id: filtered
+      - name: Resolve Module Lists
+        id: resolve
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
-          CHANGE_JSON: ${{ steps.changes.outputs.changes }}
-          ENV_CHANGED: ${{ steps.env_changes.outputs.env }}
+          BASE_REF: ${{ github.event.pull_request.base.ref || '' }}
         with:
           script: |
-            const modulesJson = JSON.parse(process.env.MODULES_JSON || '[]');
-            const changeJson = JSON.parse(process.env.CHANGE_JSON || '[]');
-            const envChanged = process.env.ENV_CHANGED === 'true';
-            const lintModulesFromEnv = envChanged ? modulesJson : null;
-            
-            if (process.env.check_only_changed === "true") {
-              console.log(`Filtering modules based on changes: ${JSON.stringify(changeJson)}`);
-              const filteredModules = modulesJson.filter(module => {
-                return changeJson.some(change => change.includes(module));
-              });
-              console.log(`Filtered modules: ${JSON.stringify(filteredModules)}`);
-              core.setOutput("modules_json", JSON.stringify(filteredModules));
-              core.setOutput('lint_modules_json', JSON.stringify(lintModulesFromEnv ?? filteredModules));
-            } else {
-              console.log("check_only_changed is false, no filtering applied.");
-              core.setOutput("modules_json", JSON.stringify(modulesJson));
-              core.setOutput('lint_modules_json', JSON.stringify(lintModulesFromEnv ?? modulesJson));
-            }
-      - name: Filter based on Testability
-        id: filtered_test
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
-        env:
-          MODULES_JSON: ${{ steps.filtered.outputs.modules_json }}
-        with:
-          script: |
-            const { execSync } = require('child_process');
-            const modules = JSON.parse(process.env.MODULES_JSON || '[]');
-            
-            const unitTestModules = [];
-            const integrationTestModules = [];
-
-            for (const module of modules) {
-              try {
-                const output = execSync(`task -d ${module} -aj`, { encoding: 'utf-8' });
-                const parsed = JSON.parse(output);
-                const taskNames = parsed.tasks.map(task => task.name);
-
-                if (taskNames.includes('test')) {
-                  unitTestModules.push(module);
-                }
-                if (taskNames.includes('test/integration')) {
-                  integrationTestModules.push(module);
-                }
-              } catch (error) {
-                console.log(`Skipping module '${module}' due to error or no taskfile: ${error.message}`);
-              }
-            }
-
-            console.log(`Unit test modules: ${JSON.stringify(unitTestModules)}`);
-            console.log(`Integration test modules: ${JSON.stringify(integrationTestModules)}`);
-            
-            core.setOutput('unit_test_modules_json', JSON.stringify(unitTestModules));
-            core.setOutput('integration_test_modules_json', JSON.stringify(integrationTestModules));
-      - name: Generate Job Summary
+            const script = (await import('${{ github.workspace }}/.github/scripts/resolve-modules.js')).default;
+            script({ core });
+      - name: Verify Registry is Up to Date
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
-            const modules = JSON.parse(`${{ steps.discover.outputs.modules_json || '[]' }}`);
-            const filtered = JSON.parse(`${{ steps.filtered.outputs.modules_json || '[]' }}`);
-            const envChanged = `${{ steps.env_changes.outputs.env || 'false' }}` === 'true';
-            const unitTests = JSON.parse(`${{ steps.filtered_test.outputs.unit_test_modules_json || '[]' }}`);
-            const integrationTests = JSON.parse(`${{ steps.filtered_test.outputs.integration_test_modules_json || '[]' }}`);
-            
-            function toMarkdownList(items) {
-              return items.length ? items.map(item => `- \`${item}\``).join('\n') : '_None_';
-            }
-            
-            let summary = `### 🧩 Go Module Discovery Summary\n\n`;
-            
-            summary += `**🔍 Discovered Modules (${modules.length}):**\n${toMarkdownList(modules)}\n\n`;
-            summary += `**🎯 Filtered Modules (${filtered.length}):**\n${toMarkdownList(filtered)}\n\n`;
-            summary += `**🧹 Lint Scope:** ${envChanged ? 'all modules (env changed)' : 'changed modules only'}\n\n`;
-            summary += `**🧪 Unit Test Modules (${unitTests.length}):**\n${toMarkdownList(unitTests)}\n\n`;
-            summary += `**🧬 Integration Test Modules (${integrationTests.length}):**\n${toMarkdownList(integrationTests)}\n`;
-            
-            core.summary.addRaw(summary).write();
+            const script = (await import('${{ github.workspace }}/.github/scripts/verify-registry.js')).default;
+            script({ core });
 
   golangci_lint_verify:
     name: "golangci-lint-verify"
@@ -228,6 +99,7 @@ jobs:
             ${{ matrix.module }}
             golangci.yml
             .env
+            ${{ fromJSON(needs.discover_modules.outputs.sparse_extras_json)[matrix.module] || '' }}
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
@@ -306,6 +178,7 @@ jobs:
           sparse-checkout: |
             ${{ matrix.module }}
             reuse.Taskfile.yml
+            ${{ fromJSON(needs.discover_modules.outputs.sparse_extras_json)[matrix.module] || '' }}
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
@@ -337,6 +210,7 @@ jobs:
           sparse-checkout: |
             .github/workflows/ci.yml
             ${{ matrix.project }}
+            ${{ fromJSON(needs.discover_modules.outputs.sparse_extras_json)[matrix.project] || '' }}
       - name: Initialize CodeQL
         uses: github/codeql-action/init@820e3160e279568db735cee8ed8f8e77a6da7818 # v3
         with:
