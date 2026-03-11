@@ -1,8 +1,6 @@
 // @ts-check
 
-import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
-import yaml from "js-yaml";
 
 /**
  * @typedef {Object} ModuleEntry
@@ -68,9 +66,9 @@ export function isModuleAffected(modulePath, changedFiles) {
  * @returns {ResolveResult}
  */
 export function resolveModules(registryPath, changedFiles) {
-  const raw = readFileSync(registryPath, "utf-8");
+  const raw = execSync(`yq -o=json ${registryPath}`, { encoding: "utf-8" });
   /** @type {{ modules: ModuleEntry[] }} */
-  const registry = yaml.load(raw);
+  const registry = JSON.parse(raw);
   const entries = registry.modules;
 
   const allModules = entries.map((e) => e.path);

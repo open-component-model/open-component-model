@@ -1,8 +1,6 @@
 // @ts-check
 
-import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
-import yaml from "js-yaml";
 
 /**
  * Verify that .github/go-modules.yml is in sync with actual go.mod files.
@@ -11,8 +9,8 @@ import yaml from "js-yaml";
  * @returns {{ missing: string[], extra: string[] }} Diff between actual and registered modules
  */
 export function verifyRegistry(registryPath) {
-  const raw = readFileSync(registryPath, "utf-8");
-  const registry = yaml.load(raw);
+  const raw = execSync(`yq -o=json ${registryPath}`, { encoding: "utf-8" });
+  const registry = JSON.parse(raw);
   const registered = new Set(registry.modules.map((m) => m.path));
 
   const actual = new Set(
