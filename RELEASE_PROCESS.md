@@ -202,11 +202,11 @@ Final promotion takes an existing RC and promotes it to a stable release.
 The workflow verifies attestations before creating any final artifacts.
 
 The final promotion is triggered automatically after the RC phase completes
-and the `cli/release` environment gate is approved.
+and the `release` environment gate is approved.
 
 1. Wait for the RC to be tested (typically 1 sprint).
 2. Go to the workflow run in GitHub Actions.
-3. Approve the `cli/release` environment gate (requires reviewer approval + wait timer).
+3. Approve the `release` environment gate (requires reviewer approval + wait timer).
 4. The workflow will automatically:
    - Verify RC attestations
    - Create final tag from RC commit
