@@ -53,7 +53,7 @@ func New(
 
 	if len(opts.FallbackResolvers) > 0 {
 		slog.WarnContext(ctx, "using deprecated fallback resolvers, consider switching to path matcher resolvers. "+
-			"See your migration guide for more details: https://ocm.software/dev/docs/how-to/migrate-from-fallback-to-deterministic-repository-resolvers/")
+			"Follow our migration guide for more details: https://ocm.software/dev/docs/how-to/migrate-from-fallback-to-deterministic-repository-resolvers/")
 		return newFallbackProviderWithBaseRepo(ctx, opts, baseRepo)
 	}
 
