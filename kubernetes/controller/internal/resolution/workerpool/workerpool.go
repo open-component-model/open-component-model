@@ -235,7 +235,6 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 		}
 
 		if cached.Error != nil {
-
 			// we remove error results from the cache, so the controller can immediately retry.
 			wp.Cache.Remove(key)
 			return result, cached.Error
