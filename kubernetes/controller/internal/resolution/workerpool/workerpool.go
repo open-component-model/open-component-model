@@ -395,7 +395,8 @@ func (wp *WorkerPool) setResult(key string, result any, err error) []RequesterIn
 	return requesters
 }
 
-// getComponentVersion performs the actual component version resolution.
+// getComponentVersion performs the actual component version resolution. If verifications or a digest from a component
+// reference from a parent component are provided, it performs the necessary integrity and signature verification.
 func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptions) (any, error) {
 	logger := log.FromContext(ctx)
 
