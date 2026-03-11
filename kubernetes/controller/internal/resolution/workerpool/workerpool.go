@@ -29,7 +29,32 @@ type RequesterInfo struct {
 	NamespacedName types.NamespacedName
 }
 
-var ErrNotSafelyDigestible = fmt.Errorf("component version is not safely digestible")
+// ErrNotSafelyDigestible is a sentinel error used to identify this error type.
+var ErrNotSafelyDigestible = errors.New("not safely digestible")
+
+// NotSafelyDigestibleError contains information about a component version that is not safely digestible.
+type NotSafelyDigestibleError struct {
+	Component string
+	Version   string
+	Err       error
+}
+
+func (e *NotSafelyDigestibleError) Error() string {
+	return fmt.Sprintf("component version %s:%s is not safely digestible: %v", e.Component, e.Version, e.Err)
+}
+
+func (e *NotSafelyDigestibleError) Unwrap() error {
+	return ErrNotSafelyDigestible
+}
+
+// NewNotSafelyDigestibleError creates a new NotSafelyDigestibleError with component and version information.
+func NewNotSafelyDigestibleError(component, version string, err error) *NotSafelyDigestibleError {
+	return &NotSafelyDigestibleError{
+		Component: component,
+		Version:   version,
+		Err:       err,
+	}
+}
 
 // ResolveOptions contains all the options the resolution service requires to perform a resolve operation.
 type ResolveOptions struct {
@@ -386,6 +411,12 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 		)
 	}
 
+	// We need to verify that the component version is safely digestible.
+	// Anything that comes after this will, in case of an error, always be skipped until cache TTL expires
+	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
+		return desc, NewNotSafelyDigestibleError(opts.Component, opts.Version, err)
+	}
+
 	// The provided digest is from the component reference from the parent component and must match the calculated
 	// digest of the resolved component version to ensure integrity.
 	// Additionally, either a digest OR verifications can be provided, hence, we can return after the integrity check as
@@ -415,12 +446,6 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 		logger.Info("no verifications requested, skipping signature verification")
 
 		return desc, nil
-	}
-
-	// If verifications are requested, we need to verify that the component version is safely digestible.
-	// Anything that comes after this will, in case of an error, always be skipped until cache TTL expires
-	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
-		return desc, fmt.Errorf("%w: %w", ErrNotSafelyDigestible, err)
 	}
 
 	logger.Info("verifying signature", "component", opts.Component, "version", opts.Version)

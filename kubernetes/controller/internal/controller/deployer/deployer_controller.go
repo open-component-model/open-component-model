@@ -927,7 +927,8 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		return nil, ErrComponentVersionDrift
 	}
 
-	resourceDescriptor, _, err := ocm.ResolveReferencePath(
+	// We use errReferencePath to keep the previous error in case it is an error of type ErrNotSafelyDigestible.
+	resourceDescriptor, _, errReferencePath := ocm.ResolveReferencePath(
 		ctx,
 		r.Resolver,
 		r.PluginManager.SigningRegistry,
@@ -942,11 +943,14 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 			},
 		},
 	)
-	if err != nil {
+	if errReferencePath != nil && !errors.Is(errReferencePath, workerpool.ErrNotSafelyDigestible) {
 		return nil, fmt.Errorf("failed to resolve resource reference path: %w", err)
 	}
 
-	return resourceDescriptor, nil
+	// Join potential errors of type ErrNotSafelyDigestible to be handled by the calling function.
+	err = errors.Join(err, errReferencePath)
+
+	return resourceDescriptor, err
 }
 
 func updateDeployedObjectStatusReferences[T client.Object](objs []T, deployer *deliveryv1alpha1.Deployer) {

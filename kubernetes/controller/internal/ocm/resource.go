@@ -85,7 +85,7 @@ func ResolveReferencePath(
 
 	currentDesc := parentDesc
 	currentRepoSpec := parentRepoSpec
-
+	var errsNotSafelyDigestible error
 	for i, refIdentity := range referencePath {
 		logger.V(1).Info("resolving reference", "step", i+1, "identity", refIdentity)
 
@@ -131,14 +131,21 @@ func ResolveReferencePath(
 
 		refDesc, err := refRepo.GetComponentVersion(ctx, matchedRef.Component, matchedRef.Version)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get referenced component version %s:%s: %w",
-				matchedRef.Component, matchedRef.Version, err)
+			if !errors.Is(err, workerpool.ErrNotSafelyDigestible) {
+				return nil, nil, fmt.Errorf("failed to get referenced component version %s:%s: %w",
+					matchedRef.Component, matchedRef.Version, err)
+			}
+
+			// GetComponentVersion can return a ErrNotSafelyDigestible error that needs to create an error event
+			// on the CR without terminating the reconciliation. Hence, we gather any ErrNotSafelyDigestible error to
+			// return it to the caller of this function.
+			errsNotSafelyDigestible = errors.Join(errsNotSafelyDigestible, err)
 		}
 
 		currentDesc = refDesc
 	}
 
-	return currentDesc, currentRepoSpec, nil
+	return currentDesc, currentRepoSpec, errsNotSafelyDigestible
 }
 
 // IdentityFuncIgnoreVersion is a custom identity matching function that ignores the "version" field if it is not set.
