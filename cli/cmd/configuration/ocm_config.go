@@ -1,8 +1,9 @@
 package configuration
 
 import (
-	"errors"
+	"bytes"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -97,17 +98,29 @@ func GetOCMConfig(additional ...string) (*genericv1.Config, error) {
 // Returns:
 //   - *v1.Config: The decoded configuration struct.
 //   - error: An error if the file cannot be opened or decoded.
-func GetConfigFromPath(path string) (_ *genericv1.Config, err error) {
-	file, err := os.Open(path)
+func GetConfigFromPath(path string) (*genericv1.Config, error) {
+	return GetConfigFromFS(os.DirFS(filepath.Dir(path)), filepath.Base(path))
+}
+
+// GetConfigFromFS reads and decodes a YAML configuration file from the given filesystem.
+// Environment variables in the file content are expanded using os.Getenv.
+//
+// Parameters:
+//   - fsys (fs.FS): The filesystem to read from.
+//   - name (string): The file name within the filesystem.
+//
+// Returns:
+//   - *genericv1.Config: The decoded configuration struct.
+//   - error: An error if the file cannot be read or decoded.
+func GetConfigFromFS(fsys fs.FS, name string) (*genericv1.Config, error) {
+	data, err := fs.ReadFile(fsys, name)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		err = errors.Join(err, file.Close())
-	}()
+	data = []byte(os.Expand(string(data), os.Getenv))
 
 	var instance genericv1.Config
-	if err := genericv1.Scheme.Decode(file, &instance); err != nil {
+	if err := genericv1.Scheme.Decode(bytes.NewReader(data), &instance); err != nil {
 		return nil, err
 	}
 	return &instance, nil
