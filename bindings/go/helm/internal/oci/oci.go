@@ -42,7 +42,10 @@ func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, dir st
 
 	zippedBuf := gzip.NewWriter(tmpFile)
 
-	target := tar.NewOCILayoutWriter(zippedBuf)
+	target, err := tar.NewOCILayoutWriterWithTempFile(zippedBuf, dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OCI layout writer: %w", err)
+	}
 
 	// Generate and push layers based on the chart to the OCI layout.
 	configLayer, chartLayer, provLayer, err := pushChartAndGenerateLayers(ctx, chart, target)
