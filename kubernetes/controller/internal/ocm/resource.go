@@ -9,8 +9,12 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 )
 
@@ -57,4 +61,86 @@ func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *de
 	}
 
 	return digestResource, nil
+}
+
+// ResolveReferencePath walks a reference path from a parent component version to a final component version.
+// It returns the final descriptor and repository spec.
+// The baseOpts are used as a template for each resolution step; only the Digest field is overridden per reference.
+func ResolveReferencePath(
+	ctx context.Context,
+	resolver *resolution.Resolver,
+	parentDesc *descriptor.Descriptor,
+	referencePath []runtime.Identity,
+	baseOpts *resolution.RepositoryOptions,
+) (*descriptor.Descriptor, runtime.Typed, error) {
+	logger := log.FromContext(ctx)
+
+	if len(referencePath) == 0 {
+		return parentDesc, baseOpts.RepositorySpec, nil
+	}
+
+	currentDesc := parentDesc
+	var errsNotSafelyDigestible error
+	for i, refIdentity := range referencePath {
+		logger.V(1).Info("resolving reference", "step", i+1, "identity", refIdentity)
+
+		matchedRef := findMatchingReference(currentDesc, refIdentity)
+		if matchedRef == nil {
+			return nil, nil, fmt.Errorf("component reference with identity %v not found in component %s:%s at reference path step %d",
+				refIdentity, currentDesc.Component.Name, currentDesc.Component.Version, i+1)
+		}
+
+		stepOpts := *baseOpts
+		stepOpts.Digest = extractDigest(matchedRef)
+
+		refRepo, err := resolver.NewCacheBackedRepository(ctx, &stepOpts)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create cache-backed repository for reference: %w", err)
+		}
+
+		refDesc, err := refRepo.GetComponentVersion(ctx, matchedRef.Component, matchedRef.Version)
+		if err != nil {
+			if !errors.Is(err, workerpool.ErrNotSafelyDigestible) {
+				return nil, nil, fmt.Errorf("failed to get referenced component version %s:%s: %w",
+					matchedRef.Component, matchedRef.Version, err)
+			}
+
+			errsNotSafelyDigestible = errors.Join(errsNotSafelyDigestible, err)
+		}
+
+		currentDesc = refDesc
+	}
+
+	return currentDesc, baseOpts.RepositorySpec, errsNotSafelyDigestible
+}
+
+func findMatchingReference(desc *descriptor.Descriptor, identity runtime.Identity) *descriptor.Reference {
+	for j, ref := range desc.Component.References {
+		if identity.Match(ref.ToIdentity(), IdentityFuncIgnoreVersion()) {
+			return &desc.Component.References[j]
+		}
+	}
+	return nil
+}
+
+func extractDigest(ref *descriptor.Reference) *v2.Digest {
+	if ref.Digest.Value != "" && ref.Digest.HashAlgorithm != "" && ref.Digest.NormalisationAlgorithm != "" {
+		return &v2.Digest{
+			HashAlgorithm:          ref.Digest.HashAlgorithm,
+			Value:                  ref.Digest.Value,
+			NormalisationAlgorithm: ref.Digest.NormalisationAlgorithm,
+		}
+	}
+	return nil
+}
+
+// IdentityFuncIgnoreVersion is a custom identity matching function that ignores the "version" field if it is not set.
+func IdentityFuncIgnoreVersion() runtime.IdentityMatchingChainFn {
+	return func(i, o runtime.Identity) bool {
+		version, ok := i["version"]
+		if !ok || version == "" {
+			delete(o, "version")
+		}
+		return runtime.IdentityEqual(i, o)
+	}
 }
