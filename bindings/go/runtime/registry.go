@@ -358,6 +358,7 @@ func (r *Scheme) DefaultType(typed Typed) (updated bool, err error) {
 //   - Raw → Typed: unmarshals Raw.Data JSON via json.Unmarshal into the Typed object (if Typed.GetType is registered).
 //   - Typed → Raw: marshals the Typed with json.Marshal, applies canonicalization, and stores the result in Raw.Data.
 //     (See Raw.UnmarshalJSON for equivalent behavior)
+//   - Unstructured → Typed: marshals the Unstructured.Data to JSON and then unmarshals it into the Typed object (if Typed.GetType is registered).
 //   - Typed → Typed: performs a deep copy using Typed.DeepCopyTyped, with reflection-based assignment.
 //
 // Errors are returned if:
@@ -370,7 +371,7 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 		return fmt.Errorf("both 'from' and 'into' must be non-nil")
 	}
 
-	// Ensure that from's type is populated. If its not, attempt to infer type information based on the scheme.
+	// Ensure that from's type is populated. If it's not, attempt to infer type information based on the scheme.
 	if from.GetType().IsEmpty() {
 		// avoid mutating the original object
 		from = from.DeepCopyTyped()
@@ -382,25 +383,69 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 	}
 	fromType := from.GetType()
 
-	// Case 1: Raw -> Raw or Raw -> Typed
-	if rawFrom, ok := from.(*Raw); ok {
-		// Raw → Raw: Deep copy the underlying data.
-		if rawInto, ok := into.(*Raw); ok {
-			rawFrom.DeepCopyInto(rawInto)
-			return nil
+	switch v := from.(type) {
+	case *Raw:
+		if err := r.convertFromRaw(v, into, fromType); err != nil {
+			return fmt.Errorf("conversion from raw failed: %w", err)
 		}
-
-		// Raw → Typed: Unmarshal the Raw.Data into the target.
-		if !r.IsRegistered(fromType) && !r.allowUnknown {
-			return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
+		return nil
+	case *Unstructured:
+		if err := r.convertFromUnstructured(v, into, fromType); err != nil {
+			return fmt.Errorf("conversion from unstructured failed: %w", err)
 		}
-		if err := json.Unmarshal(rawFrom.Data, into); err != nil {
-			return fmt.Errorf("failed to unmarshal from raw: %w", err)
+		return nil
+	default:
+		if err := r.convertFromTyped(from, into, fromType); err != nil {
+			return fmt.Errorf("conversion from typed failed: %w", err)
 		}
 		return nil
 	}
+}
 
-	// Case 2: Typed -> Raw
+// convertFromRaw handles conversions where the source is of type *Raw. It supports both Raw → Raw and Raw → Typed conversions.
+// For Raw → Typed conversions, it checks if the source type is registered in the scheme (unless allowUnknown is true) and
+// then unmarshals the JSON data into the target object.
+func (r *Scheme) convertFromRaw(from *Raw, into Typed, fromType Type) error {
+	// Raw → Raw: Deep copy the underlying data.
+	if rawInto, ok := into.(*Raw); ok {
+		from.DeepCopyInto(rawInto)
+		return nil
+	}
+
+	// Raw → Typed: Unmarshal the Raw.Data into the target.
+	if !r.IsRegistered(fromType) && !r.allowUnknown {
+		return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
+	}
+	if err := json.Unmarshal(from.Data, into); err != nil {
+		return fmt.Errorf("failed to unmarshal from raw: %w", err)
+	}
+	return nil
+}
+
+// convertFromUnstructured handles conversions where the source is of type *Unstructured and the target is a Typed object.
+// It checks if the source type is registered in the scheme (unless allowUnknown is true) and then marshals the unstructured data to JSON
+// and unmarshals it into the target object.
+func (r *Scheme) convertFromUnstructured(from *Unstructured, into Typed, fromType Type) error {
+	// Unstructured → Typed: Convert the Unstructured to JSON and then unmarshal into the target.
+	if !r.IsRegistered(fromType) && !r.allowUnknown {
+		return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
+	}
+	data, err := json.Marshal(from.Data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal unstructured data: %w", err)
+	}
+	if err := json.Unmarshal(data, into); err != nil {
+		return fmt.Errorf("failed to unmarshal from unstructured: %w", err)
+	}
+	return nil
+}
+
+// convertFromTyped handles conversions where the source is a Typed object. It supports both Typed → Raw and generic Typed → Typed conversions.
+// For Typed → Raw conversions, it checks if the source type is registered in the scheme (unless allowUnknown is true), marshals the source to JSON,
+// applies canonicalization, and stores the result in the target Raw object.
+// For generic Typed → Typed conversions, it performs a deep copy using reflection-based assignment, ensuring that the types are compatible.
+// It returns a boolean indicating whether the conversion was handled, and an error if the conversion failed.
+func (r *Scheme) convertFromTyped(from Typed, into Typed, fromType Type) error {
 	if rawInto, ok := into.(*Raw); ok {
 		if !r.IsRegistered(fromType) && !r.allowUnknown {
 			return fmt.Errorf("cannot encode from unregistered type: %s", fromType)
@@ -418,7 +463,7 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 		return nil
 	}
 
-	// Case 3: Generic Typed -> Typed conversion using reflection.
+	//  Generic Typed -> Typed conversion using reflection.
 	intoVal := reflect.ValueOf(into)
 	if intoVal.Kind() != reflect.Ptr || intoVal.IsNil() {
 		return fmt.Errorf("'into' must be a non-nil pointer")
@@ -433,5 +478,6 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 		return fmt.Errorf("cannot assign value of type %T to target of type %T", copied, into)
 	}
 	intoElem.Set(copiedVal)
+
 	return nil
 }

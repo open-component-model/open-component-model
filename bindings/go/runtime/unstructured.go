@@ -44,11 +44,26 @@ func (u *Unstructured) SetType(v Type) {
 }
 
 func (u *Unstructured) GetType() Type {
-	v, _ := Get[Type](u, IdentityAttributeType)
+	// TODO check if string, parse type otherwise use below
+	v, ok := Get[Type](u, IdentityAttributeType)
+	if !ok {
+		// get string
+		s, ok := Get[string](u, IdentityAttributeType)
+		if ok && s != "" {
+			// string usually looks like "name/version" or just "name"
+			t, err := TypeFromString(s)
+			if err == nil {
+				return t
+			}
+			// if parsing fails, try unversioned type with the entire string as the name
+			return NewUnversionedType(s)
+		}
+	}
 	return v
 }
 
 func Get[T any](u *Unstructured, key string) (T, bool) {
+	// TODO(matthiasbruns) - use/add generic method receivers in go (1.27)
 	v, ok := u.Data[key]
 	if !ok {
 		return *new(T), false
