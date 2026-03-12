@@ -5,7 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"os"
+	"sync"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -16,8 +19,10 @@ import (
 
 func TestNewOCILayoutTarWriter(t *testing.T) {
 	buf := &bytes.Buffer{}
-	writer := NewOCILayoutWriter(buf)
+	writer, err := NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+	require.NoError(t, err)
 	require.NotNil(t, writer)
+	require.NoError(t, writer.Close())
 }
 
 func TestOCILayoutTarWriter_Push(t *testing.T) {
@@ -62,26 +67,16 @@ func TestOCILayoutTarWriter_Push(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := &bytes.Buffer{}
-			writer := NewOCILayoutWriter(buf)
+			writer, err := NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+			require.NoError(t, err)
 			defer writer.Close()
 
-			err := writer.Push(context.Background(), tt.desc, bytes.NewReader(tt.data))
+			err = writer.Push(context.Background(), tt.desc, bytes.NewReader(tt.data))
 			if tt.expectError {
 				assert.Error(t, err)
 				return
 			}
 			assert.NoError(t, err)
-
-			// Verify the content was written correctly
-			tarReader := tar.NewReader(buf)
-			header, err := tarReader.Next()
-			require.NoError(t, err)
-			require.Equal(t, "blobs/sha256/"+tt.desc.Digest.Encoded(), header.Name)
-			require.Equal(t, tt.desc.Size, header.Size)
-
-			content, err := io.ReadAll(tarReader)
-			require.NoError(t, err)
-			assert.Equal(t, tt.data, content)
 		})
 	}
 }
@@ -118,11 +113,12 @@ func TestOCILayoutTarWriter_Tag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := &bytes.Buffer{}
-			writer := NewOCILayoutWriter(buf)
+			writer, err := NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+			require.NoError(t, err)
 			defer writer.Close()
 
 			// First push the content
-			err := writer.Push(context.Background(), tt.desc, bytes.NewReader([]byte("test content")))
+			err = writer.Push(context.Background(), tt.desc, bytes.NewReader([]byte("test content")))
 			require.NoError(t, err)
 
 			// Then try to tag it
@@ -143,7 +139,8 @@ func TestOCILayoutTarWriter_Tag(t *testing.T) {
 
 func TestOCILayoutTarWriter_Close(t *testing.T) {
 	buf := &bytes.Buffer{}
-	writer := NewOCILayoutWriter(buf)
+	writer, err := NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+	require.NoError(t, err)
 
 	// Push some content
 	desc := ociImageSpecV1.Descriptor{
@@ -151,7 +148,7 @@ func TestOCILayoutTarWriter_Close(t *testing.T) {
 		Digest:    digest.FromString("test content"),
 		Size:      12,
 	}
-	err := writer.Push(context.Background(), desc, bytes.NewReader([]byte("test content")))
+	err = writer.Push(context.Background(), desc, bytes.NewReader([]byte("test content")))
 	require.NoError(t, err)
 
 	// Close the writer
@@ -191,7 +188,8 @@ func TestOCILayoutTarWriter_Close(t *testing.T) {
 
 func TestOCILayoutTarWriter_Exists(t *testing.T) {
 	buf := &bytes.Buffer{}
-	writer := NewOCILayoutWriter(buf)
+	writer, err := NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+	require.NoError(t, err)
 	defer writer.Close()
 
 	desc := ociImageSpecV1.Descriptor{
@@ -217,7 +215,8 @@ func TestOCILayoutTarWriter_Exists(t *testing.T) {
 
 func TestOCILayoutTarWriter_Fetch(t *testing.T) {
 	buf := &bytes.Buffer{}
-	writer := NewOCILayoutWriter(buf)
+	writer, err := NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+	require.NoError(t, err)
 	defer writer.Close()
 
 	desc := ociImageSpecV1.Descriptor{
@@ -264,7 +263,8 @@ func TestOCILayoutTarWriter_Resolve(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := &bytes.Buffer{}
-			writer := NewOCILayoutWriter(buf)
+			writer, err := NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+			require.NoError(t, err)
 			defer writer.Close()
 
 			// Push and tag the content if we expect it to exist
@@ -410,6 +410,257 @@ func TestDeleteAnnotationRefName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := deleteAnnotationRefName(tt.desc)
 			assert.Equal(t, tt.expected.Annotations, result.Annotations)
+		})
+	}
+}
+
+func TestOCILayoutTarWriter_ConcurrentPush(t *testing.T) {
+	buf := &bytes.Buffer{}
+	writer, err := NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+	require.NoError(t, err)
+
+	const numBlobs = 20
+	type blobEntry struct {
+		desc ociImageSpecV1.Descriptor
+		data []byte
+	}
+
+	blobs := make([]blobEntry, numBlobs)
+	for i := range numBlobs {
+		data := []byte(fmt.Sprintf("blob content number %d with some padding to make it interesting", i))
+		blobs[i] = blobEntry{
+			desc: ociImageSpecV1.Descriptor{
+				MediaType: "application/octet-stream",
+				Digest:    digest.FromBytes(data),
+				Size:      int64(len(data)),
+			},
+			data: data,
+		}
+	}
+
+	// Push all blobs concurrently
+	var wg sync.WaitGroup
+	errs := make([]error, numBlobs)
+	for i := range numBlobs {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			errs[idx] = writer.Push(context.Background(), blobs[idx].desc, bytes.NewReader(blobs[idx].data))
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		require.NoError(t, err, "Push failed for blob %d", i)
+	}
+
+	// Close to finalize the tar
+	require.NoError(t, writer.Close())
+
+	// Read back the tar and verify all blobs are present
+	tarReader := tar.NewReader(buf)
+	foundBlobs := make(map[string][]byte)
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		content, err := io.ReadAll(tarReader)
+		require.NoError(t, err)
+		foundBlobs[header.Name] = content
+	}
+
+	// Verify all blobs are in the tar
+	for i, b := range blobs {
+		bPath := "blobs/" + b.desc.Digest.Algorithm().String() + "/" + b.desc.Digest.Encoded()
+		data, ok := foundBlobs[bPath]
+		require.True(t, ok, "blob %d not found in tar at path %s", i, bPath)
+		assert.Equal(t, b.data, data, "blob %d content mismatch", i)
+	}
+
+	// Verify index.json and oci-layout are present
+	_, ok := foundBlobs[ociImageSpecV1.ImageIndexFile]
+	assert.True(t, ok, "index.json not found in tar")
+	_, ok = foundBlobs[ociImageSpecV1.ImageLayoutFile]
+	assert.True(t, ok, "oci-layout not found in tar")
+}
+
+func TestOCILayoutTarWriter_ScratchClosedOnClose(t *testing.T) {
+	// When scratch implements io.Closer (like *os.File), Close() calls it.
+	tmpFile, err := os.CreateTemp("", "oci-layout-test-*")
+	require.NoError(t, err)
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+
+	buf := &bytes.Buffer{}
+	writer := NewOCILayoutWriter(buf, tmpFile)
+	require.NoError(t, writer.Close())
+
+	// The file should still exist on disk (Close closes the fd, doesn't remove)
+	_, err = os.Stat(tmpPath)
+	require.NoError(t, err, "file should still exist, only fd is closed")
+}
+
+func TestOCILayoutWriterWithTempFile_RemovesOnClose(t *testing.T) {
+	buf := &bytes.Buffer{}
+	writer, err := NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+	require.NoError(t, err)
+
+	// Peek at the underlying file path via the removingCloser
+	rc := writer.buf.(*removingCloser)
+	tmpPath := rc.File.Name()
+
+	_, err = os.Stat(tmpPath)
+	require.NoError(t, err, "temp file should exist before Close")
+
+	require.NoError(t, writer.Close())
+
+	// removingCloser should have both closed and removed the file
+	_, err = os.Stat(tmpPath)
+	assert.True(t, os.IsNotExist(err), "temp file should be removed after Close")
+}
+
+func TestOCILayoutWriter_DirectConstructor(t *testing.T) {
+	// Verify the direct constructor works with a caller-managed temp file
+	tmpFile, err := os.CreateTemp("", "oci-layout-test-*")
+	require.NoError(t, err)
+	defer func() {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+	}()
+
+	buf := &bytes.Buffer{}
+	writer := NewOCILayoutWriter(buf, tmpFile)
+
+	desc := ociImageSpecV1.Descriptor{
+		MediaType: "application/octet-stream",
+		Digest:    digest.FromString("direct test"),
+		Size:      int64(len("direct test")),
+	}
+	require.NoError(t, writer.Push(context.Background(), desc, bytes.NewReader([]byte("direct test"))))
+	require.NoError(t, writer.Close())
+
+	// Verify the tar output is valid
+	tarReader := tar.NewReader(buf)
+	files := make(map[string][]byte)
+	for {
+		header, readErr := tarReader.Next()
+		if readErr == io.EOF {
+			break
+		}
+		require.NoError(t, readErr)
+		content, readErr := io.ReadAll(tarReader)
+		require.NoError(t, readErr)
+		files[header.Name] = content
+	}
+
+	bPath := "blobs/" + desc.Digest.Algorithm().String() + "/" + desc.Digest.Encoded()
+	assert.Equal(t, []byte("direct test"), files[bPath])
+	assert.Contains(t, files, ociImageSpecV1.ImageIndexFile)
+	assert.Contains(t, files, ociImageSpecV1.ImageLayoutFile)
+}
+
+// makeBenchBlobs pre-generates n blobs of the given size with valid digests.
+func makeBenchBlobs(n int, size int) []struct {
+	desc ociImageSpecV1.Descriptor
+	data []byte
+} {
+	blobs := make([]struct {
+		desc ociImageSpecV1.Descriptor
+		data []byte
+	}, n)
+	for i := range n {
+		data := make([]byte, size)
+		// Fill with a recognizable pattern per blob
+		for j := range data {
+			data[j] = byte(i + j)
+		}
+		blobs[i].data = data
+		blobs[i].desc = ociImageSpecV1.Descriptor{
+			MediaType: "application/octet-stream",
+			Digest:    digest.FromBytes(data),
+			Size:      int64(size),
+		}
+	}
+	return blobs
+}
+
+func BenchmarkOCILayoutWriter_Push_Sequential(b *testing.B) {
+	for _, blobSize := range []int{1024, 64 * 1024, 1024 * 1024} {
+		b.Run(fmt.Sprintf("blob_%dKB", blobSize/1024), func(b *testing.B) {
+			const numBlobs = 50
+			blobs := makeBenchBlobs(numBlobs, blobSize)
+
+			b.SetBytes(int64(numBlobs * blobSize))
+			b.ResetTimer()
+
+			for range b.N {
+				tmpFile, err := os.CreateTemp("", "bench-seq-*")
+				if err != nil {
+					b.Fatal(err)
+				}
+				writer := NewOCILayoutWriter(io.Discard, tmpFile)
+
+				for j := range numBlobs {
+					if err := writer.Push(context.Background(), blobs[j].desc, bytes.NewReader(blobs[j].data)); err != nil {
+						b.Fatal(err)
+					}
+				}
+				if err := writer.Close(); err != nil {
+					b.Fatal(err)
+				}
+				os.Remove(tmpFile.Name())
+			}
+		})
+	}
+}
+
+func BenchmarkOCILayoutWriter_Push_Concurrent(b *testing.B) {
+	for _, blobSize := range []int{1024, 64 * 1024, 1024 * 1024} {
+		b.Run(fmt.Sprintf("blob_%dKB", blobSize/1024), func(b *testing.B) {
+			const numBlobs = 50
+			blobs := makeBenchBlobs(numBlobs, blobSize)
+
+			b.SetBytes(int64(numBlobs * blobSize))
+			b.ResetTimer()
+
+			for range b.N {
+				tmpFile, err := os.CreateTemp(b.TempDir(), "bench-conc-*")
+				if err != nil {
+					b.Fatal(err)
+				}
+				writer := NewOCILayoutWriter(io.Discard, tmpFile)
+
+				var (
+					wg       sync.WaitGroup
+					mu       sync.Mutex
+					firstErr error
+				)
+				for j := range numBlobs {
+					wg.Add(1)
+					go func(idx int) {
+						defer wg.Done()
+						if err := writer.Push(b.Context(), blobs[idx].desc, bytes.NewReader(blobs[idx].data)); err != nil {
+							mu.Lock()
+							if firstErr == nil {
+								firstErr = err
+							}
+							mu.Unlock()
+						}
+					}(j)
+				}
+				wg.Wait()
+				if firstErr != nil {
+					b.Fatal(firstErr)
+				}
+				if err := writer.Close(); err != nil {
+					b.Fatal(err)
+				}
+				if err := os.Remove(tmpFile.Name()); err != nil {
+					b.Fatal(err)
+				}
+			}
 		})
 	}
 }

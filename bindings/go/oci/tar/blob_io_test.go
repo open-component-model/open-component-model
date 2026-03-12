@@ -22,7 +22,8 @@ func TestCopyOCILayout(t *testing.T) {
 		testBlobData := []byte("test blob content")
 		desc := content.NewDescriptorFromBytes("application/json", testBlobData)
 		var buf bytes.Buffer
-		ociLayout := NewOCILayoutWriter(&buf)
+		ociLayout, err := NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+		require.NoError(t, err)
 		require.NoError(t, ociLayout.Push(t.Context(), desc, bytes.NewReader(testBlobData)))
 
 		manifest, err := oras.PackManifest(t.Context(), ociLayout, oras.PackManifestVersion1_1, "application/artifact", oras.PackManifestOptions{
@@ -58,7 +59,8 @@ func TestCopyOCILayout(t *testing.T) {
 		testBlobData := []byte("test blob content")
 		desc := content.NewDescriptorFromBytes("application/json", testBlobData)
 		var buf bytes.Buffer
-		ociLayout := NewOCILayoutWriter(&buf)
+		ociLayout, err := NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+		require.NoError(t, err)
 		require.NoError(t, ociLayout.Push(t.Context(), desc, bytes.NewReader(testBlobData)))
 
 		manifest, err := oras.PackManifest(t.Context(), ociLayout, oras.PackManifestVersion1_1, "application/artifact", oras.PackManifestOptions{

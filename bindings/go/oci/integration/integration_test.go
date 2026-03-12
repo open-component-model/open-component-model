@@ -767,7 +767,8 @@ func generateRandomPassword(t *testing.T, length int) string {
 func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte, *v1.OCIImage) {
 	r := require.New(t)
 	var buf bytes.Buffer
-	w := tar.NewOCILayoutWriter(&buf)
+	w, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	r.NoError(err)
 
 	desc := ociImageSpecV1.Descriptor{}
 	desc.Digest = digest.FromBytes(data)

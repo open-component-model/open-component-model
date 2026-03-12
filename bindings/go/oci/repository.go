@@ -80,6 +80,9 @@ type Repository struct {
 
 	// unmarshalDescriptorFunc is used to unmarshal descriptors from OCI stores.
 	unmarshalDescriptorFunc descriptor2.UnmarshalFunc
+
+	// tempDir is the temporary directory used for OCI buffering operations.
+	tempDir string
 }
 
 // AddComponentVersion adds a new component version to the repository.
@@ -565,6 +568,7 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 		return tar.CopyToOCILayoutInMemory(ctx, store, artifact, tar.CopyToOCILayoutOptions{
 			CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
 			Tags:             []string{version},
+			TempDir:          repo.tempDir,
 		})
 	}
 
@@ -756,6 +760,7 @@ func (repo *Repository) download(ctx context.Context, access runtime.Typed) (dat
 		downloaded, err := tar.CopyToOCILayoutInMemory(ctx, src, desc, tar.CopyToOCILayoutOptions{
 			CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
 			Tags:             []string{typed.ImageReference},
+			TempDir:          repo.tempDir,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to copy to OCI layout: %w", err)

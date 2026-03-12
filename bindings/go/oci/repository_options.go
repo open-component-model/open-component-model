@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	slogcontext "github.com/veqryn/slog-context"
 	"oras.land/oras-go/v2"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -173,15 +174,15 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 			CopyGraphOptions: oras.CopyGraphOptions{
 				Concurrency: 8,
 				PreCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-					slog.DebugContext(ctx, "copying", log.DescriptorLogAttr(desc))
+					slogcontext.FromCtx(ctx).DebugContext(ctx, "copying", log.DescriptorLogAttr(desc))
 					return nil
 				},
 				PostCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-					slog.DebugContext(ctx, "copied", log.DescriptorLogAttr(desc))
+					slogcontext.FromCtx(ctx).DebugContext(ctx, "copied", log.DescriptorLogAttr(desc))
 					return nil
 				},
 				OnCopySkipped: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-					slog.DebugContext(ctx, "skipped", log.DescriptorLogAttr(desc))
+					slogcontext.FromCtx(ctx).DebugContext(ctx, "skipped", log.DescriptorLogAttr(desc))
 					return nil
 				},
 			},
@@ -197,5 +198,6 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		descriptorEncodingMediaType: options.DescriptorEncodingMediaType,
 		logger:                      options.Logger,
 		unmarshalDescriptorFunc:     options.DescriptorUnmarshalFunc,
+		tempDir:                     options.TempDir,
 	}, nil
 }
