@@ -87,7 +87,10 @@ Use this command to establish provenance of component versions.`,
 # Sign a component version with default algorithms
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
 
-## Example Credential Config
+## Example Credential Config (.ocmconfig)
+#
+# Credentials (private/public keys) are always resolved via .ocmconfig.
+# The "signature" field must match the --signature flag (default: "default").
 
     type: generic.config.ocm.software/v1
     configurations:
@@ -102,10 +105,25 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
           properties:
             private_key_pem: <PEM>
 
+## Example Signer Spec File (--signer-spec)
+#
+# A signer spec configures the signing algorithm and encoding policy.
+# It does NOT contain credentials — keys are always resolved via .ocmconfig.
+# If omitted, defaults to RSASSA-PSS with Plain encoding.
+#
+# Supported fields:
+#   type:                    RSASigningConfiguration/v1alpha1
+#   signatureAlgorithm:      RSASSA-PSS (default) | RSASSA-PKCS1-V1_5
+#   signatureEncodingPolicy: Plain (default) | PEM
+
+    type: RSASigningConfiguration/v1alpha1
+    signatureAlgorithm: RSASSA-PSS
+    signatureEncodingPolicy: Plain
+
 # Sign with custom signature name
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
 
-# Use a signer specification file
+# Use a signer specification file to override algorithm defaults
 sign component-version ./repo/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./rsassa-pss.yaml
 
 # Dry-run signing
@@ -121,7 +139,7 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().String(FlagSignature, DefaultSignatureName, "name of the signature to create or update. defaults to \"default\"")
-	cmd.Flags().String(FlagSignerSpec, "", "path to a signer specification file. If empty, defaults to an empty RSASSA-PSS configuration.")
+	cmd.Flags().String(FlagSignerSpec, "", "path to a signer specification file (configures algorithm and encoding, not credentials). If empty, defaults to RSASSA-PSS with Plain encoding.")
 	cmd.Flags().Bool(FlagDryRun, false, "compute signature but do not persist it to the repository")
 	cmd.Flags().String(FlagNormalisationAlgorithm, v4alpha1.Algorithm, "normalisation algorithm to use (default jsonNormalisation/v4alpha1)")
 	cmd.Flags().String(FlagHashAlgorithm, crypto.SHA256.String(), "hash algorithm to use (SHA256, SHA512)")
