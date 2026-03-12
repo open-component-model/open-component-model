@@ -57,6 +57,7 @@ var (
 	recorder   record.EventRecorder
 	ctx        context.Context
 	cancel     context.CancelFunc
+	pm         *manager.PluginManager
 )
 
 func TestControllers(t *testing.T) {
@@ -143,7 +144,7 @@ var _ = BeforeSuite(func() {
 		}
 	}()
 
-	pm := manager.NewPluginManager(ctx)
+	pm = manager.NewPluginManager(ctx)
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(repository.Scheme))
 	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
 	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
