@@ -48,31 +48,6 @@ type CacheBackedRepository struct {
 
 var _ repository.ComponentVersionRepository = (*CacheBackedRepository)(nil)
 
-// newCacheBackedRepository creates a new CacheBackedRepository instance.
-func newCacheBackedRepository(
-	logger *logr.Logger,
-	resolver resolvers.ComponentVersionRepositoryResolver,
-	cfg *configuration.Configuration,
-	wp *workerpool.WorkerPool,
-	requesterFunc func() workerpool.RequesterInfo,
-	baseRepoSpec runtime.Typed,
-	verifications []verification.Verification,
-	digest *v2.Digest,
-	signingRegistry *signinghandler.SigningRegistry,
-) *CacheBackedRepository {
-	return &CacheBackedRepository{
-		logger:          logger,
-		resolver:        resolver,
-		cfg:             cfg,
-		workerPool:      wp,
-		requesterFunc:   requesterFunc,
-		baseRepoSpec:    baseRepoSpec,
-		verifications:   verifications,
-		digest:          digest,
-		signingRegistry: signingRegistry,
-	}
-}
-
 // AddComponentVersion adds a component version to the underlying repository.
 func (c *CacheBackedRepository) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
 	repo, err := c.resolver.GetComponentVersionRepositoryForComponent(ctx, desc.Component.Name, desc.Component.Version)

@@ -483,7 +483,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	var matchedResource *descriptor.Resource
 	for i, res := range componentDescriptor.Component.Resources {
 		resIdentity := res.ToIdentity()
-		if resourceIdentity.Match(resIdentity, identityFunc()) {
+		if resourceIdentity.Match(resIdentity, ocm.IdentityFuncIgnoreVersion()) {
 			matchedResource = &componentDescriptor.Component.Resources[i]
 			break
 		}
@@ -659,15 +659,6 @@ func makeResourceIdentity(info *deliveryv1alpha1.ResourceInfo) ocmruntime.Identi
 }
 
 // identityFunc is a custom identity matching function that ignores the "version" field if it is not set.
-func identityFunc() ocmruntime.IdentityMatchingChainFn {
-	return func(i, o ocmruntime.Identity) bool {
-		version, ok := i["version"]
-		if !ok || version == "" {
-			delete(o, "version")
-		}
-		return ocmruntime.IdentityEqual(i, o)
-	}
-}
 
 func (r *Reconciler) createApplySet(deployer *deliveryv1alpha1.Deployer, logger logr.Logger) *applyset.ApplySet {
 	cfg := applyset.Config{
@@ -875,21 +866,33 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		return nil, fmt.Errorf("failed to get verifications: %w", err)
 	}
 
-	repoComponent, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+	requesterFunc := func() workerpool.RequesterInfo {
+		return workerpool.RequesterInfo{
+			NamespacedName: k8stypes.NamespacedName{
+				Namespace: deployer.GetNamespace(),
+				Name:      deployer.GetName(),
+			},
+		}
+	}
+
+	verifiedOpts := resolution.RepositoryOptions{
 		RepositorySpec:    repoSpecComponent,
 		OCMConfigurations: configs,
 		Namespace:         component.GetNamespace(),
 		SigningRegistry:   r.PluginManager.SigningRegistry,
 		Verifications:     verifications,
-		RequesterFunc: func() workerpool.RequesterInfo {
-			return workerpool.RequesterInfo{
-				NamespacedName: k8stypes.NamespacedName{
-					Namespace: deployer.GetNamespace(),
-					Name:      deployer.GetName(),
-				},
-			}
-		},
-	})
+		RequesterFunc:     requesterFunc,
+	}
+
+	refPathOpts := resolution.RepositoryOptions{
+		RepositorySpec:    repoSpecComponent,
+		OCMConfigurations: configs,
+		Namespace:         deployer.GetNamespace(),
+		SigningRegistry:   r.PluginManager.SigningRegistry,
+		RequesterFunc:     requesterFunc,
+	}
+
+	repoComponent, err := r.Resolver.NewCacheBackedRepository(ctx, &verifiedOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
@@ -897,19 +900,17 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 	componentDescriptorComponent, err := repoComponent.GetComponentVersion(ctx,
 		component.Status.Component.Component,
 		component.Status.Component.Version)
-	if err != nil {
-		// Only return the error if it is not of type `ErrNotSafelyDigestible`. If it is of that type, we need to check
-		// if there is a reference path to check.
-		if !errors.Is(err, workerpool.ErrNotSafelyDigestible) {
-			return nil, fmt.Errorf("failed to get component version from cache-backed repository: %w", err)
-		}
+	// Only return the error if it is not of type `ErrNotSafelyDigestible`. If it is of that type, we need to check
+	// if there is a reference path to resolve.
+	if err != nil && !errors.Is(err, workerpool.ErrNotSafelyDigestible) {
+		return nil, fmt.Errorf("failed to get component version from cache-backed repository: %w", err)
 	}
 
 	// Early return if the component version from the component and resource status are the same.
+	// Returning the error as well as this could be of type `ErrNotSafelyDigestible`, which is a fallthrough with
+	// an error event. The error will be checked in the calling code.
 	if component.Status.Component.Component == resource.Status.Component.Component &&
 		component.Status.Component.Version == resource.Status.Component.Version {
-		// Returning the error as well as this could be of type `ErrNotSafelyDigestible`, which is a fallthrough with
-		// an error event. The error will be checked in the calling code.
 		return componentDescriptorComponent, err
 	}
 
@@ -927,24 +928,15 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		return nil, ErrComponentVersionDrift
 	}
 
-	// We use errReferencePath to keep the previous error in case it is an error of type ErrNotSafelyDigestible.
 	resourceDescriptor, _, errReferencePath := ocm.ResolveReferencePath(
 		ctx,
 		r.Resolver,
-		r.PluginManager.SigningRegistry,
 		componentDescriptorComponent,
-		repoSpecComponent,
 		resource.Spec.Resource.ByReference.ReferencePath,
-		configs,
-		workerpool.RequesterInfo{
-			NamespacedName: k8stypes.NamespacedName{
-				Namespace: deployer.GetNamespace(),
-				Name:      deployer.GetName(),
-			},
-		},
+		&refPathOpts,
 	)
 	if errReferencePath != nil && !errors.Is(errReferencePath, workerpool.ErrNotSafelyDigestible) {
-		return nil, fmt.Errorf("failed to resolve resource reference path: %w", err)
+		return nil, fmt.Errorf("failed to resolve resource reference path: %w", errReferencePath)
 	}
 
 	// Join potential errors of type ErrNotSafelyDigestible to be handled by the calling function.

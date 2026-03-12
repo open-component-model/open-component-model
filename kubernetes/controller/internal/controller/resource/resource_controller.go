@@ -345,15 +345,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	resourceDescriptor, resourceRepoSpec, err := ocm.ResolveReferencePath(
 		ctx,
 		r.Resolver,
-		r.PluginManager.SigningRegistry,
 		referencedDescriptor,
-		repoSpec,
 		resource.Spec.Resource.ByReference.ReferencePath,
-		configs,
-		workerpool.RequesterInfo{
-			NamespacedName: k8stypes.NamespacedName{
-				Namespace: resource.GetNamespace(),
-				Name:      resource.GetName(),
+		&resolution.RepositoryOptions{
+			RepositorySpec:    repoSpec,
+			OCMConfigurations: configs,
+			Namespace:         resource.GetNamespace(),
+			SigningRegistry:   r.PluginManager.SigningRegistry,
+			RequesterFunc: func() workerpool.RequesterInfo {
+				return workerpool.RequesterInfo{
+					NamespacedName: k8stypes.NamespacedName{
+						Namespace: resource.GetNamespace(),
+						Name:      resource.GetName(),
+					},
+				}
 			},
 		},
 	)

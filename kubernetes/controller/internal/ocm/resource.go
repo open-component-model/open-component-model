@@ -11,9 +11,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
@@ -67,64 +65,35 @@ func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *de
 
 // ResolveReferencePath walks a reference path from a parent component version to a final component version.
 // It returns the final descriptor and repository spec.
+// The baseOpts are used as a template for each resolution step; only the Digest field is overridden per reference.
 func ResolveReferencePath(
 	ctx context.Context,
 	resolver *resolution.Resolver,
-	signingRegistry *signinghandler.SigningRegistry,
 	parentDesc *descriptor.Descriptor,
-	parentRepoSpec runtime.Typed,
 	referencePath []runtime.Identity,
-	configs []v1alpha1.OCMConfiguration,
-	reqInfo workerpool.RequesterInfo,
+	baseOpts *resolution.RepositoryOptions,
 ) (*descriptor.Descriptor, runtime.Typed, error) {
 	logger := log.FromContext(ctx)
 
 	if len(referencePath) == 0 {
-		return parentDesc, parentRepoSpec, nil
+		return parentDesc, baseOpts.RepositorySpec, nil
 	}
 
 	currentDesc := parentDesc
-	currentRepoSpec := parentRepoSpec
 	var errsNotSafelyDigestible error
 	for i, refIdentity := range referencePath {
 		logger.V(1).Info("resolving reference", "step", i+1, "identity", refIdentity)
 
-		var matchedRef *descriptor.Reference
-		for j, ref := range currentDesc.Component.References {
-			refIdent := ref.ToIdentity()
-			if refIdentity.Match(refIdent, IdentityFuncIgnoreVersion()) {
-				matchedRef = &currentDesc.Component.References[j]
-				break
-			}
-		}
-
+		matchedRef := findMatchingReference(currentDesc, refIdentity)
 		if matchedRef == nil {
 			return nil, nil, fmt.Errorf("component reference with identity %v not found in component %s:%s at reference path step %d",
 				refIdentity, currentDesc.Component.Name, currentDesc.Component.Version, i+1)
 		}
 
-		// If the reference contains a digest spec, we pass it to the cache-backed repository, so it is used for the
-		// cache-key creation and digest integrity check in the resolution service. This is the digest of the
-		// referenced component from the component reference of the parent component.
-		var refDigest *v2.Digest
-		if matchedRef.Digest.Value != "" && matchedRef.Digest.HashAlgorithm != "" && matchedRef.Digest.NormalisationAlgorithm != "" {
-			refDigest = &v2.Digest{
-				HashAlgorithm:          matchedRef.Digest.HashAlgorithm,
-				Value:                  matchedRef.Digest.Value,
-				NormalisationAlgorithm: matchedRef.Digest.NormalisationAlgorithm,
-			}
-		}
+		stepOpts := *baseOpts
+		stepOpts.Digest = extractDigest(matchedRef)
 
-		refRepo, err := resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-			RepositorySpec:    currentRepoSpec,
-			OCMConfigurations: configs,
-			Namespace:         reqInfo.NamespacedName.Namespace,
-			SigningRegistry:   signingRegistry,
-			Digest:            refDigest,
-			RequesterFunc: func() workerpool.RequesterInfo {
-				return reqInfo
-			},
-		})
+		refRepo, err := resolver.NewCacheBackedRepository(ctx, &stepOpts)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create cache-backed repository for reference: %w", err)
 		}
@@ -136,16 +105,33 @@ func ResolveReferencePath(
 					matchedRef.Component, matchedRef.Version, err)
 			}
 
-			// GetComponentVersion can return a ErrNotSafelyDigestible error that needs to create an error event
-			// on the CR without terminating the reconciliation. Hence, we gather any ErrNotSafelyDigestible error to
-			// return it to the caller of this function.
 			errsNotSafelyDigestible = errors.Join(errsNotSafelyDigestible, err)
 		}
 
 		currentDesc = refDesc
 	}
 
-	return currentDesc, currentRepoSpec, errsNotSafelyDigestible
+	return currentDesc, baseOpts.RepositorySpec, errsNotSafelyDigestible
+}
+
+func findMatchingReference(desc *descriptor.Descriptor, identity runtime.Identity) *descriptor.Reference {
+	for j, ref := range desc.Component.References {
+		if identity.Match(ref.ToIdentity(), IdentityFuncIgnoreVersion()) {
+			return &desc.Component.References[j]
+		}
+	}
+	return nil
+}
+
+func extractDigest(ref *descriptor.Reference) *v2.Digest {
+	if ref.Digest.Value != "" && ref.Digest.HashAlgorithm != "" && ref.Digest.NormalisationAlgorithm != "" {
+		return &v2.Digest{
+			HashAlgorithm:          ref.Digest.HashAlgorithm,
+			Value:                  ref.Digest.Value,
+			NormalisationAlgorithm: ref.Digest.NormalisationAlgorithm,
+		}
+	}
+	return nil
 }
 
 // IdentityFuncIgnoreVersion is a custom identity matching function that ignores the "version" field if it is not set.

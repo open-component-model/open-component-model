@@ -106,7 +106,17 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 		r.repoCache.Add(cacheKey, provider)
 	}
 
-	return newCacheBackedRepository(r.logger, provider, cfg, r.workerPool, requesterFunc, baseRepoSpec, opts.Verifications, opts.Digest, opts.SigningRegistry), nil
+	return &CacheBackedRepository{
+		logger:          r.logger,
+		resolver:        provider,
+		cfg:             cfg,
+		workerPool:      r.workerPool,
+		requesterFunc:   requesterFunc,
+		baseRepoSpec:    baseRepoSpec,
+		verifications:   opts.Verifications,
+		digest:          opts.Digest,
+		signingRegistry: opts.SigningRegistry,
+	}, nil
 }
 
 // createResolver creates a resolver based on the configuration.
