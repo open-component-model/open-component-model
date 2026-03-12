@@ -320,7 +320,8 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			content: func(t *testing.T) []byte {
 				// Create a buffer to hold the OCI layout
 				buf := bytes.NewBuffer(nil)
-				layout := tar.NewOCILayoutWriter(buf)
+				layout, err := tar.NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+				require.NoError(t, err)
 
 				// Create a descriptor for our content
 				content := []byte("oci layout content")
@@ -548,7 +549,8 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 				// Use UploadResource for global uploads
 				// Create a temporary OCI store
 				buf := bytes.NewBuffer(nil)
-				store := tar.NewOCILayoutWriter(buf)
+				store, storeErr := tar.NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+				r.NoError(storeErr)
 
 				base := content.NewDescriptorFromBytes("", tc.content)
 				r.NoError(store.Push(ctx, base, bytes.NewReader(tc.content)), "Failed to push content to store")
@@ -730,7 +732,8 @@ func TestRepository_DownloadUploadSource(t *testing.T) {
 				// Use UploadSource for global uploads
 				// Create a temporary OCI store
 				buf := bytes.NewBuffer(nil)
-				store := tar.NewOCILayoutWriter(buf)
+				store, storeErr := tar.NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+				r.NoError(storeErr)
 
 				base := content.NewDescriptorFromBytes("", tc.content)
 				r.NoError(store.Push(ctx, base, bytes.NewReader(tc.content)), "Failed to push content to store")
@@ -960,7 +963,8 @@ func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 func createSingleLayerOCIImage(t *testing.T, data []byte, ref string) ([]byte, *v1.OCIImage) {
 	r := require.New(t)
 	var buf bytes.Buffer
-	w := tar.NewOCILayoutWriter(&buf)
+	w, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	r.NoError(err)
 
 	desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, data)
 	r.NoError(w.Push(t.Context(), desc, bytes.NewReader(data)))
@@ -1245,7 +1249,8 @@ func TestRepository_GetLocalSource(t *testing.T) {
 			content: func(t *testing.T) []byte {
 				// Create a buffer to hold the OCI layout
 				buf := bytes.NewBuffer(nil)
-				layout := tar.NewOCILayoutWriter(buf)
+				layout, err := tar.NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+				require.NoError(t, err)
 
 				// Create a descriptor for our content
 				content := []byte("oci layout content")
@@ -1256,7 +1261,7 @@ func TestRepository_GetLocalSource(t *testing.T) {
 				}
 
 				// Push the content
-				err := layout.Push(t.Context(), desc, bytes.NewReader(content))
+				err = layout.Push(t.Context(), desc, bytes.NewReader(content))
 				require.NoError(t, err)
 
 				// Create a manifest
