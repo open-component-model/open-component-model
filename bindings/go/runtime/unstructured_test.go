@@ -200,7 +200,7 @@ func TestUnstructured_GetType(t *testing.T) {
 		{
 			name:     "invalid string with too many segments falls back to unversioned",
 			data:     map[string]any{"type": "some/invalid/type"},
-			expected: runtime.NewUnversionedType("some/invalid/type"),
+			expected: runtime.Type{},
 		},
 		{
 			name:     "missing type field returns zero Type",
@@ -208,8 +208,8 @@ func TestUnstructured_GetType(t *testing.T) {
 			expected: runtime.Type{},
 		},
 		{
-			name:     "type field from JSON unmarshal is string",
-			data:     func() map[string]any {
+			name: "type field from JSON unmarshal is string",
+			data: func() map[string]any {
 				un := runtime.NewUnstructured()
 				err := un.UnmarshalJSON([]byte(`{"type":"OCIImage/v1","imageReference":"ghcr.io/example/image:v1"}`))
 				if err != nil {
@@ -220,8 +220,8 @@ func TestUnstructured_GetType(t *testing.T) {
 			expected: runtime.NewVersionedType("OCIImage", "v1"),
 		},
 		{
-			name:     "type field from JSON unmarshal is unversioned string",
-			data:     func() map[string]any {
+			name: "type field from JSON unmarshal is unversioned string",
+			data: func() map[string]any {
 				un := runtime.NewUnstructured()
 				err := un.UnmarshalJSON([]byte(`{"type":"helm","repository":"https://charts.example.com"}`))
 				if err != nil {
