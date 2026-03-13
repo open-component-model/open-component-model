@@ -257,6 +257,20 @@ func TestBindingToOCI_MapReference(t *testing.T) {
 			},
 		},
 		{
+			name: "backward compatible plain imageReference without type",
+			input: map[string]any{
+				"imageReference": "registry.io/myrepo/myapp:v1",
+			},
+			expects: map[string]string{
+				"host":       "registry.io",
+				"registry":   "registry.io",
+				"repository": "myrepo/myapp",
+				"tag":        "v1",
+				"digest":     "",
+				"reference":  "v1",
+			},
+		},
+		{
 			name: "map without recognized access keys returns error",
 			input: map[string]any{
 				"type":      "someUnknownType/v1",

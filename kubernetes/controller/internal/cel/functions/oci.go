@@ -2,6 +2,7 @@ package functions
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/cel-go/cel"
@@ -145,15 +146,20 @@ func extractImageReference(m map[string]any) (string, error) {
 		return "", fmt.Errorf("converting map to unstructured failed: %w", err)
 	}
 
+	var raw runtime.Raw
+	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(unstructured, &raw); err != nil {
+		return "", fmt.Errorf("converting unstructured to raw failed: %w", err)
+	}
+
 	// Try OCIImage access
 	var ociImage ociaccessv1.OCIImage
-	if err := ociaccess.Scheme.Convert(unstructured, &ociImage); err == nil {
+	if err := ociaccess.Scheme.Convert(&raw, &ociImage); err == nil {
 		return ociImage.ImageReference, nil
 	}
 
 	// Try localBlob access
 	var localBlob v2.LocalBlob
-	if err := v2.Scheme.Convert(unstructured, &localBlob); err == nil {
+	if err := v2.Scheme.Convert(&raw, &localBlob); err == nil {
 		// Prefer globalAccess.imageReference
 		if localBlob.GlobalAccess != nil {
 			var globalOCIImage ociaccessv1.OCIImage
@@ -166,6 +172,13 @@ func extractImageReference(m map[string]any) (string, error) {
 		if localBlob.ReferenceName != "" {
 			return localBlob.ReferenceName, nil
 		}
+	}
+
+	// try old way with "imageReference" key at the top level (for backward compatibility)
+	if imgRef, ok := m["imageReference"].(string); ok {
+		slog.Warn("toOCI(): falling back to untyped 'imageReference' field, please use a proper OCM access type (e.g. OCIImage/v1 or localBlob/v1)",
+			"imageReference", imgRef)
+		return imgRef, nil
 	}
 
 	return "", fmt.Errorf("expected map with key 'imageReference', 'globalAccess.imageReference', or 'referenceName', got %v", m)
