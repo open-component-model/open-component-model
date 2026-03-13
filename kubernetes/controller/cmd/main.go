@@ -27,8 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	"ocm.software/open-component-model/bindings/go/helm/access"
-	helmv1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -190,11 +188,7 @@ func main() {
 
 	if err := pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
 		&ocicredentials.OCICredentialRepository{},
-		[]ocmruntime.Type{
-			v1.Type,
-			ocmruntime.NewUnversionedType(access.LegacyHelmChartConsumerType),
-			ocmruntime.NewVersionedType(access.LegacyHelmChartConsumerType, helmv1.Version),
-		},
+		[]ocmruntime.Type{v1.Type},
 	); err != nil {
 		setupLog.Error(err, "failed to register internal credential repository plugin")
 		os.Exit(1)

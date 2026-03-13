@@ -31,7 +31,9 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 		identity.SetType(AnyConsumerIdentityType)
 		var anyErr error
 		plugin, anyErr = g.repositoryPluginProvider.GetRepositoryPlugin(ctx, identity)
-		// If still no repository can be found, we return an error indicating that no indirect credentials can be found.
+		// If still no repository plugin can be found, we return an error indicating that no repository plugin and
+		// indirect credentials can be found. Then, the caller can decide if it wants to treat this as an error or
+		// just a signal that no indirect credentials could be found.
 		if errors.Is(anyErr, ErrNoRepositoryPluginFound) {
 			return nil, errors.Join(anyErr, ErrNoIndirectCredentials)
 		}
