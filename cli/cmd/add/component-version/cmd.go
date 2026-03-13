@@ -489,7 +489,7 @@ func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *con
 			}
 		}
 	} else {
-		slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", prov.targetRepoSpec, "error", err)
+		slog.DebugContext(ctx, "could not get credential consumer identity for component version repository", "repository", prov.targetRepoSpec, "error", err)
 	}
 
 	return prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)
