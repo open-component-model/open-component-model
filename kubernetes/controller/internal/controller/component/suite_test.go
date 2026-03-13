@@ -24,8 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"ocm.software/open-component-model/bindings/go/helm/access"
-	helmv1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
@@ -152,11 +150,7 @@ var _ = BeforeSuite(func() {
 	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
 	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
 		&ocicredentials.OCICredentialRepository{},
-		[]ocmruntime.Type{
-			v1.Type,
-			ocmruntime.NewUnversionedType(access.LegacyHelmChartConsumerType),
-			ocmruntime.NewVersionedType(access.LegacyHelmChartConsumerType, helmv1.Version),
-		},
+		[]ocmruntime.Type{v1.Type},
 	)).To(Succeed())
 
 	const unlimited = 0
