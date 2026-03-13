@@ -2,6 +2,7 @@ package credentials
 
 import (
 	"context"
+	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -48,6 +49,10 @@ type GetRepositoryPluginFn func(ctx context.Context, typed runtime.Typed) (Repos
 func (fn GetRepositoryPluginFn) GetRepositoryPlugin(ctx context.Context, typed runtime.Typed) (RepositoryPlugin, error) {
 	return fn(ctx, typed)
 }
+
+// ErrNoRepositoryPluginFound is returned when no repository plugin can be found for a given typed object.
+// TODO(@frewilhelm): Discuss if we want to introduce another API instead, e.g. IsRegistered(typed runtime.Typed)
+var ErrNoRepositoryPluginFound = fmt.Errorf("plugin not found")
 
 // RepositoryPluginProvider is any provider that can retrieve a RepositoryPlugin for a given typed object.
 type RepositoryPluginProvider interface {
