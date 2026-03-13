@@ -78,6 +78,11 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 #   type:                    RSASigningConfiguration/v1alpha1
 #   signatureAlgorithm:      RSASSA-PSS (default) | RSASSA-PKCS1-V1_5
 #   signatureEncodingPolicy: Plain (default) | PEM
+#
+# signatureEncodingPolicy controls the *signature output* format:
+#   Plain — signature stored as hex string; verification needs an external public key
+#   PEM   — signature wrapped in a PEM SIGNATURE block with embedded certificate chain
+#           (experimental; credentials must provide certificates, not bare public keys)
 
     type: RSASigningConfiguration/v1alpha1
     signatureAlgorithm: RSASSA-PSS
