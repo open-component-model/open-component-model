@@ -6,6 +6,7 @@ import {
     parseVersion,
     extractHighestFinalVersion,
     shouldSetLatest,
+    findPreviousTag,
 } from "./release-versioning.js";
 
 // ----------------------------------------------------------
@@ -188,6 +189,87 @@ assert.ok(
 assert.ok(
     shouldSetLatest("0.10.0", "0.9.0"),
     "Should handle numeric comparison correctly (0.10 > 0.9)"
+);
+
+// ----------------------------------------------------------
+// findPreviousTag tests
+// ----------------------------------------------------------
+
+// Normal case: finds the latest non-RC tag, excluding the new tag
+assert.strictEqual(
+    findPreviousTag(
+        ["cli/v0.1.0", "cli/v0.1.0-rc.1", "cli/v0.2.0-rc.1"],
+        "cli/v0.2.0-rc.1"
+    ),
+    "cli/v0.1.0",
+    "Should find cli/v0.1.0 as previous tag"
+);
+
+// First release: no previous non-RC tags exist
+assert.strictEqual(
+    findPreviousTag(
+        ["cli/v0.1.0-rc.1"],
+        "cli/v0.1.0-rc.1"
+    ),
+    "",
+    "Should return empty string when only the new RC tag exists"
+);
+
+// Multiple stable versions: picks the highest
+assert.strictEqual(
+    findPreviousTag(
+        ["cli/v0.1.0", "cli/v0.1.1", "cli/v0.2.0-rc.1"],
+        "cli/v0.2.0-rc.1"
+    ),
+    "cli/v0.1.1",
+    "Should return the highest non-RC tag"
+);
+
+// Excludes the new tag even if it's a stable tag
+assert.strictEqual(
+    findPreviousTag(
+        ["cli/v0.1.0", "cli/v0.2.0"],
+        "cli/v0.2.0"
+    ),
+    "cli/v0.1.0",
+    "Should exclude the new tag itself from results"
+);
+
+// Empty input
+assert.strictEqual(
+    findPreviousTag([], "cli/v0.1.0-rc.1"),
+    "",
+    "Should return empty string for empty tag list"
+);
+
+// Only RC tags (first release scenario)
+assert.strictEqual(
+    findPreviousTag(
+        ["cli/v0.1.0-rc.1", "cli/v0.1.0-rc.2"],
+        "cli/v0.1.0-rc.3"
+    ),
+    "",
+    "Should return empty string when only RC tags exist"
+);
+
+// Controller tags: first release has no previous
+assert.strictEqual(
+    findPreviousTag(
+        ["kubernetes/controller/v0.2.0-rc.1"],
+        "kubernetes/controller/v0.2.0-rc.1"
+    ),
+    "",
+    "Controller first release should have no previous tag"
+);
+
+// Version sorting: 0.10.0 > 0.9.0 > 0.2.0
+assert.strictEqual(
+    findPreviousTag(
+        ["cli/v0.2.0", "cli/v0.9.0", "cli/v0.10.0", "cli/v0.11.0-rc.1"],
+        "cli/v0.11.0-rc.1"
+    ),
+    "cli/v0.10.0",
+    "Should sort versions numerically, not lexicographically"
 );
 
 console.log("✅ All tests passed.");
