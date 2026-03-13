@@ -13,7 +13,7 @@ var _ credentials.RepositoryPluginProvider = &RepositoryRegistry{}
 func (r *RepositoryRegistry) GetRepositoryPlugin(ctx context.Context, consumer runtime.Typed) (credentials.RepositoryPlugin, error) {
 	typ, ok := r.consumerTypeRegistrations[consumer.GetType()]
 	if !ok {
-		return nil, fmt.Errorf("no plugin registered for consumer identity type %q", consumer.GetType())
+		return nil, fmt.Errorf("no plugin registered for consumer identity type %q: %w", consumer.GetType(), credentials.ErrNoRepositoryPluginFound)
 	}
 
 	base, ok := r.internalCredentialRepositoryPlugins[typ]
