@@ -41,26 +41,28 @@ const (
 	ComponentLabel = "component"
 	// VersionLabel is the name of the label for the passed in component's version.
 	VersionLabel = "version"
+	// VerificationStateLabel is the name of the label for the verification state of a resolved component version.
+	VerificationStateLabel = "verification_state"
 )
 
 // CacheMissCounterTotal counts the number of times a cache miss occurred.
-// [component, version].
+// [component, version, verification_state].
 var CacheMissCounterTotal = metrics.MustRegisterCounterVec(
 	MetricsNamespace,
 	OcmComponent,
 	CacheMissCounterLabel,
 	"Number of times a cache miss occurred.",
-	ComponentLabel, VersionLabel,
+	ComponentLabel, VersionLabel, VerificationStateLabel,
 )
 
 // CacheHitCounterTotal counts the number of times a cache hit occurred.
-// [component, version].
+// [component, version, verification_state].
 var CacheHitCounterTotal = metrics.MustRegisterCounterVec(
 	MetricsNamespace,
 	OcmComponent,
 	CacheHitCounterLabel,
 	"Number of times a cache hit occurred.",
-	ComponentLabel, VersionLabel,
+	ComponentLabel, VersionLabel, VerificationStateLabel,
 )
 
 // QueueSizeGauge tracks the current size of the lookup queue.
@@ -80,22 +82,22 @@ var InProgressGauge = metrics.MustRegisterGauge(
 )
 
 // ResolutionDurationHistogram tracks the duration of component version resolutions.
-// [component, version].
+// [component, version, verification_state].
 var ResolutionDurationHistogram = metrics.MustRegisterHistogramVec(
 	MetricsNamespace,
 	OcmComponent,
 	ResolutionDurationHistogramLabel,
 	"Duration of component version resolutions in seconds.",
 	[]float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
-	ComponentLabel, VersionLabel,
+	ComponentLabel, VersionLabel, VerificationStateLabel,
 )
 
 // EventChannelDropsTotal counts the number of times events could not be emitted due to channel overflow.
-// [component, version].
+// [component, version, verification_state].
 var EventChannelDropsTotal = metrics.MustRegisterCounterVec(
 	MetricsNamespace,
 	OcmComponent,
 	EventChannelDropsLabel,
 	"Number of times resolution events could not be emitted due to channel overflow.",
-	ComponentLabel, VersionLabel,
+	ComponentLabel, VersionLabel, VerificationStateLabel,
 )
