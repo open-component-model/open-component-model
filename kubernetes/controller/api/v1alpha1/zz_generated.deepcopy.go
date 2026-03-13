@@ -616,9 +616,9 @@ func (in *ResourceSpec) DeepCopyInto(out *ResourceSpec) {
 	out.Interval = in.Interval
 	if in.AdditionalStatusFields != nil {
 		in, out := &in.AdditionalStatusFields, &out.AdditionalStatusFields
-		*out = make(map[string]string, len(*in))
+		*out = make(map[string]v1.JSON, len(*in))
 		for key, val := range *in {
-			(*out)[key] = val
+			(*out)[key] = *val.DeepCopy()
 		}
 	}
 }

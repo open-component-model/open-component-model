@@ -42,7 +42,10 @@ type ResourceSpec struct {
 
 	// AdditionalStatusFields are additional fields that can be used to
 	// extend the status of the Resource with custom expressions.
-	AdditionalStatusFields map[string]string `json:"additionalStatusFields,omitempty"`
+	// Values can be either CEL expression strings or nested objects
+	// containing CEL expression strings.
+	// +kubebuilder:validation:XPreserveUnknownFields
+	AdditionalStatusFields map[string]apiextensionsv1.JSON `json:"additionalStatusFields,omitempty"`
 }
 
 // ResourceStatus defines the observed state of Resource.
