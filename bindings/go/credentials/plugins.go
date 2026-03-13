@@ -51,7 +51,6 @@ func (fn GetRepositoryPluginFn) GetRepositoryPlugin(ctx context.Context, typed r
 }
 
 // ErrNoRepositoryPluginFound is returned when no repository plugin can be found for a given typed object.
-// TODO(@frewilhelm): Discuss if we want to introduce another API instead, e.g. IsRegistered(typed runtime.Typed)
 var ErrNoRepositoryPluginFound = errors.New("no repository plugin found")
 
 // RepositoryPluginProvider is any provider that can retrieve a RepositoryPlugin for a given typed object.
