@@ -35,7 +35,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 		// indirect credentials can be found. Then, the caller can decide if it wants to treat this as an error or
 		// just a signal that no indirect credentials could be found.
 		if errors.Is(anyErr, ErrNoRepositoryPluginFound) {
-			return nil, errors.Join(anyErr, ErrNoIndirectCredentials)
+			return nil, errors.Join(err, anyErr, ErrNoIndirectCredentials)
 		}
 		if anyErr != nil {
 			return nil, errors.Join(err, anyErr)
