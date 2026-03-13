@@ -1025,7 +1025,7 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 		"scheme":   "http",
 		"hostname": url.Hostname(),
 		"port":     url.Port(),
-		"type":     "OCIRepository",
+		"type":     "OCIRegistry",
 	}
 
 	originalData := []byte("foobar")
@@ -1117,7 +1117,7 @@ func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 		"scheme":   "http",
 		"hostname": url.Hostname(),
 		"port":     url.Port(),
-		"type":     "OCIRepository",
+		"type":     "OCIRegistry",
 	}
 
 	originalData := []byte("foobar-add")
