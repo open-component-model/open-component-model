@@ -139,6 +139,111 @@ func TestUnstructured(t *testing.T) {
 	}
 }
 
+func TestUnstructured_GetType(t *testing.T) {
+	tests := []struct {
+		name     string
+		data     map[string]any
+		expected runtime.Type
+	}{
+		{
+			name: "type set as runtime.Type via SetType with versioned OCIImage",
+			data: func() map[string]any {
+				un := runtime.NewUnstructured()
+				un.SetType(runtime.NewVersionedType("OCIImage", "v1"))
+				return un.Data
+			}(),
+			expected: runtime.NewVersionedType("OCIImage", "v1"),
+		},
+		{
+			name: "type set as runtime.Type via SetType with versioned Helm",
+			data: func() map[string]any {
+				un := runtime.NewUnstructured()
+				un.SetType(runtime.NewVersionedType("Helm", "v1"))
+				return un.Data
+			}(),
+			expected: runtime.NewVersionedType("Helm", "v1"),
+		},
+		{
+			name: "type set as runtime.Type via SetType unversioned",
+			data: func() map[string]any {
+				un := runtime.NewUnstructured()
+				un.SetType(runtime.NewUnversionedType("ociArtifact"))
+				return un.Data
+			}(),
+			expected: runtime.NewUnversionedType("ociArtifact"),
+		},
+		{
+			name:     "versioned string OCIImage/v1 parsed into Type",
+			data:     map[string]any{"type": "OCIImage/v1"},
+			expected: runtime.NewVersionedType("OCIImage", "v1"),
+		},
+		{
+			name:     "versioned string Helm/v1 parsed into Type",
+			data:     map[string]any{"type": "Helm/v1"},
+			expected: runtime.NewVersionedType("Helm", "v1"),
+		},
+		{
+			name:     "versioned string with legacy type ociArtifact/v1",
+			data:     map[string]any{"type": "ociArtifact/v1"},
+			expected: runtime.NewVersionedType("ociArtifact", "v1"),
+		},
+		{
+			name:     "unversioned string ociImage",
+			data:     map[string]any{"type": "ociImage"},
+			expected: runtime.NewUnversionedType("ociImage"),
+		},
+		{
+			name:     "unversioned string helm",
+			data:     map[string]any{"type": "helm"},
+			expected: runtime.NewUnversionedType("helm"),
+		},
+		{
+			name:     "invalid string with too many segments falls back to unversioned",
+			data:     map[string]any{"type": "some/invalid/type"},
+			expected: runtime.Type{},
+		},
+		{
+			name:     "missing type field returns zero Type",
+			data:     map[string]any{"other": "value"},
+			expected: runtime.Type{},
+		},
+		{
+			name: "type field from JSON unmarshal is string",
+			data: func() map[string]any {
+				un := runtime.NewUnstructured()
+				err := un.UnmarshalJSON([]byte(`{"type":"OCIImage/v1","imageReference":"ghcr.io/example/image:v1"}`))
+				if err != nil {
+					panic(err)
+				}
+				return un.Data
+			}(),
+			expected: runtime.NewVersionedType("OCIImage", "v1"),
+		},
+		{
+			name: "type field from JSON unmarshal is unversioned string",
+			data: func() map[string]any {
+				un := runtime.NewUnstructured()
+				err := un.UnmarshalJSON([]byte(`{"type":"helm","repository":"https://charts.example.com"}`))
+				if err != nil {
+					panic(err)
+				}
+				return un.Data
+			}(),
+			expected: runtime.NewUnversionedType("helm"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			un := &runtime.Unstructured{Data: tc.data}
+			got := un.GetType()
+			assert.Equal(t, tc.expected, got)
+			assert.Equal(t, tc.expected.GetName(), got.GetName())
+			assert.Equal(t, tc.expected.GetVersion(), got.GetVersion())
+		})
+	}
+}
+
 type testDigest struct {
 	HashAlgorithm          string `json:"hashAlgorithm"`
 	NormalisationAlgorithm string `json:"normalisationAlgorithm"`

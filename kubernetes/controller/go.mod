@@ -36,15 +36,15 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.10
 	ocm.software/open-component-model/bindings/go/credentials v0.0.7
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260310160452-6205a8a9f970
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260310160452-6205a8a9f970
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260313084546-9b60a41e6785
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260313084546-9b60a41e6785
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/oci v0.0.35
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260310160452-6205a8a9f970
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260313084546-9b60a41e6785
 	ocm.software/open-component-model/bindings/go/runtime v0.0.6
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260310160452-6205a8a9f970
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260313084546-9b60a41e6785
 	sigs.k8s.io/release-utils v0.12.3
 )
 
@@ -94,6 +94,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.4 // indirect
+	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

@@ -2,10 +2,12 @@ package test
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	. "github.com/onsi/gomega"
 
+	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -54,10 +56,18 @@ func MockResource(
 	resource.Status.Resource = options.ResourceInfo
 	resource.Status.EffectiveOCMConfig = options.EffectiveOCMConfig
 
-	Eventually(func(ctx context.Context) error {
-		status.MarkReady(options.Recorder, resource, "applied mock resource")
+	status.MarkReady(options.Recorder, resource, "applied mock resource")
+	Expect(status.UpdateStatus(ctx, patchHelper, resource, options.Recorder, time.Hour, nil)).To(Succeed())
 
-		return status.UpdateStatus(ctx, patchHelper, resource, options.Recorder, time.Hour, nil)
+	Eventually(func(ctx context.Context) error {
+		r := &v1alpha1.Resource{}
+		Expect(options.Clnt.Get(ctx, client.ObjectKeyFromObject(resource), r)).To(Succeed())
+
+		if conditions.IsReady(r) {
+			return nil
+		}
+
+		return errors.New("resource is not ready")
 	}).WithContext(ctx).Should(Succeed())
 
 	return resource
