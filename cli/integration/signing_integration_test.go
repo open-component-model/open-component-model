@@ -47,7 +47,7 @@ configurations:
 - type: credentials.config.ocm.software
   consumers:
   - identity:
-      type: OCIRepository
+      type: OCIRegistry
       hostname: %[1]q
       port: %[2]q
       scheme: http
