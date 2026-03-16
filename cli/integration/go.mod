@@ -19,7 +19,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260316115453-5423e3d5e6b5
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260316115453-5423e3d5e6b5
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
-	ocm.software/open-component-model/bindings/go/oci v0.0.35
+	ocm.software/open-component-model/bindings/go/oci v0.0.36
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260316115453-5423e3d5e6b5
