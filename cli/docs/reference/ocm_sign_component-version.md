@@ -135,7 +135,7 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
                                            4. The directory of the current executable:
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
-                                           If several configuration files are found in the above locations, they will be merged together.
+                                           If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Using the option, this configuration file be used instead of the lookup above.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing

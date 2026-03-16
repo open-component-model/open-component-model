@@ -38,7 +38,7 @@ By default (without specifying custom locations with this flag), the file will b
 4. The directory of the current executable:
 - $EXE_DIR/ocm/config
 - $EXE_DIR/.ocmconfig
-If several configuration files are found in the above locations, they will be merged together.
+If multiple configuration files are found, they will be merged in the order they are discovered.
 Using the option, this configuration file be used instead of the lookup above.`)
 }
 
