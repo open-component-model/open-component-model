@@ -51,7 +51,7 @@ Additionally, OCM provides a generic solution for how to:
 - Transport component versions, per reference or as values to any of the
   repository implementations.
 
-### [OCM CLI](cli/docs/reference/ocm.md)
+### [OCM CLI](cli)
 
 > **Work In Progress**: This OCM CLI is a completely new take on interacting and working with OCM. As such, expect
 > heavy changes, especially in the commands available. We are working on a stable API and will release it as soon as
@@ -86,6 +86,12 @@ helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/contr
     --namespace ocm-k8s-toolkit-system \
     --create-namespace
 ```
+
+While the OCM K8s Toolkit technically can be used standalone to deploy manifests from OCM resources, its full
+potential is only unlocked when used together with [kro](https://kro.run/docs/getting-started/Installation/) and a
+deployer, e.g. [FluxCD](https://fluxcd.io/docs/installation/). Together, you will be able to deploy Helm charts or
+Kustomizations from OCM resources and configure as well as localize them while deploying them.
+Check out our [guides](https://ocm.software/docs/getting-started/) for more details.
 
 ### [OCM Language Bindings](bindings)
 
