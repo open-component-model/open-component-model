@@ -139,7 +139,7 @@ func TestIntegration_MultipleConfigSources(t *testing.T) {
 		},
 	}
 
-	// Create ConfigMap with plugin config wrapped in generic config (in JSON format)
+	// Create ConfigMap with resolver config wrapped in generic config (in JSON format)
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "ocm-plugins",
@@ -150,11 +150,14 @@ func TestIntegration_MultipleConfigSources(t *testing.T) {
 				"type": "generic.config.ocm.software/v1",
 				"configurations": [
 					{
-						"type": "plugin.config.ocm.software/v1",
-						"plugins": [
+						"type": "resolvers.config.ocm.software/v1alpha1",
+						"resolvers": [
 							{
-								"name": "helm",
-								"version": "v1.0.0"
+								"repository": {
+									"type": "OCIRegistry",
+									"baseUrl": "ghcr.io"
+								},
+								"componentNamePattern": "ocm.software/*"
 							}
 						]
 					}
@@ -193,7 +196,7 @@ func TestIntegration_MultipleConfigSources(t *testing.T) {
 	require.NotNil(t, cfg)
 
 	assert.NotNil(t, cfg)
-	assert.Len(t, cfg.Config.Configurations, 2, "should have loaded 2 configurations (credentials + plugin)")
+	assert.Len(t, cfg.Config.Configurations, 2, "should have loaded 2 configurations (credentials + resolvers)")
 }
 
 func TestIntegration_ErrorHandling(t *testing.T) {

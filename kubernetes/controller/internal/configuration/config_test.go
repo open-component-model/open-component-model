@@ -13,6 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	ocmconfigv1spec "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
+	resolversv1alpha1spec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
@@ -264,12 +266,12 @@ func TestLoadConfigurations(t *testing.T) {
 				"type": "generic.config.ocm.software/v1",
 				"configurations": [
 					{
-						"type": "filesystem.config.ocm.software/v1alpha1",
-						"tempFolder": "/tmp/test"
+						"type": "credentials.config.ocm.software/v1",
+						"repositories": []
 					},
 					{
-						"type": "whatever.config.ocm.software/v1alpha1",
-						"whatever": "whatever"
+						"type": "resolvers.config.ocm.software/v1alpha1",
+						"resolvers": []
 					}
 				]
 			}`),
@@ -434,12 +436,12 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 							"type": "generic.config.ocm.software/v1",
 							"configurations": [
 								{
-									"type": "filesystem.config.ocm.software/v1alpha1",
-									"tempFolder": "/tmp/test"
+									"type": "credentials.config.ocm.software/v1",
+									"consumers": [{"identities": [{"hostname": "registry-a.io"}], "credentials": []}]
 								},
 								{
-									"type": "whatever.config.ocm.software/v1alpha1",
-									"whatever": "whatever"
+									"type": "credentials.config.ocm.software/v1",
+									"consumers": [{"identities": [{"hostname": "registry-b.io"}], "credentials": []}]
 								}
 						]}`),
 					},
@@ -454,12 +456,12 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 							"type": "generic.config.ocm.software/v1",
 							"configurations": [
 								{
-									"type": "whatever.config.ocm.software/v1alpha1",
-									"whatever": "whatever"
+									"type": "credentials.config.ocm.software/v1",
+									"consumers": [{"identities": [{"hostname": "registry-b.io"}], "credentials": []}]
 								},
 								{
-									"type": "filesystem.config.ocm.software/v1alpha1",
-									"tempFolder": "/tmp/test"
+									"type": "credentials.config.ocm.software/v1",
+									"consumers": [{"identities": [{"hostname": "registry-a.io"}], "credentials": []}]
 								}
 						]}`),
 					},
@@ -512,12 +514,12 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 							"type": "generic.config.ocm.software/v1",
 							"configurations": [
 								{
-									"type": "filesystem.config.ocm.software/v1alpha1",
-									"tempFolder": "/tmp/test"
+									"type": "credentials.config.ocm.software/v1",
+									"consumers": [{"identities": [{"hostname": "registry-a.io"}], "credentials": []}]
 								},
 								{
-									"type": "whatever.config.ocm.software/v1alpha1",
-									"whatever": "whatever"
+									"type": "credentials.config.ocm.software/v1",
+									"consumers": [{"identities": [{"hostname": "registry-b.io"}], "credentials": []}]
 								}
 						]}`),
 					},
@@ -532,12 +534,12 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 							"type": "generic.config.ocm.software/v1",
 							"configurations": [
 								{
-									"type": "whatever.config.ocm.software/v1alpha1",
-									"whatever": "whatever"
+									"type": "credentials.config.ocm.software/v1",
+									"consumers": [{"identities": [{"hostname": "registry-b.io"}], "credentials": []}]
 								},
 								{
-									"type": "filesystem.config.ocm.software/v1alpha1",
-									"tempFolder": "/tmp/test"
+									"type": "credentials.config.ocm.software/v1",
+									"consumers": [{"identities": [{"hostname": "registry-a.io"}], "credentials": []}]
 								}
 						]}`),
 					},
@@ -590,12 +592,12 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 				"type": "generic.config.ocm.software/v1",
 				"configurations": [
 					{
-						"type": "filesystem.config.ocm.software/v1alpha1",
-						"tempFolder": "/tmp/test"
+						"type": "credentials.config.ocm.software/v1",
+						"consumers": [{"identities": [{"hostname": "registry-a.io"}], "credentials": []}]
 					},
 					{
-						"type": "whatever.config.ocm.software/v1alpha1",
-						"whatever": "whatever"
+						"type": "credentials.config.ocm.software/v1",
+						"consumers": [{"identities": [{"hostname": "registry-b.io"}], "credentials": []}]
 					}
 				]
 			}`),
@@ -611,12 +613,12 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 				"type": "generic.config.ocm.software/v1",
 				"configurations": [
 					{
-						"type": "whatever.config.ocm.software/v1alpha1",
-						"whatever": "whatever"
+						"type": "credentials.config.ocm.software/v1",
+						"consumers": [{"identities": [{"hostname": "registry-b.io"}], "credentials": []}]
 					},
 					{
-						"type": "filesystem.config.ocm.software/v1alpha1",
-						"tempFolder": "/tmp/test"
+						"type": "credentials.config.ocm.software/v1",
+						"consumers": [{"identities": [{"hostname": "registry-a.io"}], "credentials": []}]
 					}
 				]
 			}`),
@@ -644,4 +646,144 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 			tt.equal(t, cfgA, cfgB)
 		})
 	}
+}
+
+func TestFilterAllowedConfigTypes(t *testing.T) {
+	makeGenericConfig := func(entries ...string) *genericv1.Config {
+		cfg := &genericv1.Config{
+			Type: ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
+		}
+		for _, entry := range entries {
+			raw := &ocmruntime.Raw{}
+			require.NoError(t, raw.UnmarshalJSON([]byte(entry)))
+			cfg.Configurations = append(cfg.Configurations, raw)
+		}
+		return cfg
+	}
+
+	t.Run("nil config returns nil configurations", func(t *testing.T) {
+		cfg := &genericv1.Config{
+			Type: ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
+		}
+		result, err := filterAllowedConfigTypes(cfg)
+		require.NoError(t, err)
+		assert.Empty(t, result.Configurations)
+	})
+
+	t.Run("only allowed types pass through", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"credentials.config.ocm.software/v1","repositories":[]}`,
+			`{"type":"resolvers.config.ocm.software/v1alpha1","resolvers":[]}`,
+			`{"type":"ocm.config.ocm.software/v1","resolvers":[]}`,
+		)
+		result, err := filterAllowedConfigTypes(cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 3)
+		types := []ocmruntime.Type{result.Configurations[0].GetType(), result.Configurations[1].GetType(), result.Configurations[2].GetType()}
+		assert.Contains(t, types, ocmruntime.NewVersionedType(credentialsv1.ConfigType, credentialsv1.Version))
+		assert.Contains(t, types, ocmruntime.NewVersionedType(resolversv1alpha1spec.ConfigType, resolversv1alpha1spec.Version))
+		assert.Contains(t, types, ocmruntime.NewVersionedType(ocmconfigv1spec.ConfigType, ocmconfigv1spec.Version))
+	})
+
+	t.Run("disallowed types are removed", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"credentials.config.ocm.software/v1","repositories":[]}`,
+			`{"type":"filesystem.config.ocm.software/v1alpha1","tempFolder":"/tmp"}`,
+			`{"type":"whatever.config.ocm.software/v1alpha1","whatever":"whatever"}`,
+		)
+		result, err := filterAllowedConfigTypes(cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+		assert.Equal(t,
+			ocmruntime.NewVersionedType(credentialsv1.ConfigType, credentialsv1.Version),
+			result.Configurations[0].GetType(),
+		)
+	})
+
+	t.Run("unversioned allowed types pass through", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"credentials.config.ocm.software","repositories":[]}`,
+			`{"type":"resolvers.config.ocm.software","resolvers":[]}`,
+		)
+		result, err := filterAllowedConfigTypes(cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 2)
+		types := []ocmruntime.Type{result.Configurations[0].GetType(), result.Configurations[1].GetType()}
+		assert.Contains(t, types, ocmruntime.NewUnversionedType(credentialsv1.ConfigType))
+		assert.Contains(t, types, ocmruntime.NewUnversionedType(resolversv1alpha1spec.ConfigType))
+	})
+
+	t.Run("aliases stripped from ocm.config.ocm.software versioned", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"ocm.config.ocm.software/v1","aliases":{"myrepo":{"type":"OCIRegistry","baseUrl":"ghcr.io"}},"resolvers":[]}`,
+		)
+		result, err := filterAllowedConfigTypes(cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+
+		var ocmCfg ocmconfigv1spec.Config
+		require.NoError(t, ocmconfigv1spec.Scheme.Convert(result.Configurations[0], &ocmCfg))
+		assert.Nil(t, ocmCfg.Aliases)
+	})
+
+	t.Run("aliases stripped from ocm.config.ocm.software unversioned", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"ocm.config.ocm.software","aliases":{"myrepo":{"type":"OCIRegistry","baseUrl":"ghcr.io"}},"resolvers":[]}`,
+		)
+		result, err := filterAllowedConfigTypes(cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+
+		var ocmCfg ocmconfigv1spec.Config
+		require.NoError(t, ocmconfigv1spec.Scheme.Convert(result.Configurations[0], &ocmCfg))
+		assert.Nil(t, ocmCfg.Aliases)
+	})
+
+	t.Run("resolvers preserved after alias stripping", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"ocm.config.ocm.software/v1","aliases":{"myrepo":{"type":"OCIRegistry","baseUrl":"ghcr.io"}},"resolvers":[{"repository":{"type":"OCIRegistry","baseUrl":"ghcr.io"},"prefix":"ocm.software","priority":10}]}`,
+		)
+		result, err := filterAllowedConfigTypes(cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+
+		var ocmCfg ocmconfigv1spec.Config
+		require.NoError(t, ocmconfigv1spec.Scheme.Convert(result.Configurations[0], &ocmCfg))
+		assert.Nil(t, ocmCfg.Aliases)
+		require.Len(t, ocmCfg.Resolvers, 1)
+		assert.Equal(t, "ocm.software", ocmCfg.Resolvers[0].Prefix)
+	})
+
+	t.Run("resolvers v1alpha1 passes through unchanged", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"resolvers.config.ocm.software/v1alpha1","resolvers":[{"repository":{"type":"OCIRegistry","baseUrl":"ghcr.io"},"componentNamePattern":"ocm.software/*"}]}`,
+		)
+		result, err := filterAllowedConfigTypes(cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+
+		var resolverCfg resolversv1alpha1spec.Config
+		require.NoError(t, resolversv1alpha1spec.Scheme.Convert(result.Configurations[0], &resolverCfg))
+		require.Len(t, resolverCfg.Resolvers, 1)
+		assert.Equal(t, "ocm.software/*", resolverCfg.Resolvers[0].ComponentNamePattern)
+	})
+
+	t.Run("allowed entries from multiple configs are all preserved after FlatMap", func(t *testing.T) {
+		cfgA := makeGenericConfig(
+			`{"type":"credentials.config.ocm.software/v1","repositories":[]}`,
+			`{"type":"filesystem.config.ocm.software/v1alpha1","tempFolder":"/tmp"}`,
+		)
+		cfgB := makeGenericConfig(
+			`{"type":"resolvers.config.ocm.software/v1alpha1","resolvers":[]}`,
+			`{"type":"whatever.config.ocm.software/v1alpha1","whatever":"whatever"}`,
+		)
+		flattened := genericv1.FlatMap(cfgA, cfgB)
+		result, err := filterAllowedConfigTypes(flattened)
+		require.NoError(t, err)
+		// only the credentials and resolvers entries survive; the filesystem and whatever entries are dropped
+		require.Len(t, result.Configurations, 2)
+		types := []ocmruntime.Type{result.Configurations[0].GetType(), result.Configurations[1].GetType()}
+		assert.Contains(t, types, ocmruntime.NewVersionedType(credentialsv1.ConfigType, credentialsv1.Version))
+		assert.Contains(t, types, ocmruntime.NewVersionedType(resolversv1alpha1spec.ConfigType, resolversv1alpha1spec.Version))
+	})
 }
