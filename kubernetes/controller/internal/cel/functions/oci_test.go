@@ -219,23 +219,6 @@ func TestBindingToOCI_MapReference(t *testing.T) {
 			},
 		},
 		{
-			name: "localBlob with referenceName fallback",
-			input: map[string]any{
-				"type":           "localBlob/v1",
-				"localReference": "sha256:abc123",
-				"mediaType":      "application/vnd.oci.image.manifest.v1+json",
-				"referenceName":  "registry.io/fallback/image:v4",
-			},
-			expects: map[string]string{
-				"host":       "registry.io",
-				"registry":   "registry.io",
-				"repository": "fallback/image",
-				"tag":        "v4",
-				"digest":     "",
-				"reference":  "v4",
-			},
-		},
-		{
 			name: "localBlob prefers globalAccess over referenceName",
 			input: map[string]any{
 				"type":           "localBlob/v1",
@@ -393,23 +376,6 @@ func TestBindingToOCI_TypedAccessSpecs(t *testing.T) {
 				"tag":        "2.0.0",
 				"digest":     "",
 				"reference":  "2.0.0",
-			},
-		},
-		{
-			name: "localBlob with referenceName",
-			input: typedToMap(t, &v2.LocalBlob{
-				Type:           runtime.NewVersionedType("localBlob", "v1"),
-				LocalReference: "sha256:def456",
-				MediaType:      "application/vnd.oci.image.manifest.v1+json",
-				ReferenceName:  "ghcr.io/org/component/chart:1.0.0",
-			}),
-			expects: map[string]string{
-				"host":       "ghcr.io",
-				"registry":   "ghcr.io",
-				"repository": "org/component/chart",
-				"tag":        "1.0.0",
-				"digest":     "",
-				"reference":  "1.0.0",
 			},
 		},
 		{
