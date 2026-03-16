@@ -85,6 +85,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
                                            4. The directory of the current executable:
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
+                                           If several configuration files are found in the above locations, they will be merged together.
                                            Using the option, this configuration file be used instead of the lookup above.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
