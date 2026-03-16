@@ -43,8 +43,8 @@ github.com/fluxcd/pkg/apis/event v0.24.0 h1:WVPf0FrJ5JExRDDGoo4W0jZgHZt0n4E48/e8
 github.com/fluxcd/pkg/apis/event v0.24.0/go.mod h1:Hoi4DejaNKVahGkRXqGBjT9h1aKmhc7RCYcsgoTieqc=
 github.com/fluxcd/pkg/apis/meta v1.25.0 h1:fmZgMoe7yITGfhFqdOs7w2GOu3Y/2Vvz4+4p/eay3eA=
 github.com/fluxcd/pkg/apis/meta v1.25.0/go.mod h1:1D92RqAet0/n/cH5S0khBXweirHWkw9rCO0V4NCY6xc=
-github.com/fluxcd/pkg/runtime v0.99.0 h1:7UKcpXwdahCtmOxexKJK2BUTzcTLZlemmB5FdQAAJTM=
-github.com/fluxcd/pkg/runtime v0.99.0/go.mod h1:MlqGtL3CkfXeTP6Ih5p0R/GdFOWmrxZo3fPpaXYsxN8=
+github.com/fluxcd/pkg/runtime v0.101.0 h1:dNChEsjZCUFh9DbR1nZ9OzEMptl8PQ6wS7O94S5La0g=
+github.com/fluxcd/pkg/runtime v0.101.0/go.mod h1:SctSsHvFwUfiOVP1zirP6mo7I8wQtXeWVl2lNQWal88=
 github.com/fsnotify/fsnotify v1.9.0 h1:2Ml+OJNzbYCTzsxtv8vKSFD9PbJjmhYF14k/jKC7S9k=
 github.com/fsnotify/fsnotify v1.9.0/go.mod h1:8jBTzvmWwFyi3Pb8djgCCO5IBqzKJ/Jwo8TRcHyHii0=
 github.com/fxamacker/cbor/v2 v2.9.0 h1:NpKPmjDBgUfBms6tr6JZkTHtfFGcMKsw3eGcmD/sapM=
