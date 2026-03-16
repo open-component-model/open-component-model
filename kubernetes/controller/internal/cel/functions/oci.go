@@ -19,6 +19,13 @@ import (
 
 const ToOCIFunctionName = "toOCI"
 
+var scheme = runtime.NewScheme()
+
+func init() {
+	scheme.MustRegisterScheme(ociaccess.Scheme)
+	scheme.MustRegisterScheme(v2.Scheme)
+}
+
 // ToOCI returns a CEL environment option that registers the "toOCI" function.
 // This function can be called on any CEL value (string or map) and converts
 // it into a map containing OCI reference components (host, registry, repository,
@@ -146,20 +153,48 @@ func extractImageReference(m map[string]any) (string, error) {
 		return "", fmt.Errorf("converting map to unstructured failed: %w", err)
 	}
 
+	// runtime.Scheme.Convert does not support runtime.Unstructured as a conversion source.
+	// We need to convert it to runtime.Raw first.
+	// TODO(matthiasbruns) https://github.com/open-component-model/ocm-project/issues/944
 	var raw runtime.Raw
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(unstructured, &raw); err != nil {
 		return "", fmt.Errorf("converting unstructured to raw failed: %w", err)
 	}
 
-	// Try OCIImage access
-	var ociImage ociaccessv1.OCIImage
-	if err := ociaccess.Scheme.Convert(&raw, &ociImage); err == nil {
-		return ociImage.ImageReference, nil
+	if imgRef, err := getAccessReference(&raw); imgRef != "" {
+		return imgRef, nil
+	} else if err != nil {
+		slog.Warn("extracting image reference from access type failed, falling back to untyped map access", "error", err)
 	}
 
-	// Try localBlob access
-	var localBlob v2.LocalBlob
-	if err := v2.Scheme.Convert(&raw, &localBlob); err == nil {
+	// try old way with "imageReference" key at the top level (for backward compatibility)
+	if imgRef, ok := m["imageReference"].(string); ok {
+		slog.Warn("toOCI(): falling back to untyped 'imageReference' field, please use a proper OCM access type (e.g. OCIImage/v1 or localBlob/v1)",
+			"imageReference", imgRef)
+		return imgRef, nil
+	}
+
+	return "", fmt.Errorf("expected map with key 'imageReference', 'globalAccess.imageReference', or 'referenceName', got %v", m)
+}
+
+func getAccessReference(raw *runtime.Raw) (string, error) {
+	typed, err := scheme.NewObject(raw.GetType())
+	if err != nil {
+		return "", fmt.Errorf("creating new object for type %s failed: %w", raw.GetType(), err)
+	}
+
+	switch typed.(type) {
+	case *ociaccessv1.OCIImage:
+		var ociImage ociaccessv1.OCIImage
+		if err := scheme.Convert(raw, &ociImage); err != nil {
+			return "", fmt.Errorf("converting to OCIImage failed: %w", err)
+		}
+		return ociImage.ImageReference, nil
+	case *v2.LocalBlob:
+		var localBlob v2.LocalBlob
+		if err := scheme.Convert(raw, &localBlob); err != nil {
+			return "", fmt.Errorf("converting to LocalBlob failed: %w", err)
+		}
 		// Prefer globalAccess.imageReference
 		if localBlob.GlobalAccess != nil {
 			var globalOCIImage ociaccessv1.OCIImage
@@ -174,12 +209,5 @@ func extractImageReference(m map[string]any) (string, error) {
 		}
 	}
 
-	// try old way with "imageReference" key at the top level (for backward compatibility)
-	if imgRef, ok := m["imageReference"].(string); ok {
-		slog.Warn("toOCI(): falling back to untyped 'imageReference' field, please use a proper OCM access type (e.g. OCIImage/v1 or localBlob/v1)",
-			"imageReference", imgRef)
-		return imgRef, nil
-	}
-
-	return "", fmt.Errorf("expected map with key 'imageReference', 'globalAccess.imageReference', or 'referenceName', got %v", m)
+	return "", fmt.Errorf("no valid OCI image reference found in access type %s", typed.GetType())
 }
