@@ -195,17 +195,12 @@ func getAccessReference(raw *runtime.Raw) (string, error) {
 		if err := scheme.Convert(raw, &localBlob); err != nil {
 			return "", fmt.Errorf("converting to LocalBlob failed: %w", err)
 		}
-		// Prefer globalAccess.imageReference
+
 		if localBlob.GlobalAccess != nil {
 			var globalOCIImage ociaccessv1.OCIImage
 			if err := ociaccess.Scheme.Convert(localBlob.GlobalAccess, &globalOCIImage); err == nil && globalOCIImage.ImageReference != "" {
 				return globalOCIImage.ImageReference, nil
 			}
-		}
-
-		// Fall back to referenceName
-		if localBlob.ReferenceName != "" {
-			return localBlob.ReferenceName, nil
 		}
 	}
 
