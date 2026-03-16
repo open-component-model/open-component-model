@@ -5,5 +5,8 @@
   },
   "devDependencies": {
     "@actions/github-script": "github:actions/github-script"
+  },
+  "overrides": {
+    "undici": "^6.24.0"
   }
 }
