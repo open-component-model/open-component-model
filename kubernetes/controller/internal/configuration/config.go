@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -62,15 +63,7 @@ func filterAllowedConfigTypes(cfg *genericv1.Config) (*genericv1.Config, error) 
 	// user-supplied alias mappings from Kubernetes Secrets/ConfigMaps are never forwarded to
 	// the library at all. Resolvers in those same entries are left intact.
 	for i, entry := range filtered.Configurations {
-		entryType := entry.GetType()
-		isOCMConfig := false
-		for _, t := range ocmConfigTypes {
-			if entryType == t {
-				isOCMConfig = true
-				break
-			}
-		}
-		if !isOCMConfig {
+		if !slices.Contains(ocmConfigTypes, entry.GetType()) {
 			continue
 		}
 
@@ -223,12 +216,17 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		configs = append(configs, cfg)
 	}
 
-	flattened, err := filterAllowedConfigTypes(genericv1.FlatMap(configs...))
+	flattened := genericv1.FlatMap(configs...)
+	if flattened == nil {
+		return nil, nil
+	}
+
+	flattenedFiltered, err := filterAllowedConfigTypes(flattened)
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply config type allowlist: %w", err)
 	}
 
-	content, err := json.Marshal(flattened)
+	content, err := json.Marshal(flattenedFiltered)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +236,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 	hash := hasher.Sum(nil)
 
 	result := Configuration{
-		Config: flattened,
+		Config: flattenedFiltered,
 		Hash:   hash,
 	}
 
