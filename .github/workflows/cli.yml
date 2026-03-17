@@ -50,8 +50,6 @@ env:
   # - pull_request: Use head repository (fork) for PR changes
   # - other events: Use current repository
   CHECKOUT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-  # Test if the arduino/setup-task works with node 24
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
