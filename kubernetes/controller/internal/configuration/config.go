@@ -47,6 +47,10 @@ var allowedConfigTypes = []runtime.Type{
 // types are in the allowedConfigTypes list. Additionally, it strips the deprecated Aliases field
 // from any ocm.config.ocm.software entries.
 func filterAllowedConfigTypes(cfg *genericv1.Config) (*genericv1.Config, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config is nil")
+	}
+
 	filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{ConfigTypes: allowedConfigTypes})
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter config types: %w", err)
