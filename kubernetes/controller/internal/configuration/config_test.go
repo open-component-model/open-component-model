@@ -661,7 +661,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		return cfg
 	}
 
-	t.Run("nil config returns nil configurations", func(t *testing.T) {
+	t.Run("empty config returns empty configurations", func(t *testing.T) {
 		cfg := &genericv1.Config{
 			Type: ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
 		}
