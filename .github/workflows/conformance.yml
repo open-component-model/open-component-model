@@ -150,31 +150,25 @@ jobs:
           CHART_PATH=$(ls tmp/chart-artifact/chart-*.tgz)
           echo "TOOLKIT_IMAGE=${{ github.workspace }}/${CHART_PATH}" >> "$GITHUB_ENV"
 
+      # Set inputs as env vars (artifact steps above take precedence via GITHUB_ENV).
+      # Task picks up env vars automatically through the {{ .VAR | default }} pattern.
+      - name: Set inputs as environment variables
+        run: |
+          [ -z "$CLI_IMAGE" ] && [ -n "$INPUT_CLI_IMAGE" ] && echo "CLI_IMAGE=${INPUT_CLI_IMAGE}" >> "$GITHUB_ENV"
+          [ -z "$TOOLKIT_IMAGE" ] && [ -n "$INPUT_TOOLKIT_IMAGE" ] && echo "TOOLKIT_IMAGE=${INPUT_TOOLKIT_IMAGE}" >> "$GITHUB_ENV"
+        env:
+          INPUT_CLI_IMAGE: ${{ inputs.cli_image }}
+          INPUT_TOOLKIT_IMAGE: ${{ inputs.toolkit_image }}
+
       - name: Check dependencies
         working-directory: conformance/scenarios/sovereign
         run: task check
       - name: Run conformance scenario
         working-directory: conformance/scenarios/sovereign
-        env:
-          _CLI_IMAGE: ${{ env.CLI_IMAGE || inputs.cli_image }}
-          _TOOLKIT_IMAGE: ${{ env.TOOLKIT_IMAGE || inputs.toolkit_image }}
-          _PRELOAD_IMAGES: ${{ env.PRELOAD_IMAGES }}
-        run: |
-          args=()
-          [ -n "$_CLI_IMAGE" ] && args+=(CLI_IMAGE="$_CLI_IMAGE")
-          [ -n "$_TOOLKIT_IMAGE" ] && args+=(TOOLKIT_IMAGE="$_TOOLKIT_IMAGE")
-          [ -n "$_PRELOAD_IMAGES" ] && args+=(PRELOAD_IMAGES="$_PRELOAD_IMAGES")
-          task run "${args[@]}"
+        run: task run
       - name: Run upgrade scenario
         working-directory: conformance/scenarios/sovereign
-        env:
-          _CLI_IMAGE: ${{ env.CLI_IMAGE || inputs.cli_image }}
-          _TOOLKIT_IMAGE: ${{ env.TOOLKIT_IMAGE || inputs.toolkit_image }}
-        run: |
-          args=()
-          [ -n "$_CLI_IMAGE" ] && args+=(CLI_IMAGE="$_CLI_IMAGE")
-          [ -n "$_TOOLKIT_IMAGE" ] && args+=(TOOLKIT_IMAGE="$_TOOLKIT_IMAGE")
-          task upgrade "${args[@]}"
+        run: task upgrade
       - name: Verify upgrade
         working-directory: conformance/scenarios/sovereign
         run: >-
