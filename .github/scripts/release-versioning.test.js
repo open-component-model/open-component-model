@@ -272,4 +272,14 @@ assert.strictEqual(
     "Should sort versions numerically, not lexicographically"
 );
 
+// Ignore non-semver tags (e.g. experimental marker tags)
+assert.strictEqual(
+    findPreviousTag(
+        ["cli/v2-experimental", "cli/v0.2.0-rc.1"],
+        "cli/v0.2.0-rc.1"
+    ),
+    "",
+    "Should ignore non-semver non-RC tags"
+);
+
 console.log("✅ All tests passed.");

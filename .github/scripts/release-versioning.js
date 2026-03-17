@@ -241,7 +241,7 @@ export function parseVersion(tag) {
 // --------------------------------------------
 
 /**
- * Find the most recent non-RC release tag for a component on the current branch.
+ * Find the most recent stable semver release tag for a component on the current branch.
  *
  * Required because git-cliff's --include-path filter can cause it to lose
  * track of tag boundaries when the tagged commit doesn't modify files matching
@@ -251,11 +251,11 @@ export function parseVersion(tag) {
  *
  * @param {string[]} tags - List of tags reachable from HEAD (from git tag --list --merged HEAD)
  * @param {string} newTag - The tag about to be created (to exclude from results)
- * @returns {string} The previous non-RC tag, or empty string if none found (first release)
+ * @returns {string} The previous stable semver tag, or empty string if none found (first release)
  */
 export function findPreviousTag(tags, newTag) {
     return tags
-        .filter(t => t && t !== newTag && !/-rc\.\d+$/.test(t))
+        .filter(t => t && t !== newTag && /^.+\/v\d+\.\d+\.\d+(?:-rc\.\d+)?$/.test(t) && !/-rc\.\d+$/.test(t))
         .sort((a, b) => {
             const pa = parseVersion(a);
             const pb = parseVersion(b);
