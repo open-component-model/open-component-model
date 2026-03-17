@@ -43,6 +43,13 @@ var allowedConfigTypes = []runtime.Type{
 	runtime.NewUnversionedType(resolversv1alpha1spec.ConfigType),
 }
 
+// ocmConfigTypes is the subset of allowedConfigTypes that identifies ocm.config.ocm.software
+// entries, used to selectively strip the deprecated Aliases field during filtering.
+var ocmConfigTypes = []runtime.Type{
+	runtime.NewVersionedType(ocmconfigv1spec.ConfigType, ocmconfigv1spec.Version),
+	runtime.NewUnversionedType(ocmconfigv1spec.ConfigType),
+}
+
 // filterAllowedConfigTypes filters the provided config to only include config entries whose
 // types are in the allowedConfigTypes list. Additionally, it strips the deprecated Aliases field
 // from any ocm.config.ocm.software entries.
@@ -54,11 +61,6 @@ func filterAllowedConfigTypes(cfg *genericv1.Config) (*genericv1.Config, error) 
 	filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{ConfigTypes: allowedConfigTypes})
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter config types: %w", err)
-	}
-
-	ocmConfigTypes := []runtime.Type{
-		runtime.NewVersionedType(ocmconfigv1spec.ConfigType, ocmconfigv1spec.Version),
-		runtime.NewUnversionedType(ocmconfigv1spec.ConfigType),
 	}
 
 	// The Filter call above only enforces the type allowlist. However, ocm.config.ocm.software
