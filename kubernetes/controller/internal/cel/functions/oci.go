@@ -1,8 +1,10 @@
 package functions
 
 import (
+	"bytes"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 
 	"github.com/google/cel-go/cel"
@@ -14,7 +16,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ociaccessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
 
 const ToOCIFunctionName = "toOCI"
@@ -22,6 +27,7 @@ const ToOCIFunctionName = "toOCI"
 var scheme = runtime.NewScheme()
 
 func init() {
+	scheme.MustRegisterScheme(repository.Scheme)
 	scheme.MustRegisterScheme(ociaccess.Scheme)
 	scheme.MustRegisterScheme(v2.Scheme)
 }
@@ -30,7 +36,8 @@ func init() {
 // This function can be called on any CEL value (string or map) and converts
 // it into a map containing OCI reference components (host, registry, repository,
 // reference, tag, digest).
-func ToOCI() cel.EnvOption {
+func ToOCI(component *v1alpha1.ComponentInfo) cel.EnvOption {
+	// TODO: inject more context during reconcile into here
 	return cel.Function(
 		ToOCIFunctionName,
 		// Member overload: allow invoking as <value>.toOCI()
@@ -47,7 +54,7 @@ func ToOCI() cel.EnvOption {
 			types.NewMapType(types.StringType, types.StringType),
 		),
 		// Bind the overload to the Go implementation
-		cel.SingletonUnaryBinding(BindingToOCI),
+		cel.SingletonUnaryBinding(BindingToOCI(component)),
 	)
 }
 
@@ -57,95 +64,99 @@ func ToOCI() cel.EnvOption {
 // of those components as strings.
 // If the input is:
 //   - string: the entire value is treated as the reference string
-//   - map[string]any with "imageReference": treated as an OCIImage access
-//   - map[string]any with "globalAccess": treated as a localBlob access,
-//     the "imageReference" is extracted from the nested "globalAccess" map
+//   - map[string]any with "imageReference": treated as an OCIImage access (OCIImage/v1),
+//     the imageReference is returned directly
+//   - map[string]any with "localReference": treated as a localBlob access (localBlob/v1),
+//     the full OCI reference is constructed from the component's repository spec
+//     (baseUrl + subPath + "component-descriptors" + component name) and the localReference digest
 //
 // The function returns an error if parsing fails or the map is malformed.
-func BindingToOCI(lhs ref.Val) ref.Val {
-	var reference string
+func BindingToOCI(component *v1alpha1.ComponentInfo) func(lhs ref.Val) ref.Val {
+	return func(lhs ref.Val) ref.Val {
+		var reference string
 
-	// Determine the reference string from the input value
-	switch v := lhs.Value().(type) {
-	case string:
-		reference = v
-	case map[string]any:
-		imgRef, err := extractImageReference(v)
+		// Determine the reference string from the input value
+		switch v := lhs.Value().(type) {
+		case string:
+			reference = v
+		case map[string]any:
+			imgRef, err := extractImageReference(v, component)
+			if err != nil {
+				return types.NewErr("%s", err)
+			}
+			reference = imgRef
+		default:
+			return types.NewErr("expected string or map with OCIImage or localBlob access, got %T", lhs.Value())
+		}
+
+		// Parse the OCI reference using the oci.ParseRef helper because if a reference consists of a tag and a digest,
+		// we need to store both of them. Additionally, consuming resources, as a HelmRelease or OCIRepository, might need
+		// the tag, the digest, or both of them. Thus, we have to offer some flexibility here.
+		r, err := looseref.ParseReference(reference)
 		if err != nil {
-			return types.NewErr("%s", err)
-		}
-		reference = imgRef
-	default:
-		return types.NewErr("expected string or map with key 'imageReference', 'globalAccess', or 'referenceName', got %T", lhs.Value())
-	}
-
-	// Parse the OCI reference using the oci.ParseRef helper because if a reference consists of a tag and a digest,
-	// we need to store both of them. Additionally, consuming resources, as a HelmRelease or OCIRepository, might need
-	// the tag, the digest, or both of them. Thus, we have to offer some flexibility here.
-	r, err := looseref.ParseReference(reference)
-	if err != nil {
-		return types.WrapErr(err)
-	}
-
-	// Extract optional tag and digest values
-	var tag, digest string
-
-	// Check for digest and ignore error (validation error indicates no digest present)
-	if refDigest, err := r.Digest(); err == nil {
-		digest = refDigest.String()
-	}
-
-	if r.Tag != "" {
-		tag = r.Tag
-	}
-
-	// Construct a lazy map to defer value computation until accessed
-	mv := lazy.NewMapValue(types.StringType)
-
-	// host and registry are the same value (OCI spec)
-	mv.Append("host", func(*lazy.MapValue) ref.Val {
-		return types.String(r.Host())
-	})
-	mv.Append("registry", func(*lazy.MapValue) ref.Val {
-		return types.String(r.Host())
-	})
-
-	// repository: trim any leading slash
-	mv.Append("repository", func(*lazy.MapValue) ref.Val {
-		return types.String(strings.TrimLeft(r.Repository, "/"))
-	})
-
-	// reference: either "tag@digest", tag, or digest
-	mv.Append("reference", func(*lazy.MapValue) ref.Val {
-		var refStr string
-		switch {
-		case r.Tag != "" && digest != "":
-			refStr = fmt.Sprintf("%s@%s", r.Tag, digest)
-		case r.Tag != "":
-			refStr = r.Tag
-		case digest != "":
-			refStr = digest
+			return types.WrapErr(err)
 		}
 
-		return types.String(refStr)
-	})
+		// Extract optional tag and digest values
+		var tag, digest string
 
-	// digest and tag as separate entries (empty string if missing)
-	mv.Append("digest", func(*lazy.MapValue) ref.Val {
-		return types.String(digest)
-	})
-	mv.Append("tag", func(*lazy.MapValue) ref.Val {
-		return types.String(tag)
-	})
+		// Check for digest and ignore error (validation error indicates no digest present)
+		if refDigest, err := r.Digest(); err == nil {
+			digest = refDigest.String()
+		}
 
-	return mv
+		if r.Tag != "" {
+			tag = r.Tag
+		}
+
+		// Construct a lazy map to defer value computation until accessed
+		mv := lazy.NewMapValue(types.StringType)
+
+		// host and registry are the same value (OCI spec)
+		mv.Append("host", func(*lazy.MapValue) ref.Val {
+			return types.String(r.Host())
+		})
+		mv.Append("registry", func(*lazy.MapValue) ref.Val {
+			return types.String(r.Host())
+		})
+
+		// repository: trim any leading slash
+		mv.Append("repository", func(*lazy.MapValue) ref.Val {
+			return types.String(strings.TrimLeft(r.Repository, "/"))
+		})
+
+		// reference: either "tag@digest", tag, or digest
+		mv.Append("reference", func(*lazy.MapValue) ref.Val {
+			var refStr string
+			switch {
+			case r.Tag != "" && digest != "":
+				refStr = fmt.Sprintf("%s@%s", r.Tag, digest)
+			case r.Tag != "":
+				refStr = r.Tag
+			case digest != "":
+				refStr = digest
+			}
+
+			return types.String(refStr)
+		})
+
+		// digest and tag as separate entries (empty string if missing)
+		mv.Append("digest", func(*lazy.MapValue) ref.Val {
+			return types.String(digest)
+		})
+		mv.Append("tag", func(*lazy.MapValue) ref.Val {
+			return types.String(tag)
+		})
+
+		return mv
+	}
 }
 
 // extractImageReference extracts an OCI image reference from a map.
-// It supports both OCIImage access (with "imageReference" key) and localBlob
-// access (with "globalAccess" containing an "imageReference" key).
-// For downwards compatibility, "imageReference" is read from the map, but a warning is logged.
-func extractImageReference(m map[string]any) (string, error) {
+// It supports OCIImage access (returns imageReference directly) and localBlob
+// access (constructs the reference from the component's repository spec and localReference digest).
+// For backward compatibility, a plain "imageReference" key at the top level is also accepted.
+func extractImageReference(m map[string]any, component *v1alpha1.ComponentInfo) (string, error) {
 	unstructured, err := runtime.UnstructuredFromMixedData(m)
 	if err != nil {
 		return "", fmt.Errorf("converting map to unstructured failed: %w", err)
@@ -159,7 +170,7 @@ func extractImageReference(m map[string]any) (string, error) {
 		return "", fmt.Errorf("converting unstructured to raw failed: %w", err)
 	}
 
-	if imgRef, err := getAccessReference(&raw); imgRef != "" {
+	if imgRef, err := getAccessReference(&raw, component); imgRef != "" {
 		return imgRef, nil
 	} else if err != nil {
 		slog.Warn("extracting image reference from access type failed, falling back to untyped map access", "error", err)
@@ -172,14 +183,18 @@ func extractImageReference(m map[string]any) (string, error) {
 		return imgRef, nil
 	}
 
-	return "", fmt.Errorf("expected map with key 'imageReference', 'globalAccess.imageReference', or 'referenceName', got %v", m)
+	return "", fmt.Errorf("expected map with OCIImage access (imageReference) or localBlob access (localReference), got %v", m)
 }
 
-// getAccessReference attempts to extract an OCI image reference from a runtime.Raw object.
-// It supports both OCIImage access (with "imageReference" field) and localBlob access
-// (with "globalAccess" containing an "imageReference" field). If the access type is not recognized
-// or does not contain a valid image reference, an error is returned.
-func getAccessReference(raw *runtime.Raw) (string, error) {
+// getAccessReference extracts an OCI image reference from a typed access spec.
+// For OCIImage access, it returns the imageReference field directly.
+// For localBlob access, it decodes the component's repository spec to obtain the
+// OCI registry base URL and subPath, then constructs the full reference as:
+//
+//	baseUrl/subPath/component-descriptors/componentName@localReference
+//
+// Returns an error if the access type is not recognized or conversion fails.
+func getAccessReference(raw *runtime.Raw, component *v1alpha1.ComponentInfo) (string, error) {
 	typed, err := scheme.NewObject(raw.GetType())
 	if err != nil {
 		return "", fmt.Errorf("creating new object for type %s failed: %w", raw.GetType(), err)
@@ -198,13 +213,37 @@ func getAccessReference(raw *runtime.Raw) (string, error) {
 			return "", fmt.Errorf("converting to LocalBlob failed: %w", err)
 		}
 
-		if localBlob.GlobalAccess != nil {
-			var globalOCIImage ociaccessv1.OCIImage
-			if err := ociaccess.Scheme.Convert(localBlob.GlobalAccess, &globalOCIImage); err == nil && globalOCIImage.ImageReference != "" {
-				return globalOCIImage.ImageReference, nil
-			}
+		repoSpec := &runtime.Raw{}
+		if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(
+			bytes.NewReader(component.RepositorySpec.Raw), repoSpec); err != nil {
+			return "", fmt.Errorf("decoding repository spec failed: %w", err)
 		}
+
+		var ociRepo oci.Repository
+		if err := scheme.Convert(repoSpec, &ociRepo); err != nil {
+			return "", fmt.Errorf("converting to OCIRepository failed: %w", err)
+		}
+
+		// now that we have the ociRepo, we can build the full url
+		path, err := buildImageReference(&ociRepo, &localBlob, component)
+		if err != nil {
+			return "", fmt.Errorf("building image reference failed: %w", err)
+		}
+		return path, nil
 	}
 
-	return "", fmt.Errorf("no valid OCI image reference found in access type %s", typed.GetType())
+	return "", fmt.Errorf("no valid image reference found in access type %s", typed.GetType())
+}
+
+// buildImageReference constructs a full OCI reference for a localBlob access by joining
+// the repository's baseUrl, subPath, "component-descriptors", the component name,
+// and appending the localReference digest (e.g. "https://ghcr.io/org/component-descriptors/my-component@sha256:...").
+func buildImageReference(ociRepo *oci.Repository, localBlob *v2.LocalBlob, component *v1alpha1.ComponentInfo) (string, error) {
+	path, err := url.JoinPath(ociRepo.BaseUrl, ociRepo.SubPath, "component-descriptors", component.Component)
+	if err != nil {
+		return "", fmt.Errorf("could not build path for oci image reference: %w", err)
+	}
+	path = strings.TrimRight(path, "/")
+	path = fmt.Sprintf("%s@%s", path, localBlob.LocalReference)
+	return path, nil
 }

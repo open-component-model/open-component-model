@@ -9,23 +9,42 @@ import (
 	"github.com/google/cel-go/common/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apiserver/pkg/cel/lazy"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmspec "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/cel/functions"
 )
 
+// componentInfoForRegistry creates a ComponentInfo with a repository spec pointing to the given registry and optional subPath.
+func componentInfoForRegistry(registry string, subPath ...string) *v1alpha1.ComponentInfo {
+	var repoSpec string
+	if len(subPath) > 0 && subPath[0] != "" {
+		repoSpec = fmt.Sprintf(`{"type":"OCIRepository/v1","baseUrl":"https://%s","subPath":"%s"}`, registry, subPath[0])
+	} else {
+		repoSpec = fmt.Sprintf(`{"type":"OCIRepository/v1","baseUrl":"https://%s"}`, registry)
+	}
+	return &v1alpha1.ComponentInfo{
+		RepositorySpec: &apiextensionsv1.JSON{Raw: []byte(repoSpec)},
+		Component:      "test-component",
+		Version:        "v1.0.0",
+	}
+}
+
 func TestBindingToOCI_StringReference(t *testing.T) {
 	tests := []struct {
-		input   string
-		expects map[string]string
-		err     require.ErrorAssertionFunc
+		input     string
+		component *v1alpha1.ComponentInfo
+		expects   map[string]string
+		err       require.ErrorAssertionFunc
 	}{
 		{
-			input: "registry.io/myrepo/myapp:v1",
+			input:     "registry.io/myrepo/myapp:v1",
+			component: componentInfoForRegistry("registry.io"),
 			expects: map[string]string{
 				"host":       "registry.io",
 				"registry":   "registry.io",
@@ -36,7 +55,8 @@ func TestBindingToOCI_StringReference(t *testing.T) {
 			},
 		},
 		{
-			input: "registry.io/myrepo/myapp@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			input:     "registry.io/myrepo/myapp@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			component: componentInfoForRegistry("registry.io"),
 			expects: map[string]string{
 				"host":       "registry.io",
 				"registry":   "registry.io",
@@ -47,7 +67,8 @@ func TestBindingToOCI_StringReference(t *testing.T) {
 			},
 		},
 		{
-			input: "registry.io/myrepo/myapp:v1@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			input:     "registry.io/myrepo/myapp:v1@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			component: componentInfoForRegistry("registry.io"),
 			expects: map[string]string{
 				"host":       "registry.io",
 				"registry":   "registry.io",
@@ -58,16 +79,18 @@ func TestBindingToOCI_StringReference(t *testing.T) {
 			},
 		},
 		{
-			input:   "registry.io/myrepo/myapp:v1@sha256:gibberish",
-			expects: map[string]string{},
-			err:     require.Error,
+			input:     "registry.io/myrepo/myapp:v1@sha256:gibberish",
+			component: componentInfoForRegistry("registry.io"),
+			expects:   map[string]string{},
+			err:       require.Error,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
 			r := require.New(t)
-			val := functions.BindingToOCI(types.String(tc.input))
+			bindFn := functions.BindingToOCI(tc.component)
+			val := bindFn(types.String(tc.input))
 			r.NotNil(val)
 			if tc.err != nil {
 				r.IsType(&types.Err{}, val)
@@ -84,7 +107,7 @@ func TestBindingToOCI_StringReference(t *testing.T) {
 
 			t.Run("cel", func(t *testing.T) {
 				r := require.New(t)
-				env, err := cel.NewEnv(functions.ToOCI(), cel.Variable("value", cel.StringType))
+				env, err := cel.NewEnv(functions.ToOCI(tc.component), cel.Variable("value", cel.StringType))
 				r.NoError(err)
 				ast, issues := env.Compile(fmt.Sprintf("value.%s()", functions.ToOCIFunctionName))
 				r.NoError(issues.Err())
@@ -113,10 +136,11 @@ func TestBindingToOCI_StringReference(t *testing.T) {
 
 func TestBindingToOCI_MapReference(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   map[string]any
-		expects map[string]string
-		err     require.ErrorAssertionFunc
+		name      string
+		input     map[string]any
+		component *v1alpha1.ComponentInfo
+		expects   map[string]string
+		err       require.ErrorAssertionFunc
 	}{
 		{
 			name: "OCIImage access with imageReference",
@@ -124,6 +148,7 @@ func TestBindingToOCI_MapReference(t *testing.T) {
 				"type":           "OCIImage/v1",
 				"imageReference": "registry.io/myrepo/myapp:v1",
 			},
+			component: componentInfoForRegistry("registry.io"),
 			expects: map[string]string{
 				"host":       "registry.io",
 				"registry":   "registry.io",
@@ -139,6 +164,7 @@ func TestBindingToOCI_MapReference(t *testing.T) {
 				"type":           "ociArtifact/v1",
 				"imageReference": "ghcr.io/open-component-model/image:latest",
 			},
+			component: componentInfoForRegistry("ghcr.io", "open-component-model"),
 			expects: map[string]string{
 				"host":       "ghcr.io",
 				"registry":   "ghcr.io",
@@ -154,6 +180,7 @@ func TestBindingToOCI_MapReference(t *testing.T) {
 				"type":           "OCIImage/v1",
 				"imageReference": "registry.io/myrepo/myapp@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 			},
+			component: componentInfoForRegistry("registry.io"),
 			expects: map[string]string{
 				"host":       "registry.io",
 				"registry":   "registry.io",
@@ -169,6 +196,7 @@ func TestBindingToOCI_MapReference(t *testing.T) {
 				"type":           "OCIImage/v1",
 				"imageReference": "registry.io/myrepo/myapp:v2@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 			},
+			component: componentInfoForRegistry("registry.io"),
 			expects: map[string]string{
 				"host":       "registry.io",
 				"registry":   "registry.io",
@@ -179,64 +207,37 @@ func TestBindingToOCI_MapReference(t *testing.T) {
 			},
 		},
 		{
-			name: "localBlob with globalAccess containing OCIImage",
+			name: "localBlob builds reference from repo spec and component info",
 			input: map[string]any{
 				"type":           "localBlob/v1",
-				"localReference": "sha256:abc123",
+				"localReference": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 				"mediaType":      "application/vnd.oci.image.manifest.v1+json",
-				"globalAccess": map[string]any{
-					"type":           "OCIImage/v1",
-					"imageReference": "registry.io/global/image:v3",
-				},
 			},
+			component: componentInfoForRegistry("registry.io", "my-org"),
 			expects: map[string]string{
 				"host":       "registry.io",
 				"registry":   "registry.io",
-				"repository": "global/image",
-				"tag":        "v3",
-				"digest":     "",
-				"reference":  "v3",
+				"repository": "my-org/component-descriptors/test-component",
+				"tag":        "",
+				"digest":     "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+				"reference":  "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 			},
 		},
 		{
-			name: "localBlob with globalAccess using legacy ociArtifact type",
+			name: "localBlob without subPath",
 			input: map[string]any{
 				"type":           "localBlob/v1",
-				"localReference": "sha256:abc123",
+				"localReference": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 				"mediaType":      "application/vnd.oci.image.manifest.v1+json",
-				"globalAccess": map[string]any{
-					"type":           "ociArtifact/v1",
-					"imageReference": "ghcr.io/org/chart:0.1.0",
-				},
 			},
-			expects: map[string]string{
-				"host":       "ghcr.io",
-				"registry":   "ghcr.io",
-				"repository": "org/chart",
-				"tag":        "0.1.0",
-				"digest":     "",
-				"reference":  "0.1.0",
-			},
-		},
-		{
-			name: "localBlob prefers globalAccess over referenceName",
-			input: map[string]any{
-				"type":           "localBlob/v1",
-				"localReference": "sha256:abc123",
-				"mediaType":      "application/vnd.oci.image.manifest.v1+json",
-				"referenceName":  "registry.io/fallback/image:v4",
-				"globalAccess": map[string]any{
-					"type":           "OCIImage/v1",
-					"imageReference": "registry.io/preferred/image:v5",
-				},
-			},
+			component: componentInfoForRegistry("registry.io"),
 			expects: map[string]string{
 				"host":       "registry.io",
 				"registry":   "registry.io",
-				"repository": "preferred/image",
-				"tag":        "v5",
-				"digest":     "",
-				"reference":  "v5",
+				"repository": "component-descriptors/test-component",
+				"tag":        "",
+				"digest":     "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+				"reference":  "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 			},
 		},
 		{
@@ -244,6 +245,7 @@ func TestBindingToOCI_MapReference(t *testing.T) {
 			input: map[string]any{
 				"imageReference": "registry.io/myrepo/myapp:v1",
 			},
+			component: componentInfoForRegistry("registry.io"),
 			expects: map[string]string{
 				"host":       "registry.io",
 				"registry":   "registry.io",
@@ -259,14 +261,16 @@ func TestBindingToOCI_MapReference(t *testing.T) {
 				"type":      "someUnknownType/v1",
 				"something": "else",
 			},
-			err: require.Error,
+			component: componentInfoForRegistry("registry.io"),
+			err:       require.Error,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			val := functions.BindingToOCI(types.DefaultTypeAdapter.NativeToValue(tc.input))
+			bindFn := functions.BindingToOCI(tc.component)
+			val := bindFn(types.DefaultTypeAdapter.NativeToValue(tc.input))
 			r.NotNil(val)
 			if tc.err != nil {
 				r.IsType(&types.Err{}, val)
@@ -283,7 +287,7 @@ func TestBindingToOCI_MapReference(t *testing.T) {
 
 			t.Run("cel", func(t *testing.T) {
 				r := require.New(t)
-				env, err := cel.NewEnv(functions.ToOCI(), cel.Variable("value", cel.DynType))
+				env, err := cel.NewEnv(functions.ToOCI(tc.component), cel.Variable("value", cel.DynType))
 				r.NoError(err)
 				ast, issues := env.Compile(fmt.Sprintf("value.%s()", functions.ToOCIFunctionName))
 				r.NoError(issues.Err())
@@ -323,10 +327,11 @@ func typedToMap(t *testing.T, typed any) map[string]any {
 
 func TestBindingToOCI_TypedAccessSpecs(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   map[string]any
-		expects map[string]string
-		err     require.ErrorAssertionFunc
+		name      string
+		input     map[string]any
+		component *v1alpha1.ComponentInfo
+		expects   map[string]string
+		err       require.ErrorAssertionFunc
 	}{
 		{
 			name: "OCIImage access with ociArtifact type",
@@ -334,6 +339,7 @@ func TestBindingToOCI_TypedAccessSpecs(t *testing.T) {
 				Type:           runtime.NewVersionedType("ociArtifact", "v1"),
 				ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 			}),
+			component: componentInfoForRegistry("ghcr.io", "open-component-model/ocm"),
 			expects: map[string]string{
 				"host":       "ghcr.io",
 				"registry":   "ghcr.io",
@@ -349,6 +355,7 @@ func TestBindingToOCI_TypedAccessSpecs(t *testing.T) {
 				Type:           runtime.NewVersionedType("OCIImage", "v1"),
 				ImageReference: "registry.io/myrepo/myapp:v1@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 			}),
+			component: componentInfoForRegistry("registry.io"),
 			expects: map[string]string{
 				"host":       "registry.io",
 				"registry":   "registry.io",
@@ -359,23 +366,20 @@ func TestBindingToOCI_TypedAccessSpecs(t *testing.T) {
 			},
 		},
 		{
-			name: "localBlob with globalAccess OCIImage",
+			name: "localBlob builds reference from repo spec and component info",
 			input: typedToMap(t, &v2.LocalBlob{
 				Type:           runtime.NewVersionedType("localBlob", "v1"),
-				LocalReference: "sha256:abc123",
+				LocalReference: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 				MediaType:      "application/vnd.oci.image.manifest.v1+json",
-				GlobalAccess: &runtime.Raw{
-					Type: runtime.NewVersionedType("OCIImage", "v1"),
-					Data: []byte(`{"type":"OCIImage/v1","imageReference":"ghcr.io/org/component/image:2.0.0"}`),
-				},
 			}),
+			component: componentInfoForRegistry("ghcr.io", "org"),
 			expects: map[string]string{
 				"host":       "ghcr.io",
 				"registry":   "ghcr.io",
-				"repository": "org/component/image",
-				"tag":        "2.0.0",
-				"digest":     "",
-				"reference":  "2.0.0",
+				"repository": "org/component-descriptors/test-component",
+				"tag":        "",
+				"digest":     "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+				"reference":  "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 			},
 		},
 		{
@@ -385,14 +389,16 @@ func TestBindingToOCI_TypedAccessSpecs(t *testing.T) {
 				HelmRepository: "oci://ghcr.io/org/charts",
 				HelmChart:      "my-chart:1.0.0",
 			}),
-			err: require.Error,
+			component: componentInfoForRegistry("ghcr.io", "org/charts"),
+			err:       require.Error,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			val := functions.BindingToOCI(types.DefaultTypeAdapter.NativeToValue(tc.input))
+			bindFn := functions.BindingToOCI(tc.component)
+			val := bindFn(types.DefaultTypeAdapter.NativeToValue(tc.input))
 			r.NotNil(val)
 			if tc.err != nil {
 				r.IsType(&types.Err{}, val)
@@ -409,7 +415,7 @@ func TestBindingToOCI_TypedAccessSpecs(t *testing.T) {
 
 			t.Run("cel", func(t *testing.T) {
 				r := require.New(t)
-				env, err := cel.NewEnv(functions.ToOCI(), cel.Variable("value", cel.DynType))
+				env, err := cel.NewEnv(functions.ToOCI(tc.component), cel.Variable("value", cel.DynType))
 				r.NoError(err)
 				ast, issues := env.Compile(fmt.Sprintf("value.%s()", functions.ToOCIFunctionName))
 				r.NoError(issues.Err())
