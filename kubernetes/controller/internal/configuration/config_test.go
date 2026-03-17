@@ -390,10 +390,32 @@ func TestLoadConfigurations(t *testing.T) {
 	}
 }
 
+// credentialsConfigJSON returns a generic OCM config JSON with credentials
+// entries for the given hostnames, in the order provided.
+func credentialsConfigJSON(hostnames ...string) []byte {
+	consumers := ""
+	for i, h := range hostnames {
+		if i > 0 {
+			consumers += ","
+		}
+		consumers += `{"type":"credentials.config.ocm.software/v1","consumers":[{"identities":[{"hostname":"` + h + `"}],"credentials":[]}]}`
+	}
+	return []byte(`{"type":"generic.config.ocm.software/v1","configurations":[` + consumers + `]}`)
+}
+
 func TestLoadConfigurationsInOrder(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, v1alpha1.AddToScheme(scheme))
+
+	secretA := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-secret-a", Namespace: "default"},
+		Data:       map[string][]byte{v1alpha1.OCMConfigKey: credentialsConfigJSON("registry-a.io", "registry-b.io")},
+	}
+	secretB := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-secret-b", Namespace: "default"},
+		Data:       map[string][]byte{v1alpha1.OCMConfigKey: credentialsConfigJSON("registry-b.io", "registry-a.io")},
+	}
 
 	tests := []struct {
 		name       string
@@ -425,48 +447,7 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 					},
 				},
 			},
-			secrets: []*corev1.Secret{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret-a",
-						Namespace: "default",
-					},
-					Data: map[string][]byte{
-						v1alpha1.OCMConfigKey: []byte(`{
-							"type": "generic.config.ocm.software/v1",
-							"configurations": [
-								{
-									"type": "credentials.config.ocm.software/v1",
-									"consumers": [{"identities": [{"hostname": "registry-a.io"}], "credentials": []}]
-								},
-								{
-									"type": "credentials.config.ocm.software/v1",
-									"consumers": [{"identities": [{"hostname": "registry-b.io"}], "credentials": []}]
-								}
-						]}`),
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret-b",
-						Namespace: "default",
-					},
-					Data: map[string][]byte{
-						v1alpha1.OCMConfigKey: []byte(`{
-							"type": "generic.config.ocm.software/v1",
-							"configurations": [
-								{
-									"type": "credentials.config.ocm.software/v1",
-									"consumers": [{"identities": [{"hostname": "registry-b.io"}], "credentials": []}]
-								},
-								{
-									"type": "credentials.config.ocm.software/v1",
-									"consumers": [{"identities": [{"hostname": "registry-a.io"}], "credentials": []}]
-								}
-						]}`),
-					},
-				},
-			},
+			secrets:    []*corev1.Secret{secretA, secretB},
 			errorCheck: require.NoError,
 			equal:      require.NotEqual,
 		},
@@ -503,48 +484,7 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 					},
 				},
 			},
-			secrets: []*corev1.Secret{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret-a",
-						Namespace: "default",
-					},
-					Data: map[string][]byte{
-						v1alpha1.OCMConfigKey: []byte(`{
-							"type": "generic.config.ocm.software/v1",
-							"configurations": [
-								{
-									"type": "credentials.config.ocm.software/v1",
-									"consumers": [{"identities": [{"hostname": "registry-a.io"}], "credentials": []}]
-								},
-								{
-									"type": "credentials.config.ocm.software/v1",
-									"consumers": [{"identities": [{"hostname": "registry-b.io"}], "credentials": []}]
-								}
-						]}`),
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret-b",
-						Namespace: "default",
-					},
-					Data: map[string][]byte{
-						v1alpha1.OCMConfigKey: []byte(`{
-							"type": "generic.config.ocm.software/v1",
-							"configurations": [
-								{
-									"type": "credentials.config.ocm.software/v1",
-									"consumers": [{"identities": [{"hostname": "registry-b.io"}], "credentials": []}]
-								},
-								{
-									"type": "credentials.config.ocm.software/v1",
-									"consumers": [{"identities": [{"hostname": "registry-a.io"}], "credentials": []}]
-								}
-						]}`),
-					},
-				},
-			},
+			secrets:    []*corev1.Secret{secretA, secretB},
 			errorCheck: require.NoError,
 			equal:      require.Equal,
 		},
@@ -581,51 +521,7 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 					},
 				},
 			},
-			secrets: []*corev1.Secret{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret-a",
-						Namespace: "default",
-					},
-					Data: map[string][]byte{
-						v1alpha1.OCMConfigKey: []byte(`{
-				"type": "generic.config.ocm.software/v1",
-				"configurations": [
-					{
-						"type": "credentials.config.ocm.software/v1",
-						"consumers": [{"identities": [{"hostname": "registry-a.io"}], "credentials": []}]
-					},
-					{
-						"type": "credentials.config.ocm.software/v1",
-						"consumers": [{"identities": [{"hostname": "registry-b.io"}], "credentials": []}]
-					}
-				]
-			}`),
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret-b",
-						Namespace: "default",
-					},
-					Data: map[string][]byte{
-						v1alpha1.OCMConfigKey: []byte(`{
-				"type": "generic.config.ocm.software/v1",
-				"configurations": [
-					{
-						"type": "credentials.config.ocm.software/v1",
-						"consumers": [{"identities": [{"hostname": "registry-b.io"}], "credentials": []}]
-					},
-					{
-						"type": "credentials.config.ocm.software/v1",
-						"consumers": [{"identities": [{"hostname": "registry-a.io"}], "credentials": []}]
-					}
-				]
-			}`),
-					},
-				},
-			},
-
+			secrets:    []*corev1.Secret{secretA, secretB},
 			errorCheck: require.NoError,
 			equal:      require.NotEqual,
 		},
@@ -660,6 +556,12 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		}
 		return cfg
 	}
+
+	t.Run("nil config is handled", func(t *testing.T) {
+		result, err := filterAllowedConfigTypes(nil)
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
 
 	t.Run("empty config returns empty configurations", func(t *testing.T) {
 		cfg := &genericv1.Config{
