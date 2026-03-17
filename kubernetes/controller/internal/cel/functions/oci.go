@@ -60,8 +60,6 @@ func ToOCI() cel.EnvOption {
 //   - map[string]any with "imageReference": treated as an OCIImage access
 //   - map[string]any with "globalAccess": treated as a localBlob access,
 //     the "imageReference" is extracted from the nested "globalAccess" map
-//   - map[string]any with "referenceName": treated as a localBlob access,
-//     the "referenceName" is used as the reference string
 //
 // The function returns an error if parsing fails or the map is malformed.
 func BindingToOCI(lhs ref.Val) ref.Val {
@@ -145,8 +143,8 @@ func BindingToOCI(lhs ref.Val) ref.Val {
 
 // extractImageReference extracts an OCI image reference from a map.
 // It supports both OCIImage access (with "imageReference" key) and localBlob
-// access (with "globalAccess" containing an "imageReference" key, or
-// "referenceName" as a fallback).
+// access (with "globalAccess" containing an "imageReference" key).
+// For downwards compatibility, "imageReference" is read from the map, but a warning is logged.
 func extractImageReference(m map[string]any) (string, error) {
 	unstructured, err := runtime.UnstructuredFromMixedData(m)
 	if err != nil {
@@ -177,6 +175,10 @@ func extractImageReference(m map[string]any) (string, error) {
 	return "", fmt.Errorf("expected map with key 'imageReference', 'globalAccess.imageReference', or 'referenceName', got %v", m)
 }
 
+// getAccessReference attempts to extract an OCI image reference from a runtime.Raw object.
+// It supports both OCIImage access (with "imageReference" field) and localBlob access
+// (with "globalAccess" containing an "imageReference" field). If the access type is not recognized
+// or does not contain a valid image reference, an error is returned.
 func getAccessReference(raw *runtime.Raw) (string, error) {
 	typed, err := scheme.NewObject(raw.GetType())
 	if err != nil {
