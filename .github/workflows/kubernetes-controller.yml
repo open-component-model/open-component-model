@@ -57,6 +57,8 @@ env:
   REF: ${{ inputs.ref || github.head_ref || github.ref_name }}
   ARTIFACT_NAME: ${{ inputs.artifact_name || 'controller-artifacts' }}
   CHECKOUT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+  # Test if the arduino/setup-task and azure/setup-helm works with node 24
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
   contents: read # for actions/checkout to fetch code
