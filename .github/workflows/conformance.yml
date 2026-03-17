@@ -154,8 +154,8 @@ jobs:
       # Task picks up env vars automatically through the {{ .VAR | default }} pattern.
       - name: Set inputs as environment variables
         run: |
-          [ -z "$CLI_IMAGE" ] && [ -n "$INPUT_CLI_IMAGE" ] && echo "CLI_IMAGE=${INPUT_CLI_IMAGE}" >> "$GITHUB_ENV"
-          [ -z "$TOOLKIT_IMAGE" ] && [ -n "$INPUT_TOOLKIT_IMAGE" ] && echo "TOOLKIT_IMAGE=${INPUT_TOOLKIT_IMAGE}" >> "$GITHUB_ENV"
+          [ -z "$CLI_IMAGE" ] && [ -n "$INPUT_CLI_IMAGE" ] && echo "CLI_IMAGE=${INPUT_CLI_IMAGE}" >> "$GITHUB_ENV" || true
+          [ -z "$TOOLKIT_IMAGE" ] && [ -n "$INPUT_TOOLKIT_IMAGE" ] && echo "TOOLKIT_IMAGE=${INPUT_TOOLKIT_IMAGE}" >> "$GITHUB_ENV" || true
         env:
           INPUT_CLI_IMAGE: ${{ inputs.cli_image }}
           INPUT_TOOLKIT_IMAGE: ${{ inputs.toolkit_image }}
