@@ -150,11 +150,12 @@ spec:
 	Context("deployer controller", func() {
 		var resourceObj *v1alpha1.Resource
 		var namespace *corev1.Namespace
-		var componentName, resourceName, deployerObjName string
+		var componentName, componentObjName, resourceName, deployerObjName string
 		var componentVersion string
 
 		BeforeEach(func(ctx SpecContext) {
 			componentName = "ocm.software/test-component-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
+			componentObjName = test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			resourceName = "test-resource-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			deployerObjName = "test-deployer-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			componentVersion = "v1.0.0"
@@ -199,6 +200,25 @@ spec:
 			_, specData, err := setupCTFWithResource(ctx, tempDir, componentName, componentVersion, resourceName, resourceVersion, rgd)
 			Expect(err).NotTo(HaveOccurred())
 
+			By("mocking a component")
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
 			By("mocking a resource")
 			hashRgd := sha256.Sum256(rgd)
 			resourceObj = test.MockResource(
@@ -207,7 +227,7 @@ spec:
 				namespace.GetName(),
 				&test.MockResourceOptions{
 					ComponentRef: corev1.LocalObjectReference{
-						Name: componentName,
+						Name: componentObjName,
 					},
 					Clnt:     k8sClient,
 					Recorder: recorder,
@@ -267,6 +287,25 @@ spec:
 			_, specData, err := setupCTFWithResource(ctx, tempDir, componentName, componentVersion, resourceName, resourceVersion, invalidRgd)
 			Expect(err).NotTo(HaveOccurred())
 
+			By("mocking a component")
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
 			By("mocking a resource")
 			hashRgd := sha256.Sum256(invalidRgd)
 			resourceObj = test.MockResource(
@@ -275,7 +314,7 @@ spec:
 				namespace.GetName(),
 				&test.MockResourceOptions{
 					ComponentRef: corev1.LocalObjectReference{
-						Name: componentName,
+						Name: componentObjName,
 					},
 					Clnt:     k8sClient,
 					Recorder: recorder,
@@ -383,6 +422,25 @@ spec:
 			_, specData, err := setupCTFWithResource(ctx, tempDir, componentName, componentVersion, resourceName, resourceVersion, rgd)
 			Expect(err).NotTo(HaveOccurred())
 
+			By("mocking a component")
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
 			By("mocking a resource")
 			hashRgd := sha256.Sum256(rgd)
 			resourceObj = test.MockResource(
@@ -391,7 +449,7 @@ spec:
 				namespace.GetName(),
 				&test.MockResourceOptions{
 					ComponentRef: corev1.LocalObjectReference{
-						Name: componentName,
+						Name: componentObjName,
 					},
 					Clnt:     k8sClient,
 					Recorder: recorder,
@@ -455,7 +513,16 @@ spec:
 			_, specDataUpdated, err := setupCTFWithResource(ctx, updatedTempDir, componentName, componentVersionUpdated, resourceName, resourceVersionUpdated, rgdUpdated)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("updating the mocked resource")
+			By("updating the mocked component and resource")
+			componentObjNotReady := &v1alpha1.Component{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(componentObj), componentObjNotReady)).To(Succeed())
+			status.MarkNotReady(recorder, componentObjNotReady, v1alpha1.ResourceIsNotAvailable, "mock component is not ready")
+			Expect(k8sClient.Status().Update(ctx, componentObjNotReady)).To(Succeed())
+			componentObjNotReady.Status.Component.Version = componentVersionUpdated
+			componentObjNotReady.Status.Component.RepositorySpec = &apiextensionsv1.JSON{Raw: specDataUpdated}
+			status.MarkReady(recorder, componentObjNotReady, "updated mock component")
+			Expect(k8sClient.Status().Update(ctx, componentObjNotReady)).To(Succeed())
+
 			resourceObjNotReady := &v1alpha1.Resource{}
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(resourceObj), resourceObjNotReady)).To(Succeed())
 			status.MarkNotReady(recorder, resourceObjNotReady, v1alpha1.ResourceIsNotAvailable, "mock resource is not ready")
@@ -495,6 +562,25 @@ spec:
 			_, specData, err := setupCTFWithResource(ctx, tempDir, componentName, componentVersion, resourceName, resourceVersion, rgd)
 			Expect(err).NotTo(HaveOccurred())
 
+			By("mocking a component")
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
 			By("mocking a resource")
 			hashRgd := sha256.Sum256(rgd)
 			resourceObj = test.MockResource(
@@ -503,7 +589,7 @@ spec:
 				namespace.GetName(),
 				&test.MockResourceOptions{
 					ComponentRef: corev1.LocalObjectReference{
-						Name: componentName,
+						Name: componentObjName,
 					},
 					Clnt:     k8sClient,
 					Recorder: recorder,
@@ -557,6 +643,16 @@ spec:
 			updatedTempDir := GinkgoT().TempDir()
 			_, specDataUpdated, err := setupCTFWithResource(ctx, updatedTempDir, componentName, componentVersionUpdated, resourceName, resourceVersionUpdated, invalidRgd)
 			Expect(err).NotTo(HaveOccurred())
+
+			By("updating the mocked component and resource")
+			componentObjNotReady := &v1alpha1.Component{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(componentObj), componentObjNotReady)).To(Succeed())
+			status.MarkNotReady(recorder, componentObjNotReady, v1alpha1.ResourceIsNotAvailable, "mock component is not ready")
+			Expect(k8sClient.Status().Update(ctx, componentObjNotReady)).To(Succeed())
+			componentObjNotReady.Status.Component.Version = componentVersionUpdated
+			componentObjNotReady.Status.Component.RepositorySpec = &apiextensionsv1.JSON{Raw: specDataUpdated}
+			status.MarkReady(recorder, componentObjNotReady, "updated mock component")
+			Expect(k8sClient.Status().Update(ctx, componentObjNotReady)).To(Succeed())
 
 			By("updating the mocked resource")
 			resourceObjNotReady := &v1alpha1.Resource{}

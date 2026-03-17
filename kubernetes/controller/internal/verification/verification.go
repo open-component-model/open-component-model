@@ -1,4 +1,4 @@
-package ocm
+package verification
 
 import (
 	"context"
@@ -15,8 +15,8 @@ import (
 // Verification is an internal representation of v1alpha1.Verification where the public key is already extracted from
 // the value or secret.
 type Verification struct {
-	Signature string
-	PublicKey []byte
+	Signature string `json:"signature"`
+	PublicKey []byte `json:"publicKey"`
 }
 
 func GetVerifications(ctx context.Context, client ctrl.Reader,
@@ -40,7 +40,7 @@ func GetVerifications(ctx context.Context, client ctrl.Reader,
 		if verification.Value != "" {
 			internal.PublicKey, err = base64.StdEncoding.DecodeString(verification.Value)
 			if err != nil {
-				return nil, err
+				return nil, reconcile.TerminalError(fmt.Errorf("failed to decode public key value for signature %q: %w", verification.Signature, err))
 			}
 		}
 		if verification.SecretRef.Name != "" {
@@ -48,9 +48,11 @@ func GetVerifications(ctx context.Context, client ctrl.Reader,
 			if err != nil {
 				return nil, err
 			}
-			if certBytes, ok := secret.Data[verification.Signature]; ok {
-				internal.PublicKey = certBytes
+			certBytes, ok := secret.Data[verification.Signature]
+			if !ok {
+				return nil, fmt.Errorf("secret %q does not contain key %q for signature verification", verification.SecretRef.Name, verification.Signature)
 			}
+			internal.PublicKey = certBytes
 		}
 
 		v = append(v, internal)

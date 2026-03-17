@@ -24,10 +24,10 @@ import (
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	"ocm.software/open-component-model/bindings/go/credentials"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
@@ -51,6 +51,7 @@ var (
 	recorder   record.EventRecorder
 	ctx        context.Context
 	cancel     context.CancelFunc
+	pm         *manager.PluginManager
 )
 
 func TestControllers(t *testing.T) {
@@ -125,13 +126,16 @@ var _ = BeforeSuite(func() {
 	}()
 
 	// Setup plugin manager for new architecture
-	pm := manager.NewPluginManager(ctx)
+	pm = manager.NewPluginManager(ctx)
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(repository.Scheme))
 	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
 	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
-	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{credentials.AnyConsumerIdentityType}))
+	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
+		&ocicredentials.OCICredentialRepository{},
+		[]ocmruntime.Type{v1.Type},
+	)).To(Succeed())
 
 	ociResourceRepoPlugin := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
 	Expect(pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin)).To(Succeed())

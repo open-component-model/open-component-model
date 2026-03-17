@@ -10,12 +10,12 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/configuration v0.0.10
 	ocm.software/open-component-model/bindings/go/constructor v0.0.6
-	ocm.software/open-component-model/bindings/go/credentials v0.0.7
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260310160452-6205a8a9f970
+	ocm.software/open-component-model/bindings/go/credentials v0.0.9
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260316142407-9901759da494
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
-	ocm.software/open-component-model/bindings/go/runtime v0.0.6
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260310160452-6205a8a9f970
+	ocm.software/open-component-model/bindings/go/runtime v0.0.7
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260316142407-9901759da494
 )
 
 require (
@@ -28,9 +28,9 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	golang.org/x/text v0.33.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260310160452-6205a8a9f970 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260316142407-9901759da494 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )

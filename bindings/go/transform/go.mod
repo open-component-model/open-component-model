@@ -6,10 +6,10 @@ require (
 	github.com/google/cel-go v0.27.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260310160452-6205a8a9f970
-	ocm.software/open-component-model/bindings/go/credentials v0.0.7
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260316142407-9901759da494
+	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/runtime v0.0.6
+	ocm.software/open-component-model/bindings/go/runtime v0.0.7
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -23,7 +23,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/text v0.33.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect

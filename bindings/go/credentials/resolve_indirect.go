@@ -30,8 +30,11 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 		identity := identity.DeepCopy()
 		identity.SetType(AnyConsumerIdentityType)
 		var anyErr error
-		if plugin, anyErr = g.repositoryPluginProvider.GetRepositoryPlugin(ctx, identity); anyErr != nil {
-			return nil, errors.Join(err, anyErr)
+		plugin, anyErr = g.repositoryPluginProvider.GetRepositoryPlugin(ctx, identity)
+		// Independently of the actual error, we return ErrNoIndirectCredentials because, in fact, we cannot provide
+		// indirect credentials. The caller should decide how to handle the error.
+		if anyErr != nil {
+			return nil, errors.Join(err, anyErr, ErrNoIndirectCredentials)
 		}
 	}
 

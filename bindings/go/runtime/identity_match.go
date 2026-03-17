@@ -54,7 +54,7 @@ func IdentityMatchesPath(i, o Identity) bool {
 //
 // see IdentityMatchingChainFn and Identity.Match for more information.
 func IdentityMatchesURL(i, o Identity) bool {
-	iScheme, oScheme := i[IdentityAttributeScheme], o[IdentityAttributeScheme]
+	iScheme, oScheme := normalizeScheme(i[IdentityAttributeScheme]), normalizeScheme(o[IdentityAttributeScheme])
 	iHost, oHost := i[IdentityAttributeHostname], o[IdentityAttributeHostname]
 	iPort, oPort := i[IdentityAttributePort], o[IdentityAttributePort]
 
@@ -64,8 +64,18 @@ func IdentityMatchesURL(i, o Identity) bool {
 		delete(m, IdentityAttributePort)
 	}
 
-	if iScheme != oScheme || iHost != oHost {
+	// Scheme: fail only if both non-empty and different (after normalization)
+	if iScheme != "" && oScheme != "" && iScheme != oScheme {
 		return false
+	}
+	if iHost != oHost {
+		return false
+	}
+
+	// Use effective scheme for port defaulting: if one is empty, use the other
+	effectiveScheme := iScheme
+	if effectiveScheme == "" {
+		effectiveScheme = oScheme
 	}
 
 	defaultPort := func(s, p string) string {
@@ -81,7 +91,16 @@ func IdentityMatchesURL(i, o Identity) bool {
 		return ""
 	}
 
-	return defaultPort(iScheme, iPort) == defaultPort(oScheme, oPort)
+	return defaultPort(effectiveScheme, iPort) == defaultPort(effectiveScheme, oPort)
+}
+
+// normalizeScheme maps OCI-specific scheme aliases to their standard equivalents.
+// The "oci" scheme is functionally equivalent to "https".
+func normalizeScheme(scheme string) string {
+	if scheme == "oci" {
+		return "https"
+	}
+	return scheme
 }
 
 // IdentityEqual is an equality IdentityMatchingChainFn. see Identity.Equal for more information
