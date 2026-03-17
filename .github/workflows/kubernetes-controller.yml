@@ -149,6 +149,11 @@ jobs:
       - name: Setup docker/buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.14.0
+
       - name: Compute VERSION
         id: version
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
@@ -193,6 +198,15 @@ jobs:
             CONTROLLER_IMG="${IMAGE_NAME}:${VERSION}" \
             OCI_OUTPUT=tmp/oci/controller.tar
 
+      # Package Helm chart without digest for use in PR conformance testing
+      - name: Package Helm chart (without digest)
+        working-directory: ${{ env.LOCATION }}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
+        run: |
+          task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_REPOSITORY="${IMAGE_NAME}"
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         id: upload-artifacts
@@ -201,6 +215,14 @@ jobs:
           name: ${{ env.ARTIFACT_NAME }}
           path: |
             ${{ env.LOCATION }}/tmp/oci/
+
+      # Upload chart artifact separately for easier access in PR conformance testing
+      - name: Upload Chart Artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          if-no-files-found: error
+          name: controller-chart-pr
+          path: ${{ env.LOCATION }}/dist/chart-*.tgz
 
   E2E:
     name: E2E Tests
@@ -432,9 +454,23 @@ jobs:
           path: ${{ env.LOCATION }}/dist/chart-*.tgz
           if-no-files-found: error
 
+  # Run conformance tests against the published image on main branch or release branches/tags
   conformance:
     name: Conformance
     needs: publish
     uses: ./.github/workflows/conformance.yml
     with:
-      toolkit_image: "ghcr.io/${{ github.repository_owner }}/kubernetes/controller/chart:${{ needs.publish.outputs.chart_version }}"
+      toolkit_image: "oci://ghcr.io/${{ github.repository_owner }}/kubernetes/controller/chart:${{ needs.publish.outputs.chart_version }}"
+    secrets: inherit
+
+  # Run conformance tests against the built image on PRs to main
+  conformance-pr:
+    name: Conformance (PR)
+    needs: [build, E2E]
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: ./.github/workflows/conformance.yml
+    with:
+      toolkit_chart_artifact: controller-chart-pr
+      toolkit_image_artifact: ${{ needs.build.outputs.artifact_name }}
+      toolkit_version: ${{ needs.build.outputs.version }}
+    secrets: inherit
