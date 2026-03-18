@@ -199,21 +199,16 @@ func getAccessReference(raw *runtime.Raw, component *v1alpha1.ComponentInfo) (st
 		return "", fmt.Errorf("creating new object for type %s failed: %w", raw.GetType(), err)
 	}
 
-	switch typed.(type) {
+	if err := scheme.Convert(raw, typed); err != nil {
+		return "", fmt.Errorf("converting raw to typed failed: %w", err)
+	}
+
+	switch v := typed.(type) {
 	case *ociaccessv1.OCIImage:
-		var ociImage ociaccessv1.OCIImage
-		if err := scheme.Convert(raw, &ociImage); err != nil {
-			return "", fmt.Errorf("converting to OCIImage failed: %w", err)
-		}
-		return ociImage.ImageReference, nil
+		return v.ImageReference, nil
 	case *v2.LocalBlob:
 		if component == nil {
 			return "", fmt.Errorf("component info is nil but required to build the imageRef for localBlob")
-		}
-
-		var localBlob v2.LocalBlob
-		if err := scheme.Convert(raw, &localBlob); err != nil {
-			return "", fmt.Errorf("converting to LocalBlob failed: %w", err)
 		}
 
 		repoSpec := &runtime.Raw{}
@@ -228,7 +223,7 @@ func getAccessReference(raw *runtime.Raw, component *v1alpha1.ComponentInfo) (st
 		}
 
 		// now that we have the ociRepo, we can build the full url
-		path, err := buildImageReference(&ociRepo, &localBlob, component)
+		path, err := buildImageReference(&ociRepo, v, component)
 		if err != nil {
 			return "", fmt.Errorf("building image reference failed: %w", err)
 		}
