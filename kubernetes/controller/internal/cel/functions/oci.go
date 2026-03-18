@@ -37,7 +37,6 @@ func init() {
 // it into a map containing OCI reference components (host, registry, repository,
 // reference, tag, digest).
 func ToOCI(component *v1alpha1.ComponentInfo) cel.EnvOption {
-	// TODO: inject more context during reconcile into here
 	return cel.Function(
 		ToOCIFunctionName,
 		// Member overload: allow invoking as <value>.toOCI()
@@ -208,6 +207,10 @@ func getAccessReference(raw *runtime.Raw, component *v1alpha1.ComponentInfo) (st
 		}
 		return ociImage.ImageReference, nil
 	case *v2.LocalBlob:
+		if component == nil {
+			return "", fmt.Errorf("component info is nil but required to build the imageRef for localBlob")
+		}
+
 		var localBlob v2.LocalBlob
 		if err := scheme.Convert(raw, &localBlob); err != nil {
 			return "", fmt.Errorf("converting to LocalBlob failed: %w", err)

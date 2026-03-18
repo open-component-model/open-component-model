@@ -24,6 +24,10 @@ var sharedEnv = sync.OnceValues[*cel.Env, error](func() (*cel.Env, error) {
 })
 
 var BaseEnv = func(component *v1alpha1.ComponentInfo) (*cel.Env, error) {
+	if component == nil {
+		return nil, fmt.Errorf("component info is nil but required to create the CEL environment")
+	}
+
 	env, err := sharedEnv()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load environment variables: %w", err)
