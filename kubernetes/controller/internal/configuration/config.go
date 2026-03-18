@@ -23,7 +23,7 @@ import (
 	resolversv1alpha1spec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	credentialsv1spec "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/credentials"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
@@ -55,7 +55,7 @@ var ocmConfigTypes = []runtime.Type{
 // from any ocm.config.ocm.software entries.
 func filterAllowedConfigTypes(cfg *genericv1.Config) (*genericv1.Config, error) {
 	if cfg == nil {
-		return nil, fmt.Errorf("config is nil")
+		return nil, errors.New("config is nil")
 	}
 
 	filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{ConfigTypes: allowedConfigTypes})
@@ -125,7 +125,7 @@ func createConfigFromDockerConfig(data []byte) (*genericv1.Config, error) {
 		return nil, fmt.Errorf("invalid docker config: %w", err)
 	}
 
-	dockerConfig := &v1.DockerConfig{}
+	dockerConfig := &credentialsv1.DockerConfig{}
 	if _, err := credentials.Scheme.DefaultType(dockerConfig); err != nil {
 		return nil, fmt.Errorf("failed to get default type for docker config type %T: %w", dockerConfig, err)
 	}
