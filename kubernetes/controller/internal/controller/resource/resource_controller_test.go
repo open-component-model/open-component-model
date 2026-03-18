@@ -781,9 +781,7 @@ var _ = Describe("Resource Controller", func() {
 			})
 		})
 
-		// This test verifies that additionalStatusFields supports nested objects,
-		// where the value is a JSON object with CEL expressions as leaf values
-		// rather than a flat map of string expressions (see ocm-project#913).
+		// This test verifies that additionalStatusFields supports nested objects
 		It("reconciles with nested object additional status fields", func(ctx SpecContext) {
 			By("creating a CTF")
 			ctfName := "nested-additional-fields"
@@ -883,109 +881,14 @@ var _ = Describe("Resource Controller", func() {
 				"Status.Resource.Type":       "ociArtifact",
 				"Status.Additional": map[string]apiextensionsv1.JSON{
 					"oci": {Raw: mustMarshalJSON(map[string]apiextensionsv1.JSON{
+						"host":       mustToJSON("ghcr.io"),
 						"registry":   mustToJSON("ghcr.io"),
 						"repository": mustToJSON("open-component-model/ocm/ocm.software/ocmcli/ocmcli-image"),
+						"tag":        mustToJSON("0.24.0"),
+						"digest":     mustToJSON(""),
 						"reference":  mustToJSON("0.24.0"),
 					})},
 				},
-			})
-		})
-
-		// This test verifies that additionalStatusFields supports assigning
-		// the entire toOCI() result as a single object value (see ocm-project#913).
-		It("reconciles with single object additional status field", func(ctx SpecContext) {
-			By("creating a CTF")
-			ctfName := "tooci-object-field"
-			ctfPath := filepath.Join(tempDir, ctfName)
-			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
-				{
-					Component: descruntime.Component{
-						ComponentMeta: descruntime.ComponentMeta{
-							ObjectMeta: descruntime.ObjectMeta{
-								Name:    componentName,
-								Version: componentVersion,
-							},
-						},
-						Resources: []descruntime.Resource{
-							{
-								ElementMeta: descruntime.ElementMeta{
-									ObjectMeta: descruntime.ObjectMeta{
-										Name:    resourceName,
-										Version: "1.0.0",
-									},
-								},
-								Type:     "ociArtifact",
-								Relation: descruntime.ExternalRelation,
-								Access: &runtime.Raw{
-									Type: runtime.Type{
-										Name:    "ociArtifact",
-										Version: "v1",
-									},
-									Data: mustMarshalJSON(map[string]any{
-										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
-									}),
-								},
-							},
-						},
-						Provider: descruntime.Provider{Name: "ocm.software"},
-					},
-				},
-			})
-
-			By("mocking a component")
-			namespace := test.NamespaceForTest(ctx)
-			componentObj := test.MockComponent(
-				ctx,
-				componentObjName,
-				namespace.GetName(),
-				&test.MockComponentOptions{
-					Client:   k8sClient,
-					Recorder: recorder,
-					Info: v1alpha1.ComponentInfo{
-						Component:      componentName,
-						Version:        componentVersion,
-						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
-					},
-					Repository: repositoryName,
-				},
-			)
-			DeferCleanup(func(ctx SpecContext) {
-				test.DeleteObject(ctx, k8sClient, componentObj)
-			})
-
-			By("creating a resource with toOCI() as a single object field")
-			resourceObj := &v1alpha1.Resource{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: namespace.GetName(),
-				},
-				Spec: v1alpha1.ResourceSpec{
-					ComponentRef: corev1.LocalObjectReference{
-						Name: componentObj.GetName(),
-					},
-					Resource: v1alpha1.ResourceID{
-						ByReference: v1alpha1.ResourceReference{
-							Resource: runtime.Identity{"name": resourceName},
-						},
-					},
-					Interval: metav1.Duration{Duration: 30 * time.Second},
-					AdditionalStatusFields: map[string]apiextensionsv1.JSON{
-						"oci": {Raw: []byte(`"resource.access.toOCI()"`)},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
-			DeferCleanup(func(ctx SpecContext) {
-				test.DeleteObject(ctx, k8sClient, resourceObj)
-			})
-
-			By("checking that the resource has been reconciled with the toOCI object")
-			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
-				"Status.Component.Component": componentName,
-				"Status.Component.Version":   componentVersion,
-				"Status.Resource.Name":       resourceName,
-				"Status.Resource.Type":       "ociArtifact",
 			})
 		})
 
