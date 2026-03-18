@@ -282,4 +282,14 @@ assert.strictEqual(
     "Should ignore non-semver non-RC tags"
 );
 
+// A stable tag newer than newTag must NOT be returned
+assert.strictEqual(
+    findPreviousTag(
+        ["cli/v0.1.0", "cli/v0.3.0", "cli/v0.2.0-rc.1"],
+        "cli/v0.2.0-rc.1"
+    ),
+    "cli/v0.1.0",
+    "Should not return cli/v0.3.0 because it is newer than the new tag"
+);
+
 console.log("✅ All tests passed.");

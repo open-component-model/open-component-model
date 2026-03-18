@@ -254,17 +254,20 @@ export function parseVersion(tag) {
  * @returns {string} The previous stable semver tag, or empty string if none found (first release)
  */
 export function findPreviousTag(tags, newTag) {
+    const compareVersions = (a, b) => {
+        for (let i = 0; i < 3; i++) {
+            const diff = (a[i] || 0) - (b[i] || 0);
+            if (diff !== 0) return diff;
+        }
+        return 0;
+    };
+
+    const newTagParts = parseVersion(newTag);
+
     return tags
-        .filter(t => t && t !== newTag && /^.+\/v\d+\.\d+\.\d+(?:-rc\.\d+)?$/.test(t) && !/-rc\.\d+$/.test(t))
-        .sort((a, b) => {
-            const pa = parseVersion(a);
-            const pb = parseVersion(b);
-            for (let i = 0; i < 3; i++) {
-                const diff = (pb[i] || 0) - (pa[i] || 0);
-                if (diff !== 0) return diff;
-            }
-            return 0;
-        })[0] || "";
+        .filter(t => t && t !== newTag && /^.+\/v\d+\.\d+\.\d+$/.test(t))
+        .filter(t => compareVersions(parseVersion(t), newTagParts) < 0)
+        .sort((a, b) => compareVersions(parseVersion(b), parseVersion(a)))[0] || "";
 }
 
 // --------------------------
