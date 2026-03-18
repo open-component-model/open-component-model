@@ -182,7 +182,7 @@ func extractImageReference(m map[string]any, component *v1alpha1.ComponentInfo) 
 		return imgRef, nil
 	}
 
-	return "", fmt.Errorf("expected map with OCIImage access (imageReference) or localBlob access (localReference), got %v", m)
+	return "", fmt.Errorf("expected map with OCIImage access (imageReference) or localBlob access (localReference) or imageReference field")
 }
 
 // getAccessReference extracts an OCI image reference from a typed access spec.
