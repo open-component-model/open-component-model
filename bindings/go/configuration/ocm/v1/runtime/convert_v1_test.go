@@ -124,6 +124,26 @@ func TestConvertFromV1_MultipleResolversOrderPreserved(t *testing.T) {
 	assert.Equal(t, &testRepo{Type: runtime.NewVersionedType("test-repo", "v1"), BaseURL: "second.example.com"}, got.Resolvers[1].Repository)
 }
 
+func TestConvertFromV1_NilResolverElementReturnsError(t *testing.T) {
+	input := &resolverv1.Config{
+		Type:      runtime.NewVersionedType(resolverv1.ConfigType, resolverv1.Version),
+		Resolvers: []*resolverv1.Resolver{nil},
+	}
+	_, err := ConvertFromV1(testScheme, input)
+	assert.Error(t, err)
+}
+
+func TestConvertFromV1_NilRepositoryReturnsError(t *testing.T) {
+	input := &resolverv1.Config{
+		Type: runtime.NewVersionedType(resolverv1.ConfigType, resolverv1.Version),
+		Resolvers: []*resolverv1.Resolver{
+			{Repository: nil},
+		},
+	}
+	_, err := ConvertFromV1(testScheme, input)
+	assert.Error(t, err)
+}
+
 func TestConvertFromV1_UnknownRepositoryTypeReturnsError(t *testing.T) {
 	input := &resolverv1.Config{
 		Type: runtime.NewVersionedType(resolverv1.ConfigType, resolverv1.Version),
