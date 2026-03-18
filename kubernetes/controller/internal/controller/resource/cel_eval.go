@@ -1,0 +1,213 @@
+package resource
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/common/types/ref"
+	"github.com/google/cel-go/common/types/traits"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	ocmcel "ocm.software/open-component-model/kubernetes/controller/internal/cel"
+)
+
+// computeAdditionalStatusFields compiles and evaluates CEL expressions for additional fields.
+func computeAdditionalStatusFields(
+	ctx context.Context,
+	res *descriptor.Resource,
+	resource *v1alpha1.Resource,
+) error {
+	env, err := ocmcel.BaseEnv()
+	if err != nil {
+		return fmt.Errorf("getting base CEL env: %w", err)
+	}
+	env, err = env.Extend(
+		cel.Variable("resource", cel.DynType),
+	)
+	if err != nil {
+		return fmt.Errorf("extending CEL env: %w", err)
+	}
+
+	resV2, err := descriptor.ConvertToV2Resource(runtime.NewScheme(runtime.WithAllowUnknown()), res)
+	if err != nil {
+		return fmt.Errorf("converting resource to v2: %w", err)
+	}
+
+	resourceMap, err := toGenericMapViaJSON(resV2)
+	if err != nil {
+		return fmt.Errorf("preparing CEL variables: %w", err)
+	}
+
+	result, err := processAdditionalFields(ctx, env, resourceMap, resource.Spec.AdditionalStatusFields)
+	if err != nil {
+		return fmt.Errorf("processing additional status fields: %w", err)
+	}
+	resource.Status.Additional = result
+
+	return nil
+}
+
+// processAdditionalFields recursively processes additional status fields.
+// If a value is a JSON string, it is evaluated as a CEL expression.
+// If a value is a JSON object, it is recursively processed.
+func processAdditionalFields(
+	ctx context.Context,
+	env *cel.Env,
+	resourceMap map[string]any,
+	fields map[string]apiextensionsv1.JSON,
+) (map[string]apiextensionsv1.JSON, error) {
+	result := make(map[string]apiextensionsv1.JSON, len(fields))
+
+	for name, val := range fields {
+		resolved, err := processField(ctx, env, resourceMap, name, val)
+		if err != nil {
+			return nil, fmt.Errorf("processing field %s: %w", name, err)
+		}
+		result[name] = resolved
+	}
+
+	return result, nil
+}
+
+// processField resolves a single additional status field value.
+// The value is either:
+//   - a JSON string: treated as a CEL expression and evaluated via evalCEL
+//   - a JSON object: each leaf value is recursively resolved as a CEL expression
+//
+// This allows users to specify flat fields like:
+//
+//	additionalStatusFields:
+//	  oci: "resource.access.toOCI()"
+//
+// or nested objects like:
+//
+//	additionalStatusFields:
+//	  oci:
+//	    registry: "resource.access.toOCI().registry"
+//	    repository: "resource.access.toOCI().repository"
+func processField(
+	ctx context.Context,
+	env *cel.Env,
+	resourceMap map[string]any,
+	name string,
+	val apiextensionsv1.JSON,
+) (apiextensionsv1.JSON, error) {
+	// Try to unmarshal as a string (CEL expression).
+	var expr string
+	if err := json.Unmarshal(val.Raw, &expr); err == nil {
+		return evalCEL(ctx, env, resourceMap, name, expr)
+	}
+
+	// Try to unmarshal as an object (nested fields).
+	var nested map[string]apiextensionsv1.JSON
+	if err := json.Unmarshal(val.Raw, &nested); err == nil {
+		nestedResult, err := processAdditionalFields(ctx, env, resourceMap, nested)
+		if err != nil {
+			return apiextensionsv1.JSON{}, fmt.Errorf("processing nested fields: %w", err)
+		}
+		raw, err := json.Marshal(nestedResult)
+		if err != nil {
+			return apiextensionsv1.JSON{}, fmt.Errorf("marshaling nested result %q: %w", name, err)
+		}
+		return apiextensionsv1.JSON{Raw: raw}, nil
+	}
+
+	return apiextensionsv1.JSON{}, fmt.Errorf("additional status field %q: value must be a CEL expression string or an object", name)
+}
+
+// evalCEL compiles and evaluates a single CEL expression against the resource data.
+// The result is converted from CEL's internal types (including lazy maps from
+// custom functions like toOCI()) to native Go values via celValueToAny, then
+// JSON-marshaled into an apiextensionsv1.JSON.
+func evalCEL(
+	ctx context.Context,
+	env *cel.Env,
+	resourceMap map[string]any,
+	name string,
+	expr string,
+) (apiextensionsv1.JSON, error) {
+	ast, issues := env.Compile(expr)
+	if issues.Err() != nil {
+		return apiextensionsv1.JSON{}, fmt.Errorf("failed to compile CEL expression %q: %w", name, issues.Err())
+	}
+	prog, err := env.Program(ast)
+	if err != nil {
+		return apiextensionsv1.JSON{}, fmt.Errorf("failed to build CEL program %q: %w", name, err)
+	}
+	val, _, err := prog.ContextEval(ctx, map[string]any{"resource": resourceMap})
+	if err != nil {
+		return apiextensionsv1.JSON{}, fmt.Errorf("failed to evaluate CEL expression %q: %w", name, err)
+	}
+	nativeVal, err := celValueToAny(val)
+	if err != nil {
+		return apiextensionsv1.JSON{}, fmt.Errorf("failed to convert CEL result %q: %w", name, err)
+	}
+	raw, err := json.Marshal(nativeVal)
+	if err != nil {
+		return apiextensionsv1.JSON{}, fmt.Errorf("failed to marshal CEL result %q: %w", name, err)
+	}
+	return apiextensionsv1.JSON{Raw: raw}, nil
+}
+
+// celValueToAny converts a CEL ref.Val to a native Go value suitable for JSON marshaling.
+// CEL types like lazy maps (e.g. k8s apiserver's lazy.MapValue) don't implement
+// traits.Mapper but do implement traits.Iterable + traits.Indexer, so we check
+// for those granular interfaces to handle all map-like CEL values.
+func celValueToAny(val ref.Val) (any, error) {
+	// Check for list first (lists are also iterable+indexable, so check before maps).
+	if lister, ok := val.(traits.Lister); ok {
+		it := lister.Iterator()
+		var result []any
+		for it.HasNext() == types.True {
+			elem := it.Next()
+			nativeVal, err := celValueToAny(elem)
+			if err != nil {
+				return nil, fmt.Errorf("failed to convert element: %w", err)
+			}
+			result = append(result, nativeVal)
+		}
+		return result, nil
+	}
+
+	// Check for map-like values: anything that is both iterable (yields keys)
+	// and indexable (get value by key). This covers both standard cel maps
+	// (traits.Mapper) and k8s lazy maps (lazy.MapValue).
+	iterable, isIterable := val.(traits.Iterable)
+	indexer, isIndexer := val.(traits.Indexer)
+	if isIterable && isIndexer {
+		it := iterable.Iterator()
+		result := make(map[string]any)
+		for it.HasNext() == types.True {
+			key := it.Next()
+			mapVal := indexer.Get(key)
+			nativeVal, err := celValueToAny(mapVal)
+			if err != nil {
+				return nil, fmt.Errorf("failed to convert element: %w", err)
+			}
+			result[fmt.Sprint(key.Value())] = nativeVal
+		}
+		return result, nil
+	}
+
+	return val.Value(), nil
+}
+
+// toGenericMapViaJSON marshals and unmarshals a struct into a generic map representation through JSON tags.
+func toGenericMapViaJSON(v any) (map[string]any, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal JSON: %w", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	return m, nil
+}
