@@ -1,7 +1,7 @@
 name: Kubernetes Controller
 
 on:
-  # Trigger workflow on pushes to main or release branches, and on PRs targeting main as well as release tags.
+  # Trigger workflow on pushes to main or release branches, and on PRs targeting main.
   # Pushes on 'releases/v**' don't automatically publish,
   # they just run the build and e2e test to validate the release branch.
   push:
