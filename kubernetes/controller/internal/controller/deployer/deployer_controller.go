@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -87,6 +88,10 @@ type Reconciler struct {
 	DownloadCache cache.DigestObjectCache[string, []*unstructured.Unstructured]
 	Resolver      *resolution.Resolver
 	PluginManager *manager.PluginManager
+
+	// MaxResourceSizeMiB is the maximum size in MiB a downloaded resource blob may contain.
+	// blob.SizeUnknown (-1) disables the limit.
+	MaxResourceSizeMiB int64
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -504,18 +509,42 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to load configurations: %w", err)
 	}
 
-	blob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
+	resourceBlob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to download resource: %w", err)
 	}
+
+	readerBlob, err := resourceBlob.ReadCloser()
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to get reader from blob: %w", err)
+	}
 	defer func() {
-		err = errors.Join(err, blob.Close())
+		err = errors.Join(err, readerBlob.Close())
 	}()
 
+	// Enforce size limit if configured
+	if r.MaxResourceSizeMiB != blob.SizeUnknown {
+		maxBytes := r.MaxResourceSizeMiB * 1024 * 1024
+		// Opportunistic pre-check: downloadResourceBlob returns an ReadOnlyBlob, so the
+		// concrete type may or may not implement blob.SizeAware. If it does and the declared
+		// size already exceeds the limit, we can reject without reading a single byte.
+		if sizeAware, ok := resourceBlob.(blob.SizeAware); ok {
+			if size := sizeAware.Size(); size != blob.SizeUnknown && size > maxBytes {
+				status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason,
+					fmt.Sprintf("resource size %d bytes exceeds maximum allowed size of %d MiB", size, r.MaxResourceSizeMiB))
+				return nil, fmt.Errorf("resource size %d bytes exceeds maximum allowed size of %d MiB", size, r.MaxResourceSizeMiB)
+			}
+		}
+		// Safety net: wrap reader to error if limit is exceeded during reading
+		readerBlob = &limitedReadCloser{Closer: readerBlob, limited: &io.LimitedReader{R: readerBlob, N: maxBytes}}
+	}
+
 	// Decode YAML manifests
-	if objs, err = decodeObjectsFromManifest(blob); err != nil {
+	if objs, err = decodeObjectsFromManifest(readerBlob); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.MarshalFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to decode objects: %w", err)
@@ -547,6 +576,21 @@ func decodeObjectsFromManifest(manifest io.ReadCloser) (_ []*unstructured.Unstru
 	return objs, nil
 }
 
+// limitedReadCloser wraps an io.ReadCloser using io.LimitedReader to cap reads,
+// returning an error instead of silent truncation when the limit is exceeded.
+type limitedReadCloser struct {
+	io.Closer
+	limited *io.LimitedReader
+}
+
+func (l *limitedReadCloser) Read(p []byte) (int, error) {
+	n, err := l.limited.Read(p)
+	if err == nil && l.limited.N == 0 {
+		return n, fmt.Errorf("resource exceeds maximum allowed size")
+	}
+	return n, err
+}
+
 // downloadResourceBlob downloads a resource blob using either the repository (for local blobs)
 // or the plugin manager (for external access types like OCI images).
 func (r *Reconciler) downloadResourceBlob(
@@ -555,7 +599,7 @@ func (r *Reconciler) downloadResourceBlob(
 	componentDescriptor *descriptor.Descriptor,
 	resource *descriptor.Resource,
 	cfg *configuration.Configuration,
-) (io.ReadCloser, error) {
+) (blob.ReadOnlyBlob, error) {
 	typed, err := v2.Scheme.NewObject(resource.Access.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve access type: %w", err)
@@ -571,12 +615,7 @@ func (r *Reconciler) downloadResourceBlob(
 			return nil, fmt.Errorf("failed to get local resource: %w", err)
 		}
 
-		reader, err := blob.ReadCloser()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get reader from local blob: %w", err)
-		}
-
-		return reader, nil
+		return blob, nil
 	}
 
 	// non-local access types use the plugin manager
@@ -590,17 +629,7 @@ func (r *Reconciler) downloadResourceBlob(
 		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
 	}
 
-	blob, err := resourcePlugin.DownloadResource(ctx, resource, creds)
-	if err != nil {
-		return nil, fmt.Errorf("failed to download resource: %w", err)
-	}
-
-	reader, err := blob.ReadCloser()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get reader from blob: %w", err)
-	}
-
-	return reader, nil
+	return resourcePlugin.DownloadResource(ctx, resource, creds)
 }
 
 // resolveResourceCredentials resolves credentials for accessing a resource.

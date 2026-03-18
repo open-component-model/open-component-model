@@ -49,7 +49,14 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
-const creator = "Builtin OCI Repository Plugin"
+const (
+	creator = "Builtin OCI Repository Plugin"
+
+	// defaultMaxResourceSizeInMiB is a generous upper bound for Kubernetes manifests.
+	// etcd's default --max-request-bytes is 1.5 MiB (https://etcd.io/docs/v3.5/dev-guide/limit/),
+	// so a multi-document manifest written to the cluster will always stay well under 2 MiB.
+	defaultMaxResourceSizeInMiB = 2
+)
 
 var (
 	scheme   = runtime.NewScheme()
@@ -76,6 +83,7 @@ func main() {
 		enableHTTP2               bool
 		eventsAddr                string
 		deployerDownloadCacheSize int
+		deployerMaxResourceSize   int64
 		ocmContextCacheSize       int
 		ocmSessionCacheSize       int
 		resourceConcurrency       int
@@ -96,6 +104,8 @@ func main() {
 	flag.StringVar(&eventsAddr, "events-addr", "", "The address of the events receiver.")
 	flag.IntVar(&deployerDownloadCacheSize, "deployer-download-cache-size", 1_000, //nolint:mnd // no magic number
 		"The maximum size of the deployer download object LRU cache.")
+	flag.Int64Var(&deployerMaxResourceSize, "deployer-download-max-resource-size", defaultMaxResourceSizeInMiB,
+		"Maximum size in MiB of a single downloadable resource. -1 disables the limit.")
 	flag.IntVar(&ocmContextCacheSize, "ocm-context-cache-size", 100, //nolint:mnd // no magic number
 		"The maximum size of the OCM context cache. This is the number of active OCM contexts that can be kept alive.")
 	flag.IntVar(&ocmSessionCacheSize, "ocm-session-cache-size", 100, //nolint:mnd // no magic number
@@ -282,8 +292,9 @@ func main() {
 		DownloadCache: cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_download_cache", deployerDownloadCacheSize, func(k string, v []*unstructured.Unstructured) {
 			setupLog.Info("evicting deployment objects from cache", "key", k, "count", len(v))
 		}),
-		Resolver:      resolver,
-		PluginManager: pm,
+		Resolver:           resolver,
+		PluginManager:      pm,
+		MaxResourceSizeMiB: deployerMaxResourceSize,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Deployer")
 		os.Exit(1)

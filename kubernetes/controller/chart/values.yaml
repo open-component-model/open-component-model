@@ -33,6 +33,8 @@ manager:
     ocmSessionSize: 100
     # -- Maximum size of the deployer download object LRU cache
     deployerDownloadSize: 1000
+    # -- Maximum size in MiB of a single downloadable resource (-1 = unlimited)
+    deployerDownloadMaxResourceSize: 2
   ## Logging configuration (zap logger)
   logging:
     # -- Zap log level: 'debug', 'info', 'error', 'panic' or integer > 0
