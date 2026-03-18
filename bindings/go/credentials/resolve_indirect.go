@@ -31,14 +31,10 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 		identity.SetType(AnyConsumerIdentityType)
 		var anyErr error
 		plugin, anyErr = g.repositoryPluginProvider.GetRepositoryPlugin(ctx, identity)
-		// If still no repository plugin can be found, we return an error indicating that no repository plugin and
-		// indirect credentials can be found. Then, the caller can decide if it wants to treat this as an error or
-		// just a signal that no indirect credentials could be found.
-		if errors.Is(anyErr, ErrNoRepositoryPluginFound) {
-			return nil, errors.Join(err, anyErr, ErrNoIndirectCredentials)
-		}
+		// Independently of the actual error, we return ErrNoIndirectCredentials because, in fact, we cannot provide
+		// indirect credentials. The caller should decide how to handle the error.
 		if anyErr != nil {
-			return nil, errors.Join(err, anyErr)
+			return nil, errors.Join(err, anyErr, ErrNoIndirectCredentials)
 		}
 	}
 
