@@ -122,9 +122,8 @@ func processField(
 }
 
 // evalCEL compiles and evaluates a single CEL expression against the resource data.
-// The result is converted from CEL's internal types (including lazy maps from
-// custom functions like toOCI()) to native Go values via celValueToAny, then
-// JSON-marshaled into an apiextensionsv1.JSON.
+// The result is converted from CEL's internal types to native Go values via
+// celValueToAny, then JSON-marshaled into an apiextensionsv1.JSON.
 func evalCEL(
 	ctx context.Context,
 	env *cel.Env,
@@ -156,9 +155,8 @@ func evalCEL(
 }
 
 // celValueToAny converts a CEL ref.Val to a native Go value suitable for JSON marshaling.
-// CEL types like lazy maps (e.g. k8s apiserver's lazy.MapValue) don't implement
-// traits.Mapper but do implement traits.Iterable + traits.Indexer, so we check
-// for those granular interfaces to handle all map-like CEL values.
+// It handles standard CEL maps (traits.Mapper), lists (traits.Lister), and falls back
+// to native Go values for scalar types.
 func celValueToAny(val ref.Val) (any, error) {
 	// Check for list first (lists are also iterable+indexable, so check before maps).
 	if lister, ok := val.(traits.Lister); ok {
@@ -176,8 +174,7 @@ func celValueToAny(val ref.Val) (any, error) {
 	}
 
 	// Check for map-like values: anything that is both iterable (yields keys)
-	// and indexable (get value by key). This covers both standard cel maps
-	// (traits.Mapper) and k8s lazy maps (lazy.MapValue).
+	// and indexable (get value by key).
 	iterable, isIterable := val.(traits.Iterable)
 	indexer, isIndexer := val.(traits.Indexer)
 	if isIterable && isIndexer {

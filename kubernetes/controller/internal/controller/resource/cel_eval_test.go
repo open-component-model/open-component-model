@@ -6,30 +6,85 @@ import (
 	"testing"
 
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/common/types/ref"
 	"github.com/google/cel-go/ext"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
-// newTestEnv creates a minimal CEL environment with a "resource" variable for testing.
 func newTestEnv(t *testing.T) *cel.Env {
 	t.Helper()
 	env, err := cel.NewEnv(
 		ext.Strings(),
 		cel.Variable("resource", cel.DynType),
 	)
-	if err != nil {
-		t.Fatalf("failed to create CEL env: %v", err)
-	}
+	require.NoError(t, err)
 	return env
 }
 
 func toJSON(t *testing.T, v any) apiextensionsv1.JSON {
 	t.Helper()
 	raw, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("failed to marshal JSON: %v", err)
-	}
+	require.NoError(t, err)
 	return apiextensionsv1.JSON{Raw: raw}
+}
+
+func TestCelValueToAny(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		val  ref.Val
+		want any
+	}{
+		{
+			name: "string",
+			val:  types.String("hello"),
+			want: "hello",
+		},
+		{
+			name: "int",
+			val:  types.Int(42),
+			want: int64(42),
+		},
+		{
+			name: "bool",
+			val:  types.Bool(true),
+			want: true,
+		},
+		{
+			name: "list",
+			val:  types.DefaultTypeAdapter.NativeToValue([]string{"a", "b"}),
+			want: []any{"a", "b"},
+		},
+		{
+			name: "map",
+			val:  types.DefaultTypeAdapter.NativeToValue(map[string]string{"k": "v", "k2": "v2"}),
+			want: map[string]any{"k": "v", "k2": "v2"},
+		},
+		{
+			name: "nested map with list",
+			val: types.DefaultTypeAdapter.NativeToValue(map[string]any{
+				"tags": []string{"a", "b"},
+				"name": "test",
+			}),
+			want: map[string]any{
+				"tags": []any{"a", "b"},
+				"name": "test",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := celValueToAny(tt.val)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestEvalCEL(t *testing.T) {
@@ -47,31 +102,11 @@ func TestEvalCEL(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{
-			name: "simple string field",
-			expr: "resource.name",
-			want: `"my-resource"`,
-		},
-		{
-			name: "string concatenation",
-			expr: `resource.name + ":" + resource.version`,
-			want: `"my-resource:1.0.0"`,
-		},
-		{
-			name: "numeric expression",
-			expr: "1 + 2",
-			want: "3",
-		},
-		{
-			name:    "invalid expression",
-			expr:    "invalid.!!!",
-			wantErr: true,
-		},
-		{
-			name:    "undefined variable",
-			expr:    "resource.nonexistent",
-			wantErr: true,
-		},
+		{name: "string field", expr: "resource.name", want: `"my-resource"`},
+		{name: "concatenation", expr: `resource.name + ":" + resource.version`, want: `"my-resource:1.0.0"`},
+		{name: "numeric", expr: "1 + 2", want: "3"},
+		{name: "invalid expression", expr: "invalid.!!!", wantErr: true},
+		{name: "undefined variable", expr: "resource.nonexistent", wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -79,86 +114,12 @@ func TestEvalCEL(t *testing.T) {
 			t.Parallel()
 			result, err := evalCEL(ctx, env, resourceMap, tt.name, tt.expr)
 			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error, got nil")
-				}
+				require.Error(t, err)
 				return
 			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if string(result.Raw) != tt.want {
-				t.Errorf("got %s, want %s", string(result.Raw), tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(result.Raw))
 		})
-	}
-}
-
-func TestProcessField_StringExpression(t *testing.T) {
-	t.Parallel()
-	env := newTestEnv(t)
-	ctx := context.Background()
-	resourceMap := map[string]any{
-		"name": "test-resource",
-	}
-
-	val := toJSON(t, "resource.name")
-	result, err := processField(ctx, env, resourceMap, "myField", val)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if string(result.Raw) != `"test-resource"` {
-		t.Errorf("got %s, want %q", string(result.Raw), `"test-resource"`)
-	}
-}
-
-func TestProcessField_NestedObject(t *testing.T) {
-	t.Parallel()
-	env := newTestEnv(t)
-	ctx := context.Background()
-	resourceMap := map[string]any{
-		"name":    "test-resource",
-		"version": "2.0.0",
-	}
-
-	nested := map[string]apiextensionsv1.JSON{
-		"name":    toJSON(t, "resource.name"),
-		"version": toJSON(t, "resource.version"),
-	}
-	raw, err := json.Marshal(nested)
-	if err != nil {
-		t.Fatalf("failed to marshal nested: %v", err)
-	}
-	val := apiextensionsv1.JSON{Raw: raw}
-
-	result, err := processField(ctx, env, resourceMap, "info", val)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var got map[string]apiextensionsv1.JSON
-	if err := json.Unmarshal(result.Raw, &got); err != nil {
-		t.Fatalf("failed to unmarshal result: %v", err)
-	}
-	if string(got["name"].Raw) != `"test-resource"` {
-		t.Errorf("name: got %s, want %q", string(got["name"].Raw), `"test-resource"`)
-	}
-	if string(got["version"].Raw) != `"2.0.0"` {
-		t.Errorf("version: got %s, want %q", string(got["version"].Raw), `"2.0.0"`)
-	}
-}
-
-func TestProcessField_InvalidValue(t *testing.T) {
-	t.Parallel()
-	env := newTestEnv(t)
-	ctx := context.Background()
-	resourceMap := map[string]any{}
-
-	// A JSON number is neither a string nor an object.
-	val := apiextensionsv1.JSON{Raw: []byte(`42`)}
-	_, err := processField(ctx, env, resourceMap, "bad", val)
-	if err == nil {
-		t.Fatal("expected error for non-string, non-object value")
 	}
 }
 
@@ -174,112 +135,56 @@ func TestProcessAdditionalFields(t *testing.T) {
 		},
 	}
 
-	tests := []struct {
-		name   string
-		fields map[string]apiextensionsv1.JSON
-		verify func(t *testing.T, result map[string]apiextensionsv1.JSON)
-	}{
-		{
-			name:   "empty fields",
-			fields: map[string]apiextensionsv1.JSON{},
-			verify: func(t *testing.T, result map[string]apiextensionsv1.JSON) {
-				if len(result) != 0 {
-					t.Errorf("expected empty result, got %d entries", len(result))
-				}
-			},
-		},
-		{
-			name: "flat string expressions",
-			fields: map[string]apiextensionsv1.JSON{
-				"name":    toJSON(t, "resource.name"),
-				"version": toJSON(t, "resource.version"),
-			},
-			verify: func(t *testing.T, result map[string]apiextensionsv1.JSON) {
-				if string(result["name"].Raw) != `"my-resource"` {
-					t.Errorf("name: got %s, want %q", string(result["name"].Raw), `"my-resource"`)
-				}
-				if string(result["version"].Raw) != `"3.0.0"` {
-					t.Errorf("version: got %s, want %q", string(result["version"].Raw), `"3.0.0"`)
-				}
-			},
-		},
-		{
-			name: "nested object with string expressions",
-			fields: map[string]apiextensionsv1.JSON{
-				"info": {Raw: mustMarshalForTest(t, map[string]apiextensionsv1.JSON{
-					"name":    toJSON(t, "resource.name"),
-					"version": toJSON(t, "resource.version"),
-				})},
-			},
-			verify: func(t *testing.T, result map[string]apiextensionsv1.JSON) {
-				var nested map[string]apiextensionsv1.JSON
-				if err := json.Unmarshal(result["info"].Raw, &nested); err != nil {
-					t.Fatalf("failed to unmarshal nested: %v", err)
-				}
-				if string(nested["name"].Raw) != `"my-resource"` {
-					t.Errorf("info.name: got %s, want %q", string(nested["name"].Raw), `"my-resource"`)
-				}
-				if string(nested["version"].Raw) != `"3.0.0"` {
-					t.Errorf("info.version: got %s, want %q", string(nested["version"].Raw), `"3.0.0"`)
-				}
-			},
-		},
-		{
-			name: "mixed flat and nested",
-			fields: map[string]apiextensionsv1.JSON{
-				"name": toJSON(t, "resource.name"),
-				"access": {Raw: mustMarshalForTest(t, map[string]apiextensionsv1.JSON{
-					"ref": toJSON(t, "resource.access.imageReference"),
-				})},
-			},
-			verify: func(t *testing.T, result map[string]apiextensionsv1.JSON) {
-				if string(result["name"].Raw) != `"my-resource"` {
-					t.Errorf("name: got %s, want %q", string(result["name"].Raw), `"my-resource"`)
-				}
-				var nested map[string]apiextensionsv1.JSON
-				if err := json.Unmarshal(result["access"].Raw, &nested); err != nil {
-					t.Fatalf("failed to unmarshal nested access: %v", err)
-				}
-				if string(nested["ref"].Raw) != `"ghcr.io/org/repo:latest"` {
-					t.Errorf("access.ref: got %s, want %q", string(nested["ref"].Raw), `"ghcr.io/org/repo:latest"`)
-				}
-			},
-		},
-	}
+	t.Run("empty fields", func(t *testing.T) {
+		t.Parallel()
+		result, err := processAdditionalFields(ctx, env, resourceMap, map[string]apiextensionsv1.JSON{})
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result, err := processAdditionalFields(ctx, env, resourceMap, tt.fields)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			tt.verify(t, result)
+	t.Run("flat string expressions", func(t *testing.T) {
+		t.Parallel()
+		result, err := processAdditionalFields(ctx, env, resourceMap, map[string]apiextensionsv1.JSON{
+			"name":    toJSON(t, "resource.name"),
+			"version": toJSON(t, "resource.version"),
 		})
-	}
-}
+		require.NoError(t, err)
+		assert.JSONEq(t, `"my-resource"`, string(result["name"].Raw))
+		assert.JSONEq(t, `"3.0.0"`, string(result["version"].Raw))
+	})
 
-func TestProcessAdditionalFields_Error(t *testing.T) {
-	t.Parallel()
-	env := newTestEnv(t)
-	ctx := context.Background()
-	resourceMap := map[string]any{}
+	t.Run("nested object", func(t *testing.T) {
+		t.Parallel()
+		nested, err := json.Marshal(map[string]apiextensionsv1.JSON{
+			"name": toJSON(t, "resource.name"),
+			"ref":  toJSON(t, "resource.access.imageReference"),
+		})
+		require.NoError(t, err)
 
-	fields := map[string]apiextensionsv1.JSON{
-		"good": toJSON(t, `"literal string"`),
-		"bad":  toJSON(t, "resource.nonexistent.field"),
-	}
-	_, err := processAdditionalFields(ctx, env, resourceMap, fields)
-	if err == nil {
-		t.Fatal("expected error for invalid CEL expression")
-	}
-}
+		result, err := processAdditionalFields(ctx, env, resourceMap, map[string]apiextensionsv1.JSON{
+			"info": {Raw: nested},
+		})
+		require.NoError(t, err)
 
-func mustMarshalForTest(t *testing.T, v any) []byte {
-	t.Helper()
-	raw, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("failed to marshal: %v", err)
-	}
-	return raw
+		var got map[string]apiextensionsv1.JSON
+		require.NoError(t, json.Unmarshal(result["info"].Raw, &got))
+		assert.JSONEq(t, `"my-resource"`, string(got["name"].Raw))
+		assert.JSONEq(t, `"ghcr.io/org/repo:latest"`, string(got["ref"].Raw))
+	})
+
+	t.Run("invalid value type", func(t *testing.T) {
+		t.Parallel()
+		_, err := processAdditionalFields(ctx, env, resourceMap, map[string]apiextensionsv1.JSON{
+			"bad": {Raw: []byte(`42`)},
+		})
+		require.Error(t, err)
+	})
+
+	t.Run("invalid CEL expression", func(t *testing.T) {
+		t.Parallel()
+		_, err := processAdditionalFields(ctx, env, resourceMap, map[string]apiextensionsv1.JSON{
+			"bad": toJSON(t, "resource.nonexistent.field"),
+		})
+		require.Error(t, err)
+	})
 }

@@ -23,10 +23,7 @@ spec:
               resource:
                 name: helm-resource
           additionalStatusFields:
-            oci:
-              registry: resource.access.imageReference.toOCI().registry
-              repository: resource.access.imageReference.toOCI().repository
-              digest: resource.access.imageReference.toOCI().digest
+            oci: resource.access.imageReference.toOCI()
           interval: 10m
     - id: ocirepository
       template:
