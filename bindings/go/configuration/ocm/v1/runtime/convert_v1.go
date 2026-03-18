@@ -38,6 +38,9 @@ func convertResolvers(repositoryScheme *runtime.Scheme, resolvers []*resolverv1.
 	if len(resolvers) == 0 {
 		return nil, nil
 	}
+	if repositoryScheme == nil {
+		return nil, fmt.Errorf("repository scheme is nil")
+	}
 
 	converted := make([]Resolver, len(resolvers))
 	for i, resolver := range resolvers {
