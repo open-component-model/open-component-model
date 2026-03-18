@@ -65,7 +65,7 @@ configurations:
 - type: credentials.config.ocm.software
   consumers:
   - identity:
-      type: OCIRepository
+      type: OCIRegistry
       hostname: %[1]q
       port: %[2]q
       scheme: http
@@ -75,7 +75,7 @@ configurations:
         username: %[3]q
         password: %[4]q
   - identity:
-      type: OCIRepository
+      type: OCIRegistry
       hostname: %[5]q
       port: %[6]q
       scheme: http
@@ -433,7 +433,7 @@ configurations:
 - type: credentials.config.ocm.software
   consumers:
   - identity:
-      type: OCIRepository
+      type: OCIRegistry
       hostname: %[1]q
       port: %[2]q
       scheme: http
@@ -443,7 +443,7 @@ configurations:
         username: %[3]q
         password: %[4]q
   - identity:
-      type: OCIRepository
+      type: OCIRegistry
       hostname: %[5]q
       port: %[6]q
       scheme: http

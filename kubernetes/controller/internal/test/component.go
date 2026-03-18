@@ -9,12 +9,14 @@ import (
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,6 +36,7 @@ type MockComponentOptions struct {
 	Recorder           record.EventRecorder
 	Info               v1alpha1.ComponentInfo
 	Repository         string
+	Verify             []v1alpha1.Verification
 	EffectiveOCMConfig []v1alpha1.OCMConfiguration
 }
 
@@ -54,6 +57,7 @@ func MockComponent(
 				Name: options.Repository,
 			},
 			Component: options.Info.Component,
+			Verify:    options.Verify,
 		},
 	}
 	Expect(options.Client.Create(ctx, component)).To(Succeed())
@@ -63,10 +67,18 @@ func MockComponent(
 	component.Status.Component = options.Info
 	component.Status.EffectiveOCMConfig = options.EffectiveOCMConfig
 
-	Eventually(func(ctx context.Context) error {
-		status.MarkReady(options.Recorder, component, "applied mock component")
+	status.MarkReady(options.Recorder, component, "applied mock component")
+	Expect(status.UpdateStatus(ctx, patchHelper, component, options.Recorder, time.Hour, nil)).To(Succeed())
 
-		return status.UpdateStatus(ctx, patchHelper, component, options.Recorder, time.Hour, nil)
+	Eventually(func(ctx context.Context) error {
+		c := &v1alpha1.Component{}
+		Expect(options.Client.Get(ctx, client.ObjectKeyFromObject(component), c)).To(Succeed())
+
+		if conditions.IsReady(c) {
+			return nil
+		}
+
+		return errors.New("component is not ready")
 	}, "15s").WithContext(ctx).Should(Succeed())
 
 	return component
