@@ -332,16 +332,18 @@ func Test_ComponentReference(t *testing.T) {
 				opts = append(opts, IgnoreSemverCompatibility())
 			}
 			parsed, err := Parse(tc.input, opts...)
-			if !tc.err(t, err) {
-				r.Equalf(tc.expected, parsed, "input %q was incorrectly parsed", tc.input)
+			tc.err(t, err)
+			if err != nil {
+				return
 			}
+			r.NotNil(parsed)
 			if tc.expected != nil && tc.expected.Type != "" {
 				if typ, err := runtime.TypeFromString(parsed.Type); err == nil {
 					tc.expected.Repository.SetType(typ)
 				}
 			}
-			if parsed != nil && tc.expected != nil {
-				r.Contains(parsed.String(), tc.expected.Component, "input %q did not serialize properly", tc.input)
+			if tc.expected != nil {
+				r.Equal(tc.expected, parsed)
 			}
 		})
 	}
