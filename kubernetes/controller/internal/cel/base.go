@@ -24,7 +24,7 @@ var sharedEnv = sync.OnceValues[*cel.Env, error](func() (*cel.Env, error) {
 })
 
 // ComponentInfoEnv constructs a CEL environment with a v1alpha1.ComponentInfo as a dependency.
-// Extentions like `toOCI` need v1alpha1.ComponentInfo to properly provide an ImageReference from a localBlob.
+// Extensions like `toOCI` need v1alpha1.ComponentInfo to properly provide an ImageReference from a localBlob.
 func ComponentInfoEnv(component *v1alpha1.ComponentInfo) (*cel.Env, error) {
 	if component == nil {
 		return nil, fmt.Errorf("component info is nil but required to create the CEL environment")

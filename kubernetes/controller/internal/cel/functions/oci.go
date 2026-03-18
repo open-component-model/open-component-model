@@ -176,10 +176,12 @@ func extractImageReference(m map[string]any, component *v1alpha1.ComponentInfo) 
 	}
 
 	// try old way with "imageReference" key at the top level (for backward compatibility)
-	// TODO(matthiasnbruns): we might drop support for this completely - this is currently being discussed in https://github.com/open-component-model/open-component-model/pull/1943#discussion_r2952238915
+	// TODO(matthiasnbruns): we will drop support for this completely - https://github.com/open-component-model/ocm-project/issues/960
 	if imgRef, ok := m["imageReference"].(string); ok {
-		slog.Warn("toOCI(): falling back to untyped 'imageReference' field, please use a proper OCM access type (e.g. OCIImage/v1 or localBlob/v1). "+
-			"This feature is deprecated and will be removed in a future release.",
+		slog.Warn(
+			"toOCI(): falling back to untyped 'imageReference' field, please use a proper OCM access type (e.g. OCIImage/v1 or localBlob/v1). "+
+				"This feature is deprecated and will be removed in a future release. "+
+				"You can track the progress here https://github.com/open-component-model/ocm-project/issues/960",
 			"imageReference", imgRef)
 		return imgRef, nil
 	}

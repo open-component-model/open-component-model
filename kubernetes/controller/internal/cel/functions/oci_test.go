@@ -31,7 +31,7 @@ func componentInfoForRepository(repository string, subPath string) *v1alpha1.Com
 	}
 }
 
-// TODO(matthiasnbruns): we might drop support for this completely - this is currently being discussed in https://github.com/open-component-model/open-component-model/pull/1943#discussion_r2952238915
+// TODO(matthiasnbruns): we will drop support for this completely - https://github.com/open-component-model/ocm-project/issues/960
 func TestBindingToOCI_StringReference(t *testing.T) {
 	tests := []struct {
 		name      string
