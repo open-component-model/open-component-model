@@ -524,7 +524,7 @@ func computeAdditionalStatusFields(
 	resource *v1alpha1.Resource,
 	component *v1alpha1.ComponentInfo,
 ) error {
-	env, err := ocmcel.BaseEnv(component)
+	env, err := ocmcel.ComponentInfoEnv(component)
 	if err != nil {
 		return fmt.Errorf("getting base CEL env: %w", err)
 	}
