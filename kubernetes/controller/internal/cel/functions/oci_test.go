@@ -21,7 +21,7 @@ import (
 )
 
 // componentInfoForRegistry creates a ComponentInfo with a repository spec pointing to the given registry and optional subPath.
-func componentInfoForRegistry(registry string, subPath ...string) *v1alpha1.ComponentInfo {
+func componentInfoForRepository(registry string, subPath ...string) *v1alpha1.ComponentInfo {
 	var repoSpec string
 	if len(subPath) > 0 && subPath[0] != "" {
 		repoSpec = fmt.Sprintf(`{"type":"OCIRepository/v1","baseUrl":"https://%s","subPath":"%s"}`, registry, subPath[0])
