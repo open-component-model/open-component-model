@@ -336,13 +336,14 @@ func Test_ComponentReference(t *testing.T) {
 			if err != nil {
 				return
 			}
+			r.NotNil(parsed)
 			if tc.expected != nil && tc.expected.Type != "" {
 				if typ, err := runtime.TypeFromString(parsed.Type); err == nil {
 					tc.expected.Repository.SetType(typ)
 				}
 			}
 			if tc.expected != nil {
-				r.EqualValues(tc.expected, parsed, "input %q did not serialize properly", tc.input)
+				r.Equal(tc.expected, parsed)
 			}
 		})
 	}
