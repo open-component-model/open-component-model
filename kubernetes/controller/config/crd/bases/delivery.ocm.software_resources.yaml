@@ -55,8 +55,8 @@ spec:
                 description: |-
                   AdditionalStatusFields are additional fields that can be used to
                   extend the status of the Resource with custom expressions.
-                  Values can be either CEL expression strings or nested objects
-                  containing CEL expression strings.
+                  Values can additionally be either CEL expression strings or nested objects
+                  containing CEL expressions.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
               componentRef:
