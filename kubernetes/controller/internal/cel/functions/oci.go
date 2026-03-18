@@ -241,11 +241,19 @@ func getAccessReference(raw *runtime.Raw, component *v1alpha1.ComponentInfo) (st
 // the repository's baseUrl, subPath, "component-descriptors", the component name,
 // and appending the localReference digest (e.g. "https://ghcr.io/org/component-descriptors/my-component@sha256:...").
 func buildImageReference(ociRepo *oci.Repository, localBlob *v2.LocalBlob, component *v1alpha1.ComponentInfo) (string, error) {
+	if ociRepo.BaseUrl == "" {
+		return "", fmt.Errorf("oci repository url is empty")
+	}
+	if localBlob.LocalReference == "" {
+		return "", fmt.Errorf("local blob reference is empty")
+	}
+	if component == nil {
+		return "", fmt.Errorf("component info is nil but required to build the imageRef for localBlob")
+	}
 	path, err := url.JoinPath(ociRepo.BaseUrl, ociRepo.SubPath, "component-descriptors", component.Component)
 	if err != nil {
 		return "", fmt.Errorf("could not build path for oci image reference: %w", err)
 	}
-	path = strings.TrimRight(path, "/")
 	path = fmt.Sprintf("%s@%s", path, localBlob.LocalReference)
 	return path, nil
 }
