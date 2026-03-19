@@ -8,10 +8,10 @@ require (
 	github.com/stretchr/testify v1.11.1
 	helm.sh/helm/v4 v4.1.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
-	ocm.software/open-component-model/bindings/go/configuration v0.0.10
+	ocm.software/open-component-model/bindings/go/configuration v0.0.11
 	ocm.software/open-component-model/bindings/go/constructor v0.0.6
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260316142407-9901759da494
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260319111041-22758595f5fe
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/oci v0.0.36
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
@@ -103,7 +103,7 @@ require (
 	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
-	google.golang.org/grpc v1.79.1 // indirect
+	google.golang.org/grpc v1.79.3 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
@@ -119,7 +119,7 @@ require (
 	k8s.io/kubectl v0.35.1 // indirect
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260316142407-9901759da494 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260319111041-22758595f5fe // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.8 // indirect
 	sigs.k8s.io/controller-runtime v0.23.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect

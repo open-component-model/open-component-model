@@ -11,10 +11,10 @@ require (
 	github.com/veqryn/slog-context v0.9.0
 	golang.org/x/sync v0.19.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
-	ocm.software/open-component-model/bindings/go/configuration v0.0.10
+	ocm.software/open-component-model/bindings/go/configuration v0.0.11
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260316142407-9901759da494
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260319111041-22758595f5fe
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
