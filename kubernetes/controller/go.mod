@@ -33,7 +33,7 @@ require (
 	github.com/docker/cli v29.2.1+incompatible
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
-	ocm.software/open-component-model/bindings/go/configuration v0.0.10
+	ocm.software/open-component-model/bindings/go/configuration v0.0.11
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260317134642-21ef6ab52666
