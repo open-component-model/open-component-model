@@ -22,28 +22,28 @@ func computeAdditionalStatusFields(
 ) error {
 	env, err := ocmcel.BaseEnv()
 	if err != nil {
-		return fmt.Errorf("getting base CEL env: %w", err)
+		return fmt.Errorf("failed to get base CEL env: %w", err)
 	}
 	env, err = env.Extend(
 		cel.Variable("resource", cel.DynType),
 	)
 	if err != nil {
-		return fmt.Errorf("extending CEL env: %w", err)
+		return fmt.Errorf("failed to extend CEL env: %w", err)
 	}
 
 	resV2, err := descriptor.ConvertToV2Resource(runtime.NewScheme(runtime.WithAllowUnknown()), res)
 	if err != nil {
-		return fmt.Errorf("converting resource to v2: %w", err)
+		return fmt.Errorf("failed to convert resource to v2: %w", err)
 	}
 
 	resourceMap, err := toGenericMapViaJSON(resV2)
 	if err != nil {
-		return fmt.Errorf("preparing CEL variables: %w", err)
+		return fmt.Errorf("failed to prepare CEL variables: %w", err)
 	}
 
 	result, err := processAdditionalFields(ctx, env, resourceMap, resource.Spec.AdditionalStatusFields)
 	if err != nil {
-		return fmt.Errorf("processing additional status fields: %w", err)
+		return fmt.Errorf("failed to process additional status fields: %w", err)
 	}
 	resource.Status.Additional = result
 
@@ -64,7 +64,7 @@ func processAdditionalFields(
 	for name, val := range fields {
 		resolved, err := processField(ctx, env, resourceMap, name, val)
 		if err != nil {
-			return nil, fmt.Errorf("processing field %s: %w", name, err)
+			return nil, fmt.Errorf("failed to process field %s: %w", name, err)
 		}
 		result[name] = resolved
 	}
@@ -106,11 +106,11 @@ func processField(
 	if err := json.Unmarshal(val.Raw, &nested); err == nil {
 		nestedResult, err := processAdditionalFields(ctx, env, resourceMap, nested)
 		if err != nil {
-			return apiextensionsv1.JSON{}, fmt.Errorf("processing nested fields: %w", err)
+			return apiextensionsv1.JSON{}, fmt.Errorf("failed to process nested fields: %w", err)
 		}
 		raw, err := json.Marshal(nestedResult)
 		if err != nil {
-			return apiextensionsv1.JSON{}, fmt.Errorf("marshaling nested result %q: %w", name, err)
+			return apiextensionsv1.JSON{}, fmt.Errorf("failed to marshal nested result %q: %w", name, err)
 		}
 		return apiextensionsv1.JSON{Raw: raw}, nil
 	}

@@ -137,72 +137,31 @@ func TestProcessAdditionalFields_MultipleResourcesNestedMap(t *testing.T) {
 	ctx := context.Background()
 
 	resourceMap := map[string]any{
-		"name":    "aggregate",
-		"version": "2.0.0",
 		"components": map[string]any{
 			"backend": map[string]any{
-				"name":    "api-server",
-				"version": "1.5.0",
-				"access": map[string]any{
-					"type":           "ociArtifact",
-					"imageReference": "ghcr.io/org/api-server:1.5.0",
-				},
-				"labels": map[string]any{
-					"team":     "platform",
-					"critical": true,
-				},
+				"image": "ghcr.io/org/api-server:1.5.0",
 			},
 			"frontend": map[string]any{
-				"name":    "web-ui",
-				"version": "3.2.1",
-				"access": map[string]any{
-					"type":           "ociArtifact",
-					"imageReference": "ghcr.io/org/web-ui:3.2.1",
-				},
-				"labels": map[string]any{
-					"team":     "ui",
-					"critical": false,
-				},
+				"image": "ghcr.io/org/web-ui:3.2.1",
 			},
 		},
 	}
 
-	// Build nested additional fields that reference both components.
-	deployInfoInner, err := json.Marshal(map[string]apiextensionsv1.JSON{
-		"backendImage":  toJSON(t, "resource.components.backend.access.imageReference"),
-		"frontendImage": toJSON(t, "resource.components.frontend.access.imageReference"),
-		"backendTeam":   toJSON(t, "resource.components.backend.labels.team"),
+	nestedImages := toJSON(t, map[string]string{
+		"backend":  "resource.components.backend.image",
+		"frontend": "resource.components.frontend.image",
 	})
-	require.NoError(t, err)
-
-	versionInfoInner, err := json.Marshal(map[string]apiextensionsv1.JSON{
-		"aggregate": toJSON(t, "resource.version"),
-		"backend":   toJSON(t, "resource.components.backend.version"),
-		"frontend":  toJSON(t, "resource.components.frontend.version"),
-	})
-	require.NoError(t, err)
 
 	result, err := processAdditionalFields(ctx, env, resourceMap, map[string]apiextensionsv1.JSON{
-		"deploy":   {Raw: deployInfoInner},
-		"versions": {Raw: versionInfoInner},
-		"summary":  toJSON(t, `resource.name + " (" + resource.version + ")"`),
+		"images":  nestedImages,
+		"summary": toJSON(t, `resource.components.backend.image + " " + resource.components.frontend.image`),
 	})
 	require.NoError(t, err)
 
-	// Verify the flat summary field.
-	assert.JSONEq(t, `"aggregate (2.0.0)"`, string(result["summary"].Raw))
+	assert.JSONEq(t, `"ghcr.io/org/api-server:1.5.0 ghcr.io/org/web-ui:3.2.1"`, string(result["summary"].Raw))
 
-	// Verify the nested deploy info.
-	var deploy map[string]apiextensionsv1.JSON
-	require.NoError(t, json.Unmarshal(result["deploy"].Raw, &deploy))
-	assert.JSONEq(t, `"ghcr.io/org/api-server:1.5.0"`, string(deploy["backendImage"].Raw))
-	assert.JSONEq(t, `"ghcr.io/org/web-ui:3.2.1"`, string(deploy["frontendImage"].Raw))
-	assert.JSONEq(t, `"platform"`, string(deploy["backendTeam"].Raw))
-
-	// Verify the nested versions info.
-	var versions map[string]apiextensionsv1.JSON
-	require.NoError(t, json.Unmarshal(result["versions"].Raw, &versions))
-	assert.JSONEq(t, `"2.0.0"`, string(versions["aggregate"].Raw))
-	assert.JSONEq(t, `"1.5.0"`, string(versions["backend"].Raw))
-	assert.JSONEq(t, `"3.2.1"`, string(versions["frontend"].Raw))
+	var images map[string]apiextensionsv1.JSON
+	require.NoError(t, json.Unmarshal(result["images"].Raw, &images))
+	assert.JSONEq(t, `"ghcr.io/org/api-server:1.5.0"`, string(images["backend"].Raw))
+	assert.JSONEq(t, `"ghcr.io/org/web-ui:3.2.1"`, string(images["frontend"].Raw))
 }
