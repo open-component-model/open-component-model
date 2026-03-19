@@ -16,6 +16,12 @@ type FilterOptions struct {
 // FilterOptions.ConfigTypes; remainder contains all other entries.
 // If no ConfigTypes are specified, all entries are placed in remainder.
 func FilterWithRemainder(config *Config, options *FilterOptions) (*Config, *Config, error) {
+	if config == nil {
+		return nil, nil, fmt.Errorf("config must not be nil")
+	}
+	if options == nil {
+		return nil, nil, fmt.Errorf("options must not be nil")
+	}
 	filtered := &Config{Type: config.Type}
 	remainder := &Config{Type: config.Type}
 	for _, entry := range config.Configurations {
