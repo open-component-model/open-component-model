@@ -2,8 +2,8 @@
 version: '3'
 
 vars:
-  CLI_IMAGE: '{{ .CLI_IMAGE | default "ghcr.io/open-component-model/cli:main" }}'
-  TOOLKIT_IMAGE: '{{ .TOOLKIT_IMAGE | default "oci://ghcr.io/open-component-model/kubernetes/controller/chart:0.0.0-c837a09" }}'
+  CLI_IMAGE: '{{ .CLI_IMAGE | default "ghcr.io/open-component-model/cli:0.0.0-main" }}'
+  TOOLKIT_IMAGE: '{{ .TOOLKIT_IMAGE | default "oci://ghcr.io/open-component-model/kubernetes/controller/chart:0.0.0-main" }}'
   PRELOAD_IMAGES: '{{ .PRELOAD_IMAGES | default "" }}'
   DOCKER_NETWORK: '{{ .DOCKER_NETWORK | default "kind" }}'
   VERSION: '1.0.0'

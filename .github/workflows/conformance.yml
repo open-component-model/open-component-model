@@ -165,17 +165,14 @@ jobs:
           INPUT_TOOLKIT_IMAGE: ${{ inputs.toolkit_image }}
 
       - name: Validate required image references
+        if: ${{ github.event_name == 'workflow_call' }}
         run: |
-          err=0
-          if [ -z "$CLI_IMAGE" ]; then
-            echo "::error::CLI_IMAGE is not set. Provide either 'cli_image' or 'cli_artifact' + 'cli_version' inputs."
-            err=1
+          if [ -z "$CLI_IMAGE" ] && [ -z "$TOOLKIT_IMAGE" ]; then
+            echo "::error::Neither CLI_IMAGE nor TOOLKIT_IMAGE is set. At least one must be provided via inputs or artifacts."
+            exit 1
           fi
-          if [ -z "$TOOLKIT_IMAGE" ]; then
-            echo "::error::TOOLKIT_IMAGE is not set. Provide either 'toolkit_image' or 'toolkit_chart_artifact' + 'toolkit_version' inputs."
-            err=1
-          fi
-          exit $err
+          echo "CLI_IMAGE=${CLI_IMAGE:-(using Taskfile default)}"
+          echo "TOOLKIT_IMAGE=${TOOLKIT_IMAGE:-(using Taskfile default)}"
 
       - name: Check dependencies
         working-directory: conformance/scenarios/sovereign
