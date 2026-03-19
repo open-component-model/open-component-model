@@ -591,12 +591,17 @@ func (l *limitedReadCloser) Read(p []byte) (int, error) {
 		// from the underlying reader to distinguish the two cases.
 		var probe [1]byte
 		_, probeErr := l.limited.R.Read(probe[:])
-		if errors.Is(probeErr, io.EOF) {
+		switch {
+		case errors.Is(probeErr, io.EOF):
 			// Blob fits exactly within the limit — return the bytes normally.
 			return n, nil
+		case probeErr == nil:
+			// Probe returned data: the blob exceeds the limit.
+			return n, fmt.Errorf("resource exceeds maximum allowed size")
+		default:
+			// Unexpected I/O error during probe — surface it directly.
+			return n, fmt.Errorf("probe failed while checking resource size: %w", probeErr)
 		}
-		// Either we got data (probeErr==nil) or an unexpected error: treat as overflow.
-		return n, fmt.Errorf("resource exceeds maximum allowed size")
 	}
 	return n, err
 }
