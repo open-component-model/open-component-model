@@ -123,6 +123,11 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	if deployerMaxResourceSize < 0 {
+		setupLog.Error(nil, "invalid flag value", "flag", "deployer-download-max-resource-size", "value", deployerMaxResourceSize, "reason", "must be >= 0")
+		os.Exit(1)
+	}
+
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	ctx := context.Background()

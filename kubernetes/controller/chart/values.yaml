@@ -34,6 +34,7 @@ manager:
     # -- Maximum size of the deployer download object LRU cache
     deployerDownloadSize: 1000
     # -- Maximum size in MiB of a single downloadable resource (0 = unlimited)
+    # @schema minimum: 0
     deployerDownloadMaxResourceSize: 2
   ## Logging configuration (zap logger)
   logging:
