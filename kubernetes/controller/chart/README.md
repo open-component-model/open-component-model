@@ -63,7 +63,7 @@ Kubernetes: `>=1.26.0-0`
 | crd.enable | bool | `true` | Install CRDs with the chart |
 | crd.keep | bool | `true` | Keep CRDs when uninstalling |
 | manager.affinity | object | `{}` | Pod affinity rules |
-| manager.cache.deployerDownloadMaxResourceSize | int | `2` | Maximum size in MiB of a single downloadable resource (0 = unlimited) |
+| manager.cache.deployerDownloadMaxResourceSize | int | `2` | Maximum size in MiB of a single downloadable resource (0 = unlimited) @schema minimum: 0 |
 | manager.cache.deployerDownloadSize | int | `1000` | Maximum size of the deployer download object LRU cache |
 | manager.cache.ocmContextSize | int | `100` | Maximum number of active OCM contexts kept alive |
 | manager.cache.ocmSessionSize | int | `100` | Maximum number of active OCM sessions kept alive |
