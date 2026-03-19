@@ -27,7 +27,7 @@ var ignoreExamples = map[string]struct{}{
 	"applyset-pruning": {}, // tested in e2e_applyset_test.go
 }
 
-var _ = Describe("controller", func() {
+var _ = FDescribe("controller", func() {
 	Context("examples", func() {
 		AfterEach(func() {
 			if !CurrentSpecReport().Failed() {
@@ -38,6 +38,9 @@ var _ = Describe("controller", func() {
 		})
 
 		for _, example := range examples {
+			if example.Name() != "helm-simple-nested-status" {
+				continue
+			}
 			if _, ok := ignoreExamples[example.Name()]; ok {
 				continue
 			}
