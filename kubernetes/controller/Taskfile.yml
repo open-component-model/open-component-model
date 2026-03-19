@@ -316,7 +316,7 @@ tasks:
     desc: "Install helm-values-schema-json plugin if not present"
     cmd: |
       if ! helm plugin list | grep -q "schema"; then
-        helm plugin install https://github.com/losisin/helm-values-schema-json
+        helm plugin install https://github.com/losisin/helm-values-schema-json.git --verify=false
       fi
     status:
       - helm plugin list | grep -q "schema"
