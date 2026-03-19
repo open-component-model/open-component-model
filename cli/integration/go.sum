@@ -448,8 +448,8 @@ ocm.software/open-component-model/bindings/go/blob v0.0.11 h1:ASalU+M+PMgLGI6vQ1
 ocm.software/open-component-model/bindings/go/blob v0.0.11/go.mod h1:pZzaYptwTVBhicYp6z9vDY2K6KTwd5c+MuYoC3jr6s8=
 ocm.software/open-component-model/bindings/go/cel v0.0.0-20260317134642-21ef6ab52666 h1:aW9FqrPd9xokgrVWzeqGfTFTAXMDHhf1tPyB8PIdLbI=
 ocm.software/open-component-model/bindings/go/cel v0.0.0-20260317134642-21ef6ab52666/go.mod h1:H/Pmrmc8zPvzBfBPFaPhMm5DdeZZPqlzEmmuB9L531g=
-ocm.software/open-component-model/bindings/go/configuration v0.0.10 h1:XtGn4nKtuRzn6l0PuS6vP5Lzhox73L89r2JoEBjJtSg=
-ocm.software/open-component-model/bindings/go/configuration v0.0.10/go.mod h1:8IzR0l9IVdoDRpy2V6Ix4/wQchikYfa/YfjYgKZzZCU=
+ocm.software/open-component-model/bindings/go/configuration v0.0.11 h1:1iTVee/AhwAy1qNvpZvTQ7nh12m2T24juYEO2n/SglM=
+ocm.software/open-component-model/bindings/go/configuration v0.0.11/go.mod h1:0sMurs1+cI/ohkuNSipDPPRb5ycSSTHDZoFG92aDtlE=
 ocm.software/open-component-model/bindings/go/constructor v0.0.6 h1:HtppfxNDehVSj0kLH+qJ6HjfmpIpAuOs2f+4pY+bngs=
 ocm.software/open-component-model/bindings/go/constructor v0.0.6/go.mod h1:JDChDHc3+Yba3kOKR2gw+x6DxhyYoxHhhiB2eKiv0Ck=
 ocm.software/open-component-model/bindings/go/credentials v0.0.9 h1:sYKfVKs+CrVL2EuKYNevCjXq1cdF0DsLnWyEjamjDdY=
