@@ -113,6 +113,59 @@ func TestFilter(t *testing.T) {
 	}
 }
 
+func TestFilterWithRemainder(t *testing.T) {
+	configType := runtime.Type{Version: "v1", Name: "test"}
+	entryA := &runtime.Raw{Type: runtime.Type{Version: "v1", Name: "typeA"}}
+	entryB := &runtime.Raw{Type: runtime.Type{Version: "v1", Name: "typeB"}}
+
+	tests := []struct {
+		name              string
+		config            *Config
+		options           *FilterOptions
+		wantFiltered      []*runtime.Raw
+		wantRemainder     []*runtime.Raw
+	}{
+		{
+			name: "empty options puts all entries in remainder",
+			config: &Config{
+				Type:           configType,
+				Configurations: []*runtime.Raw{entryA, entryB},
+			},
+			options:       &FilterOptions{},
+			wantFiltered:  nil,
+			wantRemainder: []*runtime.Raw{entryA, entryB},
+		},
+		{
+			name: "partial match splits entries correctly",
+			config: &Config{
+				Type:           configType,
+				Configurations: []*runtime.Raw{entryA, entryB},
+			},
+			options:       &FilterOptions{ConfigTypes: []runtime.Type{entryA.Type}},
+			wantFiltered:  []*runtime.Raw{entryA},
+			wantRemainder: []*runtime.Raw{entryB},
+		},
+		{
+			name: "all match puts all entries in filtered",
+			config: &Config{
+				Type:           configType,
+				Configurations: []*runtime.Raw{entryA, entryB},
+			},
+			options:       &FilterOptions{ConfigTypes: []runtime.Type{entryA.Type, entryB.Type}},
+			wantFiltered:  []*runtime.Raw{entryA, entryB},
+			wantRemainder: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filtered, remainder, err := FilterWithRemainder(tt.config, tt.options)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantFiltered, filtered.Configurations)
+			require.Equal(t, tt.wantRemainder, remainder.Configurations)
+		})
+	}
+}
+
 type testConfig struct {
 	Type  runtime.Type `json:"type"`
 	Value string       `json:"value"`

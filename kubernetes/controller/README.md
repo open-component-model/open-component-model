@@ -58,4 +58,4 @@ Code contributions, feature requests, bug reports, and help requests are very we
 [Contributing Guide](https://github.com/open-component-model/.github/blob/main/CONTRIBUTING.md)
 for more information on how to contribute to OCM.
 
-OCM K8s Toolkit follows the [CNCF Code of Conduct](https://github.com/cncf/foundation/blob/main/code-of-conduct.md).
+OCM K8s Toolkit follows the [NeoNephos Code of Conduct](https://github.com/neonephos/.github/blob/main/CODE_OF_CONDUCT.md)
