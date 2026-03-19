@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/go-logr/logr/funcr"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	ocmconfigv1spec "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
@@ -558,7 +560,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 	}
 
 	t.Run("nil config is handled", func(t *testing.T) {
-		result, err := filterAllowedConfigTypes(nil)
+		result, err := filterAllowedConfigTypes(t.Context(), nil)
 		require.Error(t, err)
 		assert.Nil(t, result)
 	})
@@ -567,7 +569,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		cfg := &genericv1.Config{
 			Type: ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
 		}
-		result, err := filterAllowedConfigTypes(cfg)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
 		require.NoError(t, err)
 		assert.Empty(t, result.Configurations)
 	})
@@ -578,7 +580,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 			`{"type":"resolvers.config.ocm.software/v1alpha1","resolvers":[]}`,
 			`{"type":"ocm.config.ocm.software/v1","resolvers":[]}`,
 		)
-		result, err := filterAllowedConfigTypes(cfg)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
 		require.NoError(t, err)
 		require.Len(t, result.Configurations, 3)
 		types := []ocmruntime.Type{result.Configurations[0].GetType(), result.Configurations[1].GetType(), result.Configurations[2].GetType()}
@@ -593,7 +595,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 			`{"type":"filesystem.config.ocm.software/v1alpha1","tempFolder":"/tmp"}`,
 			`{"type":"whatever.config.ocm.software/v1alpha1","whatever":"whatever"}`,
 		)
-		result, err := filterAllowedConfigTypes(cfg)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
 		require.NoError(t, err)
 		require.Len(t, result.Configurations, 1)
 		assert.Equal(t,
@@ -607,7 +609,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 			`{"type":"credentials.config.ocm.software","repositories":[]}`,
 			`{"type":"resolvers.config.ocm.software","resolvers":[]}`,
 		)
-		result, err := filterAllowedConfigTypes(cfg)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
 		require.NoError(t, err)
 		require.Len(t, result.Configurations, 2)
 		types := []ocmruntime.Type{result.Configurations[0].GetType(), result.Configurations[1].GetType()}
@@ -619,7 +621,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		cfg := makeGenericConfig(
 			`{"type":"ocm.config.ocm.software/v1","aliases":{"myrepo":{"type":"OCIRegistry","baseUrl":"ghcr.io"}},"resolvers":[]}`,
 		)
-		result, err := filterAllowedConfigTypes(cfg)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
 		require.NoError(t, err)
 		require.Len(t, result.Configurations, 1)
 
@@ -632,7 +634,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		cfg := makeGenericConfig(
 			`{"type":"ocm.config.ocm.software","aliases":{"myrepo":{"type":"OCIRegistry","baseUrl":"ghcr.io"}},"resolvers":[]}`,
 		)
-		result, err := filterAllowedConfigTypes(cfg)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
 		require.NoError(t, err)
 		require.Len(t, result.Configurations, 1)
 
@@ -645,7 +647,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		cfg := makeGenericConfig(
 			`{"type":"ocm.config.ocm.software/v1","aliases":{"myrepo":{"type":"OCIRegistry","baseUrl":"ghcr.io"}},"resolvers":[{"repository":{"type":"OCIRegistry","baseUrl":"ghcr.io"},"prefix":"ocm.software","priority":10}]}`,
 		)
-		result, err := filterAllowedConfigTypes(cfg)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
 		require.NoError(t, err)
 		require.Len(t, result.Configurations, 1)
 
@@ -660,7 +662,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		cfg := makeGenericConfig(
 			`{"type":"resolvers.config.ocm.software/v1alpha1","resolvers":[{"repository":{"type":"OCIRegistry","baseUrl":"ghcr.io"},"componentNamePattern":"ocm.software/*"}]}`,
 		)
-		result, err := filterAllowedConfigTypes(cfg)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
 		require.NoError(t, err)
 		require.Len(t, result.Configurations, 1)
 
@@ -680,12 +682,32 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 			`{"type":"whatever.config.ocm.software/v1alpha1","whatever":"whatever"}`,
 		)
 		flattened := genericv1.FlatMap(cfgA, cfgB)
-		result, err := filterAllowedConfigTypes(flattened)
+		result, err := filterAllowedConfigTypes(t.Context(), flattened)
 		require.NoError(t, err)
 		// only the credentials and resolvers entries survive; the filesystem and whatever entries are dropped
 		require.Len(t, result.Configurations, 2)
 		types := []ocmruntime.Type{result.Configurations[0].GetType(), result.Configurations[1].GetType()}
 		assert.Contains(t, types, ocmruntime.NewVersionedType(credentialsv1.ConfigType, credentialsv1.Version))
 		assert.Contains(t, types, ocmruntime.NewVersionedType(resolversv1alpha1spec.ConfigType, resolversv1alpha1spec.Version))
+	})
+
+	t.Run("dropped types are logged at V(1)", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"credentials.config.ocm.software/v1","repositories":[]}`,
+			`{"type":"filesystem.config.ocm.software/v1alpha1","tempFolder":"/tmp"}`,
+			`{"type":"whatever.config.ocm.software/v1alpha1","whatever":"whatever"}`,
+		)
+		var logLines []string
+		logger := funcr.New(func(_, args string) {
+			logLines = append(logLines, args)
+		}, funcr.Options{Verbosity: 1})
+		ctx := log.IntoContext(t.Context(), logger)
+		result, err := filterAllowedConfigTypes(ctx, cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+		require.Len(t, logLines, 1)
+		assert.Contains(t, logLines[0], "dropping config entries with types not in allowlist")
+		assert.Contains(t, logLines[0], "filesystem.config.ocm.software/v1alpha1")
+		assert.Contains(t, logLines[0], "whatever.config.ocm.software/v1alpha1")
 	})
 }

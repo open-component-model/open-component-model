@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	ocmconfigv1spec "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
@@ -53,14 +54,22 @@ var ocmConfigTypes = []runtime.Type{
 // filterAllowedConfigTypes filters the provided config to only include config entries whose
 // types are in the allowedConfigTypes list. Additionally, it strips the deprecated Aliases field
 // from any ocm.config.ocm.software entries.
-func filterAllowedConfigTypes(cfg *genericv1.Config) (*genericv1.Config, error) {
+func filterAllowedConfigTypes(ctx context.Context, cfg *genericv1.Config) (*genericv1.Config, error) {
 	if cfg == nil {
 		return nil, errors.New("config is nil")
 	}
 
-	filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{ConfigTypes: allowedConfigTypes})
+	filtered, remainder, err := genericv1.FilterWithRemainder(cfg, &genericv1.FilterOptions{ConfigTypes: allowedConfigTypes})
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter config types: %w", err)
+	}
+
+	if len(remainder.Configurations) > 0 {
+		droppedTypes := make([]string, 0, len(remainder.Configurations))
+		for _, entry := range remainder.Configurations {
+			droppedTypes = append(droppedTypes, entry.GetType().String())
+		}
+		log.FromContext(ctx).V(1).Info("dropping config entries with types not in allowlist", "types", droppedTypes)
 	}
 
 	// The Filter call above only enforces the type allowlist. However, ocm.config.ocm.software
@@ -227,7 +236,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		return nil, nil
 	}
 
-	flattenedFiltered, err := filterAllowedConfigTypes(flattened)
+	flattenedFiltered, err := filterAllowedConfigTypes(ctx, flattened)
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply config type allowlist: %w", err)
 	}
