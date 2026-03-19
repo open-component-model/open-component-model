@@ -74,7 +74,7 @@ spec:
                     {{- if .deployerDownloadSize }}
                     - --deployer-download-cache-size={{ .deployerDownloadSize }}
                     {{- end }}
-                    {{- if .deployerDownloadMaxResourceSize }}
+                    {{- if hasKey . "deployerDownloadMaxResourceSize" }}
                     - --deployer-download-max-resource-size={{ .deployerDownloadMaxResourceSize }}
                     {{- end }}
                     {{- end }}
