@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/go-logr/logr/funcr"
@@ -395,14 +396,11 @@ func TestLoadConfigurations(t *testing.T) {
 // credentialsConfigJSON returns a generic OCM config JSON with credentials
 // entries for the given hostnames, in the order provided.
 func credentialsConfigJSON(hostnames ...string) []byte {
-	consumers := ""
-	for i, h := range hostnames {
-		if i > 0 {
-			consumers += ","
-		}
-		consumers += `{"type":"credentials.config.ocm.software/v1","consumers":[{"identities":[{"hostname":"` + h + `"}],"credentials":[]}]}`
+	consumers := make([]string, 0, len(hostnames))
+	for _, h := range hostnames {
+		consumers = append(consumers, `{"type":"credentials.config.ocm.software/v1","consumers":[{"identities":[{"hostname":"`+h+`"}],"credentials":[]}]}`)
 	}
-	return []byte(`{"type":"generic.config.ocm.software/v1","configurations":[` + consumers + `]}`)
+	return []byte(`{"type":"generic.config.ocm.software/v1","configurations":[` + strings.Join(consumers, ",") + `]}`)
 }
 
 func TestLoadConfigurationsInOrder(t *testing.T) {
@@ -561,7 +559,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 
 	t.Run("nil config is handled", func(t *testing.T) {
 		result, err := filterAllowedConfigTypes(t.Context(), nil)
-		require.Error(t, err)
+		require.NoError(t, err)
 		assert.Nil(t, result)
 	})
 

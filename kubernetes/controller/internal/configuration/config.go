@@ -29,34 +29,31 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
 
-// allowedConfigTypes defines the set of OCM config types accepted by the controller.
-// Any config entry whose type is not in this list is silently dropped to reduce the
-// attack surface from user-supplied Kubernetes Secrets/ConfigMaps.
-var allowedConfigTypes = []runtime.Type{
-	// credentials
-	runtime.NewVersionedType(credentialsv1spec.ConfigType, credentialsv1spec.Version),
-	runtime.NewUnversionedType(credentialsv1spec.ConfigType),
-	// legacy fallback resolvers
-	runtime.NewVersionedType(ocmconfigv1spec.ConfigType, ocmconfigv1spec.Version),
-	runtime.NewUnversionedType(ocmconfigv1spec.ConfigType),
-	// path-matcher resolvers (v1alpha1)
-	runtime.NewVersionedType(resolversv1alpha1spec.ConfigType, resolversv1alpha1spec.Version),
-	runtime.NewUnversionedType(resolversv1alpha1spec.ConfigType),
-}
-
-// ocmConfigTypes is the subset of allowedConfigTypes that identifies ocm.config.ocm.software
-// entries, used to selectively strip the deprecated Aliases field during filtering.
+// ocmConfigTypes identifies ocm.config.ocm.software entries whose deprecated Aliases field
+// is stripped during filtering.
 var ocmConfigTypes = []runtime.Type{
 	runtime.NewVersionedType(ocmconfigv1spec.ConfigType, ocmconfigv1spec.Version),
 	runtime.NewUnversionedType(ocmconfigv1spec.ConfigType),
 }
+
+// allowedConfigTypes defines the set of OCM config types accepted by the controller.
+// It is built on top of ocmConfigTypes so the two can never drift.
+var allowedConfigTypes = append(
+	slices.Clone(ocmConfigTypes),
+	// credentials
+	runtime.NewVersionedType(credentialsv1spec.ConfigType, credentialsv1spec.Version),
+	runtime.NewUnversionedType(credentialsv1spec.ConfigType),
+	// path-matcher resolvers (v1alpha1)
+	runtime.NewVersionedType(resolversv1alpha1spec.ConfigType, resolversv1alpha1spec.Version),
+	runtime.NewUnversionedType(resolversv1alpha1spec.ConfigType),
+)
 
 // filterAllowedConfigTypes filters the provided config to only include config entries whose
 // types are in the allowedConfigTypes list. Additionally, it strips the deprecated Aliases field
 // from any ocm.config.ocm.software entries.
 func filterAllowedConfigTypes(ctx context.Context, cfg *genericv1.Config) (*genericv1.Config, error) {
 	if cfg == nil {
-		return nil, errors.New("config is nil")
+		return nil, nil
 	}
 
 	filtered, remainder, err := genericv1.FilterWithRemainder(cfg, &genericv1.FilterOptions{ConfigTypes: allowedConfigTypes})
