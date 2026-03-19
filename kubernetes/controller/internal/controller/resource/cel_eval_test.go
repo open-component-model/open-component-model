@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common/types"
-	"github.com/google/cel-go/common/types/ref"
 	"github.com/google/cel-go/ext"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,62 +27,6 @@ func toJSON(t *testing.T, v any) apiextensionsv1.JSON {
 	raw, err := json.Marshal(v)
 	require.NoError(t, err)
 	return apiextensionsv1.JSON{Raw: raw}
-}
-
-func TestCelValueToAny(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		val  ref.Val
-		want any
-	}{
-		{
-			name: "string",
-			val:  types.String("hello"),
-			want: "hello",
-		},
-		{
-			name: "int",
-			val:  types.Int(42),
-			want: int64(42),
-		},
-		{
-			name: "bool",
-			val:  types.Bool(true),
-			want: true,
-		},
-		{
-			name: "list",
-			val:  types.DefaultTypeAdapter.NativeToValue([]string{"a", "b"}),
-			want: []any{"a", "b"},
-		},
-		{
-			name: "map",
-			val:  types.DefaultTypeAdapter.NativeToValue(map[string]string{"k": "v", "k2": "v2"}),
-			want: map[string]any{"k": "v", "k2": "v2"},
-		},
-		{
-			name: "nested map with list",
-			val: types.DefaultTypeAdapter.NativeToValue(map[string]any{
-				"tags": []string{"a", "b"},
-				"name": "test",
-			}),
-			want: map[string]any{
-				"tags": []any{"a", "b"},
-				"name": "test",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := celValueToAny(tt.val)
-			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
 }
 
 func TestEvalCEL(t *testing.T) {
@@ -187,4 +129,80 @@ func TestProcessAdditionalFields(t *testing.T) {
 		})
 		require.Error(t, err)
 	})
+}
+
+func TestProcessAdditionalFields_MultipleResourcesNestedMap(t *testing.T) {
+	t.Parallel()
+	env := newTestEnv(t)
+	ctx := context.Background()
+
+	resourceMap := map[string]any{
+		"name":    "aggregate",
+		"version": "2.0.0",
+		"components": map[string]any{
+			"backend": map[string]any{
+				"name":    "api-server",
+				"version": "1.5.0",
+				"access": map[string]any{
+					"type":           "ociArtifact",
+					"imageReference": "ghcr.io/org/api-server:1.5.0",
+				},
+				"labels": map[string]any{
+					"team":     "platform",
+					"critical": true,
+				},
+			},
+			"frontend": map[string]any{
+				"name":    "web-ui",
+				"version": "3.2.1",
+				"access": map[string]any{
+					"type":           "ociArtifact",
+					"imageReference": "ghcr.io/org/web-ui:3.2.1",
+				},
+				"labels": map[string]any{
+					"team":     "ui",
+					"critical": false,
+				},
+			},
+		},
+	}
+
+	// Build nested additional fields that reference both components.
+	deployInfoInner, err := json.Marshal(map[string]apiextensionsv1.JSON{
+		"backendImage":  toJSON(t, "resource.components.backend.access.imageReference"),
+		"frontendImage": toJSON(t, "resource.components.frontend.access.imageReference"),
+		"backendTeam":   toJSON(t, "resource.components.backend.labels.team"),
+	})
+	require.NoError(t, err)
+
+	versionInfoInner, err := json.Marshal(map[string]apiextensionsv1.JSON{
+		"aggregate": toJSON(t, "resource.version"),
+		"backend":   toJSON(t, "resource.components.backend.version"),
+		"frontend":  toJSON(t, "resource.components.frontend.version"),
+	})
+	require.NoError(t, err)
+
+	result, err := processAdditionalFields(ctx, env, resourceMap, map[string]apiextensionsv1.JSON{
+		"deploy":   {Raw: deployInfoInner},
+		"versions": {Raw: versionInfoInner},
+		"summary":  toJSON(t, `resource.name + " (" + resource.version + ")"`),
+	})
+	require.NoError(t, err)
+
+	// Verify the flat summary field.
+	assert.JSONEq(t, `"aggregate (2.0.0)"`, string(result["summary"].Raw))
+
+	// Verify the nested deploy info.
+	var deploy map[string]apiextensionsv1.JSON
+	require.NoError(t, json.Unmarshal(result["deploy"].Raw, &deploy))
+	assert.JSONEq(t, `"ghcr.io/org/api-server:1.5.0"`, string(deploy["backendImage"].Raw))
+	assert.JSONEq(t, `"ghcr.io/org/web-ui:3.2.1"`, string(deploy["frontendImage"].Raw))
+	assert.JSONEq(t, `"platform"`, string(deploy["backendTeam"].Raw))
+
+	// Verify the nested versions info.
+	var versions map[string]apiextensionsv1.JSON
+	require.NoError(t, json.Unmarshal(result["versions"].Raw, &versions))
+	assert.JSONEq(t, `"2.0.0"`, string(versions["aggregate"].Raw))
+	assert.JSONEq(t, `"1.5.0"`, string(versions["backend"].Raw))
+	assert.JSONEq(t, `"3.2.1"`, string(versions["frontend"].Raw))
 }

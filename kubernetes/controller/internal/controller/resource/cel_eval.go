@@ -6,9 +6,6 @@ import (
 	"fmt"
 
 	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common/types"
-	"github.com/google/cel-go/common/types/ref"
-	"github.com/google/cel-go/common/types/traits"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -143,56 +140,11 @@ func evalCEL(
 	if err != nil {
 		return apiextensionsv1.JSON{}, fmt.Errorf("failed to evaluate CEL expression %q: %w", name, err)
 	}
-	nativeVal, err := celValueToAny(val)
-	if err != nil {
-		return apiextensionsv1.JSON{}, fmt.Errorf("failed to convert CEL result %q: %w", name, err)
-	}
-	raw, err := json.Marshal(nativeVal)
+	raw, err := json.Marshal(val)
 	if err != nil {
 		return apiextensionsv1.JSON{}, fmt.Errorf("failed to marshal CEL result %q: %w", name, err)
 	}
 	return apiextensionsv1.JSON{Raw: raw}, nil
-}
-
-// celValueToAny converts a CEL ref.Val to a native Go value suitable for JSON marshaling.
-// It handles standard CEL maps (traits.Mapper), lists (traits.Lister), and falls back
-// to native Go values for scalar types.
-func celValueToAny(val ref.Val) (any, error) {
-	// Check for list first (lists are also iterable+indexable, so check before maps).
-	if lister, ok := val.(traits.Lister); ok {
-		it := lister.Iterator()
-		var result []any
-		for it.HasNext() == types.True {
-			elem := it.Next()
-			nativeVal, err := celValueToAny(elem)
-			if err != nil {
-				return nil, fmt.Errorf("failed to convert element: %w", err)
-			}
-			result = append(result, nativeVal)
-		}
-		return result, nil
-	}
-
-	// Check for map-like values: anything that is both iterable (yields keys)
-	// and indexable (get value by key).
-	iterable, isIterable := val.(traits.Iterable)
-	indexer, isIndexer := val.(traits.Indexer)
-	if isIterable && isIndexer {
-		it := iterable.Iterator()
-		result := make(map[string]any)
-		for it.HasNext() == types.True {
-			key := it.Next()
-			mapVal := indexer.Get(key)
-			nativeVal, err := celValueToAny(mapVal)
-			if err != nil {
-				return nil, fmt.Errorf("failed to convert element: %w", err)
-			}
-			result[fmt.Sprint(key.Value())] = nativeVal
-		}
-		return result, nil
-	}
-
-	return val.Value(), nil
 }
 
 // toGenericMapViaJSON marshals and unmarshals a struct into a generic map representation through JSON tags.
