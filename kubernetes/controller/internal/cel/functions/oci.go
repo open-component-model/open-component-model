@@ -63,12 +63,13 @@ func ToOCI(component *v1alpha1.ComponentInfo) cel.EnvOption {
 // of those components as strings.
 // If the input is:
 //   - string: the entire value is treated as the reference string
-//   - map[string]any with "imageReference": treated as an OCIImage access (OCIImage/v1),
-//     the imageReference is returned directly
+//   - map[string]any with "imageReference": treated as an OCIImage access (OCIImage/v1).
+//     If the access cannot be fully parsed the imageReference is returned directly as a fallback
 //   - map[string]any with "localReference": treated as a localBlob access (localBlob/v1),
 //     the full OCI reference is constructed from the component's repository spec
-//     (baseUrl + subPath + "component-descriptors" + component name) and the localReference digest
 //
+// v1alpha1.ComponentInfo is used to build the imageReference when the access is localBlob.
+// It takes the component name, the repository spec and the localBlob's LocalReference to construct the full reference to the OCI registry.
 // The function returns an error if parsing fails or the map is malformed.
 func BindingToOCI(component *v1alpha1.ComponentInfo) func(lhs ref.Val) ref.Val {
 	return func(lhs ref.Val) ref.Val {
@@ -152,8 +153,7 @@ func BindingToOCI(component *v1alpha1.ComponentInfo) func(lhs ref.Val) ref.Val {
 }
 
 // extractImageReference extracts an OCI image reference from a map.
-// It supports OCIImage access (returns imageReference directly) and localBlob
-// access (constructs the reference from the component's repository spec and localReference digest).
+// It supports OCIImage access and localBlob access).
 // For backward compatibility, a plain "imageReference" key at the top level is also accepted.
 func extractImageReference(m map[string]any, component *v1alpha1.ComponentInfo) (string, error) {
 	unstructured, err := runtime.UnstructuredFromMixedData(m)

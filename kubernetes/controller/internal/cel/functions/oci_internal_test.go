@@ -36,7 +36,7 @@ func TestBuildImageReference(t *testing.T) {
 		assert.Equal(t, expected, ref)
 	})
 
-	t.Run("empty base url returns error", func(t *testing.T) {
+	t.Run("empty baseUrl returns error", func(t *testing.T) {
 		t.Parallel()
 		repo := &oci.Repository{
 			Type: runtime.NewVersionedType("OCIRepository", "v1"),
@@ -52,7 +52,7 @@ func TestBuildImageReference(t *testing.T) {
 		assert.Errorf(t, err, "expected error for empty base url")
 	})
 
-	t.Run("empty local reference returns error", func(t *testing.T) {
+	t.Run("empty localReference returns error", func(t *testing.T) {
 		t.Parallel()
 		repo := &oci.Repository{
 			Type:    runtime.NewVersionedType("OCIRepository", "v1"),
