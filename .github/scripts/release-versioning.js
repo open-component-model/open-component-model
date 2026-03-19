@@ -42,10 +42,28 @@ export default async function computeRcVersion({ core }) {
     const rcTag = `${tagPrefix}${rcVersion}`;
     const promotionTag = `${tagPrefix}${baseVersion}`;
 
+    // Find previous release tag for changelog range.
+    // git-cliff's --include-path can miss tag boundaries when the tagged commit
+    // doesn't touch files in the component path. Passing an explicit range avoids this.
+    const mergedTags = run(core, "git", [
+        "tag", "--list", `${tagPrefix}*`,
+        "--merged", "HEAD",
+        "--sort=-version:refname"
+    ]);
+    const previousTag = findPreviousTag(
+        mergedTags.split("\n").filter(Boolean),
+        rcTag
+    );
+    const changelogRange = previousTag ? `${previousTag}..HEAD` : "";
+
     core.setOutput("new_tag", rcTag);
     core.setOutput("new_version", rcVersion);
     core.setOutput("base_version", baseVersion);
     core.setOutput("promotion_tag", promotionTag);
+    core.setOutput("changelog_range", changelogRange);
+
+    core.info(`Previous release tag: ${previousTag || "(none — first release)"}`);
+    core.info(`Changelog range: ${changelogRange || "(full history)"}`);
 
     // --------------------------
     // Step summary
@@ -66,6 +84,8 @@ export default async function computeRcVersion({ core }) {
             ["Next RC Version", rcVersion],
             ["RC Tag", rcTag],
             ["Promotion Tag", promotionTag],
+            ["Previous Release Tag", previousTag || "(none — first release)"],
+            ["Changelog Range", changelogRange || "(full history)"],
         ])
         .write();
 }
@@ -214,6 +234,40 @@ export function parseVersion(tag) {
     if (!tag) return [];
     const version = tag.replace(/^.*v/, "").replace(/-rc\.\d+$/, "");
     return version.split(".").map(Number);
+}
+
+// --------------------------------------------
+// Changelog range determination for git-cliff
+// --------------------------------------------
+
+/**
+ * Find the most recent stable semver release tag for a component on the current branch.
+ *
+ * Required because git-cliff's --include-path filter can cause it to lose
+ * track of tag boundaries when the tagged commit doesn't modify files matching
+ * the include path. By finding the previous tag explicitly, we can pass it as
+ * commit range (e.g. "cli/v0.1.0..HEAD") to git-cliff instead of relying on
+ * --latest, which avoids the issue entirely.
+ *
+ * @param {string[]} tags - List of tags reachable from HEAD (from git tag --list --merged HEAD)
+ * @param {string} newTag - The tag about to be created (to exclude from results)
+ * @returns {string} The previous stable semver tag, or empty string if none found (first release)
+ */
+export function findPreviousTag(tags, newTag) {
+    const compareVersions = (a, b) => {
+        for (let i = 0; i < 3; i++) {
+            const diff = (a[i] || 0) - (b[i] || 0);
+            if (diff !== 0) return diff;
+        }
+        return 0;
+    };
+
+    const newTagParts = parseVersion(newTag);
+
+    return tags
+        .filter(t => t && t !== newTag && /^.+\/v\d+\.\d+\.\d+$/.test(t))
+        .filter(t => compareVersions(parseVersion(t), newTagParts) < 0)
+        .sort((a, b) => compareVersions(parseVersion(b), parseVersion(a)))[0] || "";
 }
 
 // --------------------------
