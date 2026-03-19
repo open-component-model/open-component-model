@@ -586,6 +586,16 @@ type limitedReadCloser struct {
 func (l *limitedReadCloser) Read(p []byte) (int, error) {
 	n, err := l.limited.Read(p)
 	if err == nil && l.limited.N == 0 {
+		// The LimitedReader is exhausted. This could mean the blob is exactly at the
+		// limit (fine) or that there is more data beyond it (overflow). Probe one byte
+		// from the underlying reader to distinguish the two cases.
+		var probe [1]byte
+		_, probeErr := l.limited.R.Read(probe[:])
+		if errors.Is(probeErr, io.EOF) {
+			// Blob fits exactly within the limit — return the bytes normally.
+			return n, nil
+		}
+		// Either we got data (probeErr==nil) or an unexpected error: treat as overflow.
 		return n, fmt.Errorf("resource exceeds maximum allowed size")
 	}
 	return n, err
