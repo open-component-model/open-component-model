@@ -13,8 +13,6 @@ on:
 
 jobs:
   create-release-branch:
-    environment:
-      name: ocm-release
     name: Create Release Branch from ${{ github.event.inputs.source_branch }} to ${{ github.event.inputs.target_branch }}
     runs-on: ubuntu-latest
 
@@ -61,7 +59,10 @@ jobs:
             // Check if target branch exists
             try {
               await github.rest.repos.getBranch({ owner, repo, branch: target });
-              core.info(`Branch '${target}' already exists. Skipping creation.`);
+              core.summary.addHeading('Release Branch Already Exists', 3);
+              core.summary.addRaw(`Branch \`${target}\` already exists. No branch was created.`);
+              await core.summary.write();
+              core.setFailed(`Branch '${target}' already exists. No branch was created.`);
               return;
             } catch (error) {
               if (error.status !== 404) throw error;

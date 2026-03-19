@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -182,10 +181,18 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 }
 
 func AddComponentForConstructor(ctx context.Context, constructorContent string, cfgPath string, registryURL string) (err error) {
-	constructorPath := filepath.Join(os.TempDir(), "constructor.yaml")
+	constructorFile, err := os.CreateTemp("", "constructor-*.yaml")
+	if err != nil {
+		return err
+	}
+	constructorPath := constructorFile.Name()
 	defer os.Remove(constructorPath)
 
-	if err = os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm); err != nil { //nolint:gosec // test code
+	if _, err = constructorFile.WriteString(constructorContent); err != nil {
+		constructorFile.Close()
+		return err
+	}
+	if err = constructorFile.Close(); err != nil {
 		return err
 	}
 
