@@ -90,7 +90,7 @@ type Reconciler struct {
 	PluginManager *manager.PluginManager
 
 	// MaxResourceSizeMiB is the maximum size in MiB a downloaded resource blob may contain.
-	// blob.SizeUnknown (-1) disables the limit.
+	// 0 disables the limit.
 	MaxResourceSizeMiB int64
 }
 
@@ -527,7 +527,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	}()
 
 	// Enforce size limit if configured
-	if r.MaxResourceSizeMiB != blob.SizeUnknown {
+	if r.MaxResourceSizeMiB != 0 {
 		maxBytes := r.MaxResourceSizeMiB * 1024 * 1024
 		// Opportunistic pre-check: downloadResourceBlob returns an ReadOnlyBlob, so the
 		// concrete type may or may not implement blob.SizeAware. If it does and the declared

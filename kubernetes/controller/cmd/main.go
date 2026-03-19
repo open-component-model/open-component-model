@@ -105,7 +105,7 @@ func main() {
 	flag.IntVar(&deployerDownloadCacheSize, "deployer-download-cache-size", 1_000, //nolint:mnd // no magic number
 		"The maximum size of the deployer download object LRU cache.")
 	flag.Int64Var(&deployerMaxResourceSize, "deployer-download-max-resource-size", defaultMaxResourceSizeInMiB,
-		"Maximum size in MiB of a single downloadable resource. -1 disables the limit.")
+		"Maximum size in MiB of a single downloadable resource. 0 disables the limit.")
 	flag.IntVar(&ocmContextCacheSize, "ocm-context-cache-size", 100, //nolint:mnd // no magic number
 		"The maximum size of the OCM context cache. This is the number of active OCM contexts that can be kept alive.")
 	flag.IntVar(&ocmSessionCacheSize, "ocm-session-cache-size", 100, //nolint:mnd // no magic number
