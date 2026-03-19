@@ -157,6 +157,8 @@ func evalCEL(
 // celValueToAny converts a CEL ref.Val to a native Go value suitable for JSON marshaling.
 // It handles standard CEL maps (traits.Mapper), lists (traits.Lister), and falls back
 // to native Go values for scalar types.
+// We need this because json.Marshal cannot convert from map[ref.Val]ref.Val - it will result in `{"Adapter":{}}`
+// Since we can have nested lists and maps, we have to convert this recursively.
 func celValueToAny(val ref.Val) (any, error) {
 	// Check for list first (lists are also iterable+indexable, so check before maps).
 	if lister, ok := val.(traits.Lister); ok {

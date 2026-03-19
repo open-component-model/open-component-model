@@ -47,6 +47,12 @@ func TestEvalCEL(t *testing.T) {
 		{name: "string field", expr: "resource.name", want: `"my-resource"`},
 		{name: "concatenation", expr: `resource.name + ":" + resource.version`, want: `"my-resource:1.0.0"`},
 		{name: "numeric", expr: "1 + 2", want: "3"},
+		// CEL-constructed maps use map[ref.Val]ref.Val internally, which json.Marshal
+		// cannot handle. This verifies that convertCELToNative correctly converts them.
+		{name: "constructed map", expr: `{"name": resource.name, "version": resource.version}`, want: `{"name":"my-resource","version":"1.0.0"}`},
+		{name: "constructed list", expr: `[resource.name, resource.version]`, want: `["my-resource","1.0.0"]`},
+		// CEL-constructed lists of maps combine both problematic types: []ref.Val containing map[ref.Val]ref.Val.
+		{name: "constructed list of maps", expr: `[{"n": resource.name}, {"v": resource.version}]`, want: `[{"n":"my-resource"},{"v":"1.0.0"}]`},
 		{name: "invalid expression", expr: "invalid.!!!", wantErr: true},
 		{name: "undefined variable", expr: "resource.nonexistent", wantErr: true},
 	}
