@@ -463,7 +463,7 @@ func setResourceStatus(
 	}
 	resource.Status.Resource = info
 
-	if err := computeAdditionalStatusFields(ctx, res, resource, component); err != nil {
+	if err := ComputeAdditionalStatusFields(ctx, res, resource, component); err != nil {
 		return fmt.Errorf("evaluating additional status fields: %w", err)
 	}
 

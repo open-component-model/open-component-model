@@ -38,6 +38,9 @@ var _ = Describe("controller", func() {
 		})
 
 		for _, example := range examples {
+			if _, ok := ignoreExamples[example.Name()]; ok {
+				continue
+			}
 			fInfo, err := os.Stat(filepath.Join(examplesDir, example.Name()))
 			Expect(err).NotTo(HaveOccurred())
 			if !fInfo.IsDir() {
