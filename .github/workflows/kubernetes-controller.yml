@@ -212,6 +212,7 @@ jobs:
         id: upload-artifacts
         with:
           if-no-files-found: error
+          retention-days: 1
           name: ${{ env.ARTIFACT_NAME }}
           path: |
             ${{ env.LOCATION }}/tmp/oci/
@@ -221,6 +222,7 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           if-no-files-found: error
+          retention-days: 1
           name: controller-chart-pr
           path: ${{ env.LOCATION }}/dist/chart-*.tgz
 
@@ -451,6 +453,7 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: controller-chart-${{ needs.build.outputs.version }}
+          retention-days: 1
           path: ${{ env.LOCATION }}/dist/chart-*.tgz
           if-no-files-found: error
 

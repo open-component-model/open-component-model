@@ -139,6 +139,7 @@ jobs:
         id: upload-artifacts
         with:
           if-no-files-found: 'error'
+          retention-days: 1
           name: ${{ env.ARTIFACT_NAME }}
           # Compiled CLI binaries
           # OCI layout files

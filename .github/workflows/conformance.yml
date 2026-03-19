@@ -55,7 +55,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: conformance-${{ github.workflow }}-${{ github.ref }}-${{ inputs.cli_image || inputs.cli_artifact || 'default-cli' }}-${{ inputs.toolkit_image || inputs.toolkit_chart_artifact || 'default-toolkit' }}
+  group: conformance-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -154,11 +154,28 @@ jobs:
       # Task picks up env vars automatically through the {{ .VAR | default }} pattern.
       - name: Set inputs as environment variables
         run: |
-          [ -z "$CLI_IMAGE" ] && [ -n "$INPUT_CLI_IMAGE" ] && echo "CLI_IMAGE=${INPUT_CLI_IMAGE}" >> "$GITHUB_ENV" || true
-          [ -z "$TOOLKIT_IMAGE" ] && [ -n "$INPUT_TOOLKIT_IMAGE" ] && echo "TOOLKIT_IMAGE=${INPUT_TOOLKIT_IMAGE}" >> "$GITHUB_ENV" || true
+          if [ -z "$CLI_IMAGE" ] && [ -n "$INPUT_CLI_IMAGE" ]; then
+            echo "CLI_IMAGE=${INPUT_CLI_IMAGE}" >> "$GITHUB_ENV"
+          fi
+          if [ -z "$TOOLKIT_IMAGE" ] && [ -n "$INPUT_TOOLKIT_IMAGE" ]; then
+            echo "TOOLKIT_IMAGE=${INPUT_TOOLKIT_IMAGE}" >> "$GITHUB_ENV"
+          fi
         env:
           INPUT_CLI_IMAGE: ${{ inputs.cli_image }}
           INPUT_TOOLKIT_IMAGE: ${{ inputs.toolkit_image }}
+
+      - name: Validate required image references
+        run: |
+          err=0
+          if [ -z "$CLI_IMAGE" ]; then
+            echo "::error::CLI_IMAGE is not set. Provide either 'cli_image' or 'cli_artifact' + 'cli_version' inputs."
+            err=1
+          fi
+          if [ -z "$TOOLKIT_IMAGE" ]; then
+            echo "::error::TOOLKIT_IMAGE is not set. Provide either 'toolkit_image' or 'toolkit_chart_artifact' + 'toolkit_version' inputs."
+            err=1
+          fi
+          exit $err
 
       - name: Check dependencies
         working-directory: conformance/scenarios/sovereign
