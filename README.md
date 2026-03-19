@@ -105,7 +105,7 @@ Code contributions, feature requests, bug reports, and help requests are very we
 [Contributing Guide in the Community repository](https://github.com/open-component-model/.github/blob/main/CONTRIBUTING.md)
 for more information on how to contribute to OCM.
 
-OCM follows the [CNCF Code of Conduct](https://github.com/cncf/foundation/blob/main/code-of-conduct.md).
+OCM follows the [NeoNephos Code of Conduct](https://github.com/neonephos/.github/blob/main/CODE_OF_CONDUCT.md).
 
 ## Licensing
 
