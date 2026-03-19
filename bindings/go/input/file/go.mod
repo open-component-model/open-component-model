@@ -20,7 +20,7 @@ require (
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/configuration v0.0.10 // indirect
+	ocm.software/open-component-model/bindings/go/configuration v0.0.11 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260317134642-21ef6ab52666 // indirect
