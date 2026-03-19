@@ -99,7 +99,7 @@ an ADR first.
 - Check existing [issues](https://github.com/open-component-model/open-component-model/issues)
 - See the [community docs](docs/community/) for SIGs and meetings or check out how to engage with us on
   our [website](https://ocm.software/community/engagement/)!
-- Review the [Code of Conduct](https://github.com/cncf/foundation/blob/main/code-of-conduct.md)
+- Review the [NeoNephos Code of Conduct](https://github.com/neonephos/.github/blob/main/CODE_OF_CONDUCT.md)
 
 | Variable           | Default              | Description                             |
 |--------------------|----------------------|-----------------------------------------|
