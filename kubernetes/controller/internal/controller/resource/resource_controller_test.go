@@ -772,9 +772,14 @@ var _ = Describe("Resource Controller", func() {
 				"Status.Resource.Name":       resourceName,
 				"Status.Resource.Type":       "ociArtifact",
 				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"registry":   mustToJSON("ghcr.io"),
-					"repository": mustToJSON("open-component-model/ocm/ocm.software/ocmcli/ocmcli-image"),
-					"reference":  mustToJSON("0.24.0"),
+					"oci": {Raw: mustMarshalJSON(map[string]any{
+						"digest":     "",
+						"host":       "ghcr.io",
+						"reference":  "0.24.0",
+						"registry":   "ghcr.io",
+						"repository": "open-component-model/ocm/ocm.software/ocmcli/ocmcli-image",
+						"tag":        "0.24.0",
+					})},
 				},
 			})
 		})
