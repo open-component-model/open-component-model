@@ -8,10 +8,10 @@ require (
 	github.com/stretchr/testify v1.11.1
 	helm.sh/helm/v4 v4.1.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
-	ocm.software/open-component-model/bindings/go/configuration v0.0.11
+	ocm.software/open-component-model/bindings/go/configuration v0.0.12
 	ocm.software/open-component-model/bindings/go/constructor v0.0.6
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260317134642-21ef6ab52666
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260319164733-6860b4757648
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/oci v0.0.36
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
@@ -119,7 +119,7 @@ require (
 	k8s.io/kubectl v0.35.1 // indirect
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260317134642-21ef6ab52666 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260319164733-6860b4757648 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.8 // indirect
 	sigs.k8s.io/controller-runtime v0.23.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
