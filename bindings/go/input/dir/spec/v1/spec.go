@@ -20,7 +20,7 @@ type Dir struct {
 
 	// MediaType is the media type of the resulting blob.
 	// The Dir input always creates a tar. However, it does not add a +tar
-	// suffix as this might cause trouble with MediaType's such as
+	// suffix as this might cause conflicts with MediaType's such as
 	// application/x-tar.
 	MediaType string `json:"mediaType,omitempty"`
 
