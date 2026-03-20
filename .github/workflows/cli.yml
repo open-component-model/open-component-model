@@ -59,6 +59,7 @@ jobs:
     outputs:
       artifact_name: ${{ env.ARTIFACT_NAME }}
       artifact_id: ${{ steps.upload-artifacts.outputs.artifact_id }}
+      version: ${{ steps.version.outputs.version }}
       should_push_oci_image: ${{ steps.branch-check.outputs.should_push_oci_image }}  # Used by publish job
     permissions:
       contents: read
@@ -133,13 +134,13 @@ jobs:
               /^cli\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(process.env.GITHUB_REF_NAME)
             )
 
-      # Upload CLI binaries and OCI layout only if branch is eligible for push
+      # Upload CLI binaries and OCI layout as build artifacts
       - name: Upload Artifacts
-        if: ${{ steps.branch-check.outputs.should_push_oci_image }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         id: upload-artifacts
         with:
           if-no-files-found: 'error'
+          retention-days: 1
           name: ${{ env.ARTIFACT_NAME }}
           # Compiled CLI binaries
           # OCI layout files
@@ -214,10 +215,23 @@ jobs:
           subject-name: ${{ env.TARGET_REPO }}
           push-to-registry: true
 
+  # Run conformance tests against the published image on main branch or release branches/tags
   conformance:
     name: Conformance
     needs: publish
     uses: ./.github/workflows/conformance.yml
     with:
       cli_image: "ghcr.io/${{ github.repository_owner }}/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
+    secrets: inherit
+
+  # Run conformance tests against the built image on PRs to main,
+  # but only if the CLI was modified (as determined by the build job)
+  conformance-pr:
+    name: Conformance (PR)
+    needs: build
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: ./.github/workflows/conformance.yml
+    with:
+      cli_artifact: ${{ needs.build.outputs.artifact_name }}
+      cli_version: ${{ needs.build.outputs.version }}
     secrets: inherit
