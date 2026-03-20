@@ -32,6 +32,13 @@ Always uses the Helm release namespace.
 {{- end }}
 
 {{/*
+Create chart label value (chart name + version), truncated to 63 characters.
+*/}}
+{{- define "ocm-k8s-toolkit.chart" -}}
+{{- printf "%s-%s" .Chart.Name (.Chart.Version | replace "+" "_") | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
 Resource name with proper truncation for Kubernetes 63-character limit.
 Takes a dict with:
   - .suffix: Resource name suffix (e.g., "metrics", "webhook")
