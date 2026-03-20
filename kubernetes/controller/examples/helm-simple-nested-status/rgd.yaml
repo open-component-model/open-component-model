@@ -23,7 +23,7 @@ spec:
               resource:
                 name: helm-resource
           additionalStatusFields:
-            oci: resource.access.imageReference.toOCI()
+            oci: resource.access.toOCI()
           interval: 10m
     - id: ocirepository
       template:
