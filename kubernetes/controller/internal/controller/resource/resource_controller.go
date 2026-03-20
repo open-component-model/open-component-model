@@ -465,7 +465,7 @@ func setResourceStatus(
 	}
 	resource.Status.Resource = info
 
-	if err := computeAdditionalStatusFields(ctx, res, resource); err != nil {
+	if err := computeAdditionalStatusFields(ctx, res, resource, component); err != nil {
 		return fmt.Errorf("evaluating additional status fields: %w", err)
 	}
 
@@ -522,8 +522,9 @@ func computeAdditionalStatusFields(
 	ctx context.Context,
 	res *descriptor.Resource,
 	resource *v1alpha1.Resource,
+	component *v1alpha1.ComponentInfo,
 ) error {
-	env, err := ocmcel.BaseEnv()
+	env, err := ocmcel.ComponentInfoEnv(component)
 	if err != nil {
 		return fmt.Errorf("getting base CEL env: %w", err)
 	}
