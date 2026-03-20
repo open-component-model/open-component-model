@@ -746,9 +746,7 @@ var _ = Describe("Resource Controller", func() {
 					},
 					Interval: metav1.Duration{Duration: 30 * time.Second},
 					AdditionalStatusFields: map[string]apiextensionsv1.JSON{
-						"registry":   {Raw: []byte(`"resource.access.toOCI().registry"`)},
-						"repository": {Raw: []byte(`"resource.access.toOCI().repository"`)},
-						"reference":  {Raw: []byte(`"resource.access.toOCI().reference"`)},
+						"oci": {Raw: []byte(`"resource.access.toOCI()"`)},
 					},
 				},
 			}
@@ -881,11 +879,8 @@ var _ = Describe("Resource Controller", func() {
 				"Status.Resource.Type":       "ociArtifact",
 				"Status.Additional": map[string]apiextensionsv1.JSON{
 					"oci": {Raw: mustMarshalJSON(map[string]apiextensionsv1.JSON{
-						"host":       mustToJSON("ghcr.io"),
 						"registry":   mustToJSON("ghcr.io"),
 						"repository": mustToJSON("open-component-model/ocm/ocm.software/ocmcli/ocmcli-image"),
-						"tag":        mustToJSON("0.24.0"),
-						"digest":     mustToJSON(""),
 						"reference":  mustToJSON("0.24.0"),
 					})},
 				},

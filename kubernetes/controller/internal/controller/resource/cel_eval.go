@@ -20,8 +20,9 @@ func ComputeAdditionalStatusFields(
 	ctx context.Context,
 	res *descriptor.Resource,
 	resource *v1alpha1.Resource,
+	component *v1alpha1.ComponentInfo,
 ) error {
-	env, err := ocmcel.BaseEnv()
+	env, err := ocmcel.ComponentInfoEnv(component)
 	if err != nil {
 		return fmt.Errorf("failed to get base CEL env: %w", err)
 	}

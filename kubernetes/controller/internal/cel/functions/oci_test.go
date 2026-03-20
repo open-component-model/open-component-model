@@ -7,12 +7,11 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
-	"github.com/google/cel-go/common/types/traits"
 	"github.com/google/cel-go/common/types/ref"
+	"github.com/google/cel-go/common/types/traits"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apiserver/pkg/cel/lazy"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmspec "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
@@ -252,11 +251,12 @@ func runToOCITests(t *testing.T,
 // assertCelMap checks if the evaluated cel value matches the expected test data
 func assertCelMap(t *testing.T, val ref.Val, expects map[string]string) {
 	r := require.New(t)
-	r.IsType(&lazy.MapValue{}, val)
-	mv := val.(*lazy.MapValue)
+	// Result must be a map with string keys and values
+	mapper, ok := val.(traits.Mapper)
+	r.True(ok, "expected traits.Mapper, got %T", val)
 	a := assert.New(t)
 	for k, v := range expects {
-		a.EqualValues(v, mv.Get(types.String(k)).Value(), "key %q", k)
+		a.EqualValues(v, mapper.Get(types.String(k)).Value())
 	}
 }
 
