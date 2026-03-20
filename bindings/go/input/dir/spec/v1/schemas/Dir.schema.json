@@ -8,7 +8,7 @@
   "properties": {
     "compress": {
       "type": "boolean",
-      "description": "Compress indicates whether the resulting blob should be compressed with gzip."
+      "description": "Compress indicates whether the resulting blob should be compressed with gzip.\nIf set to true, adds a +gzip suffix to the MediaType."
     },
     "excludeFiles": {
       "type": "array",
@@ -30,7 +30,7 @@
     },
     "mediaType": {
       "type": "string",
-      "description": "MediaType is the media type of the resulting blob."
+      "description": "MediaType is the media type of the resulting blob.\nThe Dir input always creates a tar. However, it does not add a +tar\nsuffix as this might cause conflicts with MediaType's such as\napplication/x-tar."
     },
     "path": {
       "type": "string",
