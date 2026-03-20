@@ -215,15 +215,10 @@ func getAccessReference(raw *runtime.Raw, component *v1alpha1.ComponentInfo) (st
 			return "", fmt.Errorf("component info is nil but required to build the imageRef for localBlob")
 		}
 
-		repoSpec := &runtime.Raw{}
-		if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(
-			bytes.NewReader(component.RepositorySpec.Raw), repoSpec); err != nil {
-			return "", fmt.Errorf("decoding repository spec failed: %w", err)
-		}
-
 		var ociRepo oci.Repository
-		if err := scheme.Convert(repoSpec, &ociRepo); err != nil {
-			return "", fmt.Errorf("converting to OCIRepository failed: %w", err)
+		if err := repository.Scheme.Decode(
+			bytes.NewReader(component.RepositorySpec.Raw), &ociRepo); err != nil {
+			return "", fmt.Errorf("decoding repository spec failed: %w", err)
 		}
 
 		// now that we have the ociRepo, we can build the full url
