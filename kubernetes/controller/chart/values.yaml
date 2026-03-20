@@ -98,11 +98,11 @@ manager:
   # -- Resource limits and requests
   resources:
     limits:
-      cpu: 500m
-      memory: 128Mi
+      cpu: 1000m
+      memory: 1Gi
     requests:
-      cpu: 10m
-      memory: 64Mi
+      cpu: 100m
+      memory: 256Mi
   # -- Pod affinity rules
   affinity: {}
   # -- Node selector for pod scheduling
