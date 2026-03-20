@@ -1,14 +1,9 @@
 name: Kubernetes Controller
 
 on:
-  workflow_dispatch:
-    inputs:
-      debug:
-        description: "Show cluster debug info after E2E tests (auto-enabled on failure)."
-        type: boolean
-        default: false
+  # Trigger workflow on pushes to main or release branches, and on PRs targeting main.
   # Pushes on 'releases/v**' don't automatically publish,
-  # they just run the build and e2e test to validate the release branch
+  # they just run the build and e2e test to validate the release branch.
   push:
     branches:
       - main
@@ -170,23 +165,17 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           REF: ${{ env.REF }}
-          EVENT_NAME: ${{ github.event_name }}
-          PUBLISH_INPUT: ${{ inputs.publish }}
         with:
           script: |
             const ref = process.env.REF;
-            const eventName = process.env.EVENT_NAME;
             const defaultBranch = context.payload.repository?.default_branch || 'main';
-            const publishInput = process.env.PUBLISH_INPUT;
-            // Publish for: main, release tags, workflow_call, or manual dispatch with publish=true.
-            // Release branches (releases/v*) only build+test; use workflow_dispatch to publish manually.
-            const shouldPublish = eventName !== 'pull_request' && (
-              eventName === 'workflow_call' ||
+            // Publish for: main or release tags.
+            // Release branches (releases/v*) only build+test.
+            core.setOutput(
+              'should_publish',
               ref === defaultBranch ||
-              (eventName === 'workflow_dispatch' && publishInput === 'true') ||
               /^kubernetes\/controller\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(ref)
             );
-            core.setOutput('should_publish', shouldPublish);
 
       - name: Build Multi-Arch Image to OCI Layout
         working-directory: ${{ env.LOCATION }}
