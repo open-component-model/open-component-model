@@ -28,5 +28,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/configuration v0.0.11 // indirect
+	ocm.software/open-component-model/bindings/go/configuration v0.0.12 // indirect
 )
