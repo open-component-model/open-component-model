@@ -30,7 +30,7 @@
     },
     "mediaType": {
       "type": "string",
-      "description": "MediaType is the media type of the resulting blob.\nThe Dir input always creates a tar. However, it does not add a +tar\nsuffix as this might cause conflicts with MediaType's such as\napplication/x-tar."
+      "description": "MediaType is the media type of the resulting blob (defaults to application/x-tar).\nThe Dir input always creates a tar. However, it does not add a +tar\nsuffix as this might cause conflicts with MediaType's such as\napplication/x-tar."
     },
     "path": {
       "type": "string",
