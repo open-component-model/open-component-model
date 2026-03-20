@@ -134,7 +134,7 @@ type ResourceDigestProcessor interface {
 	// Under certain circumstances, it can also process the [*descriptor.Resource.Access] of the resource,
 	// e.g. to ensure that the digest is pinned after digest information was appended.
 	// As a result, after processing, the access MUST always reference the content described by the digest and cannot be mutated.
-	ProcessResourceDigest(ctx context.Context, res *descriptor.Resource) (*descriptor.Resource, error)
+	ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error)
 }
 
 // HealthCheckable is an optional interface that can be implemented by a
