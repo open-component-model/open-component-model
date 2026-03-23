@@ -50,8 +50,6 @@ spec:
             description: ResourceSpec defines the desired state of Resource.
             properties:
               additionalStatusFields:
-                additionalProperties:
-                  x-kubernetes-preserve-unknown-fields: true
                 description: |-
                   AdditionalStatusFields are additional fields that can be used to
                   extend the status of the Resource with custom expressions.
@@ -178,9 +176,8 @@ spec:
             description: ResourceStatus defines the observed state of Resource.
             properties:
               additional:
-                additionalProperties:
-                  x-kubernetes-preserve-unknown-fields: true
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
               component:
                 properties:
                   component:

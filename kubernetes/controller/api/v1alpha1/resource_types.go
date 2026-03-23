@@ -44,8 +44,10 @@ type ResourceSpec struct {
 	// extend the status of the Resource with custom expressions.
 	// Values can be either CEL expression strings or nested objects
 	// containing CEL expression strings.
+	// +kubebuilder:validation:Type=object
 	// +kubebuilder:validation:XPreserveUnknownFields
-	AdditionalStatusFields map[string]apiextensionsv1.JSON `json:"additionalStatusFields,omitempty"`
+	// +optional
+	AdditionalStatusFields *apiextensionsv1.JSON `json:"additionalStatusFields,omitempty"`
 }
 
 // ResourceStatus defines the observed state of Resource.
@@ -71,8 +73,10 @@ type ResourceStatus struct {
 	// +optional
 	EffectiveOCMConfig []OCMConfiguration `json:"effectiveOCMConfig,omitempty"`
 
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:validation:XPreserveUnknownFields
 	// +optional
-	Additional map[string]apiextensionsv1.JSON `json:"additional,omitempty"`
+	Additional *apiextensionsv1.JSON `json:"additional,omitempty"`
 }
 
 // Resource is the Schema for the resources API.
