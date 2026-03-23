@@ -29,7 +29,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
@@ -361,6 +361,50 @@ var _ = Describe("Resource Controller", func() {
 			},
 				&testCase{
 					GitRepository: "https://github.com/open-component-model/ocm-k8s-toolkit",
+				},
+			),
+			Entry("OCIImage v1 typed access", func() ([]*descruntime.Descriptor, string) {
+				ctfName := "ociImageV1Access"
+				ctfPath := filepath.Join(tempDir, ctfName)
+				access := ocispec.OCIImage{
+					Type:           runtime.NewVersionedType("OCIImage", "v1"),
+					ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
+				}
+
+				rawAccess := &runtime.Raw{}
+				Expect(runtime.NewScheme(runtime.WithAllowUnknown()).Convert(&access, rawAccess)).To(Succeed())
+
+				return []*descruntime.Descriptor{
+					{
+						Component: descruntime.Component{
+							ComponentMeta: descruntime.ComponentMeta{
+								ObjectMeta: descruntime.ObjectMeta{
+									Name:    componentName,
+									Version: componentVersion,
+								},
+							},
+							Resources: []descruntime.Resource{
+								{
+									ElementMeta: descruntime.ElementMeta{
+										ObjectMeta: descruntime.ObjectMeta{
+											Name:    resourceName,
+											Version: "1.0.0",
+										},
+									},
+									Type:     "ociArtifact",
+									Relation: descruntime.ExternalRelation,
+									Access:   rawAccess,
+								},
+							},
+							Provider: descruntime.Provider{Name: "ocm.software"},
+						},
+					},
+				}, ctfPath
+			},
+				&testCase{
+					Registry:   "ghcr.io",
+					Repository: "open-component-model/ocm/ocm.software/ocmcli/ocmcli-image",
+					Reference:  "0.24.0@sha256:7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2",
 				},
 			),
 		)
@@ -1197,7 +1241,7 @@ var _ = Describe("Resource Controller", func() {
 			resourceName2 := "resource-2"
 			imgReferenceResource2 := "0.24.0"
 
-			repoSpec := &ctf.Repository{Type: runtime.Type{Version: "v1", Name: "ctf"}, FilePath: ctfPath, AccessMode: ctf.AccessModeReadWrite}
+			repoSpec := &ctfv1.Repository{Type: runtime.Type{Version: "v1", Name: "ctf"}, FilePath: ctfPath, AccessMode: ctfv1.AccessModeReadWrite}
 			repo, err := ocirepository.NewFromCTFRepoV1(ctx, repoSpec)
 			Expect(err).NotTo(HaveOccurred())
 			specData, err := json.Marshal(repoSpec)
