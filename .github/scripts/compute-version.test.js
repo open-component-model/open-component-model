@@ -201,3 +201,105 @@ assert.notStrictEqual(
 );
 
 console.log("✅ All tests passed.");
+
+// ----------------------------------------------------------
+// Version truncation tests
+// ----------------------------------------------------------
+console.log("Testing version truncation...");
+
+// Short pseudo-version should NOT be truncated (default maxLength=57)
+assert.strictEqual(
+    computeVersion("main", "cli/v"),
+    "0.0.0-main",
+    "Short branch should not be truncated"
+);
+
+// Long branch name that produces a version exceeding 57 chars should be truncated
+// "0.0.0-renovate-go-github.com-buger-jsonparser-vulnerability" = 59 chars -> truncated to 57
+assert.strictEqual(
+    computeVersion("renovate/go-github.com-buger-jsonparser-vulnerability", "cli/v"),
+    "0.0.0-renovate-go-github.com-buger-jsonparser-vulnerabili",
+    "Long branch should be truncated to default maxLength (57)"
+);
+
+// Verify truncated result respects maxLength
+const longResult = computeVersion("renovate/go-github.com-buger-jsonparser-vulnerability", "cli/v");
+assert.ok(
+    longResult.length <= 57,
+    `Truncated version should be <= 57 chars, got ${longResult.length}`
+);
+
+// Custom maxLength should be respected
+assert.strictEqual(
+    computeVersion("feature/my-long-branch-name", "cli/v", { maxLength: 20 }),
+    "0.0.0-feature-my-lon",
+    "Custom maxLength should truncate accordingly"
+);
+
+// Trailing hyphen after truncation should be removed
+assert.strictEqual(
+    computeVersion("feature/some-branch-name-ending-at-hyphen", "cli/v", { maxLength: 27 }),
+    computeVersion("feature/some-branch-name-ending-at-hyphen", "cli/v", { maxLength: 27 }),
+    "Result should be consistent"
+);
+// Verify no trailing hyphen
+const trailingHyphenResult = computeVersion("aaaa/bbbbbbbbbbbbbbb-cccccc", "cli/v", { maxLength: 25 });
+assert.ok(
+    !trailingHyphenResult.endsWith("-"),
+    `Truncated version should not end with hyphen, got "${trailingHyphenResult}"`
+);
+
+// Tag versions should NEVER be truncated (they come from real semver tags)
+assert.strictEqual(
+    computeVersion("cli/v1.2.3-beta.1+build.123", "cli/v"),
+    "1.2.3-beta.1+build.123",
+    "Tag versions should not be truncated regardless of length"
+);
+
+// Warn callback should be invoked when truncation occurs
+let warnMessage = null;
+computeVersion("renovate/go-github.com-buger-jsonparser-vulnerability", "cli/v", {
+    warn: (msg) => { warnMessage = msg; },
+});
+assert.ok(
+    warnMessage !== null,
+    "Warn callback should be called when version is truncated"
+);
+assert.ok(
+    warnMessage.includes("truncated"),
+    `Warn message should mention truncation, got: "${warnMessage}"`
+);
+
+// Warn callback should NOT be invoked when no truncation needed
+let warnCalled = false;
+computeVersion("main", "cli/v", {
+    warn: () => { warnCalled = true; },
+});
+assert.strictEqual(
+    warnCalled,
+    false,
+    "Warn callback should not be called when version fits within limit"
+);
+
+// Version at exactly maxLength should NOT be truncated
+const exactRef = "a".repeat(52); // "0.0.0-" (6 chars) + 52 = 58 > 57, so use 51
+const exactRef2 = "a".repeat(51); // "0.0.0-" + 51 = 57 = exactly maxLength
+assert.strictEqual(
+    computeVersion(exactRef2, "cli/v"),
+    `0.0.0-${exactRef2}`,
+    "Version at exactly maxLength should not be truncated"
+);
+assert.strictEqual(
+    computeVersion(exactRef2, "cli/v").length,
+    57,
+    "Version at exactly maxLength should be exactly 57 chars"
+);
+
+// Version one char over maxLength should be truncated
+assert.strictEqual(
+    computeVersion(exactRef, "cli/v").length,
+    57,
+    "Version one char over maxLength should be truncated to 57 chars"
+);
+
+console.log("✅ All truncation tests passed.");

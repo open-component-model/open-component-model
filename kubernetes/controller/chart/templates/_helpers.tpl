@@ -32,10 +32,12 @@ Always uses the Helm release namespace.
 {{- end }}
 
 {{/*
-Create chart label value (chart name + version), truncated to 63 characters.
+Create chart label value (chart name + version).
+Version length is enforced upstream in compute-version.js to stay within the
+Kubernetes 63-character label value limit.
 */}}
 {{- define "ocm-k8s-toolkit.chart" -}}
-{{- printf "%s-%s" .Chart.Name (.Chart.Version | replace "+" "_") | trunc 63 | trimSuffix "-" }}
+{{- printf "%s-%s" .Chart.Name (.Chart.Version | replace "+" "_") }}
 {{- end }}
 
 {{/*

@@ -5,15 +5,26 @@
  * Supports both CLI and bindings (plugins) with configurable tag prefixes.
  */
 
+// Kubernetes label values must be at most 63 characters (RFC 1123).
+// The helm.sh/chart label is formatted as "<chart-name>-<version>".
+// Our chart name is "chart" (6 chars including the hyphen separator),
+// so the version portion must not exceed 57 characters.
+// If the chart name changes, this constant must be updated accordingly.
+const MAX_VERSION_LENGTH = 57;
+
 /**
  * Compute version from a git ref.
  *
  * Rules:
  * - Tag refs (matching tagPrefix pattern): Extract version from tag name
- * - Branch/other refs: Generate pseudo-version (0.0.0-<sanitized-ref>)
+ * - Branch/other refs: Generate pseudo-version (0.0.0-<sanitized-ref>),
+ *   truncated to maxLength to stay within Kubernetes label limits
  *
  * @param {string} ref - Git ref (branch name, tag name, or other ref)
  * @param {string} tagPrefix - Tag prefix pattern (e.g., "cli/v" or "bindings/go/helm/v")
+ * @param {object} [options] - Optional settings
+ * @param {number} [options.maxLength] - Max length for pseudo-versions (default: MAX_VERSION_LENGTH)
+ * @param {(msg: string) => void} [options.warn] - Callback invoked when a version is truncated
  * @returns {string} Computed version string
  *
  * @example
@@ -22,13 +33,15 @@
  * computeVersion("main", "cli/v") // returns "0.0.0-main"
  * computeVersion("releases/v0.1", "cli/v") // returns "0.0.0-releases-v0.1"
  */
-export function computeVersion(ref, tagPrefix) {
+export function computeVersion(ref, tagPrefix, options = {}) {
     if (!ref) {
         throw new Error("ref is required");
     }
     if (!tagPrefix) {
         throw new Error("tagPrefix is required");
     }
+
+    const maxLength = options.maxLength ?? MAX_VERSION_LENGTH;
 
     // Build regex to match tag pattern: prefix + semver
     // Example: "cli/v" matches "cli/v1.2.3" or "cli/v1.2.3-rc.1"
@@ -45,7 +58,20 @@ export function computeVersion(ref, tagPrefix) {
         // Convert ref to semver-safe pseudo version
         // Replace slashes and other problematic chars with hyphens
         const sanitized = ref.replace(/[\/+#?_^%$]/g, "-").toLocaleLowerCase();
-        return `0.0.0-${sanitized}`;
+        const version = `0.0.0-${sanitized}`;
+
+        if (version.length > maxLength) {
+            const truncated = version.substring(0, maxLength).replace(/-$/, "");
+            if (options.warn) {
+                options.warn(
+                    `Version "${version}" truncated to "${truncated}" ` +
+                    `to fit Kubernetes 63-char label value limit (max version length: ${maxLength})`
+                );
+            }
+            return truncated;
+        }
+
+        return version;
     }
 }
 
@@ -83,7 +109,9 @@ export default async function computeVersionAction({ core }) {
     }
 
     try {
-        const version = computeVersion(ref, tagPrefix);
+        const version = computeVersion(ref, tagPrefix, {
+            warn: (msg) => core.warning(msg),
+        });
 
         core.exportVariable("VERSION", version);
         core.setOutput("version", version);
