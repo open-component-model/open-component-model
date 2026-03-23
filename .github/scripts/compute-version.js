@@ -5,12 +5,17 @@
  * Supports both CLI and bindings (plugins) with configurable tag prefixes.
  */
 
+// Default max version length for Kubernetes label compliance.
 // Kubernetes label values must be at most 63 characters (RFC 1123).
 // The helm.sh/chart label is formatted as "<chart-name>-<version>".
 // Our chart name is "chart" (6 chars including the hyphen separator),
 // so the version portion must not exceed 57 characters.
 // If the chart name changes, this constant must be updated accordingly.
-const MAX_VERSION_LENGTH = 57;
+//
+// Workflows that need truncation set MAX_VERSION_LENGTH as an environment
+// variable; workflows without label constraints (e.g. CLI, OCI tags) leave
+// it unset so versions are never truncated.
+export const DEFAULT_MAX_VERSION_LENGTH = 57;
 
 /**
  * Compute version from a git ref.
@@ -23,7 +28,7 @@ const MAX_VERSION_LENGTH = 57;
  * @param {string} ref - Git ref (branch name, tag name, or other ref)
  * @param {string} tagPrefix - Tag prefix pattern (e.g., "cli/v" or "bindings/go/helm/v")
  * @param {object} [options] - Optional settings
- * @param {number} [options.maxLength] - Max length for pseudo-versions (default: MAX_VERSION_LENGTH)
+ * @param {number} [options.maxLength] - Max length for pseudo-versions. If unset, no truncation is applied.
  * @param {(msg: string) => void} [options.warn] - Callback invoked when a version is truncated
  * @returns {string} Computed version string
  *
@@ -41,7 +46,7 @@ export function computeVersion(ref, tagPrefix, options = {}) {
         throw new Error("tagPrefix is required");
     }
 
-    const maxLength = options.maxLength ?? MAX_VERSION_LENGTH;
+    const maxLength = options.maxLength;
 
     // Build regex to match tag pattern: prefix + semver
     // Example: "cli/v" matches "cli/v1.2.3" or "cli/v1.2.3-rc.1"
@@ -60,12 +65,12 @@ export function computeVersion(ref, tagPrefix, options = {}) {
         const sanitized = ref.replace(/[\/+#?_^%$]/g, "-").toLocaleLowerCase();
         const version = `0.0.0-${sanitized}`;
 
-        if (version.length > maxLength) {
+        if (Number.isInteger(maxLength) && maxLength > 0 && version.length > maxLength) {
             const truncated = version.substring(0, maxLength).replace(/-$/, "");
             if (options.warn) {
                 options.warn(
                     `Version "${version}" truncated to "${truncated}" ` +
-                    `to fit Kubernetes 63-char label value limit (max version length: ${maxLength})`
+                    `to fit label value limit (max version length: ${maxLength})`
                 );
             }
             return truncated;
@@ -91,12 +96,22 @@ function escapeRegex(str) {
  * Environment variables:
  * - REF: Git ref to compute version from (required)
  * - TAG_PREFIX: Tag prefix pattern (required, e.g. "cli/v" or "bindings/go/helm/v")
+ * - MAX_VERSION_LENGTH: Optional max pseudo-version length for label compliance (e.g. "57")
  *
  * @param {import('@actions/github-script').AsyncFunctionArguments} args
  */
 export default async function computeVersionAction({ core }) {
     const ref = process.env.REF;
     const tagPrefix = process.env.TAG_PREFIX;
+    const maxLengthEnv = process.env.MAX_VERSION_LENGTH;
+
+    // Parse optional max version length from environment.
+    // Only set for workflows that produce Kubernetes labels (e.g. kubernetes-controller).
+    const maxLength = maxLengthEnv ? Number.parseInt(maxLengthEnv, 10) : undefined;
+    if (maxLengthEnv && (!Number.isInteger(maxLength) || maxLength <= 0)) {
+        core.setFailed(`MAX_VERSION_LENGTH must be a positive integer, got "${maxLengthEnv}"`);
+        return;
+    }
 
     if (!ref) {
         core.setFailed("REF environment variable is required");
@@ -110,6 +125,7 @@ export default async function computeVersionAction({ core }) {
 
     try {
         const version = computeVersion(ref, tagPrefix, {
+            maxLength,
             warn: (msg) => core.warning(msg),
         });
 
