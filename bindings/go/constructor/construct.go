@@ -697,7 +697,7 @@ func addColocatedSourceLocalBlob(
 	source *constructor.Source,
 	data blob.ReadOnlyBlob,
 ) (processed *descriptor.Source, err error) {
-	localBlob := &descriptor.LocalBlob{}
+	localBlob := &v2.LocalBlob{}
 
 	if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
 		localBlob.MediaType, _ = mediaTypeAware.MediaType()
