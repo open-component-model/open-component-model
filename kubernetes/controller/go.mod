@@ -10,7 +10,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/fluxcd/pkg/apis/event v0.24.0
 	github.com/fluxcd/pkg/apis/meta v1.25.0
-	github.com/fluxcd/pkg/runtime v0.101.0
+	github.com/fluxcd/pkg/runtime v0.102.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/cel-go v0.27.0
 	github.com/onsi/ginkgo/v2 v2.28.1
@@ -20,7 +20,7 @@ require (
 	golang.org/x/sync v0.19.0
 	k8s.io/api v0.35.1
 	k8s.io/apiextensions-apiserver v0.35.1
-	k8s.io/apimachinery v0.35.2
+	k8s.io/apimachinery v0.35.3
 	k8s.io/apiserver v0.35.1
 	k8s.io/client-go v0.35.1
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2
