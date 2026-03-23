@@ -526,21 +526,11 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		err = errors.Join(err, readerBlob.Close())
 	}()
 
-	// Enforce size limit if configured
-	if r.MaxResourceSizeMiB != 0 {
-		maxBytes := r.MaxResourceSizeMiB * 1024 * 1024
-		// Opportunistic pre-check: downloadResourceBlob returns an ReadOnlyBlob, so the
-		// concrete type may or may not implement blob.SizeAware. If it does and the declared
-		// size already exceeds the limit, we can reject without reading a single byte.
-		if sizeAware, ok := resourceBlob.(blob.SizeAware); ok {
-			if size := sizeAware.Size(); size != blob.SizeUnknown && size > maxBytes {
-				status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason,
-					fmt.Sprintf("resource size %d bytes exceeds maximum allowed size of %d MiB", size, r.MaxResourceSizeMiB))
-				return nil, fmt.Errorf("resource size %d bytes exceeds maximum allowed size of %d MiB", size, r.MaxResourceSizeMiB)
-			}
-		}
-		// Safety net: wrap reader to error if limit is exceeded during reading
-		readerBlob = &limitedReadCloser{Closer: readerBlob, limited: &io.LimitedReader{R: readerBlob, N: maxBytes}}
+	readerBlob, err = r.applyResourceSizeLimit(resourceBlob, readerBlob)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
+		return nil, err
 	}
 
 	// Decode YAML manifests
@@ -574,36 +564,6 @@ func decodeObjectsFromManifest(manifest io.ReadCloser) (_ []*unstructured.Unstru
 	}
 
 	return objs, nil
-}
-
-// limitedReadCloser wraps an io.ReadCloser using io.LimitedReader to cap reads,
-// returning an error instead of silent truncation when the limit is exceeded.
-type limitedReadCloser struct {
-	io.Closer
-	limited *io.LimitedReader
-}
-
-func (l *limitedReadCloser) Read(p []byte) (int, error) {
-	n, err := l.limited.Read(p)
-	if err == nil && l.limited.N == 0 {
-		// The LimitedReader is exhausted. This could mean the blob is exactly at the
-		// limit (fine) or that there is more data beyond it (overflow). Probe one byte
-		// from the underlying reader to distinguish the two cases.
-		var probe [1]byte
-		_, probeErr := l.limited.R.Read(probe[:])
-		switch {
-		case errors.Is(probeErr, io.EOF):
-			// Blob fits exactly within the limit — return the bytes normally.
-			return n, nil
-		case probeErr == nil:
-			// Probe returned data: the blob exceeds the limit.
-			return n, fmt.Errorf("resource exceeds maximum allowed size")
-		default:
-			// Unexpected I/O error during probe — surface it directly.
-			return n, fmt.Errorf("probe failed while checking resource size: %w", probeErr)
-		}
-	}
-	return n, err
 }
 
 // downloadResourceBlob downloads a resource blob using either the repository (for local blobs)
