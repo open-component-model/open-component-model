@@ -11,10 +11,10 @@ import (
 )
 
 // ComponentInfoChangedPredicate filters Component Update events to only
-// those where Status.Component (ComponentInfo) or the readiness condition
-// changed. This prevents condition-only patches that don't affect readiness
-// (e.g. MarkReady when already ready) from triggering spurious Resource
-// reconciles.
+// those where Status.Component (ComponentInfo), Status.EffectiveOCMConfig,
+// or the readiness condition changed. This prevents condition-only patches
+// that don't affect readiness (e.g. MarkReady when already ready) from
+// triggering spurious Resource reconciles.
 // Create, Delete, and Generic events always pass through.
 type ComponentInfoChangedPredicate struct {
 	predicate.Funcs
@@ -36,6 +36,10 @@ func (ComponentInfoChangedPredicate) Update(e event.UpdateEvent) bool {
 	}
 
 	if !reflect.DeepEqual(oldComponent.Status.Component, newComponent.Status.Component) {
+		return true
+	}
+
+	if !reflect.DeepEqual(oldComponent.Status.EffectiveOCMConfig, newComponent.Status.EffectiveOCMConfig) {
 		return true
 	}
 
