@@ -1,7 +1,8 @@
 {
   "$id": "ocm.software/open-component-model/bindings/go/descriptor/v2/resources/schema-2020-12.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Open Component Model v2 schema",
+  "title": "OCM Component Descriptor v2",
+  "description": "Describes a versioned set of delivery artifacts (resources, sources, and references) that form an OCM component version.",
   "$defs": {
     "meta": {
       "type": "object",
