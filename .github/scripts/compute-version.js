@@ -107,7 +107,7 @@ export default async function computeVersionAction({ core }) {
 
     // Parse optional max version length from environment.
     // Only set for workflows that produce Kubernetes labels (e.g. kubernetes-controller).
-    const maxLength = maxLengthEnv ? Number.parseInt(maxLengthEnv, 10) : undefined;
+    const maxLength = maxLengthEnv ? Number(maxLengthEnv) : undefined;
     if (maxLengthEnv && (!Number.isInteger(maxLength) || maxLength <= 0)) {
         core.setFailed(`MAX_VERSION_LENGTH must be a positive integer, got "${maxLengthEnv}"`);
         return;
