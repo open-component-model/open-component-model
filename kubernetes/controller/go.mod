@@ -33,18 +33,19 @@ require (
 	github.com/docker/cli v29.2.1+incompatible
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
-	ocm.software/open-component-model/bindings/go/configuration v0.0.11
+	ocm.software/open-component-model/bindings/go/configuration v0.0.12
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260317134642-21ef6ab52666
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260317134642-21ef6ab52666
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260319164733-6860b4757648
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260319164733-6860b4757648
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260316142407-9901759da494
 	ocm.software/open-component-model/bindings/go/oci v0.0.36
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260317134642-21ef6ab52666
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260319164733-6860b4757648
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260317134642-21ef6ab52666
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260319164733-6860b4757648
 	sigs.k8s.io/release-utils v0.12.3
 )
 
@@ -93,7 +94,6 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.4 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -115,10 +115,9 @@ require (
 	github.com/veqryn/slog-context v0.9.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	go.opentelemetry.io/otel/trace v1.40.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
-	go.yaml.in/yaml/v2 v2.4.3 // indirect
+	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa // indirect
 	golang.org/x/mod v0.33.0 // indirect

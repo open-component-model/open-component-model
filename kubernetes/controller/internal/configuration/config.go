@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -16,14 +17,83 @@ import (
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	ocmconfigv1spec "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
+	resolversv1alpha1spec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
+	credentialsv1spec "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/credentials"
-	"ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
+
+// ocmConfigTypes identifies ocm.config.ocm.software entries whose deprecated Aliases field
+// is stripped during filtering.
+var ocmConfigTypes = []runtime.Type{
+	runtime.NewVersionedType(ocmconfigv1spec.ConfigType, ocmconfigv1spec.Version),
+	runtime.NewUnversionedType(ocmconfigv1spec.ConfigType),
+}
+
+// allowedConfigTypes defines the set of OCM config types accepted by the controller.
+// It is built on top of ocmConfigTypes so the two can never drift.
+var allowedConfigTypes = append(
+	slices.Clone(ocmConfigTypes),
+	// credentials
+	runtime.NewVersionedType(credentialsv1spec.ConfigType, credentialsv1spec.Version),
+	runtime.NewUnversionedType(credentialsv1spec.ConfigType),
+	// path-matcher resolvers (v1alpha1)
+	runtime.NewVersionedType(resolversv1alpha1spec.ConfigType, resolversv1alpha1spec.Version),
+	runtime.NewUnversionedType(resolversv1alpha1spec.ConfigType),
+)
+
+// filterAllowedConfigTypes filters the provided config to only include config entries whose
+// types are in the allowedConfigTypes list. Additionally, it strips the deprecated Aliases field
+// from any ocm.config.ocm.software entries.
+func filterAllowedConfigTypes(ctx context.Context, cfg *genericv1.Config) (*genericv1.Config, error) {
+	if cfg == nil {
+		return nil, nil
+	}
+
+	filtered, remainder, err := genericv1.FilterWithRemainder(cfg, &genericv1.FilterOptions{ConfigTypes: allowedConfigTypes})
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter config types: %w", err)
+	}
+
+	if len(remainder.Configurations) > 0 {
+		droppedTypes := make([]string, 0, len(remainder.Configurations))
+		for _, entry := range remainder.Configurations {
+			droppedTypes = append(droppedTypes, entry.GetType().String())
+		}
+		log.FromContext(ctx).V(1).Info("dropping config entries with types not in allowlist", "types", droppedTypes)
+	}
+
+	// The Filter call above only enforces the type allowlist. However, ocm.config.ocm.software
+	// entries may carry an Aliases field which is deprecated and ignored with a warning by the
+	// OCM library. We strip it proactively here at the config-loading boundary so that
+	// user-supplied alias mappings from Kubernetes Secrets/ConfigMaps are never forwarded to
+	// the library at all. Resolvers in those same entries are left intact.
+	for i, entry := range filtered.Configurations {
+		if !slices.Contains(ocmConfigTypes, entry.GetType()) {
+			continue
+		}
+
+		var ocmCfg ocmconfigv1spec.Config //nolint:staticcheck // we use this on purpose to filter out deprecated types
+		if err := ocmconfigv1spec.Scheme.Convert(entry, &ocmCfg); err != nil {
+			return nil, fmt.Errorf("failed to convert ocm config entry: %w", err)
+		}
+		ocmCfg.Aliases = nil
+
+		raw := &runtime.Raw{}
+		if err := ocmconfigv1spec.Scheme.Convert(&ocmCfg, raw); err != nil {
+			return nil, fmt.Errorf("failed to re-serialise ocm config entry: %w", err)
+		}
+		filtered.Configurations[i] = raw
+	}
+
+	return filtered, nil
+}
 
 // GetConfigFromSecret extracts and decodes OCM configuration from a Kubernetes Secret.
 // It looks for configuration data under the OCMConfigKey.
@@ -61,7 +131,7 @@ func createConfigFromDockerConfig(data []byte) (*genericv1.Config, error) {
 		return nil, fmt.Errorf("invalid docker config: %w", err)
 	}
 
-	dockerConfig := &v1.DockerConfig{}
+	dockerConfig := &credentialsv1.DockerConfig{}
 	if _, err := credentials.Scheme.DefaultType(dockerConfig); err != nil {
 		return nil, fmt.Errorf("failed to get default type for docker config type %T: %w", dockerConfig, err)
 	}
@@ -73,9 +143,9 @@ func createConfigFromDockerConfig(data []byte) (*genericv1.Config, error) {
 	}
 
 	credScheme := runtime.NewScheme()
-	credentialsv1.MustRegister(credScheme)
-	credConfig := &credentialsv1.Config{
-		Repositories: []credentialsv1.RepositoryConfigEntry{{Repository: raw}},
+	credentialsv1spec.MustRegister(credScheme)
+	credConfig := &credentialsv1spec.Config{
+		Repositories: []credentialsv1spec.RepositoryConfigEntry{{Repository: raw}},
 	}
 	if _, err := credScheme.DefaultType(credConfig); err != nil {
 		return nil, fmt.Errorf("failed to get default type for credentials config: %w", err)
@@ -159,7 +229,16 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 	}
 
 	flattened := genericv1.FlatMap(configs...)
-	content, err := json.Marshal(flattened)
+	if flattened == nil {
+		return nil, nil
+	}
+
+	flattenedFiltered, err := filterAllowedConfigTypes(ctx, flattened)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply config type allowlist: %w", err)
+	}
+
+	content, err := json.Marshal(flattenedFiltered)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +248,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 	hash := hasher.Sum(nil)
 
 	result := Configuration{
-		Config: flattened,
+		Config: flattenedFiltered,
 		Hash:   hash,
 	}
 
