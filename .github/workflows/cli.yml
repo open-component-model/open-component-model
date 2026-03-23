@@ -1,10 +1,11 @@
 name: CLI
 
 on:
-  # Trigger workflow on pushes to main or release branches, and on PRs targeting main as well as release tags
-  # if we are on a PR, limit runtime and only build the cli if it has been modified.
-  # if we are on a push, build the CLI regardless of what has changed to always be up to date
-  # also allow manual triggering for rebuilds or failing jobs or rebuilding the artifact
+  # Trigger workflow on pushes to main or release branches, and on PRs targeting main as well as release tags.
+  # Pushes on 'releases/v**' don't automatically publish,
+  # they just run the build to validate the release branch.
+  # If we are on a PR, limit runtime and only build the cli if it has been modified.
+  # If we are on a push, build the CLI regardless of what has changed to always be up to date.
   push:
     branches:
       - main
@@ -58,6 +59,7 @@ jobs:
     outputs:
       artifact_name: ${{ env.ARTIFACT_NAME }}
       artifact_id: ${{ steps.upload-artifacts.outputs.artifact_id }}
+      version: ${{ steps.version.outputs.version }}
       should_push_oci_image: ${{ steps.branch-check.outputs.should_push_oci_image }}  # Used by publish job
     permissions:
       contents: read
@@ -118,7 +120,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-path: "${{ env.LOCATION }}/tmp/bin/ocm-*"
 
-      # Determine if this branch is eligible for publishing, but only if we're not on a PR
+      # Determine if this branch is eligible for publishing, but only if we're not on a PR.
+      # Release branches (releases/v*) only build+test; publish happens on main or release tags.
       - name: Determine if this is a push-eligible branch
         if: ${{ github.event_name != 'pull_request' }}
         id: branch-check
@@ -128,17 +131,16 @@ jobs:
             core.setOutput(
               "should_push_oci_image",
               process.env.GITHUB_REF_NAME === context.payload.repository.default_branch ||
-              /^releases\/v0\./.test(process.env.GITHUB_REF_NAME) ||
               /^cli\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(process.env.GITHUB_REF_NAME)
             )
 
-      # Upload CLI binaries and OCI layout only if branch is eligible for push
+      # Upload CLI binaries and OCI layout as build artifacts
       - name: Upload Artifacts
-        if: ${{ steps.branch-check.outputs.should_push_oci_image }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         id: upload-artifacts
         with:
           if-no-files-found: 'error'
+          retention-days: 1
           name: ${{ env.ARTIFACT_NAME }}
           # Compiled CLI binaries
           # OCI layout files
@@ -213,10 +215,23 @@ jobs:
           subject-name: ${{ env.TARGET_REPO }}
           push-to-registry: true
 
+  # Run conformance tests against the published image on main branch or release branches/tags
   conformance:
     name: Conformance
     needs: publish
     uses: ./.github/workflows/conformance.yml
     with:
       cli_image: "ghcr.io/${{ github.repository_owner }}/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
+    secrets: inherit
+
+  # Run conformance tests against the built image on PRs to main,
+  # but only if the CLI was modified (as determined by the build job)
+  conformance-pr:
+    name: Conformance (PR)
+    needs: build
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: ./.github/workflows/conformance.yml
+    with:
+      cli_artifact: ${{ needs.build.outputs.artifact_name }}
+      cli_version: ${{ needs.build.outputs.version }}
     secrets: inherit
