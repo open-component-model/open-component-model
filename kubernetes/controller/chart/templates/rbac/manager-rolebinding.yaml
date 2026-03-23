@@ -4,7 +4,7 @@ metadata:
     labels:
         app.kubernetes.io/managed-by: {{ .Release.Service }}
         app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
-        helm.sh/chart: {{ include "ocm-k8s-toolkit.chart" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "manager-rolebinding" "context" $) }}
 roleRef:
