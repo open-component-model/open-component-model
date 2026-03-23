@@ -6,7 +6,6 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/jedib0t/go-pretty/v6 v6.7.8
 	github.com/nlepage/go-tarfs v1.2.1
-	github.com/opencontainers/image-spec v1.1.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -35,9 +34,14 @@ require (
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260319164733-6860b4757648
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260319164733-6860b4757648
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260319164733-6860b4757648
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260319164733-6860b4757648
 	sigs.k8s.io/yaml v1.6.0
 )
+
+// The transfer module is new and the vanity import server hasn't been updated yet.
+// This replace directive is temporary until the module is published.
+replace ocm.software/open-component-model/bindings/go/transfer => ../bindings/go/transfer
 
 require (
 	cel.dev/expr v0.25.1 // indirect
@@ -100,6 +104,7 @@ require (
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
