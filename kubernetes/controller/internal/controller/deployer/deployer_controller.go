@@ -518,14 +518,33 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to download resource: %w", err)
 	}
 
-	limitedReader, err := getLimitedReader(resourceBlob, r.MaxResourceSizeMiB)
+	limitedReader, err := resourceBlob.ReadCloser()
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
-		return nil, fmt.Errorf("failed to get limited reader: %w", err)
+
+		return nil, fmt.Errorf("getting reader for resource blob: %w", err)
 	}
 	defer func() {
 		err = errors.Join(err, limitedReader.Close())
 	}()
+
+	// Enforce resource size limit: opportunistic pre-check using declared size,
+	// then wrap the reader to cap reads at the limit.
+	// This only happens when a maximum resource limit is set (> 0). Otherwise, we will read the whole resource
+	// regardless of its size.
+	if r.MaxResourceSizeMiB > 0 {
+		maxBytes := r.MaxResourceSizeMiB * 1024 * 1024
+		if sizeAware, ok := resourceBlob.(blob.SizeAware); ok {
+			if size := sizeAware.Size(); size != blob.SizeUnknown && size > maxBytes {
+				err := fmt.Errorf("resource size %d bytes exceeds maximum allowed size of %d MiB", size, r.MaxResourceSizeMiB)
+				status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
+				return nil, fmt.Errorf("failed to get limited reader: %w", err)
+			}
+		}
+
+		limitedReader = &limitedReadCloser{Closer: limitedReader, limited: &io.LimitedReader{R: limitedReader, N: maxBytes}}
+	}
 
 	// Decode YAML manifests
 	if objs, err = decodeObjectsFromManifest(limitedReader); err != nil {
