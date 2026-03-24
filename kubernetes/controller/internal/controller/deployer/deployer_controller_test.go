@@ -146,7 +146,7 @@ stringData:
 				Relation: descruntime.LocalRelation,
 				Access: &v2.LocalBlob{
 					Type: runtime.Type{
-						Name:    v2.LocalBlobType,
+						Name:    v2.LocalBlobAccessType,
 						Version: v2.LocalBlobAccessTypeVersion,
 					},
 					MediaType: "application/x-yaml",
@@ -509,7 +509,7 @@ data:
 				Relation: descruntime.LocalRelation,
 				Access: &v2.LocalBlob{
 					Type: runtime.Type{
-						Name:    v2.LocalBlobType,
+						Name:    v2.LocalBlobAccessType,
 						Version: v2.LocalBlobAccessTypeVersion,
 					},
 					MediaType: "application/x-yaml",
@@ -847,7 +847,7 @@ data:
 				Relation: descruntime.LocalRelation,
 				Access: &v2.LocalBlob{
 					Type: runtime.Type{
-						Name:    v2.LocalBlobType,
+						Name:    v2.LocalBlobAccessType,
 						Version: v2.LocalBlobAccessTypeVersion,
 					},
 					MediaType: "application/x-yaml",
@@ -1042,7 +1042,7 @@ data:
 				Relation: descruntime.LocalRelation,
 				Access: &v2.LocalBlob{
 					Type: runtime.Type{
-						Name:    v2.LocalBlobType,
+						Name:    v2.LocalBlobAccessType,
 						Version: v2.LocalBlobAccessTypeVersion,
 					},
 					MediaType: "application/x-yaml",
@@ -1305,7 +1305,7 @@ data:
 				Relation: descruntime.LocalRelation,
 				Access: &v2.LocalBlob{
 					Type: runtime.Type{
-						Name:    v2.LocalBlobType,
+						Name:    v2.LocalBlobAccessType,
 						Version: v2.LocalBlobAccessTypeVersion,
 					},
 					MediaType: "application/x-yaml",

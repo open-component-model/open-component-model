@@ -93,7 +93,7 @@ func TestGetLocalResource_Transform_OCI(t *testing.T) {
 		Relation: descriptor.LocalRelation,
 		Access: &v2.LocalBlob{
 			Type: runtime.Type{
-				Name:    v2.LocalBlobType,
+				Name:    v2.LocalBlobAccessType,
 				Version: v2.LocalBlobAccessTypeVersion,
 			},
 			MediaType:      "application/test",
@@ -191,7 +191,7 @@ func TestGetLocalResource_Transform_CTF(t *testing.T) {
 		Relation: descriptor.LocalRelation,
 		Access: &v2.LocalBlob{
 			Type: runtime.Type{
-				Name:    v2.LocalBlobType,
+				Name:    v2.LocalBlobAccessType,
 				Version: v2.LocalBlobAccessTypeVersion,
 			},
 			MediaType:      "application/octet-stream",

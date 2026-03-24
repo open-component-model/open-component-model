@@ -22,7 +22,7 @@ func TestLocalBlob_Struct(t *testing.T) {
 
 	blob := descriptorv2.LocalBlob{
 		Type: runtime.Type{
-			Name:    descriptorv2.LocalBlobType,
+			Name:    descriptorv2.LocalBlobAccessType,
 			Version: descriptorv2.LocalBlobAccessTypeVersion,
 		},
 		LocalReference: "sha256:abc123",
@@ -93,13 +93,13 @@ func TestLocalBlob_UnmarshalJSON_Minimal(t *testing.T) {
 
 func TestLocalBlob_Constants(t *testing.T) {
 	// Test access type constants
-	assert.Equal(t, "LocalBlob", descriptorv2.LocalBlobType)
+	assert.Equal(t, "LocalBlob", descriptorv2.LocalBlobAccessType)
 	assert.Equal(t, "localBlob", descriptorv2.LegacyLocalBlobAccessType)
 	assert.Equal(t, "v1", descriptorv2.LocalBlobAccessTypeVersion)
 }
 
 func TestScheme_ResolvesUpperCamelCase_LocalBlob(t *testing.T) {
-	obj, err := descriptorv2.Scheme.NewObject(runtime.NewVersionedType(descriptorv2.LocalBlobType, descriptorv2.LocalBlobAccessTypeVersion))
+	obj, err := descriptorv2.Scheme.NewObject(runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion))
 	require.NoError(t, err, "Scheme must resolve UpperCamelCase type LocalBlob/v1")
 	require.IsType(t, &descriptorv2.LocalBlob{}, obj, "expected *descriptorv2.LocalBlob from Scheme")
 }

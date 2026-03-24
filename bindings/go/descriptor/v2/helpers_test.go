@@ -16,7 +16,7 @@ func TestIsLocalBlob_Nil(t *testing.T) {
 func TestIsLocalBlob_LocalBlobStruct(t *testing.T) {
 	blob := &descriptorv2.LocalBlob{
 		Type: runtime.Type{
-			Name:    descriptorv2.LocalBlobType,
+			Name:    descriptorv2.LocalBlobAccessType,
 			Version: descriptorv2.LocalBlobAccessTypeVersion,
 		},
 		LocalReference: "sha256:abc123",

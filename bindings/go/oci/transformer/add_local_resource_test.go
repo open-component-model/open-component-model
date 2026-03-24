@@ -39,7 +39,7 @@ func (m *mockRepository) AddLocalResource(ctx context.Context, component, versio
 	updated := res.DeepCopy()
 	updated.Access = &v2.LocalBlob{
 		Type: runtime.Type{
-			Name:    v2.LocalBlobType,
+			Name:    v2.LocalBlobAccessType,
 			Version: v2.LocalBlobAccessTypeVersion,
 		},
 		MediaType:      "application/octet-stream",
@@ -140,7 +140,7 @@ func TestAddLocalResource_Transform_OCI(t *testing.T) {
 	require.NotNil(t, transformed.Output.Resource)
 
 	// Verify updated resource has LocalBlob access
-	assert.Equal(t, v2.LocalBlobType, transformed.Output.Resource.Access.GetType().Name)
+	assert.Equal(t, v2.LocalBlobAccessType, transformed.Output.Resource.Access.GetType().Name)
 
 	// Verify repository interactions
 	assert.Equal(t, "ocm.software/test-component", mockRepo.component)
