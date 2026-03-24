@@ -188,7 +188,7 @@ func DumpLogs(namespace, resourceType string) {
 	logCmd("kro-events", "kubectl", "get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
 	logCmd("rgd-conditions",
 		"kubectl", "get", resourceType, "-o",
-		"custom-columns=NAME:.metadata.name,ACCEPTED:.status.conditions[?(@.type==\"ResourceGraphAccepted\")].status,ACCEPTED_MSG:.status.conditions[?(@.type==\"ResourceGraphAccepted\")].message,READY:.status.conditions[?(@.type==\"Ready\")].status,READY_MSG:.status.conditions[?(@.type==\"Ready\")].message",
+		"custom-columns=NAME:.metadata.name,READY:.status.conditions[?(@.type==\"Ready\")].status,READY_MSG:.status.conditions[?(@.type==\"Ready\")].message",
 	)
 	logCmd("kro-logs", "kubectl", "logs", "-n", namespace, "--all-containers", "--tail=100", "-l", "app.kubernetes.io/name=kro")
 }
