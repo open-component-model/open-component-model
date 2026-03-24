@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  pull_request:
+  pull_request_target:
   push:
     branches:
     - main
@@ -10,9 +10,9 @@ env:
   # Check Only Changed Modules
   # If true, only changed modules will be analyzed.
   # If false, all discovered modules will be analyzed.
-  check_only_changed: ${{ github.event_name == 'pull_request' }}
-  REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
-  REPO: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+  check_only_changed: ${{ github.event_name == 'pull_request_target' }}
+  REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.ref || github.ref }}
+  REPO: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
 
 permissions:
   contents: read
@@ -24,7 +24,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
-      statuses: write
     outputs:
       # modules_json = changed modules only (filtered by paths)
       modules_json: ${{ steps.filtered.outputs.modules_json }}
@@ -33,7 +32,6 @@ jobs:
       integration_test_modules_json: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
       unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
       env_changed: ${{ steps.env_changes.outputs.env }}
-      replace_targets: ${{ steps.discover.outputs.replace_targets }}
     env:
       DIR: ${{ github.workspace }}
     steps:
@@ -53,28 +51,24 @@ jobs:
           filters: |
             env:
               - '.env'
-            ci:
-              - '.github/workflows/ci.yml'
       - name: Discover Go Modules
         id: discover
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const { execSync } = require('child_process');
-            const path = require('path');
-            const fs = require('fs');
-
+            
             // Get all Go modules using task
             const modulesOutput = execSync('task go_modules --output interleaved', { encoding: 'utf-8' });
             const modules = modulesOutput.split('\n').filter(Boolean);
-
+            
             // Generate filters for paths-filter
             const filters = modules.map(module => {
               const lines = [`${module}:`];
-
+            
               // Add the module's own path
               lines.push(` - "${module}/**"`);
-
+            
               // If this is an integration module, add its parent module path
               if (module.includes('/integration')) {
                 const parentModule = module.split('/integration')[0];
@@ -82,35 +76,14 @@ jobs:
                 console.log(`🔍 Detected integration test module: ${module}`);
                 console.log(`   └─ Linked to parent module: ${parentModule}`);
               }
-
+            
               return lines.join('\n');
             }).join('\n');
-
-            // Parse replace directives to find extra sparse-checkout paths per module
-            const replaceTargets = {};
-            for (const module of modules) {
-              const gomod = path.join(module, 'go.mod');
-              if (!fs.existsSync(gomod)) continue;
-              const content = fs.readFileSync(gomod, 'utf-8');
-              const match = content.match(/^replace \(([\s\S]*?)\)/m);
-              if (!match) continue;
-              const targets = match[1]
-                .split('\n')
-                .filter(line => line.includes('=>'))
-                .map(line => line.split('=>')[1].trim())
-                .filter(target => target.startsWith('.'))
-                .map(target => path.normalize(path.join(module, target)));
-              if (targets.length > 0) {
-                replaceTargets[module] = targets.join('\n');
-                console.log(`🔗 Module ${module} has replace targets: ${targets}`);
-              }
-            }
-
+            
             // Set outputs
             core.setOutput('modules_json', JSON.stringify(modules));
             core.setOutput('filters', filters);
-            core.setOutput('replace_targets', JSON.stringify(replaceTargets));
-
+            
             // Log for debugging
             console.log('📦 Detected modules:', modules);
             console.log('🎯 Generated filters:', filters);
@@ -125,21 +98,14 @@ jobs:
           MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
           CHANGE_JSON: ${{ steps.changes.outputs.changes }}
           ENV_CHANGED: ${{ steps.env_changes.outputs.env }}
-          CI_CHANGED: ${{ steps.env_changes.outputs.ci }}
         with:
           script: |
             const modulesJson = JSON.parse(process.env.MODULES_JSON || '[]');
             const changeJson = JSON.parse(process.env.CHANGE_JSON || '[]');
             const envChanged = process.env.ENV_CHANGED === 'true';
-            const ciChanged = process.env.CI_CHANGED === 'true';
-            const runAll = envChanged || ciChanged;
-            const lintModulesFromEnv = runAll ? modulesJson : null;
-
-            if (runAll) {
-              console.log("CI or .env changed, running all modules.");
-            }
-
-            if (process.env.check_only_changed === "true" && !ciChanged) {
+            const lintModulesFromEnv = envChanged ? modulesJson : null;
+            
+            if (process.env.check_only_changed === "true") {
               console.log(`Filtering modules based on changes: ${JSON.stringify(changeJson)}`);
               const filteredModules = modulesJson.filter(module => {
                 return changeJson.some(change => change.includes(module));
@@ -148,7 +114,7 @@ jobs:
               core.setOutput("modules_json", JSON.stringify(filteredModules));
               core.setOutput('lint_modules_json', JSON.stringify(lintModulesFromEnv ?? filteredModules));
             } else {
-              console.log("check_only_changed is false or CI changed, no filtering applied.");
+              console.log("check_only_changed is false, no filtering applied.");
               core.setOutput("modules_json", JSON.stringify(modulesJson));
               core.setOutput('lint_modules_json', JSON.stringify(lintModulesFromEnv ?? modulesJson));
             }
@@ -210,29 +176,6 @@ jobs:
             summary += `**🧬 Integration Test Modules (${integrationTests.length}):**\n${toMarkdownList(integrationTests)}\n`;
             
             core.summary.addRaw(summary).write();
-      - name: Check for replace directives
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
-        env:
-          REPLACE_TARGETS: ${{ steps.discover.outputs.replace_targets }}
-        with:
-          script: |
-            const replaceTargets = JSON.parse(process.env.REPLACE_TARGETS || '{}');
-            const modulesWithReplace = Object.keys(replaceTargets);
-            const hasReplace = modulesWithReplace.length > 0;
-            const sha = context.payload.pull_request?.head?.sha || context.sha;
-
-            const description = hasReplace
-              ? `Replace directives found in: ${modulesWithReplace.join(', ')}`
-              : 'No replace directives found';
-
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha,
-              state: hasReplace ? 'failure' : 'success',
-              context: 'Replace Directives',
-              description: description.substring(0, 140),
-            });
 
   golangci_lint_verify:
     name: "golangci-lint-verify"
@@ -285,14 +228,6 @@ jobs:
             ${{ matrix.module }}
             golangci.yml
             .env
-      - name: Checkout replace targets
-        env:
-          REPLACE_TARGETS: ${{ needs.discover_modules.outputs.replace_targets }}
-        run: |
-          replace_dirs=$(echo "$REPLACE_TARGETS" | jq -r --arg mod "${{ matrix.module }}" '.[$mod] // empty')
-          if [ -n "$replace_dirs" ]; then
-            git sparse-checkout add $replace_dirs
-          fi
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
@@ -327,6 +262,12 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: ${{ env.REPO }}
@@ -340,8 +281,8 @@ jobs:
         run: docker network create ${{ env.TESTCONTAINER_DOCKER_NETWORK }}
       - name: Run Tests
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_USER: ${{ github.actor }}
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          GITHUB_USER: ocmbot[ocm]
         run: task ${{ matrix.module }}:test/integration
 
   run_unit_tests:
@@ -365,14 +306,6 @@ jobs:
           sparse-checkout: |
             ${{ matrix.module }}
             reuse.Taskfile.yml
-      - name: Checkout replace targets
-        env:
-          REPLACE_TARGETS: ${{ needs.discover_modules.outputs.replace_targets }}
-        run: |
-          replace_dirs=$(echo "$REPLACE_TARGETS" | jq -r --arg mod "${{ matrix.module }}" '.[$mod] // empty')
-          if [ -n "$replace_dirs" ]; then
-            git sparse-checkout add $replace_dirs
-          fi
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
@@ -404,14 +337,6 @@ jobs:
           sparse-checkout: |
             .github/workflows/ci.yml
             ${{ matrix.project }}
-      - name: Checkout replace targets
-        env:
-          REPLACE_TARGETS: ${{ needs.discover_modules.outputs.replace_targets }}
-        run: |
-          replace_dirs=$(echo "$REPLACE_TARGETS" | jq -r --arg mod "${{ matrix.project }}" '.[$mod] // empty')
-          if [ -n "$replace_dirs" ]; then
-            git sparse-checkout add $replace_dirs
-          fi
       - name: Initialize CodeQL
         uses: github/codeql-action/init@ebcb5b36ded6beda4ceefea6a8bc4cc885255bb3 # v3
         with:
