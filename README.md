@@ -59,10 +59,10 @@ The [`ocm` CLI](cli/docs/reference/ocm.md) makes it easy to create, sign, verify
 well as embed them in build processes. To install the CLI, run:
 
 ```bash
-curl -fsSL https://ocm.software/install-cli.sh | sudo bash
+curl -sfL https://ocm.software/install-cli.sh | bash
 ```
 
-For more installation options, see the [installation guide](https://ocm.software/dev/docs/getting-started/install-the-ocm-cli/).
+For more installation options, see the [installation guide](https://ocm.software/docs/getting-started/install-the-ocm-cli/).
 
 You can also use the OCM CLI container image:
 
@@ -70,7 +70,7 @@ You can also use the OCM CLI container image:
 docker run -t ghcr.io/open-component-model/cli:latest --help
 ```
 
-See the [guide](https://ocm.software/dev/docs/how-to/how-to-use-the-ocm-cli-container-image/) on using the OCM CLI
+See the [guide](https://ocm.software/docs/how-to/how-to-use-the-ocm-cli-container-image/) on using the OCM CLI
 container image for more details.
 
 ### [OCM K8s Toolkit](kubernetes/controller)
