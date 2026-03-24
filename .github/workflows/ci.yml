@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  pull_request_target:
+  pull_request:
   push:
     branches:
     - main
@@ -10,9 +10,9 @@ env:
   # Check Only Changed Modules
   # If true, only changed modules will be analyzed.
   # If false, all discovered modules will be analyzed.
-  check_only_changed: ${{ github.event_name == 'pull_request_target' }}
-  REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.ref || github.ref }}
-  REPO: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
+  check_only_changed: ${{ github.event_name == 'pull_request' }}
+  REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
+  REPO: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
 
 permissions:
   contents: read
@@ -32,6 +32,7 @@ jobs:
       integration_test_modules_json: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
       unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
       env_changed: ${{ steps.env_changes.outputs.env }}
+      replace_targets: ${{ steps.discover.outputs.replace_targets }}
     env:
       DIR: ${{ github.workspace }}
     steps:
@@ -57,18 +58,20 @@ jobs:
         with:
           script: |
             const { execSync } = require('child_process');
-            
+            const path = require('path');
+            const fs = require('fs');
+
             // Get all Go modules using task
             const modulesOutput = execSync('task go_modules --output interleaved', { encoding: 'utf-8' });
             const modules = modulesOutput.split('\n').filter(Boolean);
-            
+
             // Generate filters for paths-filter
             const filters = modules.map(module => {
               const lines = [`${module}:`];
-              
+
               // Add the module's own path
               lines.push(` - "${module}/**"`);
-              
+
               // If this is an integration module, add its parent module path
               if (module.includes('/integration')) {
                 const parentModule = module.split('/integration')[0];
@@ -76,14 +79,35 @@ jobs:
                 console.log(`🔍 Detected integration test module: ${module}`);
                 console.log(`   └─ Linked to parent module: ${parentModule}`);
               }
-              
+
               return lines.join('\n');
             }).join('\n');
-            
+
+            // Parse replace directives to find extra sparse-checkout paths per module
+            const replaceTargets = {};
+            for (const module of modules) {
+              const gomod = path.join(module, 'go.mod');
+              if (!fs.existsSync(gomod)) continue;
+              const content = fs.readFileSync(gomod, 'utf-8');
+              const match = content.match(/^replace \(([\s\S]*?)\)/m);
+              if (!match) continue;
+              const targets = match[1]
+                .split('\n')
+                .filter(line => line.includes('=>'))
+                .map(line => line.split('=>')[1].trim())
+                .filter(target => target.startsWith('.'))
+                .map(target => path.normalize(path.join(module, target)));
+              if (targets.length > 0) {
+                replaceTargets[module] = targets.join('\n');
+                console.log(`🔗 Module ${module} has replace targets: ${targets}`);
+              }
+            }
+
             // Set outputs
             core.setOutput('modules_json', JSON.stringify(modules));
             core.setOutput('filters', filters);
-            
+            core.setOutput('replace_targets', JSON.stringify(replaceTargets));
+
             // Log for debugging
             console.log('📦 Detected modules:', modules);
             console.log('🎯 Generated filters:', filters);
@@ -229,8 +253,10 @@ jobs:
             golangci.yml
             .env
       - name: Checkout replace targets
+        env:
+          REPLACE_TARGETS: ${{ needs.discover_modules.outputs.replace_targets }}
         run: |
-          replace_dirs=$(awk '/^replace \(/{found=1; next} /^\)/{found=0} found && /=>/ {gsub(/.*=> */, ""); gsub(/ .*/, ""); print}' "${{ matrix.module }}/go.mod" | grep '^\.' | while read -r rel; do realpath --relative-to=. "${{ matrix.module }}/$rel"; done)
+          replace_dirs=$(echo "$REPLACE_TARGETS" | jq -r --arg mod "${{ matrix.module }}" '.[$mod] // empty')
           if [ -n "$replace_dirs" ]; then
             git sparse-checkout add $replace_dirs
           fi
@@ -313,8 +339,10 @@ jobs:
             ${{ matrix.module }}
             reuse.Taskfile.yml
       - name: Checkout replace targets
+        env:
+          REPLACE_TARGETS: ${{ needs.discover_modules.outputs.replace_targets }}
         run: |
-          replace_dirs=$(awk '/^replace \(/{found=1; next} /^\)/{found=0} found && /=>/ {gsub(/.*=> */, ""); gsub(/ .*/, ""); print}' "${{ matrix.module }}/go.mod" | grep '^\.' | while read -r rel; do realpath --relative-to=. "${{ matrix.module }}/$rel"; done)
+          replace_dirs=$(echo "$REPLACE_TARGETS" | jq -r --arg mod "${{ matrix.module }}" '.[$mod] // empty')
           if [ -n "$replace_dirs" ]; then
             git sparse-checkout add $replace_dirs
           fi
@@ -350,8 +378,10 @@ jobs:
             .github/workflows/ci.yml
             ${{ matrix.project }}
       - name: Checkout replace targets
+        env:
+          REPLACE_TARGETS: ${{ needs.discover_modules.outputs.replace_targets }}
         run: |
-          replace_dirs=$(awk '/^replace \(/{found=1; next} /^\)/{found=0} found && /=>/ {gsub(/.*=> */, ""); gsub(/ .*/, ""); print}' "${{ matrix.project }}/go.mod" | grep '^\.' | while read -r rel; do realpath --relative-to=. "${{ matrix.project }}/$rel"; done)
+          replace_dirs=$(echo "$REPLACE_TARGETS" | jq -r --arg mod "${{ matrix.project }}" '.[$mod] // empty')
           if [ -n "$replace_dirs" ]; then
             git sparse-checkout add $replace_dirs
           fi
