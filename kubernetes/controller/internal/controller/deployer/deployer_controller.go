@@ -539,7 +539,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 				err := fmt.Errorf("resource size %d bytes exceeds maximum allowed size of %d MiB", size, r.MaxResourceSizeMiB)
 				status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
-				return nil, fmt.Errorf("failed to get limited reader: %w", err)
+				return nil, err
 			}
 		}
 
