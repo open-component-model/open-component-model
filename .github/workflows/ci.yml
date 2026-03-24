@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
+      statuses: write
     outputs:
       # modules_json = changed modules only (filtered by paths)
       modules_json: ${{ steps.filtered.outputs.modules_json }}
@@ -209,6 +210,29 @@ jobs:
             summary += `**🧬 Integration Test Modules (${integrationTests.length}):**\n${toMarkdownList(integrationTests)}\n`;
             
             core.summary.addRaw(summary).write();
+      - name: Check for replace directives
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          REPLACE_TARGETS: ${{ steps.discover.outputs.replace_targets }}
+        with:
+          script: |
+            const replaceTargets = JSON.parse(process.env.REPLACE_TARGETS || '{}');
+            const modulesWithReplace = Object.keys(replaceTargets);
+            const hasReplace = modulesWithReplace.length > 0;
+            const sha = context.payload.pull_request?.head?.sha || context.sha;
+
+            const description = hasReplace
+              ? `Replace directives found in: ${modulesWithReplace.join(', ')}`
+              : 'No replace directives found';
+
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha,
+              state: hasReplace ? 'failure' : 'success',
+              context: 'Replace Directives',
+              description: description.substring(0, 140),
+            });
 
   golangci_lint_verify:
     name: "golangci-lint-verify"
