@@ -41,7 +41,7 @@ jobs:
       # Restore previous cache artifact if enabled
       - name: Restore renovate cache artifact
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled' }}
-        uses: dawidd6/action-download-artifact@5c98f0b039f36ef966fdb7dfa9779262785ecb05 # v14
+        uses: dawidd6/action-download-artifact@fe9d59ce33ce92db8a6ac90b2c8be6b6d90417c8 # v15
         continue-on-error: true
         with:
           name: ${{ env.cache_key }}
@@ -72,7 +72,7 @@ jobs:
         run: echo "RENOVATE_DRY_RUN=extract" >> $GITHUB_ENV
 
       - name: Run
-        uses: renovatebot/github-action@e23f4d9675532445118c886434f5a34292b630b4 # v46.0.2
+        uses: renovatebot/github-action@8d75b92f43899d483728e9a8a7fd44238020f6e6 # v46.1.2
         with:
           env-regex: |
             ^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|GONOPROXY|GOPRIVATE|NODE_OPTIONS|(?:HTTPS?|NO)_PROXY|(?:https?|no)_proxy)$

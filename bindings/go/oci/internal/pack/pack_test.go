@@ -519,7 +519,8 @@ func TestResourceLocalBlobMediaTypeDetection(t *testing.T) {
 	// Create valid OCI layout content for layout tests
 	ctx := t.Context()
 	var buf bytes.Buffer
-	writer := tar.NewOCILayoutWriter(&buf)
+	writer, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	require.NoError(t, err)
 	_, err = oras.PackManifest(ctx, writer, oras.PackManifestVersion1_1, "application/custom", oras.PackManifestOptions{})
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
@@ -762,7 +763,8 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 
 	ctx := t.Context()
 	var buf bytes.Buffer
-	writer := tar.NewOCILayoutWriter(&buf)
+	writer, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	require.NoError(t, err)
 
 	desc, err := oras.PackManifest(ctx, writer, oras.PackManifestVersion1_1, "application/custom", oras.PackManifestOptions{})
 	require.NoError(t, err)

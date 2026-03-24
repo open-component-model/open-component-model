@@ -12,7 +12,7 @@ manager:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
     # -- Controller image tag
-    tag: latest@sha256:48e5edf92f2033e702becd12853eda9be1bba11e5256a4d5a034e1f79de89ba3
+    tag: latest@sha256:fda4ed33f3e07d7467cdb033c0198d6653449f07d64f2839acbc4cc055d43a59
     # -- Image pull policy
     pullPolicy: IfNotPresent
   ## Controller concurrency settings
@@ -99,10 +99,10 @@ manager:
   resources:
     limits:
       cpu: 500m
-      memory: 128Mi
+      memory: 512Mi
     requests:
-      cpu: 10m
-      memory: 64Mi
+      cpu: 100m
+      memory: 256Mi
   # -- Pod affinity rules
   affinity: {}
   # -- Node selector for pod scheduling

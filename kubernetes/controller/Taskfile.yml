@@ -133,15 +133,28 @@ tasks:
         args+=(--push)
       fi
 
+      # If OCI_OUTPUT is set, write OCI layout tar to that path
+      if [ -n "{{.OCI_OUTPUT | default ""}}" ]; then
+        mkdir -p "$(dirname '{{.OCI_OUTPUT}}')"
+        args+=(--output "type=oci,dest={{.OCI_OUTPUT}},oci-mediatypes=true")
+      fi
+
       # Run docker (or podman) buildx with the constructed args
       {{.CONTAINER_TOOL}} buildx build "${args[@]}"
+
+  oci/extract:
+    desc: "Extract an OCI layout tar archive into a directory"
+    requires:
+      vars: [TAR_PATH, OUTPUT_DIR]
+    cmds:
+      - mkdir -p "{{.OUTPUT_DIR}}"
+      - tar -xf "{{.TAR_PATH}}" -C "{{.OUTPUT_DIR}}"
 
   build-installer:
     deps: [manifests, generate, kustomize]
     cmds:
       - mkdir -p dist
       - '{{.KUSTOMIZE}} build config/default > dist/install.yaml'
-
 
   # Helm chart tasks
   helm/sync-manifests:
@@ -182,13 +195,22 @@ tasks:
           exit 1
         fi
 
+
   helm/package:
     desc: "Package the Helm chart with the specified version"
     deps: [yq]
     cmds:
       - mkdir -p dist
-      - '{{ if .VERSION }}{{.YQ}} -i ".manager.image.tag = \"{{.VERSION}}\"" chart/values.yaml{{end}}'
+      - '{{ if .IMAGE_REPOSITORY }}{{.YQ}} -i ".manager.image.repository = \"{{.IMAGE_REPOSITORY}}\"" chart/values.yaml{{end}}'
+      - '{{ if .VERSION }}{{.YQ}} -i ".manager.image.tag = \"{{.VERSION}}{{ if .IMAGE_DIGEST }}@{{.IMAGE_DIGEST}}{{ end }}\"" chart/values.yaml{{end}}'
       - helm package chart/ --destination dist/ {{if .VERSION}}--version {{.VERSION}}{{end}} {{if .APP_VERSION}}--app-version {{.APP_VERSION}}{{end}}
+
+  helm/push:
+    desc: "Push packaged Helm chart to OCI registry"
+    requires:
+      vars: [VERSION, REGISTRY]
+    cmds:
+      - helm push dist/chart-{{.VERSION}}.tgz oci://{{.REGISTRY}}
 
   helm/template:
     desc: "Render Helm chart templates with test values"
@@ -294,7 +316,7 @@ tasks:
     desc: "Install helm-values-schema-json plugin if not present"
     cmd: |
       if ! helm plugin list | grep -q "schema"; then
-        helm plugin install https://github.com/losisin/helm-values-schema-json
+        helm plugin install https://github.com/losisin/helm-values-schema-json.git --verify=false
       fi
     status:
       - helm plugin list | grep -q "schema"

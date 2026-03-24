@@ -16,6 +16,7 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -137,7 +138,7 @@ func (p *ResourceRepository) getIdentity(obj runtime.Typed) (runtime.Identity, e
 		if err != nil {
 			return nil, fmt.Errorf("error parsing URL to identity: %w", err)
 		}
-		identity.SetType(runtime.NewUnversionedType(ociv1.Type))
+		identity.SetType(credidentityv1.Type)
 		return identity, nil
 	default:
 		return nil, fmt.Errorf("unsupported type %s for getting identity", obj.GetType())

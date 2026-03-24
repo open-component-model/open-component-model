@@ -18,10 +18,14 @@ type Dir struct {
 	// Path is the path to the directory.
 	Path string `json:"path"`
 
-	// MediaType is the media type of the resulting blob.
+	// MediaType is the media type of the resulting blob (defaults to application/x-tar).
+	// The Dir input always creates a tar. However, it does not add a +tar
+	// suffix as this might cause conflicts with MediaType's such as
+	// application/x-tar.
 	MediaType string `json:"mediaType,omitempty"`
 
 	// Compress indicates whether the resulting blob should be compressed with gzip.
+	// If set to true, adds a +gzip suffix to the MediaType.
 	Compress bool `json:"compress,omitempty"`
 
 	// PreserveDir defines that the directory specified in the Path field should be included in the resulting blob.

@@ -1,7 +1,10 @@
 package resource
 
 import (
+	"crypto"
+	"encoding/base64"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,16 +15,26 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/go-logr/logr"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 )
@@ -92,26 +105,28 @@ var _ = Describe("Resource Controller", func() {
 					test.DeleteObject(ctx, k8sClient, componentObj)
 				})
 
-				additionalStatusFields := map[string]string{}
+				var additionalStatusFields *apiextensionsv1.JSON
 				if tc != nil {
+					fields := map[string]any{}
 					if tc.Registry != "" {
-						additionalStatusFields["registry"] = "resource.access.toOCI().registry"
+						fields["registry"] = "resource.access.toOCI().registry"
 					}
 					if tc.Repository != "" {
-						additionalStatusFields["repository"] = "resource.access.toOCI().repository"
+						fields["repository"] = "resource.access.toOCI().repository"
 					}
 					if tc.Reference != "" {
-						additionalStatusFields["reference"] = "resource.access.toOCI().reference"
+						fields["reference"] = "resource.access.toOCI().reference"
 					}
 					if tc.HELMChart != "" {
-						additionalStatusFields["helmChart"] = "resource.access.helmChart"
+						fields["helmChart"] = "resource.access.helmChart"
 					}
 					if tc.GithubRepoURL != "" {
-						additionalStatusFields["gitRepoURL"] = "resource.access.repoUrl"
+						fields["gitRepoURL"] = "resource.access.repoUrl"
 					}
 					if tc.GitRepository != "" {
-						additionalStatusFields["gitRepository"] = "resource.access.repository"
+						fields["gitRepository"] = "resource.access.repository"
 					}
+					additionalStatusFields = &apiextensionsv1.JSON{Raw: mustMarshalJSON(fields)}
 				}
 
 				By("creating a resource")
@@ -129,6 +144,7 @@ var _ = Describe("Resource Controller", func() {
 								Resource: runtime.Identity{"name": resourceName},
 							},
 						},
+						Interval:               metav1.Duration{Duration: 30 * time.Second},
 						AdditionalStatusFields: additionalStatusFields,
 					},
 				}
@@ -148,26 +164,26 @@ var _ = Describe("Resource Controller", func() {
 				}
 
 				if tc != nil {
-					m := map[string]apiextensionsv1.JSON{}
+					m := map[string]any{}
 					if tc.Registry != "" {
-						m["registry"] = mustToJSON(tc.Registry)
+						m["registry"] = tc.Registry
 					}
 					if tc.Repository != "" {
-						m["repository"] = mustToJSON(tc.Repository)
+						m["repository"] = tc.Repository
 					}
 					if tc.Reference != "" {
-						m["reference"] = mustToJSON(tc.Reference)
+						m["reference"] = tc.Reference
 					}
 					if tc.HELMChart != "" {
-						m["helmChart"] = mustToJSON(tc.HELMChart)
+						m["helmChart"] = tc.HELMChart
 					}
 					if tc.GithubRepoURL != "" {
-						m["gitRepoURL"] = mustToJSON(tc.GithubRepoURL)
+						m["gitRepoURL"] = tc.GithubRepoURL
 					}
 					if tc.GitRepository != "" {
-						m["gitRepository"] = mustToJSON(tc.GitRepository)
+						m["gitRepository"] = tc.GitRepository
 					}
-					fields["Status.Additional"] = m
+					fields["Status.Additional"] = &apiextensionsv1.JSON{Raw: mustMarshalJSON(m)}
 				}
 
 				test.WaitForReadyObject(ctx, k8sClient, resourceObj, fields)
@@ -349,6 +365,50 @@ var _ = Describe("Resource Controller", func() {
 					GitRepository: "https://github.com/open-component-model/ocm-k8s-toolkit",
 				},
 			),
+			Entry("OCIImage v1 typed access", func() ([]*descruntime.Descriptor, string) {
+				ctfName := "ociImageV1Access"
+				ctfPath := filepath.Join(tempDir, ctfName)
+				access := ocispec.OCIImage{
+					Type:           runtime.NewVersionedType("OCIImage", "v1"),
+					ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
+				}
+
+				rawAccess := &runtime.Raw{}
+				Expect(runtime.NewScheme(runtime.WithAllowUnknown()).Convert(&access, rawAccess)).To(Succeed())
+
+				return []*descruntime.Descriptor{
+					{
+						Component: descruntime.Component{
+							ComponentMeta: descruntime.ComponentMeta{
+								ObjectMeta: descruntime.ObjectMeta{
+									Name:    componentName,
+									Version: componentVersion,
+								},
+							},
+							Resources: []descruntime.Resource{
+								{
+									ElementMeta: descruntime.ElementMeta{
+										ObjectMeta: descruntime.ObjectMeta{
+											Name:    resourceName,
+											Version: "1.0.0",
+										},
+									},
+									Type:     "ociArtifact",
+									Relation: descruntime.ExternalRelation,
+									Access:   rawAccess,
+								},
+							},
+							Provider: descruntime.Provider{Name: "ocm.software"},
+						},
+					},
+				}, ctfPath
+			},
+				&testCase{
+					Registry:   "ghcr.io",
+					Repository: "open-component-model/ocm/ocm.software/ocmcli/ocmcli-image",
+					Reference:  "0.24.0@sha256:7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2",
+				},
+			),
 		)
 
 		It("should reconcile when the resource has extra identities", func(ctx SpecContext) {
@@ -432,6 +492,7 @@ var _ = Describe("Resource Controller", func() {
 							Resource: identity,
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -533,6 +594,7 @@ var _ = Describe("Resource Controller", func() {
 							Resource: identity,
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -588,6 +650,7 @@ var _ = Describe("Resource Controller", func() {
 							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -683,11 +746,10 @@ var _ = Describe("Resource Controller", func() {
 							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
-					AdditionalStatusFields: map[string]string{
-						"registry":   "resource.access.toOCI().registry",
-						"repository": "resource.access.toOCI().repository",
-						"reference":  "resource.access.toOCI().reference",
-					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+						"oci": "resource.access.toOCI()",
+					})},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -711,11 +773,124 @@ var _ = Describe("Resource Controller", func() {
 				"Status.Component.Version":   componentVersion,
 				"Status.Resource.Name":       resourceName,
 				"Status.Resource.Type":       "ociArtifact",
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"registry":   mustToJSON("ghcr.io"),
-					"repository": mustToJSON("open-component-model/ocm/ocm.software/ocmcli/ocmcli-image"),
-					"reference":  mustToJSON("0.24.0"),
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"oci": map[string]any{
+						"digest":     "",
+						"host":       "ghcr.io",
+						"reference":  "0.24.0",
+						"registry":   "ghcr.io",
+						"repository": "open-component-model/ocm/ocm.software/ocmcli/ocmcli-image",
+						"tag":        "0.24.0",
+					},
+				})},
+			})
+		})
+
+		// This test verifies that additionalStatusFields supports nested objects
+		It("reconciles with nested object additional status fields", func(ctx SpecContext) {
+			By("creating a CTF")
+			ctfName := "nested-additional-fields"
+			ctfPath := filepath.Join(tempDir, ctfName)
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersion,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.0",
+									},
+								},
+								Type:     "ociArtifact",
+								Relation: descruntime.ExternalRelation,
+								Access: &runtime.Raw{
+									Type: runtime.Type{
+										Name:    "ociArtifact",
+										Version: "v1",
+									},
+									Data: mustMarshalJSON(map[string]any{
+										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
+									}),
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
 				},
+			})
+
+			By("mocking a component")
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+					Repository: repositoryName,
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
+			By("creating a resource with a nested object in additionalStatusFields")
+			resourceObj := &v1alpha1.Resource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: namespace.GetName(),
+				},
+				Spec: v1alpha1.ResourceSpec{
+					ComponentRef: corev1.LocalObjectReference{
+						Name: componentObj.GetName(),
+					},
+					Resource: v1alpha1.ResourceID{
+						ByReference: v1alpha1.ResourceReference{
+							Resource: runtime.Identity{"name": resourceName},
+						},
+					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+						"oci": map[string]string{
+							"registry":   "resource.access.toOCI().registry",
+							"repository": "resource.access.toOCI().repository",
+							"reference":  "resource.access.toOCI().reference",
+						},
+					})},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
+
+			By("checking that the resource has been reconciled with nested additional status")
+			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
+				"Status.Component.Component": componentName,
+				"Status.Component.Version":   componentVersion,
+				"Status.Resource.Name":       resourceName,
+				"Status.Resource.Type":       "ociArtifact",
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"oci": map[string]any{
+						"registry":   "ghcr.io",
+						"repository": "open-component-model/ocm/ocm.software/ocmcli/ocmcli-image",
+						"reference":  "0.24.0",
+					},
+				})},
 			})
 		})
 
@@ -816,9 +991,10 @@ var _ = Describe("Resource Controller", func() {
 							Resource: runtime.Identity{"name": resourceName, "version": "1.0.0"},
 						},
 					},
-					AdditionalStatusFields: map[string]string{
+					Interval: metav1.Duration{Duration: 30 * time.Second},
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
 						"reference": "resource.access.toOCI().reference",
-					},
+					})},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -828,9 +1004,9 @@ var _ = Describe("Resource Controller", func() {
 
 			By("checking that the resource has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"reference": mustToJSON("0.23.0"),
-				},
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": "0.23.0",
+				})},
 			})
 
 			By("updating resource spec")
@@ -847,9 +1023,9 @@ var _ = Describe("Resource Controller", func() {
 			By("checking that the updated resource has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
 				"Status.Resource.Version": resourceVersionUpdated,
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"reference": mustToJSON("0.24.0"),
-				},
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": "0.24.0",
+				})},
 			})
 		})
 
@@ -931,9 +1107,10 @@ var _ = Describe("Resource Controller", func() {
 							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
-					AdditionalStatusFields: map[string]string{
+					Interval: metav1.Duration{Duration: 30 * time.Second},
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
 						"reference": "resource.access.toOCI().reference",
-					},
+					})},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -948,9 +1125,9 @@ var _ = Describe("Resource Controller", func() {
 				Reference:  "0.23.0",
 			}
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"reference": mustToJSON(expected.Reference),
-				},
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": expected.Reference,
+				})},
 			})
 
 			By("updating the component version with a new resource")
@@ -1013,9 +1190,9 @@ var _ = Describe("Resource Controller", func() {
 			}
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
 				"Status.Component.Version": componentVersionUpdated,
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"reference": mustToJSON(expected.Reference),
-				},
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": expected.Reference,
+				})},
 			})
 		})
 
@@ -1120,9 +1297,10 @@ var _ = Describe("Resource Controller", func() {
 							ReferencePath: []runtime.Identity{{"name": nestedComponentReference}},
 						},
 					},
-					AdditionalStatusFields: map[string]string{
+					Interval: metav1.Duration{Duration: 30 * time.Second},
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
 						"reference": "resource.access.toOCI().reference",
-					},
+					})},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -1132,12 +1310,526 @@ var _ = Describe("Resource Controller", func() {
 
 			By("checking that the resource has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"reference": mustToJSON("0.23.0"),
-				},
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": "0.23.0",
+				})},
 				"Status.Component.Component": nestedComponentName,
 				"Status.Component.Version":   componentVersion,
 			})
+
+			By("checking the metrics for cache hits and misses")
+			parentComponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(parentComponentMissCounter)).To(Equal(float64(1)))
+			parentComponentHitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			// Hit 1 after this component version was stored in the cache (ErrResolutionInProgress)
+			// Hit 2 after the nested component returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
+			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(BeNumerically("==", float64(2)))
+
+			childComponentMissCount, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(childComponentMissCount)).To(Equal(float64(1)))
+			childComponentHitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(childComponentHitCounter)).To(Equal(float64(1)))
+		})
+
+		It("reconcile a nested and verified component by reference path", func(ctx SpecContext) {
+			By("creating a CTF")
+			ctfName := "nested-signed-component"
+			ctfPath := filepath.Join(tempDir, ctfName)
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+			// A component with two component references.
+			// - nestedComponent1 has another reference to nestedComponent11 that has a resource.
+			// - nestedComponent2 has another resource.
+			nestedComponentName1 := "ocm.software/nested-signed-component-1"
+			nestedComponentReference1 := "some-reference-1"
+			nestedComponentName11 := "ocm.software/nested-signed-component-1-1"
+			nestedComponentReference11 := "some-reference-1-1"
+			resourceName1 := "resource-1"
+			imgReferenceResource1 := "0.23.0"
+			nestedComponentName2 := "ocm.software/nested-signed-component-2"
+			nestedComponentReference2 := "some-reference-2"
+			resourceName2 := "resource-2"
+			imgReferenceResource2 := "0.24.0"
+
+			repoSpec := &ctfv1.Repository{Type: runtime.Type{Version: "v1", Name: "ctf"}, FilePath: ctfPath, AccessMode: ctfv1.AccessModeReadWrite}
+			repo, err := ocirepository.NewFromCTFRepoV1(ctx, repoSpec)
+			Expect(err).NotTo(HaveOccurred())
+			specData, err := json.Marshal(repoSpec)
+			Expect(err).NotTo(HaveOccurred())
+
+			desc := &descruntime.Descriptor{
+				Component: descruntime.Component{
+					ComponentMeta: descruntime.ComponentMeta{
+						ObjectMeta: descruntime.ObjectMeta{
+							Name:    componentName,
+							Version: componentVersion,
+						},
+					},
+					References: []descruntime.Reference{
+						{
+							ElementMeta: descruntime.ElementMeta{
+								ObjectMeta: descruntime.ObjectMeta{
+									Name:    nestedComponentReference1,
+									Version: componentVersion,
+								},
+							},
+							Component: nestedComponentName1,
+						},
+						{
+							ElementMeta: descruntime.ElementMeta{
+								ObjectMeta: descruntime.ObjectMeta{
+									Name:    nestedComponentReference2,
+									Version: componentVersion,
+								},
+							},
+							Component: nestedComponentName2,
+						},
+					},
+					Provider: descruntime.Provider{Name: "ocm.software"},
+				},
+			}
+
+			nestedDesc1 := &descruntime.Descriptor{
+				Component: descruntime.Component{
+					ComponentMeta: descruntime.ComponentMeta{
+						ObjectMeta: descruntime.ObjectMeta{
+							Name:    nestedComponentName1,
+							Version: componentVersion,
+						},
+					},
+					References: []descruntime.Reference{
+						{
+							ElementMeta: descruntime.ElementMeta{
+								ObjectMeta: descruntime.ObjectMeta{
+									Name:    nestedComponentReference11,
+									Version: componentVersion,
+								},
+							},
+							Component: nestedComponentName11,
+						},
+					},
+					Provider: descruntime.Provider{Name: "ocm.software"},
+				},
+			}
+
+			nestedDesc11 := &descruntime.Descriptor{
+				Component: descruntime.Component{
+					ComponentMeta: descruntime.ComponentMeta{
+						ObjectMeta: descruntime.ObjectMeta{
+							Name:    nestedComponentName11,
+							Version: componentVersion,
+						},
+					},
+					Resources: []descruntime.Resource{
+						{
+							ElementMeta: descruntime.ElementMeta{
+								ObjectMeta: descruntime.ObjectMeta{
+									Name:    resourceName1,
+									Version: "1.0.0",
+								},
+							},
+							Type:     "ociArtifact",
+							Relation: descruntime.ExternalRelation,
+							Access: &runtime.Raw{
+								Type: runtime.Type{
+									Name:    "ociArtifact",
+									Version: "v1",
+								},
+								Data: mustMarshalJSON(map[string]any{
+									"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:" + imgReferenceResource1,
+								}),
+							},
+						},
+					},
+					Provider: descruntime.Provider{Name: "ocm.software"},
+				},
+			}
+			Expect(repo.AddComponentVersion(ctx, nestedDesc11)).To(Succeed())
+
+			digest, err := signing.GenerateDigest(ctx, nestedDesc11, slog.New(logr.ToSlogHandler(log.FromContext(ctx))), signing.LegacyNormalisationAlgo, crypto.SHA256.String())
+			Expect(err).ToNot(HaveOccurred())
+
+			nestedDesc1.Component.References[0].Digest = descruntime.Digest{
+				HashAlgorithm:          digest.HashAlgorithm,
+				Value:                  digest.Value,
+				NormalisationAlgorithm: digest.NormalisationAlgorithm,
+			}
+			Expect(repo.AddComponentVersion(ctx, nestedDesc1)).To(Succeed())
+
+			nestedDesc2 := &descruntime.Descriptor{
+				Component: descruntime.Component{
+					ComponentMeta: descruntime.ComponentMeta{
+						ObjectMeta: descruntime.ObjectMeta{
+							Name:    nestedComponentName2,
+							Version: componentVersion,
+						},
+					},
+					Resources: []descruntime.Resource{
+						{
+							ElementMeta: descruntime.ElementMeta{
+								ObjectMeta: descruntime.ObjectMeta{
+									Name:    resourceName2,
+									Version: "1.0.0",
+								},
+							},
+							Type:     "ociArtifact",
+							Relation: descruntime.ExternalRelation,
+							Access: &runtime.Raw{
+								Type: runtime.Type{
+									Name:    "ociArtifact",
+									Version: "v1",
+								},
+								Data: mustMarshalJSON(map[string]any{
+									"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:" + imgReferenceResource2,
+								}),
+							},
+						},
+					},
+					Provider: descruntime.Provider{Name: "ocm.software"},
+				},
+			}
+			Expect(repo.AddComponentVersion(ctx, nestedDesc2)).To(Succeed())
+
+			for i, ref := range desc.Component.References {
+				descNested, err := repo.GetComponentVersion(ctx, ref.Component, componentVersion)
+				Expect(err).NotTo(HaveOccurred())
+				digest, err := signing.GenerateDigest(ctx, descNested, slog.New(logr.ToSlogHandler(log.FromContext(ctx))), signing.LegacyNormalisationAlgo, crypto.SHA256.String())
+				Expect(err).ToNot(HaveOccurred())
+
+				desc.Component.References[i].Digest = descruntime.Digest{
+					HashAlgorithm:          digest.HashAlgorithm,
+					Value:                  digest.Value,
+					NormalisationAlgorithm: digest.NormalisationAlgorithm,
+				}
+			}
+
+			By("signing the parent component version")
+			signatureName := "test-signature"
+			normalised, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			signature, pubKey := test.SignComponent(ctx, signatureName, signingv1alpha1.AlgorithmRSASSAPSS, normalised, pm)
+
+			desc.Signatures = append(desc.Signatures, signature)
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+
+			By("mocking a component")
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+					Repository: repositoryName,
+					Verify: []v1alpha1.Verification{
+						{
+							Signature: signatureName,
+							Value:     base64.StdEncoding.EncodeToString([]byte(pubKey)),
+						},
+					},
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
+			By("creating a resource CR for resource1")
+			resourceObj1 := &v1alpha1.Resource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName1,
+					Namespace: namespace.GetName(),
+				},
+				Spec: v1alpha1.ResourceSpec{
+					ComponentRef: corev1.LocalObjectReference{
+						Name: componentObj.GetName(),
+					},
+					Resource: v1alpha1.ResourceID{
+						ByReference: v1alpha1.ResourceReference{
+							Resource: runtime.Identity{"name": resourceName1},
+							ReferencePath: []runtime.Identity{
+								{"name": nestedComponentReference1},
+								{"name": nestedComponentReference11},
+							},
+						},
+					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+						"reference": "resource.access.toOCI().reference",
+					})},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resourceObj1)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj1)
+			})
+
+			By("checking that resource1 has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, resourceObj1, map[string]any{
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": imgReferenceResource1,
+				})},
+				"Status.Component.Component": nestedComponentName11,
+				"Status.Component.Version":   componentVersion,
+			})
+
+			By("creating a resource CR for resource2")
+			resourceObj2 := &v1alpha1.Resource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName2,
+					Namespace: namespace.GetName(),
+				},
+				Spec: v1alpha1.ResourceSpec{
+					ComponentRef: corev1.LocalObjectReference{
+						Name: componentObj.GetName(),
+					},
+					Resource: v1alpha1.ResourceID{
+						ByReference: v1alpha1.ResourceReference{
+							Resource: runtime.Identity{"name": resourceName2},
+							ReferencePath: []runtime.Identity{
+								{"name": nestedComponentReference2},
+							},
+						},
+					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+						"reference": "resource.access.toOCI().reference",
+					})},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resourceObj2)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj2)
+			})
+
+			By("checking that resource1 has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, resourceObj2, map[string]any{
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": imgReferenceResource2,
+				})},
+				"Status.Component.Component": nestedComponentName2,
+				"Status.Component.Version":   componentVersion,
+			})
+
+			By("checking the metrics for cache hits and misses")
+			parentComponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(parentComponentMissCounter)).To(Equal(float64(0)),
+				"expected 0 cache misses for the parent component as it should be verified")
+			parentComponentMissCounterVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "verified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(parentComponentMissCounterVerified)).To(Equal(float64(1)),
+				"expected 1 cache miss for the verified parent component for the first run")
+			parentComponentHitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "verified")
+			Expect(err).ToNot(HaveOccurred())
+			// (Only the resource controller is running!)
+			// Hit 1 after this component version was stored in the cache
+			// Hit 2 after the nested-component-1 returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
+			// Hit 3 after the nested-component-11 returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
+			// Hit 4 after the second resource got applied and queued for reconciliation
+			// Hit 5 after the nested-component-2 returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
+			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(BeNumerically("==", float64(5)),
+				"expected at least 5 cache hits for the verified parent component as it should be hit for both resources and the nested component reconciliations")
+
+			nestedComponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName1, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(nestedComponentMissCounter)).To(Equal(float64(0)),
+				"expected 0 cache misses for the nested component as it should be verified")
+			nestedComponent1MissCounterVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName1, componentVersion, "verified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(nestedComponent1MissCounterVerified)).To(Equal(float64(1)),
+				"expected 1 cache miss for the verified nested component for the first run")
+			nestedComponent1HitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(nestedComponentName1, componentVersion, "verified")
+			Expect(err).ToNot(HaveOccurred())
+			// (Only the resource controller is running!)
+			// Hit 1 after this component version was stored in the cache
+			// Hit 2 when nested-component-11 is resolved as the reference path resolver will return the ErrResolutionInProgress for nested-component-11
+			//   which will then trigger another reconciliation where we will go the full path again.
+			Expect(testutil.ToFloat64(nestedComponent1HitCounter)).To(Equal(float64(2)),
+				"expected 2 cache hits for the verified nested component as it should be hit for the resolution of the nested component again")
+
+			for _, nestedComponent := range []string{nestedComponentName11, nestedComponentName2} {
+				nestedComponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponent, componentVersion, "unverified")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(testutil.ToFloat64(nestedComponentMissCounter)).To(Equal(float64(0)),
+					"expected 0 cache misses for the nested-component as it should be integrity checked",
+					nestedComponent)
+				nestedComponentMissCounterVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponent, componentVersion, "verified")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(testutil.ToFloat64(nestedComponentMissCounterVerified)).To(Equal(float64(1)),
+					"expected 1 cache miss for the verified nested-component on the first run",
+					nestedComponent)
+				nestedComponentHitCounterVerified, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(nestedComponent, componentVersion, "verified")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(testutil.ToFloat64(nestedComponentHitCounterVerified)).To(Equal(float64(1)),
+					"expected 1 cache hit for the verified nested-component",
+					nestedComponent)
+			}
+		})
+
+		It("reconcile a nested component with digest spec but unsigned by reference path", func(ctx SpecContext) {
+			By("creating a CTF")
+			ctfName := "nested-component"
+			nestedComponentName := "ocm.software/nested-component-with-digest-spec"
+			nestedComponentReference := "some-reference"
+			ctfPath := filepath.Join(tempDir, ctfName)
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+			By("creating the child component")
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    nestedComponentName,
+								Version: componentVersion,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.0",
+									},
+								},
+								Type:     "ociArtifact",
+								Relation: descruntime.ExternalRelation,
+								Access: &runtime.Raw{
+									Type: runtime.Type{
+										Name:    "ociArtifact",
+										Version: "v1",
+									},
+									Data: mustMarshalJSON(map[string]any{
+										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.23.0",
+									}),
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+			descNested, err := repo.GetComponentVersion(ctx, nestedComponentName, componentVersion)
+			Expect(err).NotTo(HaveOccurred())
+			digestChild, err := signing.GenerateDigest(ctx, descNested, slog.New(logr.ToSlogHandler(log.FromContext(ctx))), signing.LegacyNormalisationAlgo, crypto.SHA256.String())
+			Expect(err).ToNot(HaveOccurred())
+
+			By("creating the parent component with component reference containing a digest spec")
+			_, _ = test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersion,
+							},
+						},
+						References: []descruntime.Reference{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    nestedComponentReference,
+										Version: componentVersion,
+									},
+								},
+								Component: nestedComponentName,
+								Digest: descruntime.Digest{
+									HashAlgorithm:          digestChild.HashAlgorithm,
+									Value:                  digestChild.Value,
+									NormalisationAlgorithm: digestChild.NormalisationAlgorithm,
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("mocking a component")
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+					Repository: repositoryName,
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
+			By("creating a resource")
+			resourceObj := &v1alpha1.Resource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: namespace.GetName(),
+				},
+				Spec: v1alpha1.ResourceSpec{
+					ComponentRef: corev1.LocalObjectReference{
+						Name: componentObj.GetName(),
+					},
+					Resource: v1alpha1.ResourceID{
+						ByReference: v1alpha1.ResourceReference{
+							Resource:      runtime.Identity{"name": resourceName},
+							ReferencePath: []runtime.Identity{{"name": nestedComponentReference}},
+						},
+					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+						"reference": "resource.access.toOCI().reference",
+					})},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
+
+			By("checking that the resource has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": "0.23.0",
+				})},
+				"Status.Component.Component": nestedComponentName,
+				"Status.Component.Version":   componentVersion,
+			})
+
+			By("checking the metrics for cache hits and misses")
+			parentComponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(parentComponentMissCounter)).To(Equal(float64(1)))
+			parentComponentHitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			// Hit 1 after this component version was stored in the cache (ErrResolutionInProgress)
+			// Hit 2 after the nested component returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
+			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(BeNumerically("==", float64(2)))
+
+			childComponentMissCount, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "unverified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(childComponentMissCount)).To(Equal(float64(0)))
+
+			childComponentVerifiedMissCount, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "verified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(childComponentVerifiedMissCount)).To(Equal(float64(1)))
+			childComponentVerifiedHitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "verified")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(testutil.ToFloat64(childComponentVerifiedHitCounter)).To(Equal(float64(1)))
 		})
 	})
 
@@ -1281,6 +1973,7 @@ consumers:
 							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -1443,6 +2136,7 @@ consumers:
 							Resource: runtime.Identity{"name": resourceName},
 						},
 					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
 							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
@@ -1581,12 +2275,6 @@ var _ = Describe("Resource Controller Error Handling", func() {
 		test.WaitForNotReadyObject(ctx, k8sClient, resource, v1alpha1.ResourceIsNotAvailable)
 	})
 })
-
-func mustToJSON(v string) apiextensionsv1.JSON {
-	raw, err := json.Marshal(v)
-	Expect(err).ToNot(HaveOccurred())
-	return apiextensionsv1.JSON{Raw: raw}
-}
 
 func mustMarshalJSON(v any) []byte {
 	raw, err := json.Marshal(v)

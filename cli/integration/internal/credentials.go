@@ -122,7 +122,7 @@ configurations:
 	for _, o := range opts {
 		cfg += fmt.Sprintf(`
   - identity:
-      type: OCIRepository
+      type: OCIRegistry
       hostname: %q
       port: %q
       scheme: http

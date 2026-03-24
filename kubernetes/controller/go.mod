@@ -4,13 +4,13 @@ go 1.26.1
 
 // Replace digest lib to master to gather access to BLAKE3.
 // xref: https://github.com/opencontainers/go-digest/pull/66
-replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20250813155314-89707e38ad1a
+replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20260318163012-137fd2bb009d
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/fluxcd/pkg/apis/event v0.24.0
 	github.com/fluxcd/pkg/apis/meta v1.25.0
-	github.com/fluxcd/pkg/runtime v0.99.0
+	github.com/fluxcd/pkg/runtime v0.102.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/cel-go v0.27.0
 	github.com/onsi/ginkgo/v2 v2.28.1
@@ -20,10 +20,9 @@ require (
 	golang.org/x/sync v0.19.0
 	k8s.io/api v0.35.1
 	k8s.io/apiextensions-apiserver v0.35.1
-	k8s.io/apimachinery v0.35.2
-	k8s.io/apiserver v0.35.1
+	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.1
-	k8s.io/utils v0.0.0-20260108192941-914a6e750570
+	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2
 	sigs.k8s.io/controller-runtime v0.23.1
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -33,18 +32,19 @@ require (
 	github.com/docker/cli v29.2.1+incompatible
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
-	ocm.software/open-component-model/bindings/go/configuration v0.0.10
-	ocm.software/open-component-model/bindings/go/credentials v0.0.7
+	ocm.software/open-component-model/bindings/go/configuration v0.0.12
+	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260310092250-61522efb19f1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260310092250-61522efb19f1
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260323180340-2f0ad39f3010
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260323180340-2f0ad39f3010
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/oci v0.0.34
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260323180340-2f0ad39f3010
+	ocm.software/open-component-model/bindings/go/oci v0.0.36
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260310092250-61522efb19f1
-	ocm.software/open-component-model/bindings/go/runtime v0.0.6
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260310092250-61522efb19f1
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260323180340-2f0ad39f3010
+	ocm.software/open-component-model/bindings/go/runtime v0.0.7
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260323180340-2f0ad39f3010
 	sigs.k8s.io/release-utils v0.12.3
 )
 
@@ -53,8 +53,7 @@ require (
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/blang/semver/v4 v4.0.0 // indirect
-	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -93,7 +92,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.4 // indirect
+	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -114,19 +113,18 @@ require (
 	github.com/veqryn/slog-context v0.9.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	go.opentelemetry.io/otel/trace v1.40.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
-	go.yaml.in/yaml/v2 v2.4.3 // indirect
+	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa // indirect
 	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/net v0.50.0 // indirect
-	golang.org/x/oauth2 v0.35.0 // indirect
+	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/term v0.40.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
-	golang.org/x/time v0.14.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260223185530-2f722ef697dc // indirect

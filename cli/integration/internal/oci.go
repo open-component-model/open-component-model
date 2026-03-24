@@ -22,7 +22,8 @@ func CreateSingleLayerOCIImageLayoutTar(t *testing.T, data []byte, ref ...string
 	t.Helper()
 	r := require.New(t)
 	var buf bytes.Buffer
-	w := tar.NewOCILayoutWriter(&buf)
+	w, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	r.NoError(err)
 
 	desc := ociImageSpecV1.Descriptor{}
 	desc.Digest = digest.FromBytes(data)

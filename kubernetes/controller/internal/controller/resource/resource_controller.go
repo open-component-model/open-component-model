@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
-	"github.com/google/cel-go/cel"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -28,13 +28,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	ocmcel "ocm.software/open-component-model/kubernetes/controller/internal/cel"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
+	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
 )
 
 type Reconciler struct {
@@ -97,7 +98,6 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 		WatchesRawSource(eventSource).
 		// Watch for component-events that are referenced by resources
 		Watches(
-			// Watch for changes to components that are referenced by a resource.
 			&v1alpha1.Component{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 				component, ok := obj.(*v1alpha1.Component)
@@ -123,7 +123,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 				}
 
 				return requests
-			})).
+			}), builder.WithPredicates(ComponentInfoChangedPredicate{})).
 		Watches(
 			// Ensure to reconcile the resource when a deployer changes that references this resource. We want to
 			// reconcile because the resource-finalizer makes sure that the resource is only deleted when
@@ -284,10 +284,21 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
+	// Add verifications from the component to the cache-backed repository to make sure they are included in the
+	// cache key and used for verification.
+	verifications, err := verification.GetVerifications(ctx, r.Client, component)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
+	}
+
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
 		RepositorySpec:    repoSpec,
 		OCMConfigurations: configs,
 		Namespace:         resource.GetNamespace(),
+		SigningRegistry:   r.PluginManager.SigningRegistry,
+		Verifications:     verifications,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: k8stypes.NamespacedName{
@@ -306,7 +317,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	referencedDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
 		component.Status.Component.Component,
 		component.Status.Component.Version)
-	if errors.Is(err, resolution.ErrResolutionInProgress) {
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
 		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
 		logger.Info("component version resolution in progress, waiting for event notification",
@@ -314,45 +326,62 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			"version", component.Status.Component.Version)
 
 		return ctrl.Result{}, nil
-	}
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, resource, nil, eventv1.EventSeverityError, err.Error())
+	default:
+		if err != nil {
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
+		}
 	}
 
 	startRetrievingResource := time.Now()
 	logger.V(1).Info("resolving reference path", "referencePath", resource.Spec.Resource.ByReference.ReferencePath)
-	resourceDescriptor, resourceRepoSpec, err := r.resolveReferencePath(
+	resourceDescriptor, resourceRepoSpec, err := ocm.ResolveReferencePath(
 		ctx,
+		r.Resolver,
 		referencedDescriptor,
-		repoSpec,
 		resource.Spec.Resource.ByReference.ReferencePath,
-		configs,
-		workerpool.RequesterInfo{
-			NamespacedName: k8stypes.NamespacedName{
-				Namespace: resource.GetNamespace(),
-				Name:      resource.GetName(),
+		&resolution.RepositoryOptions{
+			RepositorySpec:    repoSpec,
+			OCMConfigurations: configs,
+			Namespace:         resource.GetNamespace(),
+			SigningRegistry:   r.PluginManager.SigningRegistry,
+			RequesterFunc: func() workerpool.RequesterInfo {
+				return workerpool.RequesterInfo{
+					NamespacedName: k8stypes.NamespacedName{
+						Namespace: resource.GetNamespace(),
+						Name:      resource.GetName(),
+					},
+				}
 			},
 		},
 	)
-	if errors.Is(err, resolution.ErrResolutionInProgress) {
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
 		logger.Info("reference path resolution in progress, waiting for event notification")
 
 		return ctrl.Result{}, nil
-	}
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, resource, nil, eventv1.EventSeverityError, err.Error())
+	default:
+		if err != nil {
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to resolve reference path: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to resolve reference path: %w", err)
+		}
 	}
 
 	resourceIdentity := resource.Spec.Resource.ByReference.Resource
 	var matchedResource *descriptor.Resource
 	for i, res := range resourceDescriptor.Component.Resources {
 		resIdentity := res.ToIdentity()
-		if resourceIdentity.Match(resIdentity, identityFunc()) {
+		if resourceIdentity.Match(resIdentity, ocm.IdentityFuncIgnoreVersion()) {
 			matchedResource = &resourceDescriptor.Component.Resources[i]
 			break
 		}
@@ -417,65 +446,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	return ctrl.Result{RequeueAfter: resource.GetRequeueAfter()}, nil
 }
 
-// resolveReferencePath walks a reference path from a parent component version to a final component version.
-// It returns the final descriptor and repository spec.
-func (r *Reconciler) resolveReferencePath(
-	ctx context.Context,
-	parentDesc *descriptor.Descriptor,
-	parentRepoSpec runtime.Typed,
-	referencePath []runtime.Identity,
-	configs []v1alpha1.OCMConfiguration,
-	reqInfo workerpool.RequesterInfo,
-) (*descriptor.Descriptor, runtime.Typed, error) {
-	logger := log.FromContext(ctx)
-
-	if len(referencePath) == 0 {
-		return parentDesc, parentRepoSpec, nil
-	}
-
-	currentDesc := parentDesc
-	currentRepoSpec := parentRepoSpec
-
-	for i, refIdentity := range referencePath {
-		logger.V(1).Info("resolving reference", "step", i+1, "identity", refIdentity)
-		var matchedRef *descriptor.Reference
-		for j, ref := range currentDesc.Component.References {
-			refIdent := ref.ToIdentity()
-			if refIdentity.Match(refIdent, identityFunc()) {
-				matchedRef = &currentDesc.Component.References[j]
-				break
-			}
-		}
-
-		if matchedRef == nil {
-			return nil, nil, fmt.Errorf("component reference with identity %v not found in component %s:%s at reference path step %d",
-				refIdentity, currentDesc.Component.Name, currentDesc.Component.Version, i+1)
-		}
-
-		refRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-			RepositorySpec:    currentRepoSpec,
-			OCMConfigurations: configs,
-			Namespace:         reqInfo.NamespacedName.Namespace,
-			RequesterFunc: func() workerpool.RequesterInfo {
-				return reqInfo
-			},
-		})
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create cache-backed repository for reference: %w", err)
-		}
-
-		refDesc, err := refRepo.GetComponentVersion(ctx, matchedRef.Component, matchedRef.Version)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get referenced component version %s:%s: %w",
-				matchedRef.Component, matchedRef.Version, err)
-		}
-
-		currentDesc = refDesc
-	}
-
-	return currentDesc, currentRepoSpec, nil
-}
-
 // setResourceStatus updates the resource status with all required information.
 func setResourceStatus(
 	ctx context.Context,
@@ -492,7 +462,7 @@ func setResourceStatus(
 	}
 	resource.Status.Resource = info
 
-	if err := computeAdditionalStatusFields(ctx, res, resource); err != nil {
+	if err := ComputeAdditionalStatusFields(ctx, res, resource, component); err != nil {
 		return fmt.Errorf("evaluating additional status fields: %w", err)
 	}
 
@@ -542,82 +512,4 @@ func convertLabels(in []descriptor.Label) ([]v1alpha1.Label, error) {
 	}
 
 	return out, nil
-}
-
-// computeAdditionalStatusFields compiles and evaluates CEL expressions for additional fields.
-func computeAdditionalStatusFields(
-	ctx context.Context,
-	res *descriptor.Resource,
-	resource *v1alpha1.Resource,
-) error {
-	env, err := ocmcel.BaseEnv()
-	if err != nil {
-		return fmt.Errorf("getting base CEL env: %w", err)
-	}
-	env, err = env.Extend(
-		cel.Variable("resource", cel.DynType),
-	)
-	if err != nil {
-		return fmt.Errorf("extending CEL env: %w", err)
-	}
-
-	resV2, err := descriptor.ConvertToV2Resource(runtime.NewScheme(runtime.WithAllowUnknown()), res)
-	if err != nil {
-		return fmt.Errorf("converting resource to v2: %w", err)
-	}
-
-	resourceMap, err := toGenericMapViaJSON(resV2)
-	if err != nil {
-		return fmt.Errorf("preparing CEL variables: %w", err)
-	}
-
-	statusFields := resource.Spec.AdditionalStatusFields
-	resource.Status.Additional = make(map[string]apiextensionsv1.JSON, len(statusFields))
-
-	for name, expr := range statusFields {
-		ast, issues := env.Compile(expr)
-		if issues.Err() != nil {
-			return fmt.Errorf("compiling CEL %q: %w", name, issues.Err())
-		}
-		prog, err := env.Program(ast)
-		if err != nil {
-			return fmt.Errorf("building CEL program %q: %w", name, err)
-		}
-		val, _, err := prog.ContextEval(ctx, map[string]any{"resource": resourceMap})
-		if err != nil {
-			return fmt.Errorf("evaluating CEL %q: %w", name, err)
-		}
-		raw, err := json.Marshal(val)
-		if err != nil {
-			return fmt.Errorf("marshaling CEL result %q: %w", name, err)
-		}
-		resource.Status.Additional[name] = apiextensionsv1.JSON{Raw: raw}
-	}
-
-	return nil
-}
-
-// toGenericMapViaJSON marshals and unmarshals a struct into a generic map representation through JSON tags.
-func toGenericMapViaJSON(v any) (map[string]any, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, err
-	}
-
-	return m, nil
-}
-
-// identityFunc is a custom identity matching function that ignores the "version" field if it is not set.
-func identityFunc() runtime.IdentityMatchingChainFn {
-	return func(i, o runtime.Identity) bool {
-		version, ok := i["version"]
-		if !ok || version == "" {
-			delete(o, "version")
-		}
-		return runtime.IdentityEqual(i, o)
-	}
 }

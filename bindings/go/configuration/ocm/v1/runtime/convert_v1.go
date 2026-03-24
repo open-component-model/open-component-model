@@ -38,9 +38,18 @@ func convertResolvers(repositoryScheme *runtime.Scheme, resolvers []*resolverv1.
 	if len(resolvers) == 0 {
 		return nil, nil
 	}
+	if repositoryScheme == nil {
+		return nil, fmt.Errorf("repository scheme is nil")
+	}
 
 	converted := make([]Resolver, len(resolvers))
 	for i, resolver := range resolvers {
+		if resolver == nil {
+			return nil, fmt.Errorf("resolver at index %d is nil", i)
+		}
+		if resolver.Repository == nil {
+			return nil, fmt.Errorf("resolver at index %d has nil repository", i)
+		}
 		convertedRepo, err := repositoryScheme.NewObject(resolver.Repository.GetType())
 		if err != nil {
 			return nil, err

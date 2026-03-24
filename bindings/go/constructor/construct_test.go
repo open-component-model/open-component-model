@@ -11,7 +11,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
+
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/dag"
@@ -22,7 +25,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"sigs.k8s.io/yaml"
 )
 
 // mockTargetRepository implements TargetRepository for testing
@@ -727,6 +729,82 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConstructWithSourceBlobToCTF(t *testing.T) {
+	t.Parallel()
+
+	sourceData := inmemory.New(
+		bytes.NewReader([]byte("test source data")),
+		inmemory.WithMediaType("application/octet-stream"),
+	)
+
+	mockSourceInput := &mockSourceInputMethod{
+		processedBlob: sourceData,
+	}
+
+	sourceProvider := &mockSourceInputMethodProvider{
+		methods: map[runtime.Type]SourceInputMethod{
+			runtime.NewVersionedType("mock", "v1"): mockSourceInput,
+		},
+	}
+
+	yamlData := `
+components:
+  - name: ocm.software/test-ctf-source
+    version: v1.0.0
+    provider:
+      name: test-provider
+    resources: []
+    sources:
+      - name: test-source
+        version: v1.0.0
+        type: git
+        input:
+          type: mock/v1
+`
+
+	var comp constructorv1.ComponentConstructor
+	require.NoError(t, yaml.Unmarshal([]byte(yamlData), &comp))
+	converted := constructorruntime.ConvertToRuntimeConstructor(&comp)
+
+	// Create a real CTF repository as the target
+	ctfRepo, err := ocirepository.NewFromCTFRepoV1(t.Context(), &ctf.Repository{
+		FilePath:   t.TempDir(),
+		AccessMode: ctf.AccessModeReadWrite,
+	})
+	require.NoError(t, err)
+
+	opts := Options{
+		SourceInputMethodProvider: sourceProvider,
+		TargetRepositoryProvider:  &componentVersionRepoProvider{repo: ctfRepo},
+	}
+
+	constructorInstance := NewDefaultConstructor(converted, opts)
+	graph := constructorInstance.GetGraph()
+
+	err = constructorInstance.Construct(t.Context())
+	require.NoError(t, err)
+
+	descs := collectDescriptors(t, graph)
+	require.Len(t, descs, 1)
+
+	desc := descs[0]
+	assert.Equal(t, "ocm.software/test-ctf-source", desc.Component.Name)
+	assert.Equal(t, "v1.0.0", desc.Component.Version)
+	assert.Len(t, desc.Component.Sources, 1)
+
+	source := desc.Component.Sources[0]
+	assert.Equal(t, "test-source", source.Name)
+	assert.Equal(t, "git", source.Type)
+	assert.NotNil(t, source.Access)
+
+	// Verify the component version was persisted in the CTF
+	retrieved, err := ctfRepo.GetComponentVersion(t.Context(), "ocm.software/test-ctf-source", "v1.0.0")
+	require.NoError(t, err)
+	assert.Equal(t, "ocm.software/test-ctf-source", retrieved.Component.Name)
+	assert.Len(t, retrieved.Component.Sources, 1)
+	assert.NotNil(t, retrieved.Component.Sources[0].Access)
 }
 
 func collectDescriptors(t *testing.T, graph *syncdag.SyncedDirectedAcyclicGraph[string]) []*descriptor.Descriptor {
