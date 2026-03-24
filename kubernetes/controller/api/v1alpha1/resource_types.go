@@ -11,6 +11,16 @@ import (
 
 const KindResource = "Resource"
 
+type VerificationPolicy string
+
+const (
+	// VerificationPolicyAlways attempts to verify resource digest using a digest processor plugin.
+	// If no suitable plugin is found, we only log this because the operator cannot resolve this
+	VerificationPolicyAlways VerificationPolicy = "Always"
+	// VerificationPolicyNever skips resource digest verification unconditionally.
+	VerificationPolicyNever VerificationPolicy = "Never"
+)
+
 // ResourceSpec defines the desired state of Resource.
 type ResourceSpec struct {
 	// ComponentRef is a reference to a Component.
@@ -26,10 +36,13 @@ type ResourceSpec struct {
 	// +optional
 	OCMConfig []OCMConfiguration `json:"ocmConfig,omitempty"`
 
-	// SkipVerify indicates whether the resource should be verified or not.
-	// A verification requires the resource to be downloaded, which can be
-	// expensive for large resources.
-	SkipVerify bool `json:"skipVerify,omitempty"`
+	// VerificationPolicy controls when resource digest verification is performed.
+	// Always (default): attempt to verify resource digest; if no processor plugin is found, log and continue.
+	// Never: skip verification unconditionally.
+	// +kubebuilder:validation:Enum:="Always";"Never"
+	// +kubebuilder:default:="Always"
+	// +optional
+	VerificationPolicy VerificationPolicy `json:"verificationPolicy,omitempty"`
 
 	// Interval at which the resource is checked for updates.
 	// +required
