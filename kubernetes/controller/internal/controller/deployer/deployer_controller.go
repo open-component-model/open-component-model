@@ -331,6 +331,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: %w", err)
 	}
 
+	// TODO: This is unoptimal because we cannot ensure that the resource status will hold a digest (e.g. for unverified
+	//       component versoion/skipped verification). Instead we might use the cache-key from the resolution service.
 	key := resource.Status.Resource.Digest.Value
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
