@@ -15,7 +15,7 @@ type VerificationPolicy string
 
 const (
 	// VerificationPolicyAlways attempts to verify resource digest using a digest processor plugin.
-	// If no suitable plugin is found, a warning is logged and reconciliation continues.
+	// If no suitable plugin is found, we only log this because the operator cannot resolve this
 	VerificationPolicyAlways VerificationPolicy = "Always"
 	// VerificationPolicyNever skips resource digest verification unconditionally.
 	VerificationPolicyNever VerificationPolicy = "Never"
