@@ -37,7 +37,7 @@ type ResourceSpec struct {
 	OCMConfig []OCMConfiguration `json:"ocmConfig,omitempty"`
 
 	// VerificationPolicy controls when resource digest verification is performed.
-	// Always (default): attempt to verify resource digest; if no processor plugin is found, log a warning and continue.
+	// Always (default): attempt to verify resource digest; if no processor plugin is found, log and continue.
 	// Never: skip verification unconditionally.
 	// +kubebuilder:validation:Enum:="Always";"Never"
 	// +kubebuilder:default:="Always"
