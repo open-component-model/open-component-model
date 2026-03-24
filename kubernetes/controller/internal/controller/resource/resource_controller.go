@@ -396,7 +396,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	if !resource.Spec.SkipVerify {
+	if resource.Spec.VerificationPolicy != v1alpha1.VerificationPolicyNever {
 		logger.V(1).Info("verifying resource")
 
 		cfg, err := configuration.LoadConfigurations(ctx, r.Client, resource.GetNamespace(), configs)
@@ -419,7 +419,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			}
 		}
 	} else {
-		logger.V(1).Info("skip verifying resource")
+		logger.V(1).Info("skip verifying resource: verification policy is Never")
 	}
 
 	logger.V(1).Info("retrieved resource", "component", fmt.Sprintf("%s:%s", resourceDescriptor.Component.Name, resourceDescriptor.Component.Version),

@@ -156,17 +156,21 @@ spec:
                 required:
                 - byReference
                 type: object
-              skipVerify:
-                description: |-
-                  SkipVerify indicates whether the resource should be verified or not.
-                  A verification requires the resource to be downloaded, which can be
-                  expensive for large resources.
-                type: boolean
               suspend:
                 description: |-
                   Suspend tells the controller to suspend the reconciliation of this
                   Resource.
                 type: boolean
+              verificationPolicy:
+                default: Always
+                description: |-
+                  VerificationPolicy controls when resource digest verification is performed.
+                  Always (default): attempt to verify resource digest; if no processor plugin is found, log a warning and continue.
+                  Never: skip verification unconditionally.
+                enum:
+                - Always
+                - Never
+                type: string
             required:
             - componentRef
             - interval
