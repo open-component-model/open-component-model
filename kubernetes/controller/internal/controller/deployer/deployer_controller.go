@@ -528,7 +528,9 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		err = errors.Join(err, readerBlob.Close())
 	}()
 
-	readerBlob, err = r.applyResourceSizeLimit(resourceBlob, readerBlob)
+	// limitedReader delegates Close to readerBlob via the embedded io.Closer in limitedReadCloser,
+	// so the defer above is sufficient to close the underlying stream in all cases.
+	limitedReader, err := r.applyResourceSizeLimit(resourceBlob, readerBlob)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
@@ -536,7 +538,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	}
 
 	// Decode YAML manifests
-	if objs, err = decodeObjectsFromManifest(readerBlob); err != nil {
+	if objs, err = decodeObjectsFromManifest(limitedReader); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.MarshalFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to decode objects: %w", err)
