@@ -25,10 +25,10 @@ body = """
 To install the latest version of OCM, you can use the following command:
 
 ```bash
-curl -fsSL https://ocm.software/install-cli.sh | sudo bash
+curl -sfL https://ocm.software/install-cli.sh | bash
 ```
 
-(For more installation options, check out our [installation guide](https://ocm.software/dev/docs/getting-started/install-the-ocm-cli/).)
+(For more installation options, check out our [installation guide](https://ocm.software/docs/getting-started/install-the-ocm-cli/).)
 
 You can also use our container to run OCM without installing it:
 
@@ -36,7 +36,7 @@ You can also use our container to run OCM without installing it:
 docker run -t ghcr.io/open-component-model/cli:latest --help
 ```
 
-Check out our [guide](https://ocm.software/dev/docs/how-to/how-to-use-the-ocm-cli-container-image/) on how to use the
+Check out our [guide](https://ocm.software/docs/how-to/how-to-use-the-ocm-cli-container-image/) on how to use the
 OCM CLI container image for more details.
 
 {% if github.contributors | length > 0 %}
