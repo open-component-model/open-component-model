@@ -105,26 +105,28 @@ var _ = Describe("Resource Controller", func() {
 					test.DeleteObject(ctx, k8sClient, componentObj)
 				})
 
-				additionalStatusFields := map[string]string{}
+				var additionalStatusFields *apiextensionsv1.JSON
 				if tc != nil {
+					fields := map[string]any{}
 					if tc.Registry != "" {
-						additionalStatusFields["registry"] = "resource.access.toOCI().registry"
+						fields["registry"] = "resource.access.toOCI().registry"
 					}
 					if tc.Repository != "" {
-						additionalStatusFields["repository"] = "resource.access.toOCI().repository"
+						fields["repository"] = "resource.access.toOCI().repository"
 					}
 					if tc.Reference != "" {
-						additionalStatusFields["reference"] = "resource.access.toOCI().reference"
+						fields["reference"] = "resource.access.toOCI().reference"
 					}
 					if tc.HELMChart != "" {
-						additionalStatusFields["helmChart"] = "resource.access.helmChart"
+						fields["helmChart"] = "resource.access.helmChart"
 					}
 					if tc.GithubRepoURL != "" {
-						additionalStatusFields["gitRepoURL"] = "resource.access.repoUrl"
+						fields["gitRepoURL"] = "resource.access.repoUrl"
 					}
 					if tc.GitRepository != "" {
-						additionalStatusFields["gitRepository"] = "resource.access.repository"
+						fields["gitRepository"] = "resource.access.repository"
 					}
+					additionalStatusFields = &apiextensionsv1.JSON{Raw: mustMarshalJSON(fields)}
 				}
 
 				By("creating a resource")
@@ -162,26 +164,26 @@ var _ = Describe("Resource Controller", func() {
 				}
 
 				if tc != nil {
-					m := map[string]apiextensionsv1.JSON{}
+					m := map[string]any{}
 					if tc.Registry != "" {
-						m["registry"] = mustToJSON(tc.Registry)
+						m["registry"] = tc.Registry
 					}
 					if tc.Repository != "" {
-						m["repository"] = mustToJSON(tc.Repository)
+						m["repository"] = tc.Repository
 					}
 					if tc.Reference != "" {
-						m["reference"] = mustToJSON(tc.Reference)
+						m["reference"] = tc.Reference
 					}
 					if tc.HELMChart != "" {
-						m["helmChart"] = mustToJSON(tc.HELMChart)
+						m["helmChart"] = tc.HELMChart
 					}
 					if tc.GithubRepoURL != "" {
-						m["gitRepoURL"] = mustToJSON(tc.GithubRepoURL)
+						m["gitRepoURL"] = tc.GithubRepoURL
 					}
 					if tc.GitRepository != "" {
-						m["gitRepository"] = mustToJSON(tc.GitRepository)
+						m["gitRepository"] = tc.GitRepository
 					}
-					fields["Status.Additional"] = m
+					fields["Status.Additional"] = &apiextensionsv1.JSON{Raw: mustMarshalJSON(m)}
 				}
 
 				test.WaitForReadyObject(ctx, k8sClient, resourceObj, fields)
@@ -745,11 +747,9 @@ var _ = Describe("Resource Controller", func() {
 						},
 					},
 					Interval: metav1.Duration{Duration: 30 * time.Second},
-					AdditionalStatusFields: map[string]string{
-						"registry":   "resource.access.toOCI().registry",
-						"repository": "resource.access.toOCI().repository",
-						"reference":  "resource.access.toOCI().reference",
-					},
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+						"oci": "resource.access.toOCI()",
+					})},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -773,11 +773,124 @@ var _ = Describe("Resource Controller", func() {
 				"Status.Component.Version":   componentVersion,
 				"Status.Resource.Name":       resourceName,
 				"Status.Resource.Type":       "ociArtifact",
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"registry":   mustToJSON("ghcr.io"),
-					"repository": mustToJSON("open-component-model/ocm/ocm.software/ocmcli/ocmcli-image"),
-					"reference":  mustToJSON("0.24.0"),
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"oci": map[string]any{
+						"digest":     "",
+						"host":       "ghcr.io",
+						"reference":  "0.24.0",
+						"registry":   "ghcr.io",
+						"repository": "open-component-model/ocm/ocm.software/ocmcli/ocmcli-image",
+						"tag":        "0.24.0",
+					},
+				})},
+			})
+		})
+
+		// This test verifies that additionalStatusFields supports nested objects
+		It("reconciles with nested object additional status fields", func(ctx SpecContext) {
+			By("creating a CTF")
+			ctfName := "nested-additional-fields"
+			ctfPath := filepath.Join(tempDir, ctfName)
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersion,
+							},
+						},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{
+										Name:    resourceName,
+										Version: "1.0.0",
+									},
+								},
+								Type:     "ociArtifact",
+								Relation: descruntime.ExternalRelation,
+								Access: &runtime.Raw{
+									Type: runtime.Type{
+										Name:    "ociArtifact",
+										Version: "v1",
+									},
+									Data: mustMarshalJSON(map[string]any{
+										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
+									}),
+								},
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
 				},
+			})
+
+			By("mocking a component")
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+					Repository: repositoryName,
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
+			By("creating a resource with a nested object in additionalStatusFields")
+			resourceObj := &v1alpha1.Resource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: namespace.GetName(),
+				},
+				Spec: v1alpha1.ResourceSpec{
+					ComponentRef: corev1.LocalObjectReference{
+						Name: componentObj.GetName(),
+					},
+					Resource: v1alpha1.ResourceID{
+						ByReference: v1alpha1.ResourceReference{
+							Resource: runtime.Identity{"name": resourceName},
+						},
+					},
+					Interval: metav1.Duration{Duration: 30 * time.Second},
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+						"oci": map[string]string{
+							"registry":   "resource.access.toOCI().registry",
+							"repository": "resource.access.toOCI().repository",
+							"reference":  "resource.access.toOCI().reference",
+						},
+					})},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
+
+			By("checking that the resource has been reconciled with nested additional status")
+			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
+				"Status.Component.Component": componentName,
+				"Status.Component.Version":   componentVersion,
+				"Status.Resource.Name":       resourceName,
+				"Status.Resource.Type":       "ociArtifact",
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"oci": map[string]any{
+						"registry":   "ghcr.io",
+						"repository": "open-component-model/ocm/ocm.software/ocmcli/ocmcli-image",
+						"reference":  "0.24.0",
+					},
+				})},
 			})
 		})
 
@@ -879,9 +992,9 @@ var _ = Describe("Resource Controller", func() {
 						},
 					},
 					Interval: metav1.Duration{Duration: 30 * time.Second},
-					AdditionalStatusFields: map[string]string{
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
 						"reference": "resource.access.toOCI().reference",
-					},
+					})},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -891,9 +1004,9 @@ var _ = Describe("Resource Controller", func() {
 
 			By("checking that the resource has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"reference": mustToJSON("0.23.0"),
-				},
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": "0.23.0",
+				})},
 			})
 
 			By("updating resource spec")
@@ -910,9 +1023,9 @@ var _ = Describe("Resource Controller", func() {
 			By("checking that the updated resource has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
 				"Status.Resource.Version": resourceVersionUpdated,
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"reference": mustToJSON("0.24.0"),
-				},
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": "0.24.0",
+				})},
 			})
 		})
 
@@ -995,9 +1108,9 @@ var _ = Describe("Resource Controller", func() {
 						},
 					},
 					Interval: metav1.Duration{Duration: 30 * time.Second},
-					AdditionalStatusFields: map[string]string{
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
 						"reference": "resource.access.toOCI().reference",
-					},
+					})},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -1012,9 +1125,9 @@ var _ = Describe("Resource Controller", func() {
 				Reference:  "0.23.0",
 			}
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"reference": mustToJSON(expected.Reference),
-				},
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": expected.Reference,
+				})},
 			})
 
 			By("updating the component version with a new resource")
@@ -1077,9 +1190,9 @@ var _ = Describe("Resource Controller", func() {
 			}
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
 				"Status.Component.Version": componentVersionUpdated,
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"reference": mustToJSON(expected.Reference),
-				},
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": expected.Reference,
+				})},
 			})
 		})
 
@@ -1185,9 +1298,9 @@ var _ = Describe("Resource Controller", func() {
 						},
 					},
 					Interval: metav1.Duration{Duration: 30 * time.Second},
-					AdditionalStatusFields: map[string]string{
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
 						"reference": "resource.access.toOCI().reference",
-					},
+					})},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -1197,9 +1310,9 @@ var _ = Describe("Resource Controller", func() {
 
 			By("checking that the resource has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"reference": mustToJSON("0.23.0"),
-				},
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": "0.23.0",
+				})},
 				"Status.Component.Component": nestedComponentName,
 				"Status.Component.Version":   componentVersion,
 			})
@@ -1449,9 +1562,9 @@ var _ = Describe("Resource Controller", func() {
 						},
 					},
 					Interval: metav1.Duration{Duration: 30 * time.Second},
-					AdditionalStatusFields: map[string]string{
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
 						"reference": "resource.access.toOCI().reference",
-					},
+					})},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj1)).To(Succeed())
@@ -1461,9 +1574,9 @@ var _ = Describe("Resource Controller", func() {
 
 			By("checking that resource1 has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj1, map[string]any{
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"reference": mustToJSON(imgReferenceResource1),
-				},
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": imgReferenceResource1,
+				})},
 				"Status.Component.Component": nestedComponentName11,
 				"Status.Component.Version":   componentVersion,
 			})
@@ -1487,9 +1600,9 @@ var _ = Describe("Resource Controller", func() {
 						},
 					},
 					Interval: metav1.Duration{Duration: 30 * time.Second},
-					AdditionalStatusFields: map[string]string{
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
 						"reference": "resource.access.toOCI().reference",
-					},
+					})},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj2)).To(Succeed())
@@ -1499,9 +1612,9 @@ var _ = Describe("Resource Controller", func() {
 
 			By("checking that resource1 has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj2, map[string]any{
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"reference": mustToJSON(imgReferenceResource2),
-				},
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": imgReferenceResource2,
+				})},
 				"Status.Component.Component": nestedComponentName2,
 				"Status.Component.Version":   componentVersion,
 			})
@@ -1678,9 +1791,9 @@ var _ = Describe("Resource Controller", func() {
 						},
 					},
 					Interval: metav1.Duration{Duration: 30 * time.Second},
-					AdditionalStatusFields: map[string]string{
+					AdditionalStatusFields: &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
 						"reference": "resource.access.toOCI().reference",
-					},
+					})},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -1690,9 +1803,9 @@ var _ = Describe("Resource Controller", func() {
 
 			By("checking that the resource has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
-				"Status.Additional": map[string]apiextensionsv1.JSON{
-					"reference": mustToJSON("0.23.0"),
-				},
+				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
+					"reference": "0.23.0",
+				})},
 				"Status.Component.Component": nestedComponentName,
 				"Status.Component.Version":   componentVersion,
 			})
@@ -2162,12 +2275,6 @@ var _ = Describe("Resource Controller Error Handling", func() {
 		test.WaitForNotReadyObject(ctx, k8sClient, resource, v1alpha1.ResourceIsNotAvailable)
 	})
 })
-
-func mustToJSON(v string) apiextensionsv1.JSON {
-	raw, err := json.Marshal(v)
-	Expect(err).ToNot(HaveOccurred())
-	return apiextensionsv1.JSON{Raw: raw}
-}
 
 func mustMarshalJSON(v any) []byte {
 	raw, err := json.Marshal(v)

@@ -10,7 +10,6 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
-	"k8s.io/apiserver/pkg/cel/lazy"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
@@ -59,8 +58,8 @@ func ToOCI(component *v1alpha1.ComponentInfo) cel.EnvOption {
 
 // BindingToOCI is the implementation of the toOCI function.
 // It accepts a CEL value (string or map[string]any) representing an OCI image reference,
-// parses it into host, repository, tag, and digest components, and returns a lazy map
-// of those components as strings.
+// parses it into host, repository, tag, and digest components, and returns a standard
+// CEL map of those components as strings.
 // If the input is:
 //   - string: the entire value is treated as the reference string
 //   - map[string]any with "imageReference": treated as an OCIImage access (OCIImage/v1).
@@ -109,46 +108,30 @@ func BindingToOCI(component *v1alpha1.ComponentInfo) func(lhs ref.Val) ref.Val {
 			tag = r.Tag
 		}
 
-		// Construct a lazy map to defer value computation until accessed
-		mv := lazy.NewMapValue(types.StringType)
+		// Build reference string: either "tag@digest", tag, or digest
+		var refStr string
+		switch {
+		case r.Tag != "" && digest != "":
+			refStr = fmt.Sprintf("%s@%s", r.Tag, digest)
+		case r.Tag != "":
+			refStr = r.Tag
+		case digest != "":
+			refStr = digest
+		}
 
-		// host and registry are the same value (OCI spec)
-		mv.Append("host", func(*lazy.MapValue) ref.Val {
-			return types.String(r.Host())
-		})
-		mv.Append("registry", func(*lazy.MapValue) ref.Val {
-			return types.String(r.Host())
-		})
+		// Return a standard CEL map. We intentionally avoid k8s apiserver's lazy.MapValue
+		// because its Iterator() yields values (not keys), which breaks generic map
+		// iteration in celValueToAny.
+		result := map[string]string{
+			"host":       r.Host(),
+			"registry":   r.Host(),
+			"repository": strings.TrimLeft(r.Repository, "/"),
+			"tag":        tag,
+			"digest":     digest,
+			"reference":  refStr,
+		}
 
-		// repository: trim any leading slash
-		mv.Append("repository", func(*lazy.MapValue) ref.Val {
-			return types.String(strings.TrimLeft(r.Repository, "/"))
-		})
-
-		// reference: either "tag@digest", tag, or digest
-		mv.Append("reference", func(*lazy.MapValue) ref.Val {
-			var refStr string
-			switch {
-			case r.Tag != "" && digest != "":
-				refStr = fmt.Sprintf("%s@%s", r.Tag, digest)
-			case r.Tag != "":
-				refStr = r.Tag
-			case digest != "":
-				refStr = digest
-			}
-
-			return types.String(refStr)
-		})
-
-		// digest and tag as separate entries (empty string if missing)
-		mv.Append("digest", func(*lazy.MapValue) ref.Val {
-			return types.String(digest)
-		})
-		mv.Append("tag", func(*lazy.MapValue) ref.Val {
-			return types.String(tag)
-		})
-
-		return mv
+		return types.DefaultTypeAdapter.NativeToValue(result)
 	}
 }
 
