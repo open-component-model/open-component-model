@@ -4,12 +4,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// LocalBlobAccessType is the primary (UpperCamelCase) access type name for blobs local to a component.
-// LegacyLocalBlobAccessType is the legacy lowercase form kept for backward compatibility.
+// LocalBlobAccessType is the access type of blob local to a component.
 const (
-	LocalBlobAccessType        = "LocalBlob"
+	LocalBlobAccessType        = "localBlob"
 	LocalBlobAccessTypeVersion = "v1"
-	LegacyLocalBlobAccessType  = "localBlob"
 )
 
 // LocalBlob describes the access for a local blob.

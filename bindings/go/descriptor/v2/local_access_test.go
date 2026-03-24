@@ -36,7 +36,7 @@ func TestLocalBlob_Struct(t *testing.T) {
 
 	// Assert
 	require.NoError(t, err)
-	assert.Contains(t, string(jsonData), `"type":"LocalBlob/v1"`)
+	assert.Contains(t, string(jsonData), `"type":"localBlob/v1"`)
 	assert.Contains(t, string(jsonData), `"localReference":"sha256:abc123"`)
 	assert.Contains(t, string(jsonData), `"mediaType":"application/octet-stream"`)
 	assert.Contains(t, string(jsonData), `"globalAccess":{"type":"ociArtifact","imageReference":"test/image:1.0"}`)
@@ -61,7 +61,7 @@ func TestLocalBlob_UnmarshalJSON(t *testing.T) {
 
 	// Assert
 	require.NoError(t, err)
-	assert.Equal(t, descriptorv2.LegacyLocalBlobAccessType, blob.Type.Name)
+	assert.Equal(t, descriptorv2.LocalBlobAccessType, blob.Type.Name)
 	assert.Equal(t, descriptorv2.LocalBlobAccessTypeVersion, blob.Type.Version)
 	assert.Equal(t, "sha256:abc123", blob.LocalReference)
 	assert.Equal(t, "application/octet-stream", blob.MediaType)
@@ -83,7 +83,7 @@ func TestLocalBlob_UnmarshalJSON_Minimal(t *testing.T) {
 
 	// Assert
 	require.NoError(t, err)
-	assert.Equal(t, descriptorv2.LegacyLocalBlobAccessType, blob.Type.Name)
+	assert.Equal(t, descriptorv2.LocalBlobAccessType, blob.Type.Name)
 	assert.Equal(t, descriptorv2.LocalBlobAccessTypeVersion, blob.Type.Version)
 	assert.Equal(t, "sha256:abc123", blob.LocalReference)
 	assert.Equal(t, "application/octet-stream", blob.MediaType)
@@ -93,13 +93,6 @@ func TestLocalBlob_UnmarshalJSON_Minimal(t *testing.T) {
 
 func TestLocalBlob_Constants(t *testing.T) {
 	// Test access type constants
-	assert.Equal(t, "LocalBlob", descriptorv2.LocalBlobAccessType)
-	assert.Equal(t, "localBlob", descriptorv2.LegacyLocalBlobAccessType)
+	assert.Equal(t, "localBlob", descriptorv2.LocalBlobAccessType)
 	assert.Equal(t, "v1", descriptorv2.LocalBlobAccessTypeVersion)
-}
-
-func TestScheme_ResolvesUpperCamelCase_LocalBlob(t *testing.T) {
-	obj, err := descriptorv2.Scheme.NewObject(runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion))
-	require.NoError(t, err, "Scheme must resolve UpperCamelCase type LocalBlob/v1")
-	require.IsType(t, &descriptorv2.LocalBlob{}, obj, "expected *descriptorv2.LocalBlob from Scheme")
 }
