@@ -7,6 +7,7 @@ import (
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
+	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -59,7 +60,11 @@ func (h *HelmAccess) GetResourceCredentialConsumerIdentity(ctx context.Context, 
 		return nil, fmt.Errorf("error parsing helm repository URL to identity: %w", err)
 	}
 
-	identity.SetType(runtime.NewUnversionedType(LegacyHelmChartConsumerType))
+	if scheme, ok := identity[runtime.IdentityAttributeScheme]; ok && scheme == "oci" {
+		identity.SetType(ocicredentialsspecv1.Type)
+	} else {
+		identity.SetType(runtime.NewUnversionedType(LegacyHelmChartConsumerType))
+	}
 
 	return identity, nil
 }
