@@ -98,7 +98,6 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 		WatchesRawSource(eventSource).
 		// Watch for component-events that are referenced by resources
 		Watches(
-			// Watch for changes to components that are referenced by a resource.
 			&v1alpha1.Component{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 				component, ok := obj.(*v1alpha1.Component)
@@ -124,7 +123,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 				}
 
 				return requests
-			})).
+			}), builder.WithPredicates(ComponentInfoChangedPredicate{})).
 		Watches(
 			// Ensure to reconcile the resource when a deployer changes that references this resource. We want to
 			// reconcile because the resource-finalizer makes sure that the resource is only deleted when
