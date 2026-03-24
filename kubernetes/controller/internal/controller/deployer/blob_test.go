@@ -112,31 +112,23 @@ func TestLimitedReadCloser_MultipleReadsAtLimit(t *testing.T) {
 	}
 }
 
-func reconcilerWithLimit(mib int64) *Reconciler {
-	return &Reconciler{MaxResourceSizeMiB: mib}
-}
-
-func TestApplyResourceSizeLimit_Disabled(t *testing.T) {
-	r := reconcilerWithLimit(0)
-	original := nopCloser{bytes.NewReader([]byte("data"))}
+func TestGetLimitedReader_Disabled(t *testing.T) {
 	b := &mockBlob{data: []byte("data")}
 
-	got, err := r.applyResourceSizeLimit(b, original)
+	got, err := getLimitedReader(b, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != original {
-		t.Fatal("expected original reader to be returned unchanged when limit is 0")
+	if _, ok := got.(*limitedReadCloser); ok {
+		t.Fatal("expected unwrapped reader when limit is 0")
 	}
 }
 
-func TestApplyResourceSizeLimit_SizeAware_UnderLimit(t *testing.T) {
-	r := reconcilerWithLimit(1) // 1 MiB limit
+func TestGetLimitedReader_SizeAware_UnderLimit(t *testing.T) {
 	data := []byte("small")
 	b := &mockSizeAwareBlob{mockBlob: mockBlob{data: data}, size: int64(len(data))}
-	rc := nopCloser{bytes.NewReader(data)}
 
-	limited, err := r.applyResourceSizeLimit(b, rc)
+	limited, err := getLimitedReader(b, 1) // 1 MiB limit
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -145,13 +137,11 @@ func TestApplyResourceSizeLimit_SizeAware_UnderLimit(t *testing.T) {
 	}
 }
 
-func TestApplyResourceSizeLimit_SizeAware_OverLimit(t *testing.T) {
-	r := reconcilerWithLimit(1)                    // 1 MiB limit
+func TestGetLimitedReader_SizeAware_OverLimit(t *testing.T) {
 	data := bytes.Repeat([]byte("x"), 2*1024*1024) // 2 MiB
 	b := &mockSizeAwareBlob{mockBlob: mockBlob{data: data}, size: int64(len(data))}
-	rc := nopCloser{bytes.NewReader(data)}
 
-	got, err := r.applyResourceSizeLimit(b, rc)
+	got, err := getLimitedReader(b, 1) // 1 MiB limit
 	if got != nil {
 		t.Fatal("expected nil reader when pre-check rejects")
 	}
@@ -163,13 +153,11 @@ func TestApplyResourceSizeLimit_SizeAware_OverLimit(t *testing.T) {
 	}
 }
 
-func TestApplyResourceSizeLimit_SizeAware_SizeUnknown(t *testing.T) {
-	r := reconcilerWithLimit(1)
+func TestGetLimitedReader_SizeAware_SizeUnknown(t *testing.T) {
 	data := []byte("small")
 	b := &mockSizeAwareBlob{mockBlob: mockBlob{data: data}, size: blob.SizeUnknown}
-	rc := nopCloser{bytes.NewReader(data)}
 
-	limited, err := r.applyResourceSizeLimit(b, rc)
+	limited, err := getLimitedReader(b, 1)
 	if err != nil {
 		t.Fatalf("unexpected error for SizeUnknown blob: %v", err)
 	}
@@ -178,13 +166,11 @@ func TestApplyResourceSizeLimit_SizeAware_SizeUnknown(t *testing.T) {
 	}
 }
 
-func TestApplyResourceSizeLimit_NonSizeAware(t *testing.T) {
-	r := reconcilerWithLimit(1)
+func TestGetLimitedReader_NonSizeAware(t *testing.T) {
 	data := []byte("small")
 	b := &mockBlob{data: data}
-	rc := nopCloser{bytes.NewReader(data)}
 
-	limited, err := r.applyResourceSizeLimit(b, rc)
+	limited, err := getLimitedReader(b, 1)
 	if err != nil {
 		t.Fatalf("unexpected error for non-SizeAware blob: %v", err)
 	}
@@ -193,19 +179,17 @@ func TestApplyResourceSizeLimit_NonSizeAware(t *testing.T) {
 	}
 }
 
-// TestApplyResourceSizeLimit_NegativeLimit documents the behavior when MaxResourceSizeMiB is
+// TestGetLimitedReader_NegativeLimit documents the behavior when maxResourceSizeMiB is
 // negative. Negative values are rejected at process startup (cmd/main.go), so this path is not
 // reachable in production. The behavior is determined by io.LimitedReader: a negative N causes it
 // to return 0, io.EOF on the very first Read, so no data passes through.
-func TestApplyResourceSizeLimit_NegativeLimit(t *testing.T) {
-	r := reconcilerWithLimit(-1)
+func TestGetLimitedReader_NegativeLimit(t *testing.T) {
 	data := []byte("hello")
 	b := &mockBlob{data: data}
-	rc := nopCloser{bytes.NewReader(data)}
 
-	limited, err := r.applyResourceSizeLimit(b, rc)
+	limited, err := getLimitedReader(b, -1)
 	if err != nil {
-		t.Fatalf("unexpected error: applyResourceSizeLimit should not return an error for negative limit, got: %v", err)
+		t.Fatalf("unexpected error: getLimitedReader should not return an error for negative limit, got: %v", err)
 	}
 	if _, ok := limited.(*limitedReadCloser); !ok {
 		t.Fatalf("expected a *limitedReadCloser, got %T", limited)

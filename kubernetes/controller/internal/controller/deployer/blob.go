@@ -38,25 +38,30 @@ func (l *limitedReadCloser) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// applyResourceSizeLimit enforces MaxResourceSizeMiB on a downloaded resource blob.
-// If the limit is 0 it is a no-op and readerBlob is returned unchanged.
+// getLimitedReader opens a reader from resourceBlob and enforces maxResourceSizeMiB.
+// If the limit is 0 it is a no-op and the reader is returned unwrapped.
 // The opportunistic pre-check uses blob.SizeAware to reject without reading any data.
 // A limitedReadCloser safety-net is always wrapped around the reader when a limit is set.
-func (r *Reconciler) applyResourceSizeLimit(resourceBlob blob.ReadOnlyBlob, readerBlob io.ReadCloser) (io.ReadCloser, error) {
-	if r.MaxResourceSizeMiB == 0 {
-		return readerBlob, nil
+func getLimitedReader(resourceBlob blob.ReadOnlyBlob, maxResourceSizeMiB int64) (io.ReadCloser, error) {
+	reader, err := resourceBlob.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("getting reader for resource blob: %w", err)
 	}
 
-	maxBytes := r.MaxResourceSizeMiB * 1024 * 1024
+	if maxResourceSizeMiB == 0 {
+		return reader, nil
+	}
+
+	maxBytes := maxResourceSizeMiB * 1024 * 1024
 
 	// Opportunistic pre-check: if the blob declares its size and it already exceeds
 	// the limit, reject without reading a single byte.
 	if sizeAware, ok := resourceBlob.(blob.SizeAware); ok {
 		if size := sizeAware.Size(); size != blob.SizeUnknown && size > maxBytes {
-			return nil, fmt.Errorf("resource size %d bytes exceeds maximum allowed size of %d MiB", size, r.MaxResourceSizeMiB)
+			return nil, fmt.Errorf("resource size %d bytes exceeds maximum allowed size of %d MiB", size, maxResourceSizeMiB)
 		}
 	}
 
 	// Safety net: wrap the reader so that reading beyond the limit returns an error.
-	return &limitedReadCloser{Closer: readerBlob, limited: &io.LimitedReader{R: readerBlob, N: maxBytes}}, nil
+	return &limitedReadCloser{Closer: reader, limited: &io.LimitedReader{R: reader, N: maxBytes}}, nil
 }

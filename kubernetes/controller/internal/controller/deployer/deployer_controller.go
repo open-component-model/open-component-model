@@ -518,24 +518,14 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to download resource: %w", err)
 	}
 
-	readerBlob, err := resourceBlob.ReadCloser()
+	limitedReader, err := getLimitedReader(resourceBlob, r.MaxResourceSizeMiB)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
-
-		return nil, fmt.Errorf("failed to get reader from blob: %w", err)
+		return nil, fmt.Errorf("failed to get limited reader: %w", err)
 	}
 	defer func() {
-		err = errors.Join(err, readerBlob.Close())
+		err = errors.Join(err, limitedReader.Close())
 	}()
-
-	// limitedReader delegates Close to readerBlob via the embedded io.Closer in limitedReadCloser,
-	// so the defer above is sufficient to close the underlying stream in all cases.
-	limitedReader, err := r.applyResourceSizeLimit(resourceBlob, readerBlob)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
-
-		return nil, err
-	}
 
 	// Decode YAML manifests
 	if objs, err = decodeObjectsFromManifest(limitedReader); err != nil {
