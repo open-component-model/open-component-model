@@ -68,7 +68,7 @@ func setupCTFWithResource(
 		Relation: descruntime.LocalRelation,
 		Access: &v2.LocalBlob{
 			Type: runtime.Type{
-				Name:    v2.LocalBlobAccessType,
+				Name:    v2.LocalBlobType,
 				Version: v2.LocalBlobAccessTypeVersion,
 			},
 			MediaType: "text/plain",

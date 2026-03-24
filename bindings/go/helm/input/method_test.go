@@ -336,3 +336,9 @@ func TestInputMethodProcessResourceBothPathAndRepo(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only one of path or helmRepository can be specified")
 }
+
+func TestScheme_ResolvesUpperCamelCase_Helm(t *testing.T) {
+	obj, err := input.Scheme.NewObject(runtime.NewVersionedType(v1.Type, v1.Version))
+	require.NoError(t, err, "Scheme must resolve UpperCamelCase type Helm/v1")
+	require.IsType(t, &v1.Helm{}, obj, "expected *v1.Helm from Scheme")
+}

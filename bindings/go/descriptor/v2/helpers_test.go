@@ -16,7 +16,7 @@ func TestIsLocalBlob_Nil(t *testing.T) {
 func TestIsLocalBlob_LocalBlobStruct(t *testing.T) {
 	blob := &descriptorv2.LocalBlob{
 		Type: runtime.Type{
-			Name:    descriptorv2.LocalBlobAccessType,
+			Name:    descriptorv2.LocalBlobType,
 			Version: descriptorv2.LocalBlobAccessTypeVersion,
 		},
 		LocalReference: "sha256:abc123",
@@ -29,7 +29,7 @@ func TestIsLocalBlob_LocalBlobStruct(t *testing.T) {
 func TestIsLocalBlob_Raw(t *testing.T) {
 	raw := &runtime.Raw{
 		Type: runtime.Type{
-			Name:    descriptorv2.LocalBlobAccessType,
+			Name:    descriptorv2.LegacyLocalBlobAccessType,
 			Version: descriptorv2.LocalBlobAccessTypeVersion,
 		},
 		Data: []byte(`{"type":"localBlob/v1","localReference":"sha256:abc123","mediaType":"application/octet-stream","globalAccess":{"type":"ociArtifact","imageReference":"test/image:1.0"},"referenceName":"test/repo:1.0"}`),
