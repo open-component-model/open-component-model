@@ -7,16 +7,16 @@
 // added to the controller manager separately so it starts and stops with the manager lifecycle.
 //
 //	wp := workerpool.New(...)
-//	resolver := resolution.NewResolver(client, logger, wp, pluginManager)
+//	resolver := resolution.NewResolver(logger, wp, pluginManager)
 //	mgr.Add(wp)
 //
 // To fetch a component version, create a [CacheBackedRepository] via [Resolver.NewCacheBackedRepository]
 // with [RepositoryOptions], then call GetComponentVersion on it:
 //
+//	cfg, err := configuration.LoadConfigurations(ctx, client, namespace, ocmConfigs)
 //	repo, err := resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
 //	    RepositorySpec:    repoSpec,
-//	    OCMConfigurations: configs,
-//	    Namespace:         obj.GetNamespace(),
+//	    Configuration:    cfg,
 //	    SigningRegistry:   signingRegistry,     // required if Verifications is set
 //	    Verifications:     verifications,        // optional: signature verification
 //	    Digest:            digest,               // optional: integrity check for referenced components

@@ -326,10 +326,35 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: %w", err)
 	}
 
-	key := resource.Status.Resource.Digest.Value
+	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ConfigureContextFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
+	}
+	deployer.Status.EffectiveOCMConfig = configs
+
+	cfg, err := configuration.LoadConfigurations(ctx, r.Client, deployer.GetNamespace(), configs)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
+	}
+
+	var key string
+	if resource.Status.Resource.Digest != nil {
+		key = resource.Status.Resource.Digest.Value
+	} else {
+		var configHash string
+		if cfg != nil {
+			configHash = fmt.Sprintf("%x", cfg.Hash)
+		}
+		resourceIdentity := makeResourceIdentity(resource.Status.Resource)
+		key = configHash + "/" + resource.Status.Component.Component + ":" + resource.Status.Component.Version + "/" + resourceIdentity.String()
+	}
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
-		return r.DownloadResourceWithOCM(ctx, deployer, resource)
+		return r.DownloadResourceWithOCM(ctx, deployer, resource, cfg)
 	})
 	if errors.Is(err, resolution.ErrResolutionInProgress) {
 		return ctrl.Result{}, nil
@@ -420,15 +445,8 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	ctx context.Context,
 	deployer *deliveryv1alpha1.Deployer,
 	resource *deliveryv1alpha1.Resource,
+	cfg *configuration.Configuration,
 ) (objs []*unstructured.Unstructured, err error) {
-	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
-	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.ConfigureContextFailedReason, err.Error())
-
-		return nil, fmt.Errorf("failed to get effective config: %w", err)
-	}
-	deployer.Status.EffectiveOCMConfig = configs
-
 	repoSpec := &ocmruntime.Raw{}
 	if err := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()).Decode(
 		bytes.NewReader(resource.Status.Component.RepositorySpec.Raw), repoSpec); err != nil {
@@ -438,10 +456,9 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	}
 
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:    repoSpec,
-		OCMConfigurations: configs,
-		Namespace:         deployer.GetNamespace(),
-		SigningRegistry:   r.PluginManager.SigningRegistry,
+		RepositorySpec:  repoSpec,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: k8stypes.NamespacedName{
@@ -457,7 +474,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, configs)
+	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, cfg)
 	switch {
 	case errors.Is(err, workerpool.ErrResolutionInProgress):
 		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
@@ -495,13 +512,6 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
 		return nil, err
-	}
-
-	cfg, err := configuration.LoadConfigurations(ctx, r.Client, deployer.GetNamespace(), configs)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
-
-		return nil, fmt.Errorf("failed to load configurations: %w", err)
 	}
 
 	blob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
@@ -841,7 +851,7 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 	ctx context.Context,
 	deployer *deliveryv1alpha1.Deployer,
 	resource *deliveryv1alpha1.Resource,
-	configs []deliveryv1alpha1.OCMConfiguration,
+	cfg *configuration.Configuration,
 ) (*descriptor.Descriptor, error) {
 	// We get the (ready) component CR to (1) get any verifications needed to resolve the component version and (2) to
 	// compare the component version used in the component and resource controller.
@@ -876,20 +886,18 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 	}
 
 	verifiedOpts := resolution.RepositoryOptions{
-		RepositorySpec:    repoSpecComponent,
-		OCMConfigurations: configs,
-		Namespace:         component.GetNamespace(),
-		SigningRegistry:   r.PluginManager.SigningRegistry,
-		Verifications:     verifications,
-		RequesterFunc:     requesterFunc,
+		RepositorySpec:  repoSpecComponent,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
+		Verifications:   verifications,
+		RequesterFunc:   requesterFunc,
 	}
 
 	refPathOpts := resolution.RepositoryOptions{
-		RepositorySpec:    repoSpecComponent,
-		OCMConfigurations: configs,
-		Namespace:         deployer.GetNamespace(),
-		SigningRegistry:   r.PluginManager.SigningRegistry,
-		RequesterFunc:     requesterFunc,
+		RepositorySpec:  repoSpecComponent,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
+		RequesterFunc:   requesterFunc,
 	}
 
 	repoComponent, err := r.Resolver.NewCacheBackedRepository(ctx, &verifiedOpts)

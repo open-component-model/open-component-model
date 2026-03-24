@@ -235,7 +235,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	resolver := resolution.NewResolver(mgr.GetClient(), &setupLog, workerPool, pm)
+	resolver := resolution.NewResolver(&setupLog, workerPool, pm)
 	if err = (&repository.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
 			Client:        mgr.GetClient(),
