@@ -12,16 +12,16 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func asUnstructured(typed runtime.Typed) *runtime.Unstructured {
+func asUnstructured(typed runtime.Typed) (*runtime.Unstructured, error) {
 	var raw runtime.Raw
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(typed, &raw); err != nil {
-		panic(fmt.Sprintf("cannot convert to raw: %v", err))
+		return nil, fmt.Errorf("cannot convert to raw: %w", err)
 	}
 	var unstructured runtime.Unstructured
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(&raw, &unstructured); err != nil {
-		panic(fmt.Sprintf("cannot convert to unstructured: %v", err))
+		return nil, fmt.Errorf("cannot convert to unstructured: %w", err)
 	}
-	return &unstructured
+	return &unstructured, nil
 }
 
 // convertToConcreteRepo converts a runtime.Typed (which may be *runtime.Raw) to a concrete repository type.
@@ -97,7 +97,7 @@ func getReferenceName(imageReference string) (string, error) {
 		return "", fmt.Errorf("invalid OCI image reference %q: %w", imageReference, err)
 	}
 	if imageRef.Repository == "" {
-		return "", fmt.Errorf("invalid image reference %q: repository is required", imageRef)
+		return "", fmt.Errorf("invalid image reference %q: repository is required", imageReference)
 	}
 	referenceName := imageRef.Repository
 	if imageRef.Tag != "" {

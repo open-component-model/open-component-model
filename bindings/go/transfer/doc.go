@@ -19,8 +19,16 @@
 //	    transfer.WithCopyMode(transfer.CopyModeAllResources),
 //	    transfer.WithUploadType(transfer.UploadAsOciArtifact),
 //	)
+//	if err != nil {
+//	    return err
+//	}
 //
 //	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credentialProvider)
 //	graph, err := b.BuildAndCheck(tgd)
-//	err = graph.Process(ctx)
+//	if err != nil {
+//	    return err
+//	}
+//	if err := graph.Process(ctx); err != nil {
+//	    return err
+//	}
 package transfer

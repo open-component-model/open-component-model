@@ -95,7 +95,8 @@ func TestAsUnstructured(t *testing.T) {
 		Type:    runtime.Type{Name: oci.Type, Version: "v1"},
 		BaseUrl: "ghcr.io",
 	}
-	u := asUnstructured(repo)
+	u, err := asUnstructured(repo)
+	require.NoError(t, err)
 	require.NotNil(t, u)
 	require.NotNil(t, u.Data)
 	assert.Equal(t, "ghcr.io", u.Data["baseUrl"])

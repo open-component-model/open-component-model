@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-logr/logr/funcr"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/go-logr/logr/funcr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"

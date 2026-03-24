@@ -35,7 +35,7 @@ Override variables on the command line (e.g., `VERSION=2.0.0 task run`):
 | `REGISTRY_NAME`    | `registry`                                                     | Local registry container name                                    |
 | `REGISTRY_PORT`    | `5001`                                                         | Local registry host port                                         |
 | `PLATFORMS`        | `linux/amd64`                                                  | Docker buildx target platform                                    |
-| `KRO_VERSION`      | `0.8.5`                                                        | kro Helm chart version                                           |
+| `KRO_VERSION`      | `0.9.0`                                                        | kro Helm chart version                                           |
 | `CLI_IMAGE`        | `ghcr.io/open-component-model/cli:main`                        | OCM CLI container image                                          |
 | `TOOLKIT_IMAGE`    | `ghcr.io/open-component-model/kubernetes/controller/chart:...` | OCM toolkit Helm chart OCI reference                             |
 

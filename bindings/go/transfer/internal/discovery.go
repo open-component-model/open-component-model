@@ -104,9 +104,6 @@ func identityToTransformationID(id runtime.Identity) string {
 			return slices.Contains(toWordRunes, r)
 		})...)
 	}
-	if len(words) == 0 {
-		return ""
-	}
 	result := strings.ToLower(words[0])
 	for i := 1; i < len(words); i++ {
 		w := strings.ToLower(words[i])

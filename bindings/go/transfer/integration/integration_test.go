@@ -33,8 +33,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
+
 	"ocm.software/open-component-model/bindings/go/transfer"
-	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 )
 
 const (
@@ -238,9 +238,7 @@ func Test_Integration_TransferLocalBlob_CTFToOCI(t *testing.T) {
 	resourceRepo := resource.NewResourceRepository(nil)
 
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
-	graph, err := b.
-		WithEvents(make(chan graphRuntime.ProgressEvent, 16)).
-		BuildAndCheck(tgd)
+	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err, "graph should build and validate")
 
 	r.NoError(graph.Process(ctx), "graph execution should succeed")

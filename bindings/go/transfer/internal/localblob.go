@@ -34,6 +34,11 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 		return fmt.Errorf("choosing get local resource type for source repository: %w", err)
 	}
 
+	sourceRepoUnstructured, err := asUnstructured(sourceRepo)
+	if err != nil {
+		return fmt.Errorf("cannot convert source repository spec to unstructured: %w", err)
+	}
+
 	// Create GetLocalResource transformation
 	getResourceTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
@@ -41,13 +46,18 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 			ID:   getResourceID,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
-			"repository":       asUnstructured(sourceRepo).Data,
+			"repository":       sourceRepoUnstructured.Data,
 			"component":        component,
 			"version":          version,
 			"resourceIdentity": resourceIdentityMap,
 		}},
 	}
 	tgd.Transformations = append(tgd.Transformations, getResourceTransform)
+
+	toRepo, err := asUnstructured(toSpec)
+	if err != nil {
+		return fmt.Errorf("cannot convert target spec to unstructured: %w", err)
+	}
 
 	var addResourceTransform transformv1alpha1.GenericTransformation
 	if !uploadAsOCIArtifact {
@@ -63,7 +73,7 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 				ID:   addResourceID,
 			},
 			Spec: &runtime.Unstructured{Data: map[string]any{
-				"repository": asUnstructured(toSpec).Data,
+				"repository": toRepo.Data,
 				"component":  component,
 				"version":    version,
 				"resource":   fmt.Sprintf("${%s.output.resource}", getResourceID),

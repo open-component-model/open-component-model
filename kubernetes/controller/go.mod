@@ -4,13 +4,13 @@ go 1.26.1
 
 // Replace digest lib to master to gather access to BLAKE3.
 // xref: https://github.com/opencontainers/go-digest/pull/66
-replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20250813155314-89707e38ad1a
+replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20260318163012-137fd2bb009d
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/fluxcd/pkg/apis/event v0.24.0
 	github.com/fluxcd/pkg/apis/meta v1.25.0
-	github.com/fluxcd/pkg/runtime v0.101.0
+	github.com/fluxcd/pkg/runtime v0.102.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/cel-go v0.27.0
 	github.com/onsi/ginkgo/v2 v2.28.1
@@ -20,8 +20,7 @@ require (
 	golang.org/x/sync v0.19.0
 	k8s.io/api v0.35.1
 	k8s.io/apiextensions-apiserver v0.35.1
-	k8s.io/apimachinery v0.35.2
-	k8s.io/apiserver v0.35.1
+	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.1
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2
 	sigs.k8s.io/controller-runtime v0.23.1
@@ -36,16 +35,16 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.12
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260319164733-6860b4757648
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260319164733-6860b4757648
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260323180340-2f0ad39f3010
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260323180340-2f0ad39f3010
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260316142407-9901759da494
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260323180340-2f0ad39f3010
 	ocm.software/open-component-model/bindings/go/oci v0.0.36
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260319164733-6860b4757648
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260323180340-2f0ad39f3010
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260319164733-6860b4757648
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260323180340-2f0ad39f3010
 	sigs.k8s.io/release-utils v0.12.3
 )
 
@@ -54,8 +53,7 @@ require (
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/blang/semver/v4 v4.0.0 // indirect
-	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

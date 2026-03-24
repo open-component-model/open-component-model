@@ -80,13 +80,18 @@ func ociUploadAsLocalResource(toSpec runtime.Typed, component, version, addResou
 		return transformv1alpha1.GenericTransformation{}, fmt.Errorf("choosing add local resource type for target repository: %w", err)
 	}
 
+	toRepo, err := asUnstructured(toSpec)
+	if err != nil {
+		return transformv1alpha1.GenericTransformation{}, fmt.Errorf("cannot convert target spec to unstructured: %w", err)
+	}
+
 	addResourceTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
 			Type: addLocalResourceType,
 			ID:   addResourceID,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
-			"repository": asUnstructured(toSpec).Data,
+			"repository": toRepo.Data,
 			"component":  component,
 			"version":    version,
 			"resource": map[string]any{
