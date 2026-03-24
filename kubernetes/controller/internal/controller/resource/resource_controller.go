@@ -11,7 +11,6 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
-	"github.com/google/cel-go/cel"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -29,7 +28,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	ocmcel "ocm.software/open-component-model/kubernetes/controller/internal/cel"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
@@ -100,7 +98,6 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 		WatchesRawSource(eventSource).
 		// Watch for component-events that are referenced by resources
 		Watches(
-			// Watch for changes to components that are referenced by a resource.
 			&v1alpha1.Component{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 				component, ok := obj.(*v1alpha1.Component)
@@ -126,7 +123,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 				}
 
 				return requests
-			})).
+			}), builder.WithPredicates(ComponentInfoChangedPredicate{})).
 		Watches(
 			// Ensure to reconcile the resource when a deployer changes that references this resource. We want to
 			// reconcile because the resource-finalizer makes sure that the resource is only deleted when
@@ -465,7 +462,7 @@ func setResourceStatus(
 	}
 	resource.Status.Resource = info
 
-	if err := computeAdditionalStatusFields(ctx, res, resource, component); err != nil {
+	if err := ComputeAdditionalStatusFields(ctx, res, resource, component); err != nil {
 		return fmt.Errorf("evaluating additional status fields: %w", err)
 	}
 
@@ -515,72 +512,4 @@ func convertLabels(in []descriptor.Label) ([]v1alpha1.Label, error) {
 	}
 
 	return out, nil
-}
-
-// computeAdditionalStatusFields compiles and evaluates CEL expressions for additional fields.
-func computeAdditionalStatusFields(
-	ctx context.Context,
-	res *descriptor.Resource,
-	resource *v1alpha1.Resource,
-	component *v1alpha1.ComponentInfo,
-) error {
-	env, err := ocmcel.ComponentInfoEnv(component)
-	if err != nil {
-		return fmt.Errorf("getting base CEL env: %w", err)
-	}
-	env, err = env.Extend(
-		cel.Variable("resource", cel.DynType),
-	)
-	if err != nil {
-		return fmt.Errorf("extending CEL env: %w", err)
-	}
-
-	resV2, err := descriptor.ConvertToV2Resource(runtime.NewScheme(runtime.WithAllowUnknown()), res)
-	if err != nil {
-		return fmt.Errorf("converting resource to v2: %w", err)
-	}
-
-	resourceMap, err := toGenericMapViaJSON(resV2)
-	if err != nil {
-		return fmt.Errorf("preparing CEL variables: %w", err)
-	}
-
-	statusFields := resource.Spec.AdditionalStatusFields
-	resource.Status.Additional = make(map[string]apiextensionsv1.JSON, len(statusFields))
-
-	for name, expr := range statusFields {
-		ast, issues := env.Compile(expr)
-		if issues.Err() != nil {
-			return fmt.Errorf("compiling CEL %q: %w", name, issues.Err())
-		}
-		prog, err := env.Program(ast)
-		if err != nil {
-			return fmt.Errorf("building CEL program %q: %w", name, err)
-		}
-		val, _, err := prog.ContextEval(ctx, map[string]any{"resource": resourceMap})
-		if err != nil {
-			return fmt.Errorf("evaluating CEL %q: %w", name, err)
-		}
-		raw, err := json.Marshal(val)
-		if err != nil {
-			return fmt.Errorf("marshaling CEL result %q: %w", name, err)
-		}
-		resource.Status.Additional[name] = apiextensionsv1.JSON{Raw: raw}
-	}
-
-	return nil
-}
-
-// toGenericMapViaJSON marshals and unmarshals a struct into a generic map representation through JSON tags.
-func toGenericMapViaJSON(v any) (map[string]any, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, err
-	}
-
-	return m, nil
 }
