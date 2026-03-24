@@ -14,16 +14,16 @@ func init() {
 func MustAddToScheme(scheme *runtime.Scheme) {
 	ociImageLayer := &v2.OCIImageLayer{}
 	scheme.MustRegisterWithAlias(ociImageLayer,
-		runtime.NewVersionedType("OCIImageLayer", v2.Version),
-		runtime.NewUnversionedType("OCIImageLayer"),
+		runtime.NewVersionedType(v2.OCIImageLayerType, v2.Version),
+		runtime.NewUnversionedType(v2.OCIImageLayerType),
 		runtime.NewVersionedType(v2.LegacyOCIBlobAccessType, v2.LegacyOCIBlobAccessTypeVersion),
 		runtime.NewUnversionedType(v2.LegacyOCIBlobAccessType),
 	)
 
 	ociArtifact := &v2.OCIImage{}
 	scheme.MustRegisterWithAlias(ociArtifact,
-		runtime.NewVersionedType("OCIImage", v2.Version),
-		runtime.NewUnversionedType("OCIImage"),
+		runtime.NewVersionedType(v2.OCIImageType, v2.Version),
+		runtime.NewUnversionedType(v2.OCIImageType),
 		runtime.NewVersionedType(v2.LegacyType, v2.LegacyTypeVersion),
 		runtime.NewUnversionedType(v2.LegacyType),
 		runtime.NewVersionedType(v2.LegacyType2, v2.LegacyType2Version),

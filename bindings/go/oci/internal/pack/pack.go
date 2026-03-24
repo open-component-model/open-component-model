@@ -235,7 +235,7 @@ func updateArtifactAccess(artifact descriptor.Artifact, access *v2.LocalBlob, de
 
 	typ := access.Type
 	if typ.IsEmpty() {
-		typ = runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion)
+		typ = runtime.NewVersionedType(v2.LocalBlobType, v2.LocalBlobAccessTypeVersion)
 	}
 	localBlob := &descriptor.LocalBlob{
 		Type:           typ,
