@@ -19,7 +19,7 @@ vars:
   REGISTRY_NAME: "registry"
   REGISTRY_PORT: "5001"
   REGISTRY_INTERNAL_PORT: "5000"
-  KRO_VERSION: "0.8.5"
+  KRO_VERSION: "0.9.0"
   PLATFORMS: linux/amd64
   ocm: >-
     docker run --rm
