@@ -228,6 +228,12 @@ jobs:
             ${{ matrix.module }}
             golangci.yml
             .env
+      - name: Checkout replace targets
+        run: |
+          replace_dirs=$(awk '/^replace \(/{found=1; next} /^\)/{found=0} found && /=>/ {gsub(/.*=> */, ""); gsub(/ .*/, ""); print}' "${{ matrix.module }}/go.mod" | grep '^\.' | while read -r rel; do realpath --relative-to=. "${{ matrix.module }}/$rel"; done)
+          if [ -n "$replace_dirs" ]; then
+            git sparse-checkout add $replace_dirs
+          fi
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
@@ -306,6 +312,12 @@ jobs:
           sparse-checkout: |
             ${{ matrix.module }}
             reuse.Taskfile.yml
+      - name: Checkout replace targets
+        run: |
+          replace_dirs=$(awk '/^replace \(/{found=1; next} /^\)/{found=0} found && /=>/ {gsub(/.*=> */, ""); gsub(/ .*/, ""); print}' "${{ matrix.module }}/go.mod" | grep '^\.' | while read -r rel; do realpath --relative-to=. "${{ matrix.module }}/$rel"; done)
+          if [ -n "$replace_dirs" ]; then
+            git sparse-checkout add $replace_dirs
+          fi
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
@@ -337,6 +349,12 @@ jobs:
           sparse-checkout: |
             .github/workflows/ci.yml
             ${{ matrix.project }}
+      - name: Checkout replace targets
+        run: |
+          replace_dirs=$(awk '/^replace \(/{found=1; next} /^\)/{found=0} found && /=>/ {gsub(/.*=> */, ""); gsub(/ .*/, ""); print}' "${{ matrix.project }}/go.mod" | grep '^\.' | while read -r rel; do realpath --relative-to=. "${{ matrix.project }}/$rel"; done)
+          if [ -n "$replace_dirs" ]; then
+            git sparse-checkout add $replace_dirs
+          fi
       - name: Initialize CodeQL
         uses: github/codeql-action/init@ebcb5b36ded6beda4ceefea6a8bc4cc885255bb3 # v3
         with:
