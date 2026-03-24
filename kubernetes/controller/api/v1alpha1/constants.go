@@ -6,8 +6,6 @@ const (
 	OCMCredentialConfigKey = ".ocmcredentialconfig" //nolint:gosec // G101 -- it isn't a credential
 	// OCMConfigKey defines the secret or configmap key to look for in case a user provides an ocm config.
 	OCMConfigKey = ".ocmconfig"
-	// OCMLabelDowngradable defines the secret.
-	OCMLabelDowngradable = "ocm.software/ocm-k8s-toolkit/downgradable"
 )
 
 // Log levels.
