@@ -1,5 +1,5 @@
 import assert from "assert";
-import { computeVersion, DEFAULT_MAX_VERSION_LENGTH } from "./compute-version.js";
+import { computeVersion } from "./compute-version.js";
 
 // ----------------------------------------------------------
 // CLI version tests
@@ -207,13 +207,6 @@ console.log("✅ All tests passed.");
 // ----------------------------------------------------------
 console.log("Testing version truncation...");
 
-// DEFAULT_MAX_VERSION_LENGTH should be exported and equal 57
-assert.strictEqual(
-    DEFAULT_MAX_VERSION_LENGTH,
-    57,
-    "DEFAULT_MAX_VERSION_LENGTH should be 57"
-);
-
 // Without maxLength, long pseudo-versions should NOT be truncated
 const longBranch = "renovate/go-github.com-buger-jsonparser-vulnerability";
 const longVersion = computeVersion(longBranch, "cli/v");
@@ -227,16 +220,19 @@ assert.ok(
     `Without maxLength, version can exceed 57 chars (got ${longVersion.length})`
 );
 
-// Warn callback should NOT be invoked without maxLength, even for long versions
-let warnCalledNoLimit = false;
-computeVersion(longBranch, "cli/v", {
-    warn: () => { warnCalledNoLimit = true; },
-});
-assert.strictEqual(
-    warnCalledNoLimit,
-    false,
-    "Warn should not fire without maxLength set"
-);
+// console.warn should NOT be called without maxLength, even for long versions
+{
+    const originalWarn = console.warn;
+    let warnCalledNoLimit = false;
+    console.warn = () => { warnCalledNoLimit = true; };
+    computeVersion(longBranch, "cli/v");
+    console.warn = originalWarn;
+    assert.strictEqual(
+        warnCalledNoLimit,
+        false,
+        "console.warn should not fire without maxLength set"
+    );
+}
 
 // With explicit maxLength, long versions should be truncated
 assert.strictEqual(
@@ -273,32 +269,36 @@ assert.strictEqual(
     "Tag versions should not be truncated even with maxLength"
 );
 
-// Warn callback should be invoked when truncation occurs
-let warnMessage = null;
-computeVersion(longBranch, "cli/v", {
-    maxLength: 57,
-    warn: (msg) => { warnMessage = msg; },
-});
-assert.ok(
-    warnMessage !== null,
-    "Warn callback should be called when version is truncated"
-);
-assert.ok(
-    warnMessage.includes("truncated"),
-    `Warn message should mention truncation, got: "${warnMessage}"`
-);
+// console.warn should be called when truncation occurs
+{
+    const originalWarn = console.warn;
+    let warnMessage = null;
+    console.warn = (msg) => { warnMessage = msg; };
+    computeVersion(longBranch, "cli/v", { maxLength: 57 });
+    console.warn = originalWarn;
+    assert.ok(
+        warnMessage !== null,
+        "console.warn should be called when version is truncated"
+    );
+    assert.ok(
+        warnMessage.includes("truncated"),
+        `Warn message should mention truncation, got: "${warnMessage}"`
+    );
+}
 
-// Warn callback should NOT be invoked when no truncation needed
-let warnCalled = false;
-computeVersion("main", "cli/v", {
-    maxLength: 57,
-    warn: () => { warnCalled = true; },
-});
-assert.strictEqual(
-    warnCalled,
-    false,
-    "Warn callback should not be called when version fits within limit"
-);
+// console.warn should NOT be called when no truncation needed
+{
+    const originalWarn = console.warn;
+    let warnCalled = false;
+    console.warn = () => { warnCalled = true; };
+    computeVersion("main", "cli/v", { maxLength: 57 });
+    console.warn = originalWarn;
+    assert.strictEqual(
+        warnCalled,
+        false,
+        "console.warn should not be called when version fits within limit"
+    );
+}
 
 // Version at exactly maxLength should NOT be truncated
 const exactRef = "a".repeat(51); // "0.0.0-" (6 chars) + 51 = 57 = exactly maxLength

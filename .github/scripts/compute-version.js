@@ -29,7 +29,6 @@ export const DEFAULT_MAX_VERSION_LENGTH = 57;
  * @param {string} tagPrefix - Tag prefix pattern (e.g., "cli/v" or "bindings/go/helm/v")
  * @param {object} [options] - Optional settings
  * @param {number} [options.maxLength] - Max length for pseudo-versions. If unset, no truncation is applied.
- * @param {(msg: string) => void} [options.warn] - Callback invoked when a version is truncated
  * @returns {string} Computed version string
  *
  * @example
@@ -67,12 +66,10 @@ export function computeVersion(ref, tagPrefix, options = {}) {
 
         if (Number.isInteger(maxLength) && maxLength > 0 && version.length > maxLength) {
             const truncated = version.substring(0, maxLength).replace(/-$/, "");
-            if (options.warn) {
-                options.warn(
-                    `Version "${version}" truncated to "${truncated}" ` +
-                    `to fit label value limit (max version length: ${maxLength})`
-                );
-            }
+            console.warn(
+                `Version "${version}" truncated to "${truncated}" ` +
+                `to fit label value limit (max version length: ${maxLength})`
+            );
             return truncated;
         }
 
@@ -126,7 +123,6 @@ export default async function computeVersionAction({ core }) {
     try {
         const version = computeVersion(ref, tagPrefix, {
             maxLength,
-            warn: (msg) => core.warning(msg),
         });
 
         core.exportVariable("VERSION", version);
