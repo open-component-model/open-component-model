@@ -192,3 +192,32 @@ func TestApplyResourceSizeLimit_NonSizeAware(t *testing.T) {
 		t.Fatal("expected a *limitedReadCloser wrapper for non-SizeAware blob")
 	}
 }
+
+// TestApplyResourceSizeLimit_NegativeLimit documents the behavior when MaxResourceSizeMiB is
+// negative. Negative values are rejected at process startup (cmd/main.go), so this path is not
+// reachable in production. The behavior is determined by io.LimitedReader: a negative N causes it
+// to return 0, io.EOF on the very first Read, so no data passes through.
+func TestApplyResourceSizeLimit_NegativeLimit(t *testing.T) {
+	r := reconcilerWithLimit(-1)
+	data := []byte("hello")
+	b := &mockBlob{data: data}
+	rc := nopCloser{bytes.NewReader(data)}
+
+	limited, err := r.applyResourceSizeLimit(b, rc)
+	if err != nil {
+		t.Fatalf("unexpected error: applyResourceSizeLimit should not return an error for negative limit, got: %v", err)
+	}
+	if _, ok := limited.(*limitedReadCloser); !ok {
+		t.Fatalf("expected a *limitedReadCloser, got %T", limited)
+	}
+
+	// io.LimitedReader with N <= 0 returns 0, io.EOF immediately — no data passes through.
+	buf := make([]byte, len(data))
+	n, readErr := limited.Read(buf)
+	if n != 0 {
+		t.Fatalf("expected 0 bytes read with negative limit, got %d", n)
+	}
+	if readErr != io.EOF {
+		t.Fatalf("expected io.EOF on first read with negative limit, got: %v", readErr)
+	}
+}
