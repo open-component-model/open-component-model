@@ -15,6 +15,7 @@ import (
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/meta"
+	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -89,9 +90,9 @@ type Reconciler struct {
 	Resolver      *resolution.Resolver
 	PluginManager *manager.PluginManager
 
-	// MaxResourceSizeMiB is the maximum size in MiB a downloaded resource blob may contain.
+	// MaxResourceSizeBytes is the maximum size in bytes a downloaded resource blob may contain.
 	// 0 disables the limit.
-	MaxResourceSizeMiB int64
+	MaxResourceSizeBytes int64
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -532,18 +533,20 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	// then wrap the reader to cap reads at the limit.
 	// This only happens when a maximum resource limit is set (> 0). Otherwise, we will read the whole resource
 	// regardless of its size.
-	if r.MaxResourceSizeMiB > 0 {
-		maxBytes := r.MaxResourceSizeMiB * 1024 * 1024
+	if r.MaxResourceSizeBytes > 0 {
 		if sizeAware, ok := resourceBlob.(blob.SizeAware); ok {
-			if size := sizeAware.Size(); size != blob.SizeUnknown && size > maxBytes {
-				err := fmt.Errorf("resource size %d bytes exceeds maximum allowed size of %d MiB", size, r.MaxResourceSizeMiB)
+			if size := sizeAware.Size(); size != blob.SizeUnknown && size > r.MaxResourceSizeBytes {
+				err := fmt.Errorf("resource size %s exceeds maximum allowed size of %s",
+					apiresource.NewQuantity(size, apiresource.BinarySI),
+					apiresource.NewQuantity(r.MaxResourceSizeBytes, apiresource.BinarySI),
+				)
 				status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
 				return nil, err
 			}
 		}
 
-		limitedReader = &limitedReadCloser{Closer: limitedReader, limited: &io.LimitedReader{R: limitedReader, N: maxBytes}}
+		limitedReader = &limitedReadCloser{Closer: limitedReader, limited: &io.LimitedReader{R: limitedReader, N: r.MaxResourceSizeBytes}}
 	}
 
 	// Decode YAML manifests

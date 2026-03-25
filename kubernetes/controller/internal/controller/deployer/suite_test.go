@@ -187,7 +187,7 @@ var _ = BeforeSuite(func() {
 		}),
 		Resolver:           resolver,
 		PluginManager:      pm,
-		MaxResourceSizeMiB: 2,
+		MaxResourceSizeBytes: 2 * 1024 * 1024,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
 
 	mgrDone := make(chan struct{})

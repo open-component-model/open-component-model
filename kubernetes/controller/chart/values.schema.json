@@ -31,8 +31,7 @@
                     "type": "object",
                     "properties": {
                         "deployerDownloadMaxResourceSize": {
-                            "type": "integer",
-                            "minimum": 0
+                            "type": "string"
                         },
                         "deployerDownloadSize": {
                             "type": "integer"
