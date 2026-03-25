@@ -63,15 +63,15 @@ func TestCredentialFunc(t *testing.T) {
 			wantEmpty: true,
 		},
 		{
-			name: "invalid hostport",
+			name: "hostport without port",
 			identity: runtime.Identity{
 				runtime.IdentityAttributeHostname: "example.com",
 			},
 			credentials: map[string]string{
 				CredentialKeyUsername: "testuser",
 			},
-			hostport:  "invalid",
-			wantErr:   true,
+			hostport:  "example.com",
+			wantErr:   false,
 			wantEmpty: false,
 		},
 		{

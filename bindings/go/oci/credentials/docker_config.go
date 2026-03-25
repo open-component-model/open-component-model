@@ -2,6 +2,7 @@ package credentials
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -72,7 +73,13 @@ func CredentialFunc(identity runtime.Identity, credentials map[string]string) au
 	return func(ctx context.Context, hostport string) (auth.Credential, error) {
 		actualHost, actualPort, err := net.SplitHostPort(hostport)
 		if err != nil {
-			return auth.Credential{}, fmt.Errorf("failed to split host and port: %w", err)
+			// it can happen that no port is given here
+			err, addrError := errors.AsType[*net.AddrError](err)
+			portIsMissing := addrError && err.Err == "missing port in address"
+			if !portIsMissing {
+				return auth.Credential{}, fmt.Errorf("failed to split host and port: %w", err)
+			}
+			actualHost = hostport
 		}
 		hostMismatch := hostInIdentity && registeredHostname != actualHost
 		portMismatch := portInIdentity && registeredPort != actualPort
