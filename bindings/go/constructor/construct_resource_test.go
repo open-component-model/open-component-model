@@ -538,7 +538,7 @@ func TestConstructWithResourceDigest(t *testing.T) {
 
 func TestConstructWithResourceAccessSucceedsWhenNoDigestProcessorRegistered(t *testing.T) {
 	mockDigestProvider := &mockDigestProcessorProvider{
-		err: fmt.Errorf("no digest processor registered for access type"),
+		err: fmt.Errorf("no digest processor registered for access type: %w", ErrDigestProcessorNotFound),
 	}
 
 	constructor := setupTestComponent(t, `
@@ -547,7 +547,7 @@ func TestConstructWithResourceAccessSucceedsWhenNoDigestProcessorRegistered(t *t
         relation: external
         type: helmChart
         access:
-          type: helm/v1
+          type: Helm/v1
           helmRepository: https://charts.example.com
           helmChart: my-chart:1.0.0
 `)
@@ -577,6 +577,37 @@ func TestConstructWithResourceAccessSucceedsWhenNoDigestProcessorRegistered(t *t
 	assert.Nil(t, resource.Digest, "digest should not be set when no digest processor is registered")
 
 	assert.Len(t, mockTargetRepo.addedVersions, 1)
+}
+
+func TestConstructWithResourceAccessFailsOnDigestProcessorError(t *testing.T) {
+	mockDigestProvider := &mockDigestProcessorProvider{
+		err: fmt.Errorf("plugin process crashed"),
+	}
+
+	constructor := setupTestComponent(t, `
+      - name: test-resource
+        version: v1.0.0
+        relation: external
+        type: helmChart
+        access:
+          type: Helm/v1
+          helmRepository: https://charts.example.com
+          helmChart: my-chart:1.0.0
+`)
+
+	mockTargetRepo := newMockTargetRepository()
+
+	opts := Options{
+		TargetRepositoryProvider:        &mockTargetRepositoryProvider{repo: mockTargetRepo},
+		ResourceDigestProcessorProvider: mockDigestProvider,
+	}
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+
+	err := constructorInstance.Construct(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "error getting digest processor")
+	assert.Contains(t, err.Error(), "plugin process crashed")
 }
 
 func TestConstructWithInvalidInputMethod(t *testing.T) {

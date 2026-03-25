@@ -137,7 +137,7 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 	if ok := r.scheme.IsRegistered(typ); ok {
 		p, ok := r.internalDigestProcessorPlugins[typ]
 		if !ok {
-			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
+			return nil, fmt.Errorf("no internal plugin registered for type %v: %w", typ, constructor.ErrDigestProcessorNotFound)
 		}
 
 		return p, nil
@@ -154,7 +154,7 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 func (r *RepositoryRegistry) getPlugin(ctx context.Context, typ runtime.Type) (digestprocessorv1.ResourceDigestProcessorContract, error) {
 	plugin, ok := r.registry[typ]
 	if !ok {
-		return nil, fmt.Errorf("failed to get plugin for typ %q", typ)
+		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, constructor.ErrDigestProcessorNotFound)
 	}
 
 	if existingPlugin, ok := r.constructedPlugins[plugin.ID]; ok {
