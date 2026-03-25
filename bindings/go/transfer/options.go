@@ -49,7 +49,7 @@ const (
 
 // Options configures the behavior of a transfer operation.
 //
-// Transfer mappings must be specified via [WithTransfer] or [WithTransfer].
+// Transfer mappings must be specified via [WithTransfer].
 // Each mapping must include a resolver via [FromResolver] or [FromRepository],
 // components via [Component], and a target via [ToRepositorySpec].
 type Options struct {

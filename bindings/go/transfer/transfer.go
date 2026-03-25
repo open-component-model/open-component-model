@@ -14,7 +14,7 @@ import (
 // BuildGraphDefinition constructs a [transformv1alpha1.TransformationGraphDefinition] that
 // describes how to transfer component versions between repositories.
 //
-// Transfer mappings must be specified via [WithTransfer] or [WithTransfer].
+// Transfer mappings must be specified via [WithTransfer].
 // Each mapping pairs source components with a target repository and a resolver,
 // enabling N:M routing where different sources feed different targets.
 func BuildGraphDefinition(
@@ -45,7 +45,7 @@ func BuildGraphDefinition(
 // collectTransferRoots resolves all transfer mappings into internal TransferRoots.
 func collectTransferRoots(ctx context.Context, o *Options) ([]internal.TransferRoot, error) {
 	if len(o.Mappings) == 0 {
-		return nil, fmt.Errorf("no transfer mappings specified: use WithTransfer or WithTransfer")
+		return nil, fmt.Errorf("no transfer mappings specified: use WithTransfer")
 	}
 
 	type rootData struct {
@@ -81,6 +81,8 @@ func collectTransferRoots(ctx context.Context, o *Options) ([]internal.TransferR
 				rd = &rootData{resolver: m.Resolver}
 				byKey[key] = rd
 				keyOrder = append(keyOrder, key)
+			} else if rd.resolver != m.Resolver {
+				return nil, fmt.Errorf("conflicting resolvers for component %s: each component must use the same resolver across all mappings", key)
 			}
 			rd.targets = internal.AppendUniqueRepositories(rd.targets, []runtime.Typed{m.Target})
 		}

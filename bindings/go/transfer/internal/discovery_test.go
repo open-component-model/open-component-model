@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -192,6 +193,7 @@ func TestResolver_ValidKey(t *testing.T) {
 		},
 	}
 	r := &multiResolver{
+		mu: &sync.Mutex{},
 		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
 			"ocm.software/test:1.0.0": mockResolver,
 		},
@@ -206,6 +208,7 @@ func TestResolver_ValidKey(t *testing.T) {
 
 func TestResolver_InvalidKeyFormat(t *testing.T) {
 	r := &multiResolver{
+		mu:             &sync.Mutex{},
 		resolverMap:    map[string]resolvers.ComponentVersionRepositoryResolver{},
 		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
 	}
@@ -221,6 +224,7 @@ func TestResolver_RepoSpecError(t *testing.T) {
 		repos: map[string]repository.ComponentVersionRepository{},
 	}
 	r := &multiResolver{
+		mu: &sync.Mutex{},
 		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
 			"ocm.software/test:1.0.0": mockRes,
 		},
@@ -299,6 +303,7 @@ func TestDiscoverer_RecursiveResolverPropagation(t *testing.T) {
 
 func TestMultiResolver_NoResolverForKey(t *testing.T) {
 	r := &multiResolver{
+		mu:             &sync.Mutex{},
 		resolverMap:    map[string]resolvers.ComponentVersionRepositoryResolver{},
 		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
 	}
@@ -329,6 +334,7 @@ func TestMultiResolver_NilRepoSpec_FallsBackToDirectLookup(t *testing.T) {
 		},
 	}
 	r := &multiResolver{
+		mu: &sync.Mutex{},
 		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
 			"ocm.software/test:1.0.0": mockRes,
 		},

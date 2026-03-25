@@ -58,10 +58,7 @@ func (m *mockCVRepoResolver) GetComponentVersionRepositoryForSpecification(_ con
 	if m.sharedRepo != nil {
 		return m.sharedRepo, nil
 	}
-	for _, r := range m.repos {
-		return r, nil
-	}
-	return nil, fmt.Errorf("no repos configured")
+	return nil, fmt.Errorf("no repos configured and sharedRepo is nil")
 }
 
 func (m *mockCVRepoResolver) GetComponentVersionRepositoryForComponent(_ context.Context, component, version string) (repository.ComponentVersionRepository, error) {
@@ -105,13 +102,13 @@ func testDescriptor(component, version string, refs []descriptor.Reference) *des
 
 func testResolverFor(component, version string, repoSpec runtime.Typed, desc *descriptor.Descriptor) *mockCVRepoResolver {
 	key := component + ":" + version
+	repo := &mockCVRepo{
+		descriptors: map[string]*descriptor.Descriptor{key: desc},
+	}
 	return &mockCVRepoResolver{
-		specs: map[string]runtime.Typed{key: repoSpec},
-		repos: map[string]repository.ComponentVersionRepository{
-			key: &mockCVRepo{
-				descriptors: map[string]*descriptor.Descriptor{key: desc},
-			},
-		},
+		specs:      map[string]runtime.Typed{key: repoSpec},
+		repos:      map[string]repository.ComponentVersionRepository{key: repo},
+		sharedRepo: repo,
 	}
 }
 

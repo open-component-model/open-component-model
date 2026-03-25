@@ -744,6 +744,11 @@ func Test_Integration_TransferWithCopyResources_CTFToOCI(t *testing.T) {
 	registryAddr, user, password := startRegistry(t)
 
 	// 2. Create source CTF with a component containing a local blob resource.
+	// NOTE: This test uses a local blob which is transferred in both CopyModeLocalBlobResources
+	// and CopyModeAllResources. A true test of CopyModeAllResources with non-local resources
+	// (OCI artifacts, Helm charts) would require a source OCI registry with pre-pushed artifacts,
+	// which is out of scope for this test. The test verifies that CopyModeAllResources does not
+	// break local blob transfers.
 	componentName := "ocm.software/copy-resources"
 	componentVersion := "1.0.0"
 	sourceCTFPath := t.TempDir()

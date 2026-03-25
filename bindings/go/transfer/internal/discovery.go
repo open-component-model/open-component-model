@@ -31,6 +31,7 @@ type discoveryValue struct {
 // The resolverMap is shared with the discoverer so that recursively discovered children
 // inherit their parent's resolver (see discoverer.Discover).
 type multiResolver struct {
+	mu             *sync.Mutex // shared with discoverer to protect resolverMap
 	resolverMap    map[string]resolvers.ComponentVersionRepositoryResolver
 	expectedDigest func(id runtime.Identity) *descriptor.Digest
 }
@@ -53,7 +54,10 @@ func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValu
 
 	slog.DebugContext(ctx, "resolving component version", "component", component, "version", version)
 
+	// Lock to safely read resolverMap which may be mutated by concurrent discovery.
+	r.mu.Lock()
 	repoResolver, ok := r.resolverMap[key]
+	r.mu.Unlock()
 	if !ok {
 		return nil, fmt.Errorf("no resolver found for component %s", key)
 	}
@@ -68,19 +72,19 @@ func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValu
 	if repoSpec != nil {
 		slog.DebugContext(ctx, "resolving via repository specification",
 			"component", component, "version", version, "repoSpec", fmt.Sprintf("%T", repoSpec))
-		r, err := repoResolver.GetComponentVersionRepositoryForSpecification(ctx, repoSpec)
+		resolved, err := repoResolver.GetComponentVersionRepositoryForSpecification(ctx, repoSpec)
 		if err != nil {
 			return nil, fmt.Errorf("failed getting component version repository for spec %v: %w", repoSpec, err)
 		}
-		repo = r
+		repo = resolved
 	} else {
 		slog.DebugContext(ctx, "resolving via direct repository lookup",
 			"component", component, "version", version)
-		r, err := repoResolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
+		resolved, err := repoResolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
 		if err != nil {
 			return nil, fmt.Errorf("failed getting component version repository for %s:%s: %w", component, version, err)
 		}
-		repo = r
+		repo = resolved
 	}
 
 	desc, err := repo.GetComponentVersion(ctx, component, version)

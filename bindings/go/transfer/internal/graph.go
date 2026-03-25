@@ -79,6 +79,7 @@ func BuildGraphDefinition(
 	// The expectedDigest closure checks whether a recursively discovered child has
 	// a pinned digest from its parent's reference, enabling integrity verification.
 	res := &multiResolver{
+		mu:          &disc.mu,
 		resolverMap: resolverMap,
 		expectedDigest: func(id runtime.Identity) *descruntime.Digest {
 			disc.mu.Lock()
@@ -265,7 +266,7 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 			return fmt.Errorf("cannot process Helm Chart resource: %w", err)
 		}
 	default:
-		slog.Info("Unsupported resource access type, skipping resource. Only local blob and OCI artifact resources are supported for transformation.",
+		slog.Info("Unsupported resource access type, skipping resource. Only local blob, OCI artifact, and Helm chart resources are supported for transformation.",
 			"component", val.Descriptor.Component.Name, "version", val.Descriptor.Component.Version,
 			"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 	}
