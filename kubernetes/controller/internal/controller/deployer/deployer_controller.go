@@ -351,12 +351,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	if resource.Status.Resource.Digest != nil {
 		key = resource.Status.Resource.Digest.Value
 	} else {
-		var configHash string
 		if cfg != nil {
-			configHash = fmt.Sprintf("%x", cfg.Hash)
+			key = fmt.Sprintf("%x/", cfg.Hash)
 		}
 		resourceIdentity := makeResourceIdentity(resource.Status.Resource)
-		key = configHash + "/" + resource.Status.Component.Component + ":" + resource.Status.Component.Version + "/" + resourceIdentity.String()
+		key += resource.Status.Component.Component + ":" + resource.Status.Component.Version + "/" + resourceIdentity.String()
 	}
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
