@@ -10,6 +10,7 @@ import (
 	"time"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -174,9 +175,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	patchHelper := status.NewStatusPatcher(resource, r.Client)
+	old := resource.DeepCopy()
 	defer func(ctx context.Context) {
-		err = errors.Join(err, status.UpdateStatus(ctx, patchHelper, resource, r.EventRecorder, resource.GetRequeueAfter(), err))
+		status.UpdateBeforePatch(resource, r.EventRecorder, resource.GetRequeueAfter(), err)
+		if !equality.Semantic.DeepEqual(resource.Status, old.Status) {
+			err = errors.Join(err, r.GetClient().Status().Patch(ctx, resource, client.MergeFrom(old)))
+		}
 	}(ctx)
 
 	logger.Info("preparing reconciling resource")

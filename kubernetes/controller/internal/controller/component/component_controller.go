@@ -11,6 +11,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -170,9 +171,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	patchHelper := status.NewStatusPatcher(component, r.Client)
+	old := component.DeepCopy()
 	defer func(ctx context.Context) {
-		err = errors.Join(err, status.UpdateStatus(ctx, patchHelper, component, r.EventRecorder, component.GetRequeueAfter(), err))
+		status.UpdateBeforePatch(component, r.EventRecorder, component.GetRequeueAfter(), err)
+		if !equality.Semantic.DeepEqual(component.Status, old.Status) {
+			err = errors.Join(err, r.GetClient().Status().Patch(ctx, component, client.MergeFrom(old)))
+		}
 	}(ctx)
 
 	if !component.GetDeletionTimestamp().IsZero() {

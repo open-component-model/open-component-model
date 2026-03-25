@@ -61,13 +61,14 @@ func MockComponent(
 	}
 	Expect(options.Client.Create(ctx, component)).To(Succeed())
 
-	patchHelper := status.NewStatusPatcher(component, options.Client)
+	old := component.DeepCopy()
 
 	component.Status.Component = options.Info
 	component.Status.EffectiveOCMConfig = options.EffectiveOCMConfig
 
 	status.MarkReady(options.Recorder, component, "applied mock component")
-	Expect(status.UpdateStatus(ctx, patchHelper, component, options.Recorder, time.Hour, nil)).To(Succeed())
+	component.SetObservedGeneration(component.GetGeneration())
+	Expect(options.Client.Status().Patch(ctx, component, client.MergeFrom(old))).To(Succeed())
 
 	Eventually(func(ctx context.Context) error {
 		c := &v1alpha1.Component{}

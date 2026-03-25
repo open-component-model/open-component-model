@@ -3,7 +3,6 @@ package test
 import (
 	"context"
 	"errors"
-	"time"
 
 	. "github.com/onsi/gomega"
 
@@ -49,14 +48,15 @@ func MockResource(
 	}
 	Expect(options.Clnt.Create(ctx, resource)).To(Succeed())
 
-	patchHelper := status.NewStatusPatcher(resource, options.Clnt)
+	old := resource.DeepCopy()
 
 	resource.Status.Component = options.ComponentInfo
 	resource.Status.Resource = options.ResourceInfo
 	resource.Status.EffectiveOCMConfig = options.EffectiveOCMConfig
 
 	status.MarkReady(options.Recorder, resource, "applied mock resource")
-	Expect(status.UpdateStatus(ctx, patchHelper, resource, options.Recorder, time.Hour, nil)).To(Succeed())
+	resource.SetObservedGeneration(resource.GetGeneration())
+	Expect(options.Clnt.Status().Patch(ctx, resource, client.MergeFrom(old))).To(Succeed())
 
 	Eventually(func(ctx context.Context) error {
 		r := &v1alpha1.Resource{}

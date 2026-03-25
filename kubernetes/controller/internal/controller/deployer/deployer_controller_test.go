@@ -994,7 +994,7 @@ data:
 				test.DeleteObject(ctx, k8sClient, resourceObj)
 			})
 
-			patchHelper := status.NewStatusPatcher(resourceObj, k8sClient)
+			old := resourceObj.DeepCopy()
 			resourceObj.Status.Component = &v1alpha1.ComponentInfo{
 				Component:      childComponentName,
 				Version:        componentVersion,
@@ -1013,8 +1013,9 @@ data:
 			}
 			Eventually(func(ctx context.Context) error {
 				status.MarkReady(recorder, resourceObj, "applied mock resource")
+				resourceObj.SetObservedGeneration(resourceObj.GetGeneration())
 
-				return status.UpdateStatus(ctx, patchHelper, resourceObj, recorder, time.Hour, nil)
+				return k8sClient.Status().Patch(ctx, resourceObj, client.MergeFrom(old))
 			}).WithContext(ctx).Should(Succeed())
 
 			By("creating a Deployer that references the Resource")
@@ -1270,7 +1271,7 @@ data:
 				test.DeleteObject(ctx, k8sClient, resourceObj)
 			})
 
-			patchHelper := status.NewStatusPatcher(resourceObj, k8sClient)
+			old2 := resourceObj.DeepCopy()
 			resourceObj.Status.Component = &v1alpha1.ComponentInfo{
 				Component:      childComponentName,
 				Version:        componentVersion,
@@ -1289,8 +1290,9 @@ data:
 			}
 			Eventually(func(ctx context.Context) error {
 				status.MarkReady(recorder, resourceObj, "applied mock resource")
+				resourceObj.SetObservedGeneration(resourceObj.GetGeneration())
 
-				return status.UpdateStatus(ctx, patchHelper, resourceObj, recorder, time.Hour, nil)
+				return k8sClient.Status().Patch(ctx, resourceObj, client.MergeFrom(old2))
 			}).WithContext(ctx).Should(Succeed())
 
 			By("creating a Deployer that references the Resource")

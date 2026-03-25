@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -102,9 +103,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	patchHelper := status.NewStatusPatcher(ocmRepo, r.Client)
+	old := ocmRepo.DeepCopy()
 	defer func(ctx context.Context) {
-		err = errors.Join(err, status.UpdateStatus(ctx, patchHelper, ocmRepo, r.EventRecorder, ocmRepo.GetRequeueAfter(), err))
+		status.UpdateBeforePatch(ocmRepo, r.EventRecorder, ocmRepo.GetRequeueAfter(), err)
+		if !equality.Semantic.DeepEqual(ocmRepo.Status, old.Status) {
+			err = errors.Join(err, r.GetClient().Status().Patch(ctx, ocmRepo, client.MergeFrom(old)))
+		}
 	}(ctx)
 
 	if !ocmRepo.GetDeletionTimestamp().IsZero() {

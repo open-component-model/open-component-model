@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -288,9 +289,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	patchHelper := status.NewStatusPatcher(deployer, r.Client)
+	old := deployer.DeepCopy()
 	defer func(ctx context.Context) {
-		err = errors.Join(err, status.UpdateStatus(ctx, patchHelper, deployer, r.EventRecorder, 0, err))
+		status.UpdateBeforePatch(deployer, r.EventRecorder, 0, err)
+		if !equality.Semantic.DeepEqual(deployer.Status, old.Status) {
+			err = errors.Join(err, r.GetClient().Status().Patch(ctx, deployer, client.MergeFrom(old)))
+		}
 	}(ctx)
 
 	if deployer.Spec.Suspend {

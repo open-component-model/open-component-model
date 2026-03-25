@@ -1,7 +1,6 @@
 package status
 
 import (
-	"context"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -11,15 +10,15 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 )
 
-// UpdateStatus takes an object which can identify itself and updates its status including ObservedGeneration.
-func UpdateStatus(
-	ctx context.Context,
-	patchHelper *StatusPatcher,
+// UpdateBeforePatch mutates conditions and observed generation on the object
+// in memory and emits events. It does NOT write to the API server — the
+// caller is responsible for patching the status sub-resource afterwards.
+func UpdateBeforePatch(
 	obj IdentifiableClientObject,
 	recorder kuberecorder.EventRecorder,
 	requeue time.Duration,
 	err error,
-) error {
+) {
 	// If still reconciling then reconciliation did not succeed, set to ProgressingWithRetry to
 	// indicate that reconciliation will be retried.
 	if IsReconciling(obj) && err != nil {
@@ -43,7 +42,4 @@ func UpdateStatus(
 			event.New(recorder, obj, obj.GetVID(), v1alpha1.EventSeverityInfo, "Reconciliation finished, no further runs scheduled until next change")
 		}
 	}
-
-	// Update the object.
-	return patchHelper.Patch(ctx, obj)
 }
