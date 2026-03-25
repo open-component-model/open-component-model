@@ -144,9 +144,13 @@ func (m *mockDigestProcessor) ProcessResourceDigest(ctx context.Context, resourc
 // mockDigestProcessorProvider implements ResourceDigestProcessorProvider for testing
 type mockDigestProcessorProvider struct {
 	processor ResourceDigestProcessor
+	err       error
 }
 
 func (m *mockDigestProcessorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (ResourceDigestProcessor, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
 	return m.processor, nil
 }
 
@@ -529,6 +533,49 @@ func TestConstructWithResourceDigest(t *testing.T) {
 
 	// Verify the repository was called correctly
 	assert.Len(t, mockTargetRepo.addedLocalResources, 0)
+	assert.Len(t, mockTargetRepo.addedVersions, 1)
+}
+
+func TestConstructWithResourceAccessSucceedsWhenNoDigestProcessorRegistered(t *testing.T) {
+	mockDigestProvider := &mockDigestProcessorProvider{
+		err: fmt.Errorf("no digest processor registered for access type"),
+	}
+
+	constructor := setupTestComponent(t, `
+      - name: test-resource
+        version: v1.0.0
+        relation: external
+        type: helmChart
+        access:
+          type: helm/v1
+          helmRepository: https://charts.example.com
+          helmChart: my-chart:1.0.0
+`)
+
+	mockTargetRepo := newMockTargetRepository()
+
+	opts := Options{
+		TargetRepositoryProvider:        &mockTargetRepositoryProvider{repo: mockTargetRepo},
+		ResourceDigestProcessorProvider: mockDigestProvider,
+	}
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
+
+	err := constructorInstance.Construct(t.Context())
+	require.NoError(t, err)
+	descs := collectDescriptors(t, graph)
+	require.Len(t, descs, 1)
+
+	desc := descs[0]
+	verifyBasicComponent(t, desc)
+
+	resource := desc.Component.Resources[0]
+	assert.Equal(t, "test-resource", resource.Name)
+	assert.Equal(t, descriptor.ExternalRelation, resource.Relation)
+	assert.NotNil(t, resource.Access)
+	assert.Nil(t, resource.Digest, "digest should not be set when no digest processor is registered")
+
 	assert.Len(t, mockTargetRepo.addedVersions, 1)
 }
 

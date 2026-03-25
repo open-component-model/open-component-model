@@ -425,6 +425,9 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 					if res, err = digestProcessor.ProcessResourceDigest(ctx, res, creds); err != nil {
 						return nil, fmt.Errorf("error processing resource %q with digest processor: %w", resource.ToIdentity(), err)
 					}
+				} else {
+					logger.Debug("no digest processor found for resource, skipping digest processing", "error", err)
+					err = nil
 				}
 			}
 		}
