@@ -19,13 +19,31 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-// TransferRoot pairs a DAG root key with its target repositories and resolver.
+// TransferRoot pairs a DAG root key with its target repositories and source resolver.
+//
+// Design notes:
+//   - SourceResolver is intentionally a single resolver per component: a component version
+//     has exactly one source, even when it is pushed to multiple targets. The component is
+//     fetched once and uploaded to all Targets. Callers that supply conflicting resolvers for
+//     the same component key receive an error from collectTransferRoots before
+//     BuildGraphDefinition is invoked.
+//   - There is intentionally no TargetSpecResolver to mirror SourceResolver. Target
+//     repositories are opened directly from their runtime.Typed specs by the builder
+//     (transform executor), not by the transfer layer. Dynamic per-component target routing
+//     can be added in the future if needed.
+//   - During recursive discovery, child components inherit their parent's Targets and
+//     SourceResolver. All components in a dependency tree are therefore transferred to the
+//     same set of targets as the root that references them.
 type TransferRoot struct {
 	// RootComponentKey is the "component:version" string used as a DAG root.
 	RootComponentKey string
 	// Targets is the list of target repository specs this component should be transferred to.
+	// Each spec is opened independently by the builder; the transfer layer only tracks which
+	// targets exist, not how to open them. Note that there is intentionally no
+	// TargetSpecResolver here — see the struct doc for the rationale.
 	Targets []runtime.Typed
 	// SourceResolver resolves this root's component version from its source repository.
+	// One resolver per component — see the struct doc for the design rationale.
 	SourceResolver resolvers.ComponentVersionRepositoryResolver
 }
 
@@ -245,7 +263,8 @@ func logSkippedResource(ctx context.Context, component, version string, resource
 // processResource dispatches a single resource to the appropriate handler based on its access type.
 // Each handler creates a Get transformation (fetching the resource from the source) and an Add
 // transformation (uploading it to the target). The uploadType and target type determine whether
-// resources are stored as local blobs or separate OCI artifacts in the target repository.
+// resources are stored as local blobs or separate OCI artifacts (including Helm charts) in the
+// target repository.
 func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType int) error {
 	_, isOCITarget := toSpec.(*oci.Repository)
 	uploadAsArtifact := isOCITarget && uploadType == UploadAsOciArtifact

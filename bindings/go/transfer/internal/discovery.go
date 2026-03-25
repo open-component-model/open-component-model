@@ -155,7 +155,9 @@ type discoverer struct {
 // For each child reference, it:
 //  1. Records the expected digest (if pinned) for later verification.
 //  2. Propagates the parent's target repositories to the child (union merge).
-//  3. Propagates the parent's resolver to the child (first-writer-wins).
+//  3. Propagates the parent's resolver to the child. If the child is already claimed by
+//     another parent with a different resolver, an error is returned — the ambiguity must
+//     be resolved by the caller via an explicit WithTransfer mapping for that component.
 func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]string, error) {
 	if !d.recursive {
 		return nil, nil
@@ -195,10 +197,26 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 			slog.DebugContext(ctx, "propagated targets to child",
 				"child", key, "targets", len(d.targetMap[key]))
 		}
-		// Propagate parent's resolver to child (first-writer-wins).
+		// Propagate parent's resolver to child.
+		// If the child already has a resolver from a different parent, fail hard rather than
+		// silently picking one: the same child component referenced by two roots with different
+		// resolvers is ambiguous (one source must win, but which is non-deterministic under
+		// concurrent discovery). The caller should ensure each component is reachable via only
+		// one resolver, or explicitly transfer it as its own root with a dedicated mapping.
 		if d.resolverMap != nil {
-			if _, exists := d.resolverMap[key]; !exists {
-				d.resolverMap[key] = d.resolverMap[parentKey]
+			parentResolver := d.resolverMap[parentKey]
+			if existing, exists := d.resolverMap[key]; exists {
+				if existing != parentResolver {
+					d.mu.Unlock()
+					return nil, fmt.Errorf(
+						"ambiguous resolver for component %q: referenced by %q (which has resolver %T) "+
+							"but already claimed by another parent with a different resolver (%T); "+
+							"add an explicit WithTransfer mapping for %q to resolve the ambiguity",
+						key, parentKey, parentResolver, existing, key,
+					)
+				}
+			} else {
+				d.resolverMap[key] = parentResolver
 				slog.DebugContext(ctx, "propagated resolver to child",
 					"parent", parentKey, "child", key)
 			}

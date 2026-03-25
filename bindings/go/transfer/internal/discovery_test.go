@@ -301,6 +301,93 @@ func TestDiscoverer_RecursiveResolverPropagation(t *testing.T) {
 	assert.Equal(t, parentResolver, d.resolverMap["child.comp/name:3.0.0"])
 }
 
+func TestDiscoverer_ConflictingResolversForSameChild(t *testing.T) {
+	// Scenario from PR review r2990953106:
+	//
+	//   A <-- root (resolver: resolverA)
+	//   B <-- root (resolver: resolverB)
+	//   A references D as a child
+	//   B references D as a child
+	//
+	// Whichever parent discovers D first would win under first-writer-wins,
+	// making resolution non-deterministic. We now fail hard instead.
+	resolverA := &mockCVRepoResolver{specs: map[string]runtime.Typed{}, repos: map[string]repository.ComponentVersionRepository{}}
+	resolverB := &mockCVRepoResolver{specs: map[string]runtime.Typed{}, repos: map[string]repository.ComponentVersionRepository{}}
+
+	childKey := "shared.comp/d:1.0.0"
+
+	// Simulate: A already discovered D first and assigned resolverA.
+	d := &discoverer{
+		recursive:         true,
+		discoveredDigests: make(map[string]descriptor.Digest),
+		targetMap:         map[string][]runtime.Typed{},
+		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
+			"parent.comp/b:1.0.0": resolverB,
+			childKey:              resolverA, // already claimed by A
+		},
+	}
+
+	// Now B tries to discover D — it has a different resolver, which must fail.
+	parentB := &discoveryValue{
+		Descriptor: &descriptor.Descriptor{
+			Component: descriptor.Component{
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "parent.comp/b", Version: "1.0.0"},
+				},
+				References: []descriptor.Reference{
+					{
+						ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "d-ref", Version: "1.0.0"}},
+						Component:   "shared.comp/d",
+					},
+				},
+			},
+		},
+	}
+
+	_, err := d.Discover(t.Context(), parentB)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ambiguous resolver")
+	assert.Contains(t, err.Error(), childKey)
+}
+
+func TestDiscoverer_SameResolverForSameChildFromTwoParents(t *testing.T) {
+	// Two parents referencing the same child with the same resolver is fine.
+	sharedResolver := &mockCVRepoResolver{specs: map[string]runtime.Typed{}, repos: map[string]repository.ComponentVersionRepository{}}
+
+	childKey := "shared.comp/d:1.0.0"
+
+	d := &discoverer{
+		recursive:         true,
+		discoveredDigests: make(map[string]descriptor.Digest),
+		targetMap:         map[string][]runtime.Typed{},
+		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
+			"parent.comp/b:1.0.0": sharedResolver,
+			childKey:              sharedResolver, // already claimed, same resolver
+		},
+	}
+
+	parentB := &discoveryValue{
+		Descriptor: &descriptor.Descriptor{
+			Component: descriptor.Component{
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "parent.comp/b", Version: "1.0.0"},
+				},
+				References: []descriptor.Reference{
+					{
+						ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "d-ref", Version: "1.0.0"}},
+						Component:   "shared.comp/d",
+					},
+				},
+			},
+		},
+	}
+
+	children, err := d.Discover(t.Context(), parentB)
+	require.NoError(t, err)
+	assert.Equal(t, []string{childKey}, children)
+	assert.Equal(t, sharedResolver, d.resolverMap[childKey])
+}
+
 func TestMultiResolver_NoResolverForKey(t *testing.T) {
 	r := &multiResolver{
 		mu:             &sync.Mutex{},
