@@ -2,7 +2,6 @@ package ocm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -12,7 +11,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
 
@@ -139,36 +137,4 @@ func GetLatestValidVersion(ctx context.Context, versions []string, semvers strin
 	}
 
 	return matchedVersions[len(matchedVersions)-1], nil
-}
-
-// IsDowngradable checks whether a component version (currentcv) is downgrabale to another component version (latestcv).
-func IsDowngradable(_ context.Context, currentcv *descruntime.Descriptor, latestcv *descruntime.Descriptor) (bool, error) {
-	// Find the downgradable label
-	var downgradableValue json.RawMessage
-	for _, label := range currentcv.Component.Labels {
-		if label.Name == v1alpha1.OCMLabelDowngradable {
-			downgradableValue = label.Value
-			break
-		}
-	}
-
-	if len(downgradableValue) == 0 {
-		return false, nil
-	}
-
-	var vers string
-	err := json.Unmarshal(downgradableValue, &vers)
-	if err != nil {
-		return false, err
-	}
-	constraint, err := semver.NewConstraint(vers)
-	if err != nil {
-		return false, err
-	}
-	semvers, err := semver.NewVersion(latestcv.Component.Version)
-	if err != nil {
-		return false, err
-	}
-
-	return constraint.Check(semvers), nil
 }

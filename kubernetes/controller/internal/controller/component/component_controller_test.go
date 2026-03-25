@@ -3,7 +3,6 @@ package component
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -301,79 +300,6 @@ var _ = Describe("Component Controller", func() {
 			test.DeleteObject(ctx, k8sClient, component)
 		})
 
-		It("grabs lower version if downgrade is allowed", func(ctx SpecContext) {
-			By("creating a component version")
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
-				{
-					Component: descruntime.Component{
-						ComponentMeta: descruntime.ComponentMeta{
-							ObjectMeta: descruntime.ObjectMeta{
-								Name:    componentName,
-								Version: "0.0.3",
-								Labels: []descruntime.Label{
-									{
-										Name:  v1alpha1.OCMLabelDowngradable,
-										Value: json.RawMessage(`"0.0.2"`),
-									},
-								},
-							},
-						},
-						Provider: descruntime.Provider{Name: "ocm.software"},
-					},
-				},
-				{
-					Component: descruntime.Component{
-						ComponentMeta: descruntime.ComponentMeta{
-							ObjectMeta: descruntime.ObjectMeta{
-								Name:    componentName,
-								Version: "0.0.2",
-							},
-						},
-						Provider: descruntime.Provider{Name: "ocm.software"},
-					},
-				},
-			})
-
-			By("mocking an ocm repository")
-			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
-
-			By("creating a component")
-			component := &v1alpha1.Component{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: namespace.GetName(),
-					Name:      ComponentObj,
-				},
-				Spec: v1alpha1.ComponentSpec{
-					RepositoryRef: corev1.LocalObjectReference{
-						Name: repositoryObj.GetName(),
-					},
-					Component:       componentName,
-					DowngradePolicy: v1alpha1.DowngradePolicyAllow,
-					Semver:          "<1.0.0",
-					Interval:        metav1.Duration{Duration: time.Second},
-				},
-				Status: v1alpha1.ComponentStatus{},
-			}
-			Expect(k8sClient.Create(ctx, component)).To(Succeed())
-
-			By("checking that the component has been reconciled successfully")
-			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
-				"Status.Component.Version": "0.0.3",
-			})
-
-			By("decreasing the component version")
-			component.Spec.Semver = "0.0.2"
-			Expect(k8sClient.Update(ctx, component)).To(Succeed())
-
-			By("checking that the decreased version has been discovered successfully")
-			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
-				"Status.Component.Version": "0.0.2",
-			})
-
-			By("delete resources manually")
-			test.DeleteObject(ctx, k8sClient, component)
-		})
-
 		It("does not grab lower version if downgrade is denied", func(ctx SpecContext) {
 			By("creating a component version")
 			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
@@ -383,12 +309,6 @@ var _ = Describe("Component Controller", func() {
 							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: "0.0.3",
-								Labels: []descruntime.Label{
-									{
-										Name:  v1alpha1.OCMLabelDowngradable,
-										Value: json.RawMessage(`"0.0.2"`),
-									},
-								},
 							},
 						},
 						Provider: descruntime.Provider{Name: "ocm.software"},
@@ -458,7 +378,7 @@ var _ = Describe("Component Controller", func() {
 			test.DeleteObject(ctx, k8sClient, component)
 		})
 
-		It("can force downgrade even if not allowed by the component", func(ctx SpecContext) {
+		It("grabs lower version if downgrade is allowed", func(ctx SpecContext) {
 			By("creating a component version")
 			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
@@ -499,7 +419,7 @@ var _ = Describe("Component Controller", func() {
 						Name: repositoryObj.GetName(),
 					},
 					Component:       componentName,
-					DowngradePolicy: v1alpha1.DowngradePolicyEnforce,
+					DowngradePolicy: v1alpha1.DowngradePolicyAllow,
 					Semver:          "<1.0.0",
 					Interval:        metav1.Duration{Duration: time.Second},
 				},
