@@ -4,7 +4,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/pkg/apis/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
@@ -77,7 +76,7 @@ var _ = Describe("ComponentInfoChangedPredicate", func() {
 		It("allows the event when Status.EffectiveOCMConfig changed", func() {
 			newComponent.Status.EffectiveOCMConfig = []v1alpha1.OCMConfiguration{
 				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						Name:      "my-config",
 						Namespace: "default",
 						Kind:      "ConfigMap",
@@ -94,7 +93,7 @@ var _ = Describe("ComponentInfoChangedPredicate", func() {
 		It("filters the event when EffectiveOCMConfig is equal on both sides", func() {
 			cfg := []v1alpha1.OCMConfiguration{
 				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						Name:      "my-config",
 						Namespace: "default",
 						Kind:      "ConfigMap",

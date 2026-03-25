@@ -7,7 +7,6 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/pkg/runtime/patch"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,7 +49,7 @@ func MockResource(
 	}
 	Expect(options.Clnt.Create(ctx, resource)).To(Succeed())
 
-	patchHelper := patch.NewSerialPatcher(resource, options.Clnt)
+	patchHelper := status.NewStatusPatcher(resource, options.Clnt)
 
 	resource.Status.Component = options.ComponentInfo
 	resource.Status.Resource = options.ResourceInfo

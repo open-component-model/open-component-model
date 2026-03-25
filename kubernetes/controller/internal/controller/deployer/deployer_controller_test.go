@@ -20,8 +20,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
@@ -446,7 +444,7 @@ data:
 					},
 					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "Secret",
 								Name:       credentialSecret.Name,
@@ -487,7 +485,7 @@ data:
 			Eventually(komega.Object(deployerObj), "15s").Should(
 				HaveField("Status.EffectiveOCMConfig", ConsistOf(
 					v1alpha1.OCMConfiguration{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       credentialSecret.Name,
@@ -575,7 +573,7 @@ consumers:
 					},
 					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "Secret",
 								Name:       credentialSecret.Name,
@@ -599,7 +597,7 @@ consumers:
 					},
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "Secret",
 								Name:       deployerSecret.Name,
@@ -619,7 +617,7 @@ consumers:
 			Eventually(komega.Object(deployerObj), "15s").Should(
 				HaveField("Status.EffectiveOCMConfig", ConsistOf(
 					v1alpha1.OCMConfiguration{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       deployerSecret.Name,
@@ -996,7 +994,7 @@ data:
 				test.DeleteObject(ctx, k8sClient, resourceObj)
 			})
 
-			patchHelper := patch.NewSerialPatcher(resourceObj, k8sClient)
+			patchHelper := status.NewStatusPatcher(resourceObj, k8sClient)
 			resourceObj.Status.Component = &v1alpha1.ComponentInfo{
 				Component:      childComponentName,
 				Version:        componentVersion,
@@ -1272,7 +1270,7 @@ data:
 				test.DeleteObject(ctx, k8sClient, resourceObj)
 			})
 
-			patchHelper := patch.NewSerialPatcher(resourceObj, k8sClient)
+			patchHelper := status.NewStatusPatcher(resourceObj, k8sClient)
 			resourceObj.Status.Component = &v1alpha1.ComponentInfo{
 				Component:      childComponentName,
 				Version:        componentVersion,

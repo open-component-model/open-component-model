@@ -1,7 +1,6 @@
 package event
 
 import (
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +30,7 @@ func New(recorder kuberecorder.EventRecorder, obj EventObject, metadata map[stri
 	}
 
 	eventType := corev1.EventTypeNormal
-	if severity == eventv1.EventSeverityError {
+	if severity == v1alpha1.EventSeverityError {
 		eventType = corev1.EventTypeWarning
 	}
 

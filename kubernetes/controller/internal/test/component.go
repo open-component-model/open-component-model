@@ -16,7 +16,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/pkg/runtime/patch"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,7 +61,7 @@ func MockComponent(
 	}
 	Expect(options.Client.Create(ctx, component)).To(Succeed())
 
-	patchHelper := patch.NewSerialPatcher(component, options.Client)
+	patchHelper := status.NewStatusPatcher(component, options.Client)
 
 	component.Status.Component = options.Info
 	component.Status.EffectiveOCMConfig = options.EffectiveOCMConfig

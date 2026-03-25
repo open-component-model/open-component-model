@@ -18,6 +18,14 @@ const (
 	ProgressingWithRetryReason = "ProgressingWithRetry"
 )
 
+// Event severity constants.
+const (
+	// EventSeverityInfo represents an informational event.
+	EventSeverityInfo = "info"
+	// EventSeverityError represents an error event.
+	EventSeverityError = "error"
+)
+
 const (
 	// ConfigureContextFailedReason is used when the controller failed to create an authenticated context.
 	ConfigureContextFailedReason = "ConfigureContextFailed"

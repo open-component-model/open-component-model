@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/stretchr/testify/assert"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,12 +20,12 @@ func TestNewEvent(t *testing.T) {
 	}{
 		{
 			description: "event is of type info",
-			severity:    eventv1.EventSeverityInfo,
+			severity:    v1alpha1.EventSeverityInfo,
 			expected:    "Normal",
 		},
 		{
 			description: "event is of type error",
-			severity:    eventv1.EventSeverityError,
+			severity:    v1alpha1.EventSeverityError,
 			expected:    "Warning",
 		},
 	}

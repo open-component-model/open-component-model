@@ -8,7 +8,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/pkg/apis/meta"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -152,7 +151,7 @@ var _ = Describe("Repository Controller", func() {
 				By("adding config and secret refs")
 				ocmRepo.Spec.OCMConfig = append(ocmRepo.Spec.OCMConfig, []v1alpha1.OCMConfiguration{
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[0].Name,
@@ -160,7 +159,7 @@ var _ = Describe("Repository Controller", func() {
 						},
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[1].Name,
@@ -168,14 +167,14 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "Secret",
 							Name: secrets[2].Name,
 						},
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[0].Name,
@@ -183,7 +182,7 @@ var _ = Describe("Repository Controller", func() {
 						},
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[1].Name,
@@ -191,7 +190,7 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "ConfigMap",
 							Name: configs[2].Name,
 						},
@@ -205,7 +204,7 @@ var _ = Describe("Repository Controller", func() {
 				By("check that the ConfigRefs are in the status")
 				expectedEffectiveOCMConfig := []v1alpha1.OCMConfiguration{
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[0].Name,
@@ -214,7 +213,7 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[1].Name,
@@ -223,7 +222,7 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[2].Name,
@@ -232,7 +231,7 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[0].Name,
@@ -241,7 +240,7 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[1].Name,
@@ -250,7 +249,7 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[2].Name,
@@ -418,7 +417,7 @@ consumers:
 		ocmRepo = newTestRepository(namespace.GetName(), "repo-with-config", &specdata)
 		ocmRepo.Spec.OCMConfig = []v1alpha1.OCMConfiguration{
 			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 					APIVersion: corev1.SchemeGroupVersion.String(),
 					Kind:       "Secret",
 					Name:       credSecret.Name,
@@ -437,7 +436,7 @@ consumers:
 			)),
 			HaveField("Status.EffectiveOCMConfig", ConsistOf(
 				v1alpha1.OCMConfiguration{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						APIVersion: corev1.SchemeGroupVersion.String(),
 						Kind:       "Secret",
 						Name:       credSecret.Name,

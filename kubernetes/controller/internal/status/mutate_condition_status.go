@@ -3,7 +3,6 @@ package status
 import (
 	"fmt"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kuberecorder "k8s.io/client-go/tools/record"
 
@@ -20,7 +19,7 @@ func MarkNotReady(recorder kuberecorder.EventRecorder, obj IdentifiableClientObj
 		Reason:  reason,
 		Message: msg,
 	})
-	event.New(recorder, obj, nil, eventv1.EventSeverityError, msg)
+	event.New(recorder, obj, nil, v1alpha1.EventSeverityError, msg)
 }
 
 // MarkAsStalled sets the condition status of an Object to `Stalled`.
@@ -38,7 +37,7 @@ func MarkAsStalled(recorder kuberecorder.EventRecorder, obj IdentifiableClientOb
 		Reason:  reason,
 		Message: msg,
 	})
-	event.New(recorder, obj, nil, eventv1.EventSeverityError, msg)
+	event.New(recorder, obj, nil, v1alpha1.EventSeverityError, msg)
 }
 
 // MarkReady sets the condition status of an Object to `Ready`.
@@ -50,5 +49,5 @@ func MarkReady(recorder kuberecorder.EventRecorder, obj IdentifiableClientObject
 		Reason:  v1alpha1.SucceededReason,
 		Message: fmt.Sprintf(msg, messageArgs...),
 	})
-	event.New(recorder, obj, nil, eventv1.EventSeverityInfo, msg, messageArgs...)
+	event.New(recorder, obj, nil, v1alpha1.EventSeverityInfo, msg, messageArgs...)
 }
