@@ -30,11 +30,6 @@ import (
 // e.g. because the component version already exists in the target repository.
 var ErrShouldSkipConstruction = errors.New("should skip construction")
 
-// ErrDigestProcessorNotFound is returned by ResourceDigestProcessorProvider.GetDigestProcessor when no digest
-// processor is available for the given access type. This is distinct from operational errors (e.g. plugin start
-// failures) and signals that digest processing should be skipped for the resource.
-var ErrDigestProcessorNotFound = errors.New("digest processor not found")
-
 const AttributeDescriptor string = "constructor/descriptor"
 
 type Constructor interface {
@@ -414,8 +409,11 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 			res = constructor.ConvertToDescriptorResource(resource)
 
 			if c.opts.ResourceDigestProcessorProvider != nil {
-				var digestProcessor ResourceDigestProcessor
-				if digestProcessor, err = c.opts.GetDigestProcessor(ctx, res); err == nil {
+				digestProcessor, err := c.opts.GetDigestProcessor(ctx, res)
+				if err != nil {
+					return nil, fmt.Errorf("error getting digest processor for resource %q: %w", resource.ToIdentity(), err)
+				}
+				if digestProcessor != nil {
 					logger.Debug("processing resource digest")
 					var creds map[string]string
 					if c.opts.Resolver != nil {
@@ -430,11 +428,6 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 					if res, err = digestProcessor.ProcessResourceDigest(ctx, res, creds); err != nil {
 						return nil, fmt.Errorf("error processing resource %q with digest processor: %w", resource.ToIdentity(), err)
 					}
-				} else if errors.Is(err, ErrDigestProcessorNotFound) {
-					logger.Debug("no digest processor found for resource, skipping digest processing")
-					err = nil
-				} else {
-					return nil, fmt.Errorf("error getting digest processor for resource %q: %w", resource.ToIdentity(), err)
 				}
 			}
 		}

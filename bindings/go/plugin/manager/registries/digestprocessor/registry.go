@@ -126,6 +126,9 @@ func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *mt
 	return digestPlugin, nil
 }
 
+// GetPlugin returns the digest processor for the given access type.
+// It returns (nil, nil) if no digest processor is registered for the type, indicating that
+// digest processing should be skipped. A non-nil error indicates an operational failure.
 func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (constructor.ResourceDigestProcessor, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -137,7 +140,7 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 	if ok := r.scheme.IsRegistered(typ); ok {
 		p, ok := r.internalDigestProcessorPlugins[typ]
 		if !ok {
-			return nil, fmt.Errorf("no internal plugin registered for type %v: %w", typ, constructor.ErrDigestProcessorNotFound)
+			return nil, nil
 		}
 
 		return p, nil
@@ -147,6 +150,9 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, err)
 	}
+	if plugin == nil {
+		return nil, nil
+	}
 
 	return r.externalToResourceDigestProcessorPluginConverter(plugin, r.scheme), nil
 }
@@ -154,7 +160,7 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 func (r *RepositoryRegistry) getPlugin(ctx context.Context, typ runtime.Type) (digestprocessorv1.ResourceDigestProcessorContract, error) {
 	plugin, ok := r.registry[typ]
 	if !ok {
-		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, constructor.ErrDigestProcessorNotFound)
+		return nil, nil
 	}
 
 	if existingPlugin, ok := r.constructedPlugins[plugin.ID]; ok {
