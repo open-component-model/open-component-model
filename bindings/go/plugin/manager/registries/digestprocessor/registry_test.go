@@ -194,6 +194,7 @@ func TestRegisterInternalDigestProcessorPlugin(t *testing.T) {
 		name       string
 		accessSpec runtime.Typed
 		err        require.ErrorAssertionFunc
+		expectNil  bool
 	}{
 		{
 			name:       "prototype",
@@ -221,14 +222,15 @@ func TestRegisterInternalDigestProcessorPlugin(t *testing.T) {
 			err: require.NoError,
 		},
 		{
-			name: "invalid type",
+			name: "unregistered type returns nil",
 			accessSpec: &runtime.Raw{
 				Type: runtime.Type{
 					Name:    "NonExistingType",
 					Version: "v1",
 				},
 			},
-			err: require.Error,
+			err:       require.NoError,
+			expectNil: true,
 		},
 	}
 
@@ -237,6 +239,10 @@ func TestRegisterInternalDigestProcessorPlugin(t *testing.T) {
 			digesterProcessorPlugin, err := registry.GetPlugin(ctx, tc.accessSpec)
 			tc.err(t, err)
 			if err != nil {
+				return
+			}
+			if tc.expectNil {
+				r.Nil(digesterProcessorPlugin)
 				return
 			}
 			r.NotNil(digesterProcessorPlugin)
