@@ -15,6 +15,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -49,7 +50,14 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
-const creator = "Builtin OCI Repository Plugin"
+const (
+	creator = "Builtin OCI Repository Plugin"
+
+	// defaultMaxResourceSize is a generous upper bound for Kubernetes manifests.
+	// etcd's default --max-request-bytes is 1.5 MiB (https://etcd.io/docs/v3.5/dev-guide/limit/),
+	// so a multi-document manifest written to the cluster will always stay well under 2 MiB.
+	defaultMaxResourceSize = "2Mi"
+)
 
 var (
 	scheme   = runtime.NewScheme()
@@ -76,6 +84,7 @@ func main() {
 		enableHTTP2               bool
 		eventsAddr                string
 		deployerDownloadCacheSize int
+		deployerMaxResourceSize   string
 		ocmContextCacheSize       int
 		ocmSessionCacheSize       int
 		resourceConcurrency       int
@@ -96,6 +105,8 @@ func main() {
 	flag.StringVar(&eventsAddr, "events-addr", "", "The address of the events receiver.")
 	flag.IntVar(&deployerDownloadCacheSize, "deployer-download-cache-size", 1_000, //nolint:mnd // no magic number
 		"The maximum size of the deployer download object LRU cache.")
+	flag.StringVar(&deployerMaxResourceSize, "deployer-download-max-resource-size", defaultMaxResourceSize,
+		"Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. \"2Mi\", \"512Ki\"). \"0\" disables the limit.")
 	flag.IntVar(&ocmContextCacheSize, "ocm-context-cache-size", 100, //nolint:mnd // no magic number
 		"The maximum size of the OCM context cache. This is the number of active OCM contexts that can be kept alive.")
 	flag.IntVar(&ocmSessionCacheSize, "ocm-session-cache-size", 100, //nolint:mnd // no magic number
@@ -112,6 +123,17 @@ func main() {
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	maxResourceQuantity, err := apiresource.ParseQuantity(deployerMaxResourceSize)
+	if err != nil {
+		setupLog.Error(err, "invalid flag value", "flag", "deployer-download-max-resource-size", "value", deployerMaxResourceSize)
+		os.Exit(1)
+	}
+	maxResourceSizeBytes := maxResourceQuantity.Value()
+	if maxResourceSizeBytes < 0 {
+		setupLog.Error(nil, "invalid flag value", "flag", "deployer-download-max-resource-size", "value", deployerMaxResourceSize, "reason", "must be >= 0")
+		os.Exit(1)
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -282,8 +304,9 @@ func main() {
 		DownloadCache: cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_download_cache", deployerDownloadCacheSize, func(k string, v []*unstructured.Unstructured) {
 			setupLog.Info("evicting deployment objects from cache", "key", k, "count", len(v))
 		}),
-		Resolver:      resolver,
-		PluginManager: pm,
+		Resolver:             resolver,
+		PluginManager:        pm,
+		MaxResourceSizeBytes: maxResourceSizeBytes,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Deployer")
 		os.Exit(1)
