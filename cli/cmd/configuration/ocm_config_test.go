@@ -3,11 +3,44 @@ package configuration
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+func TestGetOCMConfigForCommand(t *testing.T) {
+	t.Run("explicit config flag with non-existent file returns error", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		RegisterConfigFlag(cmd)
+		require.NoError(t, cmd.PersistentFlags().Set(OCMConfigCommandArgument, "/nonexistent/path/config.yaml"))
+
+		_, err := GetOCMConfigForCommand(cmd)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "/nonexistent/path/config.yaml")
+	})
+
+	t.Run("explicit config flag with existing file succeeds", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		RegisterConfigFlag(cmd)
+		require.NoError(t, cmd.PersistentFlags().Set(OCMConfigCommandArgument, "testdata/.ocmconfig-1"))
+
+		cfg, err := GetOCMConfigForCommand(cmd)
+		require.NoError(t, err)
+		assert.NotNil(t, cfg)
+	})
+
+	t.Run("no config flag uses default discovery", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		RegisterConfigFlag(cmd)
+
+		// Should not panic; may or may not error depending on whether
+		// default config files exist on the test machine
+		_, _ = GetOCMConfigForCommand(cmd)
+	})
+}
 
 func TestGetFlattenedGetConfigFromPath(t *testing.T) {
 	type args struct {

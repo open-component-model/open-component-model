@@ -155,6 +155,11 @@ jobs:
         env:
           REF: ${{ env.REF }}
           TAG_PREFIX: "kubernetes/controller/v"
+          # Kubernetes label values must be ≤63 chars (RFC 1123). We need to ensure the version fits within this limit
+          # to be used as a label value in the Helm chart. helm.sh/chart is "<chart-name>-<version>"
+          # Current chart name is "chart" = 6 chars including hyphen; 63 - 6 = 57 max version length.
+          # TODO: If we change the chart name, we need to update this max version length.
+          MAX_VERSION_LENGTH: "57"
         with:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/compute-version.js');

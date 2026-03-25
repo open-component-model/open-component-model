@@ -51,9 +51,9 @@ func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, err
 }
 
 func GetOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
-	path, _ := cmd.Flags().GetString(OCMConfigCommandArgument)
-	if path != "" {
-		return GetConfigFromPath(path)
+	flag := cmd.Flag(OCMConfigCommandArgument)
+	if flag != nil && flag.Changed {
+		return GetConfigFromPath(flag.Value.String())
 	}
 	return GetOCMConfig()
 }
