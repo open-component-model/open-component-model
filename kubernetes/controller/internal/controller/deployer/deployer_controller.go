@@ -347,6 +347,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
 	}
 
+	// We use the digest as cache key if possible because a changed digest indicates that the resource changed. If no
+	// digest is available, we need to find another way to make sure the cache-key changes when the resource changes.
+	// A component version and resource identity plus the config hash, which could contain resolver configuration,
+	// should be sufficient.
 	var key string
 	if resource.Status.Resource.Digest != nil {
 		key = resource.Status.Resource.Digest.Value

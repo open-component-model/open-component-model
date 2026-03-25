@@ -52,10 +52,8 @@ type Resolver struct {
 // RepositoryOptions contains all the options the resolution service requires to perform a resolve operation.
 type RepositoryOptions struct {
 	RepositorySpec runtime.Typed
-	// Configuration is the pre-loaded OCM configuration. Callers must call
-	// configuration.LoadConfigurations before creating a CacheBackedRepository.
-	Configuration *configuration.Configuration
-	RequesterFunc func() workerpool.RequesterInfo
+	Configuration  *configuration.Configuration
+	RequesterFunc  func() workerpool.RequesterInfo
 	// Verifications are used to verify against component version signatures and used a cache key.
 	Verifications []verification.Verification
 	// Digest is used to verify the integrity of a referenced component version and is used as part of the cache key.

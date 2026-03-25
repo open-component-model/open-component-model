@@ -16,8 +16,8 @@
 //	cfg, err := configuration.LoadConfigurations(ctx, client, namespace, ocmConfigs)
 //	repo, err := resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
 //	    RepositorySpec:    repoSpec,
-//	    Configuration:    cfg,
-//	    SigningRegistry:   signingRegistry,     // required if Verifications is set
+//	    Configuration:     cfg,
+//	    SigningRegistry:   signingRegistry,      // required if Verifications is set
 //	    Verifications:     verifications,        // optional: signature verification
 //	    Digest:            digest,               // optional: integrity check for referenced components
 //	    RequesterFunc:     requesterFunc,        // identifies the requesting controller object
