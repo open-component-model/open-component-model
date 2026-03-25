@@ -29,7 +29,9 @@ func PreRunEWithConfig(cmd *cobra.Command, cfg Config) error {
 	}
 	slog.SetDefault(logger)
 
-	setup.OCMConfig(cmd)
+	if err := setup.OCMConfig(cmd); err != nil {
+		return fmt.Errorf("setup ocm config: %w", err)
+	}
 
 	// Apply filesystem config
 	setup.FilesystemConfig(cmd, cfg.FilesystemConfigOptions)

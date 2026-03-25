@@ -7,14 +7,14 @@ require (
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260319164733-6860b4757648
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260325115025-39d88c6e91a0
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260319164733-6860b4757648
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260325115025-39d88c6e91a0
 	ocm.software/open-component-model/bindings/go/oci v0.0.36
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260319164733-6860b4757648
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260319164733-6860b4757648
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260325115025-39d88c6e91a0
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260325115025-39d88c6e91a0
 )
 
 require (
@@ -104,7 +104,7 @@ require (
 	helm.sh/helm/v4 v4.1.1 // indirect
 	k8s.io/api v0.35.1 // indirect
 	k8s.io/apiextensions-apiserver v0.35.1 // indirect
-	k8s.io/apimachinery v0.35.2 // indirect
+	k8s.io/apimachinery v0.35.3 // indirect
 	k8s.io/cli-runtime v0.35.1 // indirect
 	k8s.io/client-go v0.35.1 // indirect
 	k8s.io/component-base v0.35.1 // indirect
@@ -113,10 +113,10 @@ require (
 	k8s.io/kubectl v0.35.1 // indirect
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
 	ocm.software/open-component-model/bindings/go/blob v0.0.11 // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260319111041-22758595f5fe // indirect
-	ocm.software/open-component-model/bindings/go/configuration v0.0.11 // indirect
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260325115025-39d88c6e91a0 // indirect
+	ocm.software/open-component-model/bindings/go/configuration v0.0.12 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260319111041-22758595f5fe // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260325115025-39d88c6e91a0 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/controller-runtime v0.23.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
