@@ -114,7 +114,7 @@ require (
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
 	ocm.software/open-component-model/bindings/go/blob v0.0.11 // indirect
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260319111041-22758595f5fe // indirect
-	ocm.software/open-component-model/bindings/go/configuration v0.0.11 // indirect
+	ocm.software/open-component-model/bindings/go/configuration v0.0.12 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260319111041-22758595f5fe // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
