@@ -15,6 +15,7 @@ import (
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/meta"
+	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -30,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -87,6 +89,10 @@ type Reconciler struct {
 	DownloadCache cache.DigestObjectCache[string, []*unstructured.Unstructured]
 	Resolver      *resolution.Resolver
 	PluginManager *manager.PluginManager
+
+	// MaxResourceSizeBytes is the maximum size in bytes a downloaded resource blob may contain.
+	// 0 disables the limit.
+	MaxResourceSizeBytes int64
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -326,6 +332,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: %w", err)
 	}
 
+	// TODO: This is suboptimal because we cannot ensure that the resource status will hold a digest (e.g. for unverified
+	//       component version/skipped verification). Instead we might use the cache-key from the resolution service.
 	key := resource.Status.Resource.Digest.Value
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
@@ -504,18 +512,45 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to load configurations: %w", err)
 	}
 
-	blob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
+	resourceBlob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to download resource: %w", err)
 	}
+
+	limitedReader, err := resourceBlob.ReadCloser()
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
+		return nil, fmt.Errorf("getting reader for resource blob: %w", err)
+	}
 	defer func() {
-		err = errors.Join(err, blob.Close())
+		err = errors.Join(err, limitedReader.Close())
 	}()
 
+	// Enforce resource size limit: opportunistic pre-check using declared size,
+	// then wrap the reader to cap reads at the limit.
+	// This only happens when a maximum resource limit is set (> 0). Otherwise, we will read the whole resource
+	// regardless of its size.
+	if r.MaxResourceSizeBytes > 0 {
+		if sizeAware, ok := resourceBlob.(blob.SizeAware); ok {
+			if size := sizeAware.Size(); size != blob.SizeUnknown && size > r.MaxResourceSizeBytes {
+				err := fmt.Errorf("resource size %s exceeds maximum allowed size of %s",
+					apiresource.NewQuantity(size, apiresource.BinarySI),
+					apiresource.NewQuantity(r.MaxResourceSizeBytes, apiresource.BinarySI),
+				)
+				status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
+				return nil, err
+			}
+		}
+
+		limitedReader = &limitedReadCloser{Closer: limitedReader, limited: &io.LimitedReader{R: limitedReader, N: r.MaxResourceSizeBytes}}
+	}
+
 	// Decode YAML manifests
-	if objs, err = decodeObjectsFromManifest(blob); err != nil {
+	if objs, err = decodeObjectsFromManifest(limitedReader); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.MarshalFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to decode objects: %w", err)
@@ -555,7 +590,7 @@ func (r *Reconciler) downloadResourceBlob(
 	componentDescriptor *descriptor.Descriptor,
 	resource *descriptor.Resource,
 	cfg *configuration.Configuration,
-) (io.ReadCloser, error) {
+) (blob.ReadOnlyBlob, error) {
 	typed, err := v2.Scheme.NewObject(resource.Access.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve access type: %w", err)
@@ -571,12 +606,7 @@ func (r *Reconciler) downloadResourceBlob(
 			return nil, fmt.Errorf("failed to get local resource: %w", err)
 		}
 
-		reader, err := blob.ReadCloser()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get reader from local blob: %w", err)
-		}
-
-		return reader, nil
+		return blob, nil
 	}
 
 	// non-local access types use the plugin manager
@@ -590,17 +620,7 @@ func (r *Reconciler) downloadResourceBlob(
 		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
 	}
 
-	blob, err := resourcePlugin.DownloadResource(ctx, resource, creds)
-	if err != nil {
-		return nil, fmt.Errorf("failed to download resource: %w", err)
-	}
-
-	reader, err := blob.ReadCloser()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get reader from blob: %w", err)
-	}
-
-	return reader, nil
+	return resourcePlugin.DownloadResource(ctx, resource, creds)
 }
 
 // resolveResourceCredentials resolves credentials for accessing a resource.
