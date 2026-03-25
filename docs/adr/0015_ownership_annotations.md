@@ -42,7 +42,7 @@ Two approaches are considered for how ownership metadata is stored and discovere
 Per the [OCM OCI spec section 6.3](https://github.com/open-component-model/ocm-spec/blob/e9273b126045b96e11cc9caf056363728c76bec8/doc/04-extensions/03-storage-backends/oci.md#63-asset-annotations), implementations **MAY** add ownership annotations to OCI artifacts. If added, they **MUST** be written on the **top-level manifest or index** (`manifest.annotations` or `index.annotations`), not on nested manifests. Only new artifacts packed by OCM are annotated; existing artifacts are not modified.
 
 | Annotation Key | Purpose | Value Format |
-|---|---|---|
+| --- | --- | --- |
 | `software.ocm.component.name` | Component name | Plain string |
 | `software.ocm.component.version` | Component version | Plain string |
 | `software.ocm.base.digest` | Digest of the manifest before annotations were injected | `<algorithm>:<hex>` (e.g. `sha256:abc123...`) |
@@ -175,9 +175,9 @@ OCI Distribution Spec v1.1 introduced the [Referrers API](https://github.com/ope
 }
 ```
 
-3. **Discovery via Referrers API** — given a resource image reference, a consumer queries:
+1. **Discovery via Referrers API** — given a resource image reference, a consumer queries:
 
-```
+```http
 GET /v2/<name>/referrers/sha256:abc123...?artifactType=application/vnd.ocm.ownership.v1+json
 ```
 
@@ -343,10 +343,96 @@ for _, ref := range referrers {
 }
 ```
 
+#### Consuming Ownership Referrers from External Tools
+
+Once OCM tooling pushes ownership referrers (`application/vnd.ocm.ownership.v1+json`) alongside resource images, any OCI v1.1-compatible tool can discover and consume them **without OCM-specific libraries**. This section describes how external tools — image replicators, vulnerability scanners, admission controllers, GitOps operators, and platform dashboards — can integrate with ownership referrers.
+
+##### Discovery
+
+Given a resource image digest, query the registry's Referrers API filtered by artifact type:
+
+```http
+GET /v2/<name>/referrers/<digest>?artifactType=application/vnd.ocm.ownership.v1+json
+```
+
+The response is an OCI Index whose `manifests` array contains descriptors for each matching referrer. The ownership annotations (`software.ocm.component.name`, `software.ocm.component.version`) are inlined in each descriptor's `annotations` field — no need to fetch the referrer manifest separately.
+
+With standard tooling:
+
+```bash
+oras discover <registry>/<repo>@<digest> \
+  --artifact-type "application/vnd.ocm.ownership.v1+json" \
+  --format json | jq '.referrers[0].annotations'
+# {
+#   "software.ocm.component.name": "github.com/acme/myapp",
+#   "software.ocm.component.version": "1.2.3"
+# }
+```
+
+##### Transferring Referrers During Image Replication
+
+Tools that replicate OCI images between registries (e.g. image mirrors, air-gapped transfer pipelines, component transport tools) must be extended to copy ownership referrers alongside the resource image:
+
+1. **Discover** — after uploading the resource image to the target registry, query the **source** registry's Referrers API for the resource's digest, filtered by `artifactType=application/vnd.ocm.ownership.v1+json`.
+
+2. **Fetch** — for each referrer descriptor returned, fetch its full manifest from the source registry. An ownership referrer manifest is a standard OCI manifest with an empty config (`application/vnd.oci.empty.v1+json`, `{}`) and an empty layers array — there are no blobs to transfer beyond the manifest itself.
+
+3. **Re-push** — push each referrer manifest to the **target** registry under the same repository as the resource image. The `subject.digest` in the referrer already matches the resource's digest (which is unchanged, since Option 2 does not modify the original manifest). When the target registry receives a manifest with a `subject` field, it automatically indexes it in its referrers list — no additional API calls are needed.
+
+This requires the replication tool's OCI client to support listing referrers for a given digest and pushing manifest-only artifacts.
+
+##### Validating Ownership After Transfer
+
+After transfer, consumers can verify that the ownership referrer correctly points to the resource image:
+
+1. **Digest match** — fetch the referrer manifest from the target registry and check that `subject.digest` equals the resource image's manifest digest. This confirms the referrer is bound to the correct image.
+
+2. **Annotation check** — read `software.ocm.component.name` and `software.ocm.component.version` from the referrer's `annotations` and confirm they match the expected component version from the component descriptor.
+
+3. **Referrers API round-trip** — query the target registry's Referrers API for the resource digest and confirm the ownership referrer appears in the response:
+
+   ```bash
+   oras discover <target-registry>/<repo>@<resource-digest> \
+     --artifact-type "application/vnd.ocm.ownership.v1+json" \
+     --format json | jq '.referrers[0].annotations'
+   ```
+
+   If the referrer is listed with the correct annotations, the transfer is complete and the ownership link is intact.
+
+#### Fallback Compatibility with Pre-v1.1 Registries
+
+The Referrers API was introduced in OCI Distribution Spec v1.1. Registries that have not yet adopted v1.1 do not natively index manifests by their `subject` field, so the `GET /v2/<name>/referrers/<digest>` endpoint is unavailable. The OCI spec defines a [referrers tag schema](https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#unavailable-referrers-api) as a fallback for this case.
+
+##### How the Tag Fallback Works
+
+When a client pushes a manifest with a `subject` field and the registry responds **without** the `OCI-Subject` header (indicating it does not support the Referrers API), the client must maintain a **referrers tag** — a special OCI Index stored as a tagged manifest in the same repository:
+
+1. **Tag format** — the tag is derived from the subject digest: `<algorithm>-<hex>`. For example, a subject with digest `sha256:abc123...` produces the tag `sha256-abc123...`.
+2. **Push flow** — after pushing the ownership referrer manifest, the client fetches the existing referrers index at that tag (or creates an empty one), appends the new referrer descriptor to its `manifests` array, and pushes the updated index back under the same tag.
+3. **Discovery flow** — consumers query `GET /v2/<name>/manifests/sha256-<hex>` to fetch the referrers index, then read the `manifests` array exactly as they would from the Referrers API response.
+
+##### ORAS Handles This Automatically
+
+The ORAS Go library (`oras.land/oras-go`) detects whether the target registry supports the Referrers API during push. If the registry does not return the `OCI-Subject` header, ORAS automatically falls back to the tag schema — no additional code is needed in the OCM implementation. The same applies to `oras discover` on the client side: it transparently checks both the Referrers API and the tag fallback.
+
+##### Registry Support Matrix
+
+| Registry | Referrers API (v1.1) | Tag Fallback |
+| --- | --- | --- |
+| GitHub Container Registry (ghcr.io) | ✅ | ✅ |
+| Docker Hub | ❌ | ✅ |
+| Azure Container Registry | ✅ | ✅ |
+| Amazon ECR | ❌ | ✅ |
+| Google Artifact Registry | ✅ | ✅ |
+| Harbor (v2.6+) | ✅ | ✅ |
+| Zot | ✅ | ✅ |
+
+---
+
 ### Comparison of Options 1 and 2
 
 | Aspect | Embedded Annotations (Option 1) | Referrers API (Option 2) |
-|---|---|---|
+| --- | --- | --- |
 | Original digest preserved | ❌ No — `software.ocm.base.digest` bridge needed | ✅ Yes — artifact untouched |
 | Self-contained | ✅ Annotations travel with the manifest | ❌ Referrer is separate manifest |
 | OCI-level signatures | ❌ Invalidated (cosign, Notary) | ✅ Preserved |
@@ -356,30 +442,32 @@ for _, ref := range referrers {
 | Discovery without OCM | ✅ Read `manifest.annotations` | ✅ `oras discover` / `GET /referrers/<digest>` |
 | Registry compatibility | ✅ Works with any OCI registry | ❌ Requires OCI Distribution v1.1 (or tag fallback) |
 
-## Support in Legacy OCM CLI
+### Support in Legacy OCM CLI
 
 Ownership annotations are a new feature. New features are developed in the new OCM tooling (`open-component-model/open-component-model`), which is the most recent and actively developed version of OCM. The legacy CLI (`open-component-model/ocm`) is in maintenance mode and will not receive this feature. It will gain **read support** for the new index-based format ([ADR 0012](./0012_oci_format_compatibility.md)), which naturally preserves any annotations already present on resource manifests.
 
 **Decision**: Implement only in the new OCM tooling.
 
-
 ## Steps
 
-1. 
-  - **Implement annotation injection** — during packing, compute `software.ocm.base.digest` from the original manifest bytes, then inject all ownership annotations (`software.ocm.component.name`, `software.ocm.component.version`, `software.ocm.base.digest`) into the resource's manifest/index JSON. The CD records the post-annotation digest via `internaldigest.Apply` (`genericBlobDigest/v1`), matching the registry.
-  - **Implement referrer creation** — after annotation injection, create a referrer artifact using the OCI Distribution v1.1 API. The referrer carries the same annotations and links back to the annotated manifest via `subject.digest`.
+1. **Implement**:
+
+   - **Implement annotation injection** — during packing, compute `software.ocm.base.digest` from the original manifest bytes, then inject all ownership annotations (`software.ocm.component.name`, `software.ocm.component.version`, `software.ocm.base.digest`) into the resource's manifest/index JSON. The CD records the post-annotation digest via `internaldigest.Apply` (`genericBlobDigest/v1`), matching the registry.
+   - **Implement referrer creation** — after annotation injection, create a referrer artifact using the OCI Distribution v1.1 API. The referrer carries the same annotations and links back to the annotated manifest via `subject.digest`.
 
 2. **Document**:
-    - **Code** — annotation constants in [`annotations.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/spec/annotations/annotations.go) with spec references.
-    - **OCM Website** ([ocm.software](https://ocm.software)) — add a concepts/how-to page on ownership annotations and update [OCI storage backend](https://ocm.software/docs/concepts/components/) docs. Source: [`ocm-website`](https://github.com/open-component-model/ocm-website) under `content/docs/`.
+
+   - **Code** — annotation constants in [`annotations.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/spec/annotations/annotations.go) with spec references.
+   - **OCM Website** ([ocm.software](https://ocm.software)) — add a concepts/how-to page on ownership annotations and update [OCI storage backend](https://ocm.software/docs/concepts/components/) docs. Source: [`ocm-website`](https://github.com/open-component-model/ocm-website) under `content/docs/`.
 
 3. **E2E tests**:
-    - **Creation** — Create a CV with an OCI layout resource, verify `oras manifest fetch` shows ownership annotations on the resource manifest.
-    - **Transfer** — Transfer CV between registries, verify annotations are preserved on the target.
-    - **Tracing** — Given a resource image ref, extract component name/version from `manifest.annotations`.
+
+   - **Creation** — Create a CV with an OCI layout resource, verify `oras manifest fetch` shows ownership annotations on the resource manifest.
+   - **Transfer** — Transfer CV between registries, verify annotations are preserved on the target.
+   - **Tracing** — Given a resource image ref, extract component name/version from `manifest.annotations`.
 
 ---
 
 ## Conclusion
-to 
+
 This ADR implements the OCM spec's asset annotation mechanism to solve the asset-to-owner tracing problem. Option 1 (Embedded Manifest Annotations) is chosen as the primary approach: ownership annotations (`software.ocm.component.name`, `software.ocm.component.version`) are written on the resource's own OCI manifest/index for new OCI layout resources packed by OCM. Existing OCI images are copied as-is. Option 2 (OCI Referrers API) is documented as a complementary, opt-in alternative for environments where preserving the original digest and OCI-level signatures is more important than self-containment.
