@@ -4,21 +4,29 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"os"
 	"testing"
 	"time"
 
+	godigest "github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
+	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/registry"
 	"golang.org/x/crypto/bcrypt"
+	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content/memory"
+	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -27,6 +35,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
+	ociaccessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	credidentity "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -99,18 +110,30 @@ func createAuthClient(address, username, password string) *auth.Client {
 	}
 }
 
-// staticCredResolver implements credentials.Resolver for integration tests.
-type staticCredResolver struct {
+// registryCreds holds credentials for a single OCI registry.
+type registryCreds struct {
 	address  string
 	username string
 	password string
 }
 
-func (s *staticCredResolver) Resolve(_ context.Context, _ runtime.Identity) (map[string]string, error) {
-	return map[string]string{
-		"username": s.username,
-		"password": s.password,
-	}, nil
+// newCredResolver creates a credentials.StaticCredentialsResolver for one or more OCI registries.
+func newCredResolver(t *testing.T, registries ...registryCreds) *credentials.StaticCredentialsResolver {
+	t.Helper()
+	credMap := make(map[string]map[string]string)
+	for _, reg := range registries {
+		repo := &ocirepospec.Repository{
+			Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
+			BaseUrl: fmt.Sprintf("http://%s", reg.address),
+		}
+		identity, err := credidentity.IdentityFromOCIRepository(repo)
+		require.NoError(t, err)
+		credMap[identity.String()] = map[string]string{
+			"username": reg.username,
+			"password": reg.password,
+		}
+	}
+	return credentials.NewStaticCredentialsResolver(credMap)
 }
 
 // createCTFRepository creates a CTF-backed OCI repository at the given path.
@@ -203,7 +226,7 @@ func Test_Integration_TransferLocalBlob_CTFToOCI(t *testing.T) {
 
 	// 4. Build and execute the graph
 	ctx := t.Context()
-	credResolver := &staticCredResolver{address: registryAddr, username: user, password: password}
+	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 
 	repoProvider := provider.NewComponentVersionRepositoryProvider(
 		provider.WithTempDir(t.TempDir()),
@@ -327,7 +350,7 @@ func Test_Integration_TransferDescriptorOnly_CTFToOCI(t *testing.T) {
 
 	// 4. Build and execute the graph.
 	ctx := t.Context()
-	credResolver := &staticCredResolver{address: registryAddr, username: user, password: password}
+	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
 	resourceRepo := resource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
@@ -396,7 +419,7 @@ func Test_Integration_TransferMultipleResources_CTFToOCI(t *testing.T) {
 
 	// 4. Build and execute the graph.
 	ctx := t.Context()
-	credResolver := &staticCredResolver{address: registryAddr, username: user, password: password}
+	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
 	resourceRepo := resource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
@@ -528,7 +551,7 @@ func Test_Integration_TransferMultipleComponents_CTFToOCI(t *testing.T) {
 
 	// 4. Build and execute the graph.
 	ctx := t.Context()
-	credResolver := &staticCredResolver{address: registryAddr, username: user, password: password}
+	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
 	resourceRepo := resource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
@@ -599,7 +622,7 @@ func Test_Integration_TransferWithFromRepository(t *testing.T) {
 
 	// 4. Build and execute the graph.
 	ctx := t.Context()
-	credResolver := &staticCredResolver{address: registryAddr, username: user, password: password}
+	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
 	resourceRepo := resource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
@@ -705,7 +728,7 @@ func Test_Integration_TransferRecursive_CTFToOCI(t *testing.T) {
 
 	// 4. Build and execute the graph.
 	ctx := t.Context()
-	credResolver := &staticCredResolver{address: registryAddr, username: user, password: password}
+	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
 	resourceRepo := resource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
@@ -736,37 +759,132 @@ func Test_Integration_TransferRecursive_CTFToOCI(t *testing.T) {
 	r.Equal(childVersion, gotChild.Component.Version)
 }
 
-func Test_Integration_TransferWithCopyResources_CTFToOCI(t *testing.T) {
+// pushTestOCIImage pushes a minimal OCI image (single layer) to the given registry.
+// Returns the full image reference (e.g., "localhost:5000/test/image:v1").
+func pushTestOCIImage(t *testing.T, registryAddr, user, password, repoPath, tag string) string {
+	t.Helper()
+
+	ref := fmt.Sprintf("%s/%s:%s", registryAddr, repoPath, tag)
+	// Return an http:// prefixed reference so the OCI client uses plain HTTP.
+	httpRef := fmt.Sprintf("http://%s", ref)
+
+	// Create a minimal OCI image: one layer + config + manifest.
+	layerContent := []byte("test layer content for integration test")
+	layerDesc := ocispecv1.Descriptor{
+		MediaType: ocispecv1.MediaTypeImageLayer,
+		Digest:    digestOf(layerContent),
+		Size:      int64(len(layerContent)),
+	}
+
+	configContent := []byte("{}")
+	configDesc := ocispecv1.Descriptor{
+		MediaType: ocispecv1.MediaTypeImageConfig,
+		Digest:    digestOf(configContent),
+		Size:      int64(len(configContent)),
+	}
+
+	manifest := ocispecv1.Manifest{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ocispecv1.MediaTypeImageManifest,
+		Config:    configDesc,
+		Layers:    []ocispecv1.Descriptor{layerDesc},
+	}
+
+	manifestContent, err := json.Marshal(manifest)
+	require.NoError(t, err)
+
+	manifestDesc := ocispecv1.Descriptor{
+		MediaType: ocispecv1.MediaTypeImageManifest,
+		Digest:    digestOf(manifestContent),
+		Size:      int64(len(manifestContent)),
+	}
+
+	// Push to an in-memory store, then copy to the remote registry.
+	store := memory.New()
+	ctx := t.Context()
+	require.NoError(t, store.Push(ctx, layerDesc, bytes.NewReader(layerContent)))
+	require.NoError(t, store.Push(ctx, configDesc, bytes.NewReader(configContent)))
+	require.NoError(t, store.Push(ctx, manifestDesc, bytes.NewReader(manifestContent)))
+	require.NoError(t, store.Tag(ctx, manifestDesc, tag))
+
+	repo, err := remote.NewRepository(ref)
+	require.NoError(t, err)
+	repo.PlainHTTP = true
+	repo.Client = &auth.Client{
+		Client:     retry.DefaultClient,
+		Credential: auth.StaticCredential(registryAddr, auth.Credential{Username: user, Password: password}),
+	}
+
+	_, err = oras.Copy(ctx, store, tag, repo, tag, oras.DefaultCopyOptions)
+	require.NoError(t, err, "should push test OCI image to source registry")
+
+	return httpRef
+}
+
+func digestOf(content []byte) godigest.Digest {
+	return godigest.FromBytes(content)
+}
+
+func Test_Integration_TransferOCIImageResource_CopyModeAllResources(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	// 1. Start target OCI registry.
-	registryAddr, user, password := startRegistry(t)
+	// 1. Start source and target OCI registries.
+	sourceAddr, sourceUser, sourcePwd := startRegistry(t)
+	targetAddr, targetUser, targetPwd := startRegistry(t)
 
-	// 2. Create source CTF with a component containing a local blob resource.
-	// NOTE: This test uses a local blob which is transferred in both CopyModeLocalBlobResources
-	// and CopyModeAllResources. A true test of CopyModeAllResources with non-local resources
-	// (OCI artifacts, Helm charts) would require a source OCI registry with pre-pushed artifacts,
-	// which is out of scope for this test. The test verifies that CopyModeAllResources does not
-	// break local blob transfers.
-	componentName := "ocm.software/copy-resources"
+	// 2. Push a test OCI image to the source registry.
+	imageRef := pushTestOCIImage(t, sourceAddr, sourceUser, sourcePwd, "test/image", "v1")
+
+	// 3. Create source CTF with a component that has an OCIImage resource
+	//    pointing to the image in the source registry.
+	componentName := "ocm.software/oci-resource-test"
 	componentVersion := "1.0.0"
 	sourceCTFPath := t.TempDir()
 	ctfRepo := createCTFRepository(t, sourceCTFPath)
 
-	addComponentWithResources(t, ctfRepo, componentName, componentVersion, map[string][]byte{
-		"copied-resource": []byte("copy mode all resources data"),
-	})
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    componentName,
+					Version: componentVersion,
+				},
+			},
+			Provider: descriptor.Provider{Name: "test-provider"},
+			Resources: []descriptor.Resource{
+				{
+					ElementMeta: descriptor.ElementMeta{
+						ObjectMeta: descriptor.ObjectMeta{Name: "external-image", Version: "1.0.0"},
+					},
+					Type:     "ociImage",
+					Relation: descriptor.ExternalRelation,
+					Access: &ociaccessv1.OCIImage{
+						Type:           runtime.NewVersionedType(ociaccessv1.LegacyType, ociaccessv1.LegacyTypeVersion),
+						ImageReference: imageRef,
+					},
+				},
+			},
+		},
+	}
+	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
 
-	// 3. Build the transfer graph with CopyModeAllResources.
+	// 4. Build the transfer graph with CopyModeAllResources.
 	sourceSpec := &ctfrepospec.Repository{
 		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
 		FilePath: sourceCTFPath,
 	}
 	targetSpec := &ocirepospec.Repository{
 		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
-		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
+		BaseUrl: fmt.Sprintf("http://%s", targetAddr),
 	}
+
+	// Credential resolver that handles both source and target registries.
+	credResolver := newCredResolver(t,
+		registryCreds{sourceAddr, sourceUser, sourcePwd},
+		registryCreds{targetAddr, targetUser, targetPwd},
+	)
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
 		transfer.WithCopyMode(transfer.CopyModeAllResources),
@@ -779,9 +897,19 @@ func Test_Integration_TransferWithCopyResources_CTFToOCI(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(tgd)
 
-	// 4. Build and execute the graph.
+	// Verify that CopyModeAllResources generated OCI artifact transformations.
+	// With CopyModeLocalBlobResources, an OCIImage resource would be skipped entirely.
+	hasGetOCIArtifact := false
+	for _, tr := range tgd.Transformations {
+		if tr.Type.Name == "GetOCIArtifact" {
+			hasGetOCIArtifact = true
+			break
+		}
+	}
+	r.True(hasGetOCIArtifact, "CopyModeAllResources should generate GetOCIArtifact transformation for OCIImage resource")
+
+	// 5. Build and execute the graph.
 	ctx := t.Context()
-	credResolver := &staticCredResolver{address: registryAddr, username: user, password: password}
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
 	resourceRepo := resource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
@@ -789,10 +917,10 @@ func Test_Integration_TransferWithCopyResources_CTFToOCI(t *testing.T) {
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))
 
-	// 5. Verify the resource arrives in the target.
-	client := createAuthClient(registryAddr, user, password)
+	// 6. Verify the component arrived in the target registry with the resource.
+	client := createAuthClient(targetAddr, targetUser, targetPwd)
 	urlRes, err := urlresolver.New(
-		urlresolver.WithBaseURL(registryAddr),
+		urlresolver.WithBaseURL(targetAddr),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(client),
 	)
@@ -803,7 +931,37 @@ func Test_Integration_TransferWithCopyResources_CTFToOCI(t *testing.T) {
 	gotDesc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
 	r.NoError(err, "should find transferred component in target registry")
 	r.Equal(componentName, gotDesc.Component.Name)
-	r.Equal(componentVersion, gotDesc.Component.Version)
 	r.Len(gotDesc.Component.Resources, 1)
-	r.Equal("copied-resource", gotDesc.Component.Resources[0].Name)
+	r.Equal("external-image", gotDesc.Component.Resources[0].Name)
+
+	// Verify the resource was stored as a localBlob with a globalAccess pointing to the target registry.
+	gotAccess := gotDesc.Component.Resources[0].Access
+	r.NotNil(gotAccess, "resource access should not be nil")
+	r.Equal(descriptorv2.LocalBlobAccessType, gotAccess.GetType().Name,
+		"OCI image resource should be stored as localBlob in target after CopyModeAllResources transfer")
+
+	// Convert access to LocalBlob and extract GlobalAccess.
+	accessScheme := runtime.NewScheme(runtime.WithAllowUnknown())
+	descriptorv2.MustAddToScheme(accessScheme)
+	ociaccess.MustAddToScheme(accessScheme)
+	var localBlob descriptorv2.LocalBlob
+	r.NoError(accessScheme.Convert(gotAccess, &localBlob), "should convert access to LocalBlob")
+	r.NotNil(localBlob.GlobalAccess, "localBlob should have a globalAccess pointing to the target registry")
+
+	// Convert GlobalAccess to OCIImage and verify it references the target registry.
+	var globalOCIAccess ociaccessv1.OCIImage
+	r.NoError(accessScheme.Convert(localBlob.GlobalAccess, &globalOCIAccess), "should convert globalAccess to OCIImage")
+	r.Contains(globalOCIAccess.ImageReference, targetAddr,
+		"globalAccess imageReference should point to the target registry")
+
+	// Verify the image is actually resolvable in the target registry.
+	globalRepo, err := remote.NewRepository(globalOCIAccess.ImageReference)
+	r.NoError(err)
+	globalRepo.PlainHTTP = true
+	globalRepo.Client = &auth.Client{
+		Client:     retry.DefaultClient,
+		Credential: auth.StaticCredential(targetAddr, auth.Credential{Username: targetUser, Password: targetPwd}),
+	}
+	_, _, err = globalRepo.FetchReference(ctx, globalOCIAccess.ImageReference)
+	r.NoError(err, "globalAccess imageReference should be resolvable in the target registry")
 }
