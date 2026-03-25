@@ -23,15 +23,19 @@ import (
 	"ocm.software/open-component-model/cli/internal/plugin/spec/config/v2alpha1"
 )
 
-func OCMConfig(cmd *cobra.Command) {
+func OCMConfig(cmd *cobra.Command) error {
 	cfg, err := configuration.GetFlattenedOCMConfigForCommand(cmd)
 	if err != nil {
+		if flag := cmd.Flag(configuration.OCMConfigCommandArgument); flag != nil && flag.Changed {
+			return fmt.Errorf("could not load configuration: %w", err)
+		}
 		slog.DebugContext(cmd.Context(), "could not get configuration", slog.String("error", err.Error()))
 		cfg = &genericv1.Config{}
 	}
 
 	ctx := ocmctx.WithConfiguration(cmd.Context(), cfg)
 	cmd.SetContext(ctx)
+	return nil
 }
 
 func PluginManager(cmd *cobra.Command) error {

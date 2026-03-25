@@ -8,10 +8,12 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/cli/cmd/configuration"
 	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
@@ -36,6 +38,33 @@ func createConfigWithFilesystemConfig(tempFolder string) *genericv1.Config {
 		panic(err)
 	}
 	return config
+}
+
+func TestOCMConfig(t *testing.T) {
+	t.Run("explicit config flag with non-existent file returns error", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.SetContext(context.Background())
+		configuration.RegisterConfigFlag(cmd)
+		require.NoError(t, cmd.PersistentFlags().Set(configuration.OCMConfigCommandArgument, "/nonexistent/config.yaml"))
+
+		err := OCMConfig(cmd)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "/nonexistent/config.yaml")
+	})
+
+	t.Run("no config flag proceeds without error", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.SetContext(context.Background())
+		configuration.RegisterConfigFlag(cmd)
+
+		err := OCMConfig(cmd)
+		require.NoError(t, err)
+
+		// Verify a config was set in context (even if empty)
+		ocmContext := ocmctx.FromContext(cmd.Context())
+		require.NotNil(t, ocmContext)
+		require.NotNil(t, ocmContext.Configuration())
+	})
 }
 
 func TestSetupTempFolderFilesystemConfig(t *testing.T) {
