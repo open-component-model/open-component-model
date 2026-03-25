@@ -11,9 +11,8 @@ import (
 type DowngradePolicy string
 
 var (
-	DowngradePolicyAllow   DowngradePolicy = "Allow"
-	DowngradePolicyDeny    DowngradePolicy = "Deny"
-	DowngradePolicyEnforce DowngradePolicy = "Enforce"
+	DowngradePolicyAllow DowngradePolicy = "Allow"
+	DowngradePolicyDeny  DowngradePolicy = "Deny"
 )
 
 const KindComponent = "Component"
@@ -28,16 +27,11 @@ type ComponentSpec struct {
 	// +required
 	Component string `json:"component"`
 
-	// DowngradePolicy specifies whether the component may be
-	// downgraded. The property is an enum with the 3 states: `Enforce`, `Allow`,
-	// `Deny`, with `Deny` being the default.
-	// `Deny` means never allow downgrades (thus, never fetch components with a
+	// DowngradePolicy specifies whether the component may be downgraded.
+	// `Deny` (default) means never allow downgrades (thus, never fetch components with a
 	// version lower than the version currently deployed).
-	// `Allow` means that the component will be checked for a label with the
-	// `ocm.software/ocm-k8s-toolkit/downgradePolicy` which may specify a semver
-	// constraint down to which version downgrades are allowed.
-	// `Enforce` means always allow downgrades.
-	// +kubebuilder:validation:Enum:=Allow;Deny;Enforce
+	// `Allow` means always allow downgrades.
+	// +kubebuilder:validation:Enum:=Allow;Deny
 	// +kubebuilder:default:=Deny
 	// +optional
 	DowngradePolicy DowngradePolicy `json:"downgradePolicy,omitempty"`
