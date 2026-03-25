@@ -31,7 +31,7 @@ helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/contr
   --create-namespace
 ```
 
-Check out our [guide](https://ocm.software/dev/docs/getting-started/set-up-controller-environments/) on how to set up
+Check out our [guide](https://ocm.software/docs/getting-started/set-up-controller-environments/) on how to set up
 OCM Controller environments for more details.
 
 {% if github.contributors | length > 0 %}
