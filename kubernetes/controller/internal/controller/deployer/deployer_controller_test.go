@@ -1326,6 +1326,244 @@ data:
 	})
 })
 
+var _ = Describe("Deployer Controller Finalizer Persistence", func() {
+	It("adds finalizers to the deployer object after a successful reconcile", func(ctx SpecContext) {
+		namespace := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: "deployer-finalizer-add"},
+		}
+		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+
+		ctfPath := GinkgoT().TempDir()
+		Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+
+		resourceVersion := "1.0.0"
+		componentName := "ocm.software/test-component-finalizer-add"
+		componentVersion := "v1.0.0"
+		resourceName := "test-resource-finalizer-add"
+
+		yamlStream := []byte(fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: finalizer-add-cm
+  namespace: %s
+data:
+  key: value
+`, namespace.GetName()))
+
+		fs, err := filesystem.NewFS(ctfPath, os.O_RDWR)
+		Expect(err).NotTo(HaveOccurred())
+		store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+		repo, err := oci.NewRepository(ocictf.WithCTF(store), oci.WithTempDir(ctfPath))
+		Expect(err).NotTo(HaveOccurred())
+
+		resource := &descruntime.Resource{
+			ElementMeta: descruntime.ElementMeta{
+				ObjectMeta: descruntime.ObjectMeta{Name: resourceName, Version: resourceVersion},
+			},
+			Type:     "plainText",
+			Relation: descruntime.LocalRelation,
+			Access: &v2.LocalBlob{
+				Type:      runtime.Type{Name: v2.LocalBlobAccessType, Version: v2.LocalBlobAccessTypeVersion},
+				MediaType: "application/x-yaml",
+			},
+		}
+		blobContent := inmemory.New(bytes.NewReader(yamlStream))
+		newRes, err := repo.AddLocalResource(ctx, componentName, componentVersion, resource, blobContent)
+		Expect(err).NotTo(HaveOccurred())
+
+		desc := &descruntime.Descriptor{
+			Meta: descruntime.Meta{Version: "v2"},
+			Component: descruntime.Component{
+				ComponentMeta: descruntime.ComponentMeta{
+					ObjectMeta: descruntime.ObjectMeta{Name: componentName, Version: componentVersion},
+				},
+				Provider:  descruntime.Provider{Name: "ocm.software"},
+				Resources: []descruntime.Resource{*newRes},
+			},
+		}
+		Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+
+		repoSpec := &ctfv1.Repository{
+			Type:       runtime.Type{Name: "ctf", Version: "v1"},
+			FilePath:   ctfPath,
+			AccessMode: ctfv1.AccessModeReadOnly,
+		}
+		specData, err := json.Marshal(repoSpec)
+		Expect(err).NotTo(HaveOccurred())
+
+		componentObj := test.MockComponent(ctx, "component-finalizer-add", namespace.GetName(), &test.MockComponentOptions{
+			Client:   k8sClient,
+			Recorder: recorder,
+			Info: v1alpha1.ComponentInfo{
+				Component:      componentName,
+				Version:        componentVersion,
+				RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+			},
+		})
+		DeferCleanup(func(ctx SpecContext) { test.DeleteObject(ctx, k8sClient, componentObj) })
+
+		resourceObj := test.MockResource(ctx, resourceName, namespace.GetName(), &test.MockResourceOptions{
+			ComponentRef: corev1.LocalObjectReference{Name: componentObj.GetName()},
+			Clnt:         k8sClient,
+			Recorder:     recorder,
+			ComponentInfo: &v1alpha1.ComponentInfo{
+				Component:      componentName,
+				Version:        componentVersion,
+				RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+			},
+			ResourceInfo: &v1alpha1.ResourceInfo{
+				Name:    resourceName,
+				Type:    "plainText",
+				Version: resourceVersion,
+				Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
+				Digest: &v2.Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "genericBlobDigest/v1",
+					Value:                  "finalizer-add-digest",
+				},
+			},
+		})
+		DeferCleanup(func(ctx SpecContext) { test.DeleteObject(ctx, k8sClient, resourceObj) })
+
+		deployerObj := &v1alpha1.Deployer{
+			ObjectMeta: metav1.ObjectMeta{Name: "deployer-finalizer-add"},
+			Spec: v1alpha1.DeployerSpec{
+				ResourceRef: v1alpha1.ObjectKey{
+					Name:      resourceObj.GetName(),
+					Namespace: namespace.GetName(),
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+		DeferCleanup(func(ctx SpecContext) { test.DeleteObject(ctx, k8sClient, deployerObj) })
+
+		By("waiting until the Deployer is Ready")
+		test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
+
+		By("verifying both finalizers are persisted on the deployer object")
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployerObj), deployerObj)).To(Succeed())
+		Expect(deployerObj.Finalizers).To(ContainElements(applySetPruneFinalizer, resourceWatchFinalizer))
+	})
+
+	It("removes finalizers so the deployer is fully deleted", func(ctx SpecContext) {
+		namespace := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: "deployer-finalizer-remove"},
+		}
+		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+
+		ctfPath := GinkgoT().TempDir()
+		Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+
+		resourceVersion := "1.0.0"
+		componentName := "ocm.software/test-component-finalizer-remove"
+		componentVersion := "v1.0.0"
+		resourceName := "test-resource-finalizer-remove"
+
+		yamlStream := []byte(fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: finalizer-remove-cm
+  namespace: %s
+data:
+  key: value
+`, namespace.GetName()))
+
+		fs, err := filesystem.NewFS(ctfPath, os.O_RDWR)
+		Expect(err).NotTo(HaveOccurred())
+		store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+		repo, err := oci.NewRepository(ocictf.WithCTF(store), oci.WithTempDir(ctfPath))
+		Expect(err).NotTo(HaveOccurred())
+
+		resource := &descruntime.Resource{
+			ElementMeta: descruntime.ElementMeta{
+				ObjectMeta: descruntime.ObjectMeta{Name: resourceName, Version: resourceVersion},
+			},
+			Type:     "plainText",
+			Relation: descruntime.LocalRelation,
+			Access: &v2.LocalBlob{
+				Type:      runtime.Type{Name: v2.LocalBlobAccessType, Version: v2.LocalBlobAccessTypeVersion},
+				MediaType: "application/x-yaml",
+			},
+		}
+		blobContent := inmemory.New(bytes.NewReader(yamlStream))
+		newRes, err := repo.AddLocalResource(ctx, componentName, componentVersion, resource, blobContent)
+		Expect(err).NotTo(HaveOccurred())
+
+		desc := &descruntime.Descriptor{
+			Meta: descruntime.Meta{Version: "v2"},
+			Component: descruntime.Component{
+				ComponentMeta: descruntime.ComponentMeta{
+					ObjectMeta: descruntime.ObjectMeta{Name: componentName, Version: componentVersion},
+				},
+				Provider:  descruntime.Provider{Name: "ocm.software"},
+				Resources: []descruntime.Resource{*newRes},
+			},
+		}
+		Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+
+		repoSpec := &ctfv1.Repository{
+			Type:       runtime.Type{Name: "ctf", Version: "v1"},
+			FilePath:   ctfPath,
+			AccessMode: ctfv1.AccessModeReadOnly,
+		}
+		specData, err := json.Marshal(repoSpec)
+		Expect(err).NotTo(HaveOccurred())
+
+		componentObj := test.MockComponent(ctx, "component-finalizer-remove", namespace.GetName(), &test.MockComponentOptions{
+			Client:   k8sClient,
+			Recorder: recorder,
+			Info: v1alpha1.ComponentInfo{
+				Component:      componentName,
+				Version:        componentVersion,
+				RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+			},
+		})
+		DeferCleanup(func(ctx SpecContext) { test.DeleteObject(ctx, k8sClient, componentObj) })
+
+		resourceObj := test.MockResource(ctx, resourceName, namespace.GetName(), &test.MockResourceOptions{
+			ComponentRef: corev1.LocalObjectReference{Name: componentObj.GetName()},
+			Clnt:         k8sClient,
+			Recorder:     recorder,
+			ComponentInfo: &v1alpha1.ComponentInfo{
+				Component:      componentName,
+				Version:        componentVersion,
+				RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+			},
+			ResourceInfo: &v1alpha1.ResourceInfo{
+				Name:    resourceName,
+				Type:    "plainText",
+				Version: resourceVersion,
+				Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
+				Digest: &v2.Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "genericBlobDigest/v1",
+					Value:                  "finalizer-remove-digest",
+				},
+			},
+		})
+		DeferCleanup(func(ctx SpecContext) { test.DeleteObject(ctx, k8sClient, resourceObj) })
+
+		deployerObj := &v1alpha1.Deployer{
+			ObjectMeta: metav1.ObjectMeta{Name: "deployer-finalizer-remove"},
+			Spec: v1alpha1.DeployerSpec{
+				ResourceRef: v1alpha1.ObjectKey{
+					Name:      resourceObj.GetName(),
+					Namespace: namespace.GetName(),
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+
+		By("waiting until the Deployer is Ready (finalizers are added)")
+		test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployerObj), deployerObj)).To(Succeed())
+		Expect(deployerObj.Finalizers).To(ContainElements(applySetPruneFinalizer, resourceWatchFinalizer))
+
+		By("deleting the Deployer and verifying it is fully removed (no stuck finalizers)")
+		test.DeleteObject(ctx, k8sClient, deployerObj)
+	})
+})
+
 var _ = Describe("Deployer Controller Error Handling", func() {
 	It("should not requeue when the resource is not ready", func(ctx SpecContext) {
 		namespace := &corev1.Namespace{

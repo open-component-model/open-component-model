@@ -291,6 +291,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	old := deployer.DeepCopy()
 	defer func(ctx context.Context) {
+		if !equality.Semantic.DeepEqual(deployer.Finalizers, old.Finalizers) {
+			err = errors.Join(err, r.GetClient().Update(ctx, deployer))
+			return
+		}
 		status.UpdateBeforePatch(deployer, r.EventRecorder, 0, err)
 		if !equality.Semantic.DeepEqual(deployer.Status, old.Status) {
 			err = errors.Join(err, r.GetClient().Status().Patch(ctx, deployer, client.MergeFrom(old)))
