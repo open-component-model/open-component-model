@@ -5,18 +5,6 @@
  * Supports both CLI and bindings (plugins) with configurable tag prefixes.
  */
 
-// Default max version length for Kubernetes label compliance.
-// Kubernetes label values must be at most 63 characters (RFC 1123).
-// The helm.sh/chart label is formatted as "<chart-name>-<version>".
-// Our chart name is "chart" (6 chars including the hyphen separator),
-// so the version portion must not exceed 57 characters.
-// If the chart name changes, this constant must be updated accordingly.
-//
-// Workflows that need truncation set MAX_VERSION_LENGTH as an environment
-// variable; workflows without label constraints (e.g. CLI, OCI tags) leave
-// it unset so versions are never truncated.
-export const DEFAULT_MAX_VERSION_LENGTH = 57;
-
 /**
  * Compute version from a git ref.
  *
@@ -93,7 +81,10 @@ function escapeRegex(str) {
  * Environment variables:
  * - REF: Git ref to compute version from (required)
  * - TAG_PREFIX: Tag prefix pattern (required, e.g. "cli/v" or "bindings/go/helm/v")
- * - MAX_VERSION_LENGTH: Optional max pseudo-version length for label compliance (e.g. "57")
+ * - MAX_VERSION_LENGTH: Optional max length (chars) for pseudo-versions. Required when the version
+ *   is embedded in a Kubernetes label value (max 63 chars, RFC 1123). For example, the helm.sh/chart
+ *   label uses "<chart-name>-<version>", so MAX_VERSION_LENGTH = 63 - len("<chart-name>-").
+ *   Leave unset for workflows that do not produce Kubernetes labels (e.g. CLI, OCI tags).
  *
  * @param {import('@actions/github-script').AsyncFunctionArguments} args
  */
@@ -102,8 +93,9 @@ export default async function computeVersionAction({ core }) {
     const tagPrefix = process.env.TAG_PREFIX;
     const maxLengthEnv = process.env.MAX_VERSION_LENGTH;
 
-    // Parse optional max version length from environment.
-    // Only set for workflows that produce Kubernetes labels (e.g. kubernetes-controller).
+    // Parse optional max version length. When set, pseudo-versions are truncated to fit within
+    // Kubernetes label value limits (63 chars, RFC 1123). Only workflows embedding the version
+    // in a label (e.g. helm.sh/chart) need to set this; others leave it unset to skip truncation.
     const maxLength = maxLengthEnv ? Number(maxLengthEnv) : undefined;
     if (maxLengthEnv && (!Number.isInteger(maxLength) || maxLength <= 0)) {
         core.setFailed(`MAX_VERSION_LENGTH must be a positive integer, got "${maxLengthEnv}"`);
