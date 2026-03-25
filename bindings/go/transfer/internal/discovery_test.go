@@ -11,6 +11,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -178,18 +179,21 @@ func TestResolver_ValidKey(t *testing.T) {
 		BaseUrl: "ghcr.io",
 	}
 
-	r := &resolver{
-		repoResolver: &mockCVRepoResolver{
-			specs: map[string]runtime.Typed{
-				"ocm.software/test:1.0.0": repoSpec,
-			},
-			repos: map[string]repository.ComponentVersionRepository{
-				"ocm.software/test:1.0.0": &mockCVRepo{
-					descriptors: map[string]*descriptor.Descriptor{
-						"ocm.software/test:1.0.0": desc,
-					},
+	mockResolver := &mockCVRepoResolver{
+		specs: map[string]runtime.Typed{
+			"ocm.software/test:1.0.0": repoSpec,
+		},
+		repos: map[string]repository.ComponentVersionRepository{
+			"ocm.software/test:1.0.0": &mockCVRepo{
+				descriptors: map[string]*descriptor.Descriptor{
+					"ocm.software/test:1.0.0": desc,
 				},
 			},
+		},
+	}
+	r := &multiResolver{
+		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
+			"ocm.software/test:1.0.0": mockResolver,
 		},
 		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
 	}
@@ -201,8 +205,8 @@ func TestResolver_ValidKey(t *testing.T) {
 }
 
 func TestResolver_InvalidKeyFormat(t *testing.T) {
-	r := &resolver{
-		repoResolver:   &mockCVRepoResolver{},
+	r := &multiResolver{
+		resolverMap:    map[string]resolvers.ComponentVersionRepositoryResolver{},
 		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
 	}
 	_, err := r.Resolve(t.Context(), "invalid-no-colon")
@@ -211,15 +215,127 @@ func TestResolver_InvalidKeyFormat(t *testing.T) {
 }
 
 func TestResolver_RepoSpecError(t *testing.T) {
-	r := &resolver{
-		repoResolver: &mockCVRepoResolver{
-			err:   fmt.Errorf("spec lookup failed"),
-			specs: map[string]runtime.Typed{},
-			repos: map[string]repository.ComponentVersionRepository{},
+	mockRes := &mockCVRepoResolver{
+		err:   fmt.Errorf("spec lookup failed"),
+		specs: map[string]runtime.Typed{},
+		repos: map[string]repository.ComponentVersionRepository{},
+	}
+	r := &multiResolver{
+		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
+			"ocm.software/test:1.0.0": mockRes,
 		},
 		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
 	}
 	_, err := r.Resolve(t.Context(), "ocm.software/test:1.0.0")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "spec lookup failed")
+}
+
+func TestDiscoverer_RecursiveTargetPropagation(t *testing.T) {
+	someTarget := &oci.Repository{
+		Type:    runtime.Type{Name: oci.Type, Version: "v1"},
+		BaseUrl: "ghcr.io/target",
+	}
+	d := &discoverer{
+		recursive:         true,
+		discoveredDigests: make(map[string]descriptor.Digest),
+		targetMap:         map[string][]runtime.Typed{"parent.comp/name:1.0.0": {someTarget}},
+		resolverMap:       map[string]resolvers.ComponentVersionRepositoryResolver{},
+	}
+	parent := &discoveryValue{
+		Descriptor: &descriptor.Descriptor{
+			Component: descriptor.Component{
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "parent.comp/name", Version: "1.0.0"},
+				},
+				References: []descriptor.Reference{
+					{
+						ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child-ref", Version: "2.0.0"}},
+						Component:   "child.comp/name",
+					},
+				},
+			},
+		},
+	}
+	children, err := d.Discover(t.Context(), parent)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"child.comp/name:2.0.0"}, children)
+	assert.Equal(t, []runtime.Typed{someTarget}, d.targetMap["child.comp/name:2.0.0"])
+}
+
+func TestDiscoverer_RecursiveResolverPropagation(t *testing.T) {
+	parentResolver := &mockCVRepoResolver{
+		specs: map[string]runtime.Typed{},
+		repos: map[string]repository.ComponentVersionRepository{},
+	}
+	d := &discoverer{
+		recursive:         true,
+		discoveredDigests: make(map[string]descriptor.Digest),
+		targetMap:         map[string][]runtime.Typed{},
+		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
+			"parent.comp/name:1.0.0": parentResolver,
+		},
+	}
+	parent := &discoveryValue{
+		Descriptor: &descriptor.Descriptor{
+			Component: descriptor.Component{
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "parent.comp/name", Version: "1.0.0"},
+				},
+				References: []descriptor.Reference{
+					{
+						ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child-ref", Version: "3.0.0"}},
+						Component:   "child.comp/name",
+					},
+				},
+			},
+		},
+	}
+	children, err := d.Discover(t.Context(), parent)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"child.comp/name:3.0.0"}, children)
+	assert.Equal(t, parentResolver, d.resolverMap["child.comp/name:3.0.0"])
+}
+
+func TestMultiResolver_NoResolverForKey(t *testing.T) {
+	r := &multiResolver{
+		resolverMap:    map[string]resolvers.ComponentVersionRepositoryResolver{},
+		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
+	}
+	_, err := r.Resolve(t.Context(), "ocm.software/missing:1.0.0")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no resolver found")
+}
+
+func TestMultiResolver_NilRepoSpec_FallsBackToDirectLookup(t *testing.T) {
+	desc := &descriptor.Descriptor{
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: "ocm.software/test", Version: "1.0.0"},
+			},
+		},
+	}
+	mockRepo := &mockCVRepo{
+		descriptors: map[string]*descriptor.Descriptor{
+			"ocm.software/test:1.0.0": desc,
+		},
+	}
+	mockRes := &mockCVRepoResolver{
+		specs: map[string]runtime.Typed{
+			"ocm.software/test:1.0.0": nil, // GetRepositorySpecificationForComponent returns nil
+		},
+		repos: map[string]repository.ComponentVersionRepository{
+			"ocm.software/test:1.0.0": mockRepo,
+		},
+	}
+	r := &multiResolver{
+		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
+			"ocm.software/test:1.0.0": mockRes,
+		},
+		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
+	}
+	val, err := r.Resolve(t.Context(), "ocm.software/test:1.0.0")
+	require.NoError(t, err)
+	assert.Equal(t, desc, val.Descriptor)
+	assert.Nil(t, val.SourceRepository, "SourceRepository should be nil when repo spec is nil")
 }

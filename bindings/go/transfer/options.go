@@ -49,8 +49,9 @@ const (
 
 // Options configures the behavior of a transfer operation.
 //
-// Use the functional option helpers [WithCopyMode], [WithRecursive], and [WithUploadType]
-// to construct options for [BuildGraphDefinition].
+// Transfer mappings must be specified via [WithTransfer] or [WithTransfer].
+// Each mapping must include a resolver via [FromResolver] or [FromRepository],
+// components via [Component], and a target via [ToRepositorySpec].
 type Options struct {
 	// Recursive enables recursive discovery and transfer of referenced component versions.
 	// When true, the transfer follows component references in the descriptor and transfers
@@ -65,6 +66,9 @@ type Options struct {
 	// UploadType controls how resources are stored in the target repository.
 	// See [UploadAsDefault], [UploadAsLocalBlob], and [UploadAsOciArtifact].
 	UploadType UploadType
+
+	// Mappings defines which components are transferred to which targets.
+	Mappings []Mapping
 }
 
 // Option is a functional option for configuring transfer operations.
@@ -92,5 +96,22 @@ func WithRecursive(recursive bool) Option {
 func WithUploadType(upload UploadType) Option {
 	return func(o *Options) {
 		o.UploadType = upload
+	}
+}
+
+// WithTransfer adds a transfer mapping that routes source components to a target repository.
+//
+//	transfer.WithTransfer(
+//	    transfer.Component("ocm.software/frontend", "1.0.0"),
+//	    transfer.ToRepositorySpec(targetRepo),
+//	    transfer.FromResolver(sourceResolver),
+//	)
+func WithTransfer(transferOpts ...TransferOption) Option {
+	return func(o *Options) {
+		m := Mapping{}
+		for _, opt := range transferOpts {
+			opt(&m)
+		}
+		o.Mappings = append(o.Mappings, m)
 	}
 }

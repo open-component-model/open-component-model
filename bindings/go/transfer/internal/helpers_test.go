@@ -102,6 +102,67 @@ func TestAsUnstructured(t *testing.T) {
 	assert.Equal(t, "ghcr.io", u.Data["baseUrl"])
 }
 
+func TestRepositoryEqual_OCISameValues(t *testing.T) {
+	a := &oci.Repository{Type: runtime.Type{Name: oci.Type, Version: "v1"}, BaseUrl: "ghcr.io", SubPath: "org"}
+	b := &oci.Repository{Type: runtime.Type{Name: oci.Type, Version: "v1"}, BaseUrl: "ghcr.io", SubPath: "org"}
+	assert.True(t, RepositoryEqual(a, b))
+}
+
+func TestRepositoryEqual_OCIDifferentBaseUrl(t *testing.T) {
+	a := &oci.Repository{Type: runtime.Type{Name: oci.Type, Version: "v1"}, BaseUrl: "ghcr.io"}
+	b := &oci.Repository{Type: runtime.Type{Name: oci.Type, Version: "v1"}, BaseUrl: "docker.io"}
+	assert.False(t, RepositoryEqual(a, b))
+}
+
+func TestRepositoryEqual_OCIDifferentSubPath(t *testing.T) {
+	a := &oci.Repository{Type: runtime.Type{Name: oci.Type, Version: "v1"}, BaseUrl: "ghcr.io", SubPath: "org1"}
+	b := &oci.Repository{Type: runtime.Type{Name: oci.Type, Version: "v1"}, BaseUrl: "ghcr.io", SubPath: "org2"}
+	assert.False(t, RepositoryEqual(a, b))
+}
+
+func TestRepositoryEqual_CTFSameValues(t *testing.T) {
+	a := &ctfv1.Repository{Type: runtime.Type{Name: ctfv1.Type, Version: ctfv1.Version}, FilePath: "/tmp/a"}
+	b := &ctfv1.Repository{Type: runtime.Type{Name: ctfv1.Type, Version: ctfv1.Version}, FilePath: "/tmp/a"}
+	assert.True(t, RepositoryEqual(a, b))
+}
+
+func TestRepositoryEqual_CTFDifferentPath(t *testing.T) {
+	a := &ctfv1.Repository{Type: runtime.Type{Name: ctfv1.Type, Version: ctfv1.Version}, FilePath: "/tmp/a"}
+	b := &ctfv1.Repository{Type: runtime.Type{Name: ctfv1.Type, Version: ctfv1.Version}, FilePath: "/tmp/b"}
+	assert.False(t, RepositoryEqual(a, b))
+}
+
+func TestRepositoryEqual_DifferentTypes(t *testing.T) {
+	a := &oci.Repository{Type: runtime.Type{Name: oci.Type, Version: "v1"}, BaseUrl: "ghcr.io"}
+	b := &ctfv1.Repository{Type: runtime.Type{Name: ctfv1.Type, Version: ctfv1.Version}, FilePath: "/tmp/a"}
+	assert.False(t, RepositoryEqual(a, b))
+}
+
+func TestAppendUniqueRepositories_NoDuplicates(t *testing.T) {
+	t1 := &oci.Repository{Type: runtime.Type{Name: oci.Type, Version: "v1"}, BaseUrl: "ghcr.io/t1"}
+	t2 := &oci.Repository{Type: runtime.Type{Name: oci.Type, Version: "v1"}, BaseUrl: "ghcr.io/t2"}
+
+	result := AppendUniqueRepositories(nil, []runtime.Typed{t1, t2})
+	assert.Len(t, result, 2)
+
+	// Same pointer
+	result = AppendUniqueRepositories(result, []runtime.Typed{t1})
+	assert.Len(t, result, 2)
+
+	// Different pointer, same values
+	t1Copy := &oci.Repository{Type: runtime.Type{Name: oci.Type, Version: "v1"}, BaseUrl: "ghcr.io/t1"}
+	result = AppendUniqueRepositories(result, []runtime.Typed{t1Copy})
+	assert.Len(t, result, 2, "value-equal repo should not be added again")
+}
+
+func TestAppendUniqueRepositories_MixedTypes(t *testing.T) {
+	ociRepo := &oci.Repository{Type: runtime.Type{Name: oci.Type, Version: "v1"}, BaseUrl: "ghcr.io"}
+	ctfRepo := &ctfv1.Repository{Type: runtime.Type{Name: ctfv1.Type, Version: ctfv1.Version}, FilePath: "/tmp/a"}
+
+	result := AppendUniqueRepositories(nil, []runtime.Typed{ociRepo, ctfRepo})
+	assert.Len(t, result, 2, "different types should both be kept")
+}
+
 func TestGetReferenceName(t *testing.T) {
 	tests := []struct {
 		name          string

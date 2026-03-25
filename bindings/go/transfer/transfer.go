@@ -2,8 +2,9 @@ package transfer
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 
-	"ocm.software/open-component-model/bindings/go/oci/compref"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal"
@@ -11,32 +12,13 @@ import (
 )
 
 // BuildGraphDefinition constructs a [transformv1alpha1.TransformationGraphDefinition] that
-// describes how to transfer a component version from a source repository to a target repository.
+// describes how to transfer component versions between repositories.
 //
-// The returned graph definition can be executed by a [builder.Builder] (see [NewDefaultBuilder])
-// to perform the actual transfer.
-//
-// fromSpec identifies the source component version to transfer. It must contain the component name,
-// version, and a repository specification that the repoResolver can use to locate the component.
-// Use [compref.Parse] to construct a Ref from a string like "ghcr.io/org/repo//ocm.software/mycomponent:1.0.0".
-// Note: In the future we may decide to support passing many component versions (like all CVs from a CTF) but this
-// is currently not implemented.
-//
-// toSpec is the target repository specification where the component version will be transferred to.
-// Supported types are [oci.Repository] (OCI registry) and [ctf.Repository] (Common Transport Format archive).
-// Use [compref.ParseRepository] to construct a repository spec from a string like "ghcr.io/target/repo".
-//
-// repoResolver is used to discover component versions during the transfer. It resolves component
-// names and versions to concrete repository specifications and repositories, enabling recursive
-// discovery of referenced components when [WithRecursive] is set.
-//
-// By default, only the component descriptor itself is transferred. Use [WithCopyMode] to also
-// transfer resources, and [WithUploadType] to control how resources are stored in the target.
+// Transfer mappings must be specified via [WithTransfer] or [WithTransfer].
+// Each mapping pairs source components with a target repository and a resolver,
+// enabling N:M routing where different sources feed different targets.
 func BuildGraphDefinition(
 	ctx context.Context,
-	fromSpec *compref.Ref,
-	toSpec runtime.Typed,
-	repoResolver resolvers.ComponentVersionRepositoryResolver,
 	opts ...Option,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
 	o := Options{}
@@ -45,5 +27,99 @@ func BuildGraphDefinition(
 			opt(&o)
 		}
 	}
-	return internal.BuildGraphDefinition(ctx, fromSpec, toSpec, repoResolver, o.Recursive, int(o.CopyMode), int(o.UploadType))
+
+	roots, err := collectTransferRoots(ctx, &o)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.DebugContext(ctx, "building transfer graph definition",
+		"roots", len(roots),
+		"recursive", o.Recursive,
+		"copyMode", o.CopyMode,
+		"uploadType", o.UploadType)
+
+	return internal.BuildGraphDefinition(ctx, roots, o.Recursive, int(o.CopyMode), int(o.UploadType))
+}
+
+// collectTransferRoots resolves all transfer mappings into internal TransferRoots.
+func collectTransferRoots(ctx context.Context, o *Options) ([]internal.TransferRoot, error) {
+	if len(o.Mappings) == 0 {
+		return nil, fmt.Errorf("no transfer mappings specified: use WithTransfer or WithTransfer")
+	}
+
+	type rootData struct {
+		targets  []runtime.Typed
+		resolver resolvers.ComponentVersionRepositoryResolver
+	}
+
+	byKey := make(map[string]*rootData)
+	keyOrder := make([]string, 0)
+
+	for i, m := range o.Mappings {
+		if m.Target == nil {
+			return nil, fmt.Errorf("mapping %d has no target: use ToRepositorySpec() in WithTransfer", i)
+		}
+		if m.Resolver == nil {
+			return nil, fmt.Errorf("mapping %d has no resolver: use FromResolver() or FromRepository() in WithTransfer", i)
+		}
+
+		ids, err := resolveMapping(ctx, &m)
+		if err != nil {
+			return nil, fmt.Errorf("mapping %d: %w", i, err)
+		}
+
+		slog.DebugContext(ctx, "resolved transfer mapping",
+			"mapping", i,
+			"components", len(ids),
+			"target", fmt.Sprintf("%T", m.Target))
+
+		for _, id := range ids {
+			key := id.String()
+			rd, exists := byKey[key]
+			if !exists {
+				rd = &rootData{resolver: m.Resolver}
+				byKey[key] = rd
+				keyOrder = append(keyOrder, key)
+			}
+			rd.targets = internal.AppendUniqueRepositories(rd.targets, []runtime.Typed{m.Target})
+		}
+	}
+
+	roots := make([]internal.TransferRoot, 0, len(byKey))
+	for _, key := range keyOrder {
+		rd := byKey[key]
+		roots = append(roots, internal.TransferRoot{
+			Key:      key,
+			Targets:  rd.targets,
+			Resolver: rd.resolver,
+		})
+	}
+	return roots, nil
+}
+
+// resolveMapping extracts ComponentIDs from a Mapping.
+func resolveMapping(ctx context.Context, m *Mapping) ([]ComponentID, error) {
+	if m.ComponentLister != nil && len(m.Components) > 0 {
+		return nil, fmt.Errorf("cannot combine Component/FromComponents with FromLister in the same mapping")
+	}
+
+	if m.ComponentLister != nil {
+		var ids []ComponentID
+		if err := m.ComponentLister.ListComponentVersions(ctx, func(batch []ComponentID) error {
+			ids = append(ids, batch...)
+			return nil
+		}); err != nil {
+			return nil, fmt.Errorf("listing components failed: %w", err)
+		}
+		if len(ids) == 0 {
+			return nil, fmt.Errorf("component lister returned no components")
+		}
+		return ids, nil
+	}
+
+	if len(m.Components) == 0 {
+		return nil, fmt.Errorf("no components specified: use Component()")
+	}
+	return m.Components, nil
 }
