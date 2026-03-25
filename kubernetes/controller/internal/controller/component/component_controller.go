@@ -226,6 +226,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
 
+	// Set effective config immediately so the deferred patch persists it
+	// even if a subsequent step fails.
+	component.Status.EffectiveOCMConfig = configs
+
 	repoSpec := &runtime.Raw{}
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(bytes.NewReader(repo.Spec.RepositorySpec.Raw), repoSpec); err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetRepositoryFailedReason, err.Error())
@@ -308,11 +312,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		},
 	}
 
-	component.Status.EffectiveOCMConfig = configs
-
 	status.MarkReady(r.EventRecorder, component, "Applied version %s", version)
 
-	return ctrl.Result{RequeueAfter: component.GetRequeueAfter()}, nil
+	return status.RequeueResult(component, component.GetRequeueAfter()), nil
 }
 
 func (r *Reconciler) reconcileDelete(ctx context.Context, component *v1alpha1.Component) error {

@@ -10,9 +10,9 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/runtime/conditions"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -150,7 +150,12 @@ var _ = Describe("Component Controller", func() {
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
 
 			By("marking the repository as not ready")
-			conditions.MarkFalse(repositoryObj, "Ready", "notReady", "reason")
+			apimeta.SetStatusCondition(&repositoryObj.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.ReadyCondition,
+				Status:  metav1.ConditionFalse,
+				Reason:  "notReady",
+				Message: "reason",
+			})
 			Expect(k8sClient.Status().Update(ctx, repositoryObj)).To(Succeed())
 
 			By("creating a component object")
@@ -198,7 +203,12 @@ var _ = Describe("Component Controller", func() {
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
 
 			By("marking the repository as not ready")
-			conditions.MarkFalse(repositoryObj, "Ready", "notReady", "reason")
+			apimeta.SetStatusCondition(&repositoryObj.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.ReadyCondition,
+				Status:  metav1.ConditionFalse,
+				Reason:  "notReady",
+				Message: "reason",
+			})
 			Expect(k8sClient.Status().Update(ctx, repositoryObj)).To(Succeed())
 
 			By("creating a component object")
@@ -223,7 +233,12 @@ var _ = Describe("Component Controller", func() {
 			test.WaitForNotReadyObject(ctx, k8sClient, component, v1alpha1.GetResourceFailedReason)
 
 			By("marking the repository as ready")
-			conditions.MarkTrue(repositoryObj, "Ready", "ready", "message")
+			apimeta.SetStatusCondition(&repositoryObj.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.ReadyCondition,
+				Status:  metav1.ConditionTrue,
+				Reason:  v1alpha1.SucceededReason,
+				Message: "ready",
+			})
 			Expect(k8sClient.Status().Update(ctx, repositoryObj)).To(Succeed())
 
 			By("checking that the component has been reconciled successfully")
@@ -364,7 +379,7 @@ var _ = Describe("Component Controller", func() {
 					return err
 				}
 
-				cond := conditions.Get(component, meta.ReadyCondition)
+				cond := apimeta.FindStatusCondition(component.GetConditions(), v1alpha1.ReadyCondition)
 				expectedMessage := "terminal error: component version cannot be downgraded from version 0.0.3 to version 0.0.2"
 				if cond.Message != expectedMessage {
 					return fmt.Errorf("expected ready-condition message to be '%s', but got '%s'", expectedMessage, cond.Message)
@@ -554,7 +569,11 @@ var _ = Describe("Component Controller", func() {
 					return err
 				}
 
-				reason := conditions.GetReason(comp, "Ready")
+				readyCond := apimeta.FindStatusCondition(comp.GetConditions(), v1alpha1.ReadyCondition)
+				var reason string
+				if readyCond != nil {
+					reason = readyCond.Reason
+				}
 				if reason != v1alpha1.DeletionFailedReason {
 					return fmt.Errorf(
 						"expected component ready-condition reason to be %s, but it was %s",
@@ -1016,13 +1035,23 @@ var _ = Describe("Component Controller", func() {
 				},
 			}
 
-			conditions.MarkTrue(repositoryObj, "Ready", "ready", "message")
+			apimeta.SetStatusCondition(&repositoryObj.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.ReadyCondition,
+				Status:  metav1.ConditionTrue,
+				Reason:  v1alpha1.SucceededReason,
+				Message: "ready",
+			})
 			Expect(k8sClient.Status().Update(ctx, repositoryObj)).To(Succeed())
 		})
 
 		AfterEach(func(ctx SpecContext) {
 			By("make sure the repo is still ready")
-			conditions.MarkTrue(repositoryObj, "Ready", "ready", "message")
+			apimeta.SetStatusCondition(&repositoryObj.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.ReadyCondition,
+				Status:  metav1.ConditionTrue,
+				Reason:  v1alpha1.SucceededReason,
+				Message: "ready",
+			})
 			Expect(k8sClient.Status().Update(ctx, repositoryObj)).To(Succeed())
 			cleanupTestConfigsAndSecrets(ctx, configs, secrets)
 

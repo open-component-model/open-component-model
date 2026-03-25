@@ -16,9 +16,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -74,7 +74,7 @@ func MockComponent(
 		c := &v1alpha1.Component{}
 		Expect(options.Client.Get(ctx, client.ObjectKeyFromObject(component), c)).To(Succeed())
 
-		if conditions.IsReady(c) {
+		if apimeta.IsStatusConditionTrue(c.GetConditions(), v1alpha1.ReadyCondition) {
 			return nil
 		}
 

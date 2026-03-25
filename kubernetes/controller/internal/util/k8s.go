@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/fluxcd/pkg/runtime/conditions"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
+
+	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
 
 type NotReadyError struct {
@@ -45,7 +47,7 @@ func GetReadyObject[T any, P ObjectPointerType[T]](ctx context.Context, client c
 		return nil, DeletionError{key.String()}
 	}
 
-	if !conditions.IsReady(obj) {
+	if !apimeta.IsStatusConditionTrue(obj.GetConditions(), v1alpha1.ReadyCondition) {
 		return nil, NotReadyError{key.String()}
 	}
 

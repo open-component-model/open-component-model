@@ -146,6 +146,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
 
+	// Set effective config immediately so the deferred patch persists it
+	// even if a subsequent step fails.
+	r.fillRepoStatusFromSpec(ocmRepo, configs)
+
 	repoSpec := &runtime.Raw{}
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(bytes.NewReader(ocmRepo.Spec.RepositorySpec.Raw), repoSpec); err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), ocmRepo, v1alpha1.GetRepositoryFailedReason, err.Error())
@@ -159,12 +163,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to validate ocm repository: %w", err)
 	}
 
-	r.fillRepoStatusFromSpec(ocmRepo, configs)
-
 	logger.Info("updating status")
 	status.MarkReady(r.EventRecorder, ocmRepo, "Successfully reconciled OCM repository")
 
-	return ctrl.Result{RequeueAfter: ocmRepo.GetRequeueAfter()}, nil
+	return status.RequeueResult(ocmRepo, ocmRepo.GetRequeueAfter()), nil
 }
 
 func (r *Reconciler) validate(ctx context.Context, repoSpec runtime.Typed, configs []v1alpha1.OCMConfiguration, ocmRepo *v1alpha1.Repository) error {

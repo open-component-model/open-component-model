@@ -1,5 +1,23 @@
 package v1alpha1
 
+// Condition types.
+const (
+	// ReadyCondition indicates the resource is ready.
+	ReadyCondition = "Ready"
+	// ReconcilingCondition indicates the resource is being reconciled.
+	ReconcilingCondition = "Reconciling"
+	// StalledCondition indicates the resource has stalled and will not be retried.
+	StalledCondition = "Stalled"
+)
+
+// Generic condition reasons.
+const (
+	// SucceededReason indicates reconciliation succeeded.
+	SucceededReason = "Succeeded"
+	// ProgressingWithRetryReason indicates reconciliation is retrying after a failure.
+	ProgressingWithRetryReason = "ProgressingWithRetry"
+)
+
 const (
 	// ConfigureContextFailedReason is used when the controller failed to create an authenticated context.
 	ConfigureContextFailedReason = "ConfigureContextFailed"

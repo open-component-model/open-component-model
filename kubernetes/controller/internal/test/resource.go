@@ -7,9 +7,9 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -63,7 +63,7 @@ func MockResource(
 		r := &v1alpha1.Resource{}
 		Expect(options.Clnt.Get(ctx, client.ObjectKeyFromObject(resource), r)).To(Succeed())
 
-		if conditions.IsReady(r) {
+		if apimeta.IsStatusConditionTrue(r.GetConditions(), v1alpha1.ReadyCondition) {
 			return nil
 		}
 

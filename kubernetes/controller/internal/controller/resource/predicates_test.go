@@ -113,7 +113,7 @@ var _ = Describe("ComponentInfoChangedPredicate", func() {
 		It("allows the event when readiness transitions from not-ready to ready", func() {
 			newComponent.Status.Conditions = []metav1.Condition{
 				{
-					Type:               meta.ReadyCondition,
+					Type:               v1alpha1.ReadyCondition,
 					Status:             metav1.ConditionTrue,
 					LastTransitionTime: metav1.Now(),
 					Reason:             "Ready",
@@ -127,7 +127,7 @@ var _ = Describe("ComponentInfoChangedPredicate", func() {
 
 		It("filters the event when only a non-readiness condition changed", func() {
 			readyCond := metav1.Condition{
-				Type:               meta.ReadyCondition,
+				Type:               v1alpha1.ReadyCondition,
 				Status:             metav1.ConditionTrue,
 				LastTransitionTime: metav1.Now(),
 				Reason:             "Ready",
