@@ -503,9 +503,10 @@ func TestCollectTransferRoots_SingleMapping(t *testing.T) {
 	roots, err := collectTransferRoots(t.Context(), o)
 	require.NoError(t, err)
 	require.Len(t, roots, 1)
-	assert.Equal(t, "ocm.software/test:1.0.0", roots[0].Key)
-	assert.Equal(t, []runtime.Typed{targetRepo}, roots[0].Targets)
-	assert.Equal(t, resolver, roots[0].Resolver)
+	root := roots["ocm.software/test:1.0.0"]
+	assert.Equal(t, "ocm.software/test:1.0.0", root.RootComponentKey)
+	assert.Equal(t, []runtime.Typed{targetRepo}, root.Targets)
+	assert.Equal(t, resolver, root.SourceResolver)
 }
 
 func TestCollectTransferRoots_MergesTargetsForSameComponent(t *testing.T) {
@@ -538,9 +539,10 @@ func TestCollectTransferRoots_MergesTargetsForSameComponent(t *testing.T) {
 	roots, err := collectTransferRoots(t.Context(), o)
 	require.NoError(t, err)
 	require.Len(t, roots, 1, "same component should be de-duplicated into one root")
-	assert.Len(t, roots[0].Targets, 2, "should have 2 targets merged")
-	assert.Contains(t, roots[0].Targets, runtime.Typed(target1))
-	assert.Contains(t, roots[0].Targets, runtime.Typed(target2))
+	root := roots["ocm.software/test:1.0.0"]
+	assert.Len(t, root.Targets, 2, "should have 2 targets merged")
+	assert.Contains(t, root.Targets, runtime.Typed(target1))
+	assert.Contains(t, root.Targets, runtime.Typed(target2))
 }
 
 func TestCollectTransferRoots_DuplicateTargetNotMergedTwice(t *testing.T) {
@@ -572,7 +574,7 @@ func TestCollectTransferRoots_DuplicateTargetNotMergedTwice(t *testing.T) {
 	roots, err := collectTransferRoots(t.Context(), o)
 	require.NoError(t, err)
 	require.Len(t, roots, 1)
-	assert.Len(t, roots[0].Targets, 1, "duplicate target (same pointer) should not be added twice")
+	assert.Len(t, roots["ocm.software/test:1.0.0"].Targets, 1, "duplicate target (same pointer) should not be added twice")
 }
 
 func TestResolveMapping_WithComponents(t *testing.T) {

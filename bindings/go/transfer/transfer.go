@@ -43,7 +43,7 @@ func BuildGraphDefinition(
 }
 
 // collectTransferRoots resolves all transfer mappings into internal TransferRoots.
-func collectTransferRoots(ctx context.Context, o *Options) ([]internal.TransferRoot, error) {
+func collectTransferRoots(ctx context.Context, o *Options) (map[string]internal.TransferRoot, error) {
 	if len(o.Mappings) == 0 {
 		return nil, fmt.Errorf("no transfer mappings specified: use WithTransfer")
 	}
@@ -54,7 +54,6 @@ func collectTransferRoots(ctx context.Context, o *Options) ([]internal.TransferR
 	}
 
 	byKey := make(map[string]*rootData)
-	keyOrder := make([]string, 0)
 
 	for i, m := range o.Mappings {
 		if m.Target == nil {
@@ -80,7 +79,6 @@ func collectTransferRoots(ctx context.Context, o *Options) ([]internal.TransferR
 			if !exists {
 				rd = &rootData{resolver: m.Resolver}
 				byKey[key] = rd
-				keyOrder = append(keyOrder, key)
 			} else if rd.resolver != m.Resolver {
 				return nil, fmt.Errorf("conflicting resolvers for component %s: each component must use the same resolver across all mappings", key)
 			}
@@ -88,14 +86,13 @@ func collectTransferRoots(ctx context.Context, o *Options) ([]internal.TransferR
 		}
 	}
 
-	roots := make([]internal.TransferRoot, 0, len(byKey))
-	for _, key := range keyOrder {
-		rd := byKey[key]
-		roots = append(roots, internal.TransferRoot{
-			Key:      key,
-			Targets:  rd.targets,
-			Resolver: rd.resolver,
-		})
+	roots := make(map[string]internal.TransferRoot, len(byKey))
+	for key, rd := range byKey {
+		roots[key] = internal.TransferRoot{
+			RootComponentKey: key,
+			Targets:          rd.targets,
+			SourceResolver:   rd.resolver,
+		}
 	}
 	return roots, nil
 }

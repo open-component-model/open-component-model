@@ -36,12 +36,15 @@ func testCTFRepo(path string) *ctfv1.Repository {
 	}
 }
 
-func testTransferRoots(component, version string, target runtime.Typed, resolver resolvers.ComponentVersionRepositoryResolver) []TransferRoot {
-	return []TransferRoot{{
-		Key:      component + ":" + version,
-		Targets:  []runtime.Typed{target},
-		Resolver: resolver,
-	}}
+func testTransferRoots(component, version string, target runtime.Typed, resolver resolvers.ComponentVersionRepositoryResolver) map[string]TransferRoot {
+	key := component + ":" + version
+	return map[string]TransferRoot{
+		key: {
+			RootComponentKey: key,
+			Targets:          []runtime.Typed{target},
+			SourceResolver:   resolver,
+		},
+	}
 }
 
 func testDescriptor(component, version string, resources []descriptor.Resource, refs []descriptor.Reference) *descriptor.Descriptor {
@@ -300,11 +303,13 @@ func TestBuildGraphDefinition_MultiTarget(t *testing.T) {
 	desc := testDescriptor("ocm.software/test", "1.0.0", nil, nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
-	roots := []TransferRoot{{
-		Key:      "ocm.software/test:1.0.0",
-		Targets:  []runtime.Typed{target1, target2},
-		Resolver: resolver,
-	}}
+	roots := map[string]TransferRoot{
+		"ocm.software/test:1.0.0": {
+			RootComponentKey: "ocm.software/test:1.0.0",
+			Targets:          []runtime.Typed{target1, target2},
+			SourceResolver:   resolver,
+		},
+	}
 
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
 	require.NoError(t, err)
@@ -329,9 +334,9 @@ func TestBuildGraphDefinition_MultipleRootsDifferentResolvers(t *testing.T) {
 	resolverA := testResolverFor("ocm.software/a", "1.0.0", sourceA, descA)
 	resolverB := testResolverFor("ocm.software/b", "2.0.0", sourceB, descB)
 
-	roots := []TransferRoot{
-		{Key: "ocm.software/a:1.0.0", Targets: []runtime.Typed{targetA}, Resolver: resolverA},
-		{Key: "ocm.software/b:2.0.0", Targets: []runtime.Typed{targetB}, Resolver: resolverB},
+	roots := map[string]TransferRoot{
+		"ocm.software/a:1.0.0": {RootComponentKey: "ocm.software/a:1.0.0", Targets: []runtime.Typed{targetA}, SourceResolver: resolverA},
+		"ocm.software/b:2.0.0": {RootComponentKey: "ocm.software/b:2.0.0", Targets: []runtime.Typed{targetB}, SourceResolver: resolverB},
 	}
 
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
@@ -358,11 +363,13 @@ func TestBuildGraphDefinition_MultiTargetWithResources(t *testing.T) {
 		[]descriptor.Resource{localBlobResource("my-resource", "1.0.0")}, nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
-	roots := []TransferRoot{{
-		Key:      "ocm.software/test:1.0.0",
-		Targets:  []runtime.Typed{target1, target2},
-		Resolver: resolver,
-	}}
+	roots := map[string]TransferRoot{
+		"ocm.software/test:1.0.0": {
+			RootComponentKey: "ocm.software/test:1.0.0",
+			Targets:          []runtime.Typed{target1, target2},
+			SourceResolver:   resolver,
+		},
+	}
 
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
 	require.NoError(t, err)
@@ -448,4 +455,3 @@ func TestBuildGraphDefinition_RecursiveResolverPropagation(t *testing.T) {
 	}
 	assert.Equal(t, 2, uploadCount, "expected 2 upload transformations after recursive resolver propagation")
 }
-

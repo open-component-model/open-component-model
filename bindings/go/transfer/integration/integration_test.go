@@ -3,10 +3,8 @@ package integration_test
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"os"
 	"testing"
 	"time"
@@ -49,8 +47,7 @@ import (
 const (
 	distributionRegistryImage = "registry:3.0.0"
 	testUsername              = "ocm"
-	passwordLength            = 20
-	charset                   = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	testPassword              = "password"
 )
 
 // --- test helpers ---
@@ -58,8 +55,7 @@ const (
 func startRegistry(t *testing.T) (address, user, password string) {
 	t.Helper()
 
-	password = generateRandomPassword(t)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := generateHtpasswd(t, testUsername, testPassword)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
@@ -82,18 +78,7 @@ func startRegistry(t *testing.T) (address, user, password string) {
 	addr, err := container.HostAddress(ctx)
 	require.NoError(t, err)
 
-	return addr, testUsername, password
-}
-
-func generateRandomPassword(t *testing.T) string {
-	t.Helper()
-	b := make([]byte, passwordLength)
-	for i := range b {
-		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		require.NoError(t, err)
-		b[i] = charset[n.Int64()]
-	}
-	return string(b)
+	return addr, testUsername, testPassword
 }
 
 func generateHtpasswd(t *testing.T, username, password string) string {

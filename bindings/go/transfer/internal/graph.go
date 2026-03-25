@@ -21,12 +21,12 @@ import (
 
 // TransferRoot pairs a DAG root key with its target repositories and resolver.
 type TransferRoot struct {
-	// Key is the "component:version" string used as a DAG root.
-	Key string
+	// RootComponentKey is the "component:version" string used as a DAG root.
+	RootComponentKey string
 	// Targets is the list of target repository specs this component should be transferred to.
 	Targets []runtime.Typed
-	// Resolver resolves this root's component version from its source repository.
-	Resolver resolvers.ComponentVersionRepositoryResolver
+	// SourceResolver resolves this root's component version from its source repository.
+	SourceResolver resolvers.ComponentVersionRepositoryResolver
 }
 
 // BuildGraphDefinition constructs a [transformv1alpha1.TransformationGraphDefinition] for
@@ -48,7 +48,7 @@ type TransferRoot struct {
 // The returned graph definition can be validated and executed by a builder.Builder.
 func BuildGraphDefinition(
 	ctx context.Context,
-	roots []TransferRoot,
+	roots map[string]TransferRoot,
 	recursive bool,
 	copyMode int,
 	uploadType int,
@@ -58,15 +58,14 @@ func BuildGraphDefinition(
 	// - targetMap: component key → list of target repository specs
 	// - resolverMap: component key → resolver to fetch that component from its source
 	// During recursive discovery, the discoverer will grow both maps as children are found.
+	// Using a map[string]TransferRoot guarantees key uniqueness — no duplicate roots possible.
 	targetMap := make(map[string][]runtime.Typed)
 	resolverMap := make(map[string]resolvers.ComponentVersionRepositoryResolver)
-	dagRoots := make([]string, len(roots))
-	for i, root := range roots {
-		dagRoots[i] = root.Key
-		targetMap[root.Key] = AppendUniqueRepositories(targetMap[root.Key], root.Targets)
-		if _, exists := resolverMap[root.Key]; !exists {
-			resolverMap[root.Key] = root.Resolver
-		}
+	dagRoots := make([]string, 0, len(roots))
+	for key, root := range roots {
+		dagRoots = append(dagRoots, key)
+		targetMap[key] = AppendUniqueRepositories(targetMap[key], root.Targets)
+		resolverMap[key] = root.SourceResolver
 	}
 
 	disc := &discoverer{
