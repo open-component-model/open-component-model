@@ -280,7 +280,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	// Set effective config immediately so the deferred patch persists it
 	// even if a subsequent step fails.
-	resource.Status.EffectiveOCMConfig = configs
+	if !equality.Semantic.DeepEqual(resource.Status.EffectiveOCMConfig, configs) {
+		resource.Status.EffectiveOCMConfig = configs
+		return ctrl.Result{}, fmt.Errorf("effective ocm config changed")
+	}
 
 	repoSpec := &runtime.Raw{}
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(
