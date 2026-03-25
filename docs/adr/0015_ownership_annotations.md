@@ -413,7 +413,7 @@ When a client pushes a manifest with a `subject` field and the registry responds
 
 ##### ORAS Handles This Automatically
 
-The ORAS Go library (`oras.land/oras-go`) detects whether the target registry supports the Referrers API during push. If the registry does not return the `OCI-Subject` header, ORAS automatically falls back to the tag schema — no additional code is needed in the OCM implementation. The same applies to `oras discover` on the client side: it transparently checks both the Referrers API and the tag fallback.
+The ORAS Go library ([`oras.land/oras-go`](https://github.com/oras-project/oras-go)) detects whether the target registry supports the Referrers API during push. If the registry does not return the `OCI-Subject` header, ORAS automatically falls back to the tag schema — no additional code is needed in the OCM implementation. The same applies to `oras discover` on the client side: it transparently checks both the Referrers API and the tag fallback. The fallback logic is implemented in [`registry/remote/repository.go`](https://github.com/oras-project/oras-go/blob/v2.6.0/registry/remote/repository.go) (`pushWithIndexing`, `updateReferrersIndex`) with supporting types in [`registry/remote/referrers.go`](https://github.com/oras-project/oras-go/blob/v2.6.0/registry/remote/referrers.go) (`buildReferrersTag`).
 
 ##### Registry Support Matrix
 
@@ -458,7 +458,7 @@ Ownership annotations are a new feature. New features are developed in the new O
 2. **Document**:
 
    - **Code** — annotation constants in [`annotations.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/spec/annotations/annotations.go) with spec references.
-   - **OCM Website** ([ocm.software](https://ocm.software)) — add a concepts/how-to page on ownership annotations and update [OCI storage backend](https://ocm.software/docs/concepts/components/) docs. Source: [`ocm-website`](https://github.com/open-component-model/ocm-website) under `content/docs/`.
+   - **OCM Website** ([ocm.software](https://ocm.software)) — add a concepts/how-to page on ownership annotations and update [OCI storage backend](https://ocm.software/docs/) docs. Source: [`ocm-website`](https://github.com/open-component-model/ocm-website) under `content/docs/`.
 
 3. **E2E tests**:
 
