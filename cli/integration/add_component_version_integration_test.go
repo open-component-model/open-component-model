@@ -12,7 +12,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/ctf"
 	"ocm.software/open-component-model/bindings/go/oci"
+	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/cli/cmd"
 	"ocm.software/open-component-model/cli/integration/internal"
@@ -455,6 +458,91 @@ func Test_Integration_HelmInput_LocalPath(t *testing.T) {
 
 	layout := internal.ParseHelmOCILayout(t, downloadDir)
 	layout.AssertHelmChartLayer(t)
+}
+
+func Test_Integration_HelmAccess_DigestProcessor(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	// Serve the test chart and an index.yaml from a local HTTP server.
+	// The digest is the SHA-256 of mychart-0.1.0.tgz as recorded in the index.
+	root := getRepoRootBasedOnGit(t)
+	chartDir := filepath.Join(root, "bindings/go/helm/testdata")
+	chartDigest := "c68fb36429431f1bf40e539e52d93e49d41b7ab9a6eaceba43e103ca7043bfcb"
+
+	indexYAML := fmt.Sprintf(`apiVersion: v1
+entries:
+  mychart:
+    - urls:
+        - mychart-0.1.0.tgz
+      name: mychart
+      version: 0.1.0
+      digest: "sha256:%s"
+      apiVersion: v2
+generated: "2024-01-01T00:00:00.000000000Z"
+`, chartDigest)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/index.yaml":
+			w.Header().Set("Content-Type", "application/x-yaml")
+			_, _ = w.Write([]byte(indexYAML))
+		default:
+			http.FileServer(http.Dir(chartDir)).ServeHTTP(w, req)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	componentName := "ocm.software/helm-access-digest"
+	componentVersion := "0.1.0"
+
+	constructorContent := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: mychart
+    version: 0.1.0
+    type: helmChart
+    access:
+      type: helm/v1
+      helmRepository: %s
+      helmChart: mychart:0.1.0
+`, componentName, componentVersion, srv.URL)
+
+	tempDir := t.TempDir()
+	constructorPath := filepath.Join(tempDir, "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	ctfDir := filepath.Join(tempDir, "ctf")
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
+		"--constructor", constructorPath,
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "add cv with helm access should succeed and trigger digest processor")
+
+	// Open the CTF and verify the resource has a digest set by the Helm digest processor.
+	fs, err := filesystem.NewFS(ctfDir, os.O_RDONLY)
+	r.NoError(err)
+	archive := ctf.NewFileSystemCTF(fs)
+	repo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	r.NoError(err)
+
+	desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(desc.Component.Resources, 1)
+
+	resource := desc.Component.Resources[0]
+	r.Equal("mychart", resource.Name)
+	r.NotNil(resource.Digest, "helm digest processor should have set a digest on the resource")
+	r.Equal("SHA-256", resource.Digest.HashAlgorithm)
+	r.Equal(chartDigest, resource.Digest.Value)
 }
 
 func Test_Integration_HelmInput_RemoteRepository(t *testing.T) {
