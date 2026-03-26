@@ -1,13 +1,14 @@
 package status
 
 import (
-	"github.com/fluxcd/pkg/runtime/conditions"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // IdentifiableClientObject defines an object which can create an identity for itself.
 type IdentifiableClientObject interface {
+	client.Object
+	ConditionObject
 	Mutator
-	conditions.Setter
 
 	// GetVID constructs an identifier for an object.
 	GetVID() map[string]string

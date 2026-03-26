@@ -1,25 +1,36 @@
 package event
 
 import (
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/runtime/conditions"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	kuberecorder "k8s.io/client-go/tools/record"
+
+	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
 
-func New(recorder kuberecorder.EventRecorder, obj conditions.Getter, metadata map[string]string, severity, msg string, args ...any) {
+// EventObject is an object that can be used with the event recorder and
+// carries conditions for deriving the event reason.
+type EventObject interface {
+	runtime.Object
+	GetConditions() []metav1.Condition
+	GetNamespace() string
+	GetName() string
+}
+
+func New(recorder kuberecorder.EventRecorder, obj EventObject, metadata map[string]string, severity, msg string, args ...any) {
 	if metadata == nil {
 		metadata = map[string]string{}
 	}
 
 	reason := severity
-	if r := conditions.GetReason(obj, meta.ReadyCondition); r != "" {
-		reason = r
+	if cond := apimeta.FindStatusCondition(obj.GetConditions(), v1alpha1.ReadyCondition); cond != nil && cond.Reason != "" {
+		reason = cond.Reason
 	}
 
 	eventType := corev1.EventTypeNormal
-	if severity == eventv1.EventSeverityError {
+	if severity == v1alpha1.EventSeverityError {
 		eventType = corev1.EventTypeWarning
 	}
 
