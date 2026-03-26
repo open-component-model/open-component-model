@@ -12,21 +12,11 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
-	"ocm.software/open-component-model/bindings/go/credentials"
-	helmaccess "ocm.software/open-component-model/bindings/go/helm/access"
-	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformation"
-	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
-	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
-	ocitransformer "ocm.software/open-component-model/bindings/go/oci/transformer"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
+	"ocm.software/open-component-model/bindings/go/transfer"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
-	"ocm.software/open-component-model/cli/cmd/transfer/component-version/internal"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/render"
@@ -164,9 +154,9 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting copy-resources flag failed: %w", err)
 	}
 
-	copyMode := internal.CopyModeLocalBlobResources
+	copyMode := transfer.CopyModeLocalBlobResources
 	if copyResources {
-		copyMode = internal.CopyModeAllResources
+		copyMode = transfer.CopyModeAllResources
 	}
 
 	uploadType, err := enum.Get(cmd.Flags(), FlagUploadAs)
@@ -174,30 +164,32 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting upload-as flag failed: %w", err)
 	}
 
-	upTyp := internal.UploadAsDefault
+	upTyp := transfer.UploadAsDefault
 	switch uploadType {
 	case UploadAsLocalBlob.String():
-		upTyp = internal.UploadAsLocalBlob
+		upTyp = transfer.UploadAsLocalBlob
 	case UploadAsOciArtifact.String():
-		upTyp = internal.UploadAsOciArtifact
+		upTyp = transfer.UploadAsOciArtifact
 	}
 
 	// Build TransformationGraphDefinition
-	tgd, err := internal.BuildGraphDefinition(
+	tgd, err := transfer.BuildGraphDefinition(
 		ctx,
-		fromSpec,
-		toSpec,
-		repoProvider,
-		internal.WithRecursive(recursive),
-		internal.WithCopyMode(copyMode),
-		internal.WithUploadType(upTyp),
+		transfer.WithTransfer(
+			transfer.Component(fromSpec.Component, fromSpec.Version),
+			transfer.ToRepositorySpec(toSpec),
+			transfer.FromResolver(repoProvider),
+		),
+		transfer.WithRecursive(recursive),
+		transfer.WithCopyMode(copyMode),
+		transfer.WithUploadType(upTyp),
 	)
 	if err != nil {
 		return fmt.Errorf("building graph definition failed: %w", err)
 	}
 
 	// Build transformer builder
-	b := graphBuilder(pm, credGraph)
+	b := transfer.NewDefaultBuilder(pm.ComponentVersionRepositoryRegistry, pm.ResourcePluginRegistry, credGraph)
 	graph, err := b.
 		WithEvents(make(chan graphRuntime.ProgressEvent, eventBufferSize)).
 		BuildAndCheck(tgd)
@@ -243,74 +235,6 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 
 	slog.DebugContext(ctx, "transfer completed successfully", "component", fromSpec.String())
 	return nil
-}
-
-// TODO: make this a plugin manager integration.
-func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Resolver) *builder.Builder {
-	transformerScheme := runtime.NewScheme()
-	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
-	transformerScheme.MustRegisterScheme(ociaccess.Scheme)
-	transformerScheme.MustRegisterScheme(helmv1alpha1.Scheme)
-
-	ociGet := &ocitransformer.GetComponentVersion{
-		Scheme:             transformerScheme,
-		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
-		CredentialProvider: credentialProvider,
-	}
-	ociAdd := &ocitransformer.AddComponentVersion{
-		Scheme:             transformerScheme,
-		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
-		CredentialProvider: credentialProvider,
-	}
-
-	// Resource transformers
-	ociGetResource := &ocitransformer.GetLocalResource{
-		Scheme:             transformerScheme,
-		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
-		CredentialProvider: credentialProvider,
-	}
-	ociAddResource := &ocitransformer.AddLocalResource{
-		Scheme:             transformerScheme,
-		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
-		CredentialProvider: credentialProvider,
-	}
-
-	// OCI Artifact transformers
-	ociGetOCIArtifact := &ocitransformer.GetOCIArtifact{
-		Scheme:             transformerScheme,
-		Repository:         pm.ResourcePluginRegistry,
-		CredentialProvider: credentialProvider,
-	}
-
-	ociAddOCIArtifact := &ocitransformer.AddOCIArtifact{
-		Scheme:             transformerScheme,
-		Repository:         pm.ResourcePluginRegistry,
-		CredentialProvider: credentialProvider,
-	}
-
-	// Helm transformers
-	getHelmChart := &helmtransformer.GetHelmChart{
-		Scheme:                           transformerScheme,
-		ResourceConsumerIdentityProvider: &helmaccess.HelmAccess{},
-		CredentialProvider:               credentialProvider,
-	}
-	convertHelmToOCI := &helmtransformer.ConvertHelmChartToOCI{
-		Scheme: transformerScheme,
-	}
-
-	return builder.NewBuilder(transformerScheme).
-		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
-		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
-		WithTransformer(&ociv1alpha1.CTFGetComponentVersion{}, ociGet).
-		WithTransformer(&ociv1alpha1.CTFAddComponentVersion{}, ociAdd).
-		WithTransformer(&ociv1alpha1.OCIGetLocalResource{}, ociGetResource).
-		WithTransformer(&ociv1alpha1.OCIAddLocalResource{}, ociAddResource).
-		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
-		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
-		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact).
-		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact).
-		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
-		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI)
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {

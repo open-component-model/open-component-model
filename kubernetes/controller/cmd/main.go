@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -221,6 +222,11 @@ func main() {
 
 	if err := pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(ociResourceRepoPlugin); err != nil {
 		setupLog.Error(err, "failed to register internal resource repository plugin")
+		os.Exit(1)
+	}
+
+	if err := pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(helmdigest.NewDigestProcessor("")); err != nil {
+		setupLog.Error(err, "failed to register helm digest processor plugin")
 		os.Exit(1)
 	}
 
