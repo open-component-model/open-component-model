@@ -86,7 +86,7 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	)
 
 	if strings.HasPrefix(helm.HelmRepository, "oci://") {
-		resolvedDigest, err = p.resolveOCIDigest(ctx, helm)
+		resolvedDigest, err = p.resolveOCIDigest(ctx, helm, credentials)
 	} else {
 		resolvedDigest, err = p.resolveHTTPDigest(ctx, helm, credentials)
 	}
@@ -128,6 +128,7 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 		Name: "digest-resolver",
 		URL:  helm.HelmRepository,
 	}
+
 	if credentials != nil {
 		if u, ok := credentials[ocicredentials.CredentialKeyUsername]; ok {
 			entry.Username = u
@@ -197,7 +198,7 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	return d, nil
 }
 
-func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm) (godigest.Digest, error) {
+func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm, credentials map[string]string) (godigest.Digest, error) {
 	if err := ctx.Err(); err != nil {
 		return "", fmt.Errorf("context cancelled before resolving OCI digest: %w", err)
 	}
@@ -210,7 +211,20 @@ func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm
 	// Strip the oci:// prefix for the registry client
 	ref = strings.TrimPrefix(ref, "oci://")
 
-	regClient, err := registry.NewClient()
+	var regClientOpts []registry.ClientOption
+	if credentials != nil {
+		username := credentials[ocicredentials.CredentialKeyUsername]
+		password := credentials[ocicredentials.CredentialKeyPassword]
+
+		if password == "" {
+			if token := credentials[ocicredentials.CredentialKeyAccessToken]; token != "" {
+				password = token
+			}
+		}
+		regClientOpts = []registry.ClientOption{registry.ClientOptBasicAuth(username, password)}
+	}
+
+	regClient, err := registry.NewClient(regClientOpts...)
 	if err != nil {
 		return "", fmt.Errorf("error creating registry client: %w", err)
 	}
