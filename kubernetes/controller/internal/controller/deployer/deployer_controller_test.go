@@ -26,6 +26,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -259,6 +260,170 @@ stringData:
 			}, gotSec)).To(Succeed())
 			// stringData is converted by API server into data (base64); compare the decoded value.
 			Expect(string(gotSec.Data["password"])).To(Equal("s3cr3t"))
+
+			By("deleting the Deployer")
+			test.DeleteObject(ctx, k8sClient, deployerObj)
+		})
+
+		It("reconciles a deployer when resource has no digest", func(ctx SpecContext) {
+			By("creating a CTF with the YAML stream blob")
+			resourceVersion := "1.0.0"
+
+			// Multi-doc YAML stream: ConfigMap + Secret
+			yamlStream := []byte(fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sample-cm
+  namespace: %[1]s
+data:
+  hello: world
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sample-secret
+  namespace: %[1]s
+type: Opaque
+stringData:
+  password: s3cr3t
+`, namespace.GetName()))
+
+			ctfPath := tempDir
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+
+			fs, err := filesystem.NewFS(ctfPath, os.O_RDWR)
+			Expect(err).NotTo(HaveOccurred())
+			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo, err := oci.NewRepository(ocictf.WithCTF(store), oci.WithTempDir(tempDir))
+			Expect(err).NotTo(HaveOccurred())
+
+			resource := &descruntime.Resource{
+				ElementMeta: descruntime.ElementMeta{
+					ObjectMeta: descruntime.ObjectMeta{
+						Name:    resourceName,
+						Version: resourceVersion,
+					},
+				},
+				Type:     "plainText",
+				Relation: descruntime.LocalRelation,
+				Access: &v2.LocalBlob{
+					Type: runtime.Type{
+						Name:    v2.LocalBlobAccessType,
+						Version: v2.LocalBlobAccessTypeVersion,
+					},
+					MediaType: "application/x-yaml",
+				},
+			}
+
+			blobContent := inmemory.New(bytes.NewReader(yamlStream))
+			newRes, err := repo.AddLocalResource(ctx, componentName, componentVersion, resource, blobContent)
+			Expect(err).NotTo(HaveOccurred())
+
+			desc := &descruntime.Descriptor{
+				Meta: descruntime.Meta{Version: "v2"},
+				Component: descruntime.Component{
+					ComponentMeta: descruntime.ComponentMeta{
+						ObjectMeta: descruntime.ObjectMeta{
+							Name:    componentName,
+							Version: componentVersion,
+						},
+					},
+					Provider:  descruntime.Provider{Name: "ocm.software"},
+					Resources: []descruntime.Resource{*newRes},
+				},
+			}
+
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+			repoSpec := &ctfv1.Repository{
+				Type:       runtime.Type{Name: "ctf", Version: "v1"},
+				FilePath:   ctfPath,
+				AccessMode: ctfv1.AccessModeReadOnly,
+			}
+			specData, err := json.Marshal(repoSpec)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("mocking a component")
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
+			By("mocking a Resource with no digest")
+			resourceObj = test.MockResource(
+				ctx,
+				resourceName,
+				namespace.GetName(),
+				&test.MockResourceOptions{
+					ComponentRef: corev1.LocalObjectReference{Name: componentObjName},
+					Clnt:         k8sClient,
+					Recorder:     recorder,
+					ComponentInfo: &v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+					ResourceInfo: &v1alpha1.ResourceInfo{
+						Name:    resourceName,
+						Type:    "plainText",
+						Version: resourceVersion,
+						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
+						// Digest intentionally nil to exercise the no-digest cache key path
+					},
+				},
+			)
+
+			By("creating a Deployer that references the Resource")
+			deployerObj := &v1alpha1.Deployer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: deployerObjName,
+				},
+				Spec: v1alpha1.DeployerSpec{
+					ResourceRef: v1alpha1.ObjectKey{
+						Name:      resourceObj.GetName(),
+						Namespace: namespace.GetName(),
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+
+			By("waiting until the Deployer is Ready")
+			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
+
+			By("verifying the ConfigMap has been applied")
+			gotCM := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: namespace.GetName(),
+				Name:      "sample-cm",
+			}, gotCM)).To(Succeed())
+			Expect(gotCM.Data).To(HaveKeyWithValue("hello", "world"))
+
+			By("verifying the Secret has been applied")
+			gotSec := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: namespace.GetName(),
+				Name:      "sample-secret",
+			}, gotSec)).To(Succeed())
+			Expect(string(gotSec.Data["password"])).To(Equal("s3cr3t"))
+
+			By("verifying the download cache contains the expected composite key")
+			expectedCacheKey := componentName + ":" + componentVersion + "/" + "name=" + resourceName + ",version=1.0.0"
+			_, err = downloadCache.Load(expectedCacheKey, func() ([]*unstructured.Unstructured, error) {
+				return nil, fmt.Errorf("cache miss for key %q: expected a hit", expectedCacheKey)
+			})
+			Expect(err).NotTo(HaveOccurred(), "expected download cache to contain composite key for nil-digest resource")
 
 			By("deleting the Deployer")
 			test.DeleteObject(ctx, k8sClient, deployerObj)

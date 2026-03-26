@@ -51,13 +51,14 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	k8sClient  client.Client
-	k8sManager ctrl.Manager
-	testEnv    *envtest.Environment
-	recorder   record.EventRecorder
-	ctx        context.Context
-	cancel     context.CancelFunc
-	pm         *manager.PluginManager
+	k8sClient     client.Client
+	k8sManager    ctrl.Manager
+	testEnv       *envtest.Environment
+	recorder      record.EventRecorder
+	ctx           context.Context
+	cancel        context.CancelFunc
+	pm            *manager.PluginManager
+	downloadCache *cache.MemoryDigestObjectCache[string, []*unstructured.Unstructured]
 )
 
 func TestControllers(t *testing.T) {
@@ -175,6 +176,10 @@ var _ = BeforeSuite(func() {
 
 	resolutionLogger := logf.Log.WithName("resolution")
 	resolver := resolution.NewResolver(&resolutionLogger, workerPool, pm)
+
+	downloadCache = cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_test_object_cache", 1_000, func(k string, v []*unstructured.Unstructured) {
+		GinkgoLogr.Info("DownloadCache eviction", "key", k, "value", fmt.Sprintf("%d objects", len(v)))
+	})
 
 	Expect((&Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
