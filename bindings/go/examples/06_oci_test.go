@@ -35,7 +35,6 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
-	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	credidentity "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -67,10 +66,6 @@ func TestExample_OCIRegistryRoundTrip(t *testing.T) {
 	r.NoError(err)
 
 	// 2. Create an OCI repository client pointing at the local registry.
-	scheme := runtime.NewScheme()
-	access.MustAddToScheme(scheme)
-	v2.MustAddToScheme(scheme)
-
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddress),
 		urlresolver.WithPlainHTTP(true),
@@ -83,7 +78,6 @@ func TestExample_OCIRegistryRoundTrip(t *testing.T) {
 
 	repo, err := oci.NewRepository(
 		oci.WithResolver(resolver),
-		oci.WithScheme(scheme),
 		oci.WithTempDir(t.TempDir()),
 	)
 	r.NoError(err)
@@ -177,10 +171,6 @@ func TestExample_OCIRegistryMultipleVersions(t *testing.T) {
 	registryAddress, err := registryContainer.HostAddress(ctx)
 	r.NoError(err)
 
-	scheme := runtime.NewScheme()
-	access.MustAddToScheme(scheme)
-	v2.MustAddToScheme(scheme)
-
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddress),
 		urlresolver.WithPlainHTTP(true),
@@ -193,7 +183,6 @@ func TestExample_OCIRegistryMultipleVersions(t *testing.T) {
 
 	repo, err := oci.NewRepository(
 		oci.WithResolver(resolver),
-		oci.WithScheme(scheme),
 		oci.WithTempDir(t.TempDir()),
 	)
 	r.NoError(err)
@@ -304,10 +293,6 @@ func TestExample_PrivateOCIRegistry(t *testing.T) {
 	})
 
 	// 3. Create the OCI repository client using the credentials for authentication.
-	scheme := runtime.NewScheme()
-	access.MustAddToScheme(scheme)
-	v2.MustAddToScheme(scheme)
-
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddress),
 		urlresolver.WithPlainHTTP(true),
@@ -324,7 +309,6 @@ func TestExample_PrivateOCIRegistry(t *testing.T) {
 
 	repo, err := oci.NewRepository(
 		oci.WithResolver(resolver),
-		oci.WithScheme(scheme),
 		oci.WithTempDir(t.TempDir()),
 	)
 	r.NoError(err)
@@ -373,4 +357,16 @@ func TestExample_PrivateOCIRegistry(t *testing.T) {
 	r.NoError(err)
 	r.Equal(component, got.Component.Name)
 	r.Equal(version, got.Component.Version)
+	r.Len(got.Component.Resources, 1)
+
+	// 7. Download the resource and verify its content.
+	readBlob, _, err := repo.GetLocalResource(ctx, component, version, map[string]string{
+		"name":    "secret-data",
+		"version": version,
+	})
+	r.NoError(err)
+
+	var buf bytes.Buffer
+	r.NoError(blob.Copy(&buf, readBlob))
+	r.Equal(resourceContent, buf.Bytes())
 }
