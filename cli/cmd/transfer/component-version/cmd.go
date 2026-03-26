@@ -184,7 +184,9 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		reader, rerr := renderTGD(tgd, output)
 		defer func() {
-			_ = reader.Close()
+			if reader != nil {
+				_ = reader.Close()
+			}
 		}()
 		raw, _ := io.ReadAll(reader)
 		return errors.Join(
