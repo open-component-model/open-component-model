@@ -14,7 +14,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
@@ -1934,7 +1933,7 @@ consumers:
 					Repository: repositoryName,
 					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "Secret",
 								Name:       credSecret.Name,
@@ -1943,7 +1942,7 @@ consumers:
 							Policy: v1alpha1.ConfigurationPolicyPropagate,
 						},
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "Secret",
 								Name:       "do-not-propagate-secret",
@@ -1990,7 +1989,7 @@ consumers:
 			Eventually(komega.Object(resourceObj), "15s").Should(
 				HaveField("Status.EffectiveOCMConfig", ConsistOf(
 					v1alpha1.OCMConfiguration{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       credSecret.Name,
@@ -2106,7 +2105,7 @@ consumers:
 					Repository: repositoryName,
 					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "Secret",
 								Name:       parentSecret.Name,
@@ -2139,7 +2138,7 @@ consumers:
 					Interval: metav1.Duration{Duration: 30 * time.Second},
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "Secret",
 								Name:       resourceSecret.Name,
@@ -2164,7 +2163,7 @@ consumers:
 			Eventually(komega.Object(resourceObj), "15s").Should(
 				HaveField("Status.EffectiveOCMConfig", ConsistOf(
 					v1alpha1.OCMConfiguration{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       resourceSecret.Name,

@@ -69,7 +69,6 @@ Kubernetes: `>=1.26.0-0`
 | manager.cache.ocmSessionSize | int | `100` | Maximum number of active OCM sessions kept alive |
 | manager.concurrency.resource | int | `4` | Number of active resource controller workers |
 | manager.env | list | `[]` | Environment variables for the controller |
-| manager.events.address | string | `""` | Address of the events receiver (optional) |
 | manager.extraArgs | list | `[]` | Extra arguments to pass to the controller |
 | manager.healthProbe.bindAddress | string | `":8081"` | Address the health probe endpoint binds to |
 | manager.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |

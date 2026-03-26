@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fluxcd/pkg/runtime/patch"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -103,9 +103,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	patchHelper := patch.NewSerialPatcher(ocmRepo, r.Client)
+	old := ocmRepo.DeepCopy()
 	defer func(ctx context.Context) {
-		err = errors.Join(err, status.UpdateStatus(ctx, patchHelper, ocmRepo, r.EventRecorder, ocmRepo.GetRequeueAfter(), err))
+		status.UpdateBeforePatch(ocmRepo, r.EventRecorder, ocmRepo.GetRequeueAfter(), err)
+		if !equality.Semantic.DeepEqual(ocmRepo.Status, old.Status) {
+			logger.Info("updating status")
+			err = errors.Join(err, r.GetClient().Status().Patch(ctx, ocmRepo, client.MergeFrom(old)))
+		}
 	}(ctx)
 
 	if !ocmRepo.GetDeletionTimestamp().IsZero() {
@@ -146,6 +150,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
 
+	// Set effective config immediately so the deferred patch persists it
+	// even if a subsequent step fails.
+	if !equality.Semantic.DeepEqual(ocmRepo.Status.EffectiveOCMConfig, configs) {
+		ocmRepo.Status.EffectiveOCMConfig = configs
+		return ctrl.Result{}, fmt.Errorf("effective ocm config changed")
+	}
+
 	repoSpec := &runtime.Raw{}
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(bytes.NewReader(ocmRepo.Spec.RepositorySpec.Raw), repoSpec); err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), ocmRepo, v1alpha1.GetRepositoryFailedReason, err.Error())
@@ -159,12 +170,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to validate ocm repository: %w", err)
 	}
 
-	r.fillRepoStatusFromSpec(ocmRepo, configs)
-
-	logger.Info("updating status")
 	status.MarkReady(r.EventRecorder, ocmRepo, "Successfully reconciled OCM repository")
 
-	return ctrl.Result{RequeueAfter: ocmRepo.GetRequeueAfter()}, nil
+	return status.RequeueResult(ocmRepo, ocmRepo.GetRequeueAfter()), nil
 }
 
 func (r *Reconciler) validate(ctx context.Context, repoSpec runtime.Typed, configs []v1alpha1.OCMConfiguration, ocmRepo *v1alpha1.Repository) error {
@@ -183,12 +191,6 @@ func (r *Reconciler) validate(ctx context.Context, repoSpec runtime.Typed, confi
 	}
 
 	return nil
-}
-
-func (r *Reconciler) fillRepoStatusFromSpec(ocmRepo *v1alpha1.Repository,
-	configs []v1alpha1.OCMConfiguration,
-) {
-	ocmRepo.Status.EffectiveOCMConfig = configs
 }
 
 func (r *Reconciler) deleteRepository(ctx context.Context, obj *v1alpha1.Repository) error {
