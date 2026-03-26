@@ -44,7 +44,7 @@ func (h *HelmAccess) GetResourceCredentialConsumerIdentity(ctx context.Context, 
 	}
 
 	if helm.HelmRepository == "" {
-		slog.InfoContext(ctx, "local helm inputs do not require credentials")
+		slog.DebugContext(ctx, "local helm inputs do not require credentials")
 		return nil, nil
 	}
 

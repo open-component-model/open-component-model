@@ -51,7 +51,7 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 	}
 
 	if helm.HelmRepository == "" {
-		slog.InfoContext(ctx, "local helm inputs do not require credentials")
+		slog.DebugContext(ctx, "local helm inputs do not require credentials")
 		return nil, nil
 	}
 
@@ -212,9 +212,10 @@ func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm
 	// Strip the oci:// prefix for the registry client
 	ref = strings.TrimPrefix(ref, "oci://")
 
-	username := credentials[ocicredentials.CredentialKeyUsername]
-	password := credentials[ocicredentials.CredentialKeyPassword]
+	var username, password string
 	if credentials != nil {
+		username = credentials[ocicredentials.CredentialKeyUsername]
+		password = credentials[ocicredentials.CredentialKeyPassword]
 		if password == "" {
 			if token := credentials[ocicredentials.CredentialKeyAccessToken]; token != "" {
 				password = token
@@ -222,7 +223,7 @@ func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm
 		}
 	}
 	var regClientOpts []registry.ClientOption
-	if username != "" || password != "" {
+	if username != "" && password != "" {
 		regClientOpts = append(regClientOpts, registry.ClientOptBasicAuth(username, password))
 	}
 	regClient, err := registry.NewClient(regClientOpts...)

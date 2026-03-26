@@ -120,7 +120,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		}
 	}
 
-	if password != "" {
+	if username != "" && password != "" {
 		dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
 	}
 
