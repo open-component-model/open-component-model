@@ -96,10 +96,9 @@ var _ = BeforeSuite(func() {
 
 	komega.SetClient(k8sClient)
 
-	gracefulTimeout := 5 * time.Second
 	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:                  scheme.Scheme,
-		GracefulShutdownTimeout: &gracefulTimeout,
+		GracefulShutdownTimeout: new(5 * time.Second),
 		Metrics: metricserver.Options{
 			BindAddress: "0",
 		},
@@ -146,18 +145,16 @@ var _ = BeforeSuite(func() {
 	ttl := time.Minute * 30
 	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
 
-	workerLogger := logf.Log.WithName("worker-pool")
 	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
 		WorkerCount: 10,
 		QueueSize:   100,
-		Logger:      &workerLogger,
+		Logger:      new(logf.Log.WithName("worker-pool")),
 		Client:      k8sManager.GetClient(),
 		Cache:       resolverCache,
 	})
 	Expect(k8sManager.Add(workerPool)).To(Succeed())
 
-	resolutionLogger := logf.Log.WithName("resolution")
-	resolver := resolution.NewResolver(k8sClient, &resolutionLogger, workerPool, pm)
+	resolver := resolution.NewResolver(k8sClient, new(logf.Log.WithName("resolution")), workerPool, pm)
 
 	Expect((&Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{

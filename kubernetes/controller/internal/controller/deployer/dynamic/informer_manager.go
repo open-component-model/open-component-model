@@ -21,7 +21,6 @@ import (
 	"k8s.io/client-go/rest"
 	toolscache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -143,7 +142,7 @@ func NewInformerManager(opts *Options) (*InformerManager, error) {
 		ReaderFailOnMissingInformer:  true,
 		DefaultLabelSelector:         opts.DefaultLabelSelector,
 		DefaultTransform:             TransformPartialObjectMetadata,
-		DefaultUnsafeDisableDeepCopy: ptr.To(true),
+		DefaultUnsafeDisableDeepCopy: new(true),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache: %w", err)

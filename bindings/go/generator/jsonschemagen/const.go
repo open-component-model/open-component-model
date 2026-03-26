@@ -68,7 +68,7 @@ func ApplyConstEnum(s *JSONSchemaDraft202012, enums []*universe.Const) {
 				Description: m.desc,
 			}
 			if m.deprecated {
-				entry.Deprecated = Ptr(true)
+				entry.Deprecated = new(true)
 			}
 			oneOf = append(oneOf, entry)
 		}
@@ -87,7 +87,7 @@ func ApplyConstEnum(s *JSONSchemaDraft202012, enums []*universe.Const) {
 				entry.Description = m.desc
 			}
 			if m.deprecated && entry.Deprecated == nil {
-				entry.Deprecated = Ptr(true)
+				entry.Deprecated = new(true)
 			}
 		}
 	}

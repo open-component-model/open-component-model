@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/constructor"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
@@ -22,9 +23,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var (
-	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
-)
+var dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
 
 func dummyCapability(schema []byte) v1.CapabilitySpec {
 	return v1.CapabilitySpec{
@@ -75,8 +74,7 @@ func TestPluginFlow(t *testing.T) {
 		Stdout: pipe,
 	}
 
-	capability := dummyCapability([]byte(`{}`))
-	require.NoError(t, registry.AddPlugin(plugin, &capability))
+	require.NoError(t, registry.AddPlugin(plugin, new(dummyCapability([]byte(`{}`)))))
 	p, err := scheme.NewObject(dummyType)
 	require.NoError(t, err)
 	retrievedResourcePlugin, err := registry.GetPlugin(ctx, p)

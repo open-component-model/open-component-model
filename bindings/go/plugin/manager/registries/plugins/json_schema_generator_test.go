@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -22,8 +23,7 @@ func (c *customType) SetType(t runtime.Type) {
 }
 
 func (c *customType) DeepCopyTyped() runtime.Typed {
-	c2 := *c
-	return &c2
+	return new(*c)
 }
 
 var _ runtime.Typed = &customType{}

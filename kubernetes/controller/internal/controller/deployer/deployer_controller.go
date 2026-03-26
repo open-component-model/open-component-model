@@ -322,9 +322,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, err.Error())
 
-		var notReadyErr util.NotReadyError
 		var deletionErr util.DeletionError
-		if errors.As(err, &notReadyErr) || errors.As(err, &deletionErr) {
+		if _, ok := errors.AsType[util.NotReadyError](err); ok || errors.As(err, &deletionErr) {
 			logger.Info("resource is not available", "error", err)
 
 			return ctrl.Result{}, nil
@@ -650,10 +649,9 @@ func resolveResourceCredentials(
 		return nil, fmt.Errorf("failed to get resource credential consumer identity: %w", err)
 	}
 
-	logger := log.FromContext(ctx)
 	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
 		PluginManager: pm,
-		Logger:        &logger,
+		Logger:        new(log.FromContext(ctx)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create credential graph: %w", err)

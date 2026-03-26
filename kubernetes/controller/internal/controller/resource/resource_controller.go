@@ -253,9 +253,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResourceIsNotAvailable, err.Error())
 
-		var notReadyErr util.NotReadyError
 		var deletionErr util.DeletionError
-		if errors.As(err, &notReadyErr) || errors.As(err, &deletionErr) {
+		if _, ok := errors.AsType[util.NotReadyError](err); ok || errors.As(err, &deletionErr) {
 			logger.Info("component is not available", "error", err)
 
 			return ctrl.Result{}, nil

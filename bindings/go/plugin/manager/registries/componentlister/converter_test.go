@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -145,9 +146,8 @@ func (m *mockConverterPlugin) ListComponents(ctx context.Context, request *v1.Li
 		return nil, m.err
 	}
 
-	response := m.responses[m.callCount]
 	m.callCount++
-	return &response, nil
+	return new(m.responses[m.callCount]), nil
 }
 
 func (m *mockConverterPlugin) Ping(ctx context.Context) error {

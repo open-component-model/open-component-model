@@ -113,8 +113,7 @@ func segmentFromIndexArg(e ast.Expr) (Segment, error) {
 		case string:
 			return Segment{Name: v}, nil
 		case int64:
-			i := int(v)
-			return Segment{Index: &i}, nil
+			return Segment{Index: new(int(v))}, nil
 		default:
 			return Segment{}, fmt.Errorf("unsupported index literal %T", v)
 		}

@@ -376,11 +376,9 @@ var zeroPad [512]byte
 
 var _ content.Pusher = &OCILayoutWriter{}
 
-// copyBufPool reuses 32KB byte slices for copyToWriterAt.
 var copyBufPool = sync.Pool{
 	New: func() any {
-		b := make([]byte, 32*1024)
-		return &b
+		return new(make([]byte, 32*1024))
 	},
 }
 

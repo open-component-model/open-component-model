@@ -44,6 +44,7 @@ func (logger *FakeLogger) Info(lvl int, msg string, keysAndValues ...interface{}
 	defer logger.mu.Unlock()
 	logger.infoBuffer.WriteString(msg)
 }
+
 func (logger *FakeLogger) Error(err error, msg string, keysAndValues ...interface{}) {
 	logger.mu.Lock()
 	defer logger.mu.Unlock()
@@ -65,12 +66,10 @@ func TestWorkerPool_StartAndStop(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 		fakeLogger := &FakeLogger{}
-		logger := logr.New(fakeLogger)
-
 		wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
 			WorkerCount: 3,
 			QueueSize:   10,
-			Logger:      &logger,
+			Logger:      new(logr.New(fakeLogger)),
 		})
 
 		go func() { _ = wp.Start(ctx) }()
@@ -92,8 +91,6 @@ func TestWorkerPool_StartAndStop(t *testing.T) {
 func TestWorkerPool_SingleResolution(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
-		logger := logr.Discard()
-
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ocm-config",
@@ -116,7 +113,7 @@ func TestWorkerPool_SingleResolution(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, &logger)
+		env := setupTestEnvironment(t, k8sClient, new(logr.Discard()))
 
 		opts := workerpool.ResolveOptions{
 			Component:  "single-component",
@@ -141,8 +138,6 @@ func TestWorkerPool_SingleResolution(t *testing.T) {
 func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
-		logger := logr.Discard()
-
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ocm-config",
@@ -165,7 +160,7 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, &logger)
+		env := setupTestEnvironment(t, k8sClient, new(logr.Discard()))
 
 		const numComponents = 20
 		results := make([]*descriptor.Descriptor, numComponents)
@@ -217,8 +212,6 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
-		logger := logr.Discard()
-
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ocm-config",
@@ -259,7 +252,7 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T
 			},
 		}
 
-		env := setupTestEnvironment(t, k8sClient, &logger)
+		env := setupTestEnvironment(t, k8sClient, new(logr.Discard()))
 
 		const numConcurrent = 50
 		errs := make([]error, numConcurrent)
@@ -305,8 +298,6 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 	// Note: This test uses real time.Sleep and is NOT wrapped in synctest.Test
 	// because it tests queue overflow behavior with a slow plugin that blocks workers.
 	ctx := t.Context()
-	logger := logr.Discard()
-
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "ocm-config",
@@ -350,7 +341,7 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
 		WorkerCount: 1, // Only 1 worker
 		QueueSize:   2, // Very small queue
-		Logger:      &logger,
+		Logger:      new(logr.Discard()),
 		Client:      k8sClient,
 		Cache:       cache,
 	})
@@ -398,8 +389,6 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 func TestWorkerPool_ContextCancellation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
-		logger := logr.Discard()
-
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ocm-config",
@@ -422,7 +411,7 @@ func TestWorkerPool_ContextCancellation(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, &logger)
+		env := setupTestEnvironment(t, k8sClient, new(logr.Discard()))
 
 		opts := workerpool.ResolveOptions{
 			Component:  "cancel-component",
@@ -453,8 +442,6 @@ func TestWorkerPool_ContextCancellation(t *testing.T) {
 func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
-		logger := logr.Discard()
-
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ocm-config",
@@ -477,7 +464,7 @@ func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, &logger)
+		env := setupTestEnvironment(t, k8sClient, new(logr.Discard()))
 
 		versions := []string{"v1.0.0", "v1.1.0", "v1.2.0", "v2.0.0"}
 		const numConcurrent = 10
@@ -536,8 +523,6 @@ func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 func TestWorkerPool_CacheInvalidation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
-		logger := logr.Discard()
-
 		configMap1 := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ocm-config-1",
@@ -578,7 +563,7 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 			WithObjects(configMap1, configMap2).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, &logger)
+		env := setupTestEnvironment(t, k8sClient, new(logr.Discard()))
 
 		// Create a single shared mock repository to avoid race conditions
 		mockRepo := &mockRepository{}
@@ -666,8 +651,6 @@ func (p *mockRepository) GetComponentVersion(ctx context.Context, component, ver
 func TestWorkerPoolEventChannelNotifiesRequesters(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
-		logger := logr.Discard()
-
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ocm-config",
@@ -690,7 +673,7 @@ func TestWorkerPoolEventChannelNotifiesRequesters(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, &logger)
+		env := setupTestEnvironment(t, k8sClient, new(logr.Discard()))
 
 		requester1 := workerpool.RequesterInfo{
 			NamespacedName: client.ObjectKey{Namespace: "ns1", Name: "component1"},
@@ -765,8 +748,6 @@ func TestWorkerPoolEventChannelNotifiesRequesters(t *testing.T) {
 
 func TestWorkerPoolEventChannelClosedOnShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
-	logger := logr.Discard()
-
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "ocm-config",
@@ -791,7 +772,7 @@ func TestWorkerPoolEventChannelClosedOnShutdown(t *testing.T) {
 
 	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
 	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
-		Logger: &logger,
+		Logger: new(logr.Discard()),
 		Client: k8sClient,
 		Cache:  cache,
 	})

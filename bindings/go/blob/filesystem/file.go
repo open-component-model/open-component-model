@@ -13,15 +13,12 @@ import (
 
 const DefaultFileIOBufferSize = 1 << 20 // 1 MiB
 
-// ioBufPool is a pool of byte buffers that can be reused for copying content
-// between i/o relevant data, such as files.
 var ioBufPool = sync.Pool{
 	New: func() interface{} {
 		// the buffer size should be larger than or equal to 128 KiB
 		// for performance considerations.
 		// we choose 1 MiB here so there will be less disk I/O.
-		buffer := make([]byte, DefaultFileIOBufferSize)
-		return &buffer
+		return new(make([]byte, DefaultFileIOBufferSize))
 	},
 }
 

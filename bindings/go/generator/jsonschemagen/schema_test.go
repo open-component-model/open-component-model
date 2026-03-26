@@ -8,12 +8,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
+
 	"ocm.software/open-component-model/bindings/go/generator/jsonschemagen"
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
 
 func TestSchemaOrBoolMarshalJSONWithBoolTrue(t *testing.T) {
-	sb := jsonschemagen.SchemaOrBool{Bool: jsonschemagen.Ptr(true)}
+	sb := jsonschemagen.SchemaOrBool{Bool: new(true)}
 
 	data, err := json.Marshal(sb)
 
@@ -22,7 +23,7 @@ func TestSchemaOrBoolMarshalJSONWithBoolTrue(t *testing.T) {
 }
 
 func TestSchemaOrBoolMarshalJSONWithBoolFalse(t *testing.T) {
-	sb := jsonschemagen.SchemaOrBool{Bool: jsonschemagen.Ptr(false)}
+	sb := jsonschemagen.SchemaOrBool{Bool: new(false)}
 
 	data, err := json.Marshal(sb)
 

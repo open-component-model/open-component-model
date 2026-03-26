@@ -107,24 +107,21 @@ func (s *Schema) MaxItems() *uint64 {
 	if s.Schema == nil || s.Schema.MaxItems == nil {
 		return nil
 	}
-	v := safeIntToInt(s.Schema.MaxItems)
-	return &v
+	return new(safeIntToInt(s.Schema.MaxItems))
 }
 
 func (s *Schema) MaxProperties() *uint64 {
 	if s.Schema == nil || s.Schema.MaxProperties == nil {
 		return nil
 	}
-	v := safeIntToInt(s.Schema.MaxProperties)
-	return &v
+	return new(safeIntToInt(s.Schema.MaxProperties))
 }
 
 func (s *Schema) MaxLength() *uint64 {
 	if s.Schema == nil || s.Schema.MaxLength == nil {
 		return nil
 	}
-	v := safeIntToInt(s.Schema.MaxLength)
-	return &v
+	return new(safeIntToInt(s.Schema.MaxLength))
 }
 
 func (s *Schema) Default() any {

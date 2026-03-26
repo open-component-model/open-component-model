@@ -132,13 +132,12 @@ func TestIdleChecker(t *testing.T) {
 	r := require.New(t)
 	location := "/tmp/test-plugin-idle-plugin.socket"
 	output := bytes.NewBuffer(nil)
-	timeout := 10 * time.Millisecond
 	ctx := context.Background()
 	p := NewPlugin(ctx, slog.Default(), types.Config{
 		ID:          "test-plugin-idle",
 		Type:        types.Socket,
 		PluginType:  testPluginType,
-		IdleTimeout: &timeout,
+		IdleTimeout: new(10 * time.Millisecond),
 	}, output)
 
 	t.Cleanup(func() {
@@ -362,7 +361,7 @@ func TestLockFileProcessValidation(t *testing.T) {
 		r.NoError(err)
 		socketFile.Close()
 
-		err = os.WriteFile(lockFile, []byte(fakePID), 0644)
+		err = os.WriteFile(lockFile, []byte(fakePID), 0o644)
 		r.NoError(err)
 
 		_, err = os.Stat(location)

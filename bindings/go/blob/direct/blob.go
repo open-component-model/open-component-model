@@ -63,8 +63,7 @@ func New(src io.Reader, opts ...DirectBlobOption) *Blob {
 		mediaType: atomic.Pointer[string]{},
 	}
 
-	mediaType := "application/octet-stream"
-	b.mediaType.Store(&mediaType)
+	b.mediaType.Store(new("application/octet-stream"))
 
 	// Apply each option to configure the Blob
 	for _, o := range opts {

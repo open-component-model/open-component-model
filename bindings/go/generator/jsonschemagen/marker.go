@@ -155,16 +155,16 @@ func ApplyNumericMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 	// Dispatch table to setter functions
 	setters := map[string]func(float64){
 		"minimum": func(v float64) {
-			s.Minimum = Ptr(v)
+			s.Minimum = new(v)
 		},
 		"maximum": func(v float64) {
-			s.Maximum = Ptr(v)
+			s.Maximum = new(v)
 		},
 		"exclusiveMinimum": func(v float64) {
-			s.ExclusiveMinimum = Ptr(v)
+			s.ExclusiveMinimum = new(v)
 		},
 		"exclusiveMaximum": func(v float64) {
-			s.ExclusiveMaximum = Ptr(v)
+			s.ExclusiveMaximum = new(v)
 		},
 	}
 
@@ -247,8 +247,7 @@ func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 		_, isDeprecated := depSet[v]
 		var deprecatedPtr *bool
 		if isDeprecated {
-			b := true
-			deprecatedPtr = &b // omit field when not deprecated
+			deprecatedPtr = new(true) // omit field when not deprecated
 		}
 
 		oneOf = append(oneOf, &JSONSchemaDraft202012{

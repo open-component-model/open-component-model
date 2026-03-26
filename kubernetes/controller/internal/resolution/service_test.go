@@ -32,8 +32,6 @@ import (
 func TestResolveComponentVersion_Success(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := context.Background()
-		logger := logr.Discard()
-
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ocm-config",
@@ -56,7 +54,7 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, &logger)
+		env := setupTestEnvironment(t, k8sClient, new(logr.Discard()))
 		t.Cleanup(func() {
 			err := env.Close(ctx)
 			require.NoError(t, err)
@@ -101,8 +99,6 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 func TestResolveComponentVersion_CacheHit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := context.Background()
-		logger := logr.Discard()
-
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ocm-config",
@@ -125,7 +121,7 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, &logger)
+		env := setupTestEnvironment(t, k8sClient, new(logr.Discard()))
 		t.Cleanup(func() {
 			err := env.Close(ctx)
 			require.NoError(t, err)
@@ -174,8 +170,6 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
-		logger := logr.Discard()
-
 		configMap1 := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ocm-config-1",
@@ -216,7 +210,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 			WithObjects(configMap1, configMap2).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, &logger)
+		env := setupTestEnvironment(t, k8sClient, new(logr.Discard()))
 		t.Cleanup(func() {
 			err := env.Close(ctx)
 			require.NoError(t, err)
@@ -284,8 +278,6 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 
 func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 	ctx := context.Background()
-	logger := logr.Discard()
-
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, v1alpha1.AddToScheme(scheme))
@@ -294,7 +286,7 @@ func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	env := setupTestEnvironment(t, k8sClient, &logger)
+	env := setupTestEnvironment(t, k8sClient, new(logr.Discard()))
 	t.Cleanup(func() {
 		err := env.Close(ctx)
 		require.NoError(t, err)
@@ -325,8 +317,6 @@ func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 func TestResolveComponentVersionDeduplication(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := context.Background()
-		logger := logr.Discard()
-
 		configMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "ocm-config",
@@ -349,7 +339,7 @@ func TestResolveComponentVersionDeduplication(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, &logger)
+		env := setupTestEnvironment(t, k8sClient, new(logr.Discard()))
 		t.Cleanup(func() {
 			err := env.Close(ctx)
 			require.NoError(t, err)

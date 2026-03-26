@@ -18,7 +18,7 @@ type testRepo struct {
 
 func (r *testRepo) GetType() runtime.Type        { return r.Type }
 func (r *testRepo) SetType(t runtime.Type)       { r.Type = t }
-func (r *testRepo) DeepCopyTyped() runtime.Typed { cp := *r; return &cp }
+func (r *testRepo) DeepCopyTyped() runtime.Typed { ; return new(*r) }
 
 var testScheme = func() *runtime.Scheme {
 	s := runtime.NewScheme()
@@ -69,7 +69,7 @@ func TestConvertFromV1_ExplicitPriority(t *testing.T) {
 	input := &resolverv1.Config{
 		Type: runtime.NewVersionedType(resolverv1.ConfigType, resolverv1.Version),
 		Resolvers: []*resolverv1.Resolver{
-			{Repository: rawTestRepo("registry.example.com"), Priority: ptr(42)},
+			{Repository: rawTestRepo("registry.example.com"), Priority: new(42)},
 		},
 	}
 	got, err := ConvertFromV1(testScheme, input)
@@ -113,8 +113,8 @@ func TestConvertFromV1_MultipleResolversOrderPreserved(t *testing.T) {
 	input := &resolverv1.Config{
 		Type: runtime.NewVersionedType(resolverv1.ConfigType, resolverv1.Version),
 		Resolvers: []*resolverv1.Resolver{
-			{Repository: rawTestRepo("first.example.com"), Priority: ptr(100)},
-			{Repository: rawTestRepo("second.example.com"), Priority: ptr(10)},
+			{Repository: rawTestRepo("first.example.com"), Priority: new(100)},
+			{Repository: rawTestRepo("second.example.com"), Priority: new(10)},
 		},
 	}
 	got, err := ConvertFromV1(testScheme, input)

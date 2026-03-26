@@ -106,10 +106,10 @@ func (g *generation) buildRootSchema(ti *universe.TypeInfo) *JSONSchemaDraft2020
 			Type:                 "object",
 			Properties:           g.buildStructProperties(ti.Struct, ti),
 			Required:             g.buildStructRequired(ti.Struct, ti),
-			AdditionalProperties: &SchemaOrBool{Bool: Ptr(false)},
+			AdditionalProperties: &SchemaOrBool{Bool: new(false)},
 		}
 		if deprecated {
-			out.Deprecated = Ptr(true)
+			out.Deprecated = new(true)
 		}
 		return out
 	}
@@ -151,7 +151,7 @@ func (g *generation) buildAliasSchema(ti *universe.TypeInfo) *JSONSchemaDraft202
 	sch.Title = ti.Key.TypeName
 	sch.Description = desc
 	if deprecated {
-		sch.Deprecated = Ptr(true)
+		sch.Deprecated = new(true)
 	}
 
 	ApplyConstEnum(sch, ti.Consts)
@@ -264,7 +264,7 @@ func (g *generation) buildStructProperties(st *ast.StructType, ti *universe.Type
 			sch.Description = desc
 		}
 		if deprecated {
-			sch.Deprecated = Ptr(true)
+			sch.Deprecated = new(true)
 		}
 
 		props[name] = &SchemaOrBool{Schema: sch}
@@ -326,7 +326,7 @@ func (g *generation) inlineAnonymousStruct(st *ast.StructType, ctx *universe.Typ
 			sch.Description = desc
 		}
 		if deprecated {
-			sch.Deprecated = Ptr(true)
+			sch.Deprecated = new(true)
 		}
 
 		props[name] = &SchemaOrBool{Schema: sch}
@@ -339,7 +339,7 @@ func (g *generation) inlineAnonymousStruct(st *ast.StructType, ctx *universe.Typ
 		Type:                 "object",
 		Properties:           props,
 		Required:             req,
-		AdditionalProperties: &SchemaOrBool{Bool: Ptr(false)},
+		AdditionalProperties: &SchemaOrBool{Bool: new(false)},
 	}
 }
 
@@ -413,7 +413,7 @@ func (g *generation) schemaID(ti *universe.TypeInfo) string {
 func anyObjectSchema() *JSONSchemaDraft202012 {
 	return &JSONSchemaDraft202012{
 		Type:                 "object",
-		AdditionalProperties: &SchemaOrBool{Bool: Ptr(true)},
+		AdditionalProperties: &SchemaOrBool{Bool: new(true)},
 	}
 }
 

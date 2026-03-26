@@ -195,14 +195,13 @@ func TestTimeBefore(t *testing.T) {
 }
 
 func TestTimeIsZero(t *testing.T) {
-	t1 := NewTime(time.Now())
 	cases := []struct {
 		name   string
 		x      *Time
 		result bool
 	}{
 		{"nil =? 0", nil, true},
-		{"!nil =? 0", &t1, false},
+		{"!nil =? 0", new(NewTime(time.Now())), false},
 	}
 
 	for _, c := range cases {

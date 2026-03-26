@@ -71,22 +71,22 @@ func primitiveBaseForIdent(ident *ast.Ident) *JSONSchemaDraft202012 {
 func numberWithRange(maximum float64) *JSONSchemaDraft202012 {
 	return &JSONSchemaDraft202012{
 		Type:    "number",
-		Maximum: Ptr(maximum),
+		Maximum: new(maximum),
 	}
 }
 
 func uintWithRange(maximum uint64) *JSONSchemaDraft202012 {
 	return &JSONSchemaDraft202012{
 		Type:    "integer",
-		Minimum: Ptr(float64(0)),
-		Maximum: Ptr(float64(maximum)),
+		Minimum: new(float64(0)),
+		Maximum: new(float64(maximum)),
 	}
 }
 
 func intWithRange(minimum, maximum int64) *JSONSchemaDraft202012 {
 	return &JSONSchemaDraft202012{
 		Type:    "integer",
-		Minimum: Ptr(float64(minimum)),
-		Maximum: Ptr(float64(maximum)),
+		Minimum: new(float64(minimum)),
+		Maximum: new(float64(maximum)),
 	}
 }

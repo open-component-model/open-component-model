@@ -240,10 +240,7 @@ func (p *simpleOCIPlugin) GetComponentVersionRepository(
 
 // TestIntegration_ResolverProvider tests the new path matcher resolver provider functionality.
 func TestIntegration_ResolverProvider(t *testing.T) {
-	ctx := t.Context()
-	logger := logr.Discard()
-
-	// Create a config with path matcher resolvers
+	ctx := t.Context() // Create a config with path matcher resolvers
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "ocm-config-with-resolvers",
@@ -312,7 +309,7 @@ func TestIntegration_ResolverProvider(t *testing.T) {
 
 	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
 		PluginManager: pm,
-		Logger:        &logger,
+		Logger:        new(logr.Discard()),
 	})
 	require.NoError(t, err)
 

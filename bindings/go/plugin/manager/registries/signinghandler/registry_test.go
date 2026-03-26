@@ -69,8 +69,7 @@ func TestPluginFlow(t *testing.T) {
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 	}
-	capability := dummyCapability([]byte(`{}`))
-	require.NoError(t, registry.AddPlugin(plugin, &capability))
+	require.NoError(t, registry.AddPlugin(plugin, new(dummyCapability([]byte(`{}`)))))
 	retrievedPlugin, err := registry.GetPlugin(ctx, &runtime.Raw{Type: dummyType})
 	require.NoError(t, err)
 
@@ -112,8 +111,7 @@ func TestShutdown(t *testing.T) {
 		Stdout: pipe,
 	}
 
-	capability := dummyCapability([]byte(`{}`))
-	require.NoError(t, registry.AddPlugin(plugin, &capability))
+	require.NoError(t, registry.AddPlugin(plugin, new(dummyCapability([]byte(`{}`)))))
 	retrievedPlugin, err := registry.GetPlugin(ctx, &runtime.Raw{Type: dummyType})
 	require.NoError(t, err)
 	require.NoError(t, registry.Shutdown(ctx))

@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/onsi/gomega"
+
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
-	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -97,12 +98,11 @@ func TestReconcile_RepositoryBeingDeleted_ReturnsNoRequeue(t *testing.T) {
 	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
 	g.Expect(v1alpha1.AddToScheme(scheme)).To(Succeed())
 
-	now := metav1.Now()
 	repo := &v1alpha1.Repository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "test-repo",
 			Namespace:         "default",
-			DeletionTimestamp: &now,
+			DeletionTimestamp: new(metav1.Now()),
 			Finalizers:        []string{"prevent-deletion"},
 		},
 		Spec: v1alpha1.RepositorySpec{

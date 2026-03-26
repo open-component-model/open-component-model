@@ -100,8 +100,7 @@ func (b *Blob) HasPrecalculatedDigest() bool {
 }
 
 func (b *Blob) SetPrecalculatedDigest(dig string) {
-	d := digest.Digest(dig)
-	b.digest.Store(&d)
+	b.digest.Store(new(digest.Digest(dig)))
 }
 
 func (b *Blob) MediaType() (string, bool) {
@@ -114,11 +113,9 @@ func (b *Blob) SetMediaType(mediaType string) {
 
 func newMemoryBlobFromUnknownSource() *Blob {
 	b := &Blob{}
-	mt := "application/octet-stream"
-	b.mediaType.Store(&mt)
+	b.mediaType.Store(new("application/octet-stream"))
 	b.size.Store(-1)
-	d := digest.Digest("")
-	b.digest.Store(&d)
+	b.digest.Store(new(digest.Digest("")))
 	return b
 }
 
@@ -158,8 +155,7 @@ func storeSourceInBlob(b *Blob, source io.Reader) error {
 	// if we have a verifier, we need to check if the data matches the loaded digest
 	switch {
 	case digester != nil:
-		newDigest := digester.Digest()
-		b.digest.Store(&newDigest)
+		b.digest.Store(new(digester.Digest()))
 	case verifier != nil:
 		if !verifier.Verified() {
 			return fmt.Errorf("differed from loaded digest")
