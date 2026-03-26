@@ -82,6 +82,197 @@ func addReference(t *testing.T, parent, child *descriptor.Descriptor, refName st
 	})
 }
 
+func TestTransferComponentVersionWithTransferSpec(t *testing.T) {
+	// Create a source component and generate a dry-run spec, then use --transfer-spec to execute it.
+	fromDesc := createTestDescriptor("ocm.software/spec-test-component", "0.0.1")
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, fromDesc)
+	require.NoError(t, err)
+
+	toPath := t.TempDir()
+
+	fromRef := compref.Ref{
+		Repository: &ctfv1.Repository{
+			FilePath: fromPath,
+		},
+		Component: fromDesc.Component.Name,
+		Version:   fromDesc.Component.Version,
+	}
+
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	// Step 1: Generate the transfer spec via --dry-run
+	specOutput := new(bytes.Buffer)
+	logs := test.NewJSONLogReader()
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", fromRef.String(), targetArg, "--dry-run", "-o", "yaml"),
+		test.WithOutput(specOutput),
+		test.WithErrorOutput(logs),
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, specOutput.Bytes(), "dry-run should produce output")
+
+	// Step 2: Write the spec to a temp file
+	specFile := t.TempDir() + "/spec.yaml"
+	require.NoError(t, os.WriteFile(specFile, specOutput.Bytes(), 0o644))
+
+	// Step 3: Execute the spec via --transfer-spec
+	result := new(bytes.Buffer)
+	logs2 := test.NewJSONLogReader()
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", specFile),
+		test.WithOutput(result),
+		test.WithErrorOutput(logs2),
+	)
+	require.NoError(t, err)
+
+	// Verify the component was transferred to target
+	fs, err := filesystem.NewFS(toPath, os.O_RDWR)
+	require.NoError(t, err)
+	archive := ctf.NewFileSystemCTF(fs)
+	targetRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	require.NoError(t, err)
+
+	desc, err := targetRepo.GetComponentVersion(t.Context(), fromDesc.Component.Name, fromDesc.Component.Version)
+	require.NoError(t, err)
+	require.NotNil(t, desc)
+	require.Equal(t, fromDesc.Component.Name, desc.Component.Name)
+	require.Equal(t, fromDesc.Component.Version, desc.Component.Version)
+}
+
+func TestTransferComponentVersionWithTransferSpecDryRun(t *testing.T) {
+	// Test that --transfer-spec combined with --dry-run re-renders the spec without executing.
+	fromDesc := createTestDescriptor("ocm.software/dryrun-spec-test", "0.0.1")
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, fromDesc)
+	require.NoError(t, err)
+
+	toPath := t.TempDir()
+
+	fromRef := compref.Ref{
+		Repository: &ctfv1.Repository{
+			FilePath: fromPath,
+		},
+		Component: fromDesc.Component.Name,
+		Version:   fromDesc.Component.Version,
+	}
+
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	// Generate the spec
+	specOutput := new(bytes.Buffer)
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", fromRef.String(), targetArg, "--dry-run", "-o", "yaml"),
+		test.WithOutput(specOutput),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+	originalSpec := specOutput.String()
+
+	specFile := t.TempDir() + "/spec.yaml"
+	require.NoError(t, os.WriteFile(specFile, []byte(originalSpec), 0o644))
+
+	// Re-render via --transfer-spec --dry-run
+	reRendered := new(bytes.Buffer)
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", specFile, "--dry-run", "-o", "yaml"),
+		test.WithOutput(reRendered),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+	require.Equal(t, originalSpec, reRendered.String(), "re-rendered spec should match original")
+}
+
+func TestTransferComponentVersionWithTransferSpecRejectsArgs(t *testing.T) {
+	specFile := t.TempDir() + "/spec.yaml"
+	require.NoError(t, os.WriteFile(specFile, []byte("{}"), 0o644))
+
+	result := new(bytes.Buffer)
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", specFile, "some-arg", "another-arg"),
+		test.WithOutput(result),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "positional arguments are not allowed")
+}
+
+func TestTransferComponentVersionWithTransferSpecModifiedTarget(t *testing.T) {
+	// Core two-step workflow test: generate spec for target A, edit it to point to target B, execute.
+	fromDesc := createTestDescriptor("ocm.software/modified-target-test", "0.0.1")
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, fromDesc)
+	require.NoError(t, err)
+
+	originalTarget := t.TempDir()
+	modifiedTarget := t.TempDir()
+
+	fromRef := compref.Ref{
+		Repository: &ctfv1.Repository{
+			FilePath: fromPath,
+		},
+		Component: fromDesc.Component.Name,
+		Version:   fromDesc.Component.Version,
+	}
+
+	targetArg := fmt.Sprintf("ctf::%s", originalTarget)
+
+	// Step 1: Generate the transfer spec via --dry-run
+	specOutput := new(bytes.Buffer)
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", fromRef.String(), targetArg, "--dry-run", "-o", "yaml"),
+		test.WithOutput(specOutput),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+
+	// Step 2: Modify the spec to point to a different target by replacing the filePath
+	modifiedSpec := strings.ReplaceAll(specOutput.String(), originalTarget, modifiedTarget)
+	require.NotEqual(t, specOutput.String(), modifiedSpec, "spec should have been modified")
+
+	specFile := t.TempDir() + "/spec.yaml"
+	require.NoError(t, os.WriteFile(specFile, []byte(modifiedSpec), 0o644))
+
+	// Step 3: Execute the modified spec
+	result := new(bytes.Buffer)
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", specFile),
+		test.WithOutput(result),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+
+	// Verify the component landed in the MODIFIED target, not the original
+	fs, err := filesystem.NewFS(modifiedTarget, os.O_RDWR)
+	require.NoError(t, err)
+	archive := ctf.NewFileSystemCTF(fs)
+	targetRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	require.NoError(t, err)
+
+	desc, err := targetRepo.GetComponentVersion(t.Context(), fromDesc.Component.Name, fromDesc.Component.Version)
+	require.NoError(t, err)
+	require.NotNil(t, desc)
+	require.Equal(t, fromDesc.Component.Name, desc.Component.Name)
+
+	// Verify the original target is empty (no component transferred there)
+	origFS, err := filesystem.NewFS(originalTarget, os.O_RDWR)
+	require.NoError(t, err)
+	origArchive := ctf.NewFileSystemCTF(origFS)
+	origRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(origArchive)))
+	require.NoError(t, err)
+
+	_, err = origRepo.GetComponentVersion(t.Context(), fromDesc.Component.Name, fromDesc.Component.Version)
+	require.Error(t, err, "original target should not contain the component")
+}
+
+func TestTransferComponentVersionWithTransferSpecFileNotFound(t *testing.T) {
+	result := new(bytes.Buffer)
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "/nonexistent/path/spec.yaml"),
+		test.WithOutput(result),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "reading transfer spec file")
+}
+
 func TestTransferComponentVersion(t *testing.T) {
 	fromDesc := createTestDescriptor("ocm.software/test-component", "0.0.1")
 	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, fromDesc)
