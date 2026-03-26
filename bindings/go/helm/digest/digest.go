@@ -3,6 +3,7 @@ package digest
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -12,9 +13,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/access"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
-	"ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/helm/internal/download"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
+	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -48,7 +49,23 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
 
-	return internal.GetIdentity(ctx, &helm)
+	if helm.HelmRepository == "" {
+		slog.InfoContext(ctx, "local helm inputs do not require credentials")
+		return nil, nil
+	}
+
+	identity, err := ocmruntime.ParseURLToIdentity(helm.HelmRepository)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing helm repository URL to identity: %w", err)
+	}
+
+	if scheme, ok := identity[ocmruntime.IdentityAttributeScheme]; ok && scheme == "oci" {
+		identity.SetType(ocicredentialsspecv1.Type)
+	} else {
+		identity.SetType(ocmruntime.NewUnversionedType(access.LegacyHelmChartConsumerType))
+	}
+
+	return identity, nil
 }
 
 func (p *DigestProcessor) ProcessResourceDigest(
