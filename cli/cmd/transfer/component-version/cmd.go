@@ -13,8 +13,10 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -289,7 +291,7 @@ func buildGraphDefinitionFromArgs(
 
 	copyResources, err := cmd.Flags().GetBool(FlagCopyResources)
 	if err != nil {
-		return fmt.Errorf("getting copy-resources flag failed: %w", err)
+		return nil, fmt.Errorf("getting copy-resources flag failed: %w", err)
 	}
 
 	copyMode := transfer.CopyModeLocalBlobResources
@@ -299,7 +301,7 @@ func buildGraphDefinitionFromArgs(
 
 	uploadType, err := enum.Get(cmd.Flags(), FlagUploadAs)
 	if err != nil {
-		return fmt.Errorf("getting upload-as flag failed: %w", err)
+		return nil, fmt.Errorf("getting upload-as flag failed: %w", err)
 	}
 
 	upTyp := transfer.UploadAsDefault
@@ -323,7 +325,7 @@ func buildGraphDefinitionFromArgs(
 		transfer.WithUploadType(upTyp),
 	)
 	if err != nil {
-		return fmt.Errorf("building graph definition failed: %w", err)
+		return nil, fmt.Errorf("building graph definition failed: %w", err)
 	}
 
 	return tgd, nil
