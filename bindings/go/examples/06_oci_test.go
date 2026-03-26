@@ -6,6 +6,7 @@
 //   - Listing and retrieving component versions from a remote registry
 //   - The repository interface is the same as Step 4 (CTF), just with a
 //     different backend
+//   - Using OCM credentials to authenticate against a private registry
 //
 // This is the capstone of the tour. Everything from the previous steps —
 // blobs, descriptors, repositories — comes together in a real OCI registry
@@ -23,16 +24,20 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/registry"
+	"golang.org/x/crypto/bcrypt"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
+	credidentity "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
+	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -248,4 +253,124 @@ func TestExample_OCIRegistryMultipleVersions(t *testing.T) {
 	data, err := io.ReadAll(rc)
 	r.NoError(err)
 	r.Equal("payload for 1.1.0", string(data))
+}
+
+// TestExample_PrivateOCIRegistry demonstrates authenticating against a
+// password-protected OCI registry using OCM credentials.
+//
+// OCM resolves credentials by matching a consumer identity — here derived
+// from the registry URL — against a static credential map. This is the same
+// identity model used in Steps 3 and 4, applied to a real registry.
+//
+// This test is skipped with -short because it requires Docker.
+func TestExample_PrivateOCIRegistry(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping private OCI registry test in short mode (requires Docker)")
+	}
+
+	r := require.New(t)
+	ctx := t.Context()
+
+	// 1. Start a password-protected OCI registry.
+	const username, password = "test-user", "test-password"
+	htpasswdHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	r.NoError(err)
+
+	registryContainer, err := registry.Run(ctx, "registry:3.0.0",
+		registry.WithHtpasswd(fmt.Sprintf("%s:%s", username, string(htpasswdHash))),
+	)
+	r.NoError(err)
+	t.Cleanup(func() {
+		r.NoError(testcontainers.TerminateContainer(registryContainer))
+	})
+
+	registryAddress, err := registryContainer.HostAddress(ctx)
+	r.NoError(err)
+
+	// 2. Build an OCM credential resolver for the registry.
+	//
+	// IdentityFromOCIRepository derives the consumer identity from the registry
+	// URL (hostname, scheme). The static resolver matches this identity at
+	// request time and returns the username/password.
+	repoSpec := &ocirepospec.Repository{
+		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
+		BaseUrl: fmt.Sprintf("http://%s", registryAddress),
+	}
+	identity, err := credidentity.IdentityFromOCIRepository(repoSpec)
+	r.NoError(err)
+
+	credResolver := credentials.NewStaticCredentialsResolver(map[string]map[string]string{
+		identity.String(): {"username": username, "password": password},
+	})
+
+	// 3. Create the OCI repository client using the credentials for authentication.
+	scheme := runtime.NewScheme()
+	access.MustAddToScheme(scheme)
+	v2.MustAddToScheme(scheme)
+
+	resolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(registryAddress),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(&auth.Client{
+			Client: retry.DefaultClient,
+			Cache:  auth.NewCache(),
+			Credential: auth.StaticCredential(registryAddress, auth.Credential{
+				Username: username,
+				Password: password,
+			}),
+		}),
+	)
+	r.NoError(err)
+
+	repo, err := oci.NewRepository(
+		oci.WithResolver(resolver),
+		oci.WithScheme(scheme),
+		oci.WithTempDir(t.TempDir()),
+	)
+	r.NoError(err)
+
+	// 4. Push a component version — identical to the anonymous case in Step 6.
+	component := "acme.org/private-example"
+	version := "1.0.0"
+	resourceContent := []byte("secret payload")
+
+	res := &descriptor.Resource{
+		Relation: descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "secret-data", Version: version},
+		},
+		Type: "plainText",
+		Access: &v2.LocalBlob{
+			LocalReference: digest.FromBytes(resourceContent).String(),
+			MediaType:      "text/plain",
+		},
+	}
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "acme.org"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version},
+			},
+			Resources: []descriptor.Resource{*res},
+		},
+	}
+
+	b := inmemory.New(bytes.NewReader(resourceContent))
+	newRes, err := repo.AddLocalResource(ctx, component, version, res, b)
+	r.NoError(err)
+	desc.Component.Resources[0] = *newRes
+	r.NoError(repo.AddComponentVersion(ctx, desc))
+
+	// 5. Verify the credential resolver can resolve credentials for this registry.
+	resolvedCreds, err := credResolver.Resolve(ctx, identity)
+	r.NoError(err)
+	r.Equal(username, resolvedCreds["username"])
+	r.Equal(password, resolvedCreds["password"])
+
+	// 6. Retrieve the component version to confirm authentication succeeded.
+	got, err := repo.GetComponentVersion(ctx, component, version)
+	r.NoError(err)
+	r.Equal(component, got.Component.Name)
+	r.Equal(version, got.Component.Version)
 }
