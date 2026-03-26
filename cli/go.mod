@@ -35,6 +35,7 @@ require (
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260326091035-ef0ea1b8f695
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260326091035-ef0ea1b8f695
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260326091035-ef0ea1b8f695
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260326091035-ef0ea1b8f695
 	sigs.k8s.io/yaml v1.6.0
 )
