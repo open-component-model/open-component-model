@@ -97,6 +97,52 @@ func TestInputMethodGetResourceCredentialConsumerIdentity(t *testing.T) {
 	}
 }
 
+func TestInputMethodGetResourceCredentialConsumerIdentityOCI(t *testing.T) {
+	inputMethod := &input.InputMethod{}
+
+	t.Run("returns OCIRegistry type for oci:// scheme", func(t *testing.T) {
+		resource := &constructorruntime.Resource{
+			AccessOrInput: constructorruntime.AccessOrInput{
+				Input: &v1.Helm{
+					Type: runtime.Type{
+						Name: v1.Type,
+					},
+					HelmRepository: "oci://ghcr.io/stefanprodan/charts/podinfo:6.9.1",
+				},
+			},
+		}
+
+		identity, err := inputMethod.GetResourceCredentialConsumerIdentity(t.Context(), resource)
+		require.NoError(t, err)
+		require.NotNil(t, identity)
+
+		assert.Equal(t, "OCIRegistry", identity["type"])
+		assert.Equal(t, "oci", identity["scheme"])
+		assert.Equal(t, "ghcr.io", identity["hostname"])
+	})
+
+	t.Run("returns HelmChartRepository type for https:// scheme", func(t *testing.T) {
+		resource := &constructorruntime.Resource{
+			AccessOrInput: constructorruntime.AccessOrInput{
+				Input: &v1.Helm{
+					Type: runtime.Type{
+						Name: v1.Type,
+					},
+					HelmRepository: "https://charts.example.com/stable",
+				},
+			},
+		}
+
+		identity, err := inputMethod.GetResourceCredentialConsumerIdentity(t.Context(), resource)
+		require.NoError(t, err)
+		require.NotNil(t, identity)
+
+		assert.Equal(t, "HelmChartRepository", identity["type"])
+		assert.Equal(t, "https", identity["scheme"])
+		assert.Equal(t, "charts.example.com", identity["hostname"])
+	})
+}
+
 func TestInputMethodProcessResourceLocalChart(t *testing.T) {
 	testDataDir := filepath.Join("../testdata", "mychart")
 	helmSpec := v1.Helm{

@@ -3,18 +3,20 @@ package digest
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
 	"helm.sh/helm/v4/pkg/registry"
-	repo "helm.sh/helm/v4/pkg/repo/v1"
+	"helm.sh/helm/v4/pkg/repo/v1"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/access"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	"ocm.software/open-component-model/bindings/go/helm/internal/download"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
+	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -43,19 +45,13 @@ func (p *DigestProcessor) GetResourceRepositoryScheme() *ocmruntime.Scheme {
 func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 	ctx context.Context, resource *runtime.Resource,
 ) (ocmruntime.Identity, error) {
-	if resource == nil {
-		return nil, fmt.Errorf("resource is required")
-	}
-	if resource.Access == nil {
-		return nil, fmt.Errorf("resource access is required")
-	}
-
 	helm := helmv1.Helm{}
 	if err := access.Scheme.Convert(resource.Access, &helm); err != nil {
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
 
 	if helm.HelmRepository == "" {
+		slog.DebugContext(ctx, "local helm inputs do not require credentials")
 		return nil, nil
 	}
 
@@ -64,7 +60,11 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 		return nil, fmt.Errorf("error parsing helm repository URL to identity: %w", err)
 	}
 
-	identity.SetType(ocmruntime.NewUnversionedType(access.LegacyHelmChartConsumerType))
+	if scheme, ok := identity[ocmruntime.IdentityAttributeScheme]; ok && scheme == "oci" {
+		identity.SetType(ocicredentialsspecv1.Type)
+	} else {
+		identity.SetType(ocmruntime.NewUnversionedType(access.LegacyHelmChartConsumerType))
+	}
 
 	return identity, nil
 }
@@ -87,7 +87,7 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	)
 
 	if strings.HasPrefix(helm.HelmRepository, "oci://") {
-		resolvedDigest, err = p.resolveOCIDigest(ctx, helm)
+		resolvedDigest, err = p.resolveOCIDigest(ctx, helm, credentials)
 	} else {
 		resolvedDigest, err = p.resolveHTTPDigest(ctx, helm, credentials)
 	}
@@ -129,6 +129,7 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 		Name: "digest-resolver",
 		URL:  helm.HelmRepository,
 	}
+
 	if credentials != nil {
 		if u, ok := credentials[ocicredentials.CredentialKeyUsername]; ok {
 			entry.Username = u
@@ -198,7 +199,7 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	return d, nil
 }
 
-func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm) (godigest.Digest, error) {
+func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm, credentials map[string]string) (godigest.Digest, error) {
 	if err := ctx.Err(); err != nil {
 		return "", fmt.Errorf("context cancelled before resolving OCI digest: %w", err)
 	}
@@ -211,7 +212,21 @@ func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm
 	// Strip the oci:// prefix for the registry client
 	ref = strings.TrimPrefix(ref, "oci://")
 
-	regClient, err := registry.NewClient()
+	var username, password string
+	if credentials != nil {
+		username = credentials[ocicredentials.CredentialKeyUsername]
+		password = credentials[ocicredentials.CredentialKeyPassword]
+		if password == "" {
+			if token := credentials[ocicredentials.CredentialKeyAccessToken]; token != "" {
+				password = token
+			}
+		}
+	}
+	var regClientOpts []registry.ClientOption
+	if username != "" && password != "" {
+		regClientOpts = append(regClientOpts, registry.ClientOptBasicAuth(username, password))
+	}
+	regClient, err := registry.NewClient(regClientOpts...)
 	if err != nil {
 		return "", fmt.Errorf("error creating registry client: %w", err)
 	}

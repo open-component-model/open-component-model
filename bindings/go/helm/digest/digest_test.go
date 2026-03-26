@@ -125,12 +125,6 @@ func TestGetResourceDigestProcessorCredentialConsumerIdentity(t *testing.T) {
 		assert.Nil(t, identity)
 	})
 
-	t.Run("returns error for nil resource", func(t *testing.T) {
-		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), nil)
-		assert.Error(t, err)
-		assert.Nil(t, identity)
-	})
-
 	t.Run("returns error for nil access", func(t *testing.T) {
 		resource := &descruntime.Resource{}
 		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), resource)
@@ -145,6 +139,18 @@ func TestGetResourceDigestProcessorCredentialConsumerIdentity(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, identity)
 		assert.Contains(t, err.Error(), "error parsing helm repository URL to identity")
+	})
+
+	t.Run("returns identity for OCI helm repository", func(t *testing.T) {
+		resource := helmAccessResource(t, "oci://registry.example.com/charts/mychart:1.0.0", "")
+
+		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), resource)
+		require.NoError(t, err)
+		require.NotNil(t, identity)
+
+		assert.Equal(t, "OCIRegistry", identity["type"])
+		assert.Equal(t, "oci", identity["scheme"])
+		assert.Equal(t, "registry.example.com", identity["hostname"])
 	})
 }
 
