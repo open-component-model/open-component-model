@@ -75,7 +75,8 @@ func TestHelmAccess_GetResourceCredentialConsumerIdentity(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, identity)
 
-		assert.Equal(t, "HelmChartRepository", identity["type"])
+		assert.Equal(t, "OCIRegistry", identity["type"])
+		assert.Equal(t, "oci", identity["scheme"])
 		assert.Equal(t, "registry.example.com", identity["hostname"])
 	})
 

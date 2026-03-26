@@ -111,10 +111,17 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		Keyring:          keyring,
 	}
 
-	if username, ok := opt.Credentials[ocicredentials.CredentialKeyUsername]; ok {
-		if password, ok := opt.Credentials[ocicredentials.CredentialKeyPassword]; ok {
-			dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
+	username := opt.Credentials[ocicredentials.CredentialKeyUsername]
+	password := opt.Credentials[ocicredentials.CredentialKeyPassword]
+
+	if password == "" {
+		if token := opt.Credentials[ocicredentials.CredentialKeyAccessToken]; token != "" {
+			password = token
 		}
+	}
+
+	if username != "" && password != "" {
+		dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
 	}
 
 	version, err := getVersion(opt.Version, helmRepo)
