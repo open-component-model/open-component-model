@@ -183,15 +183,20 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		BuildAndCheck(tgd)
 	if err != nil {
 		reader, rerr := renderTGD(tgd, output)
+		if rerr != nil {
+			return errors.Join(err, rerr)
+		}
 		defer func() {
 			_ = reader.Close()
 		}()
-		raw, _ := io.ReadAll(reader)
-		return errors.Join(
-			err,
-			rerr,
-			fmt.Errorf("%s", raw),
-		)
+		raw, readErr := io.ReadAll(reader)
+		if readErr != nil {
+			return errors.Join(err, readErr)
+		}
+		if len(raw) == 0 {
+			return err
+		}
+		return errors.Join(err, fmt.Errorf("%s", raw))
 	}
 
 	if dryRun {
