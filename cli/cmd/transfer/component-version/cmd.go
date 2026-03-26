@@ -187,7 +187,9 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 			return errors.Join(err, rerr)
 		}
 		defer func() {
-			_ = reader.Close()
+			if reader != nil {
+				_ = reader.Close()
+			}
 		}()
 		raw, readErr := io.ReadAll(reader)
 		if readErr != nil {
