@@ -78,10 +78,6 @@ manager:
     secure: false
     # -- Enable HTTP/2 for metrics and webhook servers
     enableHttp2: false
-  ## Events
-  events:
-    # -- Address of the events receiver (optional)
-    address: ""
   # -- Extra arguments to pass to the controller
   extraArgs: []
   # -- Environment variables for the controller

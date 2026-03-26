@@ -9,9 +9,8 @@ import (
 	"strings"
 	"time"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
-	"github.com/fluxcd/pkg/runtime/patch"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -176,9 +175,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	patchHelper := patch.NewSerialPatcher(resource, r.Client)
+	old := resource.DeepCopy()
 	defer func(ctx context.Context) {
-		err = errors.Join(err, status.UpdateStatus(ctx, patchHelper, resource, r.EventRecorder, resource.GetRequeueAfter(), err))
+		status.UpdateBeforePatch(resource, r.EventRecorder, resource.GetRequeueAfter(), err)
+		if !equality.Semantic.DeepEqual(resource.Status, old.Status) {
+			err = errors.Join(err, r.GetClient().Status().Patch(ctx, resource, client.MergeFrom(old)))
+		}
 	}(ctx)
 
 	logger.Info("preparing reconciling resource")
@@ -276,6 +278,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to configure context: %w", err)
 	}
 
+	// Set effective config immediately so the deferred patch persists it
+	// even if a subsequent step fails.
+	if !equality.Semantic.DeepEqual(resource.Status.EffectiveOCMConfig, configs) {
+		resource.Status.EffectiveOCMConfig = configs
+		return ctrl.Result{}, fmt.Errorf("effective ocm config changed")
+	}
+
 	repoSpec := &runtime.Raw{}
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(
 		bytes.NewReader(component.Status.Component.RepositorySpec.Raw), repoSpec); err != nil {
@@ -334,7 +343,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, nil
 	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 		// Ignore error, but log event
-		event.New(r.EventRecorder, resource, nil, eventv1.EventSeverityError, err.Error())
+		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, err.Error())
 	default:
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
@@ -373,7 +382,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, nil
 	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 		// Ignore error, but log event
-		event.New(r.EventRecorder, resource, nil, eventv1.EventSeverityError, err.Error())
+		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, err.Error())
 	default:
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
@@ -441,7 +450,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	status.MarkReady(r.EventRecorder, resource, "Applied version %s", matchedResource.Version)
 
-	return ctrl.Result{RequeueAfter: resource.GetRequeueAfter()}, nil
+	return status.RequeueResult(resource, resource.GetRequeueAfter()), nil
 }
 
 // setResourceStatus updates the resource status with all required information.

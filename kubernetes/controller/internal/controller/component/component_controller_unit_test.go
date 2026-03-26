@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -109,7 +109,12 @@ func TestReconcile_RepositoryBeingDeleted_ReturnsNoRequeue(t *testing.T) {
 			Interval: metav1.Duration{Duration: time.Minute},
 		},
 	}
-	conditions.MarkTrue(repo, "Ready", "ready", "message")
+	apimeta.SetStatusCondition(&repo.Status.Conditions, metav1.Condition{
+		Type:    v1alpha1.ReadyCondition,
+		Status:  metav1.ConditionTrue,
+		Reason:  v1alpha1.SucceededReason,
+		Message: "ready",
+	})
 
 	component := &v1alpha1.Component{
 		ObjectMeta: metav1.ObjectMeta{
@@ -240,7 +245,7 @@ func TestReconcile_RepositoryNotReady_ComponentMarkedNotReady(t *testing.T) {
 
 	updated := &v1alpha1.Component{}
 	g.Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-component", Namespace: "default"}, updated)).To(Succeed())
-	g.Expect(conditions.IsReady(updated)).To(BeFalse())
+	g.Expect(apimeta.IsStatusConditionTrue(updated.GetConditions(), v1alpha1.ReadyCondition)).To(BeFalse())
 }
 
 // TestResolutionInProgress_UnitTest tests that the first reconciliation returns ResolutionInProgress
@@ -300,7 +305,12 @@ func TestResolutionInProgress_UnitTest(t *testing.T) {
 		},
 		Status: v1alpha1.RepositoryStatus{},
 	}
-	conditions.MarkTrue(repository, "Ready", "ready", "message")
+	apimeta.SetStatusCondition(&repository.Status.Conditions, metav1.Condition{
+		Type:    v1alpha1.ReadyCondition,
+		Status:  metav1.ConditionTrue,
+		Reason:  v1alpha1.SucceededReason,
+		Message: "ready",
+	})
 
 	component := &v1alpha1.Component{
 		ObjectMeta: metav1.ObjectMeta{
@@ -385,12 +395,11 @@ func TestResolutionInProgress_UnitTest(t *testing.T) {
 	updatedComponent := &v1alpha1.Component{}
 	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(component), updatedComponent)).To(Succeed())
 
-	reason := conditions.GetReason(updatedComponent, "Ready")
-	g.Expect(reason).To(Equal(v1alpha1.ResolutionInProgress),
+	cond := apimeta.FindStatusCondition(updatedComponent.GetConditions(), v1alpha1.ReadyCondition)
+	g.Expect(cond).ToNot(BeNil())
+	g.Expect(cond.Reason).To(Equal(v1alpha1.ResolutionInProgress),
 		"expected component ready-condition reason to be %s, got %s",
-		v1alpha1.ResolutionInProgress, reason)
-
-	cond := conditions.Get(updatedComponent, "Ready")
+		v1alpha1.ResolutionInProgress, cond.Reason)
 	g.Expect(cond).ToNot(BeNil())
 	g.Expect(cond.Message).To(ContainSubstring("resolution in progress"))
 

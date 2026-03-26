@@ -10,9 +10,8 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
-	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -173,9 +172,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	patchHelper := patch.NewSerialPatcher(component, r.Client)
+	old := component.DeepCopy()
 	defer func(ctx context.Context) {
-		err = errors.Join(err, status.UpdateStatus(ctx, patchHelper, component, r.EventRecorder, component.GetRequeueAfter(), err))
+		status.UpdateBeforePatch(component, r.EventRecorder, component.GetRequeueAfter(), err)
+		if !equality.Semantic.DeepEqual(component.Status, old.Status) {
+			err = errors.Join(err, r.GetClient().Status().Patch(ctx, component, client.MergeFrom(old)))
+		}
 	}(ctx)
 
 	if !component.GetDeletionTimestamp().IsZero() {
@@ -225,6 +227,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
+	}
+
+	// Set effective config immediately so the deferred patch persists it
+	// even if a subsequent step fails.
+	if !equality.Semantic.DeepEqual(component.Status.EffectiveOCMConfig, configs) {
+		component.Status.EffectiveOCMConfig = configs
+		return ctrl.Result{}, fmt.Errorf("effective ocm config changed")
 	}
 
 	repoSpec := &runtime.Raw{}
@@ -287,7 +296,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, nil
 	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 		// Ignore error, but log event
-		event.New(r.EventRecorder, component, nil, eventv1.EventSeverityError, err.Error())
+		event.New(r.EventRecorder, component, nil, v1alpha1.EventSeverityError, err.Error())
 	default:
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
@@ -315,11 +324,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		},
 	}
 
-	component.Status.EffectiveOCMConfig = configs
-
 	status.MarkReady(r.EventRecorder, component, "Applied version %s", version)
 
-	return ctrl.Result{RequeueAfter: component.GetRequeueAfter()}, nil
+	return status.RequeueResult(component, component.GetRequeueAfter()), nil
 }
 
 func (r *Reconciler) reconcileDelete(ctx context.Context, component *v1alpha1.Component) error {

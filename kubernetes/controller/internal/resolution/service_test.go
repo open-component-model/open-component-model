@@ -8,7 +8,6 @@ import (
 	"testing"
 	"testing/synctest"
 
-	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/stretchr/testify/assert"
@@ -71,7 +70,7 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 
 		cfg, err := configuration.LoadConfigurations(ctx, k8sClient, "default", []v1alpha1.OCMConfiguration{
 			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 					Kind: "ConfigMap",
 					Name: "ocm-config",
 				},
@@ -142,7 +141,7 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 
 		cfg, err := configuration.LoadConfigurations(ctx, k8sClient, "default", []v1alpha1.OCMConfiguration{
 			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 					Kind: "ConfigMap",
 					Name: "ocm-config",
 				},
@@ -236,7 +235,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 		// First call with config1
 		cfg1, err := configuration.LoadConfigurations(ctx, k8sClient, "default", []v1alpha1.OCMConfiguration{
 			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 					Kind: "ConfigMap",
 					Name: "ocm-config-1",
 				},
@@ -264,7 +263,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 
 		cfg2, err := configuration.LoadConfigurations(ctx, k8sClient, "default", []v1alpha1.OCMConfiguration{
 			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 					Kind: "ConfigMap",
 					Name: "ocm-config-2",
 				},
@@ -316,7 +315,7 @@ func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 
 	_, err := configuration.LoadConfigurations(ctx, k8sClient, "default", []v1alpha1.OCMConfiguration{
 		{
-			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 				Kind: "ConfigMap",
 				Name: "missing-config",
 			},
@@ -375,7 +374,7 @@ func TestResolveComponentVersionDeduplication(t *testing.T) {
 
 		cfg, err := configuration.LoadConfigurations(ctx, k8sClient, "default", []v1alpha1.OCMConfiguration{
 			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 					Kind: "ConfigMap",
 					Name: "ocm-config",
 				},

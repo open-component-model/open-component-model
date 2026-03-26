@@ -3,7 +3,7 @@ package resource
 import (
 	"reflect"
 
-	"github.com/fluxcd/pkg/runtime/conditions"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -43,7 +43,7 @@ func (ComponentInfoChangedPredicate) Update(e event.UpdateEvent) bool {
 		return true
 	}
 
-	if conditions.IsReady(oldComponent) != conditions.IsReady(newComponent) {
+	if apimeta.IsStatusConditionTrue(oldComponent.GetConditions(), v1alpha1.ReadyCondition) != apimeta.IsStatusConditionTrue(newComponent.GetConditions(), v1alpha1.ReadyCondition) {
 		return true
 	}
 

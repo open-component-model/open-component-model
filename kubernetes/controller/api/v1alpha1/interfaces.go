@@ -1,9 +1,16 @@
 package v1alpha1
 
 import (
-	"github.com/fluxcd/pkg/runtime/conditions"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// ConditionAccessor provides access to an object's conditions.
+// +kubebuilder:object:generate=false
+type ConditionAccessor interface {
+	GetConditions() []metav1.Condition
+	SetConditions(conditions []metav1.Condition)
+}
 
 // ConfigRefProvider are objects that provide configurations such as credentials
 // or other ocm configuration. The interface allows all implementers to use the
@@ -30,7 +37,8 @@ type ConfigRefProvider interface {
 // the same ocm context configuration function.
 // +kubebuilder:object:generate=false
 type OCMK8SObject interface {
-	conditions.Setter
+	client.Object
+	ConditionAccessor
 	ConfigRefProvider
 }
 
