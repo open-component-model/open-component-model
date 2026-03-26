@@ -215,7 +215,6 @@ func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm
 	username := credentials[ocicredentials.CredentialKeyUsername]
 	password := credentials[ocicredentials.CredentialKeyPassword]
 	if credentials != nil {
-
 		if password == "" {
 			if token := credentials[ocicredentials.CredentialKeyAccessToken]; token != "" {
 				password = token
