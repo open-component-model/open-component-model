@@ -119,6 +119,12 @@ func transferArgs(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return fmt.Errorf("positional arguments are not allowed when --%s is set", FlagTransferSpec)
 		}
+		ignoredFlags := []string{FlagRecursive, FlagCopyResources, FlagUploadAs}
+		for _, name := range ignoredFlags {
+			if cmd.Flags().Changed(name) {
+				slog.Warn(fmt.Sprintf("--%s has no effect when --%s is set", name, FlagTransferSpec))
+			}
+		}
 		return nil
 	}
 	return cobra.ExactArgs(2)(cmd, args)
