@@ -187,9 +187,7 @@ var _ = BeforeSuite(func() {
 			Scheme:        testEnv.Scheme,
 			EventRecorder: recorder,
 		},
-		DownloadCache: cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_test_object_cache", 1_000, func(k string, v []*unstructured.Unstructured) {
-			GinkgoLogr.Info("DownloadCache eviction", "key", k, "value", fmt.Sprintf("%d objects", len(v)))
-		}),
+		DownloadCache:        downloadCache,
 		Resolver:             resolver,
 		PluginManager:        pm,
 		MaxResourceSizeBytes: 2 * 1024 * 1024,
