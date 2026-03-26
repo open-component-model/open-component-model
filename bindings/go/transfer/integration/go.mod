@@ -3,18 +3,21 @@ module ocm.software/open-component-model/bindings/go/transfer/integration
 go 1.26.1
 
 require (
+	github.com/opencontainers/go-digest v1.0.0
+	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.40.0
 	golang.org/x/crypto v0.48.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
+	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260325115025-39d88c6e91a0
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260326091035-ef0ea1b8f695
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
 	ocm.software/open-component-model/bindings/go/oci v0.0.36
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260325115025-39d88c6e91a0
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260326091035-ef0ea1b8f695
 	oras.land/oras-go/v2 v2.6.0
 )
 
@@ -99,8 +102,6 @@ require (
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nlepage/go-tarfs v1.2.1 // indirect
-	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -152,14 +153,13 @@ require (
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
 	k8s.io/kubectl v0.35.1 // indirect
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260325115025-39d88c6e91a0 // indirect
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260326091035-ef0ea1b8f695 // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.12 // indirect
-	ocm.software/open-component-model/bindings/go/credentials v0.0.9 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260325115025-39d88c6e91a0 // indirect
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260325115025-39d88c6e91a0 // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260325115025-39d88c6e91a0 // indirect
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260325115025-39d88c6e91a0 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260326091035-ef0ea1b8f695 // indirect
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260326091035-ef0ea1b8f695 // indirect
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260326091035-ef0ea1b8f695 // indirect
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260326091035-ef0ea1b8f695 // indirect
 	sigs.k8s.io/controller-runtime v0.23.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
