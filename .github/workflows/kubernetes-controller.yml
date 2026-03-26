@@ -155,6 +155,11 @@ jobs:
         env:
           REF: ${{ env.REF }}
           TAG_PREFIX: "kubernetes/controller/v"
+          # Kubernetes label values must be ≤63 chars (RFC 1123). We need to ensure the version fits within this limit
+          # to be used as a label value in the Helm chart. helm.sh/chart is "<chart-name>-<version>"
+          # Current chart name is "chart" = 6 chars including hyphen; 63 - 6 = 57 max version length.
+          # TODO: If we change the chart name, we need to update this max version length.
+          MAX_VERSION_LENGTH: "57"
         with:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/compute-version.js');
@@ -197,7 +202,7 @@ jobs:
           task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_REPOSITORY="${IMAGE_NAME}"
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         id: upload-artifacts
         with:
           if-no-files-found: error
@@ -208,7 +213,7 @@ jobs:
 
       # Upload chart artifact separately for easier access in PR conformance testing
       - name: Upload Chart Artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           if-no-files-found: error
           retention-days: 1
@@ -254,7 +259,7 @@ jobs:
         uses: open-component-model/ocm-setup-action@655f3525fd283ca7d22e6b2ceec42324331df401 # v1.0.0
 
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@8454b02a32e48d775b9f563cb51fdcb1787b5b93 # v2.7.5
+        uses: fluxcd/flux2/action@ac71dd88a3e6170a068873ea78aafe90f8c9c82c # v2.8.0
 
       - name: Install Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
@@ -439,7 +444,7 @@ jobs:
           push-to-registry: true
 
       - name: Upload chart artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: controller-chart-${{ needs.build.outputs.version }}
           retention-days: 1

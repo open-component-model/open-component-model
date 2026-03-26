@@ -101,7 +101,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 	dl := &downloader.ChartDownloader{
 		Out:     os.Stderr,
 		Verify:  verify,
-		Getters: getterProviders(),
+		Getters: GetterProviders(),
 		// set by ocm v1 originally.
 		RepositoryCache:  filepath.Join(cacheDir, ".helmcache"),
 		RepositoryConfig: filepath.Join(cacheDir, ".helmrepo"),
@@ -157,9 +157,9 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 	return result, nil
 }
 
-// getterProviders returns the available getter providers.
+// GetterProviders returns the available getter providers.
 // This replaces the need for cli.New() and avoids the explosion of the dependency tree.
-func getterProviders() getter.Providers {
+func GetterProviders() getter.Providers {
 	return getter.Providers{
 		{
 			Schemes: []string{"http", "https"},

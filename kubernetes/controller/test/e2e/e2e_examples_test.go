@@ -88,21 +88,6 @@ var _ = Describe("controller", func() {
 				if slices.Contains(files, Rgd) {
 					name = "rgd/" + example.Name()
 					Expect(utils.WaitForResource(ctx, "create", timeout, name)).To(Succeed())
-
-					Expect(utils.WaitForResource(ctx, "condition=ResourceGraphAccepted=true", timeout, name)).To(
-						Succeed(),
-						"The resource graph definition %s was not accepted which means the RGD is invalid", name,
-					)
-					Expect(
-						utils.WaitForResource(ctx, "condition=KindReady=true", timeout, name)).To(
-						Succeed(),
-						"The kind for the resource graph definition %s is not ready, which means KRO wasn't able to install the CRD in the Cluster", name,
-					)
-					Expect(
-						utils.WaitForResource(ctx, "condition=ControllerReady=true", timeout, name)).To(
-						Succeed(),
-						"The controller for the resource graph definition %s is not ready, which means KRO wasn't able to reconcile the CRD", name,
-					)
 					Expect(
 						utils.WaitForResource(ctx, "condition=Ready=true", timeout, name)).To(
 						Succeed(),

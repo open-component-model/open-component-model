@@ -30,6 +30,9 @@
                 "cache": {
                     "type": "object",
                     "properties": {
+                        "deployerDownloadMaxResourceSize": {
+                            "type": "string"
+                        },
                         "deployerDownloadSize": {
                             "type": "integer"
                         },

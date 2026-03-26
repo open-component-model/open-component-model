@@ -401,33 +401,7 @@ func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, comp
 	case v1alpha1.DowngradePolicyDeny:
 		return "", reconcile.TerminalError(fmt.Errorf("component version cannot be downgraded from version %s "+
 			"to version %s", currentSemver.Original(), latestSemver.Original()))
-	case v1alpha1.DowngradePolicyEnforce:
-		return latestSemver.Original(), nil
 	case v1alpha1.DowngradePolicyAllow:
-		reconciledcv, err := repo.GetComponentVersion(ctx, component.Spec.Component, currentSemver.Original())
-		if err != nil {
-			return "", reconcile.TerminalError(fmt.Errorf("failed to get reconciled component version to check"+
-				" downgradability: %w", err))
-		}
-
-		latestcv, err := repo.GetComponentVersion(ctx, component.Spec.Component, latestSemver.Original())
-		if err != nil {
-			return "", fmt.Errorf("failed to get component version: %w", err)
-		}
-
-		downgradable, err := ocm.IsDowngradable(ctx, reconciledcv, latestcv)
-		if err != nil {
-			return "", reconcile.TerminalError(fmt.Errorf("failed to check downgradability: %w", err))
-		}
-		if !downgradable {
-			// keep requeueing, a greater component version could be published
-			// semver constraint may even describe older versions and non-existing newer versions, so you have to check
-			// for potential newer versions (current is downgradable to: > 1.0.3, latest is: < 1.1.0, but version 1.0.4
-			// does not exist yet, but will be created)
-			return "", fmt.Errorf("component version cannot be downgraded from version %s "+
-				"to version %s", currentSemver.Original(), latestSemver.Original())
-		}
-
 		return latestSemver.Original(), nil
 	default:
 		return "", reconcile.TerminalError(errors.New("unknown downgrade policy: " + string(component.Spec.DowngradePolicy)))
