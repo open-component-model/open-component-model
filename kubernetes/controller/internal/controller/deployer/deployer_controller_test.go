@@ -638,7 +638,6 @@ consumers:
 
 	Context("verified component cache behavior", func() {
 		It("uses separate cache entries for verified and unverified component versions", Serial, func(ctx SpecContext) {
-
 			componentName := "ocm.software/deployer-verified-cache-test"
 			componentObjName := "deployer-verified-cache-test"
 			resourceName := "verified-yaml-resource"
@@ -818,7 +817,12 @@ data:
 
 			verifiedHit, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "verified")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(verifiedHit)).To(Equal(float64(1)),
+			// The exact hit count is non-deterministic: after the resource is applied, the reconciler
+			// registers a dynamic resource watch for the deployed object and retries until the watch has
+			// synced. Each retry reconciliation calls getEffectiveComponentDescriptor (which hits the
+			// component version cache) before reaching the download cache. How many retries occur depends
+			// on the timing between the informer sync and the controller's requeue.
+			Expect(testutil.ToFloat64(verifiedHit)).To(BeNumerically(">=", float64(1)),
 				"expected at least 1 cache hit for the verified component on subsequent reconciliation")
 
 			By("deleting the Deployer")
@@ -1053,8 +1057,10 @@ data:
 			Expect(err).ToNot(HaveOccurred())
 			// Hit 1 from first resolution (only deployer controller is running)
 			// Hit 2 from the child component resolution via reference path
-			Expect(testutil.ToFloat64(parentHitVerified)).To(Equal(float64(2)),
-				"expected 2 cache hits for the verified parent component on first resolution")
+			// Hit count is non-deterministic for the same reason as above: resource watch sync retries
+			// cause additional reconciliations that each hit the component version cache.
+			Expect(testutil.ToFloat64(parentHitVerified)).To(BeNumerically(">=", float64(2)),
+				"expected at least 2 cache hits for the verified parent component on first resolution")
 
 			parentMissUnverified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(parentComponentName, componentVersion, "unverified")
 			Expect(err).ToNot(HaveOccurred())
@@ -1068,8 +1074,10 @@ data:
 				"expected 1 cache miss for the child component resolved via digest from parent reference")
 			referencedHitVerified, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "verified")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(referencedHitVerified)).To(Equal(float64(1)),
-				"expected 1 cache hit for the child component resolved via digest from parent reference")
+			// Hit count is non-deterministic for the same reason as above: resource watch sync retries
+			// cause additional reconciliations that each hit the component version cache.
+			Expect(testutil.ToFloat64(referencedHitVerified)).To(BeNumerically(">=", float64(1)),
+				"expected at least 1 cache hit for the child component resolved via digest from parent reference")
 
 			referencedMissUnverified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "unverified")
 			Expect(err).ToNot(HaveOccurred())

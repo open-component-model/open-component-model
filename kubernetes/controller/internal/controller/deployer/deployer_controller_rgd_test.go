@@ -352,7 +352,7 @@ spec:
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
 
 			By("checking that the deployer has not been reconciled successfully")
-			test.WaitForNotReadyObject(ctx, k8sClient, deployerObj, v1alpha1.MarshalFailedReason)
+			test.WaitForNotReadyObject(ctx, k8sClient, deployerObj, v1alpha1.GetOCMResourceFailedReason)
 
 			By("deleting the resource")
 			test.DeleteObject(ctx, k8sClient, deployerObj)
@@ -673,7 +673,7 @@ spec:
 			Expect(k8sClient.Status().Update(ctx, resourceObjNotReady)).To(Succeed())
 
 			By("checking that the deployer gets reconciled again and fails")
-			test.WaitForNotReadyObject(ctx, k8sClient, deployerObj, v1alpha1.MarshalFailedReason)
+			test.WaitForNotReadyObject(ctx, k8sClient, deployerObj, v1alpha1.GetOCMResourceFailedReason)
 
 			By("deleting the deployer")
 			test.DeleteObject(ctx, k8sClient, deployerObj)

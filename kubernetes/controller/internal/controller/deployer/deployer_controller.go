@@ -347,6 +347,73 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
 	}
 
+	repoSpec := &ocmruntime.Raw{}
+	if err := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()).Decode(
+		bytes.NewReader(resource.Status.Component.RepositorySpec.Raw), repoSpec); err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to decode repository spec: %w", err)
+	}
+
+	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+		RepositorySpec:  repoSpec,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
+		RequesterFunc: func() workerpool.RequesterInfo {
+			return workerpool.RequesterInfo{
+				NamespacedName: k8stypes.NamespacedName{
+					Namespace: deployer.GetNamespace(),
+					Name:      deployer.GetName(),
+				},
+			}
+		},
+	})
+	if err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
+	}
+
+	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, cfg)
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
+
+		return ctrl.Result{}, nil
+	case errors.Is(err, ErrComponentVersionDrift):
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ComponentDriftResolutionInProgress, err.Error())
+
+		return ctrl.Result{}, err
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityError, err.Error())
+	default:
+		if err != nil {
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+
+			return ctrl.Result{}, fmt.Errorf("failed to get effective component version: %w", err)
+		}
+	}
+
+	resourceIdentity := makeResourceIdentity(resource.Status.Resource)
+	var matchedResource *descriptor.Resource
+	for i, res := range componentDescriptor.Component.Resources {
+		resIdentity := res.ToIdentity()
+		if resourceIdentity.Match(resIdentity, ocm.IdentityFuncIgnoreVersion()) {
+			matchedResource = &componentDescriptor.Component.Resources[i]
+			break
+		}
+	}
+
+	if matchedResource == nil {
+		err = fmt.Errorf("resource with identity %v not found in component %s:%s",
+			resourceIdentity, componentDescriptor.Component.Name, componentDescriptor.Component.Version)
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
+		return ctrl.Result{}, err
+	}
+
 	// We use the digest as cache key if possible because a changed digest indicates that the resource changed. If no
 	// digest is available, we need to find another way to make sure the cache-key changes when the resource changes.
 	// A component version and resource identity plus the config hash, which could contain resolver configuration,
@@ -358,17 +425,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		if cfg != nil {
 			key = fmt.Sprintf("%x/", cfg.Hash)
 		}
-		resourceIdentity := makeResourceIdentity(resource.Status.Resource)
-		key += resource.Status.Component.Component + ":" + resource.Status.Component.Version + "/" + resourceIdentity.String()
+		key += componentDescriptor.Component.Name + ":" + componentDescriptor.Component.Version + "/" + resourceIdentity.String()
 	}
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
-		return r.DownloadResourceWithOCM(ctx, deployer, resource, cfg)
+		return r.DownloadResourceWithOCM(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
 	})
-	if errors.Is(err, resolution.ErrResolutionInProgress) {
-		return ctrl.Result{}, nil
-	}
 	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to download resource from OCM or retrieve it from the cache: %w", err)
 	}
 
@@ -452,88 +517,18 @@ func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *d
 
 func (r *Reconciler) DownloadResourceWithOCM(
 	ctx context.Context,
-	deployer *deliveryv1alpha1.Deployer,
-	resource *deliveryv1alpha1.Resource,
+	cacheBackedRepo *resolution.CacheBackedRepository,
+	componentDescriptor *descriptor.Descriptor,
+	resource *descriptor.Resource,
 	cfg *configuration.Configuration,
 ) (objs []*unstructured.Unstructured, err error) {
-	repoSpec := &ocmruntime.Raw{}
-	if err := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()).Decode(
-		bytes.NewReader(resource.Status.Component.RepositorySpec.Raw), repoSpec); err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
-
-		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
-	}
-
-	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:  repoSpec,
-		Configuration:   cfg,
-		SigningRegistry: r.PluginManager.SigningRegistry,
-		RequesterFunc: func() workerpool.RequesterInfo {
-			return workerpool.RequesterInfo{
-				NamespacedName: k8stypes.NamespacedName{
-					Namespace: deployer.GetNamespace(),
-					Name:      deployer.GetName(),
-				},
-			}
-		},
-	})
+	resourceBlob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, resource, cfg)
 	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
-
-		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
-	}
-
-	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, cfg)
-	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
-
-		return nil, workerpool.ErrResolutionInProgress
-	case errors.Is(err, ErrComponentVersionDrift):
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ComponentDriftResolutionInProgress, err.Error())
-
-		return nil, ErrComponentVersionDrift
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
-		// Ignore error, but log event
-		event.New(r.EventRecorder, deployer, nil, eventv1.EventSeverityError, err.Error())
-	default:
-		if err != nil {
-			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
-
-			return nil, fmt.Errorf("failed to get effective component version: %w", err)
-		}
-	}
-
-	resourceIdentity := makeResourceIdentity(resource.Status.Resource)
-	var matchedResource *descriptor.Resource
-	for i, res := range componentDescriptor.Component.Resources {
-		resIdentity := res.ToIdentity()
-		if resourceIdentity.Match(resIdentity, ocm.IdentityFuncIgnoreVersion()) {
-			matchedResource = &componentDescriptor.Component.Resources[i]
-			break
-		}
-	}
-
-	if matchedResource == nil {
-		err := fmt.Errorf("resource with identity %v not found in component %s:%s",
-			resourceIdentity, componentDescriptor.Component.Name, componentDescriptor.Component.Version)
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
-
-		return nil, err
-	}
-
-	resourceBlob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
-
 		return nil, fmt.Errorf("failed to download resource: %w", err)
 	}
 
 	limitedReader, err := resourceBlob.ReadCloser()
 	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
-
 		return nil, fmt.Errorf("getting reader for resource blob: %w", err)
 	}
 	defer func() {
@@ -551,7 +546,6 @@ func (r *Reconciler) DownloadResourceWithOCM(
 					apiresource.NewQuantity(size, apiresource.BinarySI),
 					apiresource.NewQuantity(r.MaxResourceSizeBytes, apiresource.BinarySI),
 				)
-				status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
 				return nil, err
 			}
@@ -560,14 +554,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		limitedReader = &limitedReadCloser{Closer: limitedReader, limited: &io.LimitedReader{R: limitedReader, N: r.MaxResourceSizeBytes}}
 	}
 
-	// Decode YAML manifests
-	if objs, err = decodeObjectsFromManifest(limitedReader); err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.MarshalFailedReason, err.Error())
-
-		return nil, fmt.Errorf("failed to decode objects: %w", err)
-	}
-
-	return objs, nil
+	return decodeObjectsFromManifest(limitedReader)
 }
 
 func decodeObjectsFromManifest(manifest io.ReadCloser) (_ []*unstructured.Unstructured, err error) {
@@ -587,7 +574,7 @@ func decodeObjectsFromManifest(manifest io.ReadCloser) (_ []*unstructured.Unstru
 	}
 
 	if len(objs) == 0 {
-		return nil, fmt.Errorf("no objects found in  manifest")
+		return nil, fmt.Errorf("no objects found in manifest")
 	}
 
 	return objs, nil
