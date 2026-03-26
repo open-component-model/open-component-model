@@ -3,11 +3,10 @@ package access
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
-	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
+	"ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -38,33 +37,10 @@ type HelmAccess struct{}
 
 // GetResourceCredentialConsumerIdentity returns the consumer identity for the given resource if the resource access is a Helm repository.
 func (h *HelmAccess) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descruntime.Resource) (identity runtime.Identity, err error) {
-	if resource == nil {
-		return nil, fmt.Errorf("resource is required")
-	}
-	if resource.Access == nil {
-		return nil, fmt.Errorf("resource access is required")
-	}
-
 	helm := v1.Helm{}
 	if err := Scheme.Convert(resource.Access, &helm); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	if helm.HelmRepository == "" {
-		slog.InfoContext(ctx, "local helm inputs do not require credentials")
-		return nil, nil
-	}
-
-	identity, err = runtime.ParseURLToIdentity(helm.HelmRepository)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing helm repository URL to identity: %w", err)
-	}
-
-	if scheme, ok := identity[runtime.IdentityAttributeScheme]; ok && scheme == "oci" {
-		identity.SetType(ocicredentialsspecv1.Type)
-	} else {
-		identity.SetType(runtime.NewUnversionedType(LegacyHelmChartConsumerType))
-	}
-
-	return identity, nil
+	return internal.GetIdentity(ctx, resource.Access)
 }

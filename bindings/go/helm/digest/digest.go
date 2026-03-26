@@ -8,11 +8,11 @@ import (
 
 	godigest "github.com/opencontainers/go-digest"
 	"helm.sh/helm/v4/pkg/registry"
-	repo "helm.sh/helm/v4/pkg/repo/v1"
-
+	"helm.sh/helm/v4/pkg/repo/v1"
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/access"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
+	"ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/helm/internal/download"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
@@ -43,30 +43,12 @@ func (p *DigestProcessor) GetResourceRepositoryScheme() *ocmruntime.Scheme {
 func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 	ctx context.Context, resource *runtime.Resource,
 ) (ocmruntime.Identity, error) {
-	if resource == nil {
-		return nil, fmt.Errorf("resource is required")
-	}
-	if resource.Access == nil {
-		return nil, fmt.Errorf("resource access is required")
-	}
-
 	helm := helmv1.Helm{}
 	if err := access.Scheme.Convert(resource.Access, &helm); err != nil {
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
 
-	if helm.HelmRepository == "" {
-		return nil, nil
-	}
-
-	identity, err := ocmruntime.ParseURLToIdentity(helm.HelmRepository)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing helm repository URL to identity: %w", err)
-	}
-
-	identity.SetType(ocmruntime.NewUnversionedType(access.LegacyHelmChartConsumerType))
-
-	return identity, nil
+	return internal.GetIdentity(ctx, &helm)
 }
 
 func (p *DigestProcessor) ProcessResourceDigest(
