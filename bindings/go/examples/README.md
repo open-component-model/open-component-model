@@ -42,7 +42,7 @@ task bindings/go/examples:test
 
 ## Concept Map
 
-```
+```text
                     ┌─────────────┐
                     │  1. Blobs   │  Raw binary data
                     └──────┬──────┘

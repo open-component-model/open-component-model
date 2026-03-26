@@ -31,19 +31,8 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
-	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-// newTestScheme creates a runtime scheme with the OCI access types and v2
-// descriptor types registered, as required by the OCI repository.
-func newTestScheme() *runtime.Scheme {
-	s := runtime.NewScheme()
-	access.MustAddToScheme(s)
-	v2.MustAddToScheme(s)
-	return s
-}
 
 // newTestRepo creates a CTF-backed OCI repository using a temporary directory.
 // This pattern avoids external dependencies and is suitable for unit tests.

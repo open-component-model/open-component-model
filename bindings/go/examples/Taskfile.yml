@@ -7,3 +7,9 @@ tasks:
   test:
     cmds:
       - task: reuse:run-go-test
+        vars:
+          GO_TEST_FLAGS: -short
+
+  test/full:
+    cmds:
+      - task: reuse:run-go-test

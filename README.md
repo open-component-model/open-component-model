@@ -94,7 +94,7 @@ Check out the [guides](https://ocm.software/docs/getting-started/) for more deta
 
 Language bindings are provided for:
 
-- [go](bindings/go). These Bindings are also used by the OCM CLI and are our primary Focus.
+- [Go](bindings/go). These bindings are also used by the OCM CLI and are our primary focus.
 - Looking for usage examples? Check out the [tested examples](bindings/go/examples/) covering blobs, descriptors,
   credentials, signing, and repository operations.
 

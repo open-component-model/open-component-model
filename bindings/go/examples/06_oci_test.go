@@ -33,7 +33,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	repository "ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -125,8 +125,7 @@ func TestExample_OCIRegistryRoundTrip(t *testing.T) {
 
 	r.NoError(repo.AddComponentVersion(ctx, desc))
 
-	// 5. Verify the component version does not exist before (fresh registry).
-	//    List versions to confirm it was stored.
+	// 5. List versions to confirm the component version was stored.
 	versions, err := repo.ListComponentVersions(ctx, component)
 	r.NoError(err)
 	r.Contains(versions, version)

@@ -3,14 +3,14 @@
 // What you'll learn:
 //   - Building a transfer graph that describes how to move a component version
 //   - Executing the graph to transfer a component from one CTF repository to another
-//   - Using the ComponentVersionRepositoryResolver interface for component discovery
-//   - Verifying the transferred component version in the target repository
+//   - Using transfer.WithTransfer, transfer.Component, transfer.FromRepository, and transfer.ToRepositorySpec
+//   - Verifying the transferred component version and its resource payload in the target repository
 
 package examples
 
 import (
 	"bytes"
-	"context"
+	"io"
 	"os"
 	"testing"
 
@@ -23,13 +23,10 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
-	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 )
@@ -85,21 +82,19 @@ func TestExample_TransferCTFtoCTF(t *testing.T) {
 
 	// --- Build the transfer graph ---
 
-	// The fromSpec tells the transfer where to find the source component.
-	fromRef := &compref.Ref{
-		Repository: sourceSpec,
-		Component:  component,
-		Version:    version,
-	}
-
 	// The target is another CTF repository (writable so the transfer can store data).
 	targetSpec := newCTFSpecAt(t, t.TempDir())
 	targetSpec.AccessMode = ctfrepospec.AccessModeReadWrite
 
-	// The resolver helps the transfer discover component versions in the source.
-	resolver := &singleRepoResolver{repo: sourceRepo, spec: sourceSpec}
-
-	tgd, err := transfer.BuildGraphDefinition(ctx, fromRef, targetSpec, resolver)
+	// WithTransfer pairs the source component with a target repository and a resolver.
+	// FromRepository wraps the source repo directly — no custom resolver needed.
+	tgd, err := transfer.BuildGraphDefinition(ctx,
+		transfer.WithTransfer(
+			transfer.Component(component, version),
+			transfer.ToRepositorySpec(targetSpec),
+			transfer.FromRepository(sourceRepo, sourceSpec),
+		),
+	)
 	r.NoError(err)
 	r.NotEmpty(tgd.Transformations)
 
@@ -124,6 +119,19 @@ func TestExample_TransferCTFtoCTF(t *testing.T) {
 	r.Equal(version, got.Component.Version)
 	r.Len(got.Component.Resources, 1)
 	r.Equal("my-resource", got.Component.Resources[0].Name)
+
+	// Also verify the resource payload was transferred correctly.
+	readBlob, _, err := targetRepo.GetLocalResource(ctx, component, version, map[string]string{
+		"name":    "my-resource",
+		"version": version,
+	})
+	r.NoError(err)
+	rc, err := readBlob.ReadCloser()
+	r.NoError(err)
+	defer rc.Close()
+	data, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.Equal(resourceContent, data)
 }
 
 // --- helpers ---
@@ -148,24 +156,3 @@ func ctfSpecToRepo(t *testing.T, spec *ctfrepospec.Repository) *oci.Repository {
 	r.NoError(err)
 	return repo
 }
-
-// singleRepoResolver is a minimal ComponentVersionRepositoryResolver that
-// always returns the same repository. Suitable for single-source transfers.
-type singleRepoResolver struct {
-	repo repository.ComponentVersionRepository
-	spec runtime.Typed
-}
-
-func (r *singleRepoResolver) GetRepositorySpecificationForComponent(_ context.Context, _, _ string) (runtime.Typed, error) {
-	return r.spec, nil
-}
-
-func (r *singleRepoResolver) GetComponentVersionRepositoryForSpecification(_ context.Context, _ runtime.Typed) (repository.ComponentVersionRepository, error) {
-	return r.repo, nil
-}
-
-func (r *singleRepoResolver) GetComponentVersionRepositoryForComponent(_ context.Context, _, _ string) (repository.ComponentVersionRepository, error) {
-	return r.repo, nil
-}
-
-var _ resolvers.ComponentVersionRepositoryResolver = (*singleRepoResolver)(nil)

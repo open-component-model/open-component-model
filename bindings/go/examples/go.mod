@@ -10,15 +10,15 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260324103707-0367c224baf3
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260324103707-0367c224baf3
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260326091035-ef0ea1b8f695
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260326091035-ef0ea1b8f695
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
 	ocm.software/open-component-model/bindings/go/oci v0.0.36
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260324103707-0367c224baf3
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260324103707-0367c224baf3
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260324144506-220c7f9eb819
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260326091035-ef0ea1b8f695
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260326100711-8cef52a35973
 )
 
 require (
@@ -90,7 +90,7 @@ require (
 	helm.sh/helm/v4 v4.1.1 // indirect
 	k8s.io/api v0.35.1 // indirect
 	k8s.io/apiextensions-apiserver v0.35.1 // indirect
-	k8s.io/apimachinery v0.35.2 // indirect
+	k8s.io/apimachinery v0.35.3 // indirect
 	k8s.io/cli-runtime v0.35.1 // indirect
 	k8s.io/client-go v0.35.1 // indirect
 	k8s.io/component-base v0.35.1 // indirect
@@ -98,9 +98,9 @@ require (
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
 	k8s.io/kubectl v0.35.1 // indirect
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260319111041-22758595f5fe // indirect
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260319164733-6860b4757648 // indirect
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260319164733-6860b4757648 // indirect
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260326091035-ef0ea1b8f695 // indirect
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260326091035-ef0ea1b8f695 // indirect
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260326091035-ef0ea1b8f695 // indirect
 	sigs.k8s.io/controller-runtime v0.23.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect

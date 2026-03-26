@@ -48,8 +48,9 @@ The [`examples/`](examples/) directory contains runnable, tested examples for th
 - **Signing** — generating and verifying digests, RSA signing (plain and PEM), tamper detection
 - **Repository** — creating CTF-backed repositories, storing and retrieving component versions, resources, and sources
 - **OCI Registry** — full round-trip against a real OCI registry using testcontainers (skipped with `-short`)
+- **Transfer** — transferring component versions between CTF repositories using the transfer graph API
 
-All examples are self-contained (no external services required) and run as part of CI:
+All examples are self-contained and run as part of CI, except **OCI Registry** which requires a real OCI registry via testcontainers and is skipped with `-short`:
 
 ```bash
 task bindings/go/examples:test
