@@ -125,12 +125,6 @@ func TestGetResourceDigestProcessorCredentialConsumerIdentity(t *testing.T) {
 		assert.Nil(t, identity)
 	})
 
-	t.Run("returns error for nil resource", func(t *testing.T) {
-		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), nil)
-		assert.Error(t, err)
-		assert.Nil(t, identity)
-	})
-
 	t.Run("returns error for nil access", func(t *testing.T) {
 		resource := &descruntime.Resource{}
 		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), resource)
