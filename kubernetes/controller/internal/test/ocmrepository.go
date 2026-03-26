@@ -8,8 +8,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/pkg/runtime/conditions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -43,7 +43,12 @@ func SetupRepositoryWithSpecData(
 	}
 	Expect(k8sClient.Create(ctx, repository)).To(Succeed())
 
-	conditions.MarkTrue(repository, "Ready", "ready", "message")
+	apimeta.SetStatusCondition(&repository.Status.Conditions, metav1.Condition{
+		Type:    v1alpha1.ReadyCondition,
+		Status:  metav1.ConditionTrue,
+		Reason:  v1alpha1.SucceededReason,
+		Message: "ready",
+	})
 	Expect(k8sClient.Status().Update(ctx, repository)).To(Succeed())
 
 	return repository

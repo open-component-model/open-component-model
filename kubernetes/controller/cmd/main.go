@@ -12,7 +12,6 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
@@ -82,7 +81,6 @@ func main() {
 		probeAddr                 string
 		secureMetrics             bool
 		enableHTTP2               bool
-		eventsAddr                string
 		deployerDownloadCacheSize int
 		deployerMaxResourceSize   string
 		ocmContextCacheSize       int
@@ -102,7 +100,6 @@ func main() {
 		"If set the metrics endpoint is served securely")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.StringVar(&eventsAddr, "events-addr", "", "The address of the events receiver.")
 	flag.IntVar(&deployerDownloadCacheSize, "deployer-download-cache-size", 1_000, //nolint:mnd // no magic number
 		"The maximum size of the deployer download object LRU cache.")
 	flag.StringVar(&deployerMaxResourceSize, "deployer-download-max-resource-size", defaultMaxResourceSize,
@@ -251,11 +248,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	var eventsRecorder *events.Recorder
-	if eventsRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, "ocm-k8s-toolkit"); err != nil {
-		setupLog.Error(err, "unable to create event recorder")
-		os.Exit(1)
-	}
+	// TODO: migrate to mgr.GetEventRecorder() once BaseReconciler uses events.EventRecorder
+	eventsRecorder := mgr.GetEventRecorderFor("ocm-k8s-toolkit") //nolint:staticcheck,nolintlint
 
 	resolver := resolution.NewResolver(mgr.GetClient(), &setupLog, workerPool, pm)
 	if err = (&repository.Reconciler{

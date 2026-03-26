@@ -8,8 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/runtime/conditions"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
@@ -71,7 +70,7 @@ var _ = Describe("Repository Controller", func() {
 				By("check that repository status has been updated successfully")
 				Eventually(komega.Object(ocmRepo), "1m").Should(And(
 					HaveField("Status.Conditions", ContainElement(
-						And(HaveField("Type", Equal(meta.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionTrue))),
+						And(HaveField("Type", Equal(v1alpha1.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionTrue))),
 					)),
 				))
 			})
@@ -94,7 +93,7 @@ var _ = Describe("Repository Controller", func() {
 				By("check that repository status has NOT been updated successfully")
 				Eventually(komega.Object(ocmRepo), "1m").Should(And(
 					HaveField("Status.Conditions", ContainElement(
-						And(HaveField("Type", Equal(meta.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionFalse))),
+						And(HaveField("Type", Equal(v1alpha1.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionFalse))),
 					)),
 				))
 			})
@@ -122,7 +121,7 @@ var _ = Describe("Repository Controller", func() {
 				By("check that repository status has NOT been updated successfully")
 				Eventually(komega.Object(ocmRepo), "1m").Should(And(
 					HaveField("Status.Conditions", ContainElement(
-						And(HaveField("Type", Equal(meta.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionFalse))),
+						And(HaveField("Type", Equal(v1alpha1.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionFalse))),
 					)),
 				))
 			})
@@ -152,7 +151,7 @@ var _ = Describe("Repository Controller", func() {
 				By("adding config and secret refs")
 				ocmRepo.Spec.OCMConfig = append(ocmRepo.Spec.OCMConfig, []v1alpha1.OCMConfiguration{
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[0].Name,
@@ -160,7 +159,7 @@ var _ = Describe("Repository Controller", func() {
 						},
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[1].Name,
@@ -168,14 +167,14 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "Secret",
 							Name: secrets[2].Name,
 						},
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[0].Name,
@@ -183,7 +182,7 @@ var _ = Describe("Repository Controller", func() {
 						},
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[1].Name,
@@ -191,7 +190,7 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "ConfigMap",
 							Name: configs[2].Name,
 						},
@@ -205,7 +204,7 @@ var _ = Describe("Repository Controller", func() {
 				By("check that the ConfigRefs are in the status")
 				expectedEffectiveOCMConfig := []v1alpha1.OCMConfiguration{
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[0].Name,
@@ -214,7 +213,7 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[1].Name,
@@ -223,7 +222,7 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[2].Name,
@@ -232,7 +231,7 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[0].Name,
@@ -241,7 +240,7 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[1].Name,
@@ -250,7 +249,7 @@ var _ = Describe("Repository Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[2].Name,
@@ -261,7 +260,7 @@ var _ = Describe("Repository Controller", func() {
 				}
 				Eventually(komega.Object(ocmRepo), "15s").Should(And(
 					HaveField("Status.Conditions", ContainElement(
-						And(HaveField("Type", Equal(meta.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionTrue))),
+						And(HaveField("Type", Equal(v1alpha1.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionTrue))),
 					)),
 					HaveField("Status.EffectiveOCMConfig", ConsistOf(expectedEffectiveOCMConfig)),
 					HaveField("GetEffectiveOCMConfig()", ConsistOf(expectedEffectiveOCMConfig)),
@@ -293,7 +292,7 @@ var _ = Describe("Repository Controller", func() {
 				By("checking if the repository is ready")
 				Eventually(func() bool {
 					Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TestNamespaceOCMRepo, Name: ocmRepoName}, ocmRepo)).To(Succeed())
-					return conditions.IsReady(ocmRepo)
+					return apimeta.IsStatusConditionTrue(ocmRepo.GetConditions(), v1alpha1.ReadyCondition)
 				}).WithTimeout(5 * time.Second).Should(BeTrue())
 
 				By("creating a component that uses this repository")
@@ -376,7 +375,7 @@ var _ = Describe("Repository Controller OCM Config", func() {
 		By("checking that the repository is ready with empty effective config")
 		Eventually(komega.Object(ocmRepo), "15s").Should(And(
 			HaveField("Status.Conditions", ContainElement(
-				And(HaveField("Type", Equal(meta.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionTrue))),
+				And(HaveField("Type", Equal(v1alpha1.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionTrue))),
 			)),
 			HaveField("Status.EffectiveOCMConfig", BeEmpty()),
 		))
@@ -418,7 +417,7 @@ consumers:
 		ocmRepo = newTestRepository(namespace.GetName(), "repo-with-config", &specdata)
 		ocmRepo.Spec.OCMConfig = []v1alpha1.OCMConfiguration{
 			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 					APIVersion: corev1.SchemeGroupVersion.String(),
 					Kind:       "Secret",
 					Name:       credSecret.Name,
@@ -433,11 +432,11 @@ consumers:
 		By("checking that the repository is ready with the expected effective config")
 		Eventually(komega.Object(ocmRepo), "15s").Should(And(
 			HaveField("Status.Conditions", ContainElement(
-				And(HaveField("Type", Equal(meta.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionTrue))),
+				And(HaveField("Type", Equal(v1alpha1.ReadyCondition)), HaveField("Status", Equal(metav1.ConditionTrue))),
 			)),
 			HaveField("Status.EffectiveOCMConfig", ConsistOf(
 				v1alpha1.OCMConfiguration{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						APIVersion: corev1.SchemeGroupVersion.String(),
 						Kind:       "Secret",
 						Name:       credSecret.Name,
