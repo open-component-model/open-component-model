@@ -212,19 +212,20 @@ func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm
 	// Strip the oci:// prefix for the registry client
 	ref = strings.TrimPrefix(ref, "oci://")
 
-	var regClientOpts []registry.ClientOption
+	username := credentials[ocicredentials.CredentialKeyUsername]
+	password := credentials[ocicredentials.CredentialKeyPassword]
 	if credentials != nil {
-		username := credentials[ocicredentials.CredentialKeyUsername]
-		password := credentials[ocicredentials.CredentialKeyPassword]
 
 		if password == "" {
 			if token := credentials[ocicredentials.CredentialKeyAccessToken]; token != "" {
 				password = token
 			}
 		}
-		regClientOpts = []registry.ClientOption{registry.ClientOptBasicAuth(username, password)}
 	}
-
+	var regClientOpts []registry.ClientOption
+	if username != "" || password != "" {
+		regClientOpts = append(regClientOpts, registry.ClientOptBasicAuth(username, password))
+	}
 	regClient, err := registry.NewClient(regClientOpts...)
 	if err != nil {
 		return "", fmt.Errorf("error creating registry client: %w", err)
