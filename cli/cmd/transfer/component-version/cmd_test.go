@@ -207,6 +207,41 @@ func TestTransferComponentVersionWithTransferSpecModifiedTarget(t *testing.T) {
 	require.Error(t, err, "original target should not contain the component")
 }
 
+func TestTransferComponentVersionWithTransferSpecStdin(t *testing.T) {
+	componentName := "ocm.software/stdin-spec-test"
+	componentVersion := "0.0.1"
+	toPath := t.TempDir()
+
+	sourceRef := setupSourceRef(t, componentName, componentVersion)
+	spec := dryRunTransferSpec(t, sourceRef, fmt.Sprintf("ctf::%s", toPath))
+
+	// Execute via stdin using --transfer-spec -
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+		test.WithInput(bytes.NewBufferString(spec)),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+
+	repo := openCTFRepo(t, toPath)
+	desc, err := repo.GetComponentVersion(t.Context(), componentName, componentVersion)
+	require.NoError(t, err)
+	require.Equal(t, componentName, desc.Component.Name)
+	require.Equal(t, componentVersion, desc.Component.Version)
+}
+
+func TestTransferComponentVersionWithTransferSpecStdinInvalid(t *testing.T) {
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+		test.WithInput(bytes.NewBufferString("not: [valid: yaml: {")),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "parsing transfer spec")
+}
+
 func TestTransferComponentVersionWithTransferSpecFileNotFound(t *testing.T) {
 	_, err := test.OCM(t,
 		test.WithArgs("transfer", "component-version", "--transfer-spec", "/nonexistent/path/spec.yaml"),

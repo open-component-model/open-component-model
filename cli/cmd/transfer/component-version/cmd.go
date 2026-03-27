@@ -63,11 +63,13 @@ The graph is validated, and then executed unless --dry-run is set.
 
 Alternatively, --transfer-spec can be used to provide a previously saved TransformationGraphDefinition
 from a file (or stdin with "-"), enabling a two-step workflow:
-  1. Generate and review the spec: transfer cv --dry-run -o yaml {reference} {target} > spec.yaml
+  1. Generate the spec with all desired flags (--recursive, --copy-resources, --upload-as),
+     then review: transfer cv --dry-run -o yaml --copy-resources --recursive {reference} {target} > spec.yaml
   2. Edit the spec as needed, then execute: transfer cv --transfer-spec spec.yaml
 
-When --transfer-spec is used, positional arguments and graph-building flags
-(--recursive, --copy-resources, --upload-as) are not needed.`,
+Flags like --recursive, --copy-resources, and --upload-as are baked into the generated spec during
+step 1. When --transfer-spec is used in step 2, these flags are ignored because the spec already
+contains the full graph definition. Only --dry-run and --output remain meaningful in step 2.`,
 		Example: strings.TrimSpace(`
 # Transfer a component version from a CTF archive to an OCI registry
 transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm
@@ -90,9 +92,9 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghc
 # Recursively transfer a component version and all its references
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm -r --copy-resources
 
-# Two-step transfer: first generate a spec, edit it, then execute it
-transfer component-version --dry-run -o yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
-# (edit spec.yaml as needed, e.g. change the target registry)
+# Two-step transfer: generate a spec with all desired flags, then review and execute
+transfer component-version --dry-run -o yaml --copy-resources -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
+# (review/edit spec.yaml as needed, e.g. change the target registry)
 transfer component-version --transfer-spec spec.yaml
 `),
 		Args:              transferArgs,
