@@ -601,6 +601,9 @@ func (c *DefaultConstructor) processReference(ctx context.Context, reference *co
 
 	// If digest is specified in the constructor reference, verify it matches the calculated digest
 	if reference.Digest != nil {
+		if reference.Digest.HashAlgorithm == "" || reference.Digest.NormalisationAlgorithm == "" || reference.Digest.Value == "" {
+			return nil, fmt.Errorf("reference %q has an incomplete digest: all of hashAlgorithm, normalisationAlgorithm, and value must be set", reference.ToIdentity())
+		}
 		if reference.Digest.HashAlgorithm != referencedComponentDigest.HashAlgorithm ||
 			reference.Digest.NormalisationAlgorithm != referencedComponentDigest.NormalisationAlgorithm ||
 			reference.Digest.Value != referencedComponentDigest.Value {
