@@ -20,6 +20,7 @@ import (
 // Options holds configuration for executing OCM CLI commands in tests
 type Options struct {
 	args   []string  // Command line arguments to pass to the CLI
+	in     io.Reader // Input reader to supply stdin to the command
 	out    io.Writer // Output writer to capture command output
 	errout io.Writer // Error writer to capture command errors and logs
 	format string    // Log format to use (e.g., json, text)
@@ -32,6 +33,13 @@ type Option func(*Options)
 func WithArgs(args ...string) Option {
 	return func(o *Options) {
 		o.args = args
+	}
+}
+
+// WithInput sets the input reader to supply stdin to the command
+func WithInput(in io.Reader) Option {
+	return func(o *Options) {
+		o.in = in
 	}
 }
 
@@ -70,6 +78,9 @@ func OCM(tb testing.TB, opts ...Option) (*cobra.Command, error) {
 		opt.args = []string{"help"}
 	}
 
+	if opt.in != nil {
+		instance.SetIn(opt.in)
+	}
 	// if and output is set, mirror it towards stdout (for logging) and the given output for testing
 	if opt.out != nil {
 		instance.SetOut(io.MultiWriter(os.Stdout, opt.out))
