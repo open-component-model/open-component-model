@@ -318,6 +318,9 @@ stringData:
 			blobContent := inmemory.New(bytes.NewReader(yamlStream))
 			newRes, err := repo.AddLocalResource(ctx, componentName, componentVersion, resource, blobContent)
 			Expect(err).NotTo(HaveOccurred())
+			// Clear the digest that AddLocalResource computed so the component descriptor
+			// resource truly has no digest, exercising the no-digest cache key path.
+			newRes.Digest = nil
 
 			desc := &descruntime.Descriptor{
 				Meta: descruntime.Meta{Version: "v2"},
@@ -1500,7 +1503,7 @@ data:
 })
 
 var _ = Describe("Deployer Controller Finalizer Persistence", func() {
-	It("adds finalizers to the deployer object after a successful reconcile", func(ctx SpecContext) {
+	It("adds finalizers to the deployer object before the first reconciliation", func(ctx SpecContext) {
 		namespace := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: "deployer-finalizer-add"},
 		}
@@ -1610,12 +1613,11 @@ data:
 		Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
 		DeferCleanup(func(ctx SpecContext) { test.DeleteObject(ctx, k8sClient, deployerObj) })
 
-		By("waiting until the Deployer is Ready")
-		test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
-
-		By("verifying both finalizers are persisted on the deployer object")
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployerObj), deployerObj)).To(Succeed())
-		Expect(deployerObj.Finalizers).To(ContainElements(applySetPruneFinalizer, resourceWatchFinalizer))
+		By("verifying both finalizers are persisted after the first reconciliation")
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployerObj), deployerObj)).To(Succeed())
+			g.Expect(deployerObj.Finalizers).To(ContainElements(applySetPruneFinalizer, resourceWatchFinalizer))
+		}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
 	})
 
 	It("removes finalizers so the deployer is fully deleted", func(ctx SpecContext) {
