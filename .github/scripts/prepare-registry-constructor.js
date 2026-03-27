@@ -116,7 +116,7 @@ function getRegistryDescriptor(core, repository, componentName) {
         }
 
         const pluginCount = component.componentReferences?.length || 0;
-        core.info(`Found registry v${component.version} with ${pluginCount} plugin(s)`);
+        core.info(`Found registry ${component.version} with ${pluginCount} plugin(s)`);
 
         return {
             exists: true,
@@ -131,7 +131,11 @@ function getRegistryDescriptor(core, repository, componentName) {
 
 /**
  * Prepare registry constructor with new plugin reference.
+ * This function checks, if a version is already present in the registry.
+ * If so, it will be declined and the function throws and error.
+ * v0.0.0-main will always be overridden.
  *
+ * @param {import('@actions/core')} core
  * @param {Object} params
  * @param {string} params.constructorPath - Path to constructor template
  * @param {string} params.registryVersion - Current registry version
@@ -142,7 +146,7 @@ function getRegistryDescriptor(core, repository, componentName) {
  * @param {Object|null} params.descriptor - Existing registry descriptor
  * @returns {Object} Updated constructor
  */
-export function prepareRegistryConstructor({
+export function prepareRegistryConstructor(core, {
     constructorPath,
     registryVersion,
     pluginName,
@@ -151,6 +155,7 @@ export function prepareRegistryConstructor({
     registryExists,
     descriptor,
 }) {
+    const defaultOverrides = ["0.0.0-main", "v0.0.0-main"];
     const template = fs.readFileSync(constructorPath, 'utf8');
     const constructor = yaml.load(template);
 
@@ -161,7 +166,14 @@ export function prepareRegistryConstructor({
 
     // Check for duplicate plugin version
     const isDuplicate = constructor.componentReferences.some(
-        ref => ref.name === pluginName && ref.version === pluginVersion
+        ref => {
+            const duplicate = ref.name === pluginName && ref.version === pluginVersion;
+            if (duplicate && defaultOverrides.indexOf(ref.version) >= 0) {
+                core.warning(`Plugin ${pluginName} version ${pluginVersion} is being overridden by default`);
+                return false;
+            }
+            return duplicate;
+        }
     );
     if (isDuplicate) {
         throw new Error(`Plugin ${pluginName} v${pluginVersion} already exists in registry`);
@@ -274,7 +286,7 @@ export default async function prepareRegistryConstructorAction({core}) {
         const registryInfo = getRegistryDescriptor(core, ocmRepository, registryComponentName);
 
         // Prepare constructor with new plugin
-        const constructor = prepareRegistryConstructor({
+        const constructor = prepareRegistryConstructor(core, {
             constructorPath,
             registryVersion: registryInfo.version,
             pluginName,
