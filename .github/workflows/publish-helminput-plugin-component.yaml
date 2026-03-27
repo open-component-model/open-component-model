@@ -89,7 +89,7 @@ jobs:
 
       - name: Attest binaries
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-path: "bindings/go/helm/tmp/bin/*"
@@ -110,7 +110,7 @@ jobs:
 
       - name: Upload build artifacts
         if: ${{ steps.branch-check.outputs.should_push_oci_image == 'true' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: helm-plugin-build-artifacts
           path: bindings/go/helm/tmp/

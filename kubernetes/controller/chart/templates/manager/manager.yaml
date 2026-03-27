@@ -78,10 +78,6 @@ spec:
                     - --deployer-download-max-resource-size={{ .deployerDownloadMaxResourceSize }}
                     {{- end }}
                     {{- end }}
-                    {{- /* Events */}}
-                    {{- if .Values.manager.events.address }}
-                    - --events-addr={{ .Values.manager.events.address }}
-                    {{- end }}
                     {{- /* Logging */}}
                     {{- with .Values.manager.logging }}
                     {{- if .level }}

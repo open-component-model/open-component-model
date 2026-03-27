@@ -16,9 +16,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/pkg/runtime/patch"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -62,19 +61,20 @@ func MockComponent(
 	}
 	Expect(options.Client.Create(ctx, component)).To(Succeed())
 
-	patchHelper := patch.NewSerialPatcher(component, options.Client)
+	old := component.DeepCopy()
 
 	component.Status.Component = options.Info
 	component.Status.EffectiveOCMConfig = options.EffectiveOCMConfig
 
 	status.MarkReady(options.Recorder, component, "applied mock component")
-	Expect(status.UpdateStatus(ctx, patchHelper, component, options.Recorder, time.Hour, nil)).To(Succeed())
+	component.SetObservedGeneration(component.GetGeneration())
+	Expect(options.Client.Status().Patch(ctx, component, client.MergeFrom(old))).To(Succeed())
 
 	Eventually(func(ctx context.Context) error {
 		c := &v1alpha1.Component{}
 		Expect(options.Client.Get(ctx, client.ObjectKeyFromObject(component), c)).To(Succeed())
 
-		if conditions.IsReady(c) {
+		if apimeta.IsStatusConditionTrue(c.GetConditions(), v1alpha1.ReadyCondition) {
 			return nil
 		}
 

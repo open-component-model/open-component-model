@@ -68,6 +68,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/oci/Taskfile.yml
     dir: ./bindings/go/oci
+  bindings/go/examples:
+    optional: true
+    taskfile: ./bindings/go/examples/Taskfile.yml
+    dir: ./bindings/go/examples
   bindings/go/oci/integration:
     optional: true
     taskfile: ./bindings/go/oci/integration/Taskfile.yml

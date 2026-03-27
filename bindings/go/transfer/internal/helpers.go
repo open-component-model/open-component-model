@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"slices"
 
 	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 
@@ -104,6 +105,32 @@ func getReferenceName(imageReference string) (string, error) {
 		referenceName += ":" + imageRef.Tag
 	}
 	return referenceName, nil
+}
+
+// AppendUniqueRepositories merges sources into targets, skipping duplicates.
+func AppendUniqueRepositories(targets []runtime.Typed, sources []runtime.Typed) []runtime.Typed {
+	for _, s := range sources {
+		if !slices.ContainsFunc(targets, func(t runtime.Typed) bool {
+			return RepositoryEqual(t, s)
+		}) {
+			targets = append(targets, s)
+		}
+	}
+	return targets
+}
+
+// RepositoryEqual compares two runtime.Typed repository specs by their concrete fields.
+func RepositoryEqual(a, b runtime.Typed) bool {
+	switch at := a.(type) {
+	case *oci.Repository:
+		bt, ok := b.(*oci.Repository)
+		return ok && at.BaseUrl == bt.BaseUrl && at.SubPath == bt.SubPath
+	case *ctfv1.Repository:
+		bt, ok := b.(*ctfv1.Repository)
+		return ok && at.FilePath == bt.FilePath && at.AccessMode == bt.AccessMode
+	default:
+		return a == b
+	}
 }
 
 // IsOCICompliantManifest checks if a descriptor describes a manifest that is recognizable by OCI.

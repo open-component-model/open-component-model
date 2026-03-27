@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr/funcr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -311,7 +310,7 @@ func TestLoadConfigurations(t *testing.T) {
 			namespace: "default",
 			ocmConfigs: []v1alpha1.OCMConfiguration{
 				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						Kind: "Secret",
 						Name: "test-secret",
 					},
@@ -328,7 +327,7 @@ func TestLoadConfigurations(t *testing.T) {
 			namespace: "default",
 			ocmConfigs: []v1alpha1.OCMConfiguration{
 				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						Kind: "ConfigMap",
 						Name: "test-cm",
 					},
@@ -344,13 +343,13 @@ func TestLoadConfigurations(t *testing.T) {
 			namespace: "default",
 			ocmConfigs: []v1alpha1.OCMConfiguration{
 				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						Kind: "Secret",
 						Name: "test-secret",
 					},
 				},
 				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						Kind: "ConfigMap",
 						Name: "test-cm",
 					},
@@ -368,7 +367,7 @@ func TestLoadConfigurations(t *testing.T) {
 			namespace: "default",
 			ocmConfigs: []v1alpha1.OCMConfiguration{
 				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						Kind: "Secret",
 						Name: "non-existent",
 					},
@@ -432,7 +431,7 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 			ocmConfigs: [][]v1alpha1.OCMConfiguration{
 				{
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "Secret",
 							Name: "test-secret-a",
 						},
@@ -440,7 +439,7 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 				},
 				{
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "Secret",
 							Name: "test-secret-b",
 						},
@@ -457,13 +456,13 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 			ocmConfigs: [][]v1alpha1.OCMConfiguration{
 				{
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "Secret",
 							Name: "test-secret-a",
 						},
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "Secret",
 							Name: "test-secret-b",
 						},
@@ -471,13 +470,13 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 				},
 				{
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "Secret",
 							Name: "test-secret-a",
 						},
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "Secret",
 							Name: "test-secret-b",
 						},
@@ -494,13 +493,13 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 			ocmConfigs: [][]v1alpha1.OCMConfiguration{
 				{
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "Secret",
 							Name: "test-secret-a",
 						},
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "Secret",
 							Name: "test-secret-b",
 						},
@@ -508,13 +507,13 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 				},
 				{
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "Secret",
 							Name: "test-secret-b",
 						},
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							Kind: "Secret",
 							Name: "test-secret-a",
 						},

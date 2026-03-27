@@ -55,14 +55,6 @@
                 "env": {
                     "type": "array"
                 },
-                "events": {
-                    "type": "object",
-                    "properties": {
-                        "address": {
-                            "type": "string"
-                        }
-                    }
-                },
                 "extraArgs": {
                     "type": "array"
                 },

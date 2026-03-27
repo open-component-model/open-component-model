@@ -185,8 +185,8 @@ var _ = BeforeSuite(func() {
 		DownloadCache: cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_test_object_cache", 1_000, func(k string, v []*unstructured.Unstructured) {
 			GinkgoLogr.Info("DownloadCache eviction", "key", k, "value", fmt.Sprintf("%d objects", len(v)))
 		}),
-		Resolver:           resolver,
-		PluginManager:      pm,
+		Resolver:             resolver,
+		PluginManager:        pm,
 		MaxResourceSizeBytes: 2 * 1024 * 1024,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
 
