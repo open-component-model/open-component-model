@@ -11,8 +11,8 @@ import (
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/helm"
 	"ocm.software/open-component-model/bindings/go/helm/access"
+	"ocm.software/open-component-model/bindings/go/repository"
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	helmdownload "ocm.software/open-component-model/bindings/go/helm/internal/download"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
@@ -25,9 +25,9 @@ import (
 // For OCI registry access, the OCI registry access transformer should be used instead, which can also handle Helm charts stored in OCI registries.
 type GetHelmChart struct {
 	Scheme *runtime.Scheme
-	// ResourceConsumerIdentityProvider is used to get the consumer identity for the resource when resolving credentials.
-	ResourceConsumerIdentityProvider helm.ResourceConsumerIdentityProvider
-	CredentialProvider               credentials.Resolver
+	// ResourceRepository is used to resolve credential consumer identities for helm resources.
+	ResourceRepository repository.ResourceRepository
+	CredentialProvider credentials.Resolver
 }
 
 func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -54,8 +54,8 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 
 	// Resolve credentials if credential provider is available
 	var creds map[string]string
-	if t.CredentialProvider != nil && t.ResourceConsumerIdentityProvider != nil {
-		if consumerId, err := t.ResourceConsumerIdentityProvider.GetResourceCredentialConsumerIdentity(ctx, targetResource); err != nil {
+	if t.CredentialProvider != nil && t.ResourceRepository != nil {
+		if consumerId, err := t.ResourceRepository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err != nil {
 			return nil, fmt.Errorf("failed getting resource consumer identity for credential resolution: %w", err)
 		} else if consumerId != nil {
 			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
@@ -98,7 +98,6 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	}
 	slog.InfoContext(ctx, "Getting helm chart", "url", helmURL)
 
-	// TODO(matthiasbruns): Introduce a helm based ResourceRepository and handle access in there https://github.com/open-component-model/ocm-project/issues/911
 	resultData, err := helmdownload.NewReadOnlyChartFromRemote(ctx, helmURL, downloadTemp, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading helm chart from repository %q: %w", helmURL, err)
