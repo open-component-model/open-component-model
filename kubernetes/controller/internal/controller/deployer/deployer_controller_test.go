@@ -240,6 +240,9 @@ stringData:
 				},
 			}
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, deployerObj)
+			})
 
 			By("waiting until the Deployer is Ready")
 			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
@@ -260,9 +263,6 @@ stringData:
 			}, gotSec)).To(Succeed())
 			// stringData is converted by API server into data (base64); compare the decoded value.
 			Expect(string(gotSec.Data["password"])).To(Equal("s3cr3t"))
-
-			By("deleting the Deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
 
 		It("reconciles a deployer when resource has no digest", func(ctx SpecContext) {
@@ -398,6 +398,9 @@ stringData:
 				},
 			}
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, deployerObj)
+			})
 
 			By("waiting until the Deployer is Ready")
 			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
@@ -424,9 +427,6 @@ stringData:
 				return nil, fmt.Errorf("cache miss for key %q: expected a hit", expectedCacheKey)
 			})
 			Expect(err).NotTo(HaveOccurred(), "expected download cache to contain composite key for nil-digest resource")
-
-			By("deleting the Deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
 	})
 
@@ -634,6 +634,9 @@ data:
 				},
 			}
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, deployerObj)
+			})
 
 			By("waiting until the Deployer is Ready")
 			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
@@ -660,9 +663,6 @@ data:
 					},
 				)),
 			)
-
-			By("deleting the Deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
 
 		It("deployer with explicit ocmConfig ignores parent resource config", func(ctx SpecContext) {
@@ -774,6 +774,10 @@ consumers:
 				},
 			}
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				_ = k8sClient.Delete(ctx, deployerSecret)
+				test.DeleteObject(ctx, k8sClient, deployerObj)
+			})
 
 			By("waiting until the Deployer is Ready")
 			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
@@ -792,10 +796,6 @@ consumers:
 					},
 				)),
 			)
-
-			By("deleting the Deployer")
-			_ = k8sClient.Delete(ctx, deployerSecret)
-			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
 	})
 
@@ -955,6 +955,9 @@ data:
 				},
 			}
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, deployerObj)
+			})
 
 			By("waiting until the Deployer is Ready")
 			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
@@ -987,9 +990,6 @@ data:
 			// on the timing between the informer sync and the controller's requeue.
 			Expect(testutil.ToFloat64(verifiedHit)).To(BeNumerically(">=", float64(1)),
 				"expected at least 1 cache hit for the verified component on subsequent reconciliation")
-
-			By("deleting the Deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
 
 		It("maintains integrity chain for referenced component via reference path", Serial, func(ctx SpecContext) {
@@ -1200,6 +1200,9 @@ data:
 				},
 			}
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, deployerObj)
+			})
 
 			By("waiting until the Deployer is Ready")
 			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
@@ -1247,9 +1250,6 @@ data:
 			Expect(err).ToNot(HaveOccurred())
 			Expect(testutil.ToFloat64(referencedMissUnverified)).To(Equal(float64(0)),
 				"expected 0 unverified cache misses for the child — it should be resolved via integrity chain digest")
-
-			By("deleting the Deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
 
 		It("does not deploy when verification fails with wrong public key", Serial, func(ctx SpecContext) {

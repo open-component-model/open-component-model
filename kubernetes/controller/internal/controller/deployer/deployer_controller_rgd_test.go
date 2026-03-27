@@ -185,13 +185,17 @@ spec:
 			}).WithContext(ctx).Should(Succeed())
 
 			deployers := &v1alpha1.DeployerList{}
-			Expect(k8sClient.List(ctx, deployers)).To(Succeed())
-			Expect(deployers.Items).To(HaveLen(0))
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.List(ctx, deployers)).To(Succeed())
+				g.Expect(deployers.Items).To(HaveLen(0))
+			}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
 
 			RGDs := &unstructured.UnstructuredList{}
 			RGDs.SetGroupVersionKind(listGVK)
-			Expect(k8sClient.List(ctx, RGDs)).To(Succeed())
-			Expect(RGDs.Items).To(HaveLen(0))
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.List(ctx, RGDs)).To(Succeed())
+				g.Expect(RGDs.Items).To(HaveLen(0))
+			}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
 		})
 
 		It("reconciles a deployer with a valid RGD", func(ctx SpecContext) {
