@@ -94,7 +94,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.readinessProbe.port | int | `8081` | Port for the readiness probe |
 | manager.replicas | int | `1` | Number of controller manager replicas |
 | manager.resolver.workerCount | int | `10` | Number of active resolver workers |
-| manager.resolver.workerQueueLength | int | `100` | Maximum work items in queue for component version resolution |
+| manager.resolver.workerQueueLength | int | `1000` | Maximum work items in queue for component version resolution |
 | manager.resources | object | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"100m","memory":"256Mi"}}` | Resource limits and requests |
 | manager.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` | Container-level security context |
 | manager.tolerations | list | `[]` | Pod tolerations |

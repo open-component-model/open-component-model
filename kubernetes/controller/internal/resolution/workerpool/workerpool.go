@@ -126,7 +126,7 @@ func NewWorkerPool(opts PoolOptions) *WorkerPool {
 	}
 
 	if opts.QueueSize <= 0 {
-		opts.QueueSize = 100
+		opts.QueueSize = 1000
 	}
 
 	return &WorkerPool{
