@@ -177,7 +177,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	old := resource.DeepCopy()
 	defer func(ctx context.Context) {
-		status.UpdateBeforePatch(resource, r.EventRecorder, resource.GetRequeueAfter(), err)
+		status.UpdateBeforePatch(resource, r.EventRecorder, 0, err)
 		if !equality.Semantic.DeepEqual(resource.Status, old.Status) {
 			err = errors.Join(err, r.GetClient().Status().Patch(ctx, resource, client.MergeFrom(old)))
 		}
@@ -452,7 +452,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	status.MarkReady(r.EventRecorder, resource, "Applied version %s", matchedResource.Version)
 
-	return status.RequeueResult(resource, resource.GetRequeueAfter()), nil
+	return ctrl.Result{}, nil
 }
 
 // setResourceStatus updates the resource status with all required information.

@@ -628,7 +628,6 @@ func (in *ResourceSpec) DeepCopyInto(out *ResourceSpec) {
 		*out = make([]OCMConfiguration, len(*in))
 		copy(*out, *in)
 	}
-	out.Interval = in.Interval
 	if in.AdditionalStatusFields != nil {
 		in, out := &in.AdditionalStatusFields, &out.AdditionalStatusFields
 		*out = new(v1.JSON)

@@ -29,7 +29,6 @@ spec:
             registry: resource.access.toOCI().registry
             repository: resource.access.toOCI().repository
             digest: resource.access.toOCI().digest
-          interval: 10m
     - id: resourceImage
       template:
         apiVersion: delivery.ocm.software/v1alpha1
@@ -47,7 +46,6 @@ spec:
             registry: resource.access.toOCI().registry
             repository: resource.access.toOCI().repository
             tag: resource.access.toOCI().tag
-          interval: 10m
     - id: ocirepository
       template:
         apiVersion: source.toolkit.fluxcd.io/v1

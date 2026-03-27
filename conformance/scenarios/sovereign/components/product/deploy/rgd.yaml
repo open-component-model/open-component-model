@@ -109,7 +109,6 @@ spec:
             byReference:
               resource:
                 name: product-rgd
-          interval: 1m
     - id: rgdDeployer
       readyWhen:
         - ${rgdDeployer.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
@@ -176,7 +175,6 @@ spec:
             registry: resource.access.globalAccess.imageReference.toOCI().registry
             repository: resource.access.globalAccess.imageReference.toOCI().repository
             digest: resource.access.globalAccess.imageReference.toOCI().digest
-          interval: 10m
 
     # Resolve container image from postgres component
     - id: postgresImageResource
@@ -202,7 +200,6 @@ spec:
             repository: resource.access.globalAccess.imageReference.toOCI().repository
             tag: resource.access.globalAccess.imageReference.toOCI().tag
             digest: resource.access.globalAccess.imageReference.toOCI().digest
-          interval: 10m
 
     # FluxCD OCIRepository for postgres helm chart
     - id: postgresOciRepository
@@ -286,7 +283,6 @@ spec:
             registry: resource.access.globalAccess.imageReference.toOCI().registry
             repository: resource.access.globalAccess.imageReference.toOCI().repository
             digest: resource.access.globalAccess.imageReference.toOCI().digest
-          interval: 10m
 
     # Resolve container image from notes component
     - id: notesImageResource
@@ -312,7 +308,6 @@ spec:
             repository: resource.access.globalAccess.imageReference.toOCI().repository
             tag: resource.access.globalAccess.imageReference.toOCI().tag
             digest: resource.access.globalAccess.imageReference.toOCI().digest
-          interval: 10m
 
     # FluxCD OCIRepository for notes helm chart
     - id: notesOciRepository

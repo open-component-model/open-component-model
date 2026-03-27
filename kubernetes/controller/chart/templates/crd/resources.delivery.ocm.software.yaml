@@ -71,9 +71,6 @@ spec:
                                         type: string
                                 type: object
                                 x-kubernetes-map-type: atomic
-                            interval:
-                                description: Interval at which the resource is checked for updates.
-                                type: string
                             ocmConfig:
                                 description: |-
                                     OCMConfig defines references to secrets, config maps or ocm api
@@ -157,7 +154,7 @@ spec:
                                 default: Always
                                 description: |-
                                     VerificationPolicy controls when resource digest verification is performed.
-                                    Always (default): attempt to verify resource digest; if no processor plugin is found, log a warning and continue.
+                                    Always (default): attempt to verify resource digest; if no processor plugin is found, log and continue.
                                     Never: skip verification unconditionally.
                                 enum:
                                     - Always
@@ -165,7 +162,6 @@ spec:
                                 type: string
                         required:
                             - componentRef
-                            - interval
                             - resource
                         type: object
                     status:
