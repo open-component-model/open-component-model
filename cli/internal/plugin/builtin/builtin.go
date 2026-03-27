@@ -6,6 +6,7 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
+	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocicredentialplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/credentials/oci"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/dir"
@@ -44,6 +45,11 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	}
 	if err := helm.Register(manager.InputRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register helm input plugin: %w", err)
+	}
+	if err := manager.ResourcePluginRegistry.RegisterInternalResourcePlugin(
+		helmresource.NewResourceRepository(filesystemConfig),
+	); err != nil {
+		return fmt.Errorf("could not register helm resource repository plugin: %w", err)
 	}
 	if err := manager.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(
 		helmdigest.NewDigestProcessor(filesystemConfig.TempFolder),
