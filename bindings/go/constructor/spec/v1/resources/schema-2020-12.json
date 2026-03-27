@@ -397,6 +397,7 @@
     },
     "component": {
       "type": "object",
+      "additionalProperties": false,
       "description": "A component containing sources, resources, and references to other components",
       "required": [
         "name",
