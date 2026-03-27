@@ -364,8 +364,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	repoSpec := &ocmruntime.Raw{}
-	if err := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()).Decode(
-		bytes.NewReader(resource.Status.Component.RepositorySpec.Raw), repoSpec); err != nil {
+	if err := repoSpec.UnmarshalJSON(resource.Status.Component.RepositorySpec.Raw); err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to decode repository spec: %w", err)
