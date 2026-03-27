@@ -165,6 +165,13 @@ func ConvertToDescriptorReference(reference *Reference) *descriptor.Reference {
 		ElementMeta: ConvertElementMetaToDescriptor(reference.ElementMeta),
 		Component:   reference.Component,
 	}
+	if reference.Digest != nil {
+		target.Digest = descriptor.Digest{
+			HashAlgorithm:          reference.Digest.HashAlgorithm,
+			NormalisationAlgorithm: reference.Digest.NormalisationAlgorithm,
+			Value:                  reference.Digest.Value,
+		}
+	}
 	return target
 }
 
@@ -195,6 +202,13 @@ func ConvertFromDescriptorReference(reference *descriptor.Reference) *Reference 
 	target := &Reference{
 		ElementMeta: ConvertElementMetaFromDescriptor(reference.ElementMeta),
 		Component:   reference.Component,
+	}
+	if reference.Digest.HashAlgorithm != "" || reference.Digest.NormalisationAlgorithm != "" || reference.Digest.Value != "" {
+		target.Digest = &Digest{
+			HashAlgorithm:          reference.Digest.HashAlgorithm,
+			NormalisationAlgorithm: reference.Digest.NormalisationAlgorithm,
+			Value:                  reference.Digest.Value,
+		}
 	}
 	return target
 }

@@ -221,9 +221,21 @@ func ConvertToV1Source(source *Source) (*v1.Source, error) {
 
 // Reference conversion
 
+// ConvertFromV1Digest converts a v1 Digest pointer to runtime Digest pointer.
+// Returns nil if the input is nil.
+func ConvertFromV1Digest(digest *v1.Digest) *Digest {
+	if digest == nil {
+		return nil
+	}
+	return &Digest{
+		HashAlgorithm:          digest.HashAlgorithm,
+		NormalisationAlgorithm: digest.NormalisationAlgorithm,
+		Value:                  digest.Value,
+	}
+}
+
 // ConvertToRuntimeReference converts a v1 Reference to runtime Reference.
 // Returns an empty Reference if the input is nil.
-// Note: This conversion is lossy as it does not include the digest field.
 func ConvertToRuntimeReference(reference *v1.Reference) Reference {
 	if reference == nil {
 		return Reference{}
@@ -232,6 +244,7 @@ func ConvertToRuntimeReference(reference *v1.Reference) Reference {
 	return Reference{
 		ElementMeta: ConvertFromV1ElementMeta(reference.ElementMeta),
 		Component:   reference.Component,
+		Digest:      ConvertFromV1Digest(reference.Digest),
 	}
 }
 
@@ -332,6 +345,7 @@ func ConvertToRuntimeConstructorReference(reference v1.Reference) Reference {
 	return Reference{
 		ElementMeta: ConvertFromV1ElementMeta(reference.ElementMeta),
 		Component:   reference.Component,
+		Digest:      ConvertFromV1Digest(reference.Digest),
 	}
 }
 
@@ -440,6 +454,19 @@ func ConvertToV1Component(component *Component) (*v1.Component, error) {
 	return &target, nil
 }
 
+// ConvertToV1Digest converts a runtime Digest pointer to v1 Digest pointer.
+// Returns nil if the input is nil.
+func ConvertToV1Digest(digest *Digest) *v1.Digest {
+	if digest == nil {
+		return nil
+	}
+	return &v1.Digest{
+		HashAlgorithm:          digest.HashAlgorithm,
+		NormalisationAlgorithm: digest.NormalisationAlgorithm,
+		Value:                  digest.Value,
+	}
+}
+
 // ConvertToV1Reference converts a runtime Reference to v1 Reference.
 // Returns nil if the input is nil.
 func ConvertToV1Reference(reference *Reference) (*v1.Reference, error) {
@@ -447,10 +474,9 @@ func ConvertToV1Reference(reference *Reference) (*v1.Reference, error) {
 		return nil, nil
 	}
 
-	target := v1.Reference{
+	return &v1.Reference{
 		ElementMeta: ConvertToV1ElementMeta(reference.ElementMeta),
 		Component:   reference.Component,
-	}
-
-	return &target, nil
+		Digest:      ConvertToV1Digest(reference.Digest),
+	}, nil
 }
