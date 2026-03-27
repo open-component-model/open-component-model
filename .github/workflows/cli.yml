@@ -115,7 +115,7 @@ jobs:
       # Attest built binaries with provenance metadata, but only if we're not on a PR
       - name: Attest binaries
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-path: "${{ env.LOCATION }}/tmp/bin/ocm-*"
@@ -208,7 +208,7 @@ jobs:
         id: digest
         run: echo "digest=$(oras resolve ${TARGET_REPO}:${TAG})" >> "$GITHUB_OUTPUT"
       - name: Attest OCI image
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.digest.outputs.digest }}
