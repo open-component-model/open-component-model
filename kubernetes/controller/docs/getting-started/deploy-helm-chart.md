@@ -155,7 +155,6 @@ spec:
             registry: resource.access.toOCI().registry
             repository: resource.access.toOCI().repository
             tag: resource.access.toOCI().tag
-          interval: 1m
           # ocmConfig is required, if the OCM repository requires credentials to access it.
           # ocmConfig:
     # OCIRepository watches and downloads the resource from the location provided by the Resource status.

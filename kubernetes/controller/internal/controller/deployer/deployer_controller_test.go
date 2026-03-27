@@ -1585,7 +1585,6 @@ var _ = Describe("Deployer Controller Error Handling", func() {
 						Resource: runtime.Identity{"name": "not-ready-resource"},
 					},
 				},
-				Interval: metav1.Duration{Duration: 10 * time.Minute},
 			},
 		}
 		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -1632,7 +1631,6 @@ var _ = Describe("Deployer Controller Error Handling", func() {
 						Resource: runtime.Identity{"name": "deleting-resource"},
 					},
 				},
-				Interval: metav1.Duration{Duration: 10 * time.Minute},
 			},
 		}
 		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
