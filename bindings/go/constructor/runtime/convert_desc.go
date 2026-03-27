@@ -199,15 +199,18 @@ func ConvertFromDescriptorReference(reference *descriptor.Reference) *Reference 
 	if reference == nil {
 		return nil
 	}
-	return &Reference{
+	target := &Reference{
 		ElementMeta: ConvertElementMetaFromDescriptor(reference.ElementMeta),
 		Component:   reference.Component,
-		Digest: &Digest{
+	}
+	if reference.Digest.HashAlgorithm != "" || reference.Digest.NormalisationAlgorithm != "" || reference.Digest.Value != "" {
+		target.Digest = &Digest{
 			HashAlgorithm:          reference.Digest.HashAlgorithm,
 			NormalisationAlgorithm: reference.Digest.NormalisationAlgorithm,
 			Value:                  reference.Digest.Value,
-		},
+		}
 	}
+	return target
 }
 
 // Provider conversion
