@@ -107,12 +107,12 @@ type Resource struct {
 	// SourceRefs defines a list of source names.
 	// These entries reference the sources defined in the
 	// component.sources.
-	SourceRefs []SourceRef `json:"sourceRefs,omitempty"`
+	SourceRefs []SourceRef `json:"srcRefs,omitempty"`
 	// Type describes the type of the object.
 	Type string `json:"type"`
 	// Relation describes the relation of the resource to the component.
 	// Can be a local or external resource.
-	Relation ResourceRelation `json:"relation"`
+	Relation ResourceRelation `json:"relation,omitempty"`
 
 	AccessOrInput `json:",inline"`
 
@@ -204,6 +204,9 @@ type Reference struct {
 	ElementMeta `json:",inline"`
 	// Component describes the remote name of the referenced object.
 	Component string `json:"componentName"`
+	// Digest is the optional digest of the referenced component.
+	// If provided, it will be verified against the calculated digest during construction.
+	Digest *Digest `json:"digest,omitempty"`
 }
 
 // SourceRef defines a reference to a source.
