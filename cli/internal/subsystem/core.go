@@ -21,8 +21,8 @@ func NewRegistryFromPluginManager(pm *manager.PluginManager) (*Registry, error) 
 		"Listers for listing OCM component repositories. Can be seen as repository of versioned repositories",
 	)
 	ocmResourceRepository := NewSubsystem(
-		"ocm-resource-repository",
-		"Repositories for storing and managing OCM resources.",
+		"access",
+		"Access methods define how OCM resources are accessed and retrieved from their origin.",
 	)
 	input := NewSubsystem(
 		"input",
