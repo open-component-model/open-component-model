@@ -448,26 +448,23 @@ Ownership annotations are a new feature. New features are developed in the new O
 
 **Decision**: Implement only in the new OCM tooling.
 
-## Steps
+## Decision
 
-1. **Implement**:
+**Option 2 (OCI Referrers API)** is chosen as the primary approach. Ownership metadata is stored as a separate OCI referrer artifact linked to the resource via the `subject` field, leaving the original resource manifest untouched. This preserves the original digest, keeps OCI-level signatures (cosign, Notary) valid, and removes the need for the `software.ocm.base.digest` bridging mechanism.
 
-   - **Implement annotation injection** — during packing, compute `software.ocm.base.digest` from the original manifest bytes, then inject all ownership annotations (`software.ocm.component.name`, `software.ocm.component.version`, `software.ocm.base.digest`) into the resource's manifest/index JSON. The CD records the post-annotation digest via `internaldigest.Apply` (`genericBlobDigest/v1`), matching the registry.
-   - **Implement referrer creation** — after annotation injection, create a referrer artifact using the OCI Distribution v1.1 API. The referrer carries the same annotations and links back to the annotated manifest via `subject.digest`.
+### Steps
 
-2. **Document**:
+1. **Implement referrer creation** — after a resource is uploaded to the registry, push an ownership referrer artifact (`application/vnd.ocm.ownership.v1+json`) with `subject` pointing to the resource's original manifest. The referrer carries `software.ocm.component.name` and `software.ocm.component.version` in its annotations. ORAS handles Referrers API vs tag fallback automatically.
 
-   - **Code** — annotation constants in [`annotations.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/spec/annotations/annotations.go) with spec references.
+2. **Implement referrer transfer** — ensure `ocm transfer` copies ownership referrers alongside resources. Either re-create referrers on upload (simplest) or discover and copy them from the source registry.
+
+3. **Document**:
+
+   - **Code** — annotation constants and artifact type in [`annotations.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/spec/annotations/annotations.go) with spec references.
    - **OCM Website** ([ocm.software](https://ocm.software)) — add a concepts/how-to page on ownership annotations and update [OCI storage backend](https://ocm.software/docs/) docs. Source: [`ocm-website`](https://github.com/open-component-model/ocm-website) under `content/docs/`.
 
-3. **E2E tests**:
+4. **E2E tests**:
 
-   - **Creation** — Create a CV with an OCI layout resource, verify `oras manifest fetch` shows ownership annotations on the resource manifest.
-   - **Transfer** — Transfer CV between registries, verify annotations are preserved on the target.
-   - **Tracing** — Given a resource image ref, extract component name/version from `manifest.annotations`.
-
----
-
-## Conclusion
-
-This ADR implements the OCM spec's asset annotation mechanism to solve the asset-to-owner tracing problem. Option 1 (Embedded Manifest Annotations) is chosen as the primary approach: ownership annotations (`software.ocm.component.name`, `software.ocm.component.version`) are written on the resource's own OCI manifest/index for new OCI layout resources packed by OCM. Existing OCI images are copied as-is. Option 2 (OCI Referrers API) is documented as a complementary, opt-in alternative for environments where preserving the original digest and OCI-level signatures is more important than self-containment.
+   - **Creation** — Create a CV with an OCI layout resource, verify `oras discover` returns the ownership referrer with correct annotations.
+   - **Transfer** — Transfer CV between registries, verify the ownership referrer exists on the target.
+   - **Tracing** — Given a resource image ref, discover the ownership referrer via Referrers API and extract component name/version.
