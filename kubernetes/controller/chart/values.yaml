@@ -24,7 +24,7 @@ manager:
     # -- Number of active resolver workers
     workerCount: 10
     # -- Maximum work items in queue for component version resolution
-    workerQueueLength: 100
+    workerQueueLength: 1000
   ## Cache settings
   cache:
     # -- Maximum number of active OCM contexts kept alive
