@@ -310,6 +310,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return result, err
 	}
 
+	addedApplySetFinalizer := controllerutil.AddFinalizer(deployer, applySetPruneFinalizer)
+	addedWatchFinalizer := controllerutil.AddFinalizer(deployer, resourceWatchFinalizer)
+	if addedApplySetFinalizer || addedWatchFinalizer {
+		// Finalizers will be persisted by the defer block's Update() call.
+		// Return early to avoid doing work whose status update would be skipped
+		// by the defer's early-return path for finalizer changes.
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	resourceNamespace := deployer.Spec.ResourceRef.Namespace
 	if resourceNamespace == "" {
 		resourceNamespace = deployer.GetNamespace()
@@ -457,9 +466,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	updateDeployedObjectStatusReferences(objs, deployer)
-	// TODO: move finalizer up because removal is anyhow idempotent
-	controllerutil.AddFinalizer(deployer, applySetPruneFinalizer)
-	controllerutil.AddFinalizer(deployer, resourceWatchFinalizer)
 
 	// TODO: Status propagation of RGD status to deployer
 	//       (see https://github.com/open-component-model/ocm-k8s-toolkit/issues/192)
