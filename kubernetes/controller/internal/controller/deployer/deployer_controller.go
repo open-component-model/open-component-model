@@ -280,6 +280,7 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 	return true, nil
 }
 
+//nolint:maintidx // sequential error handling for each reconciliation step is linear and clear
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
 	logger.Info("starting reconciliation")
@@ -434,8 +435,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	// A component version and resource identity plus the config hash, which could contain resolver configuration,
 	// should be sufficient.
 	var key string
-	if resource.Status.Resource.Digest != nil {
-		key = resource.Status.Resource.Digest.Value
+	if matchedResource.Digest != nil {
+		key = matchedResource.Digest.Value
 	} else {
 		if cfg != nil {
 			key = fmt.Sprintf("%x/", cfg.Hash)
