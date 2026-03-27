@@ -174,6 +174,11 @@ func (in *ObjectMeta) DeepCopy() *ObjectMeta {
 func (in *Reference) DeepCopyInto(out *Reference) {
 	*out = *in
 	in.ElementMeta.DeepCopyInto(&out.ElementMeta)
+	if in.Digest != nil {
+		in, out := &in.Digest, &out.Digest
+		*out = new(Digest)
+		**out = **in
+	}
 	return
 }
 
