@@ -350,8 +350,8 @@ func (c *DefaultConstructor) processDescriptor(
 			referencedComponent := referencedComponents[reference.ToIdentity().String()]
 			ref, err := c.processReference(egctx, &reference, referencedComponent)
 			if c.opts.OnEndReferenceConstruct != nil {
-				if err := c.opts.OnEndReferenceConstruct(egctx, ref, err); err != nil {
-					return fmt.Errorf("error ending reference construction for %q: %w", reference.ToIdentity(), err)
+				if hookErr := c.opts.OnEndReferenceConstruct(egctx, ref, err); hookErr != nil {
+					return fmt.Errorf("error ending reference construction for %q: %w", reference.ToIdentity(), errors.Join(hookErr, err))
 				}
 			}
 			if err != nil {
