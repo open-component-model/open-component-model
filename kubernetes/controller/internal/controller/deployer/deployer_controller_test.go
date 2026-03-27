@@ -425,7 +425,7 @@ stringData:
 			Expect(string(gotSec.Data["password"])).To(Equal("s3cr3t"))
 
 			By("verifying the download cache contains the expected composite key")
-			expectedCacheKey := componentName + ":" + componentVersion + "/" + "name=" + resourceName + ",version=1.0.0"
+			expectedCacheKey := desc.Component.Name + ":" + desc.Component.Version + "/" + resourceObj.Spec.Resource.ByReference.Resource.String()
 			_, err = downloadCache.Load(expectedCacheKey, func() ([]*unstructured.Unstructured, error) {
 				return nil, fmt.Errorf("cache miss for key %q: expected a hit", expectedCacheKey)
 			})

@@ -345,7 +345,7 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer *delivery
 		return ctrl.Result{}, err
 	}
 
-	key := buildResourceCacheKey(matchedResource, componentDescriptor, cfg, makeResourceIdentity(resource.Status.Resource))
+	key := buildResourceCacheKey(matchedResource, componentDescriptor, cfg, resource.Spec.Resource.ByReference.Resource.String())
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
 		return r.DownloadResourceWithOCM(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
@@ -397,9 +397,12 @@ func (r *Reconciler) resolveResource(
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, err.Error())
 
-		var notReadyErr util.NotReadyError
-		var deletionErr util.DeletionError
-		if errors.As(err, &notReadyErr) || errors.As(err, &deletionErr) {
+		if _, ok := errors.AsType[util.NotReadyError](err); ok {
+			log.FromContext(ctx).Info("resource is not available", "error", err)
+
+			return nil, nil
+		}
+		if _, ok := errors.AsType[util.DeletionError](err); ok {
 			log.FromContext(ctx).Info("resource is not available", "error", err)
 
 			return nil, nil
@@ -508,7 +511,7 @@ func (r *Reconciler) resolveComponentAndMatchResource(
 		}
 	}
 
-	resourceIdentity := makeResourceIdentity(resource.Status.Resource)
+	resourceIdentity := resource.Spec.Resource.ByReference.Resource
 	var matchedResource *descriptor.Resource
 	for i, res := range componentDescriptor.Component.Resources {
 		resIdentity := res.ToIdentity()
@@ -725,23 +728,6 @@ func resolveResourceCredentials(
 	return creds, nil
 }
 
-// makeResourceIdentity creates a runtime.Identity from a ResourceInfo.
-func makeResourceIdentity(info *deliveryv1alpha1.ResourceInfo) ocmruntime.Identity {
-	identity := ocmruntime.Identity{
-		"name": info.Name,
-	}
-
-	if info.Version != "" {
-		identity["version"] = info.Version
-	}
-
-	for k, v := range info.ExtraIdentity {
-		identity[k] = v
-	}
-
-	return identity
-}
-
 // buildResourceCacheKey computes the cache key used to store/retrieve downloaded resource objects.
 // It uses the digest as cache key if possible because a changed digest indicates that the resource changed. If no
 // digest is available, a component version and resource identity plus the config hash, which could contain resolver
@@ -750,7 +736,7 @@ func buildResourceCacheKey(
 	matchedResource *descriptor.Resource,
 	componentDescriptor *descriptor.Descriptor,
 	cfg *configuration.Configuration,
-	resourceIdentity ocmruntime.Identity,
+	resourceIdentity string,
 ) string {
 	if matchedResource.Digest != nil {
 		return matchedResource.Digest.Value
@@ -761,12 +747,10 @@ func buildResourceCacheKey(
 		key = fmt.Sprintf("%x/", cfg.Hash)
 	}
 
-	key += componentDescriptor.Component.Name + ":" + componentDescriptor.Component.Version + "/" + resourceIdentity.String()
+	key += componentDescriptor.Component.Name + ":" + componentDescriptor.Component.Version + "/" + resourceIdentity
 
 	return key
 }
-
-// identityFunc is a custom identity matching function that ignores the "version" field if it is not set.
 
 func (r *Reconciler) createApplySet(deployer *deliveryv1alpha1.Deployer, logger logr.Logger) *applyset.ApplySet {
 	cfg := applyset.Config{
