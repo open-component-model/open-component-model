@@ -30,6 +30,9 @@ import (
 // e.g. because the component version already exists in the target repository.
 var ErrShouldSkipConstruction = errors.New("should skip construction")
 
+// ErrDigestMismatch is returned when a provided digest does not match the calculated digest.
+var ErrDigestMismatch = errors.New("digest mismatch")
+
 const AttributeDescriptor string = "constructor/descriptor"
 
 type Constructor interface {
@@ -348,11 +351,11 @@ func (c *DefaultConstructor) processDescriptor(
 			ref, err := c.processReference(egctx, &reference, referencedComponent)
 			if c.opts.OnEndReferenceConstruct != nil {
 				if err := c.opts.OnEndReferenceConstruct(egctx, ref, err); err != nil {
-					return fmt.Errorf("error ending reference construction for %q: %w", ref.ToIdentity(), err)
+					return fmt.Errorf("error ending reference construction for %q: %w", reference.ToIdentity(), err)
 				}
 			}
 			if err != nil {
-				return fmt.Errorf("error processing reference %q at index %d: %w", ref.ToIdentity(), i, err)
+				return fmt.Errorf("error processing reference %q at index %d: %w", reference.ToIdentity(), i, err)
 			}
 			descLock.Lock()
 			defer descLock.Unlock()
@@ -595,6 +598,27 @@ func (c *DefaultConstructor) processReference(ctx context.Context, reference *co
 	}
 
 	ref := constructor.ConvertToDescriptorReference(reference)
+
+	// If digest is specified in the constructor reference, verify it matches the calculated digest
+	if reference.Digest != nil {
+		if reference.Digest.HashAlgorithm != referencedComponentDigest.HashAlgorithm ||
+			reference.Digest.NormalisationAlgorithm != referencedComponentDigest.NormalisationAlgorithm ||
+			reference.Digest.Value != referencedComponentDigest.Value {
+			return nil, fmt.Errorf("%w: reference %q has digest (hashAlgorithm=%s, normalisationAlgorithm=%s, value=%s) but calculated digest is (hashAlgorithm=%s, normalisationAlgorithm=%s, value=%s)",
+				ErrDigestMismatch,
+				reference.ToIdentity(),
+				reference.Digest.HashAlgorithm,
+				reference.Digest.NormalisationAlgorithm,
+				reference.Digest.Value,
+				referencedComponentDigest.HashAlgorithm,
+				referencedComponentDigest.NormalisationAlgorithm,
+				referencedComponentDigest.Value)
+		}
+		logger.Debug("digest verification successful",
+			"expected", reference.Digest.Value,
+			"calculated", referencedComponentDigest.Value)
+	}
+
 	ref.Digest = *referencedComponentDigest
 
 	logger.Debug("reference processed successfully")

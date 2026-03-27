@@ -455,6 +455,125 @@ func TestReference_Struct(t *testing.T) {
 	assert.Contains(t, string(jsonData), `"componentName":"referenced-component"`)
 }
 
+func TestReference_WithDigest(t *testing.T) {
+	t.Run("marshaling with digest", func(t *testing.T) {
+		reference := v1.Reference{
+			ElementMeta: v1.ElementMeta{
+				ObjectMeta: v1.ObjectMeta{
+					Name:    "test-reference",
+					Version: "1.0.0",
+				},
+			},
+			Component: "referenced-component",
+			Digest: &v1.Digest{
+				HashAlgorithm:          "SHA-256",
+				NormalisationAlgorithm: "jsonNormalisation/v4alpha1",
+				Value:                  "abc123def456",
+			},
+		}
+
+		jsonData, err := json.Marshal(reference)
+		require.NoError(t, err)
+		assert.Contains(t, string(jsonData), `"name":"test-reference"`)
+		assert.Contains(t, string(jsonData), `"componentName":"referenced-component"`)
+		assert.Contains(t, string(jsonData), `"digest"`)
+		assert.Contains(t, string(jsonData), `"hashAlgorithm":"SHA-256"`)
+		assert.Contains(t, string(jsonData), `"normalisationAlgorithm":"jsonNormalisation/v4alpha1"`)
+		assert.Contains(t, string(jsonData), `"value":"abc123def456"`)
+	})
+
+	t.Run("marshaling without digest omits field", func(t *testing.T) {
+		reference := v1.Reference{
+			ElementMeta: v1.ElementMeta{
+				ObjectMeta: v1.ObjectMeta{
+					Name:    "test-reference",
+					Version: "1.0.0",
+				},
+			},
+			Component: "referenced-component",
+		}
+
+		jsonData, err := json.Marshal(reference)
+		require.NoError(t, err)
+		assert.NotContains(t, string(jsonData), `"digest"`)
+	})
+
+	t.Run("unmarshaling with digest", func(t *testing.T) {
+		jsonData := `{
+			"name": "test-reference",
+			"version": "1.0.0",
+			"componentName": "github.com/example/other-component",
+			"digest": {
+				"hashAlgorithm": "SHA-256",
+				"normalisationAlgorithm": "jsonNormalisation/v4alpha1",
+				"value": "abc123def456"
+			}
+		}`
+
+		var reference v1.Reference
+		err := json.Unmarshal([]byte(jsonData), &reference)
+		require.NoError(t, err)
+		assert.Equal(t, "test-reference", reference.Name)
+		assert.Equal(t, "1.0.0", reference.Version)
+		assert.Equal(t, "github.com/example/other-component", reference.Component)
+		require.NotNil(t, reference.Digest)
+		assert.Equal(t, "SHA-256", reference.Digest.HashAlgorithm)
+		assert.Equal(t, "jsonNormalisation/v4alpha1", reference.Digest.NormalisationAlgorithm)
+		assert.Equal(t, "abc123def456", reference.Digest.Value)
+	})
+
+	t.Run("unmarshaling without digest", func(t *testing.T) {
+		jsonData := `{
+			"name": "test-reference",
+			"version": "1.0.0",
+			"componentName": "github.com/example/other-component"
+		}`
+
+		var reference v1.Reference
+		err := json.Unmarshal([]byte(jsonData), &reference)
+		require.NoError(t, err)
+		assert.Nil(t, reference.Digest)
+	})
+}
+
+func TestComponentConstructor_UnmarshalJSON_WithReferenceDigest(t *testing.T) {
+	jsonData := `{
+		"name": "github.com/example/component",
+		"version": "v1.0.0",
+		"provider": {
+			"name": "example-provider"
+		},
+		"resources": [],
+		"componentReferences": [
+			{
+				"name": "example-reference",
+				"version": "v1.0.0",
+				"componentName": "github.com/example/other-component",
+				"digest": {
+					"hashAlgorithm": "SHA-256",
+					"normalisationAlgorithm": "jsonNormalisation/v4alpha1",
+					"value": "abc123def456"
+				}
+			}
+		]
+	}`
+
+	var constructor v1.ComponentConstructor
+	err := json.Unmarshal([]byte(jsonData), &constructor)
+	require.NoError(t, err)
+	require.Len(t, constructor.Components, 1)
+	require.Len(t, constructor.Components[0].References, 1)
+
+	ref := constructor.Components[0].References[0]
+	assert.Equal(t, "example-reference", ref.Name)
+	assert.Equal(t, "v1.0.0", ref.Version)
+	assert.Equal(t, "github.com/example/other-component", ref.Component)
+	require.NotNil(t, ref.Digest)
+	assert.Equal(t, "SHA-256", ref.Digest.HashAlgorithm)
+	assert.Equal(t, "jsonNormalisation/v4alpha1", ref.Digest.NormalisationAlgorithm)
+	assert.Equal(t, "abc123def456", ref.Digest.Value)
+}
+
 func TestProvider_Struct(t *testing.T) {
 	provider := v1.Provider{
 		Name: "test-provider",

@@ -143,6 +143,14 @@ func (a *AccessOrInput) Validate() error {
 	return nil
 }
 
+// Digest defines digest information such as hashing algorithm, normalization and the actual value.
+// +k8s:deepcopy-gen=true
+type Digest struct {
+	HashAlgorithm          string `json:"-"`
+	NormalisationAlgorithm string `json:"-"`
+	Value                  string `json:"-"`
+}
+
 // Reference describes the reference to another component in the registry.
 // A component version may refer to other component versions by adding a reference to the component version.
 // +k8s:deepcopy-gen=true
@@ -150,6 +158,8 @@ type Reference struct {
 	ElementMeta `json:",inline"`
 	// Component describes the remote name of the referenced object.
 	Component string `json:"-"`
+	// Digest is the optional digest of the referenced component.
+	Digest *Digest `json:"-"`
 }
 
 func (r *Reference) ToComponentIdentity() runtime.Identity {

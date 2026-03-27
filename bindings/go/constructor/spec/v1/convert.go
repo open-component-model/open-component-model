@@ -60,6 +60,13 @@ func ConvertToRuntimeReference(reference Reference) descriptor.Reference {
 	if reference.ExtraIdentity != nil {
 		target.ExtraIdentity = reference.ExtraIdentity.DeepCopy()
 	}
+	if reference.Digest != nil {
+		target.Digest = descriptor.Digest{
+			HashAlgorithm:          reference.Digest.HashAlgorithm,
+			NormalisationAlgorithm: reference.Digest.NormalisationAlgorithm,
+			Value:                  reference.Digest.Value,
+		}
+	}
 	return target
 }
 
