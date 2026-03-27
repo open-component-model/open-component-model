@@ -1503,7 +1503,7 @@ data:
 })
 
 var _ = Describe("Deployer Controller Finalizer Persistence", func() {
-	It("adds finalizers to the deployer object before the first reconciliation", func(ctx SpecContext) {
+	It("adds finalizers to the deployer object during the first reconciliation", func(ctx SpecContext) {
 		namespace := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: "deployer-finalizer-add"},
 		}
