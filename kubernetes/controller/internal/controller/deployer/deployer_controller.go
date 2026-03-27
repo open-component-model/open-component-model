@@ -280,7 +280,6 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 	return true, nil
 }
 
-//nolint:maintidx // sequential error handling for each reconciliation step is linear and clear
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
 	logger.Info("starting reconciliation")
@@ -320,128 +319,33 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	resourceNamespace := deployer.Spec.ResourceRef.Namespace
-	if resourceNamespace == "" {
-		resourceNamespace = deployer.GetNamespace()
-	}
+	return r.reconcileDeployment(ctx, deployer)
+}
 
-	resource, err := util.GetReadyObject[deliveryv1alpha1.Resource, *deliveryv1alpha1.Resource](ctx, r.Client, client.ObjectKey{
-		Namespace: resourceNamespace,
-		Name:      deployer.Spec.ResourceRef.Name,
-	})
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, err.Error())
-
-		var notReadyErr util.NotReadyError
-		var deletionErr util.DeletionError
-		if errors.As(err, &notReadyErr) || errors.As(err, &deletionErr) {
-			logger.Info("resource is not available", "error", err)
-
-			return ctrl.Result{}, nil
-		}
-
-		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: %w", err)
-	}
-	if resource.Status.Resource == nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, "resource is empty in status")
-
-		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: resource is empty in status")
-	}
-
-	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
-	}
-	deployer.Status.EffectiveOCMConfig = configs
-
-	cfg, err := configuration.LoadConfigurations(ctx, r.Client, deployer.GetNamespace(), configs)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
-	}
-
-	repoSpec := &ocmruntime.Raw{}
-	if err := repoSpec.UnmarshalJSON(resource.Status.Component.RepositorySpec.Raw); err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to decode repository spec: %w", err)
-	}
-
-	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:  repoSpec,
-		Configuration:   cfg,
-		SigningRegistry: r.PluginManager.SigningRegistry,
-		RequesterFunc: func() workerpool.RequesterInfo {
-			return workerpool.RequesterInfo{
-				NamespacedName: k8stypes.NamespacedName{
-					Namespace: deployer.GetNamespace(),
-					Name:      deployer.GetName(),
-				},
-			}
-		},
-	})
-	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
-	}
-
-	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, cfg)
-	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
-
-		return ctrl.Result{}, nil
-	case errors.Is(err, ErrComponentVersionDrift):
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ComponentDriftResolutionInProgress, err.Error())
-
-		return ctrl.Result{}, err
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
-		// Ignore error, but log event
-		event.New(r.EventRecorder, deployer, nil, deliveryv1alpha1.EventSeverityError, err.Error())
-	default:
-		if err != nil {
-			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
-
-			return ctrl.Result{}, fmt.Errorf("failed to get effective component version: %w", err)
-		}
-	}
-
-	resourceIdentity := makeResourceIdentity(resource.Status.Resource)
-	var matchedResource *descriptor.Resource
-	for i, res := range componentDescriptor.Component.Resources {
-		resIdentity := res.ToIdentity()
-		if resourceIdentity.Match(resIdentity, ocm.IdentityFuncIgnoreVersion()) {
-			matchedResource = &componentDescriptor.Component.Resources[i]
-			break
-		}
-	}
-
-	if matchedResource == nil {
-		err = fmt.Errorf("resource with identity %v not found in component %s:%s",
-			resourceIdentity, componentDescriptor.Component.Name, componentDescriptor.Component.Version)
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
-
+// reconcileDeployment orchestrates the main deployment pipeline: resolve the referenced resource,
+// load configuration, download the OCM resource, apply it, and track the deployed objects.
+func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer *deliveryv1alpha1.Deployer) (ctrl.Result, error) {
+	resource, err := r.resolveResource(ctx, deployer)
+	if resource == nil || err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// We use the digest as cache key if possible because a changed digest indicates that the resource changed. If no
-	// digest is available, we need to find another way to make sure the cache-key changes when the resource changes.
-	// A component version and resource identity plus the config hash, which could contain resolver configuration,
-	// should be sufficient.
-	var key string
-	if matchedResource.Digest != nil {
-		key = matchedResource.Digest.Value
-	} else {
-		if cfg != nil {
-			key = fmt.Sprintf("%x/", cfg.Hash)
-		}
-		key += componentDescriptor.Component.Name + ":" + componentDescriptor.Component.Version + "/" + resourceIdentity.String()
+	cfg, err := r.resolveConfiguration(ctx, deployer, resource)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
+
+	cacheBackedRepo, err := r.createCacheBackedRepository(ctx, deployer, resource, cfg)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	componentDescriptor, matchedResource, err := r.resolveComponentAndMatchResource(ctx, deployer, resource, cfg)
+	if componentDescriptor == nil {
+		return ctrl.Result{}, err
+	}
+
+	key := buildResourceCacheKey(matchedResource, componentDescriptor, cfg, makeResourceIdentity(resource.Status.Resource))
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
 		return r.DownloadResourceWithOCM(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
@@ -473,6 +377,156 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	// we requeue the deployer after the requeue time specified in the resource.
 	return status.RequeueResult(deployer, resource.GetRequeueAfter()), nil
+}
+
+// resolveResource fetches the Resource referenced by the Deployer and validates that it is ready.
+// Returns (nil, nil) when the resource is not yet ready or is being deleted (non-retriable).
+func (r *Reconciler) resolveResource(
+	ctx context.Context,
+	deployer *deliveryv1alpha1.Deployer,
+) (*deliveryv1alpha1.Resource, error) {
+	resourceNamespace := deployer.Spec.ResourceRef.Namespace
+	if resourceNamespace == "" {
+		resourceNamespace = deployer.GetNamespace()
+	}
+
+	resource, err := util.GetReadyObject[deliveryv1alpha1.Resource, *deliveryv1alpha1.Resource](ctx, r.Client, client.ObjectKey{
+		Namespace: resourceNamespace,
+		Name:      deployer.Spec.ResourceRef.Name,
+	})
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, err.Error())
+
+		var notReadyErr util.NotReadyError
+		var deletionErr util.DeletionError
+		if errors.As(err, &notReadyErr) || errors.As(err, &deletionErr) {
+			log.FromContext(ctx).Info("resource is not available", "error", err)
+
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("failed to get ready resource: %w", err)
+	}
+
+	if resource.Status.Resource == nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, "resource is empty in status")
+
+		return nil, fmt.Errorf("failed to get ready resource: resource is empty in status")
+	}
+
+	return resource, nil
+}
+
+// resolveConfiguration loads the effective OCM configuration for the deployer.
+// Sets deployer.Status.EffectiveOCMConfig as a side effect.
+func (r *Reconciler) resolveConfiguration(
+	ctx context.Context,
+	deployer *deliveryv1alpha1.Deployer,
+	resource *deliveryv1alpha1.Resource,
+) (*configuration.Configuration, error) {
+	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to get effective config: %w", err)
+	}
+	deployer.Status.EffectiveOCMConfig = configs
+
+	cfg, err := configuration.LoadConfigurations(ctx, r.Client, deployer.GetNamespace(), configs)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to load configurations: %w", err)
+	}
+
+	return cfg, nil
+}
+
+// createCacheBackedRepository creates a cache-backed OCM repository from the resource's repository spec.
+func (r *Reconciler) createCacheBackedRepository(
+	ctx context.Context,
+	deployer *deliveryv1alpha1.Deployer,
+	resource *deliveryv1alpha1.Resource,
+	cfg *configuration.Configuration,
+) (*resolution.CacheBackedRepository, error) {
+	repoSpec := &ocmruntime.Raw{}
+	if err := repoSpec.UnmarshalJSON(resource.Status.Component.RepositorySpec.Raw); err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
+	}
+
+	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+		RepositorySpec:  repoSpec,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
+		RequesterFunc: func() workerpool.RequesterInfo {
+			return workerpool.RequesterInfo{
+				NamespacedName: k8stypes.NamespacedName{
+					Namespace: deployer.GetNamespace(),
+					Name:      deployer.GetName(),
+				},
+			}
+		},
+	})
+	if err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
+	}
+
+	return cacheBackedRepo, nil
+}
+
+// resolveComponentAndMatchResource resolves the component descriptor and finds the matching resource within it.
+// Returns (nil, nil, nil) when resolution is in progress (non-retriable).
+func (r *Reconciler) resolveComponentAndMatchResource(
+	ctx context.Context,
+	deployer *deliveryv1alpha1.Deployer,
+	resource *deliveryv1alpha1.Resource,
+	cfg *configuration.Configuration,
+) (*descriptor.Descriptor, *descriptor.Resource, error) {
+	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, cfg)
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
+
+		return nil, nil, nil
+	case errors.Is(err, ErrComponentVersionDrift):
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ComponentDriftResolutionInProgress, err.Error())
+
+		return nil, nil, err
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, deployer, nil, deliveryv1alpha1.EventSeverityError, err.Error())
+	default:
+		if err != nil {
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+
+			return nil, nil, fmt.Errorf("failed to get effective component version: %w", err)
+		}
+	}
+
+	resourceIdentity := makeResourceIdentity(resource.Status.Resource)
+	var matchedResource *descriptor.Resource
+	for i, res := range componentDescriptor.Component.Resources {
+		resIdentity := res.ToIdentity()
+		if resourceIdentity.Match(resIdentity, ocm.IdentityFuncIgnoreVersion()) {
+			matchedResource = &componentDescriptor.Component.Resources[i]
+			break
+		}
+	}
+
+	if matchedResource == nil {
+		err = fmt.Errorf("resource with identity %v not found in component %s:%s",
+			resourceIdentity, componentDescriptor.Component.Name, componentDescriptor.Component.Version)
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
+		return nil, nil, err
+	}
+
+	return componentDescriptor, matchedResource, nil
 }
 
 func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *deliveryv1alpha1.Deployer, logger logr.Logger) (ctrl.Result, error, bool) {
@@ -686,6 +740,30 @@ func makeResourceIdentity(info *deliveryv1alpha1.ResourceInfo) ocmruntime.Identi
 	}
 
 	return identity
+}
+
+// buildResourceCacheKey computes the cache key used to store/retrieve downloaded resource objects.
+// It uses the digest as cache key if possible because a changed digest indicates that the resource changed. If no
+// digest is available, a component version and resource identity plus the config hash, which could contain resolver
+// configuration, should be sufficient.
+func buildResourceCacheKey(
+	matchedResource *descriptor.Resource,
+	componentDescriptor *descriptor.Descriptor,
+	cfg *configuration.Configuration,
+	resourceIdentity ocmruntime.Identity,
+) string {
+	if matchedResource.Digest != nil {
+		return matchedResource.Digest.Value
+	}
+
+	var key string
+	if cfg != nil {
+		key = fmt.Sprintf("%x/", cfg.Hash)
+	}
+
+	key += componentDescriptor.Component.Name + ":" + componentDescriptor.Component.Version + "/" + resourceIdentity.String()
+
+	return key
 }
 
 // identityFunc is a custom identity matching function that ignores the "version" field if it is not set.
