@@ -273,7 +273,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	logger.Info("reconciling resource")
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), resource, component)
 	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), resource, v1alpha1.ConfigureContextFailedReason, err.Error())
+		status.MarkNotReady(r.GetEventRecorder(), resource, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to configure context: %w", err)
 	}

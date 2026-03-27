@@ -350,7 +350,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
 	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ConfigureContextFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
@@ -358,7 +358,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	cfg, err := configuration.LoadConfigurations(ctx, r.Client, deployer.GetNamespace(), configs)
 	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
 	}

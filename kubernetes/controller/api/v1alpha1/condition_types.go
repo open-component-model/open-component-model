@@ -27,8 +27,8 @@ const (
 )
 
 const (
-	// ConfigureContextFailedReason is used when the controller failed to create an authenticated context.
-	ConfigureContextFailedReason = "ConfigureContextFailed"
+	// GetConfigurationFailedReason is used when the controller failed to get the OCM configuration.
+	GetConfigurationFailedReason = "GetConfigurationFailed"
 
 	// CheckVersionFailedReason is used when the controller failed to check for new versions.
 	CheckVersionFailedReason = "CheckVersionFailed"
