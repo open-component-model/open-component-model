@@ -113,7 +113,7 @@ func main() {
 		"The resource controller concurrency. This is the number of active resource controller workers that can be kept alive.")
 	flag.IntVar(&resolverWorkerCount, "resolver-worker-count", 10, //nolint:mnd // no magic number
 		"This is the number of active resolver workers.")
-	flag.IntVar(&resolverWorkerQueueLength, "resolver-worker-queue-length", 100, //nolint:mnd // no magic number
+	flag.IntVar(&resolverWorkerQueueLength, "resolver-worker-queue-length", 1000, //nolint:mnd // no magic number
 		"The maximum number of work items in the queue for the workers to pick up component versions to resolve from.")
 
 	opts := zap.Options{
