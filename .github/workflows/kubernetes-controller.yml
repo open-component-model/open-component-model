@@ -259,7 +259,7 @@ jobs:
         uses: open-component-model/ocm-setup-action@655f3525fd283ca7d22e6b2ceec42324331df401 # v1.0.0
 
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@ac71dd88a3e6170a068873ea78aafe90f8c9c82c # v2.8.0
+        uses: fluxcd/flux2/action@97222a775ae8e68f1e85508f356f248704255c9c # v2.8.1
 
       - name: Install Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1

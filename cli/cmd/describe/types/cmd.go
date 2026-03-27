@@ -28,7 +28,7 @@ WHAT ARE SUBSYSTEMS?
 
   Common subsystems:
     - ocm-repository:          Where component versions are stored (OCI registries, CTF archives)
-    - ocm-resource-repository: Where resources within components are stored
+    - access:                   How resources within components are accessed and retrieved
     - input:                   How content is sourced (from files, directories, etc.) in component constructors
     - credential-repository:   Where credentials are stored and retrieved
     - signing:                 How component versions are signed and verified
