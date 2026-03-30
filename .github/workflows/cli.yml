@@ -161,6 +161,7 @@ jobs:
       packages: write         # Needed for pushing OCI images and provenance layers
       id-token: write         # Needed for provenance attestation identity
       attestations: write     # Allows storing provenance attestation
+      artifact-metadata: write # Needed for github artifact metadata publishing for oci
     steps:
       # Retrieve artifacts produced by the build job
       - name: Download build artifacts
