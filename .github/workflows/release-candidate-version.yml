@@ -31,7 +31,7 @@ on:
         description: "Git range for changelog generation (empty for first release)"
         value: ${{ jobs.prepare.outputs.changelog_range }}
       set_latest:
-        description: "Whether to set :latest tag (true if this version >= highest existing stable)"
+        description: "Whether to set :latest tag (true if this version >= highest existing release version)"
         value: ${{ jobs.prepare.outputs.set_latest }}
       highest_previous_release_version:
         description: "Highest existing previous release version for this component (for logging)"
