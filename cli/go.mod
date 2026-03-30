@@ -18,7 +18,7 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260326170556-c969789ae31d
 	ocm.software/open-component-model/bindings/go/configuration v0.0.12
-	ocm.software/open-component-model/bindings/go/constructor v0.0.6
+	ocm.software/open-component-model/bindings/go/constructor v0.0.7
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
