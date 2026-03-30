@@ -44,7 +44,6 @@ jobs:
   tag_rc:
     name: Create and Push RC Tag
     runs-on: ubuntu-latest
-    environment: release
     needs: [prepare]
     if: ${{ github.event.inputs.dry_run == 'false' }}
     permissions:
@@ -98,6 +97,7 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+      artifact-metadata: write
     uses: ./.github/workflows/kubernetes-controller.yml
     with:
       ref: ${{ needs.prepare.outputs.new_tag }}
@@ -185,8 +185,7 @@ jobs:
     name: Verify RC Attestations
     needs: [prepare, build, release_rc]
     runs-on: ubuntu-latest
-    environment:
-      name: release
+    environment: release
     permissions:
       contents: read
       packages: read
