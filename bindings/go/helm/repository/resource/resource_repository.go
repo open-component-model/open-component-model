@@ -97,6 +97,12 @@ func (r *ResourceRepository) UploadResource(_ context.Context, _ *descriptor.Res
 }
 
 func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.Helm, error) {
+	if resource == nil {
+		return nil, fmt.Errorf("resource is required")
+	}
+	if resource.Access == nil {
+		return nil, fmt.Errorf("resource access is required")
+	}
 	t := resource.Access.GetType()
 	obj, err := r.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
