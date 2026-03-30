@@ -33,7 +33,6 @@ spec:
         name: kro-rgd
       referencePath:
         - name: nested-rgd
-  interval: 10m
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Deployer

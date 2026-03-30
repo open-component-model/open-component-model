@@ -31,7 +31,6 @@ spec:
     byReference:
       resource:
         name: k8s-manifest-resource
-  interval: 10m
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Deployer

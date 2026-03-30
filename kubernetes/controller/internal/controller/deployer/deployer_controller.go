@@ -383,8 +383,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	//       (see https://github.com/open-component-model/ocm-k8s-toolkit/issues/192)
 	status.MarkReady(r.EventRecorder, deployer, "Applied version %s", resource.Status.Resource.Version)
 
-	// we requeue the deployer after the requeue time specified in the resource.
-	return status.RequeueResult(deployer, resource.GetRequeueAfter()), nil
+	return ctrl.Result{}, nil
 }
 
 func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *deliveryv1alpha1.Deployer, logger logr.Logger) (ctrl.Result, error, bool) {

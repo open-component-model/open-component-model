@@ -24,7 +24,6 @@ spec:
                 name: helm-resource
           additionalStatusFields:
             oci: resource.access.toOCI()
-          interval: 10m
     - id: ocirepository
       template:
         apiVersion: source.toolkit.fluxcd.io/v1
