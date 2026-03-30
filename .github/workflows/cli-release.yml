@@ -97,10 +97,11 @@ jobs:
     needs: [prepare, tag_rc]
     permissions:
       contents: read
-      actions: read           # Needed for artifact download
-      packages: write         # Needed for pushing OCI images and provenance layers
-      id-token: write         # Needed for provenance attestation identity
-      attestations: write     # Allows storing provenance attestation
+      actions: read            # Needed for artifact download
+      packages: write          # Needed for pushing OCI images and provenance layers
+      id-token: write          # Needed for provenance attestation identity
+      attestations: write      # Allows storing provenance attestation
+      artifact-metadata: write # Needed for github artifact metadata publishing for oci
     uses: ./.github/workflows/cli.yml
     secrets: inherit
     with:
