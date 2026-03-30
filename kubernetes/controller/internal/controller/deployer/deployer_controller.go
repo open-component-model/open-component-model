@@ -380,9 +380,8 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer *delivery
 
 	updateDeployedObjectStatusReferences(objs, deployer)
 
-	// TODO: Status propagation of RGD status to deployer
-	//       (see https://github.com/open-component-model/ocm-k8s-toolkit/issues/192)
-	status.MarkReady(r.EventRecorder, deployer, "Applied version %s", resource.Status.Resource.Version)
+	status.MarkReady(r.EventRecorder, deployer, "Applied %s:%s, resource %s",
+		componentDescriptor.Component.Name, componentDescriptor.Component.Version, matchedResource.Name)
 
 	return ctrl.Result{}, nil
 }
