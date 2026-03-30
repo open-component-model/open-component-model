@@ -157,10 +157,10 @@ jobs:
       image_digest: ${{ steps.digest.outputs.digest }}
       image_tag: ${{ steps.set-tag.outputs.tag }}
     permissions:
-      actions: read           # Needed for artifact download
-      packages: write         # Needed for pushing OCI images and provenance layers
-      id-token: write         # Needed for provenance attestation identity
-      attestations: write     # Allows storing provenance attestation
+      actions: read            # Needed for artifact download
+      packages: write          # Needed for pushing OCI images and provenance layers
+      id-token: write          # Needed for provenance attestation identity
+      attestations: write      # Allows storing provenance attestation
       artifact-metadata: write # Needed for github artifact metadata publishing for oci
     steps:
       # Retrieve artifacts produced by the build job
