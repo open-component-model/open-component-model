@@ -27,10 +27,6 @@ manager:
     workerQueueLength: 1000
   ## Cache settings
   cache:
-    # -- Maximum number of active OCM contexts kept alive
-    ocmContextSize: 100
-    # -- Maximum number of active OCM sessions kept alive
-    ocmSessionSize: 100
     # -- Maximum size of the deployer download object LRU cache
     deployerDownloadSize: 1000
     # -- Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. "2Mi", "512Ki"). "0" disables the limit.
