@@ -129,8 +129,8 @@ function mockCore() {
     },
   });
   const result = await getOrCreateRelease(gh, mockContext, {
-    finalTag: "v1.0.0",
-    finalVersion: "1.0.0",
+    newReleaseTag: "v1.0.0",
+    newReleaseVersion: "1.0.0",
     componentName: "OCM Controller",
     notes: "notes",
     isLatest: true,
@@ -152,8 +152,8 @@ function mockCore() {
     },
   });
   const result = await getOrCreateRelease(gh, mockContext, {
-    finalTag: "v1.0.0",
-    finalVersion: "1.0.0",
+    newReleaseTag: "v1.0.0",
+    newReleaseVersion: "1.0.0",
     componentName: "OCM CLI",
     notes: "notes",
     isLatest: false,
@@ -171,7 +171,7 @@ function mockCore() {
   });
   await assert.rejects(
     () => getOrCreateRelease(gh, mockContext, {
-      finalTag: "v1.0.0", finalVersion: "1.0.0", componentName: "Test", notes: "", isLatest: false,
+      newReleaseTag: "v1.0.0", newReleaseVersion: "1.0.0", componentName: "Test", notes: "", isLatest: false,
     }),
     (err) => err.status === 500,
   );
@@ -242,63 +242,63 @@ function mockCore() {
 // writeSummary tests
 // ----------------------------------------------------------
 
-// Does not throw and calls write() — latest + stable both set
+// Does not throw and calls write() — latest + previous both set
 {
   let written = false;
   const core = mockCore();
   core.summary.write = async () => { written = true; };
   await writeSummary(core, {
-    finalTag: "v1.0.0",
+    newReleaseTag: "v1.0.0",
     rcTag: "v1.0.0-rc.1",
-    finalVersion: "1.0.0",
+    newReleaseVersion: "1.0.0",
     componentName: "OCM Controller",
     imageRepo: "ghcr.io/org/img",
     chartRepo: "ghcr.io/org/chart",
     imageDigest: "sha256:abc123def456789012345",
     isLatest: true,
-    highestPreviousVersion: "0.9.0",
+    highestPreviousReleaseVersion: "0.9.0",
     uploadedCount: 2,
     releaseUrl: "https://example.com",
   });
   assert.ok(written, "summary.write() should have been called");
 }
 
-// Handles missing optional fields gracefully — neither latest nor stable
+// Handles missing optional fields gracefully — neither latest nor previous
 {
   let written = false;
   const core = mockCore();
   core.summary.write = async () => { written = true; };
   await writeSummary(core, {
-    finalTag: "v1.0.0",
+    newReleaseTag: "v1.0.0",
     rcTag: "v1.0.0-rc.1",
-    finalVersion: "1.0.0",
+    newReleaseVersion: "1.0.0",
     componentName: "OCM CLI",
     imageRepo: "",
     chartRepo: "",
     imageDigest: "",
     isLatest: false,
-    highestPreviousVersion: "",
+    highestPreviousReleaseVersion: "",
     uploadedCount: 0,
     releaseUrl: "https://example.com",
   });
   assert.ok(written, "summary.write() should have been called");
 }
 
-// Latest set but not stable (e.g., promoting an RC that is highest overall)
+// Latest set but not previous (e.g., promoting an RC that is highest overall)
 {
   let written = false;
   const core = mockCore();
   core.summary.write = async () => { written = true; };
   await writeSummary(core, {
-    finalTag: "v1.0.0",
+    newReleaseTag: "v1.0.0",
     rcTag: "v1.0.0-rc.1",
-    finalVersion: "1.0.0",
+    newReleaseVersion: "1.0.0",
     componentName: "OCM Controller",
     imageRepo: "ghcr.io/org/img",
     chartRepo: "ghcr.io/org/chart",
     imageDigest: "sha256:abc123def456789012345",
     isLatest: true,
-    highestPreviousVersion: "1.1.0",
+    highestPreviousReleaseVersion: "1.1.0",
     uploadedCount: 1,
     releaseUrl: "https://example.com",
   });

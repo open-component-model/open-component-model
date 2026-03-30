@@ -4,7 +4,7 @@ import {
   resolveTagCommit,
   createAndPushTag,
   createRcTag,
-  createFinalTag,
+  createNewReleaseTag,
 } from "./create-tag.js";
 
 // ----------------------------------------------------------
@@ -164,14 +164,14 @@ function mockCore() {
 }
 
 // ----------------------------------------------------------
-// createFinalTag tests
+// createNewReleaseTag tests
 // ----------------------------------------------------------
 
 // Missing env vars → setFailed
 {
   const core = mockCore();
-  await withEnv({ RC_TAG: undefined, FINAL_TAG: undefined }, async () => {
-    await createFinalTag({ core });
+  await withEnv({ RC_TAG: undefined, NEW_RELEASE_TAG: undefined }, async () => {
+    await createNewReleaseTag({ core });
     assert.ok(core._state.failed?.includes("Missing"));
   });
 }
@@ -179,48 +179,48 @@ function mockCore() {
 // RC tag cannot be resolved → setFailed
 {
   const core = mockCore();
-  await withEnv({ RC_TAG: "controller/v0.1.0-rc.1", FINAL_TAG: "controller/v0.1.0" }, async () => {
+  await withEnv({ RC_TAG: "controller/v0.1.0-rc.1", NEW_RELEASE_TAG: "controller/v0.1.0" }, async () => {
     const git = mockExecGit({
       "rc.1^{commit}": new Error("not found"),
     });
-    await createFinalTag({ core, execGit: git });
+    await createNewReleaseTag({ core, execGit: git });
     assert.ok(core._state.failed !== null, "Expected setFailed on unresolvable RC tag");
   });
 }
 
-// Final tag exists at correct commit → idempotent success
+// New release tag exists at correct commit → idempotent success
 {
   const core = mockCore();
-  await withEnv({ RC_TAG: "controller/v0.1.0-rc.1", FINAL_TAG: "controller/v0.1.0" }, async () => {
+  await withEnv({ RC_TAG: "controller/v0.1.0-rc.1", NEW_RELEASE_TAG: "controller/v0.1.0" }, async () => {
     const git = mockExecGit({
       "rc.1^{commit}": "abc1234567890",
       "v0.1.0^{commit}": "abc1234567890",
       "refs/tags/controller/v0.1.0": "something", // tagExists check
     });
-    await createFinalTag({ core, execGit: git });
+    await createNewReleaseTag({ core, execGit: git });
     assert.strictEqual(core._state.failed, null);
     assert.ok(core._state.logs.some((l) => l.includes("idempotent rerun")));
   });
 }
 
-// Final tag exists at wrong commit → setFailed
+// New release tag exists at wrong commit → setFailed
 {
   const core = mockCore();
-  await withEnv({ RC_TAG: "controller/v0.1.0-rc.1", FINAL_TAG: "controller/v0.1.0" }, async () => {
+  await withEnv({ RC_TAG: "controller/v0.1.0-rc.1", NEW_RELEASE_TAG: "controller/v0.1.0" }, async () => {
     const git = mockExecGit({
       "rc.1^{commit}": "abc1234567890",
       "v0.1.0^{commit}": "def9876543210",
       "refs/tags/controller/v0.1.0": "something", // tagExists check
     });
-    await createFinalTag({ core, execGit: git });
+    await createNewReleaseTag({ core, execGit: git });
     assert.ok(core._state.failed?.includes("already exists but points to"));
   });
 }
 
-// Final tag does not exist → creates and pushes
+// New release tag does not exist → creates and pushes
 {
   const core = mockCore();
-  await withEnv({ RC_TAG: "controller/v0.1.0-rc.1", FINAL_TAG: "controller/v0.1.0" }, async () => {
+  await withEnv({ RC_TAG: "controller/v0.1.0-rc.1", NEW_RELEASE_TAG: "controller/v0.1.0" }, async () => {
     // Use a custom mock that only throws for the tagExists rev-parse check
     const calls = [];
     const git = (args) => {
@@ -228,15 +228,15 @@ function mockCore() {
       const key = args.join(" ");
       // resolveTagCommit for RC tag
       if (key.includes("rc.1^{commit}")) return "abc1234567890";
-      // tagExists check for final tag (rev-parse without ^{commit})
+      // tagExists check for new release tag (rev-parse without ^{commit})
       if (key === "rev-parse refs/tags/controller/v0.1.0") throw new Error("not found");
       // All other commands (tag, push) succeed
       return "";
     };
     git.calls = calls;
-    await createFinalTag({ core, execGit: git });
+    await createNewReleaseTag({ core, execGit: git });
     assert.strictEqual(core._state.failed, null);
-    assert.ok(core._state.logs.some((l) => l.includes("✅ Created final tag")));
+    assert.ok(core._state.logs.some((l) => l.includes("✅ Created new release tag")));
     const tagCall = calls.find((c) => c[0] === "tag");
     assert.ok(tagCall, "Expected a git tag command");
     assert.ok(tagCall.includes("abc1234567890"), "Tag should be created at RC commit");

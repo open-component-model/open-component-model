@@ -378,8 +378,8 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
-          FINAL_TAG: ${{ needs.prepare.outputs.promotion_tag }}
-          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
+          NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
+          NEW_RELEASE_VERSION: ${{ needs.prepare.outputs.base_version }}
           COMPONENT_NAME: ${{ env.COMPONENT_NAME }}
           ASSETS_DIR: ${{ runner.temp }}/final-assets
           NOTES_FILE: ${{ runner.temp }}/CHANGELOG.md
@@ -387,7 +387,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
           CHART_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
-          HIGHEST_PREVIOUS_VERSION: ${{ needs.prepare.outputs.highest_previous_version }}
+          HIGHEST_PREVIOUS_RELEASE_VERSION: ${{ needs.prepare.outputs.highest_previous_release_version }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

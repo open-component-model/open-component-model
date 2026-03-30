@@ -107,25 +107,25 @@ export async function createRcTag({ core, execGit = defaultExecGit }) {
 }
 
 // --------------------------
-// Final tag entrypoint
+// New release tag entrypoint
 // --------------------------
 
 /**
- * Create a final tag pointing to the same commit as the RC tag.
- * Idempotent: succeeds if the final tag already points to the correct commit.
- * Fails if the final tag exists but points to a different commit.
+ * Create a new release tag pointing to the same commit as the RC tag.
+ * Idempotent: succeeds if the new release tag already points to the correct commit.
+ * Fails if the new release tag exists but points to a different commit.
  *
- * Expects env vars: RC_TAG, FINAL_TAG
+ * Expects env vars: RC_TAG, NEW_RELEASE_TAG
  *
  * @param {object} args
  * @param {object} args.core - GitHub Actions core module.
  * @param {function} [args.execGit] - Git executor (for testing).
  */
-export async function createFinalTag({ core, execGit = defaultExecGit }) {
-  const { RC_TAG: rcTag, FINAL_TAG: finalTag } = process.env;
+export async function createNewReleaseTag({ core, execGit = defaultExecGit }) {
+  const { RC_TAG: rcTag, NEW_RELEASE_TAG: newReleaseTag } = process.env;
 
-  if (!rcTag || !finalTag) {
-    core.setFailed("Missing RC_TAG or FINAL_TAG environment variables");
+  if (!rcTag || !newReleaseTag) {
+    core.setFailed("Missing RC_TAG or NEW_RELEASE_TAG environment variables");
     return;
   }
 
@@ -137,10 +137,10 @@ export async function createFinalTag({ core, execGit = defaultExecGit }) {
     return;
   }
 
-  if (tagExists(finalTag, execGit)) {
+  if (tagExists(newReleaseTag, execGit)) {
     let existingSha;
     try {
-      existingSha = resolveTagCommit(finalTag, execGit);
+      existingSha = resolveTagCommit(newReleaseTag, execGit);
     } catch (err) {
       core.setFailed(err.message);
       return;
@@ -148,24 +148,24 @@ export async function createFinalTag({ core, execGit = defaultExecGit }) {
 
     if (existingSha === rcSha) {
       core.info(
-        `Tag ${finalTag} already exists at expected commit ${rcSha.substring(0, 7)}, continuing (idempotent rerun)`,
+        `Tag ${newReleaseTag} already exists at expected commit ${rcSha.substring(0, 7)}, continuing (idempotent rerun)`,
       );
       core.setOutput("pushed", "true");
       return;
     }
 
     core.setFailed(
-      `Tag ${finalTag} already exists but points to ${existingSha.substring(0, 7)}, expected ${rcSha.substring(0, 7)}`,
+      `Tag ${newReleaseTag} already exists but points to ${existingSha.substring(0, 7)}, expected ${rcSha.substring(0, 7)}`,
     );
     return;
   }
 
   createAndPushTag({
-    tag: finalTag,
+    tag: newReleaseTag,
     commit: rcSha,
-    message: `Promote ${rcTag} to ${finalTag}`,
+    message: `Promote ${rcTag} to ${newReleaseTag}`,
     execGit,
   });
   core.setOutput("pushed", "true");
-  core.info(`✅ Created final tag ${finalTag} from ${rcTag} (${rcSha.substring(0, 7)})`);
+  core.info(`✅ Created new release tag ${newReleaseTag} from ${rcTag} (${rcSha.substring(0, 7)})`);
 }
