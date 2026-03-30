@@ -17,27 +17,27 @@ export default async function computeRcVersion({ core }) {
     const basePrefix = parseBranch(releaseBranch);
     const tagPrefix = `${componentPath}/v`;
 
-    // Get latest stable tag using Git's native version sort (descending)
+    // Get previous base version tag using Git's native version sort (descending)
     // Filter out RC tags after fetching since git doesn't support negative pattern matching
     const stableTags = run(core, "git", [
         "tag", "--list", `${tagPrefix}${basePrefix}.*`,
         "--sort=-version:refname"
     ]);
-    const latestStable = stableTags
+    const previousBaseVersion = stableTags
         .split("\n")
         .filter(tag => tag && !/-rc\.\d+$/.test(tag))[0] || "";
 
-    // Get latest RC tag using Git's native version sort (descending)
+    // Get previous base RC version tag using Git's native version sort (descending)
     const rcTags = run(core, "git", [
         "tag", "--list", `${tagPrefix}${basePrefix}.*-rc.*`,
         "--sort=-version:refname"
     ]);
-    const latestRc = rcTags.split("\n").filter(Boolean)[0] || "";
+    const previousBaseRcVersion = rcTags.split("\n").filter(Boolean)[0] || "";
 
-    core.info(`Latest stable: ${latestStable || "(none)"}`);
-    core.info(`Latest RC: ${latestRc || "(none)"}`);
+    core.info(`Previous base version: ${previousBaseVersion || "(none)"}`);
+    core.info(`Previous base RC version: ${previousBaseRcVersion || "(none)"}`);
 
-    const { baseVersion, rcVersion } = computeNextVersions(basePrefix, latestStable, latestRc, false);
+    const { baseVersion, rcVersion } = computeNextVersions(basePrefix, previousBaseVersion, previousBaseRcVersion, false);
 
     const rcTag = `${tagPrefix}${rcVersion}`;
     const promotionTag = `${tagPrefix}${baseVersion}`;
@@ -78,10 +78,10 @@ export default async function computeRcVersion({ core }) {
             ["Component Path", componentPath],
             ["Release Branch", releaseBranch],
             ["Base Prefix", basePrefix],
-            ["Latest Stable", latestStable || "(none)"],
-            ["Latest RC", latestRc || "(none)"],
+            ["Previous Base Version", previousBaseVersion || "(none)"],
+            ["Previous Base RC Version", previousBaseRcVersion || "(none)"],
             ["Next Base Version", baseVersion],
-            ["Next RC Version", rcVersion],
+            ["Next Base RC Version", rcVersion],
             ["RC Tag", rcTag],
             ["Promotion Tag", promotionTag],
             ["Previous Release Tag", previousTag || "(none — first release)"],
