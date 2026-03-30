@@ -71,9 +71,6 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
-              interval:
-                description: Interval at which the resource is checked for updates.
-                type: string
               ocmConfig:
                 description: |-
                   OCMConfig defines references to secrets, config maps or ocm api
@@ -173,7 +170,6 @@ spec:
                 type: string
             required:
             - componentRef
-            - interval
             - resource
             type: object
           status:

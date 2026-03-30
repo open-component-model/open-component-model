@@ -28,7 +28,6 @@ spec:
             registry: resource.access.imageReference.toOCI().registry
             repository: resource.access.imageReference.toOCI().repository
             digest: resource.access.imageReference.toOCI().digest
-          interval: 10m
     - id: ocirepository
       template:
         apiVersion: source.toolkit.fluxcd.io/v1

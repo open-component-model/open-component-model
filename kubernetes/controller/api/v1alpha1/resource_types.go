@@ -2,7 +2,6 @@ package v1alpha1
 
 import (
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -43,10 +42,6 @@ type ResourceSpec struct {
 	// +kubebuilder:default:="Always"
 	// +optional
 	VerificationPolicy VerificationPolicy `json:"verificationPolicy,omitempty"`
-
-	// Interval at which the resource is checked for updates.
-	// +required
-	Interval metav1.Duration `json:"interval"`
 
 	// Suspend tells the controller to suspend the reconciliation of this
 	// Resource.
@@ -131,15 +126,6 @@ func (in *Resource) GetObjectMeta() *metav1.ObjectMeta {
 
 func (in *Resource) GetKind() string {
 	return KindResource
-}
-
-// GetRequeueAfter returns the duration after which the Resource must be
-// reconciled again.
-func (in *Resource) GetRequeueAfter() time.Duration {
-	if in == nil {
-		return 0
-	}
-	return in.Spec.Interval.Duration
 }
 
 func (in *Resource) GetSpecifiedOCMConfig() []OCMConfiguration {

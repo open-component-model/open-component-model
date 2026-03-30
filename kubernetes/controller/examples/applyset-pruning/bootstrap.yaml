@@ -31,4 +31,3 @@ spec:
     byReference:
       resource:
         name: applyset-pruning-resource
-  interval: 10m

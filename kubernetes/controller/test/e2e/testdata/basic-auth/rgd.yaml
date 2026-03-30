@@ -26,7 +26,6 @@ spec:
             registry: resource.access.toOCI().registry
             repository: resource.access.toOCI().repository
             digest: resource.access.toOCI().digest
-          interval: 10m
           ocmConfig:
             - kind: Secret
               name: basic-auth

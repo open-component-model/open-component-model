@@ -384,8 +384,7 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer *delivery
 	//       (see https://github.com/open-component-model/ocm-k8s-toolkit/issues/192)
 	status.MarkReady(r.EventRecorder, deployer, "Applied version %s", resource.Status.Resource.Version)
 
-	// we requeue the deployer after the requeue time specified in the resource.
-	return status.RequeueResult(deployer, resource.GetRequeueAfter()), nil
+	return ctrl.Result{}, nil
 }
 
 // resolveResource fetches the Resource referenced by the Deployer and validates that it is ready.
