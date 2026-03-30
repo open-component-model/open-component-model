@@ -532,6 +532,11 @@ func (r *Reconciler) resolveComponentAndMatchResource(
 	return componentDescriptor, matchedResource, nil
 }
 
+// reconcileDeletionTimestamp handles cleanup when a Deployer is being deleted.
+// If the deletion timestamp is set, it removes finalizers in order: first pruning the
+// ApplySet (deleting previously applied resources), then untracking watched resources.
+// Each finalizer is processed one at a time with requeues between them to ensure
+// sequential cleanup. The returned bool indicates whether deletion was in progress.
 func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *deliveryv1alpha1.Deployer, logger logr.Logger) (ctrl.Result, error, bool) {
 	if !deployer.GetDeletionTimestamp().IsZero() {
 		var errs []error
