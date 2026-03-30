@@ -35,12 +35,6 @@
                         },
                         "deployerDownloadSize": {
                             "type": "integer"
-                        },
-                        "ocmContextSize": {
-                            "type": "integer"
-                        },
-                        "ocmSessionSize": {
-                            "type": "integer"
                         }
                     }
                 },

@@ -317,10 +317,21 @@ jobs:
           helm list -n ocm-k8s-toolkit-system
           echo "::endgroup::"
 
+  # Run conformance tests against the built image before publishing
+  conformance:
+    name: Conformance
+    needs: build
+    uses: ./.github/workflows/conformance.yml
+    with:
+      toolkit_chart_artifact: controller-chart-pr
+      toolkit_image_artifact: ${{ needs.build.outputs.artifact_name }}
+      toolkit_version: ${{ needs.build.outputs.version }}
+    secrets: inherit
+
   publish:
     name: Publish and Attest Image & Chart
     runs-on: ubuntu-latest
-    needs: [build, E2E]
+    needs: [build, E2E, conformance]
     if: ${{ needs.build.outputs.should_publish == 'true' }}
     outputs:
       image_digest: ${{ steps.image-digest.outputs.digest }}
@@ -453,22 +464,10 @@ jobs:
           if-no-files-found: error
 
   # Run conformance tests against the published image on main branch or release branches/tags
-  conformance:
-    name: Conformance
+  conformance-published:
+    name: Conformance (published)
     needs: publish
     uses: ./.github/workflows/conformance.yml
     with:
       toolkit_image: "oci://ghcr.io/${{ github.repository_owner }}/kubernetes/controller/chart:${{ needs.publish.outputs.chart_version }}"
-    secrets: inherit
-
-  # Run conformance tests against the built image on PRs to main
-  conformance-pr:
-    name: Conformance (PR)
-    needs: [build, E2E]
-    if: ${{ github.event_name == 'pull_request' }}
-    uses: ./.github/workflows/conformance.yml
-    with:
-      toolkit_chart_artifact: controller-chart-pr
-      toolkit_image_artifact: ${{ needs.build.outputs.artifact_name }}
-      toolkit_version: ${{ needs.build.outputs.version }}
     secrets: inherit
