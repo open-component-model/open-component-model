@@ -10,7 +10,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260326170556-c969789ae31d
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260326170556-c969789ae31d
-	ocm.software/open-component-model/bindings/go/oci v0.0.36
+	ocm.software/open-component-model/bindings/go/oci v0.0.37
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260326170556-c969789ae31d
