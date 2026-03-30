@@ -465,7 +465,7 @@ jobs:
 
   # Run conformance tests against the published image on main branch or release branches/tags
   conformance-published:
-    name: Conformance
+    name: Conformance (published)
     needs: publish
     uses: ./.github/workflows/conformance.yml
     with:
