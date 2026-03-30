@@ -355,7 +355,7 @@ jobs:
           ASSETS_DIR: ${{ runner.temp }}/assets
           NOTES_FILE: ${{ runner.temp }}/CHANGELOG.md
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
-          HIGHEST_FINAL_VERSION: ${{ needs.prepare.outputs.highest_final_version }}
+          HIGHEST_PREVIOUS_VERSION: ${{ needs.prepare.outputs.highest_previous_version }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -423,7 +423,7 @@ jobs:
             }
 
             const releaseUrl = created.data.html_url;
-            const highestFinal = process.env.HIGHEST_FINAL_VERSION || '(none)';
+            const highestPrevious = process.env.HIGHEST_PREVIOUS_VERSION || '(none)';
             const ociTags = setLatest
               ? `${targetRepo}:${finalVersion}, ${targetRepo}:latest`
               : `${targetRepo}:${finalVersion}`;
@@ -434,7 +434,7 @@ jobs:
                 [{data: 'Field', header: true}, {data: 'Value', header: true}],
                 ['Final Tag', finalTag],
                 ['Promoted from RC', rcTag],
-                ['Highest Final Version', highestFinal],
+                ['Highest Previous Version', highestPrevious],
                 ['OCI Tags', ociTags],
                 ['GitHub Latest', setLatest ? 'Yes' : 'No (older version)'],
                 ['Uploaded Assets', String(assets.length)],

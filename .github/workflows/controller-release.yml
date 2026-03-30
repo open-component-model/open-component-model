@@ -387,7 +387,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
           CHART_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
-          HIGHEST_FINAL_VERSION: ${{ needs.prepare.outputs.highest_final_version }}
+          HIGHEST_PREVIOUS_VERSION: ${{ needs.prepare.outputs.highest_previous_version }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

@@ -288,19 +288,19 @@ export async function determineLatestRelease({ core, github, context }) {
         return;
     }
 
-    const highestFinal = extractHighestFinalVersion(releases, tagPrefix);
-    const setLatest = shouldSetLatest(promotionVersion, highestFinal);
+    const highestPrevious = extractHighestPreviousVersion(releases, tagPrefix);
+    const setLatest = shouldSetLatest(promotionVersion, highestPrevious);
 
     core.setOutput('set_latest', setLatest ? 'true' : 'false');
-    core.setOutput('highest_final_version', highestFinal || '(none)');
-    core.info(setLatest ? `✅ Will set :latest (${promotionVersion} >= ${highestFinal || 'none'})` : `⚠️ Will NOT set :latest (${promotionVersion} < ${highestFinal})`);
+    core.setOutput('highest_previous_version', highestPrevious || '(none)');
+    core.info(setLatest ? `✅ Will set :latest (${promotionVersion} >= ${highestPrevious || 'none'})` : `⚠️ Will NOT set :latest (${promotionVersion} < ${highestPrevious})`);
 
     await core.summary.addRaw('---').addEOL().addHeading('Latest Tag Decision', 2)
-        .addTable([[{ data: 'Field', header: true }, { data: 'Value', header: true }], ['Final Version', promotionVersion], ['Highest Final Version', highestFinal || '(none)'], ['Will Set Latest', setLatest ? '✅ Yes' : '⚠️ No']]).write();
+        .addTable([[{ data: 'Field', header: true }, { data: 'Value', header: true }], ['New Version', promotionVersion], ['Highest Previous Version', highestPrevious || '(none)'], ['Will Set Latest', setLatest ? '✅ Yes' : '⚠️ No']]).write();
 }
 
-/** Extract highest final (non-prerelease) version from releases */
-export function extractHighestFinalVersion(releases, tagPrefix) {
+/** Extract highest previous (non-prerelease) version from releases */
+export function extractHighestPreviousVersion(releases, tagPrefix) {
     const versions = releases.filter(r => !r.prerelease && r.tag_name.startsWith(tagPrefix))
         .map(r => r.tag_name.replace(tagPrefix, '')).filter(v => /^\d+\.\d+\.\d+$/.test(v));
     if (!versions.length) return '';
@@ -308,6 +308,6 @@ export function extractHighestFinalVersion(releases, tagPrefix) {
 }
 
 /** Determine if promotion version should be tagged as latest */
-export function shouldSetLatest(promotionVersion, highestFinal) {
-    return !highestFinal || !isStableNewer(`v${highestFinal}`, `v${promotionVersion}`);
+export function shouldSetLatest(promotionVersion, highestPrevious) {
+    return !highestPrevious || !isStableNewer(`v${highestPrevious}`, `v${promotionVersion}`);
 }

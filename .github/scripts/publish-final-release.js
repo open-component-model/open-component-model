@@ -167,7 +167,7 @@ export async function writeSummary(core, data) {
     chartRepo,
     imageDigest,
     isLatest,
-    highestFinalVersion,
+    highestPreviousVersion,
     uploadedCount,
     releaseUrl,
   } = data;
@@ -183,8 +183,8 @@ export async function writeSummary(core, data) {
     ["Uploaded Assets", String(uploadedCount)],
   ];
 
-  if (highestFinalVersion) {
-    rows.push(["Highest Final Version", highestFinalVersion]);
+  if (highestPreviousVersion) {
+    rows.push(["Highest Previous Version", highestPreviousVersion]);
   }
 
   // Add optional OCI/Helm fields when present
@@ -240,7 +240,7 @@ export default async function publishFinalRelease({ github, context, core }) {
     CHART_REPO: chartRepo,
     // Optional — controls GitHub "Latest" badge and :latest OCI tag
     SET_LATEST: setLatest,
-    HIGHEST_FINAL_VERSION: highestFinalVersion,
+    HIGHEST_PREVIOUS_VERSION: highestPreviousVersion,
   } = process.env;
 
   if (!finalTag || !finalVersion || !rcTag || !componentName || !assetsDir || !notesFile) {
@@ -269,7 +269,7 @@ export default async function publishFinalRelease({ github, context, core }) {
     chartRepo,
     imageDigest,
     isLatest,
-    highestFinalVersion: highestFinalVersion || "",
+    highestPreviousVersion: highestPreviousVersion || "",
     uploadedCount,
     releaseUrl: release.html_url,
   });
