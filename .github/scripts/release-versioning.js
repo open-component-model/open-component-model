@@ -276,8 +276,8 @@ export function findPreviousTag(tags, newTag) {
 
 /** GitHub Actions entrypoint for determining if release should be latest */
 export async function determineLatestRelease({ core, github, context }) {
-    const { COMPONENT_PATH: componentPath, NEW_VERSION: newVersion } = process.env;
-    if (!componentPath || !newVersion) return core.setFailed("Missing COMPONENT_PATH or NEW_VERSION");
+    const { COMPONENT_PATH: componentPath, NEW_RELEASE_VERSION: newReleaseVersion } = process.env;
+    if (!componentPath || !newReleaseVersion) return core.setFailed("Missing COMPONENT_PATH or NEW_RELEASE_VERSION");
 
     const tagPrefix = `${componentPath}/v`;
     let releases = [];
@@ -289,14 +289,14 @@ export async function determineLatestRelease({ core, github, context }) {
     }
 
     const highestPreviousReleaseVersion = extractHighestPreviousReleaseVersion(releases, tagPrefix);
-    const setLatest = shouldSetLatest(newVersion, highestPreviousReleaseVersion);
+    const setLatest = shouldSetLatest(newReleaseVersion, highestPreviousReleaseVersion);
 
     core.setOutput('set_latest', setLatest ? 'true' : 'false');
     core.setOutput('highest_previous_release_version', highestPreviousReleaseVersion || '(none)');
-    core.info(setLatest ? `✅ Will set :latest (${newVersion} >= ${highestPreviousReleaseVersion || 'none'})` : `⚠️ Will NOT set :latest (${newVersion} < ${highestPreviousReleaseVersion})`);
+    core.info(setLatest ? `✅ Will set :latest (${newReleaseVersion} >= ${highestPreviousReleaseVersion || 'none'})` : `⚠️ Will NOT set :latest (${newReleaseVersion} < ${highestPreviousReleaseVersion})`);
 
     await core.summary.addRaw('---').addEOL().addHeading('Latest Tag Decision', 2)
-        .addTable([[{ data: 'Field', header: true }, { data: 'Value', header: true }], ['New Version', newVersion], ['Highest Previous Release Version', highestPreviousReleaseVersion || '(none)'], ['Will Set Latest', setLatest ? '✅ Yes' : '⚠️ No']]).write();
+        .addTable([[{ data: 'Field', header: true }, { data: 'Value', header: true }], ['New Release Version', newReleaseVersion], ['Highest Previous Release Version', highestPreviousReleaseVersion || '(none)'], ['Will Set Latest', setLatest ? '✅ Yes' : '⚠️ No']]).write();
 }
 
 /** Extract highest previous release (non-prerelease) version from releases */
@@ -307,7 +307,7 @@ export function extractHighestPreviousReleaseVersion(releases, tagPrefix) {
     return versions.sort((a, b) => isStableNewer(`v${a}`, `v${b}`) ? 1 : -1).pop();
 }
 
-/** Determine if new version should be tagged as latest */
-export function shouldSetLatest(newVersion, highestPreviousReleaseVersion) {
-    return !highestPreviousReleaseVersion || !isStableNewer(`v${highestPreviousReleaseVersion}`, `v${newVersion}`);
+/** Determine if new release version should be tagged as latest */
+export function shouldSetLatest(newReleaseVersion, highestPreviousReleaseVersion) {
+    return !highestPreviousReleaseVersion || !isStableNewer(`v${highestPreviousReleaseVersion}`, `v${newReleaseVersion}`);
 }

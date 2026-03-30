@@ -15,10 +15,10 @@ import path from "path";
  *
  * @param {string} notesFile - Path to the changelog markdown file.
  * @param {string} rcTag - The RC tag being promoted (e.g. "kubernetes/controller/v0.1.0-rc.1").
- * @param {string} finalTag - The final tag (e.g. "kubernetes/controller/v0.1.0").
+ * @param {string} newReleaseTag - The new release tag (e.g. "kubernetes/controller/v0.1.0").
  * @returns {string} The release notes body.
  */
-export function prepareReleaseNotes(notesFile, rcTag, finalTag) {
+export function prepareReleaseNotes(notesFile, rcTag, newReleaseTag) {
   let notes;
   try {
     notes = fs.readFileSync(notesFile, "utf8").trim();
@@ -43,12 +43,12 @@ export function prepareReleaseNotes(notesFile, rcTag, finalTag) {
   if (!rcHeaderPattern.test(notes)) {
     // If no RC header found, prepend a final header instead of failing.
     // This handles edge cases like manually edited release notes.
-    return `## [${finalTag}] - promoted from [${rcTag}] on ${today}\n\n${notes}`;
+    return `## [${newReleaseTag}] - promoted from [${rcTag}] on ${today}\n\n${notes}`;
   }
 
   return notes.replace(
     rcHeaderPattern,
-    `## [${finalTag}] - promoted from [${rcTag}] on ${today}`,
+    `## [${newReleaseTag}] - promoted from [${rcTag}] on ${today}`,
   );
 }
 
