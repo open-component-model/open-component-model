@@ -65,12 +65,6 @@ spec:
                     {{- end }}
                     {{- /* Cache */}}
                     {{- with .Values.manager.cache }}
-                    {{- if .ocmContextSize }}
-                    - --ocm-context-cache-size={{ .ocmContextSize }}
-                    {{- end }}
-                    {{- if .ocmSessionSize }}
-                    - --ocm-session-cache-size={{ .ocmSessionSize }}
-                    {{- end }}
                     {{- if .deployerDownloadSize }}
                     - --deployer-download-cache-size={{ .deployerDownloadSize }}
                     {{- end }}
