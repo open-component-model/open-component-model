@@ -84,8 +84,6 @@ func main() {
 		enableHTTP2               bool
 		deployerDownloadCacheSize int
 		deployerMaxResourceSize   string
-		ocmContextCacheSize       int
-		ocmSessionCacheSize       int
 		resourceConcurrency       int
 		resolverWorkerCount       int
 		resolverWorkerQueueLength int
@@ -105,10 +103,6 @@ func main() {
 		"The maximum size of the deployer download object LRU cache.")
 	flag.StringVar(&deployerMaxResourceSize, "deployer-download-max-resource-size", defaultMaxResourceSize,
 		"Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. \"2Mi\", \"512Ki\"). \"0\" disables the limit.")
-	flag.IntVar(&ocmContextCacheSize, "ocm-context-cache-size", 100, //nolint:mnd // no magic number
-		"The maximum size of the OCM context cache. This is the number of active OCM contexts that can be kept alive.")
-	flag.IntVar(&ocmSessionCacheSize, "ocm-session-cache-size", 100, //nolint:mnd // no magic number
-		"The maximum size of the OCM context cache. This is the number of active OCM sessions that can be kept alive.")
 	flag.IntVar(&resourceConcurrency, "resource-controller-concurrency", 4, //nolint:mnd // no magic number
 		"The resource controller concurrency. This is the number of active resource controller workers that can be kept alive.")
 	flag.IntVar(&resolverWorkerCount, "resolver-worker-count", 10, //nolint:mnd // no magic number

@@ -65,8 +65,6 @@ Kubernetes: `>=1.26.0-0`
 | manager.affinity | object | `{}` | Pod affinity rules |
 | manager.cache.deployerDownloadMaxResourceSize | string | `"2Mi"` | Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. "2Mi", "512Ki"). "0" disables the limit. |
 | manager.cache.deployerDownloadSize | int | `1000` | Maximum size of the deployer download object LRU cache |
-| manager.cache.ocmContextSize | int | `100` | Maximum number of active OCM contexts kept alive |
-| manager.cache.ocmSessionSize | int | `100` | Maximum number of active OCM sessions kept alive |
 | manager.concurrency.resource | int | `4` | Number of active resource controller workers |
 | manager.env | list | `[]` | Environment variables for the controller |
 | manager.extraArgs | list | `[]` | Extra arguments to pass to the controller |
