@@ -257,7 +257,7 @@ func main() {
 	// TODO: migrate to mgr.GetEventRecorder() once BaseReconciler uses events.EventRecorder
 	eventsRecorder := mgr.GetEventRecorderFor("ocm-k8s-toolkit") //nolint:staticcheck,nolintlint
 
-	resolver := resolution.NewResolver(mgr.GetClient(), &setupLog, workerPool, pm)
+	resolver := resolution.NewResolver(&setupLog, workerPool, pm)
 	if err = (&repository.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
 			Client:        mgr.GetClient(),

@@ -25,6 +25,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
@@ -155,7 +156,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	logger.Info("reconciling OCM repository")
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), ocmRepo, nil)
 	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), ocmRepo, v1alpha1.ConfigureContextFailedReason, err.Error())
+		status.MarkNotReady(r.GetEventRecorder(), ocmRepo, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
@@ -186,10 +187,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 }
 
 func (r *Reconciler) validate(ctx context.Context, repoSpec runtime.Typed, configs []v1alpha1.OCMConfiguration, ocmRepo *v1alpha1.Repository) error {
+	cfg, err := configuration.LoadConfigurations(ctx, r.Client, ocmRepo.GetNamespace(), configs)
+	if err != nil {
+		return fmt.Errorf("failed to load configurations: %w", err)
+	}
+
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:    repoSpec,
-		OCMConfigurations: configs,
-		Namespace:         ocmRepo.GetNamespace(),
+		RepositorySpec: repoSpec,
+		Configuration:  cfg,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create repository: %w", err)

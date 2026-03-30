@@ -26,6 +26,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -239,6 +240,9 @@ stringData:
 				},
 			}
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, deployerObj)
+			})
 
 			By("waiting until the Deployer is Ready")
 			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
@@ -259,9 +263,173 @@ stringData:
 			}, gotSec)).To(Succeed())
 			// stringData is converted by API server into data (base64); compare the decoded value.
 			Expect(string(gotSec.Data["password"])).To(Equal("s3cr3t"))
+		})
 
-			By("deleting the Deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
+		It("reconciles a deployer when resource has no digest", func(ctx SpecContext) {
+			By("creating a CTF with the YAML stream blob")
+			resourceVersion := "1.0.0"
+
+			// Multi-doc YAML stream: ConfigMap + Secret
+			yamlStream := []byte(fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sample-cm
+  namespace: %[1]s
+data:
+  hello: world
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sample-secret
+  namespace: %[1]s
+type: Opaque
+stringData:
+  password: s3cr3t
+`, namespace.GetName()))
+
+			ctfPath := tempDir
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+
+			fs, err := filesystem.NewFS(ctfPath, os.O_RDWR)
+			Expect(err).NotTo(HaveOccurred())
+			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo, err := oci.NewRepository(ocictf.WithCTF(store), oci.WithTempDir(tempDir))
+			Expect(err).NotTo(HaveOccurred())
+
+			resource := &descruntime.Resource{
+				ElementMeta: descruntime.ElementMeta{
+					ObjectMeta: descruntime.ObjectMeta{
+						Name:    resourceName,
+						Version: resourceVersion,
+					},
+				},
+				Type:     "plainText",
+				Relation: descruntime.LocalRelation,
+				Access: &v2.LocalBlob{
+					Type: runtime.Type{
+						Name:    v2.LocalBlobAccessType,
+						Version: v2.LocalBlobAccessTypeVersion,
+					},
+					MediaType: "application/x-yaml",
+				},
+			}
+
+			blobContent := inmemory.New(bytes.NewReader(yamlStream))
+			newRes, err := repo.AddLocalResource(ctx, componentName, componentVersion, resource, blobContent)
+			Expect(err).NotTo(HaveOccurred())
+			// Clear the digest that AddLocalResource computed so the component descriptor
+			// resource truly has no digest, exercising the no-digest cache key path.
+			newRes.Digest = nil
+
+			desc := &descruntime.Descriptor{
+				Meta: descruntime.Meta{Version: "v2"},
+				Component: descruntime.Component{
+					ComponentMeta: descruntime.ComponentMeta{
+						ObjectMeta: descruntime.ObjectMeta{
+							Name:    componentName,
+							Version: componentVersion,
+						},
+					},
+					Provider:  descruntime.Provider{Name: "ocm.software"},
+					Resources: []descruntime.Resource{*newRes},
+				},
+			}
+
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+			repoSpec := &ctfv1.Repository{
+				Type:       runtime.Type{Name: "ctf", Version: "v1"},
+				FilePath:   ctfPath,
+				AccessMode: ctfv1.AccessModeReadOnly,
+			}
+			specData, err := json.Marshal(repoSpec)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("mocking a component")
+			componentObj := test.MockComponent(
+				ctx,
+				componentObjName,
+				namespace.GetName(),
+				&test.MockComponentOptions{
+					Client:   k8sClient,
+					Recorder: recorder,
+					Info: v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+				},
+			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
+			By("mocking a Resource with no digest")
+			resourceObj = test.MockResource(
+				ctx,
+				resourceName,
+				namespace.GetName(),
+				&test.MockResourceOptions{
+					ComponentRef: corev1.LocalObjectReference{Name: componentObjName},
+					Clnt:         k8sClient,
+					Recorder:     recorder,
+					ComponentInfo: &v1alpha1.ComponentInfo{
+						Component:      componentName,
+						Version:        componentVersion,
+						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+					},
+					ResourceInfo: &v1alpha1.ResourceInfo{
+						Name:    resourceName,
+						Type:    "plainText",
+						Version: resourceVersion,
+						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
+						// Digest intentionally nil to exercise the no-digest cache key path
+					},
+				},
+			)
+
+			By("creating a Deployer that references the Resource")
+			deployerObj := &v1alpha1.Deployer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: deployerObjName,
+				},
+				Spec: v1alpha1.DeployerSpec{
+					ResourceRef: v1alpha1.ObjectKey{
+						Name:      resourceObj.GetName(),
+						Namespace: namespace.GetName(),
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, deployerObj)
+			})
+
+			By("waiting until the Deployer is Ready")
+			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
+
+			By("verifying the ConfigMap has been applied")
+			gotCM := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: namespace.GetName(),
+				Name:      "sample-cm",
+			}, gotCM)).To(Succeed())
+			Expect(gotCM.Data).To(HaveKeyWithValue("hello", "world"))
+
+			By("verifying the Secret has been applied")
+			gotSec := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: namespace.GetName(),
+				Name:      "sample-secret",
+			}, gotSec)).To(Succeed())
+			Expect(string(gotSec.Data["password"])).To(Equal("s3cr3t"))
+
+			By("verifying the download cache contains the expected composite key")
+			expectedCacheKey := desc.Component.Name + ":" + desc.Component.Version + "/" + resourceObj.Spec.Resource.ByReference.Resource.String()
+			_, err = downloadCache.Load(expectedCacheKey, func() ([]*unstructured.Unstructured, error) {
+				return nil, fmt.Errorf("cache miss for key %q: expected a hit", expectedCacheKey)
+			})
+			Expect(err).NotTo(HaveOccurred(), "expected download cache to contain composite key for nil-digest resource")
 		})
 	})
 
@@ -469,6 +637,9 @@ data:
 				},
 			}
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, deployerObj)
+			})
 
 			By("waiting until the Deployer is Ready")
 			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
@@ -495,9 +666,6 @@ data:
 					},
 				)),
 			)
-
-			By("deleting the Deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
 
 		It("deployer with explicit ocmConfig ignores parent resource config", func(ctx SpecContext) {
@@ -609,6 +777,10 @@ consumers:
 				},
 			}
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				_ = k8sClient.Delete(ctx, deployerSecret)
+				test.DeleteObject(ctx, k8sClient, deployerObj)
+			})
 
 			By("waiting until the Deployer is Ready")
 			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
@@ -627,16 +799,11 @@ consumers:
 					},
 				)),
 			)
-
-			By("deleting the Deployer")
-			_ = k8sClient.Delete(ctx, deployerSecret)
-			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
 	})
 
 	Context("verified component cache behavior", func() {
 		It("uses separate cache entries for verified and unverified component versions", Serial, func(ctx SpecContext) {
-
 			componentName := "ocm.software/deployer-verified-cache-test"
 			componentObjName := "deployer-verified-cache-test"
 			resourceName := "verified-yaml-resource"
@@ -791,6 +958,9 @@ data:
 				},
 			}
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, deployerObj)
+			})
 
 			By("waiting until the Deployer is Ready")
 			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
@@ -816,11 +986,13 @@ data:
 
 			verifiedHit, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "verified")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(verifiedHit)).To(Equal(float64(1)),
+			// The exact hit count is non-deterministic: after the resource is applied, the reconciler
+			// registers a dynamic resource watch for the deployed object and retries until the watch has
+			// synced. Each retry reconciliation calls getEffectiveComponentDescriptor (which hits the
+			// component version cache) before reaching the download cache. How many retries occur depends
+			// on the timing between the informer sync and the controller's requeue.
+			Expect(testutil.ToFloat64(verifiedHit)).To(BeNumerically(">=", float64(1)),
 				"expected at least 1 cache hit for the verified component on subsequent reconciliation")
-
-			By("deleting the Deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
 
 		It("maintains integrity chain for referenced component via reference path", Serial, func(ctx SpecContext) {
@@ -1031,6 +1203,9 @@ data:
 				},
 			}
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, deployerObj)
+			})
 
 			By("waiting until the Deployer is Ready")
 			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
@@ -1052,8 +1227,10 @@ data:
 			Expect(err).ToNot(HaveOccurred())
 			// Hit 1 from first resolution (only deployer controller is running)
 			// Hit 2 from the child component resolution via reference path
-			Expect(testutil.ToFloat64(parentHitVerified)).To(Equal(float64(2)),
-				"expected 2 cache hits for the verified parent component on first resolution")
+			// Hit count is non-deterministic for the same reason as above: resource watch sync retries
+			// cause additional reconciliations that each hit the component version cache.
+			Expect(testutil.ToFloat64(parentHitVerified)).To(BeNumerically(">=", float64(2)),
+				"expected at least 2 cache hits for the verified parent component on first resolution")
 
 			parentMissUnverified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(parentComponentName, componentVersion, "unverified")
 			Expect(err).ToNot(HaveOccurred())
@@ -1067,16 +1244,15 @@ data:
 				"expected 1 cache miss for the child component resolved via digest from parent reference")
 			referencedHitVerified, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "verified")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(referencedHitVerified)).To(Equal(float64(1)),
-				"expected 1 cache hit for the child component resolved via digest from parent reference")
+			// Hit count is non-deterministic for the same reason as above: resource watch sync retries
+			// cause additional reconciliations that each hit the component version cache.
+			Expect(testutil.ToFloat64(referencedHitVerified)).To(BeNumerically(">=", float64(1)),
+				"expected at least 1 cache hit for the child component resolved via digest from parent reference")
 
 			referencedMissUnverified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "unverified")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(testutil.ToFloat64(referencedMissUnverified)).To(Equal(float64(0)),
 				"expected 0 unverified cache misses for the child — it should be resolved via integrity chain digest")
-
-			By("deleting the Deployer")
-			test.DeleteObject(ctx, k8sClient, deployerObj)
 		})
 
 		It("does not deploy when verification fails with wrong public key", Serial, func(ctx SpecContext) {
@@ -1327,7 +1503,7 @@ data:
 })
 
 var _ = Describe("Deployer Controller Finalizer Persistence", func() {
-	It("adds finalizers to the deployer object after a successful reconcile", func(ctx SpecContext) {
+	It("adds finalizers to the deployer object during the first reconciliation", func(ctx SpecContext) {
 		namespace := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: "deployer-finalizer-add"},
 		}
@@ -1437,12 +1613,11 @@ data:
 		Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
 		DeferCleanup(func(ctx SpecContext) { test.DeleteObject(ctx, k8sClient, deployerObj) })
 
-		By("waiting until the Deployer is Ready")
-		test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
-
-		By("verifying both finalizers are persisted on the deployer object")
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployerObj), deployerObj)).To(Succeed())
-		Expect(deployerObj.Finalizers).To(ContainElements(applySetPruneFinalizer, resourceWatchFinalizer))
+		By("verifying both finalizers are persisted after the first reconciliation")
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployerObj), deployerObj)).To(Succeed())
+			g.Expect(deployerObj.Finalizers).To(ContainElements(applySetPruneFinalizer, resourceWatchFinalizer))
+		}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
 	})
 
 	It("removes finalizers so the deployer is fully deleted", func(ctx SpecContext) {

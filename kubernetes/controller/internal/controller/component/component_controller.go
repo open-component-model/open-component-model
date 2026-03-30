@@ -33,6 +33,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
@@ -233,7 +234,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	logger.Info("reconciling component")
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), component, repo)
 	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
+		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
@@ -259,12 +260,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
 	}
 
+	cfg, err := configuration.LoadConfigurations(ctx, r.Client, component.GetNamespace(), configs)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
+	}
+
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:    repoSpec,
-		OCMConfigurations: configs,
-		Namespace:         component.GetNamespace(),
-		SigningRegistry:   r.PluginManager.SigningRegistry,
-		Verifications:     verifications,
+		RepositorySpec:  repoSpec,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
+		Verifications:   verifications,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: types.NamespacedName{

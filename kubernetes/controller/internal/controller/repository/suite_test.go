@@ -156,7 +156,7 @@ var _ = BeforeSuite(func() {
 	Expect(k8sManager.Add(workerPool)).To(Succeed())
 
 	resolutionLogger := logf.Log.WithName("resolution")
-	resolver := resolution.NewResolver(k8sClient, &resolutionLogger, workerPool, pm)
+	resolver := resolution.NewResolver(&resolutionLogger, workerPool, pm)
 
 	repositoryKey = "metadata.name"
 	// Register reconcilers

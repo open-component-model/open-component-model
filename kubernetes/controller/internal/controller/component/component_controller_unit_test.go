@@ -367,7 +367,7 @@ func TestResolutionInProgress_UnitTest(t *testing.T) {
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(ocmScheme))
 	g.Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
 
-	resolver := resolution.NewResolver(fakeClient, &logger, workerPool, pm)
+	resolver := resolution.NewResolver(&logger, workerPool, pm)
 	eventRecorder := &record.FakeRecorder{
 		Events: make(chan string, 100),
 	}

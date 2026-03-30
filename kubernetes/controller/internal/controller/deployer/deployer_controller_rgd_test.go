@@ -185,13 +185,17 @@ spec:
 			}).WithContext(ctx).Should(Succeed())
 
 			deployers := &v1alpha1.DeployerList{}
-			Expect(k8sClient.List(ctx, deployers)).To(Succeed())
-			Expect(deployers.Items).To(HaveLen(0))
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.List(ctx, deployers)).To(Succeed())
+				g.Expect(deployers.Items).To(HaveLen(0))
+			}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
 
 			RGDs := &unstructured.UnstructuredList{}
 			RGDs.SetGroupVersionKind(listGVK)
-			Expect(k8sClient.List(ctx, RGDs)).To(Succeed())
-			Expect(RGDs.Items).To(HaveLen(0))
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.List(ctx, RGDs)).To(Succeed())
+				g.Expect(RGDs.Items).To(HaveLen(0))
+			}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
 		})
 
 		It("reconciles a deployer with a valid RGD", func(ctx SpecContext) {
@@ -352,7 +356,7 @@ spec:
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
 
 			By("checking that the deployer has not been reconciled successfully")
-			test.WaitForNotReadyObject(ctx, k8sClient, deployerObj, v1alpha1.MarshalFailedReason)
+			test.WaitForNotReadyObject(ctx, k8sClient, deployerObj, v1alpha1.GetOCMResourceFailedReason)
 
 			By("deleting the resource")
 			test.DeleteObject(ctx, k8sClient, deployerObj)
@@ -673,7 +677,7 @@ spec:
 			Expect(k8sClient.Status().Update(ctx, resourceObjNotReady)).To(Succeed())
 
 			By("checking that the deployer gets reconciled again and fails")
-			test.WaitForNotReadyObject(ctx, k8sClient, deployerObj, v1alpha1.MarshalFailedReason)
+			test.WaitForNotReadyObject(ctx, k8sClient, deployerObj, v1alpha1.GetOCMResourceFailedReason)
 
 			By("deleting the deployer")
 			test.DeleteObject(ctx, k8sClient, deployerObj)

@@ -279,7 +279,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	logger.Info("reconciling resource")
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), resource, component)
 	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), resource, v1alpha1.ConfigureContextFailedReason, err.Error())
+		status.MarkNotReady(r.GetEventRecorder(), resource, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to configure context: %w", err)
 	}
@@ -308,12 +308,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
 	}
 
+	cfg, err := configuration.LoadConfigurations(ctx, r.Client, resource.GetNamespace(), configs)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
+	}
+
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:    repoSpec,
-		OCMConfigurations: configs,
-		Namespace:         resource.GetNamespace(),
-		SigningRegistry:   r.PluginManager.SigningRegistry,
-		Verifications:     verifications,
+		RepositorySpec:  repoSpec,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
+		Verifications:   verifications,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: k8stypes.NamespacedName{
@@ -360,10 +366,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		referencedDescriptor,
 		resource.Spec.Resource.ByReference.ReferencePath,
 		&resolution.RepositoryOptions{
-			RepositorySpec:    repoSpec,
-			OCMConfigurations: configs,
-			Namespace:         resource.GetNamespace(),
-			SigningRegistry:   r.PluginManager.SigningRegistry,
+			RepositorySpec:  repoSpec,
+			Configuration:   cfg,
+			SigningRegistry: r.PluginManager.SigningRegistry,
 			RequesterFunc: func() workerpool.RequesterInfo {
 				return workerpool.RequesterInfo{
 					NamespacedName: k8stypes.NamespacedName{
@@ -412,13 +417,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	if resource.Spec.VerificationPolicy != v1alpha1.VerificationPolicyNever {
 		logger.V(1).Info("verifying resource")
-
-		cfg, err := configuration.LoadConfigurations(ctx, r.Client, resource.GetNamespace(), configs)
-		if err != nil {
-			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
-
-			return ctrl.Result{}, fmt.Errorf("failed getting configs: %w", err)
-		}
 
 		matchedResource, err = ocm.VerifyResource(ctx, r.PluginManager, matchedResource, cfg)
 		if err != nil {
