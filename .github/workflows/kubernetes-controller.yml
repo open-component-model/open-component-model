@@ -317,7 +317,7 @@ jobs:
           helm list -n ocm-k8s-toolkit-system
           echo "::endgroup::"
 
-  # Run conformance tests against the built image on PRs to main
+  # Run conformance tests against the built image before publishing
   conformance:
     name: Conformance
     needs: build
