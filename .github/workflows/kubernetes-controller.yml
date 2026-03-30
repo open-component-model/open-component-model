@@ -464,7 +464,7 @@ jobs:
   # Run conformance tests against the built image on PRs to main
   conformance-pr:
     name: Conformance (PR)
-    needs: [build, E2E]
+    needs: [build]
     if: ${{ github.event_name == 'pull_request' }}
     uses: ./.github/workflows/conformance.yml
     with:
