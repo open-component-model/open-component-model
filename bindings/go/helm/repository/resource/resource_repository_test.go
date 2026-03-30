@@ -71,6 +71,25 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	})
 }
 
+func TestConvertAccessNilGuards(t *testing.T) {
+	t.Parallel()
+	repo := NewResourceRepository(nil)
+	ctx := context.Background()
+
+	t.Run("returns error for nil resource", func(t *testing.T) {
+		_, err := repo.GetResourceCredentialConsumerIdentity(ctx, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "resource is required")
+	})
+
+	t.Run("returns error for nil access", func(t *testing.T) {
+		res := &descriptor.Resource{}
+		_, err := repo.GetResourceCredentialConsumerIdentity(ctx, res)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "resource access is required")
+	})
+}
+
 func TestUploadResource(t *testing.T) {
 	repo := NewResourceRepository(nil)
 	res := helmResource(t, "https://charts.example.com", "mychart:1.0.0")
