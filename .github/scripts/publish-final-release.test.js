@@ -284,7 +284,7 @@ function mockCore() {
   assert.ok(written, "summary.write() should have been called");
 }
 
-// Latest set but not previous (e.g., promoting an RC that is highest overall)
+// Latest set but not release version (e.g., promoting an RC that is highest overall)
 {
   let written = false;
   const core = mockCore();
