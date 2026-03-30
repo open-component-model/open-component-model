@@ -255,6 +255,7 @@ fluxdeployerspec
 fluxdeployerstatus
 fluxvaluessource
 foldername
+formatter
 forwardspec
 frewilhelm
 frontend
@@ -467,6 +468,7 @@ newrepository
 newrepositoryspec
 niclas
 nixos
+noop
 npm
 npm's
 npmjs
