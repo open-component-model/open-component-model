@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
+	"ocm.software/open-component-model/bindings/go/helm/access"
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -30,9 +30,9 @@ func helmAccessResource(t *testing.T, data map[string]string) *descruntime.Resou
 	return r
 }
 
-func TestHelmResourceRepository_GetResourceCredentialConsumerIdentity(t *testing.T) {
+func TestHelmAccess_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	t.Parallel()
-	repo := helmresource.NewResourceRepository(nil)
+	h := &access.HelmAccess{}
 	ctx := context.Background()
 
 	t.Run("returns identity for HTTPS helm repository", func(t *testing.T) {
@@ -40,7 +40,7 @@ func TestHelmResourceRepository_GetResourceCredentialConsumerIdentity(t *testing
 			"helmRepository": "https://charts.example.com/stable",
 		})
 
-		identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource)
+		identity, err := h.GetResourceCredentialConsumerIdentity(ctx, resource)
 		require.NoError(t, err)
 		require.NotNil(t, identity)
 
@@ -55,7 +55,7 @@ func TestHelmResourceRepository_GetResourceCredentialConsumerIdentity(t *testing
 			"helmRepository": "http://charts.example.com:8080/repo",
 		})
 
-		identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource)
+		identity, err := h.GetResourceCredentialConsumerIdentity(ctx, resource)
 		require.NoError(t, err)
 		require.NotNil(t, identity)
 
@@ -71,7 +71,7 @@ func TestHelmResourceRepository_GetResourceCredentialConsumerIdentity(t *testing
 			"helmRepository": "oci://registry.example.com/charts/mychart:1.0.0",
 		})
 
-		identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource)
+		identity, err := h.GetResourceCredentialConsumerIdentity(ctx, resource)
 		require.NoError(t, err)
 		require.NotNil(t, identity)
 
@@ -85,7 +85,7 @@ func TestHelmResourceRepository_GetResourceCredentialConsumerIdentity(t *testing
 			"helmRepository": "",
 		})
 
-		identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource)
+		identity, err := h.GetResourceCredentialConsumerIdentity(ctx, resource)
 		assert.NoError(t, err)
 		assert.Nil(t, identity)
 	})
@@ -100,9 +100,10 @@ func TestHelmResourceRepository_GetResourceCredentialConsumerIdentity(t *testing
 			Data: []byte(`{}`),
 		}
 
-		identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource)
+		identity, err := h.GetResourceCredentialConsumerIdentity(ctx, resource)
 		assert.Error(t, err)
 		assert.Nil(t, identity)
+		assert.Contains(t, err.Error(), "error converting resource input spec")
 	})
 
 	t.Run("returns error for invalid URL", func(t *testing.T) {
@@ -110,7 +111,7 @@ func TestHelmResourceRepository_GetResourceCredentialConsumerIdentity(t *testing
 			"helmRepository": "://invalid",
 		})
 
-		identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource)
+		identity, err := h.GetResourceCredentialConsumerIdentity(ctx, resource)
 		assert.Error(t, err)
 		assert.Nil(t, identity)
 		assert.Contains(t, err.Error(), "error parsing helm repository URL to identity")
