@@ -1,7 +1,6 @@
 package setup
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"github.com/spf13/pflag"
 
 	clicommandv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/clicommand/v1"
-	"ocm.software/open-component-model/bindings/go/credentials"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
 
@@ -77,12 +75,8 @@ func InjectCLICommandPlugins(root *cobra.Command) error {
 					} else if len(identResp.Identity) > 0 {
 						resolved, resolveErr := graph.Resolve(cmd.Context(), identResp.Identity)
 						if resolveErr != nil {
-							if !errors.Is(resolveErr, credentials.ErrNotFound) {
-								return fmt.Errorf("resolving credentials for %s %s: %w",
-									spec.Verb, spec.ObjectType, resolveErr)
-							}
 							slog.DebugContext(cmd.Context(), "no credentials found for CLI command plugin",
-								"verb", spec.Verb, "objectType", spec.ObjectType)
+								"verb", spec.Verb, "objectType", spec.ObjectType, "error", resolveErr)
 						} else {
 							creds = resolved
 						}

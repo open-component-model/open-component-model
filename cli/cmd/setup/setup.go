@@ -39,6 +39,19 @@ func OCMConfig(cmd *cobra.Command) error {
 }
 
 func PluginManager(cmd *cobra.Command) error {
+	// Reuse an early-injected plugin manager (created before Cobra command
+	// resolution) if one is already present in the context. This avoids
+	// double-registering plugins when injectPluginCommandsEarly has run.
+	if existing := ocmctx.FromContext(cmd.Context()); existing != nil && existing.PluginManager() != nil {
+		cobra.OnFinalize(func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := existing.PluginManager().Shutdown(shutdownCtx); err != nil {
+				slog.ErrorContext(shutdownCtx, "failed to shutdown plugin manager", slog.String("error", err.Error()))
+			}
+		})
+		return nil
+	}
 	pluginManager := manager.NewPluginManager(cmd.Context())
 
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
