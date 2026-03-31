@@ -17,27 +17,27 @@ export default async function computeRcVersion({ core }) {
     const basePrefix = parseBranch(releaseBranch);
     const tagPrefix = `${componentPath}/v`;
 
-    // Get latest stable tag using Git's native version sort (descending)
+    // Get previous base version tag using Git's native version sort (descending)
     // Filter out RC tags after fetching since git doesn't support negative pattern matching
     const stableTags = run(core, "git", [
         "tag", "--list", `${tagPrefix}${basePrefix}.*`,
         "--sort=-version:refname"
     ]);
-    const latestStable = stableTags
+    const previousBaseVersion = stableTags
         .split("\n")
         .filter(tag => tag && !/-rc\.\d+$/.test(tag))[0] || "";
 
-    // Get latest RC tag using Git's native version sort (descending)
+    // Get previous base RC version tag using Git's native version sort (descending)
     const rcTags = run(core, "git", [
         "tag", "--list", `${tagPrefix}${basePrefix}.*-rc.*`,
         "--sort=-version:refname"
     ]);
-    const latestRc = rcTags.split("\n").filter(Boolean)[0] || "";
+    const previousBaseRcVersion = rcTags.split("\n").filter(Boolean)[0] || "";
 
-    core.info(`Latest stable: ${latestStable || "(none)"}`);
-    core.info(`Latest RC: ${latestRc || "(none)"}`);
+    core.info(`Previous base version: ${previousBaseVersion || "(none)"}`);
+    core.info(`Previous base RC version: ${previousBaseRcVersion || "(none)"}`);
 
-    const { baseVersion, rcVersion } = computeNextVersions(basePrefix, latestStable, latestRc, false);
+    const { baseVersion, rcVersion } = computeNextVersions(basePrefix, previousBaseVersion, previousBaseRcVersion, false);
 
     const rcTag = `${tagPrefix}${rcVersion}`;
     const promotionTag = `${tagPrefix}${baseVersion}`;
@@ -78,10 +78,10 @@ export default async function computeRcVersion({ core }) {
             ["Component Path", componentPath],
             ["Release Branch", releaseBranch],
             ["Base Prefix", basePrefix],
-            ["Latest Stable", latestStable || "(none)"],
-            ["Latest RC", latestRc || "(none)"],
+            ["Previous Base Version", previousBaseVersion || "(none)"],
+            ["Previous Base RC Version", previousBaseRcVersion || "(none)"],
             ["Next Base Version", baseVersion],
-            ["Next RC Version", rcVersion],
+            ["Next Base RC Version", rcVersion],
             ["RC Tag", rcTag],
             ["Promotion Tag", promotionTag],
             ["Previous Release Tag", previousTag || "(none — first release)"],
@@ -276,8 +276,8 @@ export function findPreviousTag(tags, newTag) {
 
 /** GitHub Actions entrypoint for determining if release should be latest */
 export async function determineLatestRelease({ core, github, context }) {
-    const { COMPONENT_PATH: componentPath, PROMOTION_VERSION: promotionVersion } = process.env;
-    if (!componentPath || !promotionVersion) return core.setFailed("Missing COMPONENT_PATH or PROMOTION_VERSION");
+    const { COMPONENT_PATH: componentPath, NEW_RELEASE_VERSION: newReleaseVersion } = process.env;
+    if (!componentPath || !newReleaseVersion) return core.setFailed("Missing COMPONENT_PATH or NEW_RELEASE_VERSION");
 
     const tagPrefix = `${componentPath}/v`;
     let releases = [];
@@ -288,26 +288,26 @@ export async function determineLatestRelease({ core, github, context }) {
         return;
     }
 
-    const highestFinal = extractHighestFinalVersion(releases, tagPrefix);
-    const setLatest = shouldSetLatest(promotionVersion, highestFinal);
+    const highestPreviousReleaseVersion = extractHighestPreviousReleaseVersion(releases, tagPrefix);
+    const setLatest = shouldSetLatest(newReleaseVersion, highestPreviousReleaseVersion);
 
     core.setOutput('set_latest', setLatest ? 'true' : 'false');
-    core.setOutput('highest_final_version', highestFinal || '(none)');
-    core.info(setLatest ? `✅ Will set :latest (${promotionVersion} >= ${highestFinal || 'none'})` : `⚠️ Will NOT set :latest (${promotionVersion} < ${highestFinal})`);
+    core.setOutput('highest_previous_release_version', highestPreviousReleaseVersion || '(none)');
+    core.info(setLatest ? `✅ Will set :latest (${newReleaseVersion} >= ${highestPreviousReleaseVersion || 'none'})` : `⚠️ Will NOT set :latest (${newReleaseVersion} < ${highestPreviousReleaseVersion})`);
 
     await core.summary.addRaw('---').addEOL().addHeading('Latest Tag Decision', 2)
-        .addTable([[{ data: 'Field', header: true }, { data: 'Value', header: true }], ['Final Version', promotionVersion], ['Highest Final Version', highestFinal || '(none)'], ['Will Set Latest', setLatest ? '✅ Yes' : '⚠️ No']]).write();
+        .addTable([[{ data: 'Field', header: true }, { data: 'Value', header: true }], ['New Release Version', newReleaseVersion], ['Highest Previous Release Version', highestPreviousReleaseVersion || '(none)'], ['Will Set Latest', setLatest ? '✅ Yes' : '⚠️ No']]).write();
 }
 
-/** Extract highest final (non-prerelease) version from releases */
-export function extractHighestFinalVersion(releases, tagPrefix) {
+/** Extract highest previous release (non-prerelease) version from releases */
+export function extractHighestPreviousReleaseVersion(releases, tagPrefix) {
     const versions = releases.filter(r => !r.prerelease && r.tag_name.startsWith(tagPrefix))
         .map(r => r.tag_name.replace(tagPrefix, '')).filter(v => /^\d+\.\d+\.\d+$/.test(v));
     if (!versions.length) return '';
     return versions.sort((a, b) => isStableNewer(`v${a}`, `v${b}`) ? 1 : -1).pop();
 }
 
-/** Determine if promotion version should be tagged as latest */
-export function shouldSetLatest(promotionVersion, highestFinal) {
-    return !highestFinal || !isStableNewer(`v${highestFinal}`, `v${promotionVersion}`);
+/** Determine if new release version should be tagged as latest */
+export function shouldSetLatest(newReleaseVersion, highestPreviousReleaseVersion) {
+    return !highestPreviousReleaseVersion || !isStableNewer(`v${highestPreviousReleaseVersion}`, `v${newReleaseVersion}`);
 }

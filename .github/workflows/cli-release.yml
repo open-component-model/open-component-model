@@ -250,28 +250,28 @@ jobs:
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
 
-      - name: Create final tag
-        # Points final tag to same commit as RC tag (no rebuild needed)
+      - name: Create new release tag
+        # Points new release tag to same commit as RC tag (no rebuild needed)
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
-          FINAL_TAG: ${{ needs.prepare.outputs.promotion_tag }}
+          NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
         with:
           script: |
             const { execFileSync } = require("child_process");
-            const { RC_TAG: rcTag, FINAL_TAG: finalTag } = process.env;
+            const { RC_TAG: rcTag, NEW_RELEASE_TAG: newReleaseTag } = process.env;
 
             // Pre-flight checks
-            if (!rcTag || !finalTag) {
-              core.setFailed("Missing RC_TAG or FINAL_TAG");
+            if (!rcTag || !newReleaseTag) {
+              core.setFailed("Missing RC_TAG or NEW_RELEASE_TAG");
               return;
             }
 
-            // Check if final tag already exists
-            try { 
-              execFileSync("git", ["rev-parse", `refs/tags/${finalTag}`], { stdio: "pipe" }); 
-              core.setFailed(`Tag ${finalTag} already exists`); 
-              return; 
+            // Check if new release tag already exists
+            try {
+              execFileSync("git", ["rev-parse", `refs/tags/${newReleaseTag}`], { stdio: "pipe" });
+              core.setFailed(`Tag ${newReleaseTag} already exists`);
+              return;
             } catch {
               // Expected: tag doesn't exist, continue
             }
@@ -283,10 +283,10 @@ jobs:
               return;
             }
 
-            // Create and push final tag
-            execFileSync("git", ["tag", "-a", finalTag, rcSha, "-m", `Promote ${rcTag} to ${finalTag}`]);
-            execFileSync("git", ["push", "origin", `refs/tags/${finalTag}`]);
-            core.info(`✅ Created final tag ${finalTag} from ${rcTag} (${rcSha.substring(0,7)})`);
+            // Create and push new release tag
+            execFileSync("git", ["tag", "-a", newReleaseTag, rcSha, "-m", `Promote ${rcTag} to ${newReleaseTag}`]);
+            execFileSync("git", ["push", "origin", `refs/tags/${newReleaseTag}`]);
+            core.info(`✅ Created new release tag ${newReleaseTag} from ${rcTag} (${rcSha.substring(0,7)})`);
 
       - name: Setup ORAS
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
@@ -301,16 +301,16 @@ jobs:
       - name: Promote OCI image tags
         env:
           RC_VERSION: ${{ needs.prepare.outputs.new_version }}
-          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
+          NEW_RELEASE_VERSION: ${{ needs.prepare.outputs.base_version }}
           TARGET_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
         run: |
           if [ "$SET_LATEST" = "true" ]; then
-            oras tag "${TARGET_REPO}:${RC_VERSION}" "${FINAL_VERSION}" "latest"
-            echo "✅ Tagged :${FINAL_VERSION} and :latest"
+            oras tag "${TARGET_REPO}:${RC_VERSION}" "${NEW_RELEASE_VERSION}" "latest"
+            echo "✅ Tagged :${NEW_RELEASE_VERSION} and :latest"
           else
-            oras tag "${TARGET_REPO}:${RC_VERSION}" "${FINAL_VERSION}"
-            echo "⚠️ Tagged :${FINAL_VERSION} (not setting :latest)"
+            oras tag "${TARGET_REPO}:${RC_VERSION}" "${NEW_RELEASE_VERSION}"
+            echo "⚠️ Tagged :${NEW_RELEASE_VERSION} (not setting :latest)"
           fi
 
   # --------------------------------------------------------
@@ -350,21 +350,21 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
-          FINAL_TAG: ${{ needs.prepare.outputs.promotion_tag }}
-          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
+          NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
+          NEW_RELEASE_VERSION: ${{ needs.prepare.outputs.base_version }}
           TARGET_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli
           ASSETS_DIR: ${{ runner.temp }}/assets
           NOTES_FILE: ${{ runner.temp }}/CHANGELOG.md
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
-          HIGHEST_FINAL_VERSION: ${{ needs.prepare.outputs.highest_final_version }}
+          HIGHEST_PREVIOUS_RELEASE_VERSION: ${{ needs.prepare.outputs.highest_previous_release_version }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
             const path = require('path');
 
-            const finalTag = process.env.FINAL_TAG;
-            const finalVersion = process.env.FINAL_VERSION;
+            const newReleaseTag = process.env.NEW_RELEASE_TAG;
+            const newReleaseVersion = process.env.NEW_RELEASE_VERSION;
             const rcTag = process.env.RC_TAG;
             const targetRepo = process.env.TARGET_REPO;
             const assetsDir = process.env.ASSETS_DIR;
@@ -375,7 +375,7 @@ jobs:
               ? fs.readFileSync(notesFile, 'utf8').trim()
               : `Promoted from ${rcTag}`;
 
-            // Replace RC header with final release header by replacing the whole line
+            // Replace RC header with new release header by replacing the whole line
             // From: "[cli/v0.17.0-rc.1] - 2026-02-02"
             // To:   "[cli/v0.17.0] - promoted from [cli/v0.17.0-rc.1] on 2026-02-16"
             const today = new Date().toISOString().split('T')[0];
@@ -387,16 +387,16 @@ jobs:
             }
             notes = notes.replace(
               rcHeaderPattern,
-              `## [${finalTag}] - promoted from [${rcTag}] on ${today}`
+              `## [${newReleaseTag}] - promoted from [${rcTag}] on ${today}`
             );
 
             // Use make_latest to control whether this release is marked as "latest"
-            // Only set as latest if this version >= highest existing final version
+            // Only set as latest if this version >= highest existing release version
             const created = await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag_name: finalTag,
-              name: `CLI ${finalVersion}`,
+              tag_name: newReleaseTag,
+              name: `CLI ${newReleaseVersion}`,
               body: notes,
               prerelease: false,
               make_latest: setLatest ? 'true' : 'false',
@@ -424,18 +424,18 @@ jobs:
             }
 
             const releaseUrl = created.data.html_url;
-            const highestFinal = process.env.HIGHEST_FINAL_VERSION || '(none)';
+            const highestPreviousReleaseVersion = process.env.HIGHEST_PREVIOUS_RELEASE_VERSION || '(none)';
             const ociTags = setLatest
-              ? `${targetRepo}:${finalVersion}, ${targetRepo}:latest`
-              : `${targetRepo}:${finalVersion}`;
+              ? `${targetRepo}:${newReleaseVersion}, ${targetRepo}:latest`
+              : `${targetRepo}:${newReleaseVersion}`;
 
             await core.summary
-              .addHeading('Final Release Published')
+              .addHeading('New Release Published')
               .addTable([
                 [{data: 'Field', header: true}, {data: 'Value', header: true}],
-                ['Final Tag', finalTag],
+                ['New Release Tag', newReleaseTag],
                 ['Promoted from RC', rcTag],
-                ['Highest Final Version', highestFinal],
+                ['Highest Previous Release Version', highestPreviousReleaseVersion],
                 ['OCI Tags', ociTags],
                 ['GitHub Latest', setLatest ? 'Yes' : 'No (older version)'],
                 ['Uploaded Assets', String(assets.length)],
