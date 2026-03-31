@@ -44,7 +44,6 @@ jobs:
   tag_rc:
     name: Create and Push RC Tag
     runs-on: ubuntu-latest
-    environment: release
     needs: [prepare]
     if: ${{ github.event.inputs.dry_run == 'false' }}
     permissions:
@@ -98,6 +97,7 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+      artifact-metadata: write
     uses: ./.github/workflows/kubernetes-controller.yml
     with:
       ref: ${{ needs.prepare.outputs.new_tag }}
@@ -185,8 +185,7 @@ jobs:
     name: Verify RC Attestations
     needs: [prepare, build, release_rc]
     runs-on: ubuntu-latest
-    environment:
-      name: release
+    environment: release
     permissions:
       contents: read
       packages: read
@@ -247,16 +246,16 @@ jobs:
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
 
-      - name: Create final tag
+      - name: Create new release tag
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
-          FINAL_TAG: ${{ needs.prepare.outputs.promotion_tag }}
+          NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
         with:
           github-token: ${{ steps.get_token.outputs.token }}
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
-            await script.createFinalTag({ core });
+            await script.createNewReleaseTag({ core });
 
       - name: Setup ORAS
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
@@ -271,15 +270,15 @@ jobs:
       - name: Promote image tags
         env:
           RC_VERSION: ${{ needs.prepare.outputs.new_version }}
-          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
+          NEW_RELEASE_VERSION: ${{ needs.prepare.outputs.base_version }}
           IMAGE_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
         run: |
           set -euo pipefail
-          oras tag "${IMAGE_REPO}:${RC_VERSION}" "${FINAL_VERSION}"
-          echo "✅ Tagged image: ${FINAL_VERSION}"
+          oras tag "${IMAGE_REPO}:${RC_VERSION}" "${NEW_RELEASE_VERSION}"
+          echo "✅ Tagged image: ${NEW_RELEASE_VERSION}"
           if [ "${SET_LATEST}" = "true" ]; then
-            oras tag "${IMAGE_REPO}:${FINAL_VERSION}" "latest"
+            oras tag "${IMAGE_REPO}:${NEW_RELEASE_VERSION}" "latest"
             echo "✅ Tagged image: latest"
           fi
 
@@ -379,8 +378,8 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
-          FINAL_TAG: ${{ needs.prepare.outputs.promotion_tag }}
-          FINAL_VERSION: ${{ needs.prepare.outputs.base_version }}
+          NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
+          NEW_RELEASE_VERSION: ${{ needs.prepare.outputs.base_version }}
           COMPONENT_NAME: ${{ env.COMPONENT_NAME }}
           ASSETS_DIR: ${{ runner.temp }}/final-assets
           NOTES_FILE: ${{ runner.temp }}/CHANGELOG.md
@@ -388,7 +387,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
           CHART_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
-          HIGHEST_FINAL_VERSION: ${{ needs.prepare.outputs.highest_final_version }}
+          HIGHEST_PREVIOUS_RELEASE_VERSION: ${{ needs.prepare.outputs.highest_previous_release_version }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
