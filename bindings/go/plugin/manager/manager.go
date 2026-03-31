@@ -17,6 +17,7 @@ import (
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	blobtransformerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
+	clicommandv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/clicommand/v1"
 	componentlisterv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	credentialrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	digestprocessorv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
@@ -25,6 +26,7 @@ import (
 	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	signinghandlerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/clicommand"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
@@ -53,6 +55,7 @@ type PluginManager struct {
 	ResourcePluginRegistry             *resource.ResourceRegistry
 	BlobTransformerRegistry            *blobtransformer.Registry
 	SigningRegistry                    *signinghandler.SigningRegistry
+	CLICommandRegistry                 *clicommand.Registry
 
 	mu sync.Mutex
 
@@ -75,6 +78,7 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 		ResourcePluginRegistry:             resource.NewResourceRegistry(ctx),
 		BlobTransformerRegistry:            blobtransformer.NewBlobTransformerRegistry(ctx),
 		SigningRegistry:                    signinghandler.NewSigningRegistry(ctx),
+		CLICommandRegistry:                 clicommand.NewCLICommandRegistry(ctx),
 		baseCtx:                            ctx,
 	}
 }
@@ -181,6 +185,7 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 		pm.ResourcePluginRegistry.Shutdown(ctx),
 		pm.BlobTransformerRegistry.Shutdown(ctx),
 		pm.SigningRegistry.Shutdown(ctx),
+		pm.CLICommandRegistry.Shutdown(ctx),
 	)
 
 	return errs
@@ -242,6 +247,7 @@ func init() {
 	scheme.MustRegisterScheme(inputv1.Scheme)
 	scheme.MustRegisterScheme(resourcev1.Scheme)
 	scheme.MustRegisterScheme(signinghandlerv1.Scheme)
+	scheme.MustRegisterScheme(clicommandv1.Scheme)
 }
 
 func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Config, plugin mtypes.Plugin, capabilitiesCommandOutput *bytes.Buffer) error {
@@ -331,6 +337,11 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 		case *signinghandlerv1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding signing handler plugin", "id", plugin.ID)
 			if err := pm.SigningRegistry.AddPlugin(plugin, capability); err != nil {
+				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+			}
+		case *clicommandv1.CapabilitySpec:
+			slog.DebugContext(ctx, "adding CLI command plugin", "id", plugin.ID)
+			if err := pm.CLICommandRegistry.AddPlugin(plugin, capability); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		default:

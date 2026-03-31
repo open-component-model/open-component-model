@@ -44,6 +44,9 @@ func PreRunEWithConfig(cmd *cobra.Command, cfg Config) error {
 		return fmt.Errorf("setup credential graph: %w", err)
 	}
 	ocmctx.Register(cmd)
+	if err := setup.InjectCLICommandPlugins(cmd.Root()); err != nil {
+		return fmt.Errorf("inject CLI command plugins: %w", err)
+	}
 
 	// Inherit output streams from parent command if available.
 	if parent := cmd.Parent(); parent != nil {
