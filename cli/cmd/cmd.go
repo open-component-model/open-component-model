@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/cli/cmd/add"
 	"ocm.software/open-component-model/cli/cmd/configuration"
 	"ocm.software/open-component-model/cli/cmd/describe"
@@ -25,7 +26,6 @@ import (
 	"ocm.software/open-component-model/cli/cmd/transfer"
 	"ocm.software/open-component-model/cli/cmd/verify"
 	"ocm.software/open-component-model/cli/cmd/version"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 )
@@ -55,7 +55,7 @@ func injectPluginCommandsEarly(root *cobra.Command) {
 	pluginDir := fs.String(ocmcmd.PluginDirectoryFlag, os.ExpandEnv(pluginDirectoryDefault), "")
 	// Silence usage output and ignore unknown flags; we only care about --plugin-directory.
 	fs.Usage = func() {}
-	fs.ParseErrorsWhitelist.UnknownFlags = true
+	fs.ParseErrorsAllowlist.UnknownFlags = true
 	_ = fs.Parse(os.Args[1:])
 
 	dir := os.ExpandEnv(*pluginDir)

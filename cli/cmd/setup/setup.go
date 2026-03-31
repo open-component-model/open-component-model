@@ -43,6 +43,13 @@ func PluginManager(cmd *cobra.Command) error {
 	// resolution) if one is already present in the context. This avoids
 	// double-registering plugins when injectPluginCommandsEarly has run.
 	if existing := ocmctx.FromContext(cmd.Context()); existing != nil && existing.PluginManager() != nil {
+		// Builtin plugins must still be registered on the reused manager;
+		// the early phase only registered external plugins.
+		ocmContext := ocmctx.FromContext(cmd.Context())
+		filesystemConfig := ocmContext.FilesystemConfig()
+		if err := builtin.Register(existing.PluginManager(), filesystemConfig, slog.Default()); err != nil {
+			return fmt.Errorf("could not register builtin plugins: %w", err)
+		}
 		cobra.OnFinalize(func() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
