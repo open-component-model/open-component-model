@@ -1,13 +1,9 @@
 name: Controller Release
-run-name: Controller Release from ${{ github.event.inputs.branch }}${{ github.event.inputs.dry_run == 'true' && ' (dry-run)' || '' }}
+run-name: Controller Release from ${{ github.ref_name }}${{ github.event.inputs.dry_run == 'true' && ' (dry-run)' || '' }}
 
 on:
   workflow_dispatch:
     inputs:
-      branch:
-        description: "Branch to release from (e.g., releases/v0.21)"
-        required: true
-        type: string
       dry_run:
         description: "Dry-run RC phase without pushing tags or creating releases."
         required: false
@@ -21,7 +17,7 @@ env:
 
 concurrency:
   cancel-in-progress: false
-  group: controller-release-${{ github.event.inputs.branch }}
+  group: controller-release-${{ github.ref_name }}
 
 jobs:
   # ===========================================================================
@@ -35,7 +31,7 @@ jobs:
     name: Prepare Release Metadata
     uses: ./.github/workflows/release-candidate-version.yml
     with:
-      branch: ${{ github.event.inputs.branch }}
+      branch: ${{ github.ref_name }}
       component_path: kubernetes/controller
 
   # ---------------------------------------------------------------------------
@@ -64,7 +60,7 @@ jobs:
           sparse-checkout: |
             ${{ env.COMPONENT_PATH }}
             .github/scripts
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ github.ref_name }}
           token: ${{ steps.get_token.outputs.token }}
           fetch-tags: true
 
@@ -237,7 +233,7 @@ jobs:
             ${{ env.COMPONENT_PATH }}
             .github/scripts
           fetch-depth: 0
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ github.ref_name }}
           token: ${{ steps.get_token.outputs.token }}
           fetch-tags: true
 
