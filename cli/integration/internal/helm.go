@@ -1,7 +1,9 @@
 package internal
 
 import (
+	"archive/tar"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,4 +113,55 @@ func (l *HelmOCILayout) AssertProvContentEquals(t *testing.T, originalProvPath s
 
 	actual := l.ReadLayerBlob(t, provLayer)
 	r.Equal(expected, actual, "downloaded prov blob should match original prov file")
+}
+
+// AssertHelmChartTar verifies that a tar file contains the expected chart and
+// optional provenance file by comparing their contents byte-for-byte against
+// the originals. This is useful for verifying raw downloads from the Helm
+// ResourceRepository, which returns a tar archive (not an OCI layout).
+func AssertHelmChartTar(t *testing.T, tarPath, originalChartPath, originalProvPath string) {
+	t.Helper()
+	r := require.New(t)
+
+	expectedChart, err := os.ReadFile(originalChartPath)
+	r.NoError(err, "should read original chart")
+
+	var expectedProv []byte
+	if originalProvPath != "" {
+		expectedProv, err = os.ReadFile(originalProvPath)
+		r.NoError(err, "should read original prov file")
+	}
+
+	f, err := os.Open(tarPath)
+	r.NoError(err, "should open downloaded tar")
+	defer func() { _ = f.Close() }()
+
+	tr := tar.NewReader(f)
+	foundChart := false
+	foundProv := false
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err, "reading tar entry should succeed")
+
+		data, err := io.ReadAll(tr)
+		r.NoError(err, "reading tar entry content should succeed")
+
+		switch {
+		case strings.HasSuffix(hdr.Name, ".tgz"):
+			r.Equal(expectedChart, data, "downloaded chart should match the original")
+			foundChart = true
+		case strings.HasSuffix(hdr.Name, ".prov"):
+			r.Equal(expectedProv, data, "downloaded prov file should match the original")
+			foundProv = true
+		default:
+			t.Errorf("unexpected file in helm chart tar: %s", hdr.Name)
+		}
+	}
+	r.True(foundChart, "tar should contain the chart .tgz")
+	if originalProvPath != "" {
+		r.True(foundProv, "tar should contain the .prov file")
+	}
 }

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -418,6 +420,72 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 		r.Equal("mychart", chart.Name(), "the chart name should match the resource name")
 		r.Equal("0.1.0", chart.Metadata.Version, "the chart version should match the resource version")
 	})
+}
+
+// Test_Integration_DownloadResource_HelmAccess verifies that a resource with helm access
+// can be downloaded from a CTF. The download triggers the Helm ResourceRepository to
+// fetch the chart from the remote helm repository and return it as a blob.
+func Test_Integration_DownloadResource_HelmAccess(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	root := getRepoRootBasedOnGit(t)
+	chartDir := filepath.Join(root, "bindings/go/helm/testdata/provenance")
+
+	srv := httptest.NewServer(http.FileServer(http.Dir(chartDir)))
+	t.Cleanup(srv.Close)
+
+	componentName := "ocm.software/helm-access-download"
+	componentVersion := "v1.0.0"
+
+	constructor := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: mychart
+    version: 0.1.0
+    type: helmChart
+    access:
+      type: helm/v1
+      helmRepository: %s
+      helmChart: mychart-0.1.0.tgz
+`, componentName, componentVersion, srv.URL)
+
+	tempDir := t.TempDir()
+	constructorPath := filepath.Join(tempDir, "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+
+	ctfDir := filepath.Join(tempDir, "ctf")
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
+		"--constructor", constructorPath,
+		"--skip-reference-digest-processing",
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "add component-version should succeed")
+
+	output := filepath.Join(t.TempDir(), "downloaded-chart")
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"resource",
+		fmt.Sprintf("ctf::%s//%s:%s", ctfDir, componentName, componentVersion),
+		"--identity", "name=mychart,version=0.1.0",
+		"--output", output,
+		"--extraction-policy", "disable",
+	})
+	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource with helm access should succeed")
+
+	// The ResourceRepository returns a tar archive containing the chart .tgz and .prov files.
+	chartPath := filepath.Join(chartDir, "mychart-0.1.0.tgz")
+	provPath := filepath.Join(chartDir, "mychart-0.1.0.tgz.prov")
+	internal.AssertHelmChartTar(t, output, chartPath, provPath)
 }
 
 func Test_Integration_ConstructorCompress(t *testing.T) {
