@@ -113,7 +113,13 @@ func tarDirectoryRecursive(dir string) (blob.ReadOnlyBlob, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("error opening root directory %s: %w", dir, err)
+	}
+	defer func() { _ = root.Close() }()
+
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -136,7 +142,7 @@ func tarDirectoryRecursive(dir string) (blob.ReadOnlyBlob, error) {
 			return fmt.Errorf("error writing tar header for %s: %w", relPath, err)
 		}
 
-		f, err := os.Open(path)
+		f, err := root.Open(relPath)
 		if err != nil {
 			return fmt.Errorf("error opening file %s: %w", relPath, err)
 		}
