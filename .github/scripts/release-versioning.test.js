@@ -4,7 +4,7 @@ import {
     isStableNewer,
     parseBranch,
     parseVersion,
-    extractHighestFinalVersion,
+    extractHighestPreviousReleaseVersion,
     shouldSetLatest,
     findPreviousTag,
 } from "./release-versioning.js";
@@ -128,7 +128,7 @@ assert.ok(
 );
 
 // ----------------------------------------------------------
-// extractHighestFinalVersion tests
+// extractHighestPreviousReleaseVersion tests
 // ----------------------------------------------------------
 const mockReleases = [
     { prerelease: false, tag_name: "cli/v0.1.0" },
@@ -140,25 +140,25 @@ const mockReleases = [
 ];
 
 assert.strictEqual(
-    extractHighestFinalVersion(mockReleases, "cli/v"),
+    extractHighestPreviousReleaseVersion(mockReleases, "cli/v"),
     "0.2.0",
     "Should return highest non-prerelease version for prefix"
 );
 
 assert.strictEqual(
-    extractHighestFinalVersion(mockReleases, "other/v"),
+    extractHighestPreviousReleaseVersion(mockReleases, "other/v"),
     "1.0.0",
     "Should filter by tag prefix"
 );
 
 assert.strictEqual(
-    extractHighestFinalVersion([], "cli/v"),
+    extractHighestPreviousReleaseVersion([], "cli/v"),
     "",
     "Should return empty string for no releases"
 );
 
 assert.strictEqual(
-    extractHighestFinalVersion([{ prerelease: true, tag_name: "cli/v0.1.0-rc.1" }], "cli/v"),
+    extractHighestPreviousReleaseVersion([{ prerelease: true, tag_name: "cli/v0.1.0-rc.1" }], "cli/v"),
     "",
     "Should return empty string if only prereleases exist"
 );
@@ -168,7 +168,7 @@ assert.strictEqual(
 // ----------------------------------------------------------
 assert.ok(
     shouldSetLatest("0.2.0", ""),
-    "Should return true if no existing final version"
+    "Should return true if no existing previous release version"
 );
 
 assert.ok(

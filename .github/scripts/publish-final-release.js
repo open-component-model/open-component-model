@@ -15,10 +15,10 @@ import path from "path";
  *
  * @param {string} notesFile - Path to the changelog markdown file.
  * @param {string} rcTag - The RC tag being promoted (e.g. "kubernetes/controller/v0.1.0-rc.1").
- * @param {string} finalTag - The final tag (e.g. "kubernetes/controller/v0.1.0").
+ * @param {string} newReleaseTag - The new release tag (e.g. "kubernetes/controller/v0.1.0").
  * @returns {string} The release notes body.
  */
-export function prepareReleaseNotes(notesFile, rcTag, finalTag) {
+export function prepareReleaseNotes(notesFile, rcTag, newReleaseTag) {
   let notes;
   try {
     notes = fs.readFileSync(notesFile, "utf8").trim();
@@ -43,12 +43,12 @@ export function prepareReleaseNotes(notesFile, rcTag, finalTag) {
   if (!rcHeaderPattern.test(notes)) {
     // If no RC header found, prepend a final header instead of failing.
     // This handles edge cases like manually edited release notes.
-    return `## [${finalTag}] - promoted from [${rcTag}] on ${today}\n\n${notes}`;
+    return `## [${newReleaseTag}] - promoted from [${rcTag}] on ${today}\n\n${notes}`;
   }
 
   return notes.replace(
     rcHeaderPattern,
-    `## [${finalTag}] - promoted from [${rcTag}] on ${today}`,
+    `## [${newReleaseTag}] - promoted from [${rcTag}] on ${today}`,
   );
 }
 
@@ -58,28 +58,28 @@ export function prepareReleaseNotes(notesFile, rcTag, finalTag) {
  * @param {object} github - Octokit instance.
  * @param {object} context - GitHub Actions context.
  * @param {object} opts
- * @param {string} opts.finalTag
- * @param {string} opts.finalVersion
+ * @param {string} opts.newReleaseTag
+ * @param {string} opts.newReleaseVersion
  * @param {string} opts.componentName
  * @param {string} opts.notes
  * @param {boolean} opts.isLatest
  * @returns {Promise<{id: number, html_url: string}>}
  */
 export async function getOrCreateRelease(github, context, opts) {
-  const { finalTag, finalVersion, componentName, notes, isLatest } = opts;
+  const { newReleaseTag, newReleaseVersion, componentName, notes, isLatest } = opts;
   const repo = { owner: context.repo.owner, repo: context.repo.repo };
   const makeLatest = isLatest ? "true" : "false";
-  const releaseName = `${componentName} ${finalVersion}`;
+  const releaseName = `${componentName} ${newReleaseVersion}`;
 
   try {
     const existing = await github.rest.repos.getReleaseByTag({
       ...repo,
-      tag: finalTag,
+      tag: newReleaseTag,
     });
     const updated = await github.rest.repos.updateRelease({
       ...repo,
       release_id: existing.data.id,
-      tag_name: finalTag,
+      tag_name: newReleaseTag,
       name: releaseName,
       body: notes,
       prerelease: false,
@@ -90,7 +90,7 @@ export async function getOrCreateRelease(github, context, opts) {
     if (e.status !== 404) throw e;
     const created = await github.rest.repos.createRelease({
       ...repo,
-      tag_name: finalTag,
+      tag_name: newReleaseTag,
       name: releaseName,
       body: notes,
       prerelease: false,
@@ -159,15 +159,15 @@ export async function uploadAssets(github, context, core, releaseId, assetsDir) 
  */
 export async function writeSummary(core, data) {
   const {
-    finalTag,
+    newReleaseTag,
     rcTag,
-    finalVersion,
+    newReleaseVersion,
     componentName,
     imageRepo,
     chartRepo,
     imageDigest,
     isLatest,
-    highestFinalVersion,
+    highestPreviousReleaseVersion,
     uploadedCount,
     releaseUrl,
   } = data;
@@ -178,27 +178,27 @@ export async function writeSummary(core, data) {
       { data: "Value", header: true },
     ],
     ["Component", componentName],
-    ["Final Tag", finalTag],
+    ["New Release Tag", newReleaseTag],
     ["Promoted from RC", rcTag],
     ["Uploaded Assets", String(uploadedCount)],
   ];
 
-  if (highestFinalVersion) {
-    rows.push(["Highest Final Version", highestFinalVersion]);
+  if (highestPreviousReleaseVersion) {
+    rows.push(["Highest Previous Release Version", highestPreviousReleaseVersion]);
   }
 
   // Add optional OCI/Helm fields when present
   if (imageRepo) {
     const imageTags = isLatest
-      ? `${imageRepo}:${finalVersion}, ${imageRepo}:latest`
-      : `${imageRepo}:${finalVersion}`;
+      ? `${imageRepo}:${newReleaseVersion}, ${imageRepo}:latest`
+      : `${imageRepo}:${newReleaseVersion}`;
     rows.push(["Image Tags", imageTags]);
   }
   if (imageDigest) {
     rows.push(["Image Digest", imageDigest.substring(0, 19) + "..."]);
   }
   if (chartRepo) {
-    rows.push(["Helm Chart", `${chartRepo}:${finalVersion}`]);
+    rows.push(["Helm Chart", `${chartRepo}:${newReleaseVersion}`]);
   }
   rows.push(["GitHub Latest", isLatest ? "✅ yes" : "⚠️ no"]);
 
@@ -216,10 +216,10 @@ export async function writeSummary(core, data) {
 // --------------------------
 
 /**
- * Publish a final GitHub release by promoting an RC.
+ * Publish a new GitHub release by promoting an RC.
  *
  * Required env vars:
- *   FINAL_TAG, FINAL_VERSION, RC_TAG, COMPONENT_NAME, ASSETS_DIR, NOTES_FILE
+ *   NEW_RELEASE_TAG, NEW_RELEASE_VERSION, RC_TAG, COMPONENT_NAME, ASSETS_DIR, NOTES_FILE
  *
  * Optional env vars (for summary):
  *   IMAGE_REPO, IMAGE_DIGEST, CHART_REPO
@@ -228,8 +228,8 @@ export async function writeSummary(core, data) {
  */
 export default async function publishFinalRelease({ github, context, core }) {
   const {
-    FINAL_TAG: finalTag,
-    FINAL_VERSION: finalVersion,
+    NEW_RELEASE_TAG: newReleaseTag,
+    NEW_RELEASE_VERSION: newReleaseVersion,
     RC_TAG: rcTag,
     COMPONENT_NAME: componentName,
     ASSETS_DIR: assetsDir,
@@ -240,36 +240,36 @@ export default async function publishFinalRelease({ github, context, core }) {
     CHART_REPO: chartRepo,
     // Optional — controls GitHub "Latest" badge and :latest OCI tag
     SET_LATEST: setLatest,
-    HIGHEST_FINAL_VERSION: highestFinalVersion,
+    HIGHEST_PREVIOUS_RELEASE_VERSION: highestPreviousReleaseVersion,
   } = process.env;
 
-  if (!finalTag || !finalVersion || !rcTag || !componentName || !assetsDir || !notesFile) {
+  if (!newReleaseTag || !newReleaseVersion || !rcTag || !componentName || !assetsDir || !notesFile) {
     core.setFailed(
-        "Missing required env vars: FINAL_TAG, FINAL_VERSION, RC_TAG, COMPONENT_NAME, ASSETS_DIR, NOTES_FILE",
+        "Missing required env vars: NEW_RELEASE_TAG, NEW_RELEASE_VERSION, RC_TAG, COMPONENT_NAME, ASSETS_DIR, NOTES_FILE",
     );
     return;
   }
 
   const isLatest = setLatest === "true";
-  const notes = prepareReleaseNotes(notesFile, rcTag, finalTag);
+  const notes = prepareReleaseNotes(notesFile, rcTag, newReleaseTag);
   const release = await getOrCreateRelease(github, context, {
-    finalTag,
-    finalVersion,
+    newReleaseTag,
+    newReleaseVersion,
     componentName,
     notes,
     isLatest,
   });
   const uploadedCount = await uploadAssets(github, context, core, release.id, assetsDir);
   await writeSummary(core, {
-    finalTag,
+    newReleaseTag,
     rcTag,
-    finalVersion,
+    newReleaseVersion,
     componentName,
     imageRepo,
     chartRepo,
     imageDigest,
     isLatest,
-    highestFinalVersion: highestFinalVersion || "",
+    highestPreviousReleaseVersion: highestPreviousReleaseVersion || "",
     uploadedCount,
     releaseUrl: release.html_url,
   });
