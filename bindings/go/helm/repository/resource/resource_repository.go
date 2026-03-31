@@ -1,16 +1,22 @@
 package resource
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/access"
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
+	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
 	helmdownload "ocm.software/open-component-model/bindings/go/helm/internal/download"
 	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -78,18 +84,79 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	if err != nil {
 		return nil, fmt.Errorf("error creating temporary directory for helm download: %w", err)
 	}
+	defer func() {
+		_ = os.RemoveAll(downloadDir)
+	}()
 
 	opts := []helmdownload.Option{
 		helmdownload.WithCredentials(credentials),
+		helmdownload.WithAlwaysDownloadProv(true),
 	}
 
-	chartData, err := helmdownload.NewReadOnlyChartFromRemote(ctx, helmURL, downloadDir, opts...)
-	if err != nil {
-		_ = os.RemoveAll(downloadDir)
+	if _, err := helmdownload.NewReadOnlyChartFromRemote(ctx, helmURL, downloadDir, opts...); err != nil {
 		return nil, fmt.Errorf("error downloading helm chart %q: %w", helmURL, err)
 	}
 
-	return chartData.ChartBlob, nil
+	tarBlob, err := tarDirectoryRecursive(downloadDir)
+	if err != nil {
+		return nil, fmt.Errorf("error creating tar archive from helm download: %w", err)
+	}
+
+	return helmblob.NewChartBlob(tarBlob), nil
+}
+
+// tarDirectoryRecursive creates a tar archive from all files in the given directory
+// and its subdirectories, returning it as an in-memory blob. File paths in the
+// archive are relative to the root directory so consumers can extract entries
+// by name (e.g. the chart tgz and its .prov sidecar).
+func tarDirectoryRecursive(dir string) (blob.ReadOnlyBlob, error) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(dir, path)
+		if err != nil {
+			return fmt.Errorf("error computing relative path for %s: %w", path, err)
+		}
+
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return fmt.Errorf("error creating tar header for %s: %w", relPath, err)
+		}
+		header.Name = relPath
+
+		if err := tw.WriteHeader(header); err != nil {
+			return fmt.Errorf("error writing tar header for %s: %w", relPath, err)
+		}
+
+		f, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("error opening file %s: %w", relPath, err)
+		}
+		defer func() { _ = f.Close() }()
+
+		if _, err := io.Copy(tw, f); err != nil {
+			return fmt.Errorf("error writing file %s to tar: %w", relPath, err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error walking download directory: %w", err)
+	}
+
+	if err := tw.Close(); err != nil {
+		return nil, fmt.Errorf("error closing tar writer: %w", err)
+	}
+
+	return inmemory.New(&buf, inmemory.WithMediaType("application/x-tar")), nil
 }
 
 func (r *ResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ map[string]string) (*descriptor.Resource, error) {
@@ -104,11 +171,11 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.H
 		return nil, fmt.Errorf("resource access is required")
 	}
 	t := resource.Access.GetType()
-	obj, err := r.GetResourceRepositoryScheme().NewObject(t)
+	obj, err := helmaccess.Scheme.NewObject(t)
 	if err != nil {
 		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
 	}
-	if err := r.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+	if err := helmaccess.Scheme.Convert(resource.Access, obj); err != nil {
 		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
 	}
 	helm, ok := obj.(*v1.Helm)

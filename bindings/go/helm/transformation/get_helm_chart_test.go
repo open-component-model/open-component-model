@@ -1,9 +1,7 @@
 package transformation_test
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,11 +13,10 @@ import (
 	"helm.sh/helm/v4/pkg/chart"
 	"helm.sh/helm/v4/pkg/chart/loader"
 
-	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/helm/access"
+	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
 	"ocm.software/open-component-model/bindings/go/helm/transformation"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -35,22 +32,6 @@ func newChartRepoServer(t *testing.T, dir string) *httptest.Server {
 	srv := httptest.NewServer(http.FileServer(http.Dir(dir)))
 	t.Cleanup(srv.Close)
 	return srv
-}
-
-// stubResourceRepository is a no-op ResourceRepository since
-// the test charts don't require credentials or actual downloads.
-type stubResourceRepository struct{}
-
-func (s *stubResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Context, _ *descriptor.Resource) (runtime.Identity, error) {
-	return nil, fmt.Errorf("no credentials configured")
-}
-
-func (s *stubResourceRepository) DownloadResource(_ context.Context, _ *descriptor.Resource, _ map[string]string) (blob.ReadOnlyBlob, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (s *stubResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ map[string]string) (*descriptor.Resource, error) {
-	return nil, fmt.Errorf("not implemented")
 }
 
 func newTestScheme() *runtime.Scheme {
@@ -78,12 +59,13 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			ctx := t.Context()
 
 			transform := &transformation.GetHelmChart{
-				Scheme:                           scheme,
-				ResourceRepository: &stubResourceRepository{},
+				Scheme:             scheme,
+				ResourceRepository: helmresource.NewResourceRepository(nil),
 			}
 
 			helmAccessData, err := json.Marshal(map[string]string{
-				"helmRepository": fmt.Sprintf("%s/mychart-0.1.0.tgz", srv.URL),
+				"helmRepository": srv.URL,
+				"helmChart":      "mychart-0.1.0.tgz",
 			})
 			r.NoError(err)
 
@@ -145,8 +127,8 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			ctx := t.Context()
 
 			transform := &transformation.GetHelmChart{
-				Scheme:                           scheme,
-				ResourceRepository: &stubResourceRepository{},
+				Scheme:             scheme,
+				ResourceRepository: helmresource.NewResourceRepository(nil),
 			}
 
 			helmAccessData, err := json.Marshal(map[string]string{
@@ -215,12 +197,13 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			outputDir := t.TempDir()
 
 			transform := &transformation.GetHelmChart{
-				Scheme:                           scheme,
-				ResourceRepository: &stubResourceRepository{},
+				Scheme:             scheme,
+				ResourceRepository: helmresource.NewResourceRepository(nil),
 			}
 
 			helmAccessData, err := json.Marshal(map[string]string{
-				"helmRepository": fmt.Sprintf("%s/mychart-0.1.0.tgz", srv.URL),
+				"helmRepository": srv.URL,
+				"helmChart":      "mychart-0.1.0.tgz",
 			})
 			r.NoError(err)
 
@@ -273,12 +256,13 @@ func TestGetHelmChart_Transform(t *testing.T) {
 		ctx := t.Context()
 
 		transform := &transformation.GetHelmChart{
-			Scheme:                           scheme,
-			ResourceRepository: &stubResourceRepository{},
+			Scheme:             scheme,
+			ResourceRepository: helmresource.NewResourceRepository(nil),
 		}
 
 		helmAccessData, err := json.Marshal(map[string]string{
-			"helmRepository": fmt.Sprintf("%s/mychart-0.1.0.tgz", srv.URL),
+			"helmRepository": srv.URL,
+			"helmChart":      "mychart-0.1.0.tgz",
 		})
 		r.NoError(err)
 
@@ -339,8 +323,8 @@ func TestGetHelmChart_Transform(t *testing.T) {
 		ctx := t.Context()
 
 		transform := &transformation.GetHelmChart{
-			Scheme:                           scheme,
-			ResourceRepository: &stubResourceRepository{},
+			Scheme:             scheme,
+			ResourceRepository: helmresource.NewResourceRepository(nil),
 		}
 
 		spec := &v1alpha1.GetHelmChart{
