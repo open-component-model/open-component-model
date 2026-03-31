@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/access"
 	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
@@ -112,6 +114,27 @@ func TestDownloadResource(t *testing.T) {
 		blob, err := repo.DownloadResource(ctx, res, nil)
 		require.NoError(t, err)
 		require.NotNil(t, blob)
+
+		rc, err := blob.ReadCloser()
+		require.NoError(t, err)
+		defer func() { _ = rc.Close() }()
+	})
+
+	t.Run("downloads chart using configured temp folder", func(t *testing.T) {
+		tempDir := t.TempDir()
+		repoWithConfig := NewResourceRepository(&filesystemv1alpha1.Config{
+			TempFolder: tempDir,
+		})
+
+		res := helmResource(t, srv.URL, "mychart-0.1.0.tgz")
+		blob, err := repoWithConfig.DownloadResource(ctx, res, nil)
+		require.NoError(t, err)
+		require.NotNil(t, blob)
+
+		// The temporary download directory should have been cleaned up
+		entries, err := os.ReadDir(tempDir)
+		require.NoError(t, err)
+		assert.Empty(t, entries, "temp folder should be empty after download completes")
 
 		rc, err := blob.ReadCloser()
 		require.NoError(t, err)
