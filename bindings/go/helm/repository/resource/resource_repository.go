@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log/slog"
 	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -18,7 +18,6 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
 	helmdownload "ocm.software/open-component-model/bindings/go/helm/internal/download"
-	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -51,29 +50,13 @@ func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 // for the given helm resource. For OCI-based helm repositories the identity type
 // is OCIRegistry; for HTTP/HTTPS repositories it is HelmChartRepository.
 // Returns nil if the resource has no remote repository (local chart).
-func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
+func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	helm, err := r.convertAccess(resource)
 	if err != nil {
 		return nil, err
 	}
 
-	if helm.HelmRepository == "" {
-		slog.DebugContext(ctx, "local helm inputs do not require credentials")
-		return nil, nil
-	}
-
-	identity, err := runtime.ParseURLToIdentity(helm.HelmRepository)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing helm repository URL to identity: %w", err)
-	}
-
-	if scheme, ok := identity[runtime.IdentityAttributeScheme]; ok && scheme == "oci" {
-		identity.SetType(ocicredentialsspecv1.Type)
-	} else {
-		identity.SetType(runtime.NewUnversionedType(helmaccess.LegacyHelmChartConsumerType))
-	}
-
-	return identity, nil
+	return helmaccess.CredentialConsumerIdentity(helm.HelmRepository)
 }
 
 // DownloadResource fetches a helm chart (and optional provenance file) from the
@@ -175,7 +158,7 @@ func tarDirectoryRecursive(dir string) (blob.ReadOnlyBlob, error) {
 		return nil, fmt.Errorf("error closing tar writer: %w", err)
 	}
 
-	return inmemory.New(&buf, inmemory.WithMediaType("application/x-tar")), nil
+	return inmemory.New(&buf, inmemory.WithMediaType(filesystem.DefaultTarMediaType)), nil
 }
 
 // UploadResource is not supported for Helm repositories and always returns an error.

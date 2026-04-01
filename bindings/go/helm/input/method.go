@@ -55,7 +55,7 @@ func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
 }
 
 // GetResourceCredentialConsumerIdentity returns credentials consumer identity for remote helm repositories
-// or nil for local helm inputs. Remote repositories may require authentication credentials.
+// or [ErrLocalHelmInputDoesNotRequireCredentials] for local helm inputs.
 func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	helm := v1.Helm{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &helm); err != nil {
