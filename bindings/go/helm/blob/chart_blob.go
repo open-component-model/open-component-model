@@ -2,6 +2,7 @@ package blob
 
 import (
 	"archive/tar"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,8 @@ import (
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/compression"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 )
 
@@ -81,14 +84,14 @@ func extractFromTar(tarBlob blob.ReadOnlyBlob) (chartBlob blob.ReadOnlyBlob, pro
 		switch {
 		case strings.HasSuffix(header.Name, ".tgz"):
 			chartBlob = inmemory.New(
-				newByteReader(data),
-				inmemory.WithMediaType("application/gzip"),
+				bytes.NewReader(data),
+				inmemory.WithMediaType(compression.MediaTypeGzip),
 				inmemory.WithSize(int64(len(data))),
 			)
 		case strings.HasSuffix(header.Name, ".prov"):
 			provBlob = inmemory.New(
-				newByteReader(data),
-				inmemory.WithMediaType("application/octet-stream"),
+				bytes.NewReader(data),
+				inmemory.WithMediaType(filesystem.DefaultFileMediaType),
 				inmemory.WithSize(int64(len(data))),
 			)
 		}
@@ -99,23 +102,4 @@ func extractFromTar(tarBlob blob.ReadOnlyBlob) (chartBlob blob.ReadOnlyBlob, pro
 	}
 
 	return chartBlob, provBlob, nil
-}
-
-// byteReader wraps a byte slice as an io.Reader for inmemory.New.
-type byteReader struct {
-	data   []byte
-	offset int
-}
-
-func newByteReader(data []byte) *byteReader {
-	return &byteReader{data: data}
-}
-
-func (r *byteReader) Read(p []byte) (n int, err error) {
-	if r.offset >= len(r.data) {
-		return 0, io.EOF
-	}
-	n = copy(p, r.data[r.offset:])
-	r.offset += n
-	return n, nil
 }

@@ -23,22 +23,34 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// ResourceRepository implements [repository.ResourceRepository] for Helm charts.
+// It supports downloading charts from HTTP/HTTPS and OCI-based Helm repositories
+// and resolving credential consumer identities for authentication.
 type ResourceRepository struct {
 	filesystemConfig *filesystemv1alpha1.Config
 }
 
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
+// NewResourceRepository creates a ResourceRepository. If filesystemConfig is non-nil,
+// its TempFolder is used for intermediate download directories; otherwise os.TempDir
+// is used.
 func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config) *ResourceRepository {
 	return &ResourceRepository{
 		filesystemConfig: filesystemConfig,
 	}
 }
 
+// GetResourceRepositoryScheme returns the Helm access scheme containing the
+// helm/v1 type and its aliases.
 func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 	return helmaccess.Scheme
 }
 
+// GetResourceCredentialConsumerIdentity resolves the credential consumer identity
+// for the given helm resource. For OCI-based helm repositories the identity type
+// is OCIRegistry; for HTTP/HTTPS repositories it is HelmChartRepository.
+// Returns nil if the resource has no remote repository (local chart).
 func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	helm, err := r.convertAccess(resource)
 	if err != nil {
@@ -64,6 +76,9 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 	return identity, nil
 }
 
+// DownloadResource fetches a helm chart (and optional provenance file) from the
+// remote repository specified in the resource's helm access. The returned blob
+// is a [helmblob.ChartBlob] wrapping a tar archive of the downloaded files.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	helm, err := r.convertAccess(resource)
 	if err != nil {
@@ -116,6 +131,11 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 func tarDirectoryRecursive(dir string) (blob.ReadOnlyBlob, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
+	defer func(tw *tar.Writer) {
+		if err := tw.Close(); err != nil {
+			slog.Warn("error closing tar writer", "error", err)
+		}
+	}(tw)
 
 	root, err := os.OpenRoot(dir)
 	if err != nil {
@@ -162,13 +182,10 @@ func tarDirectoryRecursive(dir string) (blob.ReadOnlyBlob, error) {
 		return nil, fmt.Errorf("error walking download directory: %w", err)
 	}
 
-	if err := tw.Close(); err != nil {
-		return nil, fmt.Errorf("error closing tar writer: %w", err)
-	}
-
 	return inmemory.New(&buf, inmemory.WithMediaType("application/x-tar")), nil
 }
 
+// UploadResource is not supported for Helm repositories and always returns an error.
 func (r *ResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ map[string]string) (*descriptor.Resource, error) {
 	return nil, fmt.Errorf("helm chart repositories do not support upload operations")
 }
