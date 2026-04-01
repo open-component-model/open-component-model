@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"io"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,26 @@ func createTarBlob(t *testing.T, files map[string][]byte) *inmemory.Blob {
 	return inmemory.New(&buf)
 }
 
+// createTarBlobFromTestdata builds a tar archive from real testdata files.
+func createTarBlobFromTestdata(t *testing.T, files map[string]string) *inmemory.Blob {
+	t.Helper()
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	for tarName, filePath := range files {
+		data, err := os.ReadFile(filePath)
+		require.NoError(t, err, "should read testdata file %s", filePath)
+		require.NoError(t, tw.WriteHeader(&tar.Header{
+			Name: tarName,
+			Size: int64(len(data)),
+			Mode: 0o644,
+		}))
+		_, err = tw.Write(data)
+		require.NoError(t, err)
+	}
+	require.NoError(t, tw.Close())
+	return inmemory.New(&buf)
+}
+
 func readBlob(t *testing.T, b interface{ ReadCloser() (io.ReadCloser, error) }) []byte {
 	t.Helper()
 	rc, err := b.ReadCloser()
@@ -40,46 +61,74 @@ func readBlob(t *testing.T, b interface{ ReadCloser() (io.ReadCloser, error) }) 
 	return data
 }
 
-func TestChartBlob_ChartArchiveAndProvFile(t *testing.T) {
+const (
+	testdataChartWithProv = "../testdata/provenance/mychart-0.1.0.tgz"
+	testdataProvFile      = "../testdata/provenance/mychart-0.1.0.tgz.prov"
+	testdataChartOnly     = "../testdata/mychart-0.1.0.tgz"
+)
+
+func TestChartBlob_ExtractChartAndProv(t *testing.T) {
 	t.Parallel()
 
-	chartData := []byte("fake-chart-content")
-	provData := []byte("fake-prov-content")
+	tests := []struct {
+		name         string
+		tarFiles     map[string]string
+		chartSrcPath string
+		provSrcPath  string
+	}{
+		{
+			name: "flat paths with provenance",
+			tarFiles: map[string]string{
+				"mychart-0.1.0.tgz":      testdataChartWithProv,
+				"mychart-0.1.0.tgz.prov": testdataProvFile,
+			},
+			chartSrcPath: testdataChartWithProv,
+			provSrcPath:  testdataProvFile,
+		},
+		{
+			name: "subdirectory paths with provenance",
+			tarFiles: map[string]string{
+				"helmRemoteChart123/mychart-0.1.0.tgz":      testdataChartWithProv,
+				"helmRemoteChart123/mychart-0.1.0.tgz.prov": testdataProvFile,
+			},
+			chartSrcPath: testdataChartWithProv,
+			provSrcPath:  testdataProvFile,
+		},
+		{
+			name: "chart without provenance",
+			tarFiles: map[string]string{
+				"mychart-0.1.0.tgz": testdataChartOnly,
+			},
+			chartSrcPath: testdataChartOnly,
+		},
+	}
 
-	tarBlob := createTarBlob(t, map[string][]byte{
-		"mychart-0.1.0.tgz":      chartData,
-		"mychart-0.1.0.tgz.prov": provData,
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	cb := helmblob.NewChartBlob(tarBlob)
+			tarBlob := createTarBlobFromTestdata(t, tt.tarFiles)
+			cb := helmblob.NewChartBlob(tarBlob)
 
-	chart, err := cb.ChartArchive()
-	require.NoError(t, err)
-	assert.Equal(t, chartData, readBlob(t, chart))
+			expectedChart, err := os.ReadFile(tt.chartSrcPath)
+			require.NoError(t, err)
 
-	prov, err := cb.ProvFile()
-	require.NoError(t, err)
-	require.NotNil(t, prov)
-	assert.Equal(t, provData, readBlob(t, prov))
-}
+			chart, err := cb.ChartArchive()
+			require.NoError(t, err)
+			assert.Equal(t, expectedChart, readBlob(t, chart))
 
-func TestChartBlob_ChartArchiveWithoutProv(t *testing.T) {
-	t.Parallel()
-
-	chartData := []byte("fake-chart-content")
-	tarBlob := createTarBlob(t, map[string][]byte{
-		"mychart-0.1.0.tgz": chartData,
-	})
-
-	cb := helmblob.NewChartBlob(tarBlob)
-
-	chart, err := cb.ChartArchive()
-	require.NoError(t, err)
-	assert.Equal(t, chartData, readBlob(t, chart))
-
-	prov, err := cb.ProvFile()
-	require.NoError(t, err)
-	assert.Nil(t, prov)
+			prov, err := cb.ProvFile()
+			require.NoError(t, err)
+			if tt.provSrcPath != "" {
+				require.NotNil(t, prov)
+				expectedProv, err := os.ReadFile(tt.provSrcPath)
+				require.NoError(t, err)
+				assert.Equal(t, expectedProv, readBlob(t, prov))
+			} else {
+				assert.Nil(t, prov)
+			}
+		})
+	}
 }
 
 func TestChartBlob_NoChartInTar(t *testing.T) {
@@ -108,35 +157,11 @@ func TestChartBlob_EmptyTar(t *testing.T) {
 	assert.Contains(t, err.Error(), "no chart (.tgz) found")
 }
 
-func TestChartBlob_SubdirectoryPaths(t *testing.T) {
-	t.Parallel()
-
-	chartData := []byte("chart-in-subdir")
-	provData := []byte("prov-in-subdir")
-
-	tarBlob := createTarBlob(t, map[string][]byte{
-		"helmRemoteChart123/mychart-0.1.0.tgz":      chartData,
-		"helmRemoteChart123/mychart-0.1.0.tgz.prov": provData,
-	})
-
-	cb := helmblob.NewChartBlob(tarBlob)
-
-	chart, err := cb.ChartArchive()
-	require.NoError(t, err)
-	assert.Equal(t, chartData, readBlob(t, chart))
-
-	prov, err := cb.ProvFile()
-	require.NoError(t, err)
-	require.NotNil(t, prov)
-	assert.Equal(t, provData, readBlob(t, prov))
-}
-
 func TestChartBlob_ExtractionIsLazy(t *testing.T) {
 	t.Parallel()
 
-	chartData := []byte("lazy-chart")
-	tarBlob := createTarBlob(t, map[string][]byte{
-		"mychart.tgz": chartData,
+	tarBlob := createTarBlobFromTestdata(t, map[string]string{
+		"mychart.tgz": testdataChartOnly,
 	})
 
 	cb := helmblob.NewChartBlob(tarBlob)
@@ -154,9 +179,8 @@ func TestChartBlob_ExtractionIsLazy(t *testing.T) {
 func TestChartBlob_ReadCloserReturnsTarContent(t *testing.T) {
 	t.Parallel()
 
-	chartData := []byte("chart-content")
-	tarBlob := createTarBlob(t, map[string][]byte{
-		"mychart.tgz": chartData,
+	tarBlob := createTarBlobFromTestdata(t, map[string]string{
+		"mychart.tgz": testdataChartOnly,
 	})
 
 	cb := helmblob.NewChartBlob(tarBlob)
