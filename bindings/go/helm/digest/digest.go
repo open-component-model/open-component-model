@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/access"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
+	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/helm/internal/download"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
@@ -48,7 +49,11 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
 
-	return access.CredentialConsumerIdentity(helm.HelmRepository)
+	if helm.HelmRepository == "" {
+		return nil, nil
+	}
+
+	return helminternal.CredentialConsumerIdentity(helm.HelmRepository)
 }
 
 func (p *DigestProcessor) ProcessResourceDigest(

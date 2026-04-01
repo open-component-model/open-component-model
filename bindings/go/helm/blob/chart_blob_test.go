@@ -14,6 +14,12 @@ import (
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
 )
 
+const (
+	testdataChartWithProv = "../testdata/provenance/mychart-0.1.0.tgz"
+	testdataProvFile      = "../testdata/provenance/mychart-0.1.0.tgz.prov"
+	testdataChartOnly     = "../testdata/mychart-0.1.0.tgz"
+)
+
 func createTarBlob(t *testing.T, files map[string][]byte) *inmemory.Blob {
 	t.Helper()
 	var buf bytes.Buffer
@@ -60,12 +66,6 @@ func readBlob(t *testing.T, b interface{ ReadCloser() (io.ReadCloser, error) }) 
 	require.NoError(t, err)
 	return data
 }
-
-const (
-	testdataChartWithProv = "../testdata/provenance/mychart-0.1.0.tgz"
-	testdataProvFile      = "../testdata/provenance/mychart-0.1.0.tgz.prov"
-	testdataChartOnly     = "../testdata/mychart-0.1.0.tgz"
-)
 
 func TestChartBlob_ExtractChartAndProv(t *testing.T) {
 	t.Parallel()

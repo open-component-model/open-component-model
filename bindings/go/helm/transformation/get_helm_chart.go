@@ -40,6 +40,9 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	if transformation.Spec == nil {
 		return nil, fmt.Errorf("spec is required for get helm transformation")
 	}
+	if t.ResourceRepository == nil {
+		return nil, fmt.Errorf("ResourceRepository is required for get helm transformation")
+	}
 
 	if transformation.Output == nil {
 		transformation.Output = &v1alpha1.GetHelmChartOutput{}

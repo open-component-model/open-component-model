@@ -17,6 +17,7 @@ import (
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/access"
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
+	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
 	helmdownload "ocm.software/open-component-model/bindings/go/helm/internal/download"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -56,7 +57,11 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 		return nil, err
 	}
 
-	return helmaccess.CredentialConsumerIdentity(helm.HelmRepository)
+	if helm.HelmRepository == "" {
+		return nil, nil
+	}
+
+	return helminternal.CredentialConsumerIdentity(helm.HelmRepository)
 }
 
 // DownloadResource fetches a helm chart (and optional provenance file) from the
