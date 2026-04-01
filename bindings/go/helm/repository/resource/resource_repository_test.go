@@ -156,7 +156,7 @@ func TestDownloadResource(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid repository URL", func(t *testing.T) {
-		res := helmResource(t, "https://localhost:0/nonexistent", "")
+		res := helmResource(t, "https://localhost:0/nonexistent", "mychart-0.1.0.tgz")
 		_, err := repo.DownloadResource(ctx, res, nil)
 		require.Error(t, err)
 	})

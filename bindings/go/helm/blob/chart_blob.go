@@ -52,6 +52,9 @@ func (c *ChartBlob) ProvFile() (blob.ReadOnlyBlob, error) {
 }
 
 func (c *ChartBlob) ensureExtracted() error {
+	if c == nil || c.ReadOnlyBlob == nil {
+		return fmt.Errorf("tar blob is required")
+	}
 	c.extract.Do(func() {
 		c.chartBlob, c.provBlob, c.err = extractFromTar(c.ReadOnlyBlob)
 	})
