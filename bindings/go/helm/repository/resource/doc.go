@@ -1,9 +1,21 @@
 // Package resource implements [repository.ResourceRepository] for Helm charts
-// hosted in classic HTTP/HTTPS or OCI-based Helm repositories.
+// hosted in classic HTTP/HTTPS Helm repositories.
 //
 // The [ResourceRepository] downloads charts (and optional provenance files) from
 // remote Helm repos and returns them as [blob.ChartBlob] values, which provide
 // structured access to the chart .tgz and .prov entries.
+//
+// # Scope
+//
+// This repository handles the helm/v1 access type for classic (HTTP/HTTPS-based)
+// Helm chart repositories only. Helm charts stored in OCI registries
+// (oci:// scheme) should use the OCI ResourceRepository instead, which provides
+// native OCI artifact handling including authentication and layer management.
+//
+// # Credentials
+// TLS configuration (CA certificates, client certificates, private keys) should
+// be provided through the credential resolver instead of being embedded in the
+// access spec.
 //
 // # Usage
 //

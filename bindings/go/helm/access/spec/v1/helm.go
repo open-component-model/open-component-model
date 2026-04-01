@@ -13,8 +13,15 @@ const (
 	LegacyTypeVersion = "v1"
 )
 
-// Helm describes the access for a helm chart.
-// This spec is aligned with ocm v1 https://github.com/open-component-model/ocm/blob/main/api/ocm/extensions/accessmethods/helm/method.go#L41
+// Helm describes the access for a helm chart hosted in a classic HTTP/HTTPS
+// Helm repository.
+//
+// TLS credentials (CA certificates, client certificates, private keys) should be
+// provided through the credential resolver.
+//
+// For Helm charts stored in OCI registries (oci:// scheme), use the OCI access
+// type instead.
+//
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
