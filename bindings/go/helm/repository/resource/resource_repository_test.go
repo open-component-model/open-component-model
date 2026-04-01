@@ -148,6 +148,13 @@ func TestDownloadResource(t *testing.T) {
 		assert.Contains(t, err.Error(), "chart name is required")
 	})
 
+	t.Run("returns error for empty helmRepository", func(t *testing.T) {
+		res := helmResource(t, "", "mychart-0.1.0.tgz")
+		_, err := repo.DownloadResource(ctx, res, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "helm repository URL is required")
+	})
+
 	t.Run("returns error for invalid repository URL", func(t *testing.T) {
 		res := helmResource(t, "https://localhost:0/nonexistent", "")
 		_, err := repo.DownloadResource(ctx, res, nil)

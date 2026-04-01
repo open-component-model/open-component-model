@@ -70,6 +70,10 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, err
 	}
 
+	if helm.HelmRepository == "" {
+		return nil, fmt.Errorf("helm repository URL is required for downloading a chart")
+	}
+
 	helmURL, err := helm.ChartReference()
 	if err != nil {
 		return nil, fmt.Errorf("error constructing chart reference: %w", err)
