@@ -1,13 +1,17 @@
 package resource
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/access"
@@ -112,12 +116,66 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, fmt.Errorf("error downloading helm chart %q: %w", helmURL, err)
 	}
 
-	tarBlob, err := filesystem.GetBlobFromPath(ctx, downloadDir, filesystem.DirOptions{})
+	tarBlob, err := tarDirectoryRecursive(downloadDir)
 	if err != nil {
 		return nil, fmt.Errorf("error creating tar archive from helm download: %w", err)
 	}
 
 	return helmblob.NewChartBlob(tarBlob), nil
+}
+
+// tarDirectoryRecursive creates an in-memory tar archive from all files in the given
+// directory tree. The blob must be fully buffered because the download directory
+// is cleaned up immediately after this function returns.
+func tarDirectoryRecursive(dir string) (blob.ReadOnlyBlob, error) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	root := os.DirFS(dir)
+	err := fs.WalkDir(root, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return fmt.Errorf("error getting file info for %s: %w", path, err)
+		}
+
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return fmt.Errorf("error creating tar header for %s: %w", path, err)
+		}
+		header.Name = path
+
+		if err := tw.WriteHeader(header); err != nil {
+			return fmt.Errorf("error writing tar header for %s: %w", path, err)
+		}
+
+		f, err := root.Open(path)
+		if err != nil {
+			return fmt.Errorf("error opening file %s: %w", path, err)
+		}
+		defer func() { _ = f.Close() }()
+
+		if _, err := io.Copy(tw, f); err != nil {
+			return fmt.Errorf("error writing file %s to tar: %w", path, err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error walking download directory: %w", err)
+	}
+
+	if err := tw.Close(); err != nil {
+		return nil, fmt.Errorf("error closing tar writer: %w", err)
+	}
+
+	return inmemory.New(&buf, inmemory.WithMediaType("application/x-tar")), nil
 }
 
 // UploadResource is not supported for Helm repositories and always returns an error.
