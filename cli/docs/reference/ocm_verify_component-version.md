@@ -51,7 +51,10 @@ ocm verify component-version {reference} [flags]
 # Verify all component version signatures found in a component version
 verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
 
-## Example Credential Config
+## Example Credential Config (Plain encoding — bare public key)
+#
+# Used when the signature was created with signatureEncodingPolicy: Plain (the default).
+# Supply the matching RSA public key.
 
     type: generic.config.ocm.software/v1
     configurations:
@@ -66,11 +69,31 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
           properties:
             public_key_pem: <PEM>
 
+## Example Credential Config (PEM encoding — certificate chain trust anchor)
+#
+# Used when the signature was created with signatureEncodingPolicy: PEM.
+# The signature already embeds the leaf and intermediate certificates.
+# Supply only the root CA certificate as the trust anchor; it must be self-signed.
+# The verifier isolates the provided root from system roots, so only this CA is trusted.
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: default
+        credentials:
+        - type: Credentials/v1
+          properties:
+            public_key_pem_file: /path/to/root-ca.pem
+
 # Verify a specific signature
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
+verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
 
 # Use a verifier specification file
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./rsassa-pss.yaml
+verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./rsassa-pss.yaml
 ```
 
 ### Options

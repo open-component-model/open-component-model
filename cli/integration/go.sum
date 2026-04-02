@@ -478,8 +478,8 @@ ocm.software/open-component-model/bindings/go/plugin v0.0.14 h1:PJg5pYB26ji9xKhK
 ocm.software/open-component-model/bindings/go/plugin v0.0.14/go.mod h1:nXAFNN9qb4RpVbkjK55RVgWwGBgQZpfIIQw9kNrXlNE=
 ocm.software/open-component-model/bindings/go/repository v0.0.8 h1:TUwsQSOkPMvKAU3ciK7Tr2UgewDag640X+OD97zI2oE=
 ocm.software/open-component-model/bindings/go/repository v0.0.8/go.mod h1:2TCCOD2lV/druBsW3/YBRnk8uOqUJCPefk1s7MyULb8=
-ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260402061016-e120070fd921 h1:UkTauJMnyUNs2wF1xnB+PkitX+wHRP1MWPaXRkVNoEE=
-ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260402061016-e120070fd921/go.mod h1:btiP1h0WB4P67luT4kOLuWLkLFHw5v4qjmkXvcZUoIs=
+ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260402131554-15c6189f2d4a h1:ML3GC0dCDixK0Y9ue7yhBIuE+YEfKBvmM8SpWv1zOTo=
+ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260402131554-15c6189f2d4a/go.mod h1:33q8DCKA3FTYLqRY6cHQh1n5MCwcLjNS0DReB7JznQQ=
 ocm.software/open-component-model/bindings/go/runtime v0.0.7 h1:/4RDxVVubr6IC+ZKNAseDl4CoTwweIx0LYmCiNgkQYU=
 ocm.software/open-component-model/bindings/go/runtime v0.0.7/go.mod h1:hbas6Al4VECYKFk51SLIi8zdzhFgZ2WvFpPljatbJHo=
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20260402061016-e120070fd921 h1:Kb/PgPbGNTEwY5sNwMKdhXSRN8Kp36e92p4d2+q29JU=

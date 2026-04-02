@@ -87,7 +87,7 @@ Use this command to establish provenance of component versions.`,
 # Sign a component version with default algorithms
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
 
-## Example Credential Config (.ocmconfig)
+## Example Credential Config (.ocmconfig) — Plain encoding (default)
 #
 # Credentials (private/public keys) are always resolved via .ocmconfig.
 # The "signature" field must match the --signature flag (default: "default").
@@ -104,6 +104,28 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
         - type: Credentials/v1
           properties:
             private_key_pem: <PEM>
+
+## Example Credential Config (.ocmconfig) — PEM encoding with certificate chain
+#
+# Required when signatureEncodingPolicy: PEM is set in the signer spec.
+# private_key_pem_file: leaf private key (PKCS#1 or PKCS#8)
+# public_key_pem_file:  PEM file containing [leaf, intermediate] certificates
+#                       Do NOT include the root CA here — it must not be embedded
+#                       in the signature (the verifier rejects self-signed embedded certs).
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: default
+        credentials:
+        - type: Credentials/v1
+          properties:
+            private_key_pem_file: /path/to/leaf.key
+            public_key_pem_file: /path/to/leaf-and-intermediate-chain.pem
 
 ## Example Signer Spec File (--signer-spec)
 #
@@ -124,6 +146,12 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
     type: RSASigningConfiguration/v1alpha1
     signatureAlgorithm: RSASSA-PSS
     signatureEncodingPolicy: Plain
+
+# Example signer spec for PEM encoding (requires certificate chain in credentials):
+
+    type: RSASigningConfiguration/v1alpha1
+    signatureAlgorithm: RSASSA-PSS
+    signatureEncodingPolicy: PEM
 
 # Sign with custom signature name
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
