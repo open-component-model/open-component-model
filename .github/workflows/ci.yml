@@ -175,9 +175,6 @@ jobs:
   golangci_lint_verify:
     name: "golangci-lint-verify"
     runs-on: ubuntu-latest
-    permissions:
-      # Optional: allow write access to checks to allow the action to annotate code in the PR.
-      checks: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -204,9 +201,6 @@ jobs:
      - discover_modules
      - golangci_lint_verify
     runs-on: ubuntu-latest
-    permissions:
-      # Optional: allow write access to checks to allow the action to annotate code in the PR.
-      checks: write
     # Run for all modules when .env changed, else only for changed modules
     if: ${{ needs.discover_modules.outputs.lint_modules_json != '[]' }}
     strategy:
@@ -301,7 +295,6 @@ jobs:
     timeout-minutes: 360
     permissions:
       actions: read
-      security-events: write
     if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
     strategy:
       fail-fast: false
