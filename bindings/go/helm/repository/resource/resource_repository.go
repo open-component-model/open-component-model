@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -51,17 +52,20 @@ func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 // for the given helm resource. For OCI-based helm repositories the identity type
 // is OCIRegistry; for HTTP/HTTPS repositories it is HelmChartRepository.
 // Returns nil if the resource has no remote repository (local chart).
-func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
+func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	helm, err := r.convertAccess(resource)
 	if err != nil {
 		return nil, err
 	}
 
-	if helm.HelmRepository == "" {
-		return nil, nil
+	identity, err := helminternal.CredentialConsumerIdentity(helm.HelmRepository)
+	if err != nil {
+		return nil, err
 	}
 
-	return helminternal.CredentialConsumerIdentity(helm.HelmRepository)
+	slog.DebugContext(ctx, "Resolved credential consumer identity for helm resource", "identity", identity)
+
+	return identity, nil
 }
 
 // DownloadResource fetches a helm chart (and optional provenance file) from the
@@ -82,6 +86,8 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, fmt.Errorf("error constructing chart reference: %w", err)
 	}
 
+	slog.DebugContext(ctx, "Resolved helm chart reference for download", "chartReference", helmURL)
+
 	tempDir := ""
 	if r.filesystemConfig != nil {
 		tempDir = r.filesystemConfig.TempFolder
@@ -95,6 +101,8 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		_ = os.RemoveAll(downloadDir)
 	}()
 
+	slog.DebugContext(ctx, "Created temporary download directory", "dir", downloadDir)
+
 	opts := []helmdownload.Option{
 		helmdownload.WithCredentials(credentials),
 		helmdownload.WithAlwaysDownloadProv(true),
@@ -104,23 +112,37 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, fmt.Errorf("error downloading helm chart %q: %w", helmURL, err)
 	}
 
+	slog.DebugContext(ctx, "Helm chart downloaded successfully, creating tar archive", "chartReference", helmURL)
+
 	tarBlob, err := tarDirectoryRecursive(downloadDir)
 	if err != nil {
 		return nil, fmt.Errorf("error creating tar archive from helm download: %w", err)
 	}
 
+	slog.DebugContext(ctx, "Created tar archive from downloaded helm chart files")
+
 	return helmblob.NewChartBlob(tarBlob), nil
 }
 
 // tarDirectoryRecursive creates an in-memory tar archive from all files in the given
-// directory tree. The blob must be fully buffered because the download directory
-// is cleaned up immediately after this function returns.
+// directory tree. The blob must be fully buffered in memory because the download
+// directory is cleaned up immediately after this function returns -- the caller
+// removes the temp directory once it has the resulting blob, so any lazy reading
+// from the filesystem would fail.
 func tarDirectoryRecursive(dir string) (blob.ReadOnlyBlob, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
-	root := os.DirFS(dir)
-	err := fs.WalkDir(root, ".", func(path string, d fs.DirEntry, err error) error {
+	// os.OpenRoot restricts all subsequent file operations to the given directory tree,
+	// preventing path traversal (e.g. via symlinks) outside of it.
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("error opening root directory %s: %w", dir, err)
+	}
+	defer func() { _ = root.Close() }()
+
+	fsRoot := os.DirFS(dir)
+	err = fs.WalkDir(fsRoot, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -143,14 +165,19 @@ func tarDirectoryRecursive(dir string) (blob.ReadOnlyBlob, error) {
 			return fmt.Errorf("error writing tar header for %s: %w", path, err)
 		}
 
+		// Open through the rooted directory to prevent path escape via symlinks.
 		f, err := root.Open(path)
 		if err != nil {
 			return fmt.Errorf("error opening file %s: %w", path, err)
 		}
-		defer func() { _ = f.Close() }()
 
-		if _, err := io.Copy(tw, f); err != nil {
-			return fmt.Errorf("error writing file %s to tar: %w", path, err)
+		_, copyErr := io.Copy(tw, f)
+		closeErr := f.Close()
+		if copyErr != nil {
+			return fmt.Errorf("error writing file %s to tar: %w", path, copyErr)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("error closing file %s: %w", path, closeErr)
 		}
 
 		return nil
@@ -159,6 +186,8 @@ func tarDirectoryRecursive(dir string) (blob.ReadOnlyBlob, error) {
 		return nil, fmt.Errorf("error walking download directory: %w", err)
 	}
 
+	// Explicitly close the tar writer before reading the buffer to ensure the
+	// tar footer (two 512-byte zero blocks) is flushed.
 	if err := tw.Close(); err != nil {
 		return nil, fmt.Errorf("error closing tar writer: %w", err)
 	}
@@ -167,6 +196,9 @@ func tarDirectoryRecursive(dir string) (blob.ReadOnlyBlob, error) {
 }
 
 // UploadResource is not supported for Helm repositories and always returns an error.
+// Traditional Helm chart repositories are read-only HTTP servers that serve a static
+// index.yaml and packaged chart archives; there is no standardized upload API.
+// Charts stored in OCI registries should use the OCI resource repository instead.
 func (r *ResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ map[string]string) (*descriptor.Resource, error) {
 	return nil, fmt.Errorf("helm chart repositories do not support upload operations")
 }
@@ -178,17 +210,9 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.H
 	if resource.Access == nil {
 		return nil, fmt.Errorf("resource access is required")
 	}
-	t := resource.Access.GetType()
-	obj, err := helmaccess.Scheme.NewObject(t)
-	if err != nil {
-		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+	var helm v1.Helm
+	if err := helmaccess.Scheme.Convert(resource.Access, &helm); err != nil {
+		return nil, fmt.Errorf("error converting access to helm spec: %w", err)
 	}
-	if err := helmaccess.Scheme.Convert(resource.Access, obj); err != nil {
-		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
-	}
-	helm, ok := obj.(*v1.Helm)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T for helm access", obj)
-	}
-	return helm, nil
+	return &helm, nil
 }

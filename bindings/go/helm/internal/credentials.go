@@ -11,10 +11,10 @@ import (
 // CredentialConsumerIdentity resolves the credential consumer identity for the
 // given helm repository URL. For OCI-based repositories (oci:// scheme) the
 // identity type is OCIRegistry; for HTTP/HTTPS repositories it is
-// HelmChartRepository. Returns an error if helmRepository is empty.
+// HelmChartRepository. Returns nil if helmRepository is empty (e.g. for local charts).
 func CredentialConsumerIdentity(helmRepository string) (runtime.Identity, error) {
 	if helmRepository == "" {
-		return nil, fmt.Errorf("helm repository URL is required for credential resolution")
+		return nil, nil
 	}
 
 	identity, err := runtime.ParseURLToIdentity(helmRepository)

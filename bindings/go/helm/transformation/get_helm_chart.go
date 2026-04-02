@@ -59,7 +59,7 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 
 	// Resolve credentials if credential provider is available
 	var creds map[string]string
-	if t.CredentialProvider != nil && t.ResourceRepository != nil {
+	if t.CredentialProvider != nil {
 		if consumerId, err := t.ResourceRepository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err != nil {
 			return nil, fmt.Errorf("failed getting resource consumer identity for credential resolution: %w", err)
 		} else if consumerId != nil {

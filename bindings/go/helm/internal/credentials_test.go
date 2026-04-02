@@ -43,10 +43,10 @@ func TestCredentialConsumerIdentity(t *testing.T) {
 		assert.Equal(t, "registry.example.com", identity["hostname"])
 	})
 
-	t.Run("returns error for empty repository", func(t *testing.T) {
-		_, err := internal.CredentialConsumerIdentity("")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "helm repository URL is required")
+	t.Run("returns nil for empty repository", func(t *testing.T) {
+		identity, err := internal.CredentialConsumerIdentity("")
+		require.NoError(t, err)
+		assert.Nil(t, identity)
 	})
 
 	t.Run("returns error for invalid URL", func(t *testing.T) {
