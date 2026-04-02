@@ -178,7 +178,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260402061016-e120070fd921 // indirect
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14 // indirect
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260402061016-e120070fd921 // indirect
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260402131554-15c6189f2d4a // indirect
 	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260402061016-e120070fd921 // indirect
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260402061016-e120070fd921 // indirect
 	sigs.k8s.io/controller-runtime v0.23.1 // indirect
