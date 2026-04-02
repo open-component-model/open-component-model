@@ -7,12 +7,15 @@ import (
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
+	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/identity/v1"
 	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
-	LegacyHelmChartConsumerType = "HelmChartRepository"
+	// LegacyHelmChartConsumerType is the legacy unversioned identity type for Helm chart repositories.
+	// Deprecated: Use helmidentityv1.Type or helmidentityv1.VersionedType instead.
+	LegacyHelmChartConsumerType = helmidentityv1.HelmChartRepositoryIdentityType
 	HelmRepositoryType          = "helmChart"
 )
 
@@ -56,7 +59,7 @@ func (h *HelmAccess) GetResourceCredentialConsumerIdentity(ctx context.Context, 
 	if scheme, ok := identity[runtime.IdentityAttributeScheme]; ok && scheme == "oci" {
 		identity.SetType(ocicredentialsspecv1.Type)
 	} else {
-		identity.SetType(runtime.NewUnversionedType(LegacyHelmChartConsumerType))
+		identity.SetType(helmidentityv1.Type)
 	}
 
 	return identity, nil

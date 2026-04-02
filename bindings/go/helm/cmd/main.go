@@ -15,6 +15,7 @@ import (
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	helminput "ocm.software/open-component-model/bindings/go/helm/input"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
@@ -173,12 +174,23 @@ func parseFilesystemConfig(conf types.Config) (*filesystemv1alpha1.Config, error
 }
 
 // processHelmResource wraps the helm.InputMethod to process resources
+// TODO(matthiasbruns): Once the plugin contract accepts runtime.Typed, remove the map conversion https://github.com/open-component-model/ocm-project/issues/980
 func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string, filesystemConfig *filesystemv1alpha1.Config) (_ *v1.ProcessResourceInputResponse, err error) {
 	resource := &constructorruntime.Resource{
 		AccessOrInput: constructorruntime.AccessOrInput{
 			Input: request.Resource.Input,
 		},
 	}
+
+	// Convert map credentials from the plugin wire format to typed HelmHTTPCredentials.
+	// This is the plugin boundary — the wire format stays map[string]string until Phase 3.
+	helmCreds := helmcredsv1.FromDirectCredentials(credentials)
+	logger.Info("resolved typed credentials for helm input",
+		"username", helmCreds.Username,
+		"hasCertFile", helmCreds.CertFile != "",
+		"hasKeyFile", helmCreds.KeyFile != "",
+		"hasKeyring", helmCreds.Keyring != "",
+	)
 
 	tempDir := ""
 	if filesystemConfig != nil {
@@ -188,6 +200,7 @@ func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRe
 	helmMethod := &helminput.InputMethod{
 		TempFolder: tempDir,
 	}
+	// Pass the original map to ProcessResource (constructor interface still uses map)
 	result, err := helmMethod.ProcessResource(ctx, resource, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process resource: %w", err)

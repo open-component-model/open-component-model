@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"sync"
 
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -17,7 +18,7 @@ var ErrNoIndirectCredentials = errors.New("no indirect credentials found in grap
 
 // resolveFromRepository is invoked when the DAG does not yield direct credentials.
 // The method ensures that successful resolutions are cached for subsequent calls.
-func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
+func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
 	if credentials, cached := g.getCredentials(identity.String()); cached {
 		return credentials, nil
 	}
@@ -60,7 +61,9 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 			// NOTE: This explicitly does not allow recursing from repository to another repository.
 			// This is because the usage of repository credentials resolved by other repository credentials
 			// would require dynamic recursion detection via stack and would make the code significantly more complex.
-			credentials, _ = g.resolveFromGraph(ctx, identity)
+			if typed, err := g.resolveFromGraph(ctx, identity); err == nil {
+				credentials = typedToMap(typed)
+			}
 		}
 		slog.DebugContext(ctx, "Resolving credentials via repository", "identity", identity, "config", cfg)
 		credentials, err := plugin.Resolve(ctx, cfg, identity, credentials)
@@ -101,8 +104,12 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 		return nil, errors.Join(ErrNoIndirectCredentials, fmt.Errorf("no repository plugin could resolve credentials for identity %q", identity.String()))
 	}
 
-	// Cache the resolved credentials for future use.
-	g.setCredentials(identity.String(), resolved)
+	// Wrap and cache the resolved credentials.
+	typed := &v1.DirectCredentials{
+		Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+		Properties: resolved,
+	}
+	g.setCredentials(identity.String(), typed)
 
-	return resolved, nil
+	return typed, nil
 }

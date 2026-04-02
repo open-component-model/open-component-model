@@ -30,6 +30,21 @@ const (
 	IdentityAttributePort = "port"
 )
 
+// IdentityProvider is implemented by typed identity structs that can produce a
+// runtime.Identity map. This allows typed structs (e.g. OCIRegistryIdentity) to
+// be used as a structured way to build identities while the graph continues to
+// work with the map representation for matching.
+type IdentityProvider interface {
+	ToIdentity() Identity
+}
+
+// CredentialAcceptor is an optional interface that typed identity structs can implement
+// to declare which credential types they accept. The graph and consumers use this to
+// validate that configured credentials match the identity type.
+type CredentialAcceptor interface {
+	AcceptedCredentialTypes() []Type
+}
+
 // Identity is a map that represents a set of attributes that uniquely identity
 // arbitrary resources. It is used in various places in Open Component Model to uniquely
 // identity objects such as resources or components.

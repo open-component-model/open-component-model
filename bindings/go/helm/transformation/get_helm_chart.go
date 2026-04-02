@@ -10,11 +10,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credentialsconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm"
 	"ocm.software/open-component-model/bindings/go/helm/access"
 	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	helmdownload "ocm.software/open-component-model/bindings/go/helm/internal/download"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -27,7 +29,8 @@ type GetHelmChart struct {
 	Scheme *runtime.Scheme
 	// ResourceConsumerIdentityProvider is used to get the consumer identity for the resource when resolving credentials.
 	ResourceConsumerIdentityProvider helm.ResourceConsumerIdentityProvider
-	CredentialProvider               credentials.Resolver
+	// CredentialProvider resolves credentials.
+	CredentialProvider credentials.Resolver
 }
 
 func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -52,14 +55,19 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	// Convert resource to internal format
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
 
-	// Resolve credentials if credential provider is available
-	var creds map[string]string
+	// Resolve credentials if credential provider is available.
+	var helmHTTPCreds *helmcredsv1.HelmHTTPCredentials
 	if t.CredentialProvider != nil && t.ResourceConsumerIdentityProvider != nil {
 		if consumerId, err := t.ResourceConsumerIdentityProvider.GetResourceCredentialConsumerIdentity(ctx, targetResource); err != nil {
 			return nil, fmt.Errorf("failed getting resource consumer identity for credential resolution: %w", err)
 		} else if consumerId != nil {
-			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
+			resolved, err := t.CredentialProvider.ResolveTyped(ctx, consumerId)
+			if err != nil && !errors.Is(err, credentials.ErrNotFound) {
 				return nil, fmt.Errorf("failed resolving credentials: %w", err)
+			}
+			helmHTTPCreds, err = toHelmHTTPCredentials(resolved)
+			if err != nil {
+				return nil, fmt.Errorf("invalid credentials for helm chart retrieval: %w", err)
 			}
 		}
 	}
@@ -86,7 +94,7 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		// If not specified, the downloader will use the default behavior which tries to get the version from helmAccess.HelmRepository
 		//nolint:staticcheck // downward compatibility for helm input
 		helmdownload.WithVersion(helmAccess.GetVersion()),
-		helmdownload.WithCredentials(creds),
+		helmdownload.WithCredentials(helmHTTPCreds),
 		// Override the default downloader behavior to always download the chart and prov files.
 		helmdownload.WithAlwaysDownloadProv(true),
 	}
@@ -145,4 +153,24 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	transformation.Output.Resource = v2Resource
 
 	return &transformation, nil
+}
+
+// toHelmHTTPCredentials converts a runtime.Typed credential to *HelmHTTPCredentials.
+// Returns an error if the credential type is not compatible with HTTP Helm repositories.
+func toHelmHTTPCredentials(cred runtime.Typed) (*helmcredsv1.HelmHTTPCredentials, error) {
+	if cred == nil {
+		return nil, nil
+	}
+	switch c := cred.(type) {
+	case *helmcredsv1.HelmHTTPCredentials:
+		return c, nil
+	case *credentialsconfigv1.DirectCredentials:
+		return helmcredsv1.FromDirectCredentials(c.Properties), nil
+	default:
+		return nil, fmt.Errorf("unsupported credential type %q for Helm HTTP repository, expected %s or %s",
+			cred.GetType(),
+			helmcredsv1.HelmHTTPCredentialsType+"/"+helmcredsv1.Version,
+			credentialsconfigv1.CredentialsType+"/"+credentialsconfigv1.Version,
+		)
+	}
 }

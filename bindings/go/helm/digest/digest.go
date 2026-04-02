@@ -15,6 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/access"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	"ocm.software/open-component-model/bindings/go/helm/internal/download"
+	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/identity/v1"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
@@ -63,12 +64,13 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 	if scheme, ok := identity[ocmruntime.IdentityAttributeScheme]; ok && scheme == "oci" {
 		identity.SetType(ocicredentialsspecv1.Type)
 	} else {
-		identity.SetType(ocmruntime.NewUnversionedType(access.LegacyHelmChartConsumerType))
+		identity.SetType(helmidentityv1.Type)
 	}
 
 	return identity, nil
 }
 
+// TODO(matthiasbruns): Migrate credentials parameter to runtime.Typed once repository interface changes https://github.com/open-component-model/ocm-project/issues/980
 func (p *DigestProcessor) ProcessResourceDigest(
 	ctx context.Context, resource *runtime.Resource, credentials map[string]string,
 ) (*runtime.Resource, error) {

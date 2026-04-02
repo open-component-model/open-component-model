@@ -14,17 +14,26 @@ const (
 	ConfigType = "credentials.config.ocm.software"
 	// CredentialsType defines the type identifier for credentials
 	CredentialsType = "Credentials"
+	// DirectCredentialsType is the legacy type identifier for direct credentials
+	DirectCredentialsType = "DirectCredentials"
 )
 
 // MustRegister registers the credential configuration types with the runtime scheme.
-// It registers both versioned and unversioned types for DirectCredentials and Config.
+// DirectCredentials is registered with Credentials/v1 as the default, and
+// Credentials, DirectCredentials/v1, and DirectCredentials as aliases.
 func MustRegister(scheme *runtime.Scheme) {
 	direct := &DirectCredentials{}
-	scheme.MustRegisterWithAlias(direct, runtime.NewUnversionedType(CredentialsType))
-	scheme.MustRegisterWithAlias(direct, runtime.NewVersionedType(CredentialsType, Version))
+	scheme.MustRegisterWithAlias(direct,
+		runtime.NewVersionedType(CredentialsType, Version),     // default: Credentials/v1
+		runtime.NewUnversionedType(CredentialsType),            // alias: Credentials
+		runtime.NewVersionedType(DirectCredentialsType, Version), // alias: DirectCredentials/v1
+		runtime.NewUnversionedType(DirectCredentialsType),      // alias: DirectCredentials
+	)
 	config := &Config{}
-	scheme.MustRegisterWithAlias(config, runtime.NewUnversionedType(ConfigType))
-	scheme.MustRegisterWithAlias(config, runtime.NewVersionedType(ConfigType, Version))
+	scheme.MustRegisterWithAlias(config,
+		runtime.NewVersionedType(ConfigType, Version), // default: credentials.config.ocm.software/v1
+		runtime.NewUnversionedType(ConfigType),        // alias: credentials.config.ocm.software
+	)
 }
 
 // Config represents the top-level configuration for credentials management.

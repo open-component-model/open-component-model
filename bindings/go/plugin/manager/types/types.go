@@ -39,6 +39,10 @@ type Type struct {
 	Aliases []runtime.Type `json:"aliases"`
 	// JSONSchema holds the scheme for the type. This scheme corresponds to the type.
 	JSONSchema []byte `json:"jsonSchema"`
+	// AcceptedCredentialTypes declares which credential types are valid for this identity type.
+	// This is the JSON-based equivalent of the Go CredentialAcceptor interface, enabling
+	// external plugins (written in any language) to declare the identity→credential mapping.
+	AcceptedCredentialTypes []runtime.Type `json:"acceptedCredentialTypes,omitempty"`
 }
 
 // Types contains all the types a specific plugin has declared for a specific functionality.

@@ -14,6 +14,7 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/configuration"
@@ -108,6 +109,9 @@ func CredentialGraph(cmd *cobra.Command) error {
 		return fmt.Errorf("could not get plugin manager to initialize credential graph")
 	}
 
+	credentialTypeScheme := runtime.NewScheme()
+	helmcredsv1.MustRegisterCredentialType(credentialTypeScheme)
+
 	opts := credentials.Options{
 		RepositoryPluginProvider: pluginManager.CredentialRepositoryRegistry,
 		CredentialPluginProvider: credentials.GetCredentialPluginFn(
@@ -117,6 +121,7 @@ func CredentialGraph(cmd *cobra.Command) error {
 			},
 		),
 		CredentialRepositoryTypeScheme: pluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
+		CredentialTypeScheme:           credentialTypeScheme,
 	}
 
 	var credCfg *credentialsRuntime.Config

@@ -9,9 +9,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/identity/v1"
 	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -48,7 +50,8 @@ type InputMethod struct {
 }
 
 // LegacyHelmChartConsumerType is the type of the identity for remote helm repositories.
-const LegacyHelmChartConsumerType = "HelmChartRepository"
+// Deprecated: Use helmidentityv1.Type instead.
+const LegacyHelmChartConsumerType = helmidentityv1.HelmChartRepositoryIdentityType
 
 func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
 	return Scheme
@@ -74,7 +77,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 	if scheme, ok := identity[runtime.IdentityAttributeScheme]; ok && scheme == "oci" {
 		identity.SetType(ocicredentialsspecv1.Type)
 	} else {
-		identity.SetType(runtime.NewUnversionedType(LegacyHelmChartConsumerType))
+		identity.SetType(helmidentityv1.Type)
 	}
 
 	return identity, nil
@@ -86,6 +89,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 //
 // For local charts (a path specified): Returns only ProcessedBlobData (local access)
 // For remote charts (helmRepository specified): Returns both ProcessedResource (remote access) and ProcessedBlobData
+// TODO(matthiasbruns): Migrate credentials parameter to runtime.Typed once constructor interface changes https://github.com/open-component-model/ocm-project/issues/980
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
 	helm := v1.Helm{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &helm); err != nil {
@@ -102,7 +106,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		i.TempFolder = temp
 	}
 
-	helmBlob, chart, err := GetV1HelmBlob(ctx, helm, i.TempFolder, WithCredentials(credentials))
+	helmBlob, chart, err := GetV1HelmBlob(ctx, helm, i.TempFolder, WithCredentials(helmcredsv1.FromDirectCredentials(credentials)))
 	if err != nil {
 		return nil, fmt.Errorf("error getting helm blob based on resource input specification: %w", err)
 	}
