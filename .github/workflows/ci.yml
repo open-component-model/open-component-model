@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  pull_request_target:
+  pull_request:
   push:
     branches:
     - main
@@ -10,9 +10,7 @@ env:
   # Check Only Changed Modules
   # If true, only changed modules will be analyzed.
   # If false, all discovered modules will be analyzed.
-  check_only_changed: ${{ github.event_name == 'pull_request_target' }}
-  REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.ref || github.ref }}
-  REPO: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
+  check_only_changed: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -41,9 +39,6 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
       # Detect .env changes to decide whether to run golangci-lint on all or only changed modules
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: env_changes
@@ -186,8 +181,6 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
           sparse-checkout: |
             golangci.yml
             .env
@@ -222,8 +215,6 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
           sparse-checkout: |
             ${{ matrix.module }}
             golangci.yml
@@ -262,16 +253,7 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Generate token
-        id: generate_token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
-        with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
@@ -281,8 +263,8 @@ jobs:
         run: docker network create ${{ env.TESTCONTAINER_DOCKER_NETWORK }}
       - name: Run Tests
         env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
-          GITHUB_USER: ocmbot[ocm]
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_USER: ${{ github.actor }}
         run: task ${{ matrix.module }}:test/integration
 
   run_unit_tests:
@@ -301,8 +283,6 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
           sparse-checkout: |
             ${{ matrix.module }}
             reuse.Taskfile.yml
@@ -331,8 +311,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
           # we have a self reference here because CodeQL does introspection on the step
           sparse-checkout: |
             .github/workflows/ci.yml
@@ -355,9 +333,6 @@ jobs:
     name: "Code Generation"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
         with:
