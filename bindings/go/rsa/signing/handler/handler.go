@@ -10,6 +10,7 @@ package handler
 
 import (
 	"context"
+	"crypto"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/hex"
@@ -164,35 +165,58 @@ func (h *Handler) Verify(
 
 	case v1alpha1.MediaTypePEM:
 		slog.WarnContext(ctx, "verifying signatures with PEM encoding is experimental")
-		sig, algFromPEM, chain, err := rsasignature.GetSignatureFromPem([]byte(signed.Signature.Value))
-		if err != nil {
-			return fmt.Errorf("parse pem signature: %w", err)
-		}
-		if len(chain) == 0 {
-			return errors.New("pem signature missing certificate chain")
-		}
-		leaf := chain[0]
-		rsaPub, ok := leaf.PublicKey.(*rsa.PublicKey)
-		if !ok {
-			return errors.New("leaf cert public key is not RSA")
-		}
-
-		underlyingCert := pubFromCreds.GetOptionalUnderlyingCert()
-
-		if err := verifyChainWithOptionalAnchor(leaf, chain[1:], underlyingCert, h.roots, h.now); err != nil {
-			return fmt.Errorf("certificate verification failed: %w", err)
-		}
-
-		// Optional issuer constraint check against the underlying certificate subject.
-		if err := verifyIssuerForUnderlyingCert(signed, underlyingCert); err != nil {
-			return fmt.Errorf("issuer verification based on underlying certificate failed: %w", err)
-		}
-
-		return verifyRSA(v1alpha1.SignatureAlgorithm(algFromPEM), rsaPub, hash, dig, sig)
+		return h.verifyPEMSignature(signed, hash, dig, creds)
 
 	default:
 		return fmt.Errorf("unsupported media type %q", signed.Signature.MediaType)
 	}
+}
+
+// verifyPEMSignature handles the MediaTypePEM case for Verify. It parses the
+// embedded chain, classifies the credential chain into intermediates and an
+// optional root anchor, merges the two intermediate pools, validates the X.509
+// path and issuer constraint, and finally verifies the RSA signature bytes.
+func (h *Handler) verifyPEMSignature(
+	signed descruntime.Signature,
+	hash crypto.Hash,
+	dig []byte,
+	creds map[string]string,
+) error {
+	sig, algFromPEM, chain, err := rsasignature.GetSignatureFromPem([]byte(signed.Signature.Value))
+	if err != nil {
+		return fmt.Errorf("parse pem signature: %w", err)
+	}
+	if len(chain) == 0 {
+		return errors.New("pem signature missing certificate chain")
+	}
+	leaf := chain[0]
+	rsaPub, ok := leaf.PublicKey.(*rsa.PublicKey)
+	if !ok {
+		return errors.New("leaf cert public key is not RSA")
+	}
+
+	credIntermediates, credAnchor, err := classifyCredentialChain(creds)
+	if err != nil {
+		return err
+	}
+
+	// Merge embedded chain intermediates with credential intermediates.
+	allIntermediates := make([]*x509.Certificate, 0, len(chain)-1+len(credIntermediates))
+	allIntermediates = append(allIntermediates, chain[1:]...)
+	allIntermediates = append(allIntermediates, credIntermediates...)
+
+	if err := verifyChainWithOptionalAnchor(leaf, allIntermediates, credAnchor, h.roots, h.now); err != nil {
+		return fmt.Errorf("certificate verification failed: %w", err)
+	}
+
+	// Optional issuer constraint: the signature's Issuer field must match the
+	// X.509 Issuer of the leaf certificate (i.e. the DN of the CA that directly
+	// signed the leaf).
+	if err := verifyIssuerForLeafCert(signed, leaf); err != nil {
+		return fmt.Errorf("issuer verification based on leaf certificate failed: %w", err)
+	}
+
+	return verifyRSA(v1alpha1.SignatureAlgorithm(algFromPEM), rsaPub, hash, dig, sig)
 }
 
 // GetSigningCredentialConsumerIdentity requests credentials for signing.
@@ -259,8 +283,65 @@ func algorithmFromPlainMedia(mt string) (v1alpha1.SignatureAlgorithm, error) {
 	}
 }
 
-// verifyChainWithOptionalAnchor validates leaf with intermediates against roots,
-// optionally adding a provided anchor certificate to the root pool.
+// isSelfSigned reports whether cert is self-signed, i.e. its Issuer equals its
+// Subject and its signature can be verified with its own public key.
+func isSelfSigned(cert *x509.Certificate) bool {
+	return cert.CheckSignatureFrom(cert) == nil
+}
+
+// classifyCredentialChain parses the verifier-controlled credential chain and
+// splits it into intermediates (non-self-signed) and an optional root anchor
+// (the single self-signed cert, which must appear last if present).
+// A self-signed cert at any position other than last is rejected.
+func classifyCredentialChain(creds map[string]string) (intermediates []*x509.Certificate, anchor *x509.Certificate, err error) {
+	chain, err := rsacredentials.CertificateChainFromCredentials(creds)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot load certificate chain from credentials: %w", err)
+	}
+	for i, c := range chain {
+		if isSelfSigned(c) {
+			if i != len(chain)-1 {
+				return nil, nil, fmt.Errorf("self-signed certificate %q at position %d must be the last certificate in the credential chain", c.Subject.String(), i)
+			}
+			anchor = c
+		} else {
+			intermediates = append(intermediates, c)
+		}
+	}
+	return intermediates, anchor, nil
+}
+
+// classifyEmbeddedChain classifies certificates from the signer-controlled
+// embedded chain (the certs bundled inside the PEM signature). Self-signed
+// certificates are unconditionally rejected: a signer must not embed root CAs,
+// because doing so would let them assert their own trust anchor and bypass the
+// verifier's credential store. All non-self-signed certs go to the intermediates
+// pool for path building.
+func classifyEmbeddedChain(chain []*x509.Certificate, ip *x509.CertPool) (*x509.CertPool, error) {
+	for _, c := range chain {
+		if isSelfSigned(c) {
+			return nil, fmt.Errorf("self-signed certificate %q must not be embedded in the signature; supply root CAs via credentials instead", c.Subject.String())
+		}
+		if ip == nil {
+			ip = x509.NewCertPool()
+		}
+		ip.AddCert(c)
+	}
+	return ip, nil
+}
+
+// verifyChainWithOptionalAnchor validates leaf against a root pool.
+//
+// intermediates are path-building certificates merged from the embedded
+// signature chain and any credential-supplied intermediates. Self-signed
+// certificates in intermediates are rejected — the signer must not embed
+// root CAs, and a self-signed cert is invalid as an intermediate.
+//
+// anchor is the self-signed root CA from credentials, or nil:
+//   - nil: system roots (h.roots) are the only trust anchors.
+//   - non-nil: system roots are ignored; the chain must terminate at exactly
+//     this anchor. anchor is always self-signed — non-self-signed credential
+//     certs are passed as intermediates, not as the anchor.
 func verifyChainWithOptionalAnchor(
 	leaf *x509.Certificate,
 	intermediates []*x509.Certificate,
@@ -268,26 +349,28 @@ func verifyChainWithOptionalAnchor(
 	roots *x509.CertPool,
 	now func() time.Time,
 ) error {
-	// Build empty root pool if not provided.
-	if roots == nil {
+	if anchor != nil {
+		// Credential root supplied: use an isolated pool so system roots cannot
+		// satisfy the chain in place of the verifier's chosen anchor.
+		roots = x509.NewCertPool()
+		roots.AddCert(anchor)
+	} else if roots == nil {
 		roots = x509.NewCertPool()
 	}
-	// Build intermediates pool if present.
-	var ip *x509.CertPool
-	if len(intermediates) > 0 {
-		ip = x509.NewCertPool()
-		for _, c := range intermediates {
-			ip.AddCert(c)
-		}
-	}
-	// Add anchor into a cloned root pool if provided.
-	if anchor != nil {
-		cloned := roots.Clone()
-		cloned.AddCert(anchor)
-		roots = cloned
+
+	var (
+		ip  *x509.CertPool
+		err error
+	)
+
+	// All intermediates come pre-merged from the call site; self-signed certs
+	// are forbidden here (they must only appear as the credential anchor).
+	ip, err = classifyEmbeddedChain(intermediates, ip)
+	if err != nil {
+		return fmt.Errorf("invalid certificate chain: %w", err)
 	}
 
-	_, err := leaf.Verify(x509.VerifyOptions{
+	_, err = leaf.Verify(x509.VerifyOptions{
 		Intermediates: ip,
 		Roots:         roots,
 		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageCodeSigning},
@@ -296,13 +379,10 @@ func verifyChainWithOptionalAnchor(
 	return err
 }
 
-// verifyIssuerForUnderlyingCert checks that the issuer of the signature matches the subject of the underlying certificate.
-// If the underlying certificate is nil, this check is skipped.
-func verifyIssuerForUnderlyingCert(signed descruntime.Signature, underlyingCert *x509.Certificate) error {
-	if underlyingCert == nil {
-		return nil
-	}
-
+// verifyIssuerForLeafCert checks that the Issuer field declared in the signature
+// matches the X.509 Issuer of the leaf certificate, i.e. the DN of the CA that
+// directly signed the leaf. The check is skipped when the Issuer field is empty.
+func verifyIssuerForLeafCert(signed descruntime.Signature, leaf *x509.Certificate) error {
 	iss := strings.TrimSpace(signed.Signature.Issuer)
 	if iss == "" {
 		return nil
@@ -313,10 +393,10 @@ func verifyIssuerForUnderlyingCert(signed descruntime.Signature, underlyingCert 
 		return fmt.Errorf("parsing issuer %q failed: %w", iss, err)
 	}
 
-	subjectDN := underlyingCert.Subject
+	leafIssuerDN := leaf.Issuer
 
-	if err := rfc2253.Equal(want, subjectDN); err != nil {
-		return fmt.Errorf("issuer mismatch between %q and %q: %w", want.String(), subjectDN.String(), err)
+	if err := rfc2253.Equal(want, leafIssuerDN); err != nil {
+		return fmt.Errorf("issuer mismatch between %q and %q: %w", want.String(), leafIssuerDN.String(), err)
 	}
 	return nil
 }
