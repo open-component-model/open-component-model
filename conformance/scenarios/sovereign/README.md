@@ -153,7 +153,7 @@ task verify:deployment
 
 ## Directory Structure
 
-```
+```text
 sovereign-scenario/
 ├── README.md                    # This file
 ├── Taskfile.yml                 # Build and deployment automation
