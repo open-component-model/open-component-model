@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -55,12 +56,15 @@ func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	helm, err := r.convertAccess(resource)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error converting resource access to helm spec: %w", err)
 	}
 
 	identity, err := helminternal.CredentialConsumerIdentity(helm.HelmRepository)
-	if err != nil {
-		return nil, err
+	switch {
+	case errors.Is(err, helminternal.ErrLocalHelmInputDoesNotRequireCredentials):
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("error resolving credential consumer identity: %w", err)
 	}
 
 	slog.DebugContext(ctx, "Resolved credential consumer identity for helm resource", "identity", identity)
@@ -114,7 +118,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 	slog.DebugContext(ctx, "Helm chart downloaded successfully, creating tar archive", "chartReference", helmURL)
 
-	tarBlob, err := tarDirectoryRecursive(downloadDir)
+	tarBlob, err := tarDirectoryRecursive(ctx, downloadDir)
 	if err != nil {
 		return nil, fmt.Errorf("error creating tar archive from helm download: %w", err)
 	}
@@ -129,9 +133,15 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 // directory is cleaned up immediately after this function returns -- the caller
 // removes the temp directory once it has the resulting blob, so any lazy reading
 // from the filesystem would fail.
-func tarDirectoryRecursive(dir string) (blob.ReadOnlyBlob, error) {
+func tarDirectoryRecursive(ctx context.Context, dir string) (blob.ReadOnlyBlob, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
+	defer func(tw *tar.Writer) {
+		err := tw.Close()
+		if err != nil {
+			slog.WarnContext(ctx, "Error closing tar writer", "error", err)
+		}
+	}(tw)
 
 	// os.OpenRoot restricts all subsequent file operations to the given directory tree,
 	// preventing path traversal (e.g. via symlinks) outside of it.

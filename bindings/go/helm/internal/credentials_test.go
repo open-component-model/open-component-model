@@ -43,9 +43,9 @@ func TestCredentialConsumerIdentity(t *testing.T) {
 		assert.Equal(t, "registry.example.com", identity["hostname"])
 	})
 
-	t.Run("returns nil for empty repository", func(t *testing.T) {
+	t.Run("returns error for empty repository (local helm input)", func(t *testing.T) {
 		identity, err := internal.CredentialConsumerIdentity("")
-		require.NoError(t, err)
+		require.ErrorIs(t, err, internal.ErrLocalHelmInputDoesNotRequireCredentials)
 		assert.Nil(t, identity)
 	})
 

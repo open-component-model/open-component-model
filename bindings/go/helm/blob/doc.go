@@ -3,7 +3,7 @@
 //
 // A [ChartBlob] wraps a tar archive containing a chart .tgz and an optional
 // provenance .prov file, exposing each as an individual [blob.ReadOnlyBlob].
-// Extraction is lazy and cached so repeated calls are cheap.
+// Extraction is lazy and cached in memory once accessed, so repeated calls are cheap.
 //
 // # Usage
 //

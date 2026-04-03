@@ -2,7 +2,9 @@ package digest
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -42,7 +44,7 @@ func (p *DigestProcessor) GetResourceRepositoryScheme() *ocmruntime.Scheme {
 }
 
 func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
-	_ context.Context, resource *runtime.Resource,
+	ctx context.Context, resource *runtime.Resource,
 ) (ocmruntime.Identity, error) {
 	helm := helmv1.Helm{}
 	if err := access.Scheme.Convert(resource.Access, &helm); err != nil {
@@ -50,10 +52,19 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 	}
 
 	if helm.HelmRepository == "" {
+		slog.DebugContext(ctx, "local helm inputs do not require credentials")
 		return nil, nil
 	}
 
-	return helminternal.CredentialConsumerIdentity(helm.HelmRepository)
+	identity, err := helminternal.CredentialConsumerIdentity(helm.HelmRepository)
+	switch {
+	case errors.Is(err, helminternal.ErrLocalHelmInputDoesNotRequireCredentials):
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("error resolving credential consumer identity: %w", err)
+	}
+
+	return identity, nil
 }
 
 func (p *DigestProcessor) ProcessResourceDigest(

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -72,7 +73,11 @@ func extractFromTar(tarBlob blob.ReadOnlyBlob) (chartBlob blob.ReadOnlyBlob, pro
 	if err != nil {
 		return nil, nil, fmt.Errorf("error opening tar blob: %w", err)
 	}
-	defer func() { _ = rc.Close() }()
+	defer func() {
+		if err := rc.Close(); err != nil {
+			slog.Warn("error closing tar blob reader", "error", err)
+		}
+	}()
 
 	tr := tar.NewReader(rc)
 	for {

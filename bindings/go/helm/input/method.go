@@ -9,16 +9,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
-	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-// ErrLocalHelmInputDoesNotRequireCredentials is returned when credential-related operations are attempted
-// on local helm inputs, since those are based on local filesystem and do not require authentication or authorization.
-var ErrLocalHelmInputDoesNotRequireCredentials = errors.New("local helm inputs do not require credentials")
 
 var _ interface {
 	constructor.ResourceInputMethod
@@ -62,19 +58,12 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	if helm.HelmRepository == "" {
-		return nil, ErrLocalHelmInputDoesNotRequireCredentials
-	}
-
-	identity, err = runtime.ParseURLToIdentity(helm.HelmRepository)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing helm repository URL to identity: %w", err)
-	}
-
-	if scheme, ok := identity[runtime.IdentityAttributeScheme]; ok && scheme == "oci" {
-		identity.SetType(ocicredentialsspecv1.Type)
-	} else {
-		identity.SetType(runtime.NewUnversionedType(LegacyHelmChartConsumerType))
+	identity, err = helminternal.CredentialConsumerIdentity(helm.HelmRepository)
+	switch {
+	case errors.Is(err, helminternal.ErrLocalHelmInputDoesNotRequireCredentials):
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("error resolving credential consumer identity: %w", err)
 	}
 
 	return identity, nil

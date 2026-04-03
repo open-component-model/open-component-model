@@ -33,7 +33,7 @@ func TestInputMethodGetResourceCredentialConsumerIdentity(t *testing.T) {
 				},
 				Path: "/path/to/local/chart",
 			},
-			expectError:    true, // Should return ErrLocalHelmInputDoesNotRequireCredentials
+			expectError:    false, // Local inputs return nil, nil — no credentials needed
 			expectIdentity: false,
 		},
 		{
