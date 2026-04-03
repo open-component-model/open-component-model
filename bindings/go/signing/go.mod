@@ -3,6 +3,7 @@ module ocm.software/open-component-model/bindings/go/signing
 go 1.26.1
 
 require (
+	github.com/digitorus/pkcs7 v0.0.0-20250730155240-ffadbf3f398c
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260402061016-e120070fd921
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260402061016-e120070fd921
