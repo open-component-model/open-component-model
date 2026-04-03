@@ -275,6 +275,7 @@ func ConvertFromV2Signature(signature *v2.Signature) *Signature {
 		Name:      signature.Name,
 		Digest:    *ConvertFromV2Digest(&signature.Digest),
 		Signature: *ConvertFromV2SignatureInfo(&signature.Signature),
+		Timestamp: ConvertFromV2TimestampSpec(signature.Timestamp),
 	}
 }
 
@@ -288,6 +289,34 @@ func ConvertFromV2SignatureInfo(signature *v2.SignatureInfo) *SignatureInfo {
 		MediaType: signature.MediaType,
 		Issuer:    signature.Issuer,
 	}
+}
+
+// ConvertFromV2TimestampSpec converts a v2 TimestampSpec to the internal representation.
+func ConvertFromV2TimestampSpec(ts *v2.TimestampSpec) *TimestampSpec {
+	if ts == nil {
+		return nil
+	}
+	result := &TimestampSpec{
+		Value: ts.Value,
+	}
+	if ts.Time != nil {
+		result.Time = ts.Time.Time.Time
+	}
+	return result
+}
+
+// ConvertToV2TimestampSpec converts an internal TimestampSpec to v2 format.
+func ConvertToV2TimestampSpec(ts *TimestampSpec) *v2.TimestampSpec {
+	if ts == nil {
+		return nil
+	}
+	result := &v2.TimestampSpec{
+		Value: ts.Value,
+	}
+	if !ts.Time.IsZero() {
+		result.Time = &v2.Timestamp{Time: v2.NewTime(ts.Time)}
+	}
+	return result
 }
 
 // ConvertToV2Provider converts an internal provider identity to a string format expected by v2.
@@ -487,6 +516,7 @@ func ConvertToV2Signature(sig *Signature) *v2.Signature {
 		Name:      sig.Name,
 		Digest:    *ConvertToV2Digest(&sig.Digest),
 		Signature: *ConvertToV2SignatureInfo(&sig.Signature),
+		Timestamp: ConvertToV2TimestampSpec(sig.Timestamp),
 	}
 }
 
