@@ -247,7 +247,7 @@ func processResources(ctx context.Context, v2desc *descriptorv2.Descriptor, id s
 }
 
 func logSkippedResource(ctx context.Context, component, version string, resource descriptorv2.Resource, copyMode, uploadType int) {
-	logLevel := slog.LevelInfo
+	logLevel := slog.LevelDebug
 	if uploadType == UploadAsOciArtifact {
 		logLevel = slog.LevelWarn
 	}
