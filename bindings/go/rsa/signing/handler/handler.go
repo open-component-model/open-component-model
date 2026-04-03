@@ -205,7 +205,19 @@ func (h *Handler) verifyPEMSignature(
 	allIntermediates = append(allIntermediates, chain[1:]...)
 	allIntermediates = append(allIntermediates, credIntermediates...)
 
-	if err := verifyChainWithOptionalAnchor(leaf, allIntermediates, credAnchor, h.roots, h.now); err != nil {
+	// If a verified TSA time is provided, use it instead of h.now for certificate
+	// chain validation. This allows verifying signatures with expired certificates
+	// when the TSA timestamp proves the signature was created while the cert was valid.
+	nowFn := h.now
+	if tsaTimeStr, ok := creds["tsa_verified_time"]; ok { // canonical constant: tsa.VerifiedTimeKey
+		tsaTime, err := time.Parse(time.RFC3339, tsaTimeStr)
+		if err != nil {
+			return fmt.Errorf("invalid TSA verified time %q: %w", tsaTimeStr, err)
+		}
+		nowFn = func() time.Time { return tsaTime }
+	}
+
+	if err := verifyChainWithOptionalAnchor(leaf, allIntermediates, credAnchor, h.roots, nowFn); err != nil {
 		return fmt.Errorf("certificate verification failed: %w", err)
 	}
 
