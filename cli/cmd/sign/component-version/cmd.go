@@ -2,6 +2,7 @@ package componentversion
 
 import (
 	"crypto"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
+	"ocm.software/open-component-model/bindings/go/signing/tsa"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/log"
@@ -39,9 +41,17 @@ const (
 	FlagHashAlgorithm          = "hash"
 	FlagDryRun                 = "dry-run"
 	FlagForce                  = "force"
+	FlagTSA                    = "tsa"
+	FlagTSAURL                 = "tsa-url"
 )
 
 const (
+	// DefaultTSAURL is a well-known public TSA server used when --tsa is set
+	// without an explicit --tsa-url. DigiCert's TSA is widely used in the
+	// software supply-chain ecosystem (e.g. by sigstore, Authenticode, Java
+	// jarsigner) and offers free, unauthenticated RFC 3161 timestamps.
+	DefaultTSAURL = "http://timestamp.digicert.com"
+
 	// DefaultSignatureName is the default name of the signature to create or update if not provided by FlagSignature.
 	DefaultSignatureName = "default"
 )
@@ -177,6 +187,8 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 	cmd.Flags().String(FlagNormalisationAlgorithm, v4alpha1.Algorithm, "normalisation algorithm to use (default jsonNormalisation/v4alpha1)")
 	cmd.Flags().String(FlagHashAlgorithm, crypto.SHA256.String(), "hash algorithm to use (SHA256, SHA512)")
 	cmd.Flags().Bool(FlagForce, false, "overwrite existing signatures under the same name")
+	cmd.Flags().Bool(FlagTSA, false, fmt.Sprintf("request an RFC 3161 timestamp from a TSA server (default: %s)", DefaultTSAURL))
+	cmd.Flags().String(FlagTSAURL, "", "custom TSA server URL (implies --tsa)")
 
 	return cmd
 }
@@ -268,6 +280,24 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		logger.InfoContext(ctx, "overwriting existing signature", "name", signatureName)
 	}
 
+	var tsaURL string
+	if tsaEnabled, _ := cmd.Flags().GetBool(FlagTSA); tsaEnabled {
+		tsaURL = DefaultTSAURL
+	}
+	if customTSAURL, _ := cmd.Flags().GetString(FlagTSAURL); customTSAURL != "" {
+		tsaURL = customTSAURL
+	}
+	useTSA := tsaURL != "" && !dryRun
+	if useTSA {
+		tsaURLJSON, _ := json.Marshal(tsaURL)
+		desc.Component.Labels = append(desc.Component.Labels, descruntime.Label{
+			Name:    tsa.TSAURLLabelPrefix + signatureName,
+			Value:   tsaURLJSON,
+			Signing: true,
+			Version: "v1alpha1",
+		})
+	}
+
 	// digest
 	unsignedDigest, err := signing.GenerateDigest(
 		ctx, desc, logger,
@@ -299,10 +329,37 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("signing failed: %w", err)
 	}
 
+	// TSA timestamp (optional).
+	// TSA configuration can come from CLI flags or the credential graph.
+	// CLI flags take precedence; the credential graph provides defaults.
+	var tsSpec *descruntime.TimestampSpec
+	if useTSA {
+		hash, err := signing.GetSupportedHash(unsignedDigest.HashAlgorithm)
+		if err != nil {
+			return fmt.Errorf("preparing TSA request: %w", err)
+		}
+		digestBytes, err := hex.DecodeString(unsignedDigest.Value)
+		if err != nil {
+			return fmt.Errorf("decoding digest for TSA request: %w", err)
+		}
+
+		token, err := tsa.RequestTimestamp(ctx, nil, tsaURL, hash, digestBytes)
+		if err != nil {
+			return fmt.Errorf("TSA timestamp request to %s failed: %w", tsaURL, err)
+		}
+
+		tsSpec = &descruntime.TimestampSpec{
+			Value: string(tsa.ToPEM(token.Raw)),
+			Time:  token.Time,
+		}
+		logger.InfoContext(ctx, "obtained TSA timestamp", "time", token.Time, "server", tsaURL)
+	}
+
 	out := descruntime.Signature{
 		Name:      signatureName,
 		Digest:    *unsignedDigest,
 		Signature: sigBytes,
+		Timestamp: tsSpec,
 	}
 
 	if err := printSignature(cmd, out); err != nil {

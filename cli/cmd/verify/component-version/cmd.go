@@ -2,6 +2,9 @@ package componentversion
 
 import (
 	"bytes"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -21,6 +24,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
+	"ocm.software/open-component-model/bindings/go/signing/tsa"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
@@ -117,6 +121,29 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
 
 # Use a verifier specification file
 verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./rsassa-pss.yaml
+
+## Example Credential Config (TSA timestamp verification)
+#
+# If a signature includes an RFC 3161 timestamp, the verifier checks it automatically.
+# To enable full PKCS#7 chain verification of the timestamp token, supply the TSA's
+# root CA certificate via the credential graph with a TSA/v1alpha1 identity.
+# Without root certificates, only structural validity is checked.
+#
+# The TSA URL stored in the signed descriptor is used as a hint for credential
+# lookup, enabling URL-specific matching.
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: TSA/v1alpha1
+          hostname: timestamp.digicert.com
+          scheme: https
+        credentials:
+        - type: Credentials/v1
+          properties:
+            root_certs_pem_file: /path/to/digicert-tsa-root.pem
 `),
 		RunE:              VerifyComponentVersion,
 		DisableAutoGenTag: true,
@@ -267,6 +294,66 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 
 			if len(creds) > 0 {
 				logger.DebugContext(egctx, "using discovered credentials for verification", "attributes", slices.Collect(maps.Keys(creds)))
+			}
+
+			// Verify TSA timestamp if present
+			if signature.Timestamp != nil {
+				// Look up TSA root certs from the credential graph.
+				// If the descriptor contains a TSA URL label for this signature,
+				// use it for a URL-specific identity lookup. Otherwise, fall back
+				// to a generic TSA/v1alpha1 identity.
+				var tsaURL string
+				labelName := tsa.TSAURLLabelPrefix + signature.Name
+				for _, lbl := range desc.Component.Labels {
+					if lbl.Name == labelName {
+						_ = json.Unmarshal(lbl.Value, &tsaURL)
+						break
+					}
+				}
+
+				var tsaRootPool *x509.CertPool
+				if tsaID, err := tsa.TSAConsumerIdentity(tsaURL); err == nil {
+					if tsaCreds, err := credentialGraph.Resolve(egctx, tsaID); err == nil {
+						if pool, err := tsa.RootCertPoolFromCredentials(tsaCreds); err == nil && pool != nil {
+							tsaRootPool = pool
+							logger.DebugContext(egctx, "TSA root certificates resolved from credential graph", "name", signature.Name, "tsaURL", tsaURL)
+						} else if err != nil {
+							return fmt.Errorf("loading TSA root certificates from credential graph: %w", err)
+						}
+					}
+				}
+
+				if tsaRootPool == nil {
+					logger.WarnContext(egctx, "verifying TSA timestamp without root certificates; only structural validity is checked. Configure TSA root certs in the credential graph (type: TSA/v1alpha1) for full trust verification.", "name", signature.Name)
+				}
+				logger.InfoContext(egctx, "verifying TSA timestamp", "name", signature.Name)
+
+				tsaDER, err := tsa.FromPEM([]byte(signature.Timestamp.Value))
+				if err != nil {
+					return fmt.Errorf("parsing TSA timestamp PEM failed: %w", err)
+				}
+
+				hash, err := signing.GetSupportedHash(signature.Digest.HashAlgorithm)
+				if err != nil {
+					return fmt.Errorf("preparing TSA verification: %w", err)
+				}
+				digestBytes, err := hex.DecodeString(signature.Digest.Value)
+				if err != nil {
+					return fmt.Errorf("decoding digest for TSA verification: %w", err)
+				}
+
+				verifiedTime, err := tsa.Verify(tsaDER, hash, digestBytes, tsaRootPool)
+				if err != nil {
+					return fmt.Errorf("TSA timestamp verification failed: %w", err)
+				}
+
+				logger.InfoContext(egctx, "TSA timestamp verified", "name", signature.Name, "time", verifiedTime)
+
+				// Pass verified TSA time to handler so it can use it for cert validity checks
+				if creds == nil {
+					creds = make(map[string]string)
+				}
+				creds[tsa.VerifiedTimeKey] = verifiedTime.Format(time.RFC3339)
 			}
 
 			return handler.Verify(egctx, signature, verifierSpec, creds)
