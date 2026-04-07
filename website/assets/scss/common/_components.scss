@@ -1,0 +1,71 @@
+/*
+ * COMPONENT STYLES
+ * ================
+ * This file contains reusable UI components
+ * used on various pages.
+ * 
+ * Currently includes:
+ * 1. TOC Box (Table of Contents)
+ * 2. Description Box (for section descriptions)
+ */
+
+/* TOC BOX (Table of Contents)
+ * ---------------------------
+ * A box containing the table of contents of a page.
+ * Adapts to light and dark design.
+ */
+.toc-box {
+  border-radius: 0.6rem;
+  background: var(--toc-box-bg);
+  border: 1px solid var(--toc-box-border);
+  padding: 1.3rem 1.8rem;
+}
+
+/* TOC title */
+.toc-title {
+  font-size: 1.2rem;
+  font-weight: 500;
+  margin-bottom: 0.7rem;
+}
+
+/* Dark mode adjustments for TOC */
+[data-bs-theme="dark"] .toc-box {
+  background: var(--toc-box-bg-dark);
+  border: 1px solid var(--toc-box-border-dark);
+}
+
+/* DESCRIPTION BOX
+ * --------------
+ * A box for section descriptions or important information.
+ * Often used at the beginning of a section.
+ */
+.section-desc-box {
+  margin: 1.1rem 0 2.2rem 0;
+  padding: 1.1rem 1.5rem;
+  background: var(--desc-box-bg);
+  border: 1px solid var(--desc-box-border);
+  border-radius: 0.8rem;
+  font-size: 1.08rem;
+  color: var(--desc-box-text);
+  font-weight: 400;
+  line-height: 1.5;
+  width: 100%;
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+  box-sizing: border-box;
+}
+
+/* Dark mode adjustments for the description box */
+[data-bs-theme="dark"] .section-desc-box {
+  background: var(--desc-box-bg-dark);
+  color: var(--desc-box-text-dark);
+  border-color: var(--desc-box-border-dark);
+}
+
+/* --------------------------------------------
+   Details/Summary Elements (expandable sections)
+   -------------------------------------------- */
+.docs-content details summary {
+  font-size: 0.95rem;
+}

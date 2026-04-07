@@ -1,0 +1,47 @@
+// -----------------------------------------------------------------------------
+// Dart Sass compatibility fixes for @thulite/doks-core search form styles
+//
+// Context:
+//   When migrating from libsass to dartsass (required since Hugo v0.153.0
+//   deprecated libsass), Dart Sass is stricter about `@extend` rules: it
+//   errors when the target selector does not exist in the current compilation.
+//
+// Problem:
+//   @thulite/doks-core/assets/scss/components/_forms.scss uses `@extend`
+//   without `!optional` on Bootstrap 4 utility classes (.form-group,
+//   .form-inline) that were removed in Bootstrap 5. LibSass silently ignored
+//   missing targets; Dart Sass throws a hard error:
+//     "The target selector was not found. Use @extend <selector> !optional
+//      to avoid this error."
+//
+// Fix:
+//   We redeclare all affected rules here with `!optional`, so Dart Sass
+//   skips the extend silently if the target selector is absent.
+//   This file is imported via _custom.scss and takes precedence over the
+//   theme's _forms.scss through Hugo's asset mount order (own assets/ last).
+//
+// Reference:
+//   https://sass-lang.com/documentation/at-rules/extend/#optional-extends
+//   https://gohugo.io/functions/css/sass/#dart-sass
+// -----------------------------------------------------------------------------
+
+/** Search form */
+.search-form {
+    @extend .form-inline !optional;
+}
+
+.search-form label {
+    @extend .form-group !optional;
+
+    font-weight: normal;
+}
+
+.search-form .search-field {
+    @extend .form-control !optional;
+}
+
+.search-form .search-submit {
+    @extend .btn !optional;
+    @extend .btn-secondary !optional;
+}
+

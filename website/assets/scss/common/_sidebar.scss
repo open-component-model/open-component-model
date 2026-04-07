@@ -1,0 +1,92 @@
+/*
+ * SIDEBAR NAVIGATION STYLES
+ * ========================
+ * Minimal overrides on top of Doks _section-nav.scss defaults.
+ * Layout, positioning, overflow, scrollbar, and base link styles
+ * are all handled by the Doks theme (_global.scss, _sidebar.scss,
+ * _section-nav.scss). We only tweak visual details below.
+ */
+
+.section-nav {
+  /* Consistent spacing between top-level sections */
+  > ul {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  /* Section title links inside <summary> — inline so the disclosure
+     marker and text stay on the same line. Overrides Doks
+     `.section-nav a { display: block; margin: 0.5rem 0 }`.
+     font-weight: 700 ensures headers stay bold even when .active
+     (Doks sets `.docs-link.active { font-weight: 500 }` which would win
+     over the inherited summary weight). */
+  details > summary a {
+    display: inline;
+    margin: 0;
+    font-weight: 700 !important;
+    color: inherit !important;
+    &:hover,
+    &:active {
+      color: inherit !important;
+    }
+  }
+
+  /* Top-level section title size */
+  > ul > li > details > summary .docs-link {
+    font-size: 1.05rem;
+  }
+
+  /* Leaf / page links — slightly compact */
+  .docs-link {
+    font-size: 0.95rem;
+    line-height: 1.4;
+  }
+
+  /* Active leaf link — bolder weight + dark color.
+     Scoped to exclude summary links so section headers keep their 700 weight.
+     Needs !important to beat Doks `li.active a { color: $primary }` (0-3-1) */
+  :not(summary) > .docs-link.active {
+    font-weight: 600;
+    color: var(--sidebar-active-color) !important;
+  }
+
+  /* Prevent Doks `li.active a` from cascading blue to ALL descendant links.
+     When on a section overview page, li.active wraps the entire section tree —
+     without this reset every child link would inherit the blue active color. */
+  li.active .list-nested .docs-link:not(.active) {
+    color: var(--bs-body-color) !important;
+    font-weight: normal;
+  }
+
+  /* Leaf hover */
+  a:hover:not(.active) {
+    color: var(--sidebar-hover-color);
+  }
+
+  li.active .list-nested .docs-link:not(.active):hover {
+    color: var(--sidebar-hover-color) !important;
+  }
+}
+
+/* Dark mode: same cascade fixes — match light mode behavior */
+[data-bs-theme="dark"] .section-nav :not(summary) > .docs-link.active {
+  color: var(--sidebar-active-color) !important;
+}
+
+[data-bs-theme="dark"] .section-nav li.active .list-nested .docs-link:not(.active) {
+  color: var(--bs-body-color) !important;
+}
+
+/* XL+: constrain sidebar width within a sensible range */
+@media (min-width: 1200px) {
+  .docs-sidebar {
+    width: clamp(260px, 26vw, 360px) !important;
+  }
+  .docs-content {
+    width: calc(100% - clamp(260px, 26vw, 360px)) !important;
+  }
+  .docs-toc {
+    margin-left: 1.25rem;
+  }
+}
