@@ -26,7 +26,7 @@ require (
 
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
-	github.com/docker/cli v29.2.1+incompatible
+	github.com/docker/cli v29.3.0+incompatible
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	golang.org/x/time v0.15.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
@@ -154,7 +154,7 @@ require (
 	helm.sh/helm/v4 v4.1.1 // indirect
 	k8s.io/cli-runtime v0.35.2 // indirect
 	k8s.io/component-base v0.35.2 // indirect
-	k8s.io/klog/v2 v2.130.1 // indirect
+	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
 	k8s.io/kubectl v0.35.2 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.7 // indirect
