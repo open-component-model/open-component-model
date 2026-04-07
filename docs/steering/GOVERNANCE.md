@@ -2,7 +2,7 @@
 
 This document describes governance procedures specific to the OCM Technical Steering Committee (TSC).
 
-For general community governance, roles, decision-making principles, ways of working, and specification development process, see the [OCM Community Governance Policy](../community/GOVERNANCE.md).
+For general community governance, roles, decision-making principles, ways of working, and specification development process, see the [OCM Community Governance Policy](https://github.com/open-component-model/ocm-spec/blob/main/GOVERNANCE.md).
 
 ## Scope
 
@@ -44,7 +44,7 @@ The Security Officer role is currently delegated to the entire TSC. The TSC can 
 
 | Document | Purpose |
 |---|---|
-| [Community Governance](../community/GOVERNANCE.md) | General roles, decision-making, ways of working |
+| [Community Governance](https://github.com/open-component-model/ocm-spec/blob/main/GOVERNANCE.md) | General roles, decision-making, ways of working |
 | [Project Charter](./CHARTER.md) | Structure, purpose, and organization of the project |
 | [OWNERS.md](./OWNERS.md) | TSC members and Chair |
 | [SIG Handbook](../community/SIGs/SIG-Handbook.md) | SIG creation, lifecycle, and operations |
