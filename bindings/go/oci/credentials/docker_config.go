@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 
 	"oras.land/oras-go/v2/registry/remote/auth"
 	remotecredentials "oras.land/oras-go/v2/registry/remote/credentials"
@@ -90,6 +91,12 @@ func CredentialFunc(identity runtime.Identity, credentials map[string]string) au
 	}
 }
 
+// Resolving of credentials is an expensive operation and we might receive many requests from different
+// graph transformers or nodes requesting access to a registry at once. In this case it is advisable to
+// deduplicate the requests as most credential helpers do not deal well with multiple concurrent calls due
+// to the protocol relying on binary execution on many operating systems.
+var storeConcurrencyMu sync.Mutex
+
 // ResolveV1DockerConfigCredentials resolves credentials from a Docker configuration
 // for a given identity. It supports both file-based and in-memory Docker configurations.
 //
@@ -118,6 +125,10 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 		hostname = "index.docker.io"
 	}
 
+	logger := slog.With("hostname", hostname, "identity", identity.String())
+	storeConcurrencyMu.Lock()
+	defer storeConcurrencyMu.Unlock()
+	logger.DebugContext(ctx, "getting credentials")
 	cred, err := credStore.Get(ctx, hostname)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get credentials for %q: %w", hostname, err)
@@ -129,17 +140,16 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 		// this is a fallback try).
 		if port, ok := identity[runtime.IdentityAttributePort]; ok {
 			hostname = fmt.Sprintf("%s:%s", hostname, port)
+			logger.DebugContext(ctx, "attempting secondary credentials lookup via hostname:port")
 			cred, err = credStore.Get(ctx, hostname)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get credentials for %q with port: %w", hostname, err)
 			}
-			if cred == auth.EmptyCredential {
-				return nil, nil
-			}
-		} else {
-			// no port, we have no creds
-			return nil, nil
 		}
+	}
+	if cred == auth.EmptyCredential {
+		logger.DebugContext(ctx, "no credentials found")
+		return nil, nil
 	}
 
 	credentialMap := map[string]string{}
@@ -155,6 +165,8 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 	if v := cred.RefreshToken; v != "" {
 		credentialMap[CredentialKeyRefreshToken] = v
 	}
+
+	logger.DebugContext(ctx, "credentials found", "username", cred.Username)
 
 	return credentialMap, nil
 }
@@ -193,7 +205,7 @@ func createDefaultStore(ctx context.Context) (remotecredentials.Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create default docker config store: %w", err)
 	}
-	return wrapWithLogging(store, slog.Default()), nil
+	return store, nil
 }
 
 // createInlineConfigStore creates a credential store from an inline JSON configuration.
@@ -205,7 +217,7 @@ func createInlineConfigStore(ctx context.Context, config string) (remotecredenti
 	if err != nil {
 		return nil, fmt.Errorf("failed to create inline config store: %w", err)
 	}
-	return wrapWithLogging(store, slog.Default()), nil
+	return store, nil
 }
 
 // createFileBasedStore creates a credential store from a specified Docker config file.
@@ -230,7 +242,7 @@ func createFileBasedStore(ctx context.Context, configPath string) (remotecredent
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file-based config store: %w", err)
 	}
-	return wrapWithLogging(store, slog.Default()), nil
+	return store, nil
 }
 
 // expandConfigPath handles shell expansion for the config file path.
