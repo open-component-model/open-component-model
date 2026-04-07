@@ -37,6 +37,8 @@ on:
         description: "Highest existing previous release version for this component (for logging)"
         value: ${{ jobs.prepare.outputs.highest_previous_release_version }}
 
+permissions: {}
+
 jobs:
   prepare:
     name: Tag & Changelog

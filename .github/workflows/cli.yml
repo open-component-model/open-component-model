@@ -43,6 +43,9 @@ on:
         description: "The digest of the pushed OCI image (sha256:...)."
         value: ${{ jobs.publish.outputs.image_digest }}
 
+permissions:
+  contents: read
+
 env:
   LOCATION: "cli"                       # Folder containing the CLI source
   REGISTRY: ghcr.io                     # Target container registry

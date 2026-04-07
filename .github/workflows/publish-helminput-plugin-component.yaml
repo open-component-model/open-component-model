@@ -22,6 +22,8 @@ on:
         type: string
         required: false
 
+permissions: {}
+
 env:
   # Repository selection for checkout:
   # - pull_request: Use head repository (fork) for PR changes
