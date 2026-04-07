@@ -9,30 +9,31 @@ This page contains all active and inactive TSC members.
 
 ### Current Chair
 
-| Name         | Organization | Github Handle                                         |
-|--------------|--------------|-------------------------------------------------------|
-| Jakob Möller | SAP SE       | [jakobmoellerdev](https://github.com/jakobmoellerdev) |
+| Name              | Organization    | GitHub Handle                         |
+|-------------------|-----------------|---------------------------------------|
+| Gergely Bräutigam | Kubermatic GmbH | [skarlso](https://github.com/skarlso) |
 
 ### Chair History
 
-| Name         | Organization | Github Handle                                         | From       | To      |
-|--------------|--------------|-------------------------------------------------------|------------|---------|
-| Jakob Möller | SAP SE       | [jakobmoellerdev](https://github.com/jakobmoellerdev) | 2025-06-06 | Present |
+| Name              | Organization    | GitHub Handle                                         | From       | To         |
+|-------------------|-----------------|-------------------------------------------------------|------------|------------|
+| Gergely Bräutigam | Kubermatic GmbH | [skarlso](https://github.com/skarlso)                 | 2026-02-02 | Present    |
+| Jakob Möller      | SAP SE          | [jakobmoellerdev](https://github.com/jakobmoellerdev) | 2025-06-06 | 2026-02-02 |
 
 ### All Voting Members
 
-| Name              | Organization | Github Handle                                         |
-|-------------------|--------------|-------------------------------------------------------|
-| Jakob Möller      | SAP SE       | [jakobmoellerdev](https://github.com/jakobmoellerdev) |
-| Gerald Morrison   | SAP SE       | [morri-son](https://github.com/morri-son)             |
-| Fabian Burth      | SAP SE       | [fabianburth](https://github.com/fabianburth)         |
-| Frederic Wilhelm  | SAP SE       | [frewilhelm](https://github.com/frewilhelm)           |
-| Philipp Heil      | SAP SE       | [zkdev](https://github.com/zkdev)                     |
-| Gergely Bräutigam | -            | [skarlso](https://github.com/skarlso)                 |
+| Name              | Organization    | GitHub Handle                                         |
+|-------------------|-----------------|-------------------------------------------------------|
+| Jakob Möller      | SAP SE          | [jakobmoellerdev](https://github.com/jakobmoellerdev) |
+| Gerald Morrison   | SAP SE          | [morri-son](https://github.com/morri-son)             |
+| Fabian Burth      | SAP SE          | [fabianburth](https://github.com/fabianburth)         |
+| Frederic Wilhelm  | SAP SE          | [frewilhelm](https://github.com/frewilhelm)           |
+| Philipp Heil      | SAP SE          | [zkdev](https://github.com/zkdev)                     |
+| Gergely Bräutigam | Kubermatic GmbH | [skarlso](https://github.com/skarlso)                 |
 
 ## Emeritus Members
 
-| Name             | Organization | Github Handle                         |
+| Name             | Organization | GitHub Handle                         |
 |------------------|--------------|---------------------------------------|
 | Christian Cwienk | SAP SE       | [ccwienk](https://github.com/ccwienk) |
 
