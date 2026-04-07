@@ -4,7 +4,7 @@ Welcome to the Open Component Model community. OCM is an open standard for descr
 
 ## Governance
 
-- [Community Governance Policy](GOVERNANCE.md) — Roles, decision-making, ways of working, and specification development process
+- [Community Governance Policy](https://github.com/open-component-model/ocm-spec/blob/main/GOVERNANCE.md) — Roles, decision-making, ways of working, and specification development process
 - [TSC Governance](../steering/GOVERNANCE.md) — Technical Steering Committee operating procedures
 - [Project Charter](../steering/CHARTER.md) — Structure, purpose, and organization of the project
 - [TSC Members](../steering/OWNERS.md) — Current TSC voting members and Chair
