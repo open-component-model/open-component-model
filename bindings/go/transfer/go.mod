@@ -7,14 +7,14 @@ require (
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260402061016-e120070fd921
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260407102747-5b24debae3cf
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260402061016-e120070fd921
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260407102747-5b24debae3cf
 	ocm.software/open-component-model/bindings/go/oci v0.0.37
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260402061016-e120070fd921
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260402061016-e120070fd921
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260407102747-5b24debae3cf
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260407102747-5b24debae3cf
 )
 
 require (
@@ -113,10 +113,10 @@ require (
 	k8s.io/kubectl v0.35.2 // indirect
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
 	ocm.software/open-component-model/bindings/go/blob v0.0.11 // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260402061016-e120070fd921 // indirect
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260407102747-5b24debae3cf // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.12 // indirect
-	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260402061016-e120070fd921 // indirect
+	ocm.software/open-component-model/bindings/go/ctf v0.4.0 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260407102747-5b24debae3cf // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/controller-runtime v0.23.3 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
