@@ -113,7 +113,7 @@ gitGraph TB:
 A new release branch marks the cut-off point for that minor release line.
 Once created, only bug fixes and documentation changes are allowed.
 
-1. Run workflow **[Release Branch Creation](https://github.com/open-component-model/open-component-model/actions/workflows/release-branch.yml)**.
+1. Run workflow **[Create OCM Release Branch](https://github.com/open-component-model/open-component-model/actions/workflows/release-branch.yml)**.
 2. Set target branch to `releases/vX.Y`.
 3. Confirm the branch was created successfully.
 
