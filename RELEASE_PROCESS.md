@@ -54,9 +54,9 @@ Copy this checklist to your "Sprint Responsible" issue:
 - [ ] New release branch created (e.g `releases/v0.4`)
 - [ ] CLI RC created and verified (`v0.4.0-rc.1`)
 - [ ] Controller RC created and verified (`v0.4.0-rc.1`)
-- [ ] CLI Final promoted from last RC (`v0.4.0-rc.1` --> `v0.4.0`)
-- [ ] Controller Final promoted from last RC (`v0.4.0-rc.1` --> `v0.4.0`)
-- [ ] Both releases visible on GitHub Releases page (`v0.4.0`)
+- [ ] CLI Final promoted from last RC (`v0.3.0-rc.1` --> `v0.3.0`)
+- [ ] Controller Final promoted from last RC (`v0.3.0-rc.1` --> `v0.3.0`)
+- [ ] Both releases visible on GitHub Releases page (`v0.3.0`)
 ```
 
 ### Timeline
