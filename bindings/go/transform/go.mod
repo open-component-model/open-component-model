@@ -6,7 +6,7 @@ require (
 	github.com/google/cel-go v0.27.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260402061016-e120070fd921
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260407102747-5b24debae3cf
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
