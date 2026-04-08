@@ -63,8 +63,8 @@ ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260402
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260402061016-e120070fd921/go.mod h1:uET6F54antG7z/nBtrzIHkZZCAjbkbg255UG3GrZwf8=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 h1:SdQm6w7Lj0g+d+MaNXQQkpKUqOhFwUSzoUjzRyeKL0I=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9/go.mod h1:5ES8RkuCdrbqiG56WJE40qhFoC4QHAQn8BasL5aKlvM=
-ocm.software/open-component-model/bindings/go/oci v0.0.37 h1:0UiWSzx4MnpZL2QQ4wxBWXvmJmnK5RZJYvRYpYqE7+g=
-ocm.software/open-component-model/bindings/go/oci v0.0.37/go.mod h1:9mIySy39sDnoQMsBjiUZbUluXbPwgmxGyiEsHIBr/LQ=
+ocm.software/open-component-model/bindings/go/oci v0.0.38 h1:zLCrpBwP1+5xh3Gynvysco/j2Kqkv13/wQTTmD09fmg=
+ocm.software/open-component-model/bindings/go/oci v0.0.38/go.mod h1:hvK8VfYZAuoh8ftX4m9ZKplKgR7JeFHU3ISJZmXOnEw=
 ocm.software/open-component-model/bindings/go/repository v0.0.8 h1:TUwsQSOkPMvKAU3ciK7Tr2UgewDag640X+OD97zI2oE=
 ocm.software/open-component-model/bindings/go/repository v0.0.8/go.mod h1:2TCCOD2lV/druBsW3/YBRnk8uOqUJCPefk1s7MyULb8=
 ocm.software/open-component-model/bindings/go/runtime v0.0.7 h1:/4RDxVVubr6IC+ZKNAseDl4CoTwweIx0LYmCiNgkQYU=
