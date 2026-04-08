@@ -2,6 +2,7 @@ package applyset
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"testing"
 
@@ -973,5 +974,114 @@ func TestMetadata_Annotations(t *testing.T) {
 
 	if got := annotations[ApplySetAdditionalNamespacesAnnotation]; got != "default" {
 		t.Errorf("Annotations()[%s] = %q, want %q", ApplySetAdditionalNamespacesAnnotation, got, "default")
+	}
+}
+
+func TestApply_ConflictDetection(t *testing.T) {
+	ctx := context.Background()
+	mapper := newTestRESTMapper()
+
+	parentGVK := schema.GroupVersionKind{
+		Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind",
+	}
+
+	parentA := newTestParent(parentGVK)
+	applySetIDA := ID(parentA)
+
+	parentB := &testParent{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "other-instance",
+			Namespace: "default",
+			UID:       types.UID("other-parent-uid"),
+		},
+		gvk: parentGVK,
+	}
+	applySetIDB := ID(parentB)
+
+	tests := map[string]struct {
+		existingObjs []client.Object
+		wantConflict bool
+	}{
+		"conflict: live object owned by different applyset": {
+			existingObjs: func() []client.Object {
+				cm := newConfigMap("cm1", "default")
+				cm.SetLabels(map[string]string{ApplysetPartOfLabel: applySetIDB})
+				cm.SetUID(types.UID("existing-uid"))
+				return []client.Object{cm}
+			}(),
+			wantConflict: true,
+		},
+		"no conflict: live object owned by same applyset": {
+			existingObjs: func() []client.Object {
+				cm := newConfigMap("cm1", "default")
+				cm.SetLabels(map[string]string{ApplysetPartOfLabel: applySetIDA})
+				cm.SetUID(types.UID("existing-uid"))
+				return []client.Object{cm}
+			}(),
+			wantConflict: false,
+		},
+		"no conflict: object does not exist yet": {
+			existingObjs: nil,
+			wantConflict: false,
+		},
+		"no conflict: live object has no part-of label": {
+			existingObjs: func() []client.Object {
+				cm := newConfigMap("cm1", "default")
+				cm.SetUID(types.UID("existing-uid"))
+				return []client.Object{cm}
+			}(),
+			wantConflict: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			fakeClient := newFakeClient(tt.existingObjs...)
+
+			applier := New(Config{
+				Client:          fakeClient,
+				RESTMapper:      mapper,
+				Log:             logr.Discard(),
+				ParentNamespace: "default",
+			}, parentA)
+
+			resources := []Resource{
+				{ID: "cm1", Object: newConfigMap("cm1", "default")},
+			}
+
+			result, _, err := applier.Apply(ctx, resources, ApplyMode{})
+			if err != nil {
+				t.Fatalf("Apply() error = %v", err)
+			}
+
+			if len(result.Applied) != 1 {
+				t.Fatalf("Apply() applied %d resources, want 1", len(result.Applied))
+			}
+
+			item := result.Applied[0]
+
+			if tt.wantConflict {
+				if item.Error == nil {
+					t.Fatal("Apply() expected conflict error, got nil")
+				}
+				if !errors.Is(item.Error, ErrApplySetConflict) {
+					t.Errorf("Apply() error = %v, want ErrApplySetConflict", item.Error)
+				}
+				var conflictErr *ApplySetConflictError
+				if !errors.As(item.Error, &conflictErr) {
+					t.Fatalf("Apply() error is not *ApplySetConflictError: %T", item.Error)
+				}
+				if conflictErr.CurrentApplySetID != applySetIDB {
+					t.Errorf("CurrentApplySetID = %q, want %q", conflictErr.CurrentApplySetID, applySetIDB)
+				}
+				if conflictErr.DesiredApplySetID != applySetIDA {
+					t.Errorf("DesiredApplySetID = %q, want %q", conflictErr.DesiredApplySetID, applySetIDA)
+				}
+			} else {
+				if item.Error != nil {
+					t.Errorf("Apply() unexpected error: %v", item.Error)
+				}
+			}
+		})
 	}
 }

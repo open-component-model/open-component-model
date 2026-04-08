@@ -342,35 +342,54 @@ func (a *ApplySet) applyResource(
 ) ApplyResultItem {
 	item := ApplyResultItem{ID: r.ID}
 
-	// Inject applyset membership label (required for prune to find managed resources)
+	// Resolve namespace for the lookup key before checking live cluster state.
+	lookupNamespace := ""
+	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+		lookupNamespace = a.resolveNamespace(r.Object.GetNamespace())
+	}
+
+	// Check live cluster state for ApplySet membership conflict.
+	// Resources are freshly constructed from manifests and never carry the part-of
+	// label, so checking the in-memory object would be ineffective (see #2090).
+	// Instead, GET the live object and check its labels.
+	liveObj := &unstructured.Unstructured{}
+	liveObj.SetGroupVersionKind(r.Object.GroupVersionKind())
+	err := a.client.Get(ctx, client.ObjectKey{Name: r.Object.GetName(), Namespace: lookupNamespace}, liveObj)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			item.Error = fmt.Errorf("failed to get existing resource %s/%s for conflict check: %w",
+				lookupNamespace, r.Object.GetName(), err)
+			return item
+		}
+		// NotFound: object is new, no conflict possible.
+	} else {
+		// Object exists on cluster — check its part-of label for ownership conflict.
+		liveLabels := liveObj.GetLabels()
+		if existingID, exists := liveLabels[ApplysetPartOfLabel]; exists && existingID != a.applySetID {
+			item.Error = &ApplySetConflictError{
+				ResourceName:      r.Object.GetName(),
+				ResourceNamespace: lookupNamespace,
+				ResourceGVK:       r.Object.GroupVersionKind().String(),
+				CurrentApplySetID: existingID,
+				DesiredApplySetID: a.applySetID,
+			}
+			a.log.V(2).Info("applyset conflict detected from live object",
+				"id", r.ID,
+				"name", r.Object.GetName(),
+				"namespace", lookupNamespace,
+				"gvk", r.Object.GroupVersionKind().String(),
+				"existingApplySetID", existingID,
+				"desiredApplySetID", a.applySetID,
+			)
+			return item
+		}
+	}
+
+	// Inject applyset membership label (required for prune to find managed resources).
 	labels := r.Object.GetLabels()
 	if labels == nil {
 		labels = make(map[string]string)
 	}
-
-	// Check for ApplySet membership conflict: if the resource already belongs to
-	// a different ApplySet, fail rather than silently overwriting the membership.
-	// This prevents accidental takeover of resources managed by other instances/controllers.
-	if existingID, exists := labels[ApplysetPartOfLabel]; exists && existingID != a.applySetID {
-		item.Error = &ApplySetConflictError{
-			ResourceName:      r.Object.GetName(),
-			ResourceNamespace: r.Object.GetNamespace(),
-			ResourceGVK:       r.Object.GroupVersionKind().String(),
-			CurrentApplySetID: existingID,
-			DesiredApplySetID: a.applySetID,
-		}
-		a.log.V(2).Info("applyset conflict",
-			"id", r.ID,
-			"name", r.Object.GetName(),
-			"namespace", r.Object.GetNamespace(),
-			"gvk", r.Object.GroupVersionKind().String(),
-			"existingApplySetID", existingID,
-			"desiredApplySetID", a.applySetID,
-		)
-		return item
-	}
-
-	// Handle applyset label conflicts/overwrites
 	labels[ApplysetPartOfLabel] = a.applySetID
 	r.Object.SetLabels(labels)
 
@@ -388,7 +407,7 @@ func (a *ApplySet) applyResource(
 		client.FieldOwner(options.FieldManager),
 	}
 
-	err := a.client.Apply(ctx, client.ApplyConfigurationFromUnstructured(r.Object), applyOptions...)
+	err = a.client.Apply(ctx, client.ApplyConfigurationFromUnstructured(r.Object), applyOptions...)
 	if err != nil {
 		item.Error = err
 		a.log.V(2).Info("apply failed",
