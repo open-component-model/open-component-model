@@ -28,8 +28,8 @@ require (
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260407102747-5b24debae3cf
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260407102747-5b24debae3cf
-	ocm.software/open-component-model/bindings/go/oci v0.0.37
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260402061016-e120070fd921
+	ocm.software/open-component-model/bindings/go/oci v0.0.38
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260407102747-5b24debae3cf

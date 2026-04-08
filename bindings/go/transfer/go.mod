@@ -9,8 +9,8 @@ require (
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260407102747-5b24debae3cf
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260407102747-5b24debae3cf
-	ocm.software/open-component-model/bindings/go/oci v0.0.37
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260402061016-e120070fd921
+	ocm.software/open-component-model/bindings/go/oci v0.0.38
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260407102747-5b24debae3cf
