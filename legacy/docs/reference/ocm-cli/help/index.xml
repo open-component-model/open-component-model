@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>help on Open Component Model</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/help/</link><description>Recent content in help on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/legacy/docs/reference/ocm-cli/help/index.xml" rel="self" type="application/rss+xml"/><item><title>attributes</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/help/attributes/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/help/attributes/</guid><description>&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;The OCM library supports a set of attributes, which can be used to influence
+the behaviour of various functions. The CLI also supports setting of those
+attributes using the config file (see 
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/help/configfile/"&gt;ocm configfile&lt;/a&gt;) or by
+command line options of the main command (see 
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/"&gt;ocm&lt;/a&gt;).&lt;/p&gt;</description></item><item><title>configfile</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/help/configfile/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/help/configfile/</guid><description>&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;The command line client supports configuring by a given configuration file.
+If existent, by default, the file &lt;code&gt;$HOME/.ocmconfig&lt;/code&gt; will be read.
+Using the option &lt;code&gt;&amp;ndash;config&lt;/code&gt; an alternative file can be specified.&lt;/p&gt;</description></item><item><title>credential-handling</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/help/credential-handling/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/help/credential-handling/</guid><description>&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;In contrast to libraries intended for a dedicated technical environment,
+for example the handling of OCI images in OCI registries, the OCM
+ecosystem cannot provide a specialized credential management for a dedicated
+environment.&lt;/p&gt;</description></item><item><title>logging</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/help/logging/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/help/logging/</guid><description>&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Logging can be configured as part of the ocm config file (
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/help/configfile/"&gt;ocm configfile&lt;/a&gt;)
+or by command line options of the 
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/"&gt;ocm&lt;/a&gt; command. Details about
+the YAML structure of a logging settings can be found on https://github.com/mandelsoft/logging.&lt;/p&gt;</description></item><item><title>oci-references</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/help/oci-references/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/help/oci-references/</guid><description>&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;The command line client supports a special notation scheme for specifying
+references to instances of oci like registries. This allows for specifying
+references to any registry supported by the OCM toolset that can host OCI
+artifacts. As a subset the regular OCI artifact notation used for docker
+images are possible:&lt;/p&gt;</description></item><item><title>ocm-accessmethods</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/help/ocm-accessmethods/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/help/ocm-accessmethods/</guid><description>&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Access methods are used to handle the access to the content of artifacts
+described in a component version. Therefore, an artifact entry contains
+an access specification describing the access attributes for the dedicated
+artifact.&lt;/p&gt;</description></item><item><title>ocm-downloadhandlers</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/help/ocm-downloadhandlers/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/help/ocm-downloadhandlers/</guid><description>&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;A download handler can be used to process resources to be downloaded from
+on OCM repository. By default, the blobs provided from the access method
+(see 
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/help/ocm-accessmethods/"&gt;ocm ocm-accessmethods&lt;/a&gt;) are used to store the resource content
+in the local filesystem. Download handlers can be used to tweak this process.
+They get access to the blob content and decide on their own what to do
+with it, or how to transform it into files stored in the file system.&lt;/p&gt;</description></item><item><title>ocm-labels</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/help/ocm-labels/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/help/ocm-labels/</guid><description>&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Labels are a set of arbitrary properties, which can be attached to elements
+of a component version:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;a component version itself&lt;/li&gt;
+&lt;li&gt;the provider of a component version&lt;/li&gt;
+&lt;li&gt;resources&lt;/li&gt;
+&lt;li&gt;sources&lt;/li&gt;
+&lt;li&gt;component references&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The dedicated elements support this by providing a field &lt;code&gt;labels&lt;/code&gt;,
+which is a list of label definitions. Every label definition has several fields:&lt;/p&gt;</description></item><item><title>ocm-pubsub</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/help/ocm-pubsub/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/help/ocm-pubsub/</guid><description>&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;An OCM repository can be configured to propagate change events via a
+publish/subscribe system, if there is a persistence provider for the dedicated
+repository type. If available any known publish/subscribe system can
+be configured with 
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/set/pubsub/"&gt;ocm set pubsub&lt;/a&gt; and shown with
+
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/get/pubsub/"&gt;ocm get pubsub&lt;/a&gt;. Hereby, the pub/sub system
+is described by a typed specification.&lt;/p&gt;</description></item><item><title>ocm-references</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/help/ocm-references/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/help/ocm-references/</guid><description>&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;The command line client supports a special notation scheme for specifying
+references to OCM components and repositories. This allows for specifying
+references to any registry supported by the OCM toolset that can host OCM
+components:&lt;/p&gt;</description></item></channel></rss>

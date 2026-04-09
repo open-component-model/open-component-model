@@ -1,0 +1,10 @@
+<html><head>
+  <meta name="go-import"
+        content="ocm.software/testpackage
+                 git https://github.com/mandelsoft/testpackage">
+  <meta name="go-source"
+        content="ocm.test/testpackage
+                 https://github.com/mandelsoft/testpackage
+                 https://github.com/mandelsoft/testpackage/tree/master{/dir}
+                 https://github.com/mandelsoft/testpackage/blob/master{/dir}/{file}#L{line}">
+</head></html>

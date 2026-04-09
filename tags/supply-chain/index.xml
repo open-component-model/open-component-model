@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Supply-Chain on Open Component Model</title><link>https://ocm.software/tags/supply-chain/</link><description>Recent content in Supply-Chain on Open Component Model</description><generator>Hugo</generator><language>en-US</language><lastBuildDate>Mon, 30 Mar 2026 10:00:00 +0200</lastBuildDate><atom:link href="https://ocm.software/tags/supply-chain/index.xml" rel="self" type="application/rss+xml"/><item><title>OCM v2: A Fresh Foundation for Secure Software Delivery</title><link>https://ocm.software/blog/ocmv2/</link><pubDate>Mon, 30 Mar 2026 10:00:00 +0200</pubDate><guid>https://ocm.software/blog/ocmv2/</guid><description>&lt;p&gt;We are excited to announce &lt;strong&gt;OCM v2&lt;/strong&gt; — a ground-up rebuild of the Open Component Model tooling stack. A new CLI, Kubernetes controllers, and Go library — designed from the start for modularity, security, and community contribution. The entire stack continues to implement the 
+
+
+
+
+
+
+&lt;a href="https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/00-component-descriptor/v2.md" target="_blank" rel="noopener"&gt;OCM Specification v2&lt;/a&gt;, ensuring full compatibility with the standard that defines how components, resources, and signatures are represented.&lt;/p&gt;</description></item></channel></rss>

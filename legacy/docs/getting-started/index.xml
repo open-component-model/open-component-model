@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Getting Started on Open Component Model</title><link>https://ocm.software/legacy/docs/getting-started/</link><description>Recent content in Getting Started on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/legacy/docs/getting-started/index.xml" rel="self" type="application/rss+xml"/><item><title>Prerequisites</title><link>https://ocm.software/legacy/docs/getting-started/prerequisites/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/getting-started/prerequisites/</guid><description>&lt;p&gt;This and the following chapters walk you through some basic steps to get started with OCM concepts and the OCM CLI.
+You will learn how to create a component version, display and examine the component, and how to transport and sign it.&lt;/p&gt;</description></item><item><title>Install the OCM CLI</title><link>https://ocm.software/legacy/docs/getting-started/install-the-ocm-cli/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/getting-started/install-the-ocm-cli/</guid><description>&lt;h2 id="overview"&gt;Overview&lt;/h2&gt;
+&lt;p&gt;You can install the latest release of the OCM CLI from any of the following sources (more details below):&lt;/p&gt;</description></item><item><title>Create Component Versions</title><link>https://ocm.software/legacy/docs/getting-started/create-component-versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/getting-started/create-component-versions/</guid><description>&lt;h2 id="creating-and-storing-component-versions"&gt;Creating and Storing Component Versions&lt;/h2&gt;
+&lt;p&gt;Component Versions are created using a &lt;code&gt;component-constructor.yaml&lt;/code&gt; file, which is a description file that contains one or multiple components. The file describes the components and their artifacts - resources and sources, metadata in form of labels and references to other components.&lt;/p&gt;</description></item><item><title>Display and Examine Component Versions</title><link>https://ocm.software/legacy/docs/getting-started/display-and-examine-component-versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/getting-started/display-and-examine-component-versions/</guid><description>&lt;h2 id="list-component-versions"&gt;List Component Versions&lt;/h2&gt;
+&lt;p&gt;To show a component stored in an OCM repository or CTF archive (which itself is an OCM repository), the 
+
+
+
+
+
+
+&lt;a href="https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_get_componentversions.md" target="_blank" rel="noopener"&gt;&lt;code&gt;ocm get componentversion&lt;/code&gt;&lt;/a&gt; command can be used:&lt;/p&gt;</description></item><item><title>Sign Component Versions</title><link>https://ocm.software/legacy/docs/getting-started/sign-component-versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/getting-started/sign-component-versions/</guid><description>&lt;p&gt;Component versions can be signed to ensure integrity along a transport chain.&lt;/p&gt;
+&lt;p&gt;Signing requires a key pair, a signature, and, optionally, an issuer, as well as an algorithm and a
+name for the signature.&lt;/p&gt;</description></item><item><title>Transport Component Versions</title><link>https://ocm.software/legacy/docs/getting-started/transport-component-versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/getting-started/transport-component-versions/</guid><description>&lt;p&gt;The section 
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/legacy/docs/getting-started/create-component-versions/#add-component-version-to-ctf-archive/"&gt;Add Component Version to CTF archive&lt;/a&gt; explained how to store component versions in a CTF archive.&lt;/p&gt;
+&lt;p&gt;During the transfer, it is possible to include component references as local blobs. It is also possible to include references in a recursive way.&lt;/p&gt;</description></item><item><title>Set Up OCM Controller Environment</title><link>https://ocm.software/legacy/docs/getting-started/set-up-ocm-controller-environment/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/getting-started/set-up-ocm-controller-environment/</guid><description>&lt;p&gt;This document describes how to set up a local environment to 
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/legacy/docs/getting-started/deploy-helm-charts/"&gt;Deploy a Helm Chart&lt;/a&gt; using the OCM controllers.&lt;/p&gt;
+&lt;h2 id="prerequisites"&gt;Prerequisites&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;
+
+
+
+
+
+
+&lt;a href="https://kubernetes.io/docs/tasks/tools/#kubectl" target="_blank" rel="noopener"&gt;kubectl&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="start-a-local-kubernetes-cluster-with-kind"&gt;Start a Local Kubernetes Cluster with kind&lt;/h2&gt;
+&lt;div class="callout callout-note d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"&gt;&lt;svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="outline/box svg-inline callout-icon me-2 mb-3" id="svg-box" role="img"&gt; &lt;path stroke="none" d="M0 0h24v24H0z" fill="none" /&gt; &lt;path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5" /&gt; &lt;path d="M12 12l8 -4.5" /&gt; &lt;path d="M12 12l0 9" /&gt; &lt;path d="M12 12l-8 -4.5" /&gt; &lt;/svg&gt;&lt;div class="callout-content"&gt;&lt;div class="callout-title"&gt;Kubernetes Cluster&lt;/div&gt;&lt;div class="callout-body"&gt;&lt;p&gt;You don&amp;rsquo;t need to run kind if you are using a remote Kubernetes cluster you have access to. If so, you can skip this.&lt;/p&gt;</description></item><item><title>Deploy Helm Charts</title><link>https://ocm.software/legacy/docs/getting-started/deploy-helm-charts/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/getting-started/deploy-helm-charts/</guid><description>&lt;p&gt;This guide demonstrates how to deploy a Helm Chart from an OCM component version using OCM controllers, kro, and FluxCD.
+It is a rather basic example, in which it is assumed that a developer created an application, packaged it as a Helm
+chart, and publishes it as OCM component version in an OCI registry. Then, an operator who wants to deploy the
+application via Helm chart in a Kubernetes cluster, creates a &lt;code&gt;ResourceGraphDefinition&lt;/code&gt; with resources that point to
+this OCM component version. Using CEL expressions inside the &lt;code&gt;ResourceGraphDefinition&lt;/code&gt;, the information about the
+resource location will be passed to FluxCD, which will then configure the Helm chart and deploy it into the Kubernetes
+cluster.&lt;/p&gt;</description></item></channel></rss>

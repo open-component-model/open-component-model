@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>download on Open Component Model</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/download/</link><description>Recent content in download on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/legacy/docs/reference/ocm-cli/download/index.xml" rel="self" type="application/rss+xml"/><item><title>artifacts</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/download/artifacts/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/download/artifacts/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm download artifacts [&amp;lt;options&amp;gt;] {&amp;lt;artifact&amp;gt;} &lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --dirtree extract as effective filesystem content
+ -h, --help help for artifacts
+ --layers ints extract dedicated layers
+ --oci-layout download as OCI Image Layout (blobs in blobs/&amp;lt;algorithm&amp;gt;/&amp;lt;encoded&amp;gt;)
+ -O, --outfile string output file or directory
+ --repo string repository name or spec
+ -t, --type string archive format (directory, tar, tgz) (default &amp;#34;directory&amp;#34;)&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Download artifacts from an OCI registry. The result is stored in
+artifact set format, without the repository part.&lt;/p&gt;</description></item><item><title>cli</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/download/cli/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/download/cli/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm download cli [&amp;lt;options&amp;gt;] [&amp;lt;component&amp;gt; {&amp;lt;name&amp;gt; { &amp;lt;key&amp;gt;=&amp;lt;value&amp;gt; }}]&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -c, --constraints constraints version constraint
+ -h, --help help for cli
+ --oci-layout download OCI artifacts in OCI Image Layout format (blobs/&amp;lt;algorithm&amp;gt;/&amp;lt;encoded&amp;gt;)
+ -O, --outfile string output file or directory
+ -p, --path lookup executable in PATH
+ --repo string repository name or spec
+ --use-verified enable verification store
+ --verified string file used to remember verifications for downloads (default &amp;#34;~/.ocm/verified&amp;#34;)
+ --verify verify downloads&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Download an OCM CLI executable. By default, the standard publishing component
+and repository is used. Optionally, another component or repo and even a resource
+can be specified. Resources are specified by identities. An identity consists of
+a name argument followed by optional &lt;code&gt;&amp;lt;key&amp;gt;=&amp;lt;value&amp;gt;&lt;/code&gt;
+arguments.&lt;/p&gt;</description></item><item><title>componentversions</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/download/componentversions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/download/componentversions/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm download componentversions [&amp;lt;options&amp;gt;] {&amp;lt;components&amp;gt;} &lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for componentversions
+ -O, --outfile string output file or directory
+ --repo string repository name or spec
+ -t, --type string archive format (directory, tar, tgz) (default &amp;#34;directory&amp;#34;)&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Download component versions from an OCM repository. The result is stored in
+component archives.&lt;/p&gt;</description></item><item><title>resources</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/download/resources/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/download/resources/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm download resources [&amp;lt;options&amp;gt;] &amp;lt;component&amp;gt; {&amp;lt;name&amp;gt; { &amp;lt;key&amp;gt;=&amp;lt;value&amp;gt; }}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --check-verified enable verification store
+ -c, --constraints constraints version constraint
+ -d, --download-handlers use download handler if possible
+ --downloader &amp;lt;name&amp;gt;=&amp;lt;value&amp;gt; artifact downloader (&amp;lt;name&amp;gt;[:&amp;lt;artifact type&amp;gt;[:&amp;lt;media type&amp;gt;[:&amp;lt;priority&amp;gt;]]]=&amp;lt;JSON target config&amp;gt;) (default [])
+ -x, --executable download executable for local platform
+ -h, --help help for resources
+ --latest restrict component versions to latest
+ --lookup stringArray repository name or spec for closure lookup fallback
+ --oci-layout download OCI artifacts in OCI Image Layout format (blobs/&amp;lt;algorithm&amp;gt;/&amp;lt;encoded&amp;gt;)
+ -O, --outfile string output file or directory
+ -r, --recursive follow component reference nesting
+ --repo string repository name or spec
+ -t, --type stringArray resource type filter
+ --verified string file used to remember verifications for downloads (default &amp;#34;~/.ocm/verified&amp;#34;)
+ --verify verify downloads&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Download resources of a component version. Resources are specified
+by identities. An identity consists of
+a name argument followed by optional &lt;code&gt;&amp;lt;key&amp;gt;=&amp;lt;value&amp;gt;&lt;/code&gt;
+arguments.&lt;/p&gt;</description></item></channel></rss>

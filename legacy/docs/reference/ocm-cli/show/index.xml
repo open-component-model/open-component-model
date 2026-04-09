@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>show on Open Component Model</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/show/</link><description>Recent content in show on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/legacy/docs/reference/ocm-cli/show/index.xml" rel="self" type="application/rss+xml"/><item><title>tags</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/show/tags/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/show/tags/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm show tags [&amp;lt;options&amp;gt;] &amp;lt;component&amp;gt; {&amp;lt;version pattern&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for tags
+ -l, --latest show only latest tags
+ --repo string repository name or spec
+ -o, --semantic show semantic tags
+ -s, --semver show only semver compliant tags&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Match tags of an artifact against some patterns.&lt;/p&gt;</description></item><item><title>versions</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/show/versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/show/versions/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm show versions [&amp;lt;options&amp;gt;] &amp;lt;component&amp;gt; {&amp;lt;version pattern&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for versions
+ -l, --latest show only latest version
+ --repo string repository name or spec
+ -s, --semantic show semantic version&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Match versions of a component against some patterns.&lt;/p&gt;</description></item></channel></rss>

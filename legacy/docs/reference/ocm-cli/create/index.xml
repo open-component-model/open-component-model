@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>create on Open Component Model</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/create/</link><description>Recent content in create on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/legacy/docs/reference/ocm-cli/create/index.xml" rel="self" type="application/rss+xml"/><item><title>componentarchive</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/create/componentarchive/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/create/componentarchive/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm create componentarchive [&amp;lt;options&amp;gt;] &amp;lt;component&amp;gt; &amp;lt;version&amp;gt; --provider &amp;lt;provider-name&amp;gt; {--provider &amp;lt;label&amp;gt;=&amp;lt;value&amp;gt;} {&amp;lt;label&amp;gt;=&amp;lt;value&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -F, --file string target file/directory (default &amp;#34;component-archive&amp;#34;)
+ -f, --force remove existing content
+ -h, --help help for componentarchive
+ -p, --provider stringArray provider attribute
+ -S, --scheme string schema version (default &amp;#34;v2&amp;#34;)
+ -t, --type string archive format (directory, tar, tgz) (default &amp;#34;directory&amp;#34;)&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Create a new component archive. This might be either a directory prepared
+to host component version content or a tar/tgz file (see option &amp;ndash;type).&lt;/p&gt;</description></item><item><title>rsakeypair</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/create/rsakeypair/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/create/rsakeypair/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm create rsakeypair [&amp;lt;private key file&amp;gt; [&amp;lt;public key file&amp;gt;]] {&amp;lt;subject-attribute&amp;gt;=&amp;lt;value&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --ca create certificate for a signing authority
+ --ca-cert string certificate authority to sign public key
+ --ca-key string private key for certificate authority
+ -E, --encrypt encrypt private key with new key
+ -e, --encryptionKey string encrypt private key with given key
+ -h, --help help for rsakeypair
+ --root-certs string root certificates used to validate used certificate authority
+ --validity duration certificate validity (default 87600h0m0s)&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Create an RSA public key pair and save to files.&lt;/p&gt;</description></item><item><title>transportarchive</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/create/transportarchive/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/create/transportarchive/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm create transportarchive [&amp;lt;options&amp;gt;] &amp;lt;path&amp;gt;&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -f, --force remove existing content
+ -h, --help help for transportarchive
+ -t, --type string archive format (directory, tar, tgz) (default &amp;#34;directory&amp;#34;)&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Create a new empty OCM/OCI transport archive. This might be either a directory prepared
+to host artifact content or a tar/tgz file.&lt;/p&gt;</description></item></channel></rss>

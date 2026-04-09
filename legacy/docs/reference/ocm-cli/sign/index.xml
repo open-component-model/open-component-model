@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>sign on Open Component Model</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/sign/</link><description>Recent content in sign on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/legacy/docs/reference/ocm-cli/sign/index.xml" rel="self" type="application/rss+xml"/><item><title>componentversions</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/sign/componentversions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/sign/componentversions/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm sign componentversions [&amp;lt;options&amp;gt;] {&amp;lt;component-reference&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -- enable verification store
+ -S, --algorithm string signature handler (default &amp;#34;RSASSA-PKCS1-V1_5&amp;#34;)
+ --ca-cert stringArray additional root certificate authorities (for signing certificates)
+ -c, --constraints constraints version constraint
+ -H, --hash string hash algorithm (default &amp;#34;SHA-256&amp;#34;)
+ -h, --help help for componentversions
+ -I, --issuer stringArray issuer name or distinguished name (DN) (optionally for dedicated signature) ([&amp;lt;name&amp;gt;:=]&amp;lt;dn&amp;gt;)
+ --keyless use keyless signing
+ --latest restrict component versions to latest
+ --lookup stringArray repository name or spec for closure lookup fallback
+ -N, --normalization string normalization algorithm (default &amp;#34;jsonNormalisation/v3&amp;#34;)
+ -K, --private-key stringArray private key setting
+ -k, --public-key stringArray public key setting
+ -R, --recursive recursively sign component versions
+ --repo string repository name or spec
+ -s, --signature stringArray signature name
+ --tsa use timestamp authority (default server: http://timestamp.digicert.com)
+ --tsa-url string TSA server URL
+ --update update digest in component versions (default true)
+ --verified string file used to remember verifications for downloads (default &amp;#34;~/.ocm/verified&amp;#34;)
+ -V, --verify verify existing digests (default true)&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Sign specified component versions.&lt;/p&gt;</description></item><item><title>hash</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/sign/hash/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/sign/hash/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm sign hash &amp;lt;private key file&amp;gt; &amp;lt;hash&amp;gt; [&amp;lt;issuer&amp;gt;]&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -S, --algorithm string signature algorithm (default &amp;#34;RSASSA-PKCS1-V1_5&amp;#34;)
+ --ca-cert stringArray additional root certificate authorities (for signing certificates)
+ -h, --help help for hash
+ --publicKey string public key certificate file
+ --rootCerts string root certificates file (deprecated)&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Print the signature for a dedicated digest value.&lt;/p&gt;</description></item></channel></rss>

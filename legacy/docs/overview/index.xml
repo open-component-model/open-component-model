@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Overview on Open Component Model</title><link>https://ocm.software/legacy/docs/overview/</link><description>Recent content in Overview on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/legacy/docs/overview/index.xml" rel="self" type="application/rss+xml"/><item><title>About the OCM Project</title><link>https://ocm.software/legacy/docs/overview/about-the-ocm-project/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/overview/about-the-ocm-project/</guid><description>&lt;p&gt;The Open Component Model (OCM) is an open standard that enables teams to describe software artifacts and their lifecycle metadata in a consistent,
+technology-agnostic way. It’s built to support secure, reliable delivery and deployment of software—across cloud, on-prem, hybrid, and even air-gapped environments.
+By decoupling and streamlining lifecycle processes like compliance checks, security scans, and deployments, OCM helps teams collaborate more effectively
+and build trust into every step of the software supply chain.&lt;/p&gt;</description></item><item><title>Benefits of OCM</title><link>https://ocm.software/legacy/docs/overview/benefits-of-ocm/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/overview/benefits-of-ocm/</guid><description>&lt;p&gt;The Open Component Model (OCM) is an open-source toolset for secure software delivery.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;OCM gives you full visibility and control across the supply chain, streamlining compliance checks, security scans, and deployments.&lt;/li&gt;
+&lt;li&gt;OCM works everywhere — cloud, on-premises, hybrid, and air-gapped environments.&lt;/li&gt;
+&lt;li&gt;OCM integrates seamlessly with your existing tools and is easy to extend.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;With OCM, you gain control, reduce risk, and keep your delivery approach adaptable.&lt;/p&gt;</description></item></channel></rss>

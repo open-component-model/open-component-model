@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>check on Open Component Model</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/check/</link><description>Recent content in check on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/legacy/docs/reference/ocm-cli/check/index.xml" rel="self" type="application/rss+xml"/><item><title>componentversions</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/check/componentversions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/check/componentversions/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm check componentversions [&amp;lt;options&amp;gt;] {&amp;lt;component-reference&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --fail-on-error fail on validation error
+ -h, --help help for componentversions
+ -R, --local-resources check also for describing resources with local access method, only
+ -S, --local-sources check also for describing sources with local access method, only
+ -o, --output string output mode (JSON, json, wide, yaml)
+ --repo string repository name or spec
+ -s, --sort stringArray sort fields&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;This command checks, whether component versions are completely contained
+in an OCM repository with all its dependent component references.&lt;/p&gt;</description></item></channel></rss>

@@ -1,0 +1,901 @@
+$id: 'https://ocm.software/schemas/component-configuration'
+description: 'OCM Configuration File Schema'
+
+type: object
+required:
+  - 'components'
+additionalProperties: false
+properties:
+  components:
+    $ref: '#/$defs/components'
+
+$defs:
+  components:
+    type: 'array'
+    description: 'list of specifications of the components to be created'
+    items:
+      $ref: '#/$defs/component'
+  component:
+    type: 'object'
+    description: 'specification of the component to be created'
+    required:
+      - 'name'
+      - 'version'
+      - 'provider'
+    additionalProperties: false
+    properties:
+      name:
+        $ref: '#/$defs/componentName'
+      version:
+        $ref: '#/$defs/version'
+      labels:
+        $ref: '#/$defs/labels'
+      provider:
+        $ref: '#/$defs/provider'
+      resources:
+        $ref: '#/$defs/resources'
+      sources:
+        $ref: '#/$defs/sources'
+      componentReferences:
+        $ref: '#/$defs/componentReferences'
+
+# Resource Schema Specification --------------------------------------------------------------------------------------#
+  resources:
+    type: 'array'
+    description: 'list of specifications of a resources to be added to the component'
+    items:
+      $ref: '#/$defs/resource'
+
+  resource:
+    # The 'defaultResource' schema contains all properties possible on a resource to enable autocompletion for all
+    # properties.
+    $ref: '#/$defs/defaultResource'
+    allOf:
+      - if:
+          required:
+            - 'access'
+          properties:
+            access:
+              $ref: '#/$defs/access'
+        then:
+          type: object
+          $ref: '#/$defs/accessResource'
+      - if:
+          required:
+            - 'input'
+          properties:
+            input:
+              $ref: '#/$defs/input'
+        then:
+          type: object
+          $ref: '#/$defs/inputResource'
+
+  defaultResource:
+    properties:
+      name:
+        $ref: '#/$defs/elementName'
+      type:
+        $ref: '#/$defs/artifactType'
+      extraIdentity:
+        $ref: '#/$defs/elementExtraIdentity'
+      version:
+        $ref: '#/$defs/version'
+      relation:
+        $ref: '#/$defs/relation'
+      labels:
+        $ref: '#/$defs/labels'
+      srcRefs:
+        $ref: '#/$defs/srcRefs'
+      access:
+        $ref: '#/$defs/access'
+      input:
+        $ref: '#/$defs/input'
+
+  accessResource:
+    type: object
+    required:
+      - 'name'
+      - 'type'
+      - 'access'
+    properties:
+      name:
+        $ref: '#/$defs/elementName'
+      type:
+        $ref: '#/$defs/artifactType'
+      extraIdentity:
+        $ref: '#/$defs/elementExtraIdentity'
+      version:
+        $ref: '#/$defs/version'
+      relation:
+        $ref: '#/$defs/relation'
+      labels:
+        $ref: '#/$defs/labels'
+      srcRefs:
+        $ref: '#/$defs/srcRefs'
+      access:
+        $ref: '#/$defs/access'
+    if:
+      type: object
+      properties:
+        relation:
+          const: 'external'
+    then:
+      # If relation is 'external', a version can be specified.
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: '#/$defs/elementName'
+        type:
+          $ref: '#/$defs/artifactType'
+        extraIdentity:
+          $ref: '#/$defs/elementExtraIdentity'
+        version:
+          $ref: '#/$defs/version'
+        labels:
+          $ref: '#/$defs/labels'
+        srcRefs:
+          $ref: '#/$defs/srcRefs'
+        relation:
+          const: 'external'
+        access:
+          $ref: '#/$defs/access'
+    else:
+      # If relation is 'local', version cannot be specified, as it has to be equal to the component version. Thus, the
+      # version is set correspondingly during creation of the component.
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: '#/$defs/elementName'
+        type:
+          $ref: '#/$defs/artifactType'
+        extraIdentity:
+          $ref: '#/$defs/elementExtraIdentity'
+        labels:
+          $ref: '#/$defs/labels'
+        srcRefs:
+          $ref: '#/$defs/srcRefs'
+        relation:
+          const: 'local'
+        access:
+          $ref: '#/$defs/access'
+
+  inputResource:
+    type: object
+    required:
+      - 'name'
+      - 'type'
+      - 'input'
+    additionalProperties: false
+    properties:
+      name:
+        $ref: '#/$defs/elementName'
+      type:
+        $ref: '#/$defs/artifactType'
+      extraIdentity:
+        $ref: '#/$defs/elementExtraIdentity'
+      labels:
+        $ref: '#/$defs/labels'
+      srcRefs:
+        $ref: '#/$defs/srcRefs'
+      relation:
+        const: 'local'
+      input:
+        $ref: '#/$defs/input'
+
+
+  access:
+    type: object
+    required:
+      - 'type'
+    properties:
+      type:
+        $ref: '#/$defs/accessType'
+    allOf:
+      - if:
+          properties:
+            type:
+              const: 'localBlob'
+        then:
+          type: object
+          required:
+            - 'localReference'
+            - 'mediaType'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'localBlob'
+              description: |
+                "localBlob" specifies the access to an artifact blob that is stored along with the component descriptor.
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#localBlob)
+            localReference:
+              type: 'string'
+              description: |
+                Repository type specific location information. For OCI repository type, the localReference contains the SHA of the blob used to store the blob as layer in the same OCI artifact as the component descriptor. For the Component Archive repository type (a file system representation of a single component), localReference contains the file name of the blob within the blob directory.
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#localBlob)
+              default: 'blob-filename'
+              examples: ['blob-filename', 'sha256:4375e2b69a03eb17ff81b94ecccd59644cf8aef1c1f07', 'sha256.fa7d95d13bcec2665ec944f005d0d7f28ba92c1fd7c128e9b7347d792ba5f291']
+            mediaType:
+              type: 'string'
+              description: |
+                The media type of the blob used to store the resource.
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#localBlob)
+              default: 'application/octet-stream'
+              examples: ['application/octet-stream', 'text/plain', 'application/json', 'application/yaml', 'application/gzip', 'application/x-tar', 'application/x-tgz', 'application/x-tar+gzip']
+            referenceName:
+              type: 'string'
+              description: |
+                (optional) This property may contain identity information used by other repositories to restore a global access. For example, if the localBlob contains an OCI artifact (resource type is ociArtifact) and the component is transported to an OCI registry, then this localBlob may be uploaded as independent OCI artifact (thus, the access type changes to ociArtifact). Then, the referenceName is used as the artifact name.
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#localBlob)
+              default: 'ocmcli-image'
+              examples: ['nginx', 'echo-server', 'ocmcli-image']
+            globalAccess:
+              $ref: '#/$defs/access'
+              description: |
+                (optional) If a resource blob is stored as localBlob, the repository implementation may decide to provide an external access information (usable by non-OCM-aware tools). For example, an OCI artifact stored as local blob can be additionally stored as a regular OCI artifact in an OCI registry. Then, the global access property would contain an entire access of type ociArtifact.
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#localBlob)
+      - if:
+          properties:
+            type:
+              const: 'ociArtifact'
+        then:
+          type: object
+          required:
+            - 'imageReference'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'ociArtifact'
+              description: |
+                "ociArtifact" specifies the access to an artifact stored in an OCI registry.
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#ociartifact)
+            imageReference:
+              type: 'string'
+              description: |
+                OCI image/artifact reference.
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#ociartifact)
+              default: 'ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.7.0'
+              examples: ['nginx:1.25.4', 'eu.gcr.io/gardener-project/landscaper/examples/charts/guided-tour/echo-server:1.0.0', 'ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.7.0', 'ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image@sha256:7b3399da19561d3c54bab9d694126174c334a4a080176cb99186ea4075aff3db', 'ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.7.0@sha256:4f5d0d0684a1ed9f7ce482c87c2c4d3499468fdcea2711f0c3f6a69a7aa9147b']
+      - if:
+          properties:
+            type:
+              const: 'ociBlob'
+              description: |
+                "ociBlob"
+        then:
+          type: object
+          required:
+            - 'imageReference'
+            - 'mediaType'
+            - 'digest'
+            - 'size'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'ociBlob'
+              description: |
+                "ociBlob" specifies the access to OCI blob stored in an OCI repository. Thus, while "ociArtifact" enables to access an entire OCI artifact, "ociBlob" enables to access a specific blob which is described by a layer within such an OCI artifact. (CAUTION: Due to blob size limitations of certain OCI registries, it might be necessary for the OCM tooling to split local blobs into multiple OCI blobs. Therefore, "ociBlob" might not be suitable to provide a global access for local blobs (blobs stored along with the component descriptor).)
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#ociblob)
+            imageReference:
+              type: 'string'
+              description: |
+                OCI repository reference (thus, the artifact name without a tag or a version).
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#ociblob)
+              default: 'ghcr.io/open-component-model/ocm/component-descriptors/ocm.software/ocmcli'
+              examples: ['nginx', 'eu.gcr.io/gardener-project/landscaper/examples/charts/guided-tour/echo-server', 'ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image']
+            mediaType:
+              type: 'string'
+              description: |
+                The media type of the blob (usually described by the layer).
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#ociblob)
+              default: 'application/octet-stream'
+              examples: ['application/octet-stream', 'text/plain', 'application/json', 'application/yaml', 'application/gzip', 'application/x-tar', 'application/x-tgz', 'application/x-tar+gzip']
+            digest:
+              type: 'string'
+              description: |
+                The digest of the blob (usually described by the layer).
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#ociblob)
+              default: 'sha256:41029839fa6ad57a33a4fe85a9f7c7127d37e42d6947317488b5de4c5dbeb20e'
+              examples: ['sha256:41029839fa6ad57a33a4fe85a9f7c7127d37e42d6947317488b5de4c5dbeb20e']
+            size:
+              type: 'integer'
+              description: |
+                The size of the blob (usually described by the layer).
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#ociblob)
+      - if:
+          properties:
+            type:
+              const: 'helm'
+        then:
+          type: object
+          required:
+            - 'helmRepository'
+            - 'helmChart'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'helm'
+              description: |
+                "helm" specifies the access to a helm chart in a helm chart repository.
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#helm-1)
+            helmRepository:
+              type: 'string'
+              description: |
+                Helm repository URL.
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#helm-1)
+              default: 'https://example.helm.repo.com/landscaper'
+              examples: ['https://example.helm.repo.com/landscaper']
+            helmChart:
+              type: 'string'
+              description: |
+                The name and version of the helm chart, separated by a colon.
+              default: 'hello-world:1.0.0'
+              examples: ['hello-world:1.0.0', 'example-chart:1.2.0', 'mychart:2.0.0']
+            caCert:
+              type: 'string'
+              description: |
+                (optional) An TLS root certificate (to enable https communication with registries with otherwise unknown certificate authority).
+            keyring:
+              type: 'string'
+              description: |
+                (optional) An optional keyring used to verify the chart.
+      - if:
+          properties:
+            type:
+              const: 'gitHub'
+        then:
+          type: object
+          required:
+            - 'repoUrl'
+            - 'commit'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'gitHub'
+              description: |
+                "gitHub" specifies the access to the content of a commit in a Github repository.
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#github)
+            repoUrl:
+              type: 'string'
+              description: |
+                Repository URL (with or without scheme).
+                [See the documentation](https://ocm.software/docs/guides/input_and_access/#github)
+              default: 'https://github.com/open-component-model/ocm'
+              examples: ['https://github.com/open-component-model/ocm', 'github.com/open-component-model/ocm']
+            ref:
+              type: 'string'
+            commit:
+              type: 'string'
+              description: |
+                The SHA of the git commit.
+              examples: ['16ce14e14f88858d8a905e70f172ede70fa73864']
+      - if:
+          properties:
+            type:
+              const: 's3'
+        then:
+          type: object
+          required:
+            - 'bucket'
+            - 'key'
+            - 'mediaType'
+          additionalProperties: false
+          properties:
+            type:
+              const: 's3'
+            region:
+              type: 'string'
+            bucket:
+              type: 'string'
+            key:
+              type: 'string'
+            mediaType:
+              type: 'string'
+      - if:
+          properties:
+            type:
+              const: 'npm'
+        then:
+          type: object
+          required:
+            - 'registry'
+            - 'package'
+            - 'version'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'npm'
+            registry:
+              type: 'string'
+            package:
+              type: 'string'
+            version:
+              type: 'string'
+      - if:
+          properties:
+            type:
+              const: 'wget'
+        then:
+          type: object
+          required:
+            - 'url'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'wget'
+            url:
+              type: 'string'
+            mediaType:
+              type: 'string'
+            header:
+              type: 'object'
+              additionalProperties:
+                type: 'array'
+                items:
+                  type: 'string'
+            verb:
+              type: 'string'
+            body:
+              type: 'string'
+            noRedirect:
+              type: 'boolean'
+
+  input:
+    type: object
+    required:
+      - 'type'
+    properties:
+      type:
+        $ref: '#/$defs/inputType'
+    allOf:
+      - if:
+          properties:
+            type:
+              const: 'binary'
+        then:
+          type: object
+          required:
+            - 'data'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'binary'
+            data:
+              type: 'string'
+              description: 'The binary data to provide.'
+            mediaType:
+              type: 'string'
+            compress:
+              type: 'boolean'
+      - if:
+          properties:
+            type:
+              const: 'dir'
+        then:
+          type: object
+          required:
+            - 'path'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'dir'
+            path:
+              type: 'string'
+            mediaType:
+              type: 'string'
+            compress:
+              type: 'boolean'
+            preserveDir:
+              type: 'boolean'
+            followSymlinks:
+              type: 'boolean'
+            excludeFiles:
+              type: 'array'
+              items:
+                type: 'string'
+            includeFiles:
+              type: 'array'
+              items:
+                type: 'string'
+      - if:
+          properties:
+            type:
+              const: 'docker'
+        then:
+          type: object
+          required:
+            - 'path'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'docker'
+            path:
+              type: 'string'
+            repository:
+              type: 'string'
+      - if:
+          properties:
+            type:
+              const: 'dockermulti'
+        then:
+          type: object
+          required:
+            - 'variants'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'dockermulti'
+            variants:
+              type: 'array'
+              items:
+                type: 'string'
+            repository:
+              type: 'string'
+      - if:
+          properties:
+            type:
+              const: 'file'
+        then:
+          type: object
+          required:
+            - 'path'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'file'
+            path:
+              type: 'string'
+            mediaType:
+              type: 'string'
+            compress:
+              type: 'boolean'
+      - if:
+          properties:
+            type:
+              const: 'helm'
+        then:
+          type: object
+          required:
+            - 'path'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'helm'
+            path:
+              type: 'string'
+            version:
+              type: 'string'
+            helmRepository:
+              type: 'string'
+            repository:
+              type: 'string'
+            caCertFile:
+              type: 'string'
+            caCert:
+              type: 'string'
+      - if:
+          properties:
+            type:
+              const: 'ociArtifact'
+        then:
+          type: object
+          required:
+            - 'path'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'ociArtifact'
+            path:
+              type: 'string'
+            repository:
+              type: 'string'
+            platforms:
+              type: 'array'
+              items:
+                type: 'string'
+      - if:
+          properties:
+            type:
+              const: 'spiff'
+        then:
+          type: object
+          required:
+            - 'path'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'spiff'
+            path:
+              type: 'string'
+            mediaType:
+              type: 'string'
+            compress:
+              type: 'boolean'
+            values:
+              type: object
+            libraries:
+              type: 'array'
+              items:
+                type: 'string'
+      - if:
+          properties:
+            type:
+              const: 'utf8'
+        then:
+          type: object
+          additionalProperties: false
+          properties:
+            type:
+              const: 'utf8'
+            text:
+              type: 'string'
+            json:
+              type: object
+            formattedJson:
+              type: object
+            yaml:
+              type: object
+            mediaType:
+              type: 'string'
+            compress:
+              type: 'boolean'
+      - if:
+          properties:
+            type:
+              const: 'wget'
+        then:
+          type: object
+          required:
+            - 'url'
+          additionalProperties: false
+          properties:
+            type:
+              const: 'wget'
+            url:
+              type: 'string'
+            mediaType:
+              type: 'string'
+            header:
+              type: 'object'
+              additionalProperties:
+                type: 'array'
+                items:
+                  type: 'string'
+            verb:
+              type: 'string'
+            body:
+              type: 'string'
+            noRedirect:
+              type: 'string'
+
+# Source Schema Specification ----------------------------------------------------------------------------------------#
+  sources:
+    type: 'array'
+    description: 'list of specifications of a resources to be added to the component'
+    items:
+      $ref: '#/$defs/source'
+
+  source:
+    # The 'defaultResource' schema contains all properties possible on a resource to enable autocompletion for all
+    # properties.
+    $ref: '#/$defs/defaultSource'
+    allOf:
+      - if:
+          required:
+            - 'access'
+          properties:
+            access:
+              $ref: '#/$defs/access'
+        then:
+          type: object
+          $ref: '#/$defs/accessSource'
+      - if:
+          required:
+            - 'input'
+          properties:
+            input:
+              $ref: '#/$defs/input'
+        then:
+          type: object
+          $ref: '#/$defs/inputSource'
+
+  defaultSource:
+    properties:
+      name:
+        $ref: '#/$defs/elementName'
+      type:
+        $ref: '#/$defs/artifactType'
+      extraIdentity:
+        $ref: '#/$defs/elementExtraIdentity'
+      version:
+        $ref: '#/$defs/version'
+      labels:
+        $ref: '#/$defs/labels'
+      access:
+        $ref: '#/$defs/access'
+      input:
+        $ref: '#/$defs/input'
+
+  accessSource:
+    type: object
+    required:
+      - 'name'
+      - 'type'
+      - 'access'
+    additionalProperties: false
+    properties:
+      name:
+        $ref: '#/$defs/elementName'
+      type:
+        $ref: '#/$defs/artifactType'
+      extraIdentity:
+        $ref: '#/$defs/elementExtraIdentity'
+      version:
+        $ref: '#/$defs/version'
+      labels:
+        $ref: '#/$defs/labels'
+      access:
+        $ref: '#/$defs/access'
+
+  inputSource:
+    type: object
+    required:
+      - 'name'
+      - 'type'
+      - 'input'
+    additionalProperties: false
+    properties:
+      name:
+        $ref: '#/$defs/elementName'
+      type:
+        $ref: '#/$defs/artifactType'
+      extraIdentity:
+        $ref: '#/$defs/elementExtraIdentity'
+      version:
+        $ref: '#/$defs/version'
+      labels:
+        $ref: '#/$defs/labels'
+      input:
+        $ref: '#/$defs/input'
+
+
+
+
+
+# Component Reference Schema Specification ---------------------------------------------------------------------------#
+
+  componentReferences:
+    type: 'array'
+    items:
+      $ref: '#/$defs/componentReference'
+
+  componentReference:
+    type: object
+    description: 'a reference to a component'
+    required:
+      - 'name'
+      - 'componentName'
+      - 'version'
+    additionalProperties: false
+    properties:
+      componentName:
+        $ref: '#/$defs/componentName'
+      name:
+        $ref: '#/$defs/elementName'
+      extraIdentity:
+        $ref: '#/$defs/elementExtraIdentity'
+      version:
+        $ref: '#/$defs/version'
+      labels:
+        $ref: '#/$defs/labels'
+
+# Auxiliary Schema Specification -------------------------------------------------------------------------------------#
+
+  componentName:
+    type: 'string'
+    maxLength: 255
+    pattern: '^[a-z][-a-z0-9]*([.][a-z][-a-z0-9]*)*[.][a-z]{2,}(/[a-z][-a-z0-9_]*([.][a-z][-a-z0-9_]*)*)+$'
+    default: 'github.com/acme.org/helloworld'
+    examples: ['github.com/acme.org/helloworld']
+
+  version:
+    type: 'string'
+    pattern: '^[v]?(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?(?:\.(0|[1-9]\d*))?(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+    default: '1.0.0'
+    examples: ['1.0.0', 'v1.0.0']
+
+  labels:
+    type: 'array'
+    items:
+      $ref: '#/$defs/label'
+  label:
+    type: 'object'
+    required:
+      - 'name'
+      - 'value'
+    additionalProperties: false
+    properties:
+      name:
+        type: 'string'
+      value: {}
+      version:
+        type: 'string'
+        pattern: '^v[0-9]+$'
+      signing:
+        type: 'boolean'
+      merge:
+        $ref: '#/$defs/merge'
+  merge:
+    type: 'object'
+    additionalProperties: false
+    properties:
+      algorithm:
+        type: 'string'
+        pattern: '^[a-z][a-z0-9/_-]+$'
+      config: {}
+
+  provider:
+    type: 'object'
+    required:
+      - 'name'
+    additionalProperties: false
+    properties:
+      name:
+        type: 'string'
+        default: 'internal'
+        examples: ['internal', 'sap']
+      labels:
+        $ref: '#/$defs/labels'
+
+  relation:
+    type: 'string'
+    enum: ['local', 'external']
+    default: 'external'
+    examples: ['local', 'external']
+
+  elementName:
+    type: 'string'
+    minLength: 2
+    pattern: '^[a-z0-9]([-_+a-z0-9]*[a-z0-9])?$'
+    default: 'myresource'
+    examples: ['myresource', 'mychart', 'myimage', 'myblob']
+
+  elementExtraIdentity:
+    type: object
+    propertyNames:
+      $ref: '#/$defs/elementName'
+
+  artifactType:
+    type: 'string'
+    enum: ['blob', 'directoryTree', 'gitOpsTemplate', 'helmChart', 'npmPackage', 'ociArtifact', 'ociImage', 'executable', 'sbom', 'blueprint', 'toiExecutor', 'toiPackage']
+    default: 'helmChart'
+    examples: ['blob', 'directoryTree', 'gitOpsTemplate', 'helmChart', 'npmPackage', 'ociArtifact', 'ociImage', 'executable', 'sbom', 'blueprint', 'toiExecutor', 'toiPackage']
+
+  accessType:
+    type: 'string'
+    enum: ['localBlob', 'ociArtifact', 'ociBlob', 'helm', 'gitHub', 's3', 'npm', 'wget']
+    default: 'helm'
+    examples: ['localBlob', 'ociArtifact', 'ociBlob', 'helm', 'gitHub', 's3', 'npm', 'wget']
+
+  inputType:
+    type: 'string'
+    enum: ['binary', 'dir', 'docker', 'dockermulti', 'file', 'helm', 'ociArtifact', 'spiff', 'utf8', 'wget']
+    default: 'file'
+    examples: ['binary', 'dir', 'docker', 'dockermulti', 'file', 'helm', 'ociArtifact', 'spiff', 'utf8', 'wget']
+
+  srcRefs:
+    type: 'array'
+    items:
+      $ref: '#/$defs/srcRef'
+
+  srcRef:
+    type: 'object'
+    description: 'a reference to a (component-local) source'
+    additionalProperties: false
+    properties:
+      identitySelector:
+        $ref: '#/$defs/elementExtraIdentity'
+      labels:
+        $ref: '#/$defs/labels'
+

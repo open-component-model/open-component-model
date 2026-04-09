@@ -1,0 +1,331 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>get on Open Component Model</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/get/</link><description>Recent content in get on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/legacy/docs/reference/ocm-cli/get/index.xml" rel="self" type="application/rss+xml"/><item><title>artifacts</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/get/artifacts/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/get/artifacts/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm get artifacts [&amp;lt;options&amp;gt;] {&amp;lt;artifact-reference&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -a, --attached show attached artifacts
+ -h, --help help for artifacts
+ -o, --output string output mode (JSON, json, tree, wide, yaml)
+ -r, --recursive follow index nesting
+ --repo string repository name or spec
+ -s, --sort stringArray sort fields&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Get lists all artifact versions specified, if only a repository is specified
+all tagged artifacts are listed.&lt;/p&gt;</description></item><item><title>componentversions</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/get/componentversions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/get/componentversions/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm get componentversions [&amp;lt;options&amp;gt;] {&amp;lt;component-reference&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -c, --constraints constraints version constraint
+ -h, --help help for componentversions
+ --latest restrict component versions to latest
+ --lookup stringArray repository name or spec for closure lookup fallback
+ -o, --output string output mode (JSON, json, tree, wide, yaml)
+ -r, --recursive follow component reference nesting
+ --repo string repository name or spec
+ -S, --scheme string schema version
+ -s, --sort stringArray sort fields&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Get lists all component versions specified, if only a component is specified
+all versions are listed.&lt;/p&gt;</description></item><item><title>config</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/get/config/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/get/config/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm get config &amp;lt;options&amp;gt;&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for config
+ -O, --outfile string output file or directory
+ -o, --output string output mode (JSON, json, yaml)&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Evaluate the command line arguments and all explicitly
+or implicitly used configuration files and provide
+a single configuration object.&lt;/p&gt;</description></item><item><title>credentials</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/get/credentials/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/get/credentials/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm get credentials {&amp;lt;consumer property&amp;gt;=&amp;lt;value&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for credentials
+ -m, --matcher string matcher type override
+ -s, --sloppy sloppy matching of consumer type&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Try to resolve a given consumer specification against the configured credential
+settings and show the found credential attributes.&lt;/p&gt;</description></item><item><title>plugins</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/get/plugins/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/get/plugins/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm get plugins [&amp;lt;options&amp;gt;] {&amp;lt;plugin name&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for plugins
+ -o, --output string output mode (JSON, json, wide, yaml)
+ -s, --sort stringArray sort fields&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Get lists information for all plugins specified, if no plugin is specified
+all registered ones are listed.&lt;/p&gt;</description></item><item><title>pubsub</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/get/pubsub/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/get/pubsub/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm get pubsub {&amp;lt;ocm repository&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for pubsub
+ -o, --output string output mode (JSON, json, yaml)
+ -s, --sort stringArray sort fields&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;A repository may be able to store a publish/subscribe specification
+to propagate the creation or update of component versions.
+If such an implementation is available and a specification is
+assigned to the repository, it is shown. The specification
+can be set with the 
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/set/pubsub/"&gt;ocm set pubsub&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>references</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/get/references/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/get/references/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm get references [&amp;lt;options&amp;gt;] &amp;lt;component&amp;gt; {&amp;lt;name&amp;gt; { &amp;lt;key&amp;gt;=&amp;lt;value&amp;gt; }}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -c, --constraints constraints version constraint
+ -h, --help help for references
+ --latest restrict component versions to latest
+ --lookup stringArray repository name or spec for closure lookup fallback
+ -o, --output string output mode (JSON, json, tree, wide, yaml)
+ -r, --recursive follow component reference nesting
+ --repo string repository name or spec
+ -s, --sort stringArray sort fields&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Get references of a component version. References are specified
+by identities. An identity consists of
+a name argument followed by optional &lt;code&gt;&amp;lt;key&amp;gt;=&amp;lt;value&amp;gt;&lt;/code&gt;
+arguments.&lt;/p&gt;</description></item><item><title>resources</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/get/resources/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/get/resources/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm get resources [&amp;lt;options&amp;gt;] &amp;lt;component&amp;gt; {&amp;lt;name&amp;gt; { &amp;lt;key&amp;gt;=&amp;lt;value&amp;gt; }}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -c, --constraints constraints version constraint
+ -h, --help help for resources
+ --latest restrict component versions to latest
+ --lookup stringArray repository name or spec for closure lookup fallback
+ -o, --output string output mode (JSON, json, tree, treewide, wide, yaml)
+ -r, --recursive follow component reference nesting
+ --repo string repository name or spec
+ -s, --sort stringArray sort fields&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Get resources of a component version. Resources are specified
+by identities. An identity consists of
+a name argument followed by optional &lt;code&gt;&amp;lt;key&amp;gt;=&amp;lt;value&amp;gt;&lt;/code&gt;
+arguments.&lt;/p&gt;</description></item><item><title>routingslips</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/get/routingslips/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/get/routingslips/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm get routingslips [&amp;lt;options&amp;gt;] &amp;lt;component&amp;gt; {&amp;lt;name&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --all-columns show all table columns
+ -c, --constraints constraints version constraint
+ --fail-on-error fail on validation error
+ -h, --help help for routingslips
+ --latest restrict component versions to latest
+ --lookup stringArray repository name or spec for closure lookup fallback
+ -o, --output string output mode (JSON, json, wide, yaml)
+ --repo string repository name or spec
+ -s, --sort stringArray sort fields
+ -v, --verify verify signature&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Get all or the selected routing slips for a component version specification.&lt;/p&gt;</description></item><item><title>sources</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/get/sources/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/get/sources/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm get sources [&amp;lt;options&amp;gt;] &amp;lt;component&amp;gt; {&amp;lt;name&amp;gt; { &amp;lt;key&amp;gt;=&amp;lt;value&amp;gt; }}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -c, --constraints constraints version constraint
+ -h, --help help for sources
+ --latest restrict component versions to latest
+ --lookup stringArray repository name or spec for closure lookup fallback
+ -o, --output string output mode (JSON, json, tree, wide, yaml)
+ -r, --recursive follow component reference nesting
+ --repo string repository name or spec
+ -s, --sort stringArray sort fields&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Get sources of a component version. Sources are specified
+by identities. An identity consists of
+a name argument followed by optional &lt;code&gt;&amp;lt;key&amp;gt;=&amp;lt;value&amp;gt;&lt;/code&gt;
+arguments.&lt;/p&gt;</description></item></channel></rss>

@@ -1,0 +1,480 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>add on Open Component Model</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/add/</link><description>Recent content in add on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/legacy/docs/reference/ocm-cli/add/index.xml" rel="self" type="application/rss+xml"/><item><title>componentversions</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/add/componentversions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/add/componentversions/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm add componentversions [&amp;lt;options&amp;gt;] [--version &amp;lt;version&amp;gt;] [&amp;lt;ctf archive&amp;gt;] {&amp;lt;component-constructor.yaml&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --addenv access environment for templating
+ -C, --complete include all referenced component version
+ -L, --copy-local-resources transfer referenced local resources by-value
+ -V, --copy-resources transfer referenced resources by-value
+ -c, --create (re)create archive
+ --dry-run evaluate and print component specifications
+ -F, --file string target file/directory (default &amp;#34;transport-archive&amp;#34;)
+ -f, --force remove existing content
+ -h, --help help for componentversions
+ --lookup stringArray repository name or spec for closure lookup fallback
+ -O, --output string output file for dry-run
+ -P, --preserve-signature preserve existing signatures
+ -R, --replace replace existing elements
+ -S, --scheme string schema version (default &amp;#34;v2&amp;#34;)
+ -s, --settings stringArray settings file with variable settings (yaml)
+ --skip-digest-generation skip digest creation
+ --templater string templater to use (go, none, spiff, subst) (default &amp;#34;subst&amp;#34;)
+ -t, --type string archive format (directory, tar, tgz) (default &amp;#34;directory&amp;#34;)
+ --uploader &amp;lt;name&amp;gt;=&amp;lt;value&amp;gt; repository uploader (&amp;lt;name&amp;gt;[:&amp;lt;artifact type&amp;gt;[:&amp;lt;media type&amp;gt;[:&amp;lt;priority&amp;gt;]]]=&amp;lt;JSON target config&amp;gt;) (default [])
+ -v, --version string default version for components&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Add component versions specified by a constructor file to a Common Transport
+Archive. The archive might be either a directory prepared to host component version
+content or a tar/tgz file (see option &amp;ndash;type).&lt;/p&gt;</description></item><item><title>references</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/add/references/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/add/references/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm add references [&amp;lt;options&amp;gt;] [&amp;lt;target&amp;gt;] {&amp;lt;referencefile&amp;gt; | &amp;lt;var&amp;gt;=&amp;lt;value&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --addenv access environment for templating
+ --component string component name
+ --dry-run evaluate and print reference specifications
+ --extra &amp;lt;name&amp;gt;=&amp;lt;value&amp;gt; reference extra identity (default [])
+ -F, --file string target file/directory (default &amp;#34;component-archive&amp;#34;)
+ -h, --help help for references
+ --label &amp;lt;name&amp;gt;=&amp;lt;YAML&amp;gt; reference label (leading * indicates signature relevant, optional version separated by @)
+ --name string reference name
+ -O, --output string output file for dry-run
+ -P, --preserve-signature preserve existing signatures
+ --reference YAML reference meta data (yaml)
+ -R, --replace replace existing elements
+ -s, --settings stringArray settings file with variable settings (yaml)
+ --templater string templater to use (go, none, spiff, subst) (default &amp;#34;subst&amp;#34;)
+ --version string reference version&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Add aggregation information specified in a reference file to a component version.
+So far only component archives are supported as target.&lt;/p&gt;</description></item><item><title>resource-configuration</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/add/resource-configuration/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/add/resource-configuration/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm add resource-configuration [&amp;lt;options&amp;gt;] &amp;lt;target&amp;gt; {&amp;lt;configfile&amp;gt; | &amp;lt;var&amp;gt;=&amp;lt;value&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --access YAML blob access specification (YAML)
+ --accessComponent string component for access specification
+ --accessHostname string hostname used for access
+ --accessRepository string repository or registry URL
+ --accessType string type of blob access specification
+ --accessVersion string version for access specification
+ --artifactId string maven artifact id
+ --body string body of a http request
+ --bucket string bucket name
+ --classifier string maven classifier
+ --commit string git commit id
+ --digest string blob digest
+ --extension string maven extension name
+ --external flag non-local resource
+ --extra &amp;lt;name&amp;gt;=&amp;lt;value&amp;gt; resource extra identity (default [])
+ --globalAccess YAML access specification for global access
+ --groupId string maven group id
+ --header &amp;lt;name&amp;gt;:&amp;lt;value&amp;gt;,&amp;lt;value&amp;gt;,... http headers (default {})
+ -h, --help help for resource-configuration
+ --hint string (repository) hint for local artifacts
+ --identityPath {&amp;lt;name&amp;gt;=&amp;lt;value&amp;gt;} identity path for specification
+ --input YAML blob input specification (YAML)
+ --inputComponent string component name
+ --inputCompress compress option for input
+ --inputData !bytesBase64 data (string, !!string or !&amp;lt;base64&amp;gt;
+ --inputExcludes stringArray excludes (path) for inputs
+ --inputFollowSymlinks follow symbolic links during archive creation for inputs
+ --inputFormattedJson YAML JSON formatted text
+ --inputHelmRepository string helm repository base URL
+ --inputIncludes stringArray includes (path) for inputs
+ --inputJson YAML JSON formatted text
+ --inputLibraries stringArray library path for inputs
+ --inputPath filepath path field for input
+ --inputPlatforms stringArray input filter for image platforms ([os]/[architecture])
+ --inputPreserveDir preserve directory in archive for inputs
+ --inputRepository string repository or registry for inputs
+ --inputText string utf8 text
+ --inputType string type of blob input specification
+ --inputValues YAML YAML based generic values for inputs
+ --inputVariants stringArray (platform) variants for inputs
+ --inputVersion string version info for inputs
+ --inputYaml YAML YAML formatted text
+ --label &amp;lt;name&amp;gt;=&amp;lt;YAML&amp;gt; resource label (leading * indicates signature relevant, optional version separated by @)
+ --mediaType string media type for artifact blob representation
+ --name string resource name
+ --noredirect http redirect behavior
+ --package string package or object name
+ --reference string reference name
+ --region string region name
+ --resource YAML resource meta data (yaml)
+ -s, --settings stringArray settings file with variable settings (yaml)
+ --size int blob size
+ --type string resource type
+ --url string artifact or server url
+ --verb string http request method
+ --version string resource version&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Add a resource specification to a resource config file used by 
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/add/resources/"&gt;ocm add resources&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>resources</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/add/resources/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/add/resources/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm add resources [&amp;lt;options&amp;gt;] [&amp;lt;target&amp;gt;] {&amp;lt;resourcefile&amp;gt; | &amp;lt;var&amp;gt;=&amp;lt;value&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --access YAML blob access specification (YAML)
+ --accessComponent string component for access specification
+ --accessHostname string hostname used for access
+ --accessRepository string repository or registry URL
+ --accessType string type of blob access specification
+ --accessVersion string version for access specification
+ --addenv access environment for templating
+ --artifactId string maven artifact id
+ --body string body of a http request
+ --bucket string bucket name
+ --classifier string maven classifier
+ --commit string git commit id
+ --digest string blob digest
+ --dry-run evaluate and print resource specifications
+ --extension string maven extension name
+ --external flag non-local resource
+ --extra &amp;lt;name&amp;gt;=&amp;lt;value&amp;gt; resource extra identity (default [])
+ -F, --file string target file/directory (default &amp;#34;component-archive&amp;#34;)
+ --globalAccess YAML access specification for global access
+ --groupId string maven group id
+ --header &amp;lt;name&amp;gt;:&amp;lt;value&amp;gt;,&amp;lt;value&amp;gt;,... http headers (default {})
+ -h, --help help for resources
+ --hint string (repository) hint for local artifacts
+ --identityPath {&amp;lt;name&amp;gt;=&amp;lt;value&amp;gt;} identity path for specification
+ --input YAML blob input specification (YAML)
+ --inputComponent string component name
+ --inputCompress compress option for input
+ --inputData !bytesBase64 data (string, !!string or !&amp;lt;base64&amp;gt;
+ --inputExcludes stringArray excludes (path) for inputs
+ --inputFollowSymlinks follow symbolic links during archive creation for inputs
+ --inputFormattedJson YAML JSON formatted text
+ --inputHelmRepository string helm repository base URL
+ --inputIncludes stringArray includes (path) for inputs
+ --inputJson YAML JSON formatted text
+ --inputLibraries stringArray library path for inputs
+ --inputPath filepath path field for input
+ --inputPlatforms stringArray input filter for image platforms ([os]/[architecture])
+ --inputPreserveDir preserve directory in archive for inputs
+ --inputRepository string repository or registry for inputs
+ --inputText string utf8 text
+ --inputType string type of blob input specification
+ --inputValues YAML YAML based generic values for inputs
+ --inputVariants stringArray (platform) variants for inputs
+ --inputVersion string version info for inputs
+ --inputYaml YAML YAML formatted text
+ --label &amp;lt;name&amp;gt;=&amp;lt;YAML&amp;gt; resource label (leading * indicates signature relevant, optional version separated by @)
+ --mediaType string media type for artifact blob representation
+ --name string resource name
+ --noredirect http redirect behavior
+ -O, --output string output file for dry-run
+ --package string package or object name
+ -P, --preserve-signature preserve existing signatures
+ --reference string reference name
+ --region string region name
+ -R, --replace replace existing elements
+ --resource YAML resource meta data (yaml)
+ -s, --settings stringArray settings file with variable settings (yaml)
+ --size int blob size
+ --skip-digest-generation skip digest creation
+ --templater string templater to use (go, none, spiff, subst) (default &amp;#34;subst&amp;#34;)
+ --type string resource type
+ --url string artifact or server url
+ --verb string http request method
+ --version string resource version&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Adds resources specified in a resource file to a component version.
+So far, only component archives are supported as target.&lt;/p&gt;</description></item><item><title>routingslips</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/add/routingslips/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/add/routingslips/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm add routingslips [&amp;lt;options&amp;gt;] &amp;lt;component-version&amp;gt; &amp;lt;routing-slip&amp;gt; &amp;lt;type&amp;gt;&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -S, --algorithm string signature handler (default &amp;#34;RSASSA-PKCS1-V1_5&amp;#34;)
+ --comment string comment field value
+ --digest string parent digest to use
+ --entry YAML routing slip entry specification (YAML)
+ -h, --help help for routingslips
+ --links strings links to other slip/entries (&amp;lt;slipname&amp;gt;[@&amp;lt;digest&amp;gt;])
+ --lookup stringArray repository name or spec for closure lookup fallback
+ --repo string repository name or spec&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Add a routing slip entry for the specified routing slip name to the given
+component version. The name is typically a DNS domain name followed by some
+qualifiers separated by a slash (/). It is possible to use arbitrary types,
+the type is not checked, if it is not known. Accordingly, an arbitrary config
+given as JSON or YAML can be given to determine the attribute set of the new
+entry for unknown types.&lt;/p&gt;</description></item><item><title>source-configuration</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/add/source-configuration/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/add/source-configuration/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm add source-configuration [&amp;lt;options&amp;gt;] &amp;lt;target&amp;gt; {&amp;lt;configfile&amp;gt; | &amp;lt;var&amp;gt;=&amp;lt;value&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --access YAML blob access specification (YAML)
+ --accessComponent string component for access specification
+ --accessHostname string hostname used for access
+ --accessRepository string repository or registry URL
+ --accessType string type of blob access specification
+ --accessVersion string version for access specification
+ --artifactId string maven artifact id
+ --body string body of a http request
+ --bucket string bucket name
+ --classifier string maven classifier
+ --commit string git commit id
+ --digest string blob digest
+ --extension string maven extension name
+ --extra &amp;lt;name&amp;gt;=&amp;lt;value&amp;gt; source extra identity (default [])
+ --globalAccess YAML access specification for global access
+ --groupId string maven group id
+ --header &amp;lt;name&amp;gt;:&amp;lt;value&amp;gt;,&amp;lt;value&amp;gt;,... http headers (default {})
+ -h, --help help for source-configuration
+ --hint string (repository) hint for local artifacts
+ --identityPath {&amp;lt;name&amp;gt;=&amp;lt;value&amp;gt;} identity path for specification
+ --input YAML blob input specification (YAML)
+ --inputComponent string component name
+ --inputCompress compress option for input
+ --inputData !bytesBase64 data (string, !!string or !&amp;lt;base64&amp;gt;
+ --inputExcludes stringArray excludes (path) for inputs
+ --inputFollowSymlinks follow symbolic links during archive creation for inputs
+ --inputFormattedJson YAML JSON formatted text
+ --inputHelmRepository string helm repository base URL
+ --inputIncludes stringArray includes (path) for inputs
+ --inputJson YAML JSON formatted text
+ --inputLibraries stringArray library path for inputs
+ --inputPath filepath path field for input
+ --inputPlatforms stringArray input filter for image platforms ([os]/[architecture])
+ --inputPreserveDir preserve directory in archive for inputs
+ --inputRepository string repository or registry for inputs
+ --inputText string utf8 text
+ --inputType string type of blob input specification
+ --inputValues YAML YAML based generic values for inputs
+ --inputVariants stringArray (platform) variants for inputs
+ --inputVersion string version info for inputs
+ --inputYaml YAML YAML formatted text
+ --label &amp;lt;name&amp;gt;=&amp;lt;YAML&amp;gt; source label (leading * indicates signature relevant, optional version separated by @)
+ --mediaType string media type for artifact blob representation
+ --name string source name
+ --noredirect http redirect behavior
+ --package string package or object name
+ --reference string reference name
+ --region string region name
+ -s, --settings stringArray settings file with variable settings (yaml)
+ --size int blob size
+ --source YAML source meta data (yaml)
+ --type string source type
+ --url string artifact or server url
+ --verb string http request method
+ --version string source version&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Add a source specification to a source config file used by 
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/add/sources/"&gt;ocm add sources&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>sources</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/add/sources/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/add/sources/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm add sources [&amp;lt;options&amp;gt;] [&amp;lt;target&amp;gt;] {&amp;lt;resourcefile&amp;gt; | &amp;lt;var&amp;gt;=&amp;lt;value&amp;gt;}&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --access YAML blob access specification (YAML)
+ --accessComponent string component for access specification
+ --accessHostname string hostname used for access
+ --accessRepository string repository or registry URL
+ --accessType string type of blob access specification
+ --accessVersion string version for access specification
+ --addenv access environment for templating
+ --artifactId string maven artifact id
+ --body string body of a http request
+ --bucket string bucket name
+ --classifier string maven classifier
+ --commit string git commit id
+ --digest string blob digest
+ --dry-run evaluate and print source specifications
+ --extension string maven extension name
+ --extra &amp;lt;name&amp;gt;=&amp;lt;value&amp;gt; source extra identity (default [])
+ -F, --file string target file/directory (default &amp;#34;component-archive&amp;#34;)
+ --globalAccess YAML access specification for global access
+ --groupId string maven group id
+ --header &amp;lt;name&amp;gt;:&amp;lt;value&amp;gt;,&amp;lt;value&amp;gt;,... http headers (default {})
+ -h, --help help for sources
+ --hint string (repository) hint for local artifacts
+ --identityPath {&amp;lt;name&amp;gt;=&amp;lt;value&amp;gt;} identity path for specification
+ --input YAML blob input specification (YAML)
+ --inputComponent string component name
+ --inputCompress compress option for input
+ --inputData !bytesBase64 data (string, !!string or !&amp;lt;base64&amp;gt;
+ --inputExcludes stringArray excludes (path) for inputs
+ --inputFollowSymlinks follow symbolic links during archive creation for inputs
+ --inputFormattedJson YAML JSON formatted text
+ --inputHelmRepository string helm repository base URL
+ --inputIncludes stringArray includes (path) for inputs
+ --inputJson YAML JSON formatted text
+ --inputLibraries stringArray library path for inputs
+ --inputPath filepath path field for input
+ --inputPlatforms stringArray input filter for image platforms ([os]/[architecture])
+ --inputPreserveDir preserve directory in archive for inputs
+ --inputRepository string repository or registry for inputs
+ --inputText string utf8 text
+ --inputType string type of blob input specification
+ --inputValues YAML YAML based generic values for inputs
+ --inputVariants stringArray (platform) variants for inputs
+ --inputVersion string version info for inputs
+ --inputYaml YAML YAML formatted text
+ --label &amp;lt;name&amp;gt;=&amp;lt;YAML&amp;gt; source label (leading * indicates signature relevant, optional version separated by @)
+ --mediaType string media type for artifact blob representation
+ --name string source name
+ --noredirect http redirect behavior
+ -O, --output string output file for dry-run
+ --package string package or object name
+ -P, --preserve-signature preserve existing signatures
+ --reference string reference name
+ --region string region name
+ -R, --replace replace existing elements
+ -s, --settings stringArray settings file with variable settings (yaml)
+ --size int blob size
+ --source YAML source meta data (yaml)
+ --templater string templater to use (go, none, spiff, subst) (default &amp;#34;subst&amp;#34;)
+ --type string source type
+ --url string artifact or server url
+ --verb string http request method
+ --version string source version&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="description"&gt;Description&lt;/h3&gt;
+&lt;p&gt;Add information about the sources, e.g. commits in a Github repository,
+that have been used to create the resources specified in a resource file to a component version.
+So far only component archives are supported as target.&lt;/p&gt;</description></item></channel></rss>
