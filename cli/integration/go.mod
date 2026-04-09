@@ -10,19 +10,19 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.40.0
-	golang.org/x/crypto v0.48.0
+	golang.org/x/crypto v0.49.0
 	helm.sh/helm/v4 v4.1.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/configuration v0.0.12
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260407102747-5b24debae3cf
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260407102747-5b24debae3cf
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260408134040-69b3fc617615
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260408134040-69b3fc617615
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
 	ocm.software/open-component-model/bindings/go/oci v0.0.38
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260407102747-5b24debae3cf
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260408134040-69b3fc617615
 	ocm.software/open-component-model/cli v0.3.0
 	oras.land/oras-go/v2 v2.6.0
 )
@@ -139,23 +139,25 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect
-	go.opentelemetry.io/otel v1.42.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.42.0 // indirect
-	go.opentelemetry.io/otel/metric v1.42.0 // indirect
-	go.opentelemetry.io/otel/trace v1.42.0 // indirect
-	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
+	go.opentelemetry.io/otel v1.43.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0 // indirect
+	go.opentelemetry.io/otel/metric v1.43.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.43.0 // indirect
+	go.opentelemetry.io/otel/sdk/metric v1.43.0 // indirect
+	go.opentelemetry.io/otel/trace v1.43.0 // indirect
+	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39 // indirect
-	golang.org/x/net v0.51.0 // indirect
+	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260209200024-4cfbd4190f57 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260209200024-4cfbd4190f57 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
@@ -170,17 +172,17 @@ require (
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
 	k8s.io/kubectl v0.35.2 // indirect
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260407102747-5b24debae3cf // indirect
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260408134040-69b3fc617615 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.7 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260407102747-5b24debae3cf // indirect
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260408134040-69b3fc617615 // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3 // indirect
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260407102747-5b24debae3cf // indirect
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260408134040-69b3fc617615 // indirect
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14 // indirect
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260407102747-5b24debae3cf // indirect
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260407102747-5b24debae3cf // indirect
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260407102747-5b24debae3cf // indirect
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260408134040-69b3fc617615 // indirect
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260408134040-69b3fc617615 // indirect
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260408134040-69b3fc617615 // indirect
 	sigs.k8s.io/controller-runtime v0.23.3 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect

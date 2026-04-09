@@ -1,0 +1,163 @@
+<header class="header">
+    <nav class="navbar navbar-expand-lg">
+        <div class="container-fluid">
+
+            <a class="navbar-brand" href="{{ .Site.Home.RelPermalink }}">
+                <img src="{{ `images/base.svg` | relURL }}" alt="{{ site.Title }} Logo" width="48" height="48"
+                    class="d-inline-block">
+                <span class="ms-2 fw-bold">
+                    {{ range split site.Title " " }}
+                    <span class="word">{{ . }}</span>
+                    {{ end }}
+                </span>
+            </a>
+
+            <!-- Search Toggle Mobile -->
+            {{ if site.Params.doks.flexSearch }}
+            <button type="button" id="searchToggleMobile" class="btn btn-link nav-link p-0 d-lg-none ms-auto"
+                aria-label="Search">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-search" width="24"
+                    height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                    <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                    <path d="M21 21l-6 -6"></path>
+                </svg>
+            </button>
+            {{ end }}
+
+            <button class="navbar-toggler {{ if not site.Params.doks.flexSearch }}ms-auto{{ end }}" type="button"
+                data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-menu-2" width="24"
+                    height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                    <path d="M4 6l16 0"></path>
+                    <path d="M4 12l16 0"></path>
+                    <path d="M4 18l16 0"></path>
+                </svg>
+            </button>
+
+            <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasNavbar"
+                aria-labelledby="offcanvasNavbarLabel">
+                <div class="offcanvas-header">
+                    <h5 class="offcanvas-title" id="offcanvasNavbarLabel">
+                        {{ range split site.Title " " }}
+                        <span class="word">{{ . }}</span>
+                        {{ end }}
+                    </h5>
+                    <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas"
+                        aria-label="Close"></button>
+                </div>
+                <div class="offcanvas-body">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                        {{ $currentPage := . }}
+                        {{ $siteRoot := strings.TrimSuffix "/" $.Site.Home.RelPermalink }}
+                        {{ range site.Menus.main }}
+                        {{ $active := or ($currentPage.IsMenuCurrent "main" .) ($currentPage.HasMenuCurrent "main" .) }}
+                        {{ $url := .URL }}
+                        {{ $isAbs := or (strings.HasPrefix $url "http://") (strings.HasPrefix $url "https://") }}
+                        {{ $path := strings.TrimPrefix "/" $url }}
+                        {{ $href := cond $isAbs $url (printf "%s/%s" $siteRoot $path) }}
+                        <li class="nav-item">
+                            <a class="nav-link {{ if $active }}active{{ end }}" href="{{ $href }}" {{ if $active
+                                }}aria-current="page" {{ end }}>{{ .Name }}</a>
+                        </li>
+                        {{ end }}
+                    </ul>
+                    <div class="navbar-right">
+                        <!-- Search Placeholder or Partial -->
+                        {{ if site.Params.doks.flexSearch }}
+                        <button type="button" id="searchToggleDesktop"
+                            class="btn btn-link nav-link p-0 me-3 d-none d-lg-flex" aria-label="Search">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-search"
+                                width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
+                                fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                                <path d="M21 21l-6 -6"></path>
+                            </svg>
+                        </button>
+                        {{ end }}
+
+                        <!-- Theme Toggle -->
+                        {{ if and (eq site.Params.doks.colorMode "auto") site.Params.doks.colorModeToggler -}}
+                        <button id="buttonColorMode" class="btn btn-link nav-link p-0 mode-toggle me-3 d-none d-lg-flex" type="button"
+                            aria-label="Toggle theme">
+                            <svg data-bs-theme-value="dark" xmlns="http://www.w3.org/2000/svg"
+                                class="icon icon-tabler icon-tabler-moon" width="20" height="20" viewBox="0 0 24 24"
+                                stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                <path
+                                    d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z">
+                                </path>
+                            </svg>
+                            <svg data-bs-theme-value="light" xmlns="http://www.w3.org/2000/svg"
+                                class="icon icon-tabler icon-tabler-sun" width="20" height="20" viewBox="0 0 24 24"
+                                stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                <path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"></path>
+                                <path
+                                    d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7">
+                                </path>
+                            </svg>
+                        </button>
+                        {{ end -}}
+
+                        <!-- Social Icons -->
+                        {{ range site.Menus.social }}
+                        <a href="{{ .URL }}" target="_blank" class="header-github-pill d-none d-lg-inline-flex"
+                            aria-label="{{ .Name }}">
+                            <span class="icon">{{ .Pre | safeHTML }}</span>
+                        </a>
+                        {{ end }}
+
+                        <!-- Version switcher using Hugo's built-in versions. Always show global versions via Home.Rotate. -->
+                        <div class="dropdown me-3 d-none d-lg-flex">
+                            <button class="btn btn-link nav-link p-0 dropdown-toggle btn-dropdown" id="doks-versions"
+                                data-bs-toggle="dropdown" aria-expanded="false" data-bs-display="static"
+                                aria-label="Toggle version menu">
+                                Versions
+                                <span class="dropdown-caret">
+                                    <svg xmlns="http://www.w3.org/2000/svg"
+                                        class="icon icon-tabler icon-tabler-chevron-down" width="20" height="20"
+                                        viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none"
+                                        stroke-linecap="round" stroke-linejoin="round">
+                                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                        <path d="M6 9l6 6l6 -6" />
+                                    </svg>
+                                </span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-lg-end shadow rounded border-0"
+                                aria-labelledby="doks-versions">
+                                {{ $currentVersionName := $.Site.Version.Name }}
+                                {{ with .Site.Home.Rotate "version" }}
+                                  {{ range . }}
+                                    {{ $isCurrent := eq .Site.Version.Name $currentVersionName }}
+                                    {{/* Default detection via Hugo: use .Site.Version.IsDefault */}}
+                                    {{ $isDefault := .Site.Version.IsDefault }}
+                                    <li>
+                                      <a class="dropdown-item{{ if $isCurrent }} current{{ end }}" {{ if $isCurrent }}aria-current="true" {{ end }}
+                                         href="{{ .RelPermalink }}">
+                                        {{ .Site.Version.Name }}{{ if $isDefault }} <span class="version-flag">(default)</span>{{ end }}
+                                      </a>
+                                    </li>
+                                  {{ end }}
+                                {{ end }}
+                            </ul>
+                        </div>
+
+                        <!-- Version Droplet -->
+                        {{ partial "header/version-warning.html" . }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+</header>
+
+{{ if site.Params.doks.flexSearch }}
+{{ partial "header/search-modal" . }}
+{{ end }}

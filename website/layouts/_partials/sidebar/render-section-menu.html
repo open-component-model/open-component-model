@@ -1,0 +1,66 @@
+{{- /*
+Override of Doks render-section-menu.html to make section (_index.md) pages
+clickable in the sidebar. In the default Doks theme, <summary> elements contain
+only text and toggle the <details> open/close. This override replaces the text
+with an <a> link so clicking the section title navigates to the section overview
+page. The disclosure triangle still toggles expand/collapse via JS in custom.js.
+
+Based on: https://discourse.gohugo.io/t/automated-nested-menus/42835/2
+*/}}
+
+{{- /* Configure. */}}
+{{- $skipHome := true }}
+
+{{- /* Get parameters. */}}
+{{- $currentPage := .currentPage }}
+{{- $nodes := .nodes }}
+
+{{- /* Render. */}}
+<nav class="section-nav docs-links">
+  <ul class="list-unstyled">
+    {{- range $nodes }}
+      {{- if and .Page.IsHome $skipHome }}
+        {{- continue }}
+      {{- end }}
+      {{- template "walk" (dict "node" . "currentPage" $currentPage) }}
+    {{- end }}
+  </ul>
+</nav>
+
+{{- /* Recursively render list items. */}}
+{{- define "walk" }}
+  {{- $currentPage := .currentPage }}
+  {{- $node := .node }}
+
+  {{- $linkContent := $node.Name }}
+  {{- with $node.Page }}
+    {{- $linkContent = .LinkTitle }}
+  {{- end }}
+
+  {{- $ariaCurrent := "" }}
+  {{- $liClass := "" }}
+
+  {{- if in $currentPage.Ancestors $node.Page }}
+    {{- $ariaCurrent = "true" }}
+  {{- end }}
+
+  {{- if $currentPage.Eq $node.Page }}
+    {{- $ariaCurrent = "page" }}
+    {{- $liClass = "active" }}
+  {{- end }}
+
+  <li {{- with $liClass }} class="{{ . }}" {{ end -}}>
+    {{- with $node.Page.Pages }}
+    <details{{- with $ariaCurrent }} open{{- else}}{{- if ne $node.Page.Params.sidebar.collapsed true }} open{{- end }}{{- end}}>
+      <summary><a {{- with $ariaCurrent }} aria-current="{{ . }}" {{- end }} class="docs-link{{- if eq $ariaCurrent "page" }} active{{ end }}" href="{{- $node.Page.RelPermalink }}">{{ $linkContent }}</a></summary>
+      <ul class="list-unstyled list-nested">
+        {{- range . }}
+          {{- template "walk" (dict "node" . "currentPage" $currentPage) }}
+        {{- end }}
+      </ul>
+    </details>
+    {{- else }}
+      <a {{- with $ariaCurrent }} aria-current="{{ . }}" {{- end }} class="docs-link{{- if eq $ariaCurrent "page" }} active{{ end }}" href="{{- $node.Page.RelPermalink }}">{{ $linkContent }}</a>
+    {{- end }}
+  </li>
+{{- end }}
