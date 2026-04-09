@@ -1,0 +1,54 @@
+/*
+ * Logo and branding styles.
+ *
+ * Features:
+ * - Quicksand font for OCM logo
+ * - SVG logo sizing and colors
+ * - Theme-dependent logo colors
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300&display=swap');
+
+.font-logo {
+  font-family: 'Quicksand', sans-serif;
+  font-weight: 300;
+}
+
+/* === Logo icon and text SVG styling === */
+.ocm-logo-icon svg {
+  height: 42px;
+  width: auto;
+  display: block;
+  /* Allow native colors inside icon SVG */
+  fill: unset !important;
+  stroke: unset !important;
+}
+
+.ocm-logo-text svg {
+  height: 42px;
+  width: auto;
+  display: block;
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+/* === Force white logo color in the header === */
+header.navbar .ocm-logo {
+  color: var(--brand-logo-light) !important;
+}
+
+/* === Force white logo text in header and sections === */
+header.navbar .ocm-logo-text svg,
+.section .ocm-logo-text svg {
+  fill: var(--brand-logo-light) !important;
+  stroke: var(--brand-logo-light) !important;
+}
+
+/* === Theme-dependent color for center logo on start page === */
+[data-bs-theme="dark"] .font-logo {
+  color: var(--brand-font-logo-dark) !important;
+}
+
+[data-bs-theme="light"] .font-logo {
+  color: var(--brand-font-logo-light) !important;
+}

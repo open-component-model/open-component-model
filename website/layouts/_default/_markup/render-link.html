@@ -1,0 +1,26 @@
+{{/* Process links to handle OCM CLI documentation markdown links */}}
+{{ $link := .Destination }}
+{{ $isRemote := strings.HasPrefix $link "http" }}
+
+{{/* Don't modify remote links */}}
+{{ if not $isRemote }}
+  {{/* Process .md links */}}
+  {{ if strings.HasSuffix $link ".md" }}
+    {{/* Remove the .md extension */}}
+    {{ $link = strings.TrimSuffix ".md" $link }}
+    
+    {{/* Convert underscores to dashes */}}
+    {{ $link = strings.Replace $link "_" "-" -1 }}
+    
+    {{/* Only modify OCM command links that have no path separators */}}
+    {{ if and (strings.HasPrefix $link "ocm-") (not (strings.Contains $link "/")) }}
+      {{/* Get the base URL path without the last segment */}}
+      {{ $sectionURL := .Page.CurrentSection.RelPermalink }}
+      
+      {{/* Create command link in the same section */}}
+      {{ $link = printf "%s%s" $sectionURL $link }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+
+<a href="{{ $link | safeURL }}"{{ with .Title}} title="{{ . }}"{{ end }}{{ if $isRemote }} target="_blank" rel="noopener"{{ end }}>{{ .Text | safeHTML }}</a>

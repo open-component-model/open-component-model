@@ -1,0 +1,6 @@
+dirs:
+  - ./website/content
+baseUrl: "https://ocm.software"
+replacementPatterns:
+  - pattern: "^/"
+    replacement: "{{BASEURL}}/"
