@@ -1,0 +1,3 @@
+examples_as_yaml: true
+template_name: "js"
+expand_buttons: true

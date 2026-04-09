@@ -1,0 +1,129 @@
+/*
+ * BASE STYLES
+ * ===========
+ * This file contains basic layout and structure styles.
+ * It defines:
+ * 1. Container behavior for full-width mode
+ * 2. Basic image adjustments
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+html, body {
+  font-family: 'Inter var', 'Inter', system-ui, sans-serif;
+  font-optical-sizing: auto;
+}
+
+/* COLOR SCHEME FOR SVG DARK MODE
+ * ------------------------------
+ * Sets color-scheme based on data-bs-theme attribute
+ * This enables CSS light-dark() function in inline SVGs
+ */
+html[data-bs-theme="light"] {
+  color-scheme: light;
+}
+
+html[data-bs-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-bs-theme="auto"] {
+  color-scheme: light dark;
+}
+
+/* FULL-WIDTH CONTAINER
+ * --------------------
+ * .container-fw = Full Width Container
+ * If a page has the class .container-fw, the content is stretched to full width.
+ * Important for landing pages or wide documentation pages.
+ */
+.container-fw {
+  max-width: 100%;
+  /* Uses the full available width */
+  padding-left: 1rem;
+  /* Minimal left padding */
+
+  /* Main content (docs-content) in full-width mode */
+  .docs-content {
+    margin-left: 0 !important;
+    /* Removes standard margins */
+    margin-right: 0 !important;
+    /* so the content can use the full */
+    padding-right: 0 !important;
+    /* width */
+    padding-left: 0 !important;
+  }
+
+  /* Table of contents (TOC) in full-width mode */
+  .docs-toc {
+    margin-left: 3rem !important;  /* slightly increased separation from main content */
+    margin-right: 0 !important;   /* no extra right margin */
+    padding-right: 0 !important;  /* no extra right padding */
+    padding-left: 0 !important;   /* keep left padding neutral */
+  }
+}
+
+/* RESPONSIVE IMAGES
+ * -----------------
+ * Makes all images in the content area responsive.
+ * They automatically fit the width of their container.
+ */
+.content img {
+  max-width: 100%;
+  /* Image never wider than its container */
+  height: auto;
+  /* Height scales proportionally */
+}
+
+/* Limit overall content container width and align with navbar padding */
+.wrap {
+  max-width: 1920px;
+  margin-inline: auto;
+  padding-inline: 24px; /* align horizontal content padding with header */
+}
+
+/* WORD WRAPPING
+ * -------------
+ * Used to wrap individual words in spans for styling or animation.
+ */
+.word {
+  display: inline-block;
+  margin-right: 0.25em;
+  /* Add space between words wrapped in spans */
+
+  &:last-child {
+    margin-right: 0;
+  }
+}
+
+/* Prevent sticky header from overlapping page content on non-home pages
+ * The non-home layout wraps content in .wrap .content (baseof.html).
+ * Ensure there's always at least the header height above the content.
+ */
+.wrap .content {
+  border-top: none; /* avoid double thickness; rely on header border for the horizontal divider */
+  padding-top: 0; /* shift the offset into the columns so the vertical divider aligns */
+}
+
+/* Shift content and TOC down to clear the sticky header while keeping the top divider flush.
+   Sidebar itself is sticky and already offset via top: var(--nav-height), so do not add extra padding there. */
+.row.flex-xl-nowrap > .docs-content,
+.row.flex-xl-nowrap > .docs-toc {
+  padding-top: var(--nav-height);
+}
+
+/* Ensure the first content element aligns directly under the header divider (no gap) */
+.wrap .content > *:first-child {
+  margin-top: 0;
+}
+
+/* If the first element is an HR or a dedicated divider, remove its top margin as well */
+.wrap .content > hr:first-child,
+.docs-content > hr:first-child {
+  margin-top: 0;
+}
+
+/* Also normalize top margin for the first element inside docs-content */
+.docs-content > *:first-child {
+  margin-top: 0;
+}

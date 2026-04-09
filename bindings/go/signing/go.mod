@@ -4,8 +4,8 @@ go 1.26.1
 
 require (
 	github.com/stretchr/testify v1.11.1
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260330094137-cce09ef07431
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260330094137-cce09ef07431
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260408134040-69b3fc617615
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260408134040-69b3fc617615
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
 )
 
@@ -15,8 +15,8 @@ require (
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
-	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	golang.org/x/text v0.34.0 // indirect
+	go.yaml.in/yaml/v2 v2.4.4 // indirect
+	golang.org/x/text v0.35.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
