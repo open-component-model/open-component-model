@@ -1,6 +1,6 @@
 ---
 title: "Download Resources from Component Versions"
-description: "Extract resources from OCM component versions to your local filesystem."
+description: "Extract resources from OCM component versions or CTFs to your local filesystem."
 icon: "📥"
 weight: 8
 toc: true
@@ -43,12 +43,34 @@ The OCM CLI fetches a specific resource from a component version and saves it to
 
 First, check which resources are available in the component version. Until the OCM CLI supports resource listing,
 you can use the [`ocm get cv`]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) command
-to see the complete component
+to see the complete component version descriptor, including the `resources` section.
+
+As mentioned in the [concept document for Component Identity]({{< relref "/docs/concepts/component-identity.md#component-repositories-and-storage" >}}),
+components can be stored in OCI registries or local CTF archives, but the way you access them is the same — using their unique identity.
+
+The following examples show component versions stored in a local CTF archive and in a remote OCI registry.
+The local CTF uses the component created in the [Getting Started: Create Component Versions]({{< relref "create-component-version.md" >}}) tutorial,
+while the remote OCI registry uses the Podinfo component published to GitHub Container Registry.
+Later in this How-To, we'll download a resource from the Podinfo component version.
+
+{{< tabs >}}
+{{< tab "remote OCI registry" >}}
 
    ```shell
    ocm get cv ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0 -oyaml
    ```
 
+{{< /tab >}}
+{{< tab "local CTF" >}}
+
+   ```shell
+   ocm get cv ./transport-archive//github.com/acme.org/helloworld:1.0.0 -oyaml
+   ```
+
+{{< /tab >}}
+{{< /tabs >}}
+
+For the Podinfo component version in the OCI registry, the output includes two resources: an OCI image and a Helm chart stored as OCI artifact.
 <details>
 <summary>Inspect the component for resources</summary>
 
