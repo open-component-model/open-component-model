@@ -50,6 +50,7 @@ rules:
     verbs:
       - create
       - delete
+      - get
       - list
       - patch
       - update
@@ -131,6 +132,7 @@ rules:
     verbs:
       - create
       - delete
+      - get
       - list
       - patch
       - update
@@ -142,6 +144,7 @@ rules:
     verbs:
       - create
       - delete
+      - get
       - list
       - patch
       - update
