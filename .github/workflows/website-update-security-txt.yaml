@@ -33,7 +33,7 @@ jobs:
           https://raw.github.tools.sap/sgsc-engineering-and-automation/securitytxt/main/security.txt -o website/static/.well-known/security.txt
 
     - name: Create Pull Request
-      uses: peter-evans/create-pull-request@v7
+      uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8
       with:
         token: ${{ steps.generate_token.outputs.token }}
         title: "chore: update '.well-known/security.text'"
