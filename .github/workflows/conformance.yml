@@ -96,7 +96,7 @@ jobs:
       # Artifact mode: Download and prepare CLI image
       - name: Download CLI artifact
         if: ${{ inputs.cli_artifact != '' }}
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ inputs.cli_artifact }}
           path: tmp/cli-artifact
@@ -119,7 +119,7 @@ jobs:
       # Artifact mode: Download and prepare controller image + chart
       - name: Download controller image artifact
         if: ${{ inputs.toolkit_image_artifact != '' }}
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ inputs.toolkit_image_artifact }}
           path: tmp/controller-artifact
@@ -140,7 +140,7 @@ jobs:
 
       - name: Download chart artifact
         if: ${{ inputs.toolkit_chart_artifact != '' }}
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ inputs.toolkit_chart_artifact }}
           path: tmp/chart-artifact
