@@ -105,7 +105,7 @@ jobs:
                     echo "[ERROR] gh api status call failed."
                     exit 1
                   fi
-                  PREVIEW_STATUS=$(echo "$STATUS_JSON" | jq ".statuses[] | select(.context==\"netlify/open-component-model/deploy-preview\")")
+                  PREVIEW_STATUS=$(echo "$STATUS_JSON" | jq ".statuses[] | select(.context==\"netlify/ocm-website/deploy-preview\")")
                   PREVIEW_URL=$(echo "$PREVIEW_STATUS" | jq -r ".target_url")
                   echo "Deploy Preview ready: $PREVIEW_URL"
                   echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
