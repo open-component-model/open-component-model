@@ -47,7 +47,6 @@ export default async function computeRcVersion({ core }) {
     // doesn't touch files in the component path. Passing an explicit range avoids this.
     const mergedTags = run(core, "git", [
         "tag", "--list", `${tagPrefix}*`,
-        "--merged", "HEAD",
         "--sort=-version:refname"
     ]);
     const previousTag = findPreviousTag(
