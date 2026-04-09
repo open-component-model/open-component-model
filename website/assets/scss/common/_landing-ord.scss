@@ -1,0 +1,653 @@
+/*
+ * Landing page hero section and footer styles.
+ *
+ * Features:
+ * - Responsive hero layout with image container
+ * - Animated background effects
+ * - EU funding footer with Neonephos branding
+ * - Netlify logo for footer
+ * - Light/dark theme support
+ */
+
+/* ============================================
+   Hero Section Layout
+   ============================================ */
+.lp-home {
+    display: grid;
+    align-content: start; /* prevent grid rows from stretching vertically; keep constant spacing between sections even on tall viewports */
+    background: var(--lp-c-bg);
+    min-height: 100vh;
+    gap: 24px;
+    padding-top: var(--nav-height);
+    padding-left: var(--nav-pad-x) !important;
+    padding-right: var(--nav-pad-x) !important;
+    padding-bottom: var(--nav-height);
+
+    .container {
+        display: flex;
+        margin: 0 auto;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: clamp(40px, 4vw, 64px);
+        width: 100%;
+        max-width: 1400px;
+    }
+
+    .main {
+        flex: 1 1 100%;
+        order: 2;
+    }
+
+    .heading {
+        line-height: 1.2;
+        font-weight: 600;
+        margin-bottom: 24px;
+        letter-spacing: -0.01em;
+        font-optical-sizing: auto;
+    }
+
+    .name {
+        font-size: 48px;
+        font-weight: 700;
+        font-family: 'Inter var', 'Inter', system-ui, sans-serif;
+        display: block;
+        line-height: 1.12;
+        letter-spacing: -0.4px;
+        font-optical-sizing: auto;
+        width: fit-content;
+        max-width: 392px;
+        white-space: normal;
+        padding-bottom: 0.12em;
+
+        &.clip {
+            background: var(--lp-home-hero-name-background);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: var(--lp-home-hero-name-color);
+        }
+    }
+
+    .text {
+        font-size: 48px;
+        font-weight: 700;
+        line-height: 1.12;
+        font-family: 'Inter var', 'Inter', system-ui, sans-serif;
+        letter-spacing: -0.4px;
+        font-optical-sizing: auto;
+        width: fit-content;
+        max-width: 392px;
+        white-space: normal;
+        color: var(--lp-c-text-1);
+        display: block;
+        margin-top: 8px;
+    }
+
+    .tagline {
+        color: var(--lp-c-text-2);
+        font-size: 20px;
+        font-family: 'Inter var', 'Inter', system-ui, sans-serif;
+        line-height: 30px;
+        margin: 0 auto 24px;
+        max-width: 600px;
+    }
+
+    /* Two subheadline lines below hero lines*/
+    .subheadlines {
+        margin-top: 8px;
+        display: block !important;
+        clear: both;
+    }
+    .subheadline {
+        color: var(--ocm-card-desc-color);
+        font-family: 'Inter var', 'Inter', system-ui, sans-serif;
+        font-size: 24px;
+        line-height: 28px;
+        margin: 0;
+        display: block !important;
+        white-space: normal !important;
+        width: 100%;
+    }
+
+    /* Fixed hero lines: block and nowrap on tablet/desktop; mobile wraps normally */
+    .hero-line {
+        display: block;
+        white-space: normal;
+    }
+    @media (min-width: 481px) {
+        .hero-line {
+            white-space: nowrap;
+        }
+    }
+
+    /* Hero actions (buttons under subheadline) */
+    .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding-top: 34px;
+        justify-content: center;
+    }
+
+    .container--after-hero {
+        margin-top: 40px;
+    }
+
+    .hero-button {
+        display: inline-block;
+        border: 1px solid transparent;
+        border-radius: 24px;
+        padding: 0 24px;
+        line-height: 46px;
+        font-size: 14px;
+        font-weight: 400;
+        text-decoration: none;
+        transition: color 0.25s, border-color 0.25s, background-color 0.25s;
+    }
+
+    .hero-button--brand {
+        border-color: var(--lp-button-brand-border);
+        color: var(--lp-button-brand-text);
+        background-color: var(--lp-button-brand-bg);
+    }
+
+    .hero-button--brand:hover {
+        background-color: var(--lp-button-brand-hover-bg);
+    }
+
+    .hero-button--alt {
+        border-color: var(--lp-c-divider);
+        color: var(--lp-button-alt-text);
+        background-color: var(--lp-button-alt-bg);
+    }
+
+    .hero-button--alt:hover {
+        background-color: var(--lp-button-alt-hover-bg);
+    }
+
+    .image {
+        display: flex;
+        order: 1;
+        flex: 1 1 100%;
+        margin-top: 10px;
+        justify-content: center;
+        align-items: center;
+        position: relative; /* isolate glow rendering from adjacent text container */
+        isolation: isolate; /* create a new stacking context so filters/mixes don't interact with siblings */
+        z-index: 0; /* keep glow and image contained below other UI overlays */
+
+        .image-container {
+            position: relative;
+            width: 280px;
+            height: 280px;
+            margin: 0 auto;
+            max-width: 100%;
+            isolation: isolate; /* ensure background glow does not blend with sibling elements */
+            overflow: visible;   /* prevent blur from being clipped by container bounds */
+
+            @media (max-width: 480px) {
+                width: 200px;
+                height: 200px;
+            }
+
+            @media (min-width: 481px) and (max-width: 959px) {
+                width: 280px;
+                height: 280px;
+            }
+        }
+
+        .image-bg {
+            position: absolute;
+            inset: 0;
+            background-image: var(--lp-home-hero-image-background-image);
+            filter: var(--lp-home-hero-image-filter);
+            border-radius: 50%;
+            opacity: 0.6;
+            z-index: 0;                 /* place glow behind the logo image */
+            mix-blend-mode: normal;     /* avoid blending with text container; keep standard compositing */
+            will-change: filter, opacity; /* hint for smoother glow rendering */
+            pointer-events: none;       /* no interaction, purely visual */
+        }
+
+        .image-src {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            z-index: 1;
+            background-size: contain;
+            background-position: center;
+            background-repeat: no-repeat;
+            /* subtle glow to blend with background */
+            filter: drop-shadow(0 0 24px rgba(46, 227, 255, 0.3));
+        }
+    }
+
+    /* Responsive styles */
+    @media (min-width: 768px) {
+        .name {
+            font-size: 56px;
+            line-height: 56px;
+            max-width: 576px;
+        }
+
+        .text {
+            font-size: 56px;
+            line-height: 56px;
+            max-width: 576px;
+        }
+
+        .tagline {
+            font-size: 24px;
+            line-height: 36px;
+        }
+    }
+
+    @media (min-width: 960px) {
+        padding-top: 32px; /* doubled desktop spacing between header and hero title */
+
+        .container {
+            flex-direction: row;
+            text-align: left;
+            gap: 36px;
+        }
+
+        .main {
+            flex: 1 1 auto;
+            order: 1;
+            position: relative;
+            z-index: 2;
+        }
+
+        .name {
+            font-size: 64px;
+            line-height: 72px;
+        }
+
+        .text {
+            font-size: 64px;
+            line-height: 64px;
+        }
+
+        .tagline {
+            margin: 0 0 32px;
+        }
+
+        .hero-actions {
+            justify-content: flex-start;
+        }
+
+        .image {
+            flex: 0 0 280px;
+            order: 2;
+            z-index: 0;
+        }
+    }
+
+    /* Large screens: widen text column; keep subheadlines stacked */
+    @media (min-width: 1200px) {
+        .container {
+            gap: 48px;
+        }
+
+        /* Maintain fluid text width to prevent jumps; use values from 960px breakpoint */
+        .main {
+            flex: 1 1 auto;
+        }
+
+        /* Keep logo column fixed to avoid push-out and overlaps */
+        .image {
+            flex: 0 0 280px;
+        }
+
+        /* Ensure subheadlines remain stacked on separate lines */
+    .subheadlines {
+        margin-top: 8px;
+        clear: both;
+    }
+        .subheadlines .subheadline {
+            display: block;
+            white-space: normal;
+        }
+
+        /* Slightly reduce glow radius to free horizontal space (still larger than before overall) */
+        .image .image-bg {
+            filter: blur(56px);
+        }
+    }
+
+    /* Extra-large screens: keep default block flow; avoid forcing heading into flex to prevent layout shifts */
+    @media (min-width: 1400px) {
+        .heading {
+            display: block;
+        }
+    }
+
+    /* Large/XL screens: force single-line title and inline hero lines earlier */
+    @media (min-width: 1250px) {
+        .name,
+        .text {
+            white-space: nowrap;
+            max-width: none;
+        }
+
+        
+
+        /* Ensure subheadlines always stack vertically (never side-by-side) */
+        .subheadlines {
+            display: grid !important;
+            grid-template-columns: 1fr !important;
+            align-items: start;
+            justify-items: start;
+            gap: 0;
+        }
+        .subheadlines .subheadline {
+            display: block !important;
+            white-space: normal !important;
+            width: 100%;
+            float: none;
+        }
+    }
+
+    /* Up to 974px: force column layout and center all hero elements */
+    @media (max-width: 974px) {
+        .container {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: clamp(40px, 4vw, 64px);
+        }
+        .main {
+            order: 2;
+            text-align: center;
+        }
+        .image {
+            order: 1;
+        }
+        .heading,
+        .name,
+        .text,
+        .subheadlines,
+        .tagline {
+            text-align: center;
+        }
+        .name,
+        .text,
+        .subheadlines,
+        .tagline {
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .subheadlines .subheadline {
+            text-align: center;
+        }
+    }
+
+    /* Mobile smallest view: ensure name and text are centered */
+    @media (max-width: 480px) {
+        .name,
+        .text {
+            margin-left: auto;
+            margin-right: auto;
+            text-align: center;
+        }
+    }
+
+    /* Hard override: keep hero sublines (hero_line1/hero_line2) always stacked on separate lines at all widths */
+    .heading .text .hero-line {
+        display: block !important;
+        white-space: normal !important;
+    }
+}
+
+/* Footer styles */
+.footer--dark {
+    --ifm-footer-background-color: var(--lp-c-bg);
+    background-color: var(--lp-c-bg);
+    border-top: 1px solid var(--lp-c-divider);
+    padding: 16px 0 24px; /* increase bottom space */
+}
+
+.footer-content-wrapper {
+    width: 100%;
+    padding: 0 24px;
+    margin: 0 auto;
+
+    @media (min-width: 960px) {
+        padding: 0 64px;
+    }
+}
+
+.footer-inner-container {
+    max-width: 1152px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.footer-bottom-group {
+    width: 100%;
+    margin: 0 auto;
+}
+
+.footer--dark .netlify-logo {
+    display: inline-block;
+    opacity: 1;
+    filter: brightness(1.2);
+}
+
+html[data-bs-theme="dark"] .footer--dark .netlify-logo {
+    filter: brightness(1.4);
+}
+
+.footer--dark .footer__copyright {
+    color: var(--lp-c-text-2);
+    font-size: 12px;
+    line-height: 24px;
+    max-width: var(--container);
+    margin: 0 auto;
+    text-align: left;
+}
+
+
+.footer-funding {
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    padding: 0;
+}
+
+.footer-funding__image img {
+    max-width: 300px;
+    height: auto;
+    display: block;
+}
+
+.footer-funding__text {
+    flex: 1;
+    font-size: 12px;
+    color: var(--lp-c-text-2);
+    line-height: 1.6;
+    text-align: left;
+}
+
+.footer-funding__text p {
+    color: var(--lp-c-text-3);
+    margin: 0;
+    font-size: 12px;
+    text-align: left;
+}
+
+.footer-funding__text strong {
+    color: var(--lp-c-text-3);
+    font-weight: 600;
+}
+
+.footer-funding__text a {
+    color: var(--c-accent);
+    text-decoration: none;
+}
+
+.footer-funding__text a:hover {
+    color: var(--lp-c-brand-2);
+    text-decoration: underline;
+}
+
+.footer-copyright {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--lp-c-divider);
+}
+
+.footer-container {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+
+    @media (min-width: 960px) {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+}
+
+.neonephos-logos {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 20px 0;
+}
+
+.neonephos-link {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.neonephos-logo {
+    height: 60px;
+    width: auto;
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.neonephos-link:hover .neonephos-logo {
+    opacity: 1;
+}
+
+.neonephos-logo--light {
+    display: none;
+}
+
+.neonephos-logo--dark {
+    display: inline;
+}
+
+html[data-bs-theme="light"] .neonephos-logo--dark {
+    display: none;
+}
+
+html[data-bs-theme="light"] .neonephos-logo--light {
+    display: inline;
+}
+
+.footer-legal-links {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--lp-c-text-2);
+}
+
+.footer-legal-links a {
+    color: var(--lp-c-text-2);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.footer-legal-links a:hover {
+    color: var(--lp-c-brand-1);
+    text-decoration: underline;
+}
+
+.footer-legal-sep {
+    color: var(--lp-c-text-3);
+    opacity: 0.5;
+}
+
+@media (max-width: 649px) {
+    .footer-funding {
+        flex-direction: column;
+        gap: 24px;
+        width: 100%;
+    }
+
+    .footer-funding__image {
+        align-self: flex-start;
+    }
+}
+
+@media (min-width: 650px) and (max-width: 768px) {
+    .footer-funding {
+        flex-direction: row;
+        gap: 24px;
+        width: 100%;
+        flex-wrap: unset;
+    }
+
+    .footer-funding__image img {
+        max-height: 200px;
+    }
+
+    .footer-legal-links {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .footer-legal-sep {
+        margin: 0 8px;
+    }
+}
+
+@media (min-width: 769px) {
+    .footer-funding {
+        flex-direction: row;
+        gap: 24px;
+        width: auto;
+        flex: 1;
+        flex-wrap: wrap;
+    }
+
+    .footer-funding__image {
+        align-self: flex-start;
+    }
+}
+
+/* Light Theme Overrides */
+[data-bs-theme="light"] {
+    .lp-home {
+        .heading .name {
+            color: var(--lp-c-text-1);
+        }
+
+        .heading .text,
+        .tagline {
+            color: var(--lp-c-text-2);
+        }
+
+        .image .image-container,
+        .image .image-bg {
+            background: transparent;
+        }
+    }
+
+    .footer--dark {
+        background: var(--lp-c-bg) !important;
+        color: var(--lp-c-text-2) !important;
+        border-top-color: var(--lp-c-divider);
+    }
+}

@@ -1,0 +1,161 @@
+# Module Configuration File
+#
+# This file configures Hugo module settings, particularly module mounts which
+# define how content is organized within the project.
+#
+# Mounts specify file paths in your project that Hugo should use when building
+# the site. They allow for custom directory structures and integrating content
+# from different locations.
+#
+# At the end of this file, there are per-version mounts and imports for
+# reference documentation, allowing different versions of content to be
+# served based on the site's versioning strategy.
+
+## data
+[[mounts]]
+  source = "node_modules/@thulite/doks-core/data"
+  target = "data"
+
+[[mounts]]
+  source = "data"
+  target = "data"
+
+## layouts
+[[mounts]]
+  source = "layouts"
+  target = "layouts"
+
+[[mounts]]
+  # Exclude 'home.html' to avoid conflicts with a custom home page layout defined in the local 'layouts' directory.
+  # Hugo >= 0.153 deprecates `excludeFiles`; use `files` glob slice instead.
+  files = ["**", "!home.html"]
+  source = "node_modules/@thulite/doks-core/layouts"
+  target = "layouts"
+
+[[mounts]]
+  source = "node_modules/@thulite/core/layouts"
+  target = "layouts"
+
+[[mounts]]
+  source = "node_modules/@thulite/seo/layouts"
+  target = "layouts"
+
+[[mounts]]
+  source = "node_modules/@thulite/images/layouts"
+  target = "layouts"
+
+[[mounts]]
+  source = "node_modules/@thulite/inline-svg/layouts"
+  target = "layouts"
+
+## i18n
+[[mounts]]
+  source = "node_modules/@thulite/doks-core/i18n"
+  target = "i18n"
+
+[[mounts]]
+  source = "i18n"
+  target = "i18n"
+
+## archetypes
+[[mounts]]
+  source = "node_modules/@thulite/doks-core/archetypes"
+  target = "archetypes"
+
+[[mounts]]
+  source = "archetypes"
+  target = "archetypes"
+
+## assets
+[[mounts]]
+  source = "node_modules/@thulite/core/assets"
+  target = "assets"
+
+[[mounts]]
+  source = "node_modules/@thulite/doks-core/assets"
+  target = "assets"
+
+[[mounts]]
+  source = "node_modules/@tabler/icons/icons"
+  target = "assets/svgs/tabler-icons"
+
+[[mounts]]
+  source = "node_modules/@thulite/images/assets"
+  target = "assets"
+
+[[mounts]]
+  source = "assets"
+  target = "assets"
+
+## static
+[[mounts]]
+  source = "node_modules/@thulite/doks-core/static"
+  target = "static"
+
+[[mounts]]
+  source = "static"
+  target = "static"
+
+# Versioning content with mounts and imports
+## per-version mounts of content folders
+## per-version imports of reference docs using module imports
+### legacy: no import (uses embedded reference docs in content folder)
+### dev: uses latest
+### x.y.z uses version x.y.z of ref docs module
+
+# Shared blog content (single source of truth across all site versions)
+[[mounts]]
+  source = "content/blog"
+  target = "content/blog"
+
+# legacy (only mount, no imports)
+[[mounts]]
+  files = ["**", "!blog/**"]
+  source = "content_versioned/version-legacy"
+  target = "content"
+[mounts.sites.matrix]
+  versions = ["legacy"]
+
+# dev
+[[mounts]]
+  files = ["**", "!blog/**"]
+  source = "content"
+  target = "content"
+  [mounts.sites.matrix]
+    versions = ["latest"]
+
+[[imports]]
+  path = "ocm.software/open-component-model/cli"
+  version = "latest"
+  [[imports.mounts]]
+  source = "docs/reference"
+  target = "content/docs/reference/ocm-cli"
+  [imports.mounts.sites.matrix]
+    versions = ["latest"]
+
+[[imports]]
+  path = "ocm.software/open-component-model/bindings/go/constructor"
+  version = "latest"
+  [[imports.mounts]]
+  source = "spec/v1/resources"
+  target = "static/latest/schemas/bindings/go/constructor"
+  [imports.mounts.sites.matrix]
+    versions = ["latest"]
+
+[[imports]]
+  path = "ocm.software/open-component-model/bindings/go/descriptor/v2"
+  version = "latest"
+  [[imports.mounts]]
+  source = "resources"
+  target = "static/latest/schemas/bindings/go/descriptor/v2"
+  [imports.mounts.sites.matrix]
+    versions = ["latest"]
+
+[[imports]]
+  path = "ocm.software/open-component-model/kubernetes/controller"
+  version = "latest"
+  [[imports.mounts]]
+  source = "config/crd/bases"
+  target = "static/latest/schemas/kubernetes/controller"
+  [imports.mounts.sites.matrix]
+    versions = ["latest"]

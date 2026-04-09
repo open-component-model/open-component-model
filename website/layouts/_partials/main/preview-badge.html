@@ -1,0 +1,8 @@
+{{- if or .Draft (gt (time .Date) now) -}}
+  {{- if .Draft -}}
+    <span style="display: inline-block; background: #ffc107; color: #664d03; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin-left: 8px; vertical-align: middle;">DRAFT</span>
+  {{- end -}}
+  {{- if gt (time .Date) now -}}
+    <span style="display: inline-block; background: #0dcaf0; color: #055160; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin-left: 8px; vertical-align: middle;">SCHEDULED</span>
+  {{- end -}}
+{{- end -}}

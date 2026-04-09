@@ -39,14 +39,14 @@ jobs:
       packages: write # Required for pushing to GHCR
     steps:
       - name: Download constructor artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ inputs.constructor_artifact_name }}
           path: ${{ github.workspace }}/constructor
 
       - name: Download build artifact (optional)
         if: ${{ inputs.build_artifact_name != '' }}
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ inputs.build_artifact_name }}
           path: ${{ github.workspace }}/constructor/resources

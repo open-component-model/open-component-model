@@ -1,0 +1,11 @@
+{{- if or .Draft (gt (time .Date) now) -}}
+<div class="preview-banner" style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 6px; padding: 12px 16px; margin-bottom: 24px; font-size: 0.95rem; color: #664d03;">
+  {{- if and .Draft (gt (time .Date) now) -}}
+    <strong>Draft &amp; Scheduled</strong> &mdash; This post is a draft and scheduled for {{ .Date | time.Format "January 2, 2006" }}. It will not appear on the published site.
+  {{- else if .Draft -}}
+    <strong>Draft</strong> &mdash; This post is a draft and will not appear on the published site.
+  {{- else -}}
+    <strong>Scheduled</strong> &mdash; This post is scheduled for {{ .Date | time.Format "January 2, 2006" }} and will not appear on the published site until then.
+  {{- end -}}
+</div>
+{{- end -}}
