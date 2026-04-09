@@ -3,7 +3,7 @@ ignores:
   - "website/content_versioned/version-legacy/**"
 config:
   default: true
-  MD001: false #Heading style - Allow heading levels to be incremented by multiple levels at a time
+  MD001: false #Heading style
   MD004: false #Unordered list style
   MD009: false #no-trailing-spaces Trailing spaces
   MD013: false #Line length - https://github.com/DavidAnson/markdownlint/blob/HEAD/doc/Rules.md#md013
