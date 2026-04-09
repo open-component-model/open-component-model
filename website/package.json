@@ -52,7 +52,7 @@
     "shx": "^0.4.0",
     "smol-toml": "^1.6.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.57.2"
+    "typescript-eslint": "^8.58.0"
   },
   "overrides": {
     "semver": "^7.5.4",
