@@ -1,0 +1,78 @@
+name: "Website: Publish Site"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'website/**'
+    paths:
+      - 'website/**'
+      - '.github/workflows/website-publish-site.yaml'
+
+env:
+  OUTPUT_DIR: site-docs/
+
+jobs:
+  publish-site:
+    name: Publish Site
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+
+    steps:
+      - name: Get OCMBot installation token
+        id: generate_token
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a #v2
+        with:
+          app_id: ${{ secrets.OCMBOT_APP_ID }}
+          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 #v4
+        with:
+          node-version: 25.5.0
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v2
+        with:
+          hugo-version: '0.155.0'
+          extended: true
+
+      - name: Install deps and Build
+        working-directory: website
+        run: |
+          npm ci
+          npm run build
+
+      - name: Setup Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c #v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate Schema
+        working-directory: website
+        run: |
+          python3 -m pip install json-schema-for-humans
+          generate-schema-doc --config-file generate-schema.yaml static/schemas/component-descriptor-v2 schema-v2.html
+
+      - name: Copy Schema
+        working-directory: website
+        run: |
+          mkdir -p public/docs/overview/specification
+          cp schema-v2.html schema_doc.css schema_doc.min.js public/docs/overview/specification
+
+      - name: Publish as GitHub Pages
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e #v4
+        with:
+          github_token: ${{ steps.generate_token.outputs.token }}
+          publish_dir: ./website/public
+          commit_message: ${{ github.event.head_commit.message }}
+          user_name: 'GitHub Actions Bot'
+          user_email: '<41898282+github-actions[bot]@users.noreply.github.com>'

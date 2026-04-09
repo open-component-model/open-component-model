@@ -1,0 +1,21 @@
+/*
+ * Main SCSS entry point - imports all modular components.
+ * Import order matters for CSS cascade.
+ */
+
+@import "variables-custom"; // Custom variables (colors, fonts)
+@import "base"; // Layout & structure
+@import "header-custom"; // Custom header navigation
+@import "branding"; // Logo & fonts
+@import "sidebar"; // Sidebar navigation
+@import "cards"; // Unified card system
+@import "components"; // TOC & description boxes
+@import "pages"; // Page-specific overrides
+@import "version-warning"; // Version warning banner
+@import "landing-ord"; // Landing page & footer
+@import "../components/schema-renderer"; // Schema renderer (Preact)
+
+// Note: Dart Sass compatibility fixes for the theme's search form @extend
+// rules are applied via assets/scss/components/_forms.scss (overrides
+// @thulite/doks-core's original) and defined in _forms-dart-sass-compat.scss.
+
