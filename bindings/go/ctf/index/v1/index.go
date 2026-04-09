@@ -22,7 +22,7 @@ type Index interface {
 	// AddArtifact adds an ArtifactMetadata to the index.
 	//
 	// Like OCI Image Layout, multiple entries with the same digest but different tags are allowed.
-	// If a tag already exists in the same repository but points to a different digest, it is cleared ("retag" scenario).
+	// If a tag already exists in the same repository but points to a different digest, the old entry is removed.
 	// If an exact duplicate (same repository, tag, and digest) exists, the add is skipped.
 	AddArtifact(a ArtifactMetadata)
 	// GetArtifacts returns a slice of ArtifactMetadata that are stored in the index at the time of the call.
@@ -91,33 +91,31 @@ func (i *index) AddArtifact(a ArtifactMetadata) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	var foundUntaggedMatch bool
-	for idx, art := range i.Artifacts {
-		// Only consider artifacts in the same repository
-		if art.Repository != a.Repository {
-			continue
-		}
-
-		// Case 1: Exact duplicate (same repo+tag+digest) → skip, don't add
-		if art.Tag == a.Tag && art.Digest == a.Digest {
+	// skip exact duplicate entries
+	for _, art := range i.Artifacts {
+		if art.Repository == a.Repository && art.Tag == a.Tag && art.Digest == a.Digest {
 			return
-		}
-
-		// Case 2: Retag scenario - same tag but different digest → clear old tag
-		if a.Tag != "" && art.Tag == a.Tag && art.Digest != a.Digest {
-			i.Artifacts[idx].Tag = ""
-		}
-
-		// Case 3: Tag an untagged entry - same digest but currently untagged → tag it
-		if a.Tag != "" && art.Tag == "" && art.Digest == a.Digest {
-			i.Artifacts[idx].Tag = a.Tag
-			foundUntaggedMatch = true
 		}
 	}
 
-	// If we tagged an existing untagged entry, don't add a new entry
-	if foundUntaggedMatch {
-		return
+	if a.Tag != "" {
+		// If adding a tagged artifact, remove any existing entry with same repo+tag but different digest
+		// This handles the "retag" scenario: moving a tag from one digest to another
+		for idx, art := range i.Artifacts {
+			if art.Repository == a.Repository && art.Tag == a.Tag {
+				i.Artifacts = slices.Delete(i.Artifacts, idx, idx+1)
+				break
+			}
+		}
+
+		// Check if we should tag an existing untagged entry instead of adding new
+		// This handles the pattern: artifact added without tag, then tagged later
+		for idx, art := range i.Artifacts {
+			if art.Repository == a.Repository && art.Tag == "" && art.Digest == a.Digest {
+				i.Artifacts[idx].Tag = a.Tag
+				return
+			}
+		}
 	}
 
 	// No matching artifact found, add as new entry
