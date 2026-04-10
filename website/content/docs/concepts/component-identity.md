@@ -42,7 +42,7 @@ The DNS domain at the start of the name (e.g., `acme.org` in `acme.org/webshop/b
 **Examples:**
 
 | Component Name | Owner |
-|---|---|
+| --- | --- |
 | `github.com/open-component-model/ocm` | OCM project |
 | `acme.org/webshop/backend` | Acme Corp |
 | `acme.org/webshop/frontend` | Acme Corp |
@@ -72,7 +72,7 @@ Artifact identities are always **relative to a component version**. They are not
 Within a component version, every artifact (resource, source, or reference) must have a unique identity, defined by the following attributes:
 
 | Attribute | Required | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `name` | Yes | Identifies the artifact. Typically describes its intended purpose (e.g., `backend-image`, `deploy-chart`). |
 | `extraIdentity` | No | A string-to-string map that contributes to identity. Used for variants like `os: linux`, `architecture: amd64`. |
 | `version` | No | Only contributes to identity when `name` + `extraIdentity` are not sufficient to disambiguate. |
@@ -110,7 +110,7 @@ Both resources share the name `backend-image`, but their `extraIdentity` attribu
 OCM coordinates provide a shorthand for referencing elements in the model. Given a component `example.org/my-component` with versions `1.2.3` and `1.3.0`, each declaring a resource `my-resource`:
 
 | Coordinate | Refers to |
-|---|---|
+| --- | --- |
 | `example.org/my-component` | All versions of the component (1.2.3 + 1.3.0) |
 | `example.org/my-component:1.2.3` | Version 1.2.3 of the component |
 | `example.org/my-component:1.2.3:resource/my-resource` | The resource `my-resource` in version 1.2.3 |
