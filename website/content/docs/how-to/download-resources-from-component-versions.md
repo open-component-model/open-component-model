@@ -1,6 +1,6 @@
 ---
 title: "Download Resources from Component Versions"
-description: "Extract resources from OCM component versions or CTFs to your local filesystem."
+description: "Extract resources from OCM component versions to your local filesystem."
 icon: "📥"
 weight: 8
 toc: true
