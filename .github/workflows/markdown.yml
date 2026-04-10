@@ -150,7 +150,7 @@ jobs:
 
       - name: Run linkspector
         if: steps.check_changes.outputs.has_website_changes == 'true'
-        uses: umbrelladocs/action-linkspector@874d01cae9fd488e3077b08952093235bd626977 # v1
+        uses: umbrelladocs/action-linkspector@37c85bcde51b30bf929936502bac6bfb7e8f0a4d # v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
