@@ -59,7 +59,7 @@ jobs:
       - name: Generate Schema
         working-directory: website
         run: |
-          python3 -m pip install json-schema-for-humans
+          python3 -m pip install json-schema-for-humans==1.5.1
           generate-schema-doc --config-file generate-schema.yaml static/schemas/component-descriptor-v2 schema-v2.html
 
       - name: Copy Schema
