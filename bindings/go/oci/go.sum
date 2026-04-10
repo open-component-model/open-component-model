@@ -53,12 +53,12 @@ ocm.software/open-component-model/bindings/go/configuration v0.0.12 h1:SXrHUR70g
 ocm.software/open-component-model/bindings/go/configuration v0.0.12/go.mod h1:0sMurs1+cI/ohkuNSipDPPRb5ycSSTHDZoFG92aDtlE=
 ocm.software/open-component-model/bindings/go/credentials v0.0.9 h1:sYKfVKs+CrVL2EuKYNevCjXq1cdF0DsLnWyEjamjDdY=
 ocm.software/open-component-model/bindings/go/credentials v0.0.9/go.mod h1:JFQDqqZv17uJLQSZOKa9siuLTK4zMA3Bzk4amU9ZALU=
-ocm.software/open-component-model/bindings/go/ctf v0.3.0 h1:u1B26OgUvR+gzTwY0hTVdZgFIXv5uwdI8reEvCcjNV4=
-ocm.software/open-component-model/bindings/go/ctf v0.3.0/go.mod h1:skMxA1l7rZFhKsjn8CysSVG31zjmV95WaFqMVKRjHug=
+ocm.software/open-component-model/bindings/go/ctf v0.4.0 h1:E2kDGJk/ZR2wMK6fk3yFr2Uv6AhfLdMmvdvQ7Y64/2s=
+ocm.software/open-component-model/bindings/go/ctf v0.4.0/go.mod h1:XaVTQK/STJ64pq8vClsT+onD0kEs7P+Wzsq1k2tp9h4=
 ocm.software/open-component-model/bindings/go/dag v0.0.6 h1:To76QJAmFD88C101oB/HgYvtomp8mm0270ewDLcVncw=
 ocm.software/open-component-model/bindings/go/dag v0.0.6/go.mod h1:mQbO95zYvX59VXNJGer4+wGsKY0BVI4FKwlR5BlPugM=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260408134040-69b3fc617615 h1:v7CZVECS7qF0LGu5TDZkPEBF569wv4AojteNTnmt84o=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260408134040-69b3fc617615/go.mod h1:gB2z/xXiBqridb+jfkKgukfCP8y6+EhNylCNAK3iVWY=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260410083020-fa0b74c6c6e8 h1:rkTj1QgBt2EbTp4iWZDVwqBGil3VPt7pgh4P/hEv7dw=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260410083020-fa0b74c6c6e8/go.mod h1:gB2z/xXiBqridb+jfkKgukfCP8y6+EhNylCNAK3iVWY=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 h1:SdQm6w7Lj0g+d+MaNXQQkpKUqOhFwUSzoUjzRyeKL0I=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9/go.mod h1:5ES8RkuCdrbqiG56WJE40qhFoC4QHAQn8BasL5aKlvM=
 ocm.software/open-component-model/bindings/go/repository v0.0.8 h1:TUwsQSOkPMvKAU3ciK7Tr2UgewDag640X+OD97zI2oE=
