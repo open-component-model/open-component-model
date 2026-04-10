@@ -170,7 +170,6 @@ func fillGraphDefinitionWithPrefetchedComponents(
 		"components", len(d.Vertices))
 
 	var allFileRefs []fileBufferRef
-	var uploadIDs []string
 
 	for key, v := range d.Vertices {
 		val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
@@ -217,13 +216,10 @@ func fillGraphDefinitionWithPrefetchedComponents(
 			if err := addUploadTransformation(v2desc, id, baseID, target, tgd, resourceTransformIDs); err != nil {
 				return err
 			}
-
-			// Track the upload ID so the cleanup node can depend on it.
-			uploadIDs = append(uploadIDs, id+"Upload")
 		}
 	}
 
-	addFileCleanupTransformation(tgd, allFileRefs, uploadIDs)
+	addFileCleanupTransformation(tgd, allFileRefs)
 
 	return nil
 }
@@ -279,14 +275,15 @@ func logSkippedResource(ctx context.Context, component, version string, resource
 // transformation (uploading it to the target). The uploadType and target type determine whether
 // resources are stored as local blobs or separate OCI artifacts (including Helm charts) in the
 // target repository.
-// It returns file buffer references for any Get transformations that buffer content to disk.
+// It returns file buffer references that point to consumer spec fields (Add/Convert nodes),
+// ensuring the cleanup node depends on consumers rather than producers.
 func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType int) ([]fileBufferRef, error) {
 	_, isOCITarget := toSpec.(*oci.Repository)
 	uploadAsArtifact := isOCITarget && uploadType == UploadAsOciArtifact
 
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
-	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
+	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 
 	switch acc := access.(type) {
 	case *descriptorv2.LocalBlob:
@@ -294,18 +291,18 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		if err := processLocalBlob(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i, shouldUpload); err != nil {
 			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
 		}
-		return collectLocalBlobFileRefs(getResourceID), nil
+		return collectLocalBlobFileRefs(addResourceID), nil
 	case *ociv1.OCIImage:
 		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
 			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
 		}
-		return collectOCIArtifactFileRefs(getResourceID), nil
+		return collectOCIArtifactFileRefs(addResourceID), nil
 	case *helmv1.Helm:
 		convertResourceID := fmt.Sprintf("%sConvert%s", id, resourceID)
 		if err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
 			return nil, fmt.Errorf("cannot process Helm Chart resource: %w", err)
 		}
-		return collectHelmFileRefs(getResourceID, convertResourceID), nil
+		return collectHelmFileRefs(convertResourceID, addResourceID), nil
 	default:
 		slog.Info("Unsupported resource access type, skipping resource. Only local blob, OCI artifact, and Helm chart resources are supported for transformation.",
 			"component", val.Descriptor.Component.Name, "version", val.Descriptor.Component.Version,

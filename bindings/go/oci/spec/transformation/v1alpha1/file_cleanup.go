@@ -33,12 +33,6 @@ type FileCleanupSpec struct {
 	// Files is a list of file access specifications to clean up.
 	// Each entry references a file that was buffered during a Get transformation.
 	Files []v1alpha1.File `json:"files"`
-	// DependsOn holds CEL-resolved references to upstream transformations that
-	// must complete before cleanup runs. This field is not used by the cleanup
-	// logic itself but establishes ordering edges in the transformation DAG,
-	// ensuring files are not removed while they are still being consumed by
-	// Add/Upload transformations.
-	DependsOn []any `json:"dependsOn,omitempty"`
 }
 
 // FileCleanupOutput is the output specification of the
