@@ -30,6 +30,6 @@ type Wget struct {
 	// Body is the HTTP body to send with the request.
 	Body []byte `json:"body,omitempty"`
 
-	// NoRedirect indicates whether to follow HTTP redirects.
+	// NoRedirect disables following HTTP redirects when set to true.
 	NoRedirect bool `json:"noRedirect,omitempty"`
 }
