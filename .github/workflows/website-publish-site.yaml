@@ -40,7 +40,7 @@ jobs:
           node-version: 25.5.0
 
       - name: Setup Hugo
-        uses: peaceiris/actions-hugo@dc99976453b04b1029527154fc04fef80a4a49cf # v2
+        uses: peaceiris/actions-hugo@16361eb4acea8698b220b76c0d4e84e1fd22c61d # v2
         with:
           hugo-version: '0.160.0'
           extended: true
