@@ -49,7 +49,7 @@ while the remote OCI registry uses the Podinfo component published to GitHub Con
 {{< steps >}}
 {{< step >}}
 
-### List available resources
+### List the available resources
 
 First, check which resources are available in the component version. Until the OCM CLI supports resource listing,
 you can use the [`ocm get cv`]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) command
@@ -248,7 +248,7 @@ The output shows the component version descriptor. We're interested in the `mylo
 {{< /step >}}
 {{< step >}}
 
-### Download the resource
+### Download resource
 
 Use the `ocm download resource` command with the `--identity` flag to specify which resource to download.
 We download the `mylocalfile` resource, which is a plain text file:
@@ -272,7 +272,7 @@ time=2026-04-10T11:01:02.320+02:00 level=INFO msg="resource downloaded successfu
 {{< /step >}}
 {{< step >}}
 
-### Verify the Download
+### Verify Download
 
 Check that the downloaded resource exists and has content:
 
