@@ -9,6 +9,9 @@ on:
         required: true
         default: ''
 
+permissions:
+  contents: read
+
 jobs:
   retrigger:
     name: Create new "Release Publish Event"

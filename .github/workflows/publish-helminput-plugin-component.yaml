@@ -22,7 +22,8 @@ on:
         type: string
         required: false
 
-permissions: {}
+permissions:
+  contents: read
 
 env:
   # Repository selection for checkout:

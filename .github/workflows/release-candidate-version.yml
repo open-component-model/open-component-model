@@ -37,13 +37,12 @@ on:
         description: "Highest existing previous release version for this component (for logging)"
         value: ${{ jobs.prepare.outputs.highest_previous_release_version }}
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   prepare:
     name: Tag & Changelog
-    permissions:
-      contents: read
     runs-on: ubuntu-latest
     outputs:
       new_tag: ${{ steps.compute.outputs.new_tag }}
