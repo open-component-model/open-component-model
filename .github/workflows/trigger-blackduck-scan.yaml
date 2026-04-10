@@ -13,13 +13,14 @@ on:
     - cron:  '10 0 * * 0'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   trigger-scan:
     uses: open-component-model/.github/.github/workflows/blackduck-scan.yaml@c878408ef4362b719549404c49c47833dba69e5a
     with:
       # required to be able to differentiate between PRs and pushes in the called workflow (rapid or full scan)
-      event_type: ${{ github.event_name }} 
+      event_type: ${{ github.event_name }}
       detector_search_depth: 3
     secrets: inherit
-    permissions:
-      contents: read

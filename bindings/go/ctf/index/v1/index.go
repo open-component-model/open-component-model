@@ -24,6 +24,9 @@ type Index interface {
 	// Like OCI Image Layout, multiple entries with the same digest but different tags are allowed.
 	// If a tag already exists in the same repository but points to a different digest, it is cleared ("retag" scenario).
 	// If an exact duplicate (same repository, tag, and digest) exists, the add is skipped.
+	//
+	// Note: AddArtifact performs no garbage collection. When a tag is cleared during retag, the index
+	// entry persists with an empty tag, and unreferenced blobs persist in the CTF.
 	AddArtifact(a ArtifactMetadata)
 	// GetArtifacts returns a slice of ArtifactMetadata that are stored in the index at the time of the call.
 	// It is not guaranteed to be consistent with later calls as it is a snapshot of the current state.
