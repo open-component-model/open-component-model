@@ -135,11 +135,10 @@ We download the `chart` resource, which is a Helm chart:
 <summary >You should see this output</summary>
 
 ```text
-time=2026-03-04T13:32:54.297+01:00 level=INFO msg="resource downloaded successfully" output=helmchart-oci
-time=2026-03-04T13:32:55.295+01:00 level=INFO msg=copied descriptor.mediaType=application/vnd.cncf.helm.chart.content.v1.tar+gzip descriptor.digest=sha256:ddf24dfc79800f80a8f1e5b8d462b15619c22d77c8ffe454636fef3b9a6d4f60 descriptor.size=14956
-time=2026-03-04T13:32:55.295+01:00 level=INFO msg=copied descriptor.mediaType=application/vnd.cncf.helm.config.v1+json descriptor.digest=sha256:eb2808c21a03a7007ef9a7b5207af0a3b4115be5ce4bb340e0bf501abaf8d31e descriptor.size=348
-time=2026-03-04T13:32:55.295+01:00 level=INFO msg=copied descriptor.mediaType=application/vnd.oci.image.manifest.v1+json descriptor.digest=sha256:2360bdf32ddc50c05f8e128118173343b0a012a338daf145b16e0da9c80081a4 descriptor.size=828
+{"time":"2026-04-10T14:06:57.85304+02:00","level":"INFO","msg":"capabilities sent"}
+time=2026-04-10T14:07:01.593+02:00 level=INFO msg="resource downloaded successfully" output=helmchart-oci
 ```
+
 </details>
 
 {{< /step >}}
@@ -153,7 +152,6 @@ Check that the downloaded resource exists and has content:
 ls -la helmchart-oci
 ```
 
-{{< details "Inspect the downloaded OCI artifact" >}}
 The downloaded Helm chart is in OCI blob format. 
 
 ```shell
@@ -166,7 +164,7 @@ drwxr-xr-x  3 D032990  96 März  4 13:38 blobs
 ```
 
 ```shell
-jq . index.json
+jq . helmchart-oci/index.json
 ```
 
 ```json
@@ -184,7 +182,6 @@ jq . index.json
   ]
 }
 ```
-{{< /details >}}
 
 {{< /step >}}
 {{< /steps >}}
@@ -283,8 +280,6 @@ Check that the downloaded resource exists and has content:
 ls -la mylocalfile-downloaded
 ```
 
-{{< details "Inspect the downloaded text file" >}}
-
 ```shell
 -rw------- 1 D032990 45 Apr. 10 11:01 mylocalfile-downloaded
 ```
@@ -296,7 +291,6 @@ cat mylocalfile-downloaded
 ```text
 My first local Resource for an OCM component
 ```
-{{< /details >}}
 
 {{< /step >}}
 {{< /steps >}}
