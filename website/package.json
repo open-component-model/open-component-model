@@ -41,18 +41,18 @@
     "thulite": "^2.6.5"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@types/js-yaml": "^4.0.9",
-    "@types/node": "^25.5.0",
-    "eslint": "^10.1.0",
-    "globals": "^17.4.0",
-    "hugo-extended": "^0.158.0",
-    "jiti": "^2.6.1",
-    "sass-embedded": "^1.98.0",
-    "shx": "^0.4.0",
-    "smol-toml": "^1.6.1",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.57.2"
+    "@eslint/js": "10.0.1",
+    "@types/js-yaml": "4.0.9",
+    "@types/node": "25.5.2",
+    "eslint": "10.2.0",
+    "globals": "17.4.0",
+    "hugo-extended": "0.160.1",
+    "jiti": "2.6.1",
+    "sass-embedded": "1.99.0",
+    "shx": "0.4.0",
+    "smol-toml": "1.6.1",
+    "typescript": "6.0.2",
+    "typescript-eslint": "8.58.1"
   },
   "overrides": {
     "semver": "^7.5.4",

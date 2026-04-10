@@ -85,10 +85,10 @@ You should see both files:
 
 ## Key management tips
 
-| Key | Who has it | Purpose |
-|-----|------------|---------|
-| **Private key** | Only you (the signer) | Sign component versions |
-| **Public key** | Anyone who needs to verify | Verify signatures |
+| Key             | Who has it                     | Purpose                  |
+|-----------------|--------------------------------|--------------------------|
+| **Private key** | Only you (the signer)          | Sign component versions  |
+| **Public key**  | Anyone who needs to verify     | Verify signatures        |
 
 - Use different key pairs for different environments (dev, staging, production)
 - Document which public key corresponds to which signing identity

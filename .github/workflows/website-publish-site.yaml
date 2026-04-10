@@ -10,6 +10,9 @@ on:
       - 'website/**'
       - '.github/workflows/website-publish-site.yaml'
 
+permissions:
+  contents: read
+
 env:
   OUTPUT_DIR: site-docs/
 
@@ -32,17 +35,17 @@ jobs:
           private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
 
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 #v4
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version: 25.5.0
 
       - name: Setup Hugo
-        uses: peaceiris/actions-hugo@v2
+        uses: peaceiris/actions-hugo@75d2e84710de30f6ff7268e08f310b60ef14033f # v3
         with:
-          hugo-version: '0.155.0'
+          hugo-version: '0.160.0'
           extended: true
 
       - name: Install deps and Build
@@ -52,9 +55,9 @@ jobs:
           npm run build
 
       - name: Setup Python
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c #v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
-          python-version: '3.11'
+          python-version: '3.14'
 
       - name: Generate Schema
         working-directory: website

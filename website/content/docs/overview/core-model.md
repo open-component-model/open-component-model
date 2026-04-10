@@ -33,11 +33,11 @@ Together, `github.com/acme/webshop:1.0.0` uniquely identifies a specific deliver
 
 A component version contains three kinds of elements:
 
-| Element       | Purpose                                           | Examples                          |
-|---------------|---------------------------------------------------|-----------------------------------|
-| **Resources** | The deliverables — what gets deployed              | OCI images, Helm charts, binaries |
-| **Sources**   | Where resources were built from                    | Git repositories, source archives |
-| **References**| Dependencies on other component versions           | Shared libraries, base components |
+| Element        | Purpose                                              | Examples                          |
+|----------------|------------------------------------------------------|-----------------------------------|
+| **Resources**  | The deliverables — what gets deployed                | OCI images, Helm charts, binaries |
+| **Sources**    | Where resources were built from                      | Git repositories, source archives |
+| **References** | Dependencies on other component versions             | Shared libraries, base components |
 
 All of these are described in a single **Component Descriptor** — a YAML document that serves as the manifest for the component version. For the full structure and field reference, see [Component Descriptor Reference]({{< relref "docs/reference/component-descriptor.md" >}}).
 

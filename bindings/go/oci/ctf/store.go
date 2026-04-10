@@ -339,7 +339,7 @@ func (s *repository) tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 
 	slog.DebugContext(ctx, "adding artifact to index", "meta", meta)
 
-	addOrUpdateArtifactMetadataInIndex(idx, meta)
+	idx.AddArtifact(meta)
 
 	if err := s.archive.SetIndex(ctx, idx); err != nil {
 		return fmt.Errorf("unable to set index: %w", err)
@@ -380,21 +380,4 @@ func (s *repository) Tags(ctx context.Context, _ string, fn func(tags []string) 
 	// Unlock before invoking the callback to avoid potential re-entrant locking deadlocks.
 	s.mu.RUnlock()
 	return fn(tags)
-}
-
-func addOrUpdateArtifactMetadataInIndex(idx v1.Index, meta v1.ArtifactMetadata) {
-	arts := idx.GetArtifacts()
-
-	// check if the tag already exists within the repository
-	// if it does, we need to nil out the old tag if the digest differs, (thats equivalent to a retag)
-	for i, art := range arts {
-		tagAlreadyExists := art.Repository == meta.Repository && art.Tag == meta.Tag
-		digestDiffers := art.Digest != meta.Digest
-		if tagAlreadyExists && digestDiffers {
-			arts[i].Tag = ""
-			break
-		}
-	}
-
-	idx.AddArtifact(meta)
 }
