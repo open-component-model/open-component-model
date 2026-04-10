@@ -17,6 +17,7 @@ var (
 	CTFAddLocalResourceV1alpha1    = runtime.NewVersionedType(CTFAddLocalResourceType, Version)
 	CTFGetLocalResourceV1alpha1    = runtime.NewVersionedType(CTFGetLocalResourceType, Version)
 	AddOCIArtifactV1alpha1         = runtime.NewVersionedType(AddOCIArtifactType, Version)
+	FileCleanupV1alpha1            = runtime.NewVersionedType(FileCleanupType, Version)
 )
 
 func init() {
@@ -30,4 +31,5 @@ func init() {
 	Scheme.MustRegisterWithAlias(&CTFAddLocalResource{}, CTFAddLocalResourceV1alpha1)
 	Scheme.MustRegisterWithAlias(&CTFGetLocalResource{}, CTFGetLocalResourceV1alpha1)
 	Scheme.MustRegisterWithAlias(&AddOCIArtifact{}, AddOCIArtifactV1alpha1)
+	Scheme.MustRegisterWithAlias(&FileCleanup{}, FileCleanupV1alpha1)
 }

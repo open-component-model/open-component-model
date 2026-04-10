@@ -72,6 +72,11 @@ func NewDefaultBuilder(
 		Scheme: transformerScheme,
 	}
 
+	// File cleanup transformer
+	fileCleanup := &ocitransformer.FileCleanup{
+		Scheme: transformerScheme,
+	}
+
 	return builder.NewBuilder(transformerScheme).
 		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
 		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
@@ -84,5 +89,6 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact).
 		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact).
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
-		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI)
+		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
+		WithTransformer(&ociv1alpha1.FileCleanup{}, fileCleanup)
 }

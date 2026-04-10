@@ -168,10 +168,12 @@ func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 3)
+	assert.Len(t, tgd.Transformations, 4)
 	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
 	assert.Contains(t, tgd.Transformations[2].ID, "Upload")
+	assert.Equal(t, ociv1alpha1.FileCleanupV1alpha1, tgd.Transformations[3].Type)
+	assert.Equal(t, "fileBufferCleanup", tgd.Transformations[3].ID)
 }
 
 func TestBuildGraphDefinition_OCIImageSkippedInDefaultMode(t *testing.T) {
@@ -200,7 +202,7 @@ func TestBuildGraphDefinition_OCIImageWithCopyAllResources(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeAllResources, UploadAsDefault)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 3)
+	assert.Len(t, tgd.Transformations, 4)
 	assert.Equal(t, ociv1alpha1.GetOCIArtifactV1alpha1, tgd.Transformations[0].Type)
 }
 
@@ -215,7 +217,7 @@ func TestBuildGraphDefinition_OCIImageUploadAsOCIArtifact(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeAllResources, UploadAsOciArtifact)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 3)
+	assert.Len(t, tgd.Transformations, 4)
 	assert.Equal(t, ociv1alpha1.GetOCIArtifactV1alpha1, tgd.Transformations[0].Type)
 	addOCIType := runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version)
 	assert.Equal(t, addOCIType, tgd.Transformations[1].Type)
@@ -232,7 +234,7 @@ func TestBuildGraphDefinition_HelmResource(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeAllResources, UploadAsDefault)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 4)
+	assert.Len(t, tgd.Transformations, 5)
 	assert.Equal(t, helmv1alpha1.GetHelmChartV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, helmv1alpha1.ConvertHelmToOCIV1alpha1, tgd.Transformations[1].Type)
 }
@@ -248,7 +250,7 @@ func TestBuildGraphDefinition_CTFTarget(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 3)
+	assert.Len(t, tgd.Transformations, 4)
 	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, ociv1alpha1.CTFAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
 	assert.Equal(t, ociv1alpha1.CTFAddComponentVersionV1alpha1, tgd.Transformations[2].Type)
@@ -374,8 +376,8 @@ func TestBuildGraphDefinition_MultiTargetWithResources(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
 	require.NoError(t, err)
 
-	// With 1 resource and 2 targets: each target needs get + add + upload = 3, total 6
-	assert.Len(t, tgd.Transformations, 6)
+	// With 1 resource and 2 targets: each target needs get + add + upload = 3, total 6, plus 1 cleanup = 7
+	assert.Len(t, tgd.Transformations, 7)
 }
 
 func TestBuildGraphDefinition_RecursiveTargetPropagation(t *testing.T) {

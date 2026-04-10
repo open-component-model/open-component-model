@@ -169,6 +169,8 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	slog.DebugContext(ctx, "building transformations for discovered components",
 		"components", len(d.Vertices))
 
+	var allFileRefs []fileBufferRef
+
 	for key, v := range d.Vertices {
 		val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
 		component := val.Descriptor.Component.Name
@@ -205,33 +207,39 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				"targetIndex", targetIdx, "targetType", fmt.Sprintf("%T", target),
 				"transformID", id)
 
-			resourceTransformIDs, err := processResources(ctx, v2desc, id, val, tgd, target, copyMode, uploadType)
+			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, id, val, tgd, target, copyMode, uploadType)
 			if err != nil {
 				return err
 			}
+			allFileRefs = append(allFileRefs, fileRefs...)
 
 			if err := addUploadTransformation(v2desc, id, baseID, target, tgd, resourceTransformIDs); err != nil {
 				return err
 			}
 		}
 	}
+
+	addFileCleanupTransformation(tgd, allFileRefs)
+
 	return nil
 }
 
 // processResources iterates over resources in a v2 descriptor and creates the appropriate
 // get/add transformation pairs based on access type, copy mode, and upload type.
-func processResources(ctx context.Context, v2desc *descriptorv2.Descriptor, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, copyMode int, uploadType int) (map[int]string, error) {
+// It also returns file buffer references for all Get transformations that buffer content to disk.
+func processResources(ctx context.Context, v2desc *descriptorv2.Descriptor, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, copyMode int, uploadType int) (map[int]string, []fileBufferRef, error) {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 	resourceTransformIDs := make(map[int]string)
+	var fileRefs []fileBufferRef
 
 	for i, resource := range v2desc.Component.Resources {
 		access, err := scheme.NewObject(resource.Access.Type)
 		if err != nil {
-			return nil, fmt.Errorf("cannot create new object for resource access type %q: %w", resource.Access.Type.String(), err)
+			return nil, nil, fmt.Errorf("cannot create new object for resource access type %q: %w", resource.Access.Type.String(), err)
 		}
 		if err := scheme.Convert(resource.Access, access); err != nil {
-			return nil, fmt.Errorf("cannot convert resource access to typed object: %w", err)
+			return nil, nil, fmt.Errorf("cannot convert resource access to typed object: %w", err)
 		}
 
 		if copyMode == CopyModeLocalBlobResources && !descriptorv2.IsLocalBlob(access) {
@@ -239,11 +247,13 @@ func processResources(ctx context.Context, v2desc *descriptorv2.Descriptor, id s
 			continue
 		}
 
-		if err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i, uploadType); err != nil {
-			return nil, err
+		refs, err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i, uploadType)
+		if err != nil {
+			return nil, nil, err
 		}
+		fileRefs = append(fileRefs, refs...)
 	}
-	return resourceTransformIDs, nil
+	return resourceTransformIDs, fileRefs, nil
 }
 
 func logSkippedResource(ctx context.Context, component, version string, resource descriptorv2.Resource, copyMode, uploadType int) {
@@ -265,30 +275,39 @@ func logSkippedResource(ctx context.Context, component, version string, resource
 // transformation (uploading it to the target). The uploadType and target type determine whether
 // resources are stored as local blobs or separate OCI artifacts (including Helm charts) in the
 // target repository.
-func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType int) error {
+// It returns file buffer references for any Get transformations that buffer content to disk.
+func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType int) ([]fileBufferRef, error) {
 	_, isOCITarget := toSpec.(*oci.Repository)
 	uploadAsArtifact := isOCITarget && uploadType == UploadAsOciArtifact
+
+	resourceIdentity := resource.ToIdentity()
+	resourceID := identityToTransformationID(resourceIdentity)
+	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
 
 	switch acc := access.(type) {
 	case *descriptorv2.LocalBlob:
 		shouldUpload := uploadAsArtifact && isOCICompliantManifest(acc.MediaType) && acc.ReferenceName != ""
 		if err := processLocalBlob(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i, shouldUpload); err != nil {
-			return fmt.Errorf("failed processing local blob resource: %w", err)
+			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
 		}
+		return collectLocalBlobFileRefs(getResourceID), nil
 	case *ociv1.OCIImage:
 		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
-			return fmt.Errorf("cannot process OCI artifact resource: %w", err)
+			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
 		}
+		return collectOCIArtifactFileRefs(getResourceID), nil
 	case *helmv1.Helm:
+		convertResourceID := fmt.Sprintf("%sConvert%s", id, resourceID)
 		if err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
-			return fmt.Errorf("cannot process Helm Chart resource: %w", err)
+			return nil, fmt.Errorf("cannot process Helm Chart resource: %w", err)
 		}
+		return collectHelmFileRefs(getResourceID, convertResourceID), nil
 	default:
 		slog.Info("Unsupported resource access type, skipping resource. Only local blob, OCI artifact, and Helm chart resources are supported for transformation.",
 			"component", val.Descriptor.Component.Name, "version", val.Descriptor.Component.Version,
 			"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 	}
-	return nil
+	return nil, nil
 }
 
 // addDescriptorToEnvironment marshals the v2 descriptor and adds it to the graph environment.
