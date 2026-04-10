@@ -203,12 +203,14 @@
     {
       customType: 'regex',
       managerFilePatterns: [
-        '/.github/workflows/**',
+        '/.github/workflows/**/*.yml',
+        '/.github/workflows/**/*.yaml',
       ],
       matchStrings: [
         'pip install (?<depName>\\S+)==(?<currentValue>\\S+)',
       ],
       datasourceTemplate: 'pypi',
+      versioningTemplate: 'pep440',
     },
   ],
   postUpgradeTasks: {
