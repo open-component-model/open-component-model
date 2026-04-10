@@ -173,7 +173,7 @@ func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
 	assert.Contains(t, tgd.Transformations[2].ID, "Upload")
-	assert.Equal(t, ociv1alpha1.FileCleanupV1alpha1, tgd.Transformations[3].Type)
+	assert.Equal(t, FileCleanupVersionedType, tgd.Transformations[3].Type)
 	assert.Equal(t, "fileBufferCleanup", tgd.Transformations[3].ID)
 }
 

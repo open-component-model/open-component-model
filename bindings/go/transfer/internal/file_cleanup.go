@@ -7,11 +7,79 @@ import (
 	"net/url"
 	"os"
 
-	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
+	accessv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
+
+const (
+	FileCleanupType    = "FileCleanup"
+	fileCleanupVersion = "v1alpha1"
+)
+
+// FileCleanupVersionedType is the versioned type identifier for FileCleanup transformations.
+var FileCleanupVersionedType = runtime.NewVersionedType(FileCleanupType, fileCleanupVersion)
+
+// FileCleanupSpec is the input specification for a FileCleanup transformation.
+type FileCleanupSpec struct {
+	// Files is a list of file access specifications to clean up.
+	// Each entry references a file that was buffered during a Get transformation.
+	Files []accessv1alpha1.File `json:"files"`
+}
+
+// DeepCopyInto copies FileCleanupSpec into out.
+func (in *FileCleanupSpec) DeepCopyInto(out *FileCleanupSpec) {
+	*out = *in
+	if in.Files != nil {
+		out.Files = make([]accessv1alpha1.File, len(in.Files))
+		copy(out.Files, in.Files)
+	}
+}
+
+// FileCleanupOutput is the output of a FileCleanup transformation.
+type FileCleanupOutput struct {
+	// CleanedFiles is the number of files that were successfully removed.
+	CleanedFiles int `json:"cleanedFiles"`
+}
+
+// FileCleanupTransformation is a transformation specification that removes
+// temporary files that were buffered to the local filesystem during Get
+// transformations. It runs as a final node in the transformation graph,
+// after all other transformations have completed.
+type FileCleanupTransformation struct {
+	Type   runtime.Type       `json:"type"`
+	ID     string             `json:"id"`
+	Spec   *FileCleanupSpec   `json:"spec"`
+	Output *FileCleanupOutput `json:"output,omitempty"`
+}
+
+func (t *FileCleanupTransformation) GetType() runtime.Type       { return t.Type }
+func (t *FileCleanupTransformation) SetType(typ runtime.Type)    { t.Type = typ }
+
+// JSONSchema returns a minimal JSON Schema for FileCleanupTransformation.
+func (FileCleanupTransformation) JSONSchema() []byte {
+	return []byte(`{"type":"object","properties":{"type":{"type":"string"},"id":{"type":"string"},"spec":{"type":"object"}}}`)
+}
+
+// DeepCopyTyped implements runtime.Typed.
+func (in *FileCleanupTransformation) DeepCopyTyped() runtime.Typed {
+	if in == nil {
+		return nil
+	}
+	out := &FileCleanupTransformation{}
+	out.Type = in.Type
+	out.ID = in.ID
+	if in.Spec != nil {
+		out.Spec = &FileCleanupSpec{}
+		in.Spec.DeepCopyInto(out.Spec)
+	}
+	if in.Output != nil {
+		copied := *in.Output
+		out.Output = &copied
+	}
+	return out
+}
 
 // FileCleanup is a transformer that removes temporary files from the local
 // filesystem that were buffered during Get transformations.
@@ -22,7 +90,7 @@ type FileCleanup struct {
 }
 
 func (t *FileCleanup) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
-	var transformation ociv1alpha1.FileCleanup
+	var transformation FileCleanupTransformation
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to file cleanup: %w", err)
 	}
@@ -32,7 +100,7 @@ func (t *FileCleanup) Transform(ctx context.Context, step runtime.Typed) (runtim
 	}
 
 	if transformation.Output == nil {
-		transformation.Output = &ociv1alpha1.FileCleanupOutput{}
+		transformation.Output = &FileCleanupOutput{}
 	}
 
 	cleaned := 0
@@ -111,7 +179,7 @@ func addFileCleanupTransformation(tgd *transformv1alpha1.TransformationGraphDefi
 
 	cleanup := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type: ociv1alpha1.FileCleanupV1alpha1,
+			Type: FileCleanupVersionedType,
 			ID:   "fileBufferCleanup",
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{

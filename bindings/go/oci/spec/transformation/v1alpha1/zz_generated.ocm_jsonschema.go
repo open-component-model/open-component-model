@@ -54,15 +54,6 @@ var schemaCTFGetLocalResourceOutput []byte
 //go:embed schemas/CTFGetLocalResourceSpec.schema.json
 var schemaCTFGetLocalResourceSpec []byte
 
-//go:embed schemas/FileCleanup.schema.json
-var schemaFileCleanup []byte
-
-//go:embed schemas/FileCleanupOutput.schema.json
-var schemaFileCleanupOutput []byte
-
-//go:embed schemas/FileCleanupSpec.schema.json
-var schemaFileCleanupSpec []byte
-
 //go:embed schemas/GetOCIArtifact.schema.json
 var schemaGetOCIArtifact []byte
 
@@ -181,21 +172,6 @@ func (CTFGetLocalResourceOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for CTFGetLocalResourceSpec.
 func (CTFGetLocalResourceSpec) JSONSchema() []byte {
 	return schemaCTFGetLocalResourceSpec
-}
-
-// JSONSchema returns the JSON Schema for FileCleanup.
-func (FileCleanup) JSONSchema() []byte {
-	return schemaFileCleanup
-}
-
-// JSONSchema returns the JSON Schema for FileCleanupOutput.
-func (FileCleanupOutput) JSONSchema() []byte {
-	return schemaFileCleanupOutput
-}
-
-// JSONSchema returns the JSON Schema for FileCleanupSpec.
-func (FileCleanupSpec) JSONSchema() []byte {
-	return schemaFileCleanupSpec
 }
 
 // JSONSchema returns the JSON Schema for GetOCIArtifact.

@@ -8,10 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	accessv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
@@ -20,9 +17,7 @@ import (
 
 func newFileCleanupScheme() *runtime.Scheme {
 	s := runtime.NewScheme()
-	v2.MustAddToScheme(s)
-	filesystemaccess.MustAddToScheme(s)
-	s.MustRegisterWithAlias(&ociv1alpha1.FileCleanup{}, ociv1alpha1.FileCleanupV1alpha1)
+	s.MustRegisterWithAlias(&FileCleanupTransformation{}, FileCleanupVersionedType)
 	return s
 }
 
@@ -109,10 +104,10 @@ func TestFileCleanup_Transform(t *testing.T) {
 			transformer := &FileCleanup{Scheme: scheme}
 
 			files := tt.setup(t)
-			spec := &ociv1alpha1.FileCleanup{
-				Type: runtime.NewVersionedType(ociv1alpha1.FileCleanupType, ociv1alpha1.Version),
+			spec := &FileCleanupTransformation{
+				Type: FileCleanupVersionedType,
 				ID:   "testCleanup",
-				Spec: &ociv1alpha1.FileCleanupSpec{
+				Spec: &FileCleanupSpec{
 					Files: files,
 				},
 			}
@@ -121,7 +116,7 @@ func TestFileCleanup_Transform(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 
-			transformed, ok := result.(*ociv1alpha1.FileCleanup)
+			transformed, ok := result.(*FileCleanupTransformation)
 			require.True(t, ok)
 			require.NotNil(t, transformed.Output)
 			assert.Equal(t, tt.expectedCleaned, transformed.Output.CleanedFiles)
@@ -134,8 +129,8 @@ func TestFileCleanup_Transform_NilSpec(t *testing.T) {
 	scheme := newFileCleanupScheme()
 	transformer := &FileCleanup{Scheme: scheme}
 
-	spec := &ociv1alpha1.FileCleanup{
-		Type: runtime.NewVersionedType(ociv1alpha1.FileCleanupType, ociv1alpha1.Version),
+	spec := &FileCleanupTransformation{
+		Type: FileCleanupVersionedType,
 		ID:   "testCleanup",
 		Spec: nil,
 	}
@@ -159,10 +154,10 @@ func TestFileCleanup_Transform_VerifiesFilesRemoved(t *testing.T) {
 	_, err := os.Stat(f1)
 	require.NoError(t, err)
 
-	spec := &ociv1alpha1.FileCleanup{
-		Type: runtime.NewVersionedType(ociv1alpha1.FileCleanupType, ociv1alpha1.Version),
+	spec := &FileCleanupTransformation{
+		Type: FileCleanupVersionedType,
 		ID:   "testCleanup",
-		Spec: &ociv1alpha1.FileCleanupSpec{
+		Spec: &FileCleanupSpec{
 			Files: []accessv1alpha1.File{
 				{URI: "file://" + f1},
 			},
@@ -172,7 +167,7 @@ func TestFileCleanup_Transform_VerifiesFilesRemoved(t *testing.T) {
 	result, err := transformer.Transform(ctx, spec)
 	require.NoError(t, err)
 
-	transformed := result.(*ociv1alpha1.FileCleanup)
+	transformed := result.(*FileCleanupTransformation)
 	assert.Equal(t, 1, transformed.Output.CleanedFiles)
 
 	// File no longer exists after cleanup
@@ -288,7 +283,7 @@ func TestAddFileCleanupTransformation(t *testing.T) {
 
 	cleanup := tgd.Transformations[0]
 	assert.Equal(t, "fileBufferCleanup", cleanup.ID)
-	assert.Equal(t, ociv1alpha1.FileCleanupV1alpha1, cleanup.Type)
+	assert.Equal(t, FileCleanupVersionedType, cleanup.Type)
 
 	files, ok := cleanup.Spec.Data["files"].([]any)
 	require.True(t, ok, "spec.files should be []any")

@@ -74,6 +74,7 @@ func NewDefaultBuilder(
 	}
 
 	// File cleanup transformer
+	transformerScheme.MustRegisterWithAlias(&FileCleanupTransformation{}, FileCleanupVersionedType)
 	fileCleanup := &FileCleanup{
 		Scheme: transformerScheme,
 	}
@@ -91,5 +92,5 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact).
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
-		WithTransformer(&ociv1alpha1.FileCleanup{}, fileCleanup)
+		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }
