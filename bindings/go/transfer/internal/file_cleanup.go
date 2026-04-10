@@ -54,8 +54,8 @@ type FileCleanupTransformation struct {
 	Output *FileCleanupOutput `json:"output,omitempty"`
 }
 
-func (t *FileCleanupTransformation) GetType() runtime.Type       { return t.Type }
-func (t *FileCleanupTransformation) SetType(typ runtime.Type)    { t.Type = typ }
+func (t *FileCleanupTransformation) GetType() runtime.Type    { return t.Type }
+func (t *FileCleanupTransformation) SetType(typ runtime.Type) { t.Type = typ }
 
 // JSONSchema returns a minimal JSON Schema for FileCleanupTransformation.
 func (FileCleanupTransformation) JSONSchema() []byte {
