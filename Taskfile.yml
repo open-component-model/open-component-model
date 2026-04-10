@@ -112,6 +112,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/transform/Taskfile.yml
     dir: ./bindings/go/transform
+  bindings/go/wget:
+    optional: true
+    taskfile: ./bindings/go/wget/Taskfile.yml
+    dir: ./bindings/go/wget
   cli:
     optional: true
     taskfile: ./cli/Taskfile.yml
