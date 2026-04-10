@@ -9,6 +9,7 @@ import (
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	ocitransformer "ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/repository"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 )
@@ -73,7 +74,7 @@ func NewDefaultBuilder(
 	}
 
 	// File cleanup transformer
-	fileCleanup := &ocitransformer.FileCleanup{
+	fileCleanup := &FileCleanup{
 		Scheme: transformerScheme,
 	}
 
