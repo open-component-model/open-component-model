@@ -41,7 +41,7 @@ jobs:
       # Restore previous cache artifact if enabled
       - name: Restore renovate cache artifact
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled' }}
-        uses: dawidd6/action-download-artifact@2536c51d3d126276eb39f74d6bc9c72ac6ef30d3 # v16
+        uses: dawidd6/action-download-artifact@09b07ec687d10771279a426c79925ee415c12906 # v17
         continue-on-error: true
         with:
           name: ${{ env.cache_key }}

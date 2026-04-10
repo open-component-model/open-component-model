@@ -1535,6 +1535,425 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 	}
 }
 
+func TestRepository_AddComponentVersionAlias(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	componentName := "ocm.software/test-component"
+
+	// Helper to create descriptor
+	makeDesc := func(version string) *descriptor.Descriptor {
+		return &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider:      descriptor.Provider{Name: "test-provider"},
+				ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: version}},
+			},
+		}
+	}
+
+	// Add versions 1.0.0 and 2.0.0
+	r.NoError(repo.AddComponentVersion(ctx, makeDesc("1.0.0")))
+	r.NoError(repo.AddComponentVersion(ctx, makeDesc("2.0.0")))
+
+	// Add multiple aliases to 1.0.0
+	r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "1.0.0", "latest"))
+	r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "1.0.0", "stable"))
+
+	// Verify aliases resolve correctly
+	for _, alias := range []string{"latest", "stable"} {
+		got, err := repo.GetComponentVersion(ctx, componentName, alias)
+		r.NoError(err)
+		r.Equal("1.0.0", got.Component.Version)
+	}
+
+	got, err := repo.GetComponentVersion(ctx, componentName, "1.0.0")
+	r.NoError(err, "original version must be retrievable after aliasing")
+	r.Equal("1.0.0", got.Component.Version)
+
+	// Move "latest" to 2.0.0
+	r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "2.0.0", "latest"))
+
+	got, err = repo.GetComponentVersion(ctx, componentName, "latest")
+	r.NoError(err)
+	r.Equal("2.0.0", got.Component.Version, "latest should now point to 2.0.0")
+
+	// Both versions must still be retrievable after alias move
+	got, err = repo.GetComponentVersion(ctx, componentName, "1.0.0")
+	r.NoError(err, "1.0.0 must be retrievable after alias moved")
+	r.Equal("1.0.0", got.Component.Version)
+
+	got, err = repo.GetComponentVersion(ctx, componentName, "2.0.0")
+	r.NoError(err, "2.0.0 must be retrievable")
+	r.Equal("2.0.0", got.Component.Version)
+
+	// "stable" should still point to 1.0.0
+	got, err = repo.GetComponentVersion(ctx, componentName, "stable")
+	r.NoError(err)
+	r.Equal("1.0.0", got.Component.Version, "stable should still point to 1.0.0")
+}
+
+func TestRepository_AddComponentVersionAlias_NonExistent(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	// Must fail for non-existent component
+	err = repo.AddComponentVersionAlias(ctx, "non-existent", "1.0.0", "latest")
+	r.Error(err)
+	r.ErrorIs(err, repository.ErrNotFound)
+}
+
+func TestRepository_AddComponentVersionAlias_ChainedAndIdempotent(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	componentName := "ocm.software/test-component"
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider:      descriptor.Provider{Name: "test-provider"},
+			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: "1.0.0"}},
+		},
+	}
+	r.NoError(repo.AddComponentVersion(ctx, desc))
+
+	// Chain: version -> latest -> stable -> production
+	r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "1.0.0", "latest"))
+	r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "latest", "stable"))
+	r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "stable", "production"))
+
+	// All must resolve to 1.0.0
+	for _, ref := range []string{"1.0.0", "latest", "stable", "production"} {
+		got, err := repo.GetComponentVersion(ctx, componentName, ref)
+		r.NoError(err, "ref %s should resolve", ref)
+		r.Equal("1.0.0", got.Component.Version)
+	}
+
+	// Idempotent: adding same alias multiple times should work
+	for i := 0; i < 3; i++ {
+		r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "1.0.0", "latest"))
+		got, err := repo.GetComponentVersion(ctx, componentName, "latest")
+		r.NoError(err)
+		r.Equal("1.0.0", got.Component.Version)
+	}
+
+	// version still retrievable after repeated operations
+	got, err := repo.GetComponentVersion(ctx, componentName, "1.0.0")
+	r.NoError(err)
+	r.Equal("1.0.0", got.Component.Version)
+}
+
+func TestRepository_AddComponentVersionAlias_ManyVersionsStayRetrievable(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	componentName := "ocm.software/test-component"
+	versions := []string{"1.0.0", "1.1.0", "2.0.0", "2.1.0"}
+
+	// Add all versions
+	for _, v := range versions {
+		desc := &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider:      descriptor.Provider{Name: "test-provider"},
+				ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: v}},
+			},
+		}
+		r.NoError(repo.AddComponentVersion(ctx, desc))
+	}
+
+	// Move "latest" through all versions
+	for _, v := range versions {
+		r.NoError(repo.AddComponentVersionAlias(ctx, componentName, v, "latest"))
+	}
+
+	// ALL versions must still be retrievable
+	for _, v := range versions {
+		got, err := repo.GetComponentVersion(ctx, componentName, v)
+		r.NoError(err, "version %s must be retrievable after alias operations", v)
+		r.Equal(v, got.Component.Version)
+	}
+
+	// "latest" should point to last version
+	got, err := repo.GetComponentVersion(ctx, componentName, "latest")
+	r.NoError(err)
+	r.Equal("2.1.0", got.Component.Version)
+}
+
+func TestRepository_AddComponentVersionAlias_OCIImageIndex(t *testing.T) {
+	// This test exercises the OCI image index code path in AddComponentVersionAlias.
+	// When a component version has a local resource with an OCI layout media type,
+	// AddComponentVersion wraps the manifest in an OCI image index. Aliasing must
+	// work correctly through this index-based structure.
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	componentName := "ocm.software/test-component"
+
+	// Helper to create a component version with an OCI layout resource,
+	// which triggers OCI image index creation in AddDescriptorToStore.
+	addVersionWithOCILayoutResource := func(version string) {
+		desc := &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider:      descriptor.Provider{Name: "test-provider"},
+				ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: version}},
+			},
+		}
+
+		data, _ := createSingleLayerOCIImage(t, []byte("content-"+version), "image:"+version)
+
+		resource := &descriptor.Resource{
+			Relation: descriptor.LocalRelation,
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: "test-resource", Version: version},
+			},
+			Type: "ociImage",
+			Access: &v2.LocalBlob{
+				LocalReference: digest.FromBytes(data).String(),
+				MediaType:      layout.MediaTypeOCIImageLayoutV1 + "+tar",
+			},
+		}
+		desc.Component.Resources = append(desc.Component.Resources, *resource)
+
+		newRes, err := repo.AddLocalResource(ctx, componentName, version, resource, inmemory.New(bytes.NewReader(data)))
+		r.NoError(err)
+		desc.Component.Resources[0] = *newRes
+
+		r.NoError(repo.AddComponentVersion(ctx, desc))
+	}
+
+	addVersionWithOCILayoutResource("1.0.0")
+	addVersionWithOCILayoutResource("2.0.0")
+
+	// Alias "latest" to 1.0.0 (stored as an OCI image index)
+	r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "1.0.0", "latest"))
+
+	// Verify the alias resolves to the correct component version
+	got, err := repo.GetComponentVersion(ctx, componentName, "latest")
+	r.NoError(err)
+	r.Equal("1.0.0", got.Component.Version)
+
+	// Original version must still be retrievable
+	got, err = repo.GetComponentVersion(ctx, componentName, "1.0.0")
+	r.NoError(err)
+	r.Equal("1.0.0", got.Component.Version)
+
+	// Move alias to 2.0.0
+	r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "2.0.0", "latest"))
+
+	got, err = repo.GetComponentVersion(ctx, componentName, "latest")
+	r.NoError(err)
+	r.Equal("2.0.0", got.Component.Version, "latest should now point to 2.0.0")
+
+	// Both original versions must remain retrievable after alias move
+	got, err = repo.GetComponentVersion(ctx, componentName, "1.0.0")
+	r.NoError(err, "1.0.0 must be retrievable after alias moved away")
+	r.Equal("1.0.0", got.Component.Version)
+
+	got, err = repo.GetComponentVersion(ctx, componentName, "2.0.0")
+	r.NoError(err, "2.0.0 must be retrievable")
+	r.Equal("2.0.0", got.Component.Version)
+
+	// Resources must be accessible through the alias
+	b, _, err := repo.GetLocalResource(ctx, componentName, "latest", map[string]string{
+		"name":    "test-resource",
+		"version": "2.0.0",
+	})
+	r.NoError(err, "resource should be accessible through alias")
+	r.NotNil(b)
+
+	// Chain alias through index-backed versions: latest -> stable
+	r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "latest", "stable"))
+	got, err = repo.GetComponentVersion(ctx, componentName, "stable")
+	r.NoError(err)
+	r.Equal("2.0.0", got.Component.Version, "stable should resolve through latest to 2.0.0")
+}
+
+func TestRepository_ListComponentVersions_WithAliases(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	componentName := "ocm.software/test-component"
+
+	makeDesc := func(version string) *descriptor.Descriptor {
+		return &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider:      descriptor.Provider{Name: "test-provider"},
+				ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: version}},
+			},
+		}
+	}
+
+	// Add three versions
+	r.NoError(repo.AddComponentVersion(ctx, makeDesc("1.0.0")))
+	r.NoError(repo.AddComponentVersion(ctx, makeDesc("2.0.0")))
+	r.NoError(repo.AddComponentVersion(ctx, makeDesc("3.0.0")))
+
+	// Create multiple aliases pointing to 1.0.0
+	r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "1.0.0", "latest"))
+	r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "1.0.0", "stable"))
+
+	// ListComponentVersions must return exactly the 3 unique versions, no duplicates from aliases
+	versions, err := repo.ListComponentVersions(ctx, componentName)
+	r.NoError(err)
+	r.Equal([]string{"3.0.0", "2.0.0", "1.0.0"}, versions,
+		"aliases must not produce duplicate entries in version listing")
+
+	// Move "latest" to 3.0.0 — listing should still show exactly 3 unique versions
+	r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "3.0.0", "latest"))
+
+	versions, err = repo.ListComponentVersions(ctx, componentName)
+	r.NoError(err)
+	r.Equal([]string{"3.0.0", "2.0.0", "1.0.0"}, versions,
+		"moving an alias must not change the set of listed versions")
+}
+
+func TestRepository_AddComponentVersionAlias_RejectsSemverAlias(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	componentName := "ocm.software/test-component"
+
+	makeDesc := func(version string) *descriptor.Descriptor {
+		return &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider:      descriptor.Provider{Name: "test-provider"},
+				ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: version}},
+			},
+		}
+	}
+
+	r.NoError(repo.AddComponentVersion(ctx, makeDesc("1.0.0")))
+	r.NoError(repo.AddComponentVersion(ctx, makeDesc("2.0.0")))
+
+	// Attempting to alias 1.0.0 as "2.0.0" should fail because "2.0.0" is semver-formatted
+	err = repo.AddComponentVersionAlias(ctx, componentName, "1.0.0", "2.0.0")
+	r.Error(err)
+	r.Contains(err.Error(), "uses semantic version format")
+
+	// Verify both versions are still independently accessible
+	got, err := repo.GetComponentVersion(ctx, componentName, "1.0.0")
+	r.NoError(err)
+	r.Equal("1.0.0", got.Component.Version)
+
+	got, err = repo.GetComponentVersion(ctx, componentName, "2.0.0")
+	r.NoError(err)
+	r.Equal("2.0.0", got.Component.Version)
+
+	// Both versions should be listed
+	versions, err := repo.ListComponentVersions(ctx, componentName)
+	r.NoError(err)
+	r.ElementsMatch([]string{"1.0.0", "2.0.0"}, versions)
+}
+
+func TestRepository_AddComponentVersionAlias_GetLocalResource(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	componentName := "ocm.software/test-component"
+	resourceContent := []byte("hello from the resource layer")
+	contentDigest := digest.FromBytes(resourceContent)
+
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider:      descriptor.Provider{Name: "test-provider"},
+			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: "1.0.0"}},
+		},
+	}
+
+	resource := &descriptor.Resource{
+		Relation: descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "my-resource", Version: "1.0.0"},
+		},
+		Type: "plainData",
+		Access: &v2.LocalBlob{
+			LocalReference: contentDigest.String(),
+			MediaType:      ociImageSpecV1.MediaTypeImageLayer,
+		},
+	}
+	desc.Component.Resources = append(desc.Component.Resources, *resource)
+
+	newRes, err := repo.AddLocalResource(ctx, componentName, "1.0.0", resource, inmemory.New(bytes.NewReader(resourceContent)))
+	r.NoError(err)
+	desc.Component.Resources[0] = *newRes
+
+	r.NoError(repo.AddComponentVersion(ctx, desc))
+
+	// Alias 1.0.0 as "latest"
+	r.NoError(repo.AddComponentVersionAlias(ctx, componentName, "1.0.0", "latest"))
+
+	identity := map[string]string{"name": "my-resource", "version": "1.0.0"}
+
+	// GetLocalResource through the alias must return the correct content
+	blob, _, err := repo.GetLocalResource(ctx, componentName, "latest", identity)
+	r.NoError(err, "GetLocalResource through alias must succeed")
+	r.NotNil(blob)
+
+	reader, err := blob.ReadCloser()
+	r.NoError(err)
+	defer reader.Close()
+	downloaded, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.Equal(resourceContent, downloaded, "content retrieved through alias must match original")
+
+	// GetLocalResource through the original version must still work
+	blob, _, err = repo.GetLocalResource(ctx, componentName, "1.0.0", identity)
+	r.NoError(err, "GetLocalResource through original version must still succeed")
+	r.NotNil(blob)
+
+	reader2, err := blob.ReadCloser()
+	r.NoError(err)
+	defer reader2.Close()
+	downloaded2, err := io.ReadAll(reader2)
+	r.NoError(err)
+	r.Equal(resourceContent, downloaded2, "content retrieved through original version must match")
+}
+
 func TestRepositoryHealthCheck(t *testing.T) {
 	ctx := context.Background()
 
