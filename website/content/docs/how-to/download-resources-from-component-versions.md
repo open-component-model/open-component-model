@@ -36,6 +36,16 @@ The OCM CLI fetches a specific resource from a component version and saves it to
 
 ## Download Workflow
 
+As mentioned in the [concept document for Component Identity]({{< relref "/docs/concepts/component-identity.md#component-repositories-and-storage" >}}),
+components can be stored in OCI registries or local CTF archives, but the way you access them is the same — using their unique identity.
+
+The following examples show component versions stored in a local CTF archive and in a remote OCI registry.
+The local CTF uses the component created in the [Getting Started: Create Component Versions]({{< relref "create-component-version.md" >}}) tutorial,
+while the remote OCI registry uses the Podinfo component published to GitHub Container Registry.
+
+{{< tabs >}}
+{{< tab "remote OCI registry" >}}
+
 {{< steps >}}
 {{< step >}}
 
@@ -45,36 +55,14 @@ First, check which resources are available in the component version. Until the O
 you can use the [`ocm get cv`]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) command
 to see the complete component version descriptor, including the `resources` section.
 
-As mentioned in the [concept document for Component Identity]({{< relref "/docs/concepts/component-identity.md#component-repositories-and-storage" >}}),
-components can be stored in OCI registries or local CTF archives, but the way you access them is the same — using their unique identity.
-
-The following examples show component versions stored in a local CTF archive and in a remote OCI registry.
-The local CTF uses the component created in the [Getting Started: Create Component Versions]({{< relref "create-component-version.md" >}}) tutorial,
-while the remote OCI registry uses the Podinfo component published to GitHub Container Registry.
-Later in this How-To, we'll download a resource from the Podinfo component version.
-
-{{< tabs >}}
-{{< tab "remote OCI registry" >}}
-
    ```shell
    ocm get cv ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0 -oyaml
    ```
 
-{{< /tab >}}
-{{< tab "local CTF" >}}
-
-   ```shell
-   ocm get cv ./transport-archive//github.com/acme.org/helloworld:1.0.0 -oyaml
-   ```
-
-{{< /tab >}}
-{{< /tabs >}}
-
-For the Podinfo component version in the OCI registry, the output includes two resources: an OCI image and a Helm chart stored as OCI artifact.
 <details>
 <summary>Inspect the component for resources</summary>
 
-The output shows the component version descriptor, including the `resources` section where you can find the available resources and their identities (e.g., name, version).
+The output shows the component version descriptor.
 We're interested in the `chart` resource, which is a Helm chart stored as OCI artifact in an OCI registry.
 
 ```yaml
@@ -157,7 +145,7 @@ time=2026-03-04T13:32:55.295+01:00 level=INFO msg=copied descriptor.mediaType=ap
 {{< /step >}}
 {{< step >}}
 
-### Verify the download
+### Verify the Download
 
 Check that the downloaded resource exists and has content:
 
@@ -200,6 +188,121 @@ jq . index.json
 
 {{< /step >}}
 {{< /steps >}}
+
+{{< /tab >}}
+
+{{< tab "local CTF" >}}
+{{< steps >}}
+{{< step >}}
+
+### List available resources
+
+First, check which resources are available in the component version. Until the OCM CLI supports resource listing,
+you can use the [`ocm get cv`]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) command
+to see the complete component version descriptor, including the `resources` section.
+
+   ```shell
+   ocm get cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 -oyaml
+   ```
+
+<details>
+<summary>Inspect the component for resources</summary>
+
+The output shows the component version descriptor. We're interested in the `mylocalfile` resource, which is a plain text file.
+
+```yaml
+- component:
+    componentReferences: null
+    name: github.com/acme.org/helloworld
+    provider: acme.org
+    repositoryContexts: null
+    resources:
+      - access:
+          localReference: sha256:70a2577d7b649574cbbba99a2f2ebdf27904a4abf80c9729923ee67ea8d2d9d8
+          mediaType: text/plain; charset=utf-8
+          type: localBlob/v1
+        digest:
+          hashAlgorithm: SHA-256
+          normalisationAlgorithm: genericBlobDigest/v1
+          value: 70a2577d7b649574cbbba99a2f2ebdf27904a4abf80c9729923ee67ea8d2d9d8
+        name: mylocalfile
+        relation: local
+        type: blob
+        version: 1.0.0
+      - access:
+          imageReference: ghcr.io/stefanprodan/podinfo:6.11.1@sha256:8fa56908408de98f24aed2a162b1bb42c0b98df7abfcc5a76a14a8be510457c5
+          type: ociArtifact
+        digest:
+          hashAlgorithm: SHA-256
+          normalisationAlgorithm: genericBlobDigest/v1
+          value: 8fa56908408de98f24aed2a162b1bb42c0b98df7abfcc5a76a14a8be510457c5
+        name: image
+        relation: external
+        type: ociImage
+        version: 1.0.0
+    sources: null
+    version: 1.0.0
+  meta:
+    schemaVersion: v2
+```
+
+</details>
+
+{{< /step >}}
+{{< step >}}
+
+### Download the resource
+
+Use the `ocm download resource` command with the `--identity` flag to specify which resource to download.
+We download the `mylocalfile` resource, which is a plain text file:
+
+```shell
+ ocm download resource /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 \
+   --identity name=mylocalfile \
+   --output mylocalfile-downloaded
+ ```
+
+<details>
+<summary >You should see this output</summary>
+
+```text
+{"time":"2026-04-10T11:01:02.313565+02:00","level":"INFO","msg":"capabilities sent"}
+time=2026-04-10T11:01:02.320+02:00 level=INFO msg="resource downloaded successfully" output=mylocalfile-downloaded
+```
+
+</details>
+
+{{< /step >}}
+{{< step >}}
+
+### Verify the Download
+
+Check that the downloaded resource exists and has content:
+
+```shell
+ls -la mylocalfile-downloaded
+```
+
+{{< details "Inspect the downloaded text file" >}}
+
+```shell
+-rw------- 1 D032990 45 Apr. 10 11:01 mylocalfile-downloaded
+```
+
+```shell
+cat mylocalfile-downloaded
+```
+
+```text
+My first local Resource for an OCM component
+```
+{{< /details >}}
+
+{{< /step >}}
+{{< /steps >}}
+
+{{< /tab >}}
+{{< /tabs >}}
 
 ## Using Transformers
 
