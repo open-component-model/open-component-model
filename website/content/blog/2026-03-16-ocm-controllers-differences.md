@@ -19,7 +19,7 @@ The [new controller](https://github.com/open-component-model/open-component-mode
 The number of custom resources dropped from **7 to 4**, and the overall architecture is leaner:
 
 | Previous | New | What happened |
-|---|---|---|
+| --- | --- | --- |
 | `ComponentVersion` | `Component` | Renamed and restructured |
 | `ComponentDescriptor` | — | Removed |
 | `Resource` | `Resource` | Redesigned |
@@ -236,7 +236,7 @@ These resources no longer exist. The new controller takes the position that muta
 The operational footprint is significantly smaller:
 
 | | Previous | New |
-|---|---|---|
+| --- | --- | --- |
 | In-cluster OCI registry | Required (for Snapshot caching) | Not needed |
 | Flux controllers | Required (for deployment) | Not needed |
 | Performance tuning | No exposed knobs | Configurable concurrency, cache sizes, worker counts |

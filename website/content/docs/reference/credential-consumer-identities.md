@@ -32,11 +32,11 @@ The consumer identity type is extensible — any string in `Name` or `Name/Versi
 Plugins and integrations can introduce additional types (e.g. `AWSSecretsManager`, `HashiCorpVault`, `MavenRepository`).
 The following types are defined by the core OCM modules:
 
-| Identity Type                                    | Used For |
-|--------------------------------------------------|---|
-| [`OCIRegistry`](#ociregistry)                    | Authenticating against OCI registries |
-| [`HelmChartRepository`](#helmchartrepository)    | Authenticating against Helm chart repositories |
-| [`RSA/v1alpha1`](#rsav1alpha1)                   | Providing signing and verification keys |
+| Identity Type                                    | Used For                                          |
+|--------------------------------------------------|---------------------------------------------------|
+| [`OCIRegistry`](#ociregistry)                    | Authenticating against OCI registries             |
+| [`HelmChartRepository`](#helmchartrepository)    | Authenticating against Helm chart repositories    |
+| [`RSA/v1alpha1`](#rsav1alpha1)                   | Providing signing and verification keys           |
 
 ---
 
@@ -47,7 +47,7 @@ Used when OCM accesses an OCI registry — pushing, pulling, or resolving compon
 ### Identity Attributes
 
 | Attribute | Required | Description |
-|---|---|---|
+| --- | --- | --- |
 | `type` | Yes | Must be `OCIRegistry` |
 | `hostname` | Yes | Registry hostname (e.g. `ghcr.io`, `registry.example.com`) |
 | `path` | No | Repository path. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
@@ -57,7 +57,7 @@ Used when OCM accesses an OCI registry — pushing, pulling, or resolving compon
 ### Credential Properties
 
 | Property | Description |
-|---|---|
+| --- | --- |
 | `username` | Registry username |
 | `password` | Registry password or token |
 
@@ -124,7 +124,7 @@ Used when OCM accesses a remote Helm chart repository — pulling or resolving H
 ### Identity Attributes
 
 | Attribute | Required | Description |
-|---|---|---|
+| --- | --- | --- |
 | `type` | Yes | Must be `HelmChartRepository` |
 | `hostname` | Yes | Repository hostname (e.g. `charts.example.com`, `registry.example.com`) |
 | `path` | No | Repository path (e.g. `stable`). If omitted, matches any path on the hostname. |
@@ -134,7 +134,7 @@ Used when OCM accesses a remote Helm chart repository — pulling or resolving H
 ### Credential Properties
 
 | Property | Description |
-|---|---|
+| --- | --- |
 | `username` | Repository username |
 | `password` | Repository password or token |
 
@@ -177,7 +177,7 @@ Used when OCM signs or verifies component versions with RSA keys.
 ### Identity Attributes
 
 | Attribute | Required | Description |
-|---|---|---|
+| --- | --- | --- |
 | `type` | Yes | Must be `RSA/v1alpha1` |
 | `algorithm` | Yes | Signing algorithm. Must be `RSASSA-PSS` (recommended) or `RSASSA-PKCS1-V1_5`. |
 | `signature` | Yes | Logical signature name (e.g. `default`). Must match the `--signature` flag used with `ocm sign cv`. Defaults to `default` if not specified on the CLI. |
@@ -191,7 +191,7 @@ If you are unsure which algorithm to use, specify `algorithm: RSASSA-PSS`.
 ### Credential Properties
 
 | Property | Used For | Description |
-|---|---|---|
+| --- | --- | --- |
 | `private_key_pem` | Signing | Inline PEM-encoded private key |
 | `private_key_pem_file` | Signing | Path to PEM-encoded private key file |
 | `public_key_pem` | Verification | Inline PEM-encoded public key |

@@ -71,7 +71,7 @@ OCM supports different digest algorithms for different artifact types.
 The algorithm determines how a resource's content is hashed to produce its digest:
 
 | Algorithm | Description |
-|-----------|-------------|
+| --- | --- |
 | `genericBlobDigest/v1` | Direct hash of blob content. For OCI artifacts (container images, Helm charts), this is the hash of the top-level OCI manifest, ensuring consistency with OCI registry behavior. For non-OCI content (executables, blueprints), it is the direct hash of the raw blob. |
 | `ociArtifactDigest/v1` | Computes the digest of the OCI manifest specifically. Effectively equivalent to `genericBlobDigest/v1` for OCI content. You may encounter this algorithm in older component descriptors. |
 
@@ -190,10 +190,10 @@ A component version can have **multiple signatures** from different parties, ena
 
 OCM currently only supports RSA-based signing algorithms:
 
-| Algorithm            | Type | Characteristics |
-|----------------------|------|-----------------|
-| RSASSA-PSS (default) | Asymmetric | Probabilistic, stronger security guarantees, recommended for new implementations |
-| RSA-PKCS#1 v1.5      | Asymmetric | Deterministic, widely supported, compatible with legacy systems |
+| Algorithm            | Type       | Characteristics                                                                                      |
+|----------------------|------------|------------------------------------------------------------------------------------------------------|
+| RSASSA-PSS (default) | Asymmetric | Probabilistic, stronger security guarantees, recommended for new implementations                     |
+| RSA-PKCS#1 v1.5      | Asymmetric | Deterministic, widely supported, compatible with legacy systems                                      |
 
 To override the default signing algorithm or encoding policy, see the `--signer-spec` flag in the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}).
 The signer spec file configures only the algorithm and encoding policy — credentials are always resolved separately via the [`.ocmconfig`]({{< relref "configure-multiple-credentials.md" >}}) file.
@@ -215,7 +215,7 @@ This will enable keyless signing workflows and improved supply chain security. S
 The `signatureEncodingPolicy` in the [signer spec]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}) controls how the **signature output** is serialized and stored. It does **not** affect the format of key input files, which are always PEM-encoded.
 
 | Policy | Signature Format | Media Type | Certificate Chain | Verification Requires |
-|--------|-----------------|------------|-------------------|-----------------------|
+| ------ | ---------------- | ---------- | ----------------- | --------------------- |
 | **Plain** (default) | Hex-encoded raw bytes | `application/vnd.ocm.signature.rsa.pss` | Not embedded | Externally supplied public key |
 | **PEM** (experimental) | PEM `SIGNATURE` block + `CERTIFICATE` blocks | `application/x-pem-file` | Embedded in signature | Valid certificate chain in signature |
 
