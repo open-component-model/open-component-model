@@ -454,6 +454,11 @@ func (in *FileCleanupSpec) DeepCopyInto(out *FileCleanupSpec) {
 		*out = make([]accessv1alpha1.File, len(*in))
 		copy(*out, *in)
 	}
+	if in.DependsOn != nil {
+		in, out := &in.DependsOn, &out.DependsOn
+		*out = make([]any, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 

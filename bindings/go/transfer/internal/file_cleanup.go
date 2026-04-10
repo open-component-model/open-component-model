@@ -22,7 +22,12 @@ type fileBufferRef struct {
 // that references all buffered file outputs. The dependency discovery system
 // will automatically resolve the CEL expressions and ensure the cleanup node
 // runs after all referenced transformations complete.
-func addFileCleanupTransformation(tgd *transformv1alpha1.TransformationGraphDefinition, refs []fileBufferRef) {
+//
+// uploadIDs are the IDs of the AddComponentVersion (upload) transformations.
+// The cleanup spec includes a dependsOn field with CEL references to upload outputs,
+// ensuring the cleanup node only runs after all uploads have finished consuming
+// the buffered files.
+func addFileCleanupTransformation(tgd *transformv1alpha1.TransformationGraphDefinition, refs []fileBufferRef, uploadIDs []string) {
 	if len(refs) == 0 {
 		return
 	}
@@ -32,13 +37,23 @@ func addFileCleanupTransformation(tgd *transformv1alpha1.TransformationGraphDefi
 		files = append(files, ref.expression)
 	}
 
+	// Build CEL references to upload outputs so the dependency discovery
+	// system creates edges from uploads → cleanup. Without this, the cleanup
+	// would only depend on Get transformations and could race with uploads
+	// that are still consuming the buffered files.
+	dependsOn := make([]any, 0, len(uploadIDs))
+	for _, uploadID := range uploadIDs {
+		dependsOn = append(dependsOn, fmt.Sprintf("${%s.output}", uploadID))
+	}
+
 	cleanup := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
 			Type: ociv1alpha1.FileCleanupV1alpha1,
 			ID:   "fileBufferCleanup",
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
-			"files": files,
+			"files":     files,
+			"dependsOn": dependsOn,
 		}},
 	}
 

@@ -170,6 +170,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 		"components", len(d.Vertices))
 
 	var allFileRefs []fileBufferRef
+	var uploadIDs []string
 
 	for key, v := range d.Vertices {
 		val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
@@ -216,10 +217,13 @@ func fillGraphDefinitionWithPrefetchedComponents(
 			if err := addUploadTransformation(v2desc, id, baseID, target, tgd, resourceTransformIDs); err != nil {
 				return err
 			}
+
+			// Track the upload ID so the cleanup node can depend on it.
+			uploadIDs = append(uploadIDs, id+"Upload")
 		}
 	}
 
-	addFileCleanupTransformation(tgd, allFileRefs)
+	addFileCleanupTransformation(tgd, allFileRefs, uploadIDs)
 
 	return nil
 }
