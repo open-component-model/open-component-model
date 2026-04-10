@@ -11,7 +11,7 @@ require (
 	golang.org/x/crypto v0.48.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
-	ocm.software/open-component-model/bindings/go/ctf v0.4.0
+	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260409111948-a6aca34e77a9
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
 	ocm.software/open-component-model/bindings/go/oci v0.0.38

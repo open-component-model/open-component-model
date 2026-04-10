@@ -20,7 +20,7 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.12
 	ocm.software/open-component-model/bindings/go/constructor v0.0.7
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
-	ocm.software/open-component-model/bindings/go/ctf v0.4.0
+	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260409111948-a6aca34e77a9
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260409111948-a6aca34e77a9
