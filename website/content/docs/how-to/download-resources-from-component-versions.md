@@ -55,9 +55,9 @@ First, check which resources are available in the component version. Until the O
 you can use the [`ocm get cv`]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) command
 to see the complete component version descriptor, including the `resources` section.
 
-   ```shell
-   ocm get cv ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0 -oyaml
-   ```
+```shell
+ocm get cv ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0 -oyaml
+```
 
 <details>
 <summary>Inspect the component for resources</summary>
@@ -198,9 +198,9 @@ First, check which resources are available in the component version. Until the O
 you can use the [`ocm get cv`]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) command
 to see the complete component version descriptor, including the `resources` section.
 
-   ```shell
-   ocm get cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 -oyaml
-   ```
+```shell
+ocm get cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 -oyaml
+```
 
 <details>
 <summary>Inspect the component for resources</summary>
