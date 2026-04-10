@@ -378,7 +378,7 @@ ocm download resource <repo>//<component>:<version> \
 ## CLI Reference
 
 | Command | Description |
-|---------|-------------|
+| --- | --- |
 | [`ocm download resource`]({{< relref "/docs/reference/ocm-cli/ocm_download_resource.md" >}}) | Download a specific resource |
 | [`ocm get cv`]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) | Get component versions and resources |
 

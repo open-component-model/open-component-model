@@ -65,16 +65,16 @@ If any matcher fails, the entry is skipped. **First match wins** — OCM returns
 
 Quick reference:
 
-| Configured identity                                                  | Request                    | Result | Why                         |
-|----------------------------------------------------------------------|----------------------------|--------|-----------------------------|
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/my-repo` | `ghcr.io/my-org/my-repo`   | ✅      | Exact path match            |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*`       | `ghcr.io/my-org/my-repo`   | ✅      | `*` matches `my-repo`       |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`                           | `ghcr.io/my-org/my-repo`   | ✅      | No path — accepts any       |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org`         | `ghcr.io/my-org/my-repo`   | ❌      | `my-org` ≠ `my-org/my-repo` |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*`       | `ghcr.io/other-org/foo`    | ❌      | `other-org` ≠ `my-org`      |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: https`        | `https://ghcr.io:443/repo` | ✅      | Port defaults to `443`      |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: http`         | `https://ghcr.io/repo`     | ❌      | `http` ≠ `https`            |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`port: 5000`           | `https://ghcr.io:443/repo` | ❌      | `5000` ≠ `443`              |
+| Configured identity | Request | Result | Why |
+| --- | --- | --- | --- |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/my-repo` | `ghcr.io/my-org/my-repo` | ✅ | Exact path match |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*` | `ghcr.io/my-org/my-repo` | ✅ | `*` matches `my-repo` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io` | `ghcr.io/my-org/my-repo` | ✅ | No path — accepts any |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org` | `ghcr.io/my-org/my-repo` | ❌ | `my-org` ≠ `my-org/my-repo` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*` | `ghcr.io/other-org/foo` | ❌ | `other-org` ≠ `my-org` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: https` | `https://ghcr.io:443/repo` | ✅ | Port defaults to `443` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: http` | `https://ghcr.io/repo` | ❌ | `http` ≠ `https` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`port: 5000` | `https://ghcr.io:443/repo` | ❌ | `5000` ≠ `443` |
 
 {{< callout context="note" >}}
 `*` matches exactly one path segment. It does **not** match across `/` separators. Use `my-org/*/*` to match two-level paths like `my-org/team/repo`.

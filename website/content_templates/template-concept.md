@@ -57,7 +57,7 @@ Highlight any non-obvious behavior, edge cases, or important constraints that af
 Summarize the defining characteristics that readers should remember.
 
 | Property | Description |
-|----------|-------------|
+| -------- | ----------- |
 | **[Property 1]** | What it means and why it matters |
 | **[Property 2]** | What it means and why it matters |
 | **[Property 3]** | What it means and why it matters |

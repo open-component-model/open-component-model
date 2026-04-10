@@ -124,7 +124,7 @@ head -n 1 /tmp/keys/public-key.pem
 ## CLI Reference
 
 | Command | Description |
-|---------|-------------|
+| --- | --- |
 | [`ocm verify componentversions`]({{< relref "docs/reference/ocm-cli/ocm_verify_component-version.md" >}}) | Verify a component version signature |
 | [`ocm get componentversions`]({{< relref "docs/reference/ocm-cli/ocm_get_component-version.md" >}}) | View component with signatures |
 
