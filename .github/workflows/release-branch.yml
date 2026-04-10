@@ -11,6 +11,9 @@ on:
         required: false
         default: 'main'
 
+permissions:
+  contents: read
+
 jobs:
   create-release-branch:
     name: Create Release Branch from ${{ github.event.inputs.source_branch }} to ${{ github.event.inputs.target_branch }}
@@ -25,7 +28,6 @@ jobs:
       - name: Generate App Token
         id: get_token
         uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
-        continue-on-error: true
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
@@ -37,7 +39,7 @@ jobs:
           TARGET_BRANCH: ${{ github.event.inputs.target_branch }}
           SOURCE_BRANCH: ${{ github.event.inputs.source_branch }}
         with:
-          github-token: ${{ steps.get_token.outputs.token || secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.get_token.outputs.token }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;

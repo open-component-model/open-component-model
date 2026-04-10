@@ -114,8 +114,6 @@ jobs:
       artifact_id: ${{ steps.upload-artifacts.outputs.artifact-id }}
       version: ${{ steps.version.outputs.version }}
       should_publish: ${{ steps.branch-check.outputs.should_publish }}
-    permissions:
-      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
