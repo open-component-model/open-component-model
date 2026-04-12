@@ -36,23 +36,33 @@ The OCM CLI fetches a specific resource from a component version and saves it to
 
 ## Download Workflow
 
+As mentioned in the [concept document for Component Identity]({{< relref "/docs/concepts/component-identity.md#component-repositories-and-storage" >}}),
+components can be stored in OCI registries or local CTF archives, but the way you access them is the same — using their unique identity.
+
+The following examples show component versions stored in a local CTF archive and in a remote OCI registry.
+The local CTF uses the component created in the [Getting Started: Create Component Versions]({{< relref "create-component-version.md" >}}) tutorial,
+while the remote OCI registry uses the Podinfo component published to GitHub Container Registry.
+
+{{< tabs >}}
+{{< tab "remote OCI registry" >}}
+
 {{< steps >}}
 {{< step >}}
 
-### List available resources
+### List the available resources
 
 First, check which resources are available in the component version. Until the OCM CLI supports resource listing,
 you can use the [`ocm get cv`]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) command
-to see the complete component
+to see the complete component version descriptor, including the `resources` section.
 
-   ```shell
-   ocm get cv ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0 -oyaml
-   ```
+```shell
+ocm get cv ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0 -oyaml
+```
 
 <details>
 <summary>Inspect the component for resources</summary>
 
-The output shows the component version descriptor, including the `resources` section where you can find the available resources and their identities (e.g., name, version).
+The output shows the component version descriptor.
 We're interested in the `chart` resource, which is a Helm chart stored as OCI artifact in an OCI registry.
 
 ```yaml
@@ -125,17 +135,16 @@ We download the `chart` resource, which is a Helm chart:
 <summary >You should see this output</summary>
 
 ```text
-time=2026-03-04T13:32:54.297+01:00 level=INFO msg="resource downloaded successfully" output=helmchart-oci
-time=2026-03-04T13:32:55.295+01:00 level=INFO msg=copied descriptor.mediaType=application/vnd.cncf.helm.chart.content.v1.tar+gzip descriptor.digest=sha256:ddf24dfc79800f80a8f1e5b8d462b15619c22d77c8ffe454636fef3b9a6d4f60 descriptor.size=14956
-time=2026-03-04T13:32:55.295+01:00 level=INFO msg=copied descriptor.mediaType=application/vnd.cncf.helm.config.v1+json descriptor.digest=sha256:eb2808c21a03a7007ef9a7b5207af0a3b4115be5ce4bb340e0bf501abaf8d31e descriptor.size=348
-time=2026-03-04T13:32:55.295+01:00 level=INFO msg=copied descriptor.mediaType=application/vnd.oci.image.manifest.v1+json descriptor.digest=sha256:2360bdf32ddc50c05f8e128118173343b0a012a338daf145b16e0da9c80081a4 descriptor.size=828
+{"time":"2026-04-10T14:06:57.85304+02:00","level":"INFO","msg":"capabilities sent"}
+time=2026-04-10T14:07:01.593+02:00 level=INFO msg="resource downloaded successfully" output=helmchart-oci
 ```
+
 </details>
 
 {{< /step >}}
 {{< step >}}
 
-### Verify the download
+### Verify the Download
 
 Check that the downloaded resource exists and has content:
 
@@ -143,7 +152,6 @@ Check that the downloaded resource exists and has content:
 ls -la helmchart-oci
 ```
 
-{{< details "Inspect the downloaded OCI artifact" >}}
 The downloaded Helm chart is in OCI blob format. 
 
 ```shell
@@ -156,7 +164,7 @@ drwxr-xr-x  3 D032990  96 März  4 13:38 blobs
 ```
 
 ```shell
-jq . index.json
+jq . helmchart-oci/index.json
 ```
 
 ```json
@@ -174,10 +182,121 @@ jq . index.json
   ]
 }
 ```
-{{< /details >}}
 
 {{< /step >}}
 {{< /steps >}}
+
+{{< /tab >}}
+
+{{< tab "local CTF" >}}
+{{< steps >}}
+{{< step >}}
+
+### List available resources
+
+First, check which resources are available in the component version. Until the OCM CLI supports resource listing,
+you can use the [`ocm get cv`]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) command
+to see the complete component version descriptor, including the `resources` section.
+
+```shell
+ocm get cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 -oyaml
+```
+
+<details>
+<summary>Inspect the component for resources</summary>
+
+The output shows the component version descriptor. We're interested in the `mylocalfile` resource, which is a plain text file.
+
+```yaml
+- component:
+    componentReferences: null
+    name: github.com/acme.org/helloworld
+    provider: acme.org
+    repositoryContexts: null
+    resources:
+      - access:
+          localReference: sha256:70a2577d7b649574cbbba99a2f2ebdf27904a4abf80c9729923ee67ea8d2d9d8
+          mediaType: text/plain; charset=utf-8
+          type: localBlob/v1
+        digest:
+          hashAlgorithm: SHA-256
+          normalisationAlgorithm: genericBlobDigest/v1
+          value: 70a2577d7b649574cbbba99a2f2ebdf27904a4abf80c9729923ee67ea8d2d9d8
+        name: mylocalfile
+        relation: local
+        type: blob
+        version: 1.0.0
+      - access:
+          imageReference: ghcr.io/stefanprodan/podinfo:6.11.1@sha256:8fa56908408de98f24aed2a162b1bb42c0b98df7abfcc5a76a14a8be510457c5
+          type: ociArtifact
+        digest:
+          hashAlgorithm: SHA-256
+          normalisationAlgorithm: genericBlobDigest/v1
+          value: 8fa56908408de98f24aed2a162b1bb42c0b98df7abfcc5a76a14a8be510457c5
+        name: image
+        relation: external
+        type: ociImage
+        version: 1.0.0
+    sources: null
+    version: 1.0.0
+  meta:
+    schemaVersion: v2
+```
+
+</details>
+
+{{< /step >}}
+{{< step >}}
+
+### Download resource
+
+Use the `ocm download resource` command with the `--identity` flag to specify which resource to download.
+We download the `mylocalfile` resource, which is a plain text file:
+
+```shell
+ ocm download resource /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 \
+   --identity name=mylocalfile \
+   --output mylocalfile-downloaded
+ ```
+
+<details>
+<summary >You should see this output</summary>
+
+```text
+{"time":"2026-04-10T11:01:02.313565+02:00","level":"INFO","msg":"capabilities sent"}
+time=2026-04-10T11:01:02.320+02:00 level=INFO msg="resource downloaded successfully" output=mylocalfile-downloaded
+```
+
+</details>
+
+{{< /step >}}
+{{< step >}}
+
+### Verify Download
+
+Check that the downloaded resource exists and has content:
+
+```shell
+ls -la mylocalfile-downloaded
+```
+
+```shell
+-rw------- 1 D032990 45 Apr. 10 11:01 mylocalfile-downloaded
+```
+
+```shell
+cat mylocalfile-downloaded
+```
+
+```text
+My first local Resource for an OCM component
+```
+
+{{< /step >}}
+{{< /steps >}}
+
+{{< /tab >}}
+{{< /tabs >}}
 
 ## Using Transformers
 

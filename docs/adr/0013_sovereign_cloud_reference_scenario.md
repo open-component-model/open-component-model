@@ -227,6 +227,7 @@ The product component is a **meta-component** that references notes and postgres
 See [`components/notes/component-constructor.yaml`](../../conformance/scenarios/sovereign/components/notes/component-constructor.yaml).
 
 Key details:
+
 - Provider: `ocm.software/sovereign`
 - The container image uses `input.type: file` with an OCI layout tarball (`application/vnd.ocm.software.oci.layout.v1+tar+gzip`), built by `docker buildx --output type=oci`
 - Helm chart uses `input.type: helm` with a local chart directory
@@ -237,6 +238,7 @@ Key details:
 See [`components/postgres/component-constructor.yaml`](../../conformance/scenarios/sovereign/components/postgres/component-constructor.yaml).
 
 Key details:
+
 - Provider: `ocm.software/sovereign`
 - The postgres image is an **external reference** (`access.type: ociArtifact` pointing to `docker.io/library/postgres:${POSTGRES_VERSION}`)
 - Helm chart uses `input.type: helm` with a local chart directory
@@ -246,6 +248,7 @@ Key details:
 See [`components/product/component-constructor.yaml`](../../conformance/scenarios/sovereign/components/product/component-constructor.yaml).
 
 Key details:
+
 - Provider: `ocm.software/sovereign`
 - References `acme.org/sovereign/notes` and `acme.org/sovereign/postgres` as child components
 - Carries a single resource: `product-rgd` — the unified ResourceGraphDefinition that orchestrates the entire deployment

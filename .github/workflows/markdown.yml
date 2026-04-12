@@ -157,3 +157,17 @@ jobs:
           fail_level: any
           config_file: .github/config/website-linkspector.yaml
           show_stats: true
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      - name: Read tool versions
+        id: versions
+        run: |
+          source .env
+          echo "markdownlint_cli2=${MARKDOWNLINT_CLI2_VERSION}" >> $GITHUB_OUTPUT
+      - name: Run linter
+        run: npx markdownlint-cli2@${{ steps.versions.outputs.markdownlint_cli2 }} --config .github/config/.markdownlint-cli2.yaml "**/*.md"
