@@ -1,7 +1,7 @@
 package access
 
 import (
-	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
+	v2 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -17,11 +17,11 @@ func init() {
 }
 
 func MustAddToScheme(scheme *runtime.Scheme) {
-	helm := &v1.Helm{}
+	helm := &v2.Helm{}
 	scheme.MustRegisterWithAlias(helm,
-		runtime.NewVersionedType("Helm", v1.Version),
+		runtime.NewVersionedType("Helm", v2.Version),
 		runtime.NewUnversionedType("Helm"),
-		runtime.NewVersionedType(v1.LegacyType, v1.LegacyTypeVersion),
-		runtime.NewUnversionedType(v1.LegacyType),
+		runtime.NewVersionedType(v2.LegacyType, v2.LegacyTypeVersion),
+		runtime.NewUnversionedType(v2.LegacyType),
 	)
 }

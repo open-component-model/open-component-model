@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	helmaccess "ocm.software/open-component-model/bindings/go/helm/access"
 	"ocm.software/open-component-model/bindings/go/helm/internal"
+	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -15,43 +15,69 @@ import (
 func TestCredentialConsumerIdentity(t *testing.T) {
 	t.Parallel()
 
-	t.Run("returns HelmChartRepository identity for HTTPS repository", func(t *testing.T) {
-		identity, err := internal.CredentialConsumerIdentity("https://charts.example.com/stable")
-		require.NoError(t, err)
-		require.NotNil(t, identity)
-		assert.Equal(t, runtime.NewUnversionedType(helmaccess.LegacyHelmChartConsumerType), identity.GetType())
-		assert.Equal(t, "https", identity["scheme"])
-		assert.Equal(t, "charts.example.com", identity["hostname"])
-	})
+	tests := []struct {
+		name             string
+		repository       string
+		expectedType     runtime.Type
+		expectedIdentity map[string]string
+		expectedErr      string
+	}{
+		{
+			name:         "returns HelmChartRepository identity for HTTPS repository",
+			repository:   "https://charts.example.com/stable",
+			expectedType: runtime.NewUnversionedType(helmaccess.LegacyHelmChartConsumerType),
+			expectedIdentity: map[string]string{
+				"scheme":   "https",
+				"hostname": "charts.example.com",
+			},
+		},
+		{
+			name:         "returns HelmChartRepository identity for HTTP repository",
+			repository:   "http://charts.example.com:8080/repo",
+			expectedType: runtime.NewUnversionedType(helmaccess.LegacyHelmChartConsumerType),
+			expectedIdentity: map[string]string{
+				"scheme":   "http",
+				"hostname": "charts.example.com",
+				"port":     "8080",
+			},
+		},
+		{
+			name:         "returns OCIRegistry identity for OCI repository",
+			repository:   "oci://registry.example.com/charts/mychart:1.0.0",
+			expectedType: ocicredentialsspecv1.Type,
+			expectedIdentity: map[string]string{
+				"scheme":   "oci",
+				"hostname": "registry.example.com",
+			},
+		},
+		{
+			name:        "returns error for empty repository (local helm input)",
+			repository:  "",
+			expectedErr: "no helm repository specified",
+		},
+		{
+			name:        "returns error for invalid URL",
+			repository:  "://invalid",
+			expectedErr: "error parsing helm repository URL to identity",
+		},
+	}
 
-	t.Run("returns HelmChartRepository identity for HTTP repository", func(t *testing.T) {
-		identity, err := internal.CredentialConsumerIdentity("http://charts.example.com:8080/repo")
-		require.NoError(t, err)
-		require.NotNil(t, identity)
-		assert.Equal(t, runtime.NewUnversionedType(helmaccess.LegacyHelmChartConsumerType), identity.GetType())
-		assert.Equal(t, "http", identity["scheme"])
-		assert.Equal(t, "charts.example.com", identity["hostname"])
-		assert.Equal(t, "8080", identity["port"])
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity, err := internal.CredentialConsumerIdentity(tt.repository)
 
-	t.Run("returns OCIRegistry identity for OCI repository", func(t *testing.T) {
-		identity, err := internal.CredentialConsumerIdentity("oci://registry.example.com/charts/mychart:1.0.0")
-		require.NoError(t, err)
-		require.NotNil(t, identity)
-		assert.Equal(t, ocicredentialsspecv1.Type, identity.GetType())
-		assert.Equal(t, "oci", identity["scheme"])
-		assert.Equal(t, "registry.example.com", identity["hostname"])
-	})
+			if tt.expectedErr != "" {
+				require.ErrorContains(t, err, tt.expectedErr)
+				assert.Nil(t, identity)
+				return
+			}
 
-	t.Run("returns error for empty repository (local helm input)", func(t *testing.T) {
-		identity, err := internal.CredentialConsumerIdentity("")
-		require.ErrorIs(t, err, internal.ErrLocalHelmInputDoesNotRequireCredentials)
-		assert.Nil(t, identity)
-	})
-
-	t.Run("returns error for invalid URL", func(t *testing.T) {
-		_, err := internal.CredentialConsumerIdentity("://invalid")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "error parsing helm repository URL to identity")
-	})
+			require.NoError(t, err)
+			require.NotNil(t, identity)
+			assert.Equal(t, tt.expectedType, identity.GetType())
+			for key, value := range tt.expectedIdentity {
+				assert.Equal(t, value, identity[key])
+			}
+		})
+	}
 }

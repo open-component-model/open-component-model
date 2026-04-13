@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
-	"strings"
 
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
 
@@ -13,9 +13,9 @@ import (
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/helm/access"
-	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
+	"ocm.software/open-component-model/bindings/go/helm/spec/access"
+	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -39,9 +39,6 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	}
 	if transformation.Spec == nil {
 		return nil, fmt.Errorf("spec is required for get helm transformation")
-	}
-	if t.ResourceRepository == nil {
-		return nil, fmt.Errorf("ResourceRepository is required for get helm transformation")
 	}
 
 	if transformation.Output == nil {
@@ -83,10 +80,7 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		return nil, fmt.Errorf("error downloading helm chart: %w", err)
 	}
 
-	chartBlob, ok := downloadedBlob.(*helmblob.ChartBlob)
-	if !ok {
-		return nil, fmt.Errorf("expected ChartBlob from helm ResourceRepository, got %T", downloadedBlob)
-	}
+	chartBlob := helmblob.NewChartBlob(downloadedBlob)
 
 	chartArchive, err := chartBlob.ChartArchive()
 	if err != nil {
@@ -116,8 +110,14 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	}
 
 	// Load the chart from the written file to get the resolved name and version
-	chartPath := strings.TrimPrefix(chartFileSpec.URI, "file://")
-	loadedChart, err := loader.Load(chartPath)
+	closer, err := chartArchive.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("error reading chart archive: %w", err)
+	}
+	defer func(closer io.ReadCloser) {
+		_ = closer.Close()
+	}(closer)
+	loadedChart, err := loader.LoadArchive(closer)
 	if err != nil {
 		return nil, fmt.Errorf("failed loading downloaded chart to read metadata: %w", err)
 	}

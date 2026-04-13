@@ -13,7 +13,7 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	helmaccess "ocm.software/open-component-model/bindings/go/helm/access"
+	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -81,7 +81,7 @@ func TestConvertAccessNilGuards(t *testing.T) {
 	t.Run("returns error for nil resource", func(t *testing.T) {
 		_, err := repo.GetResourceCredentialConsumerIdentity(ctx, nil)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "resource is required")
+		assert.Contains(t, err.Error(), "error converting resource access to helm spec")
 	})
 
 	t.Run("returns error for nil access", func(t *testing.T) {

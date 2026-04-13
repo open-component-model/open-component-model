@@ -2,8 +2,8 @@ package input
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
@@ -52,21 +52,18 @@ func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
 
 // GetResourceCredentialConsumerIdentity returns credentials consumer identity for remote helm repositories
 // or [ErrLocalHelmInputDoesNotRequireCredentials] for local helm inputs.
-func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+func (i *InputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	helm := v1.Helm{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &helm); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	identity, err = helminternal.CredentialConsumerIdentity(helm.HelmRepository)
-	switch {
-	case errors.Is(err, helminternal.ErrLocalHelmInputDoesNotRequireCredentials):
+	if helm.HelmRepository == "" {
+		slog.DebugContext(ctx, "no credentials are needed for local helm charts")
 		return nil, nil
-	case err != nil:
-		return nil, fmt.Errorf("error resolving credential consumer identity: %w", err)
 	}
 
-	return identity, nil
+	return helminternal.CredentialConsumerIdentity(helm.HelmRepository)
 }
 
 // ProcessResource processes a helm-based resource input by converting the input specification

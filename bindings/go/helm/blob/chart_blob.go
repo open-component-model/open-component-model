@@ -16,6 +16,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 )
 
+const (
+	TarGzSuffix = ".tar.gz"
+	TGZSuffix   = ".tgz"
+)
+
+var ErrNoChartFound = errors.New("no chart found in tar archive")
+
 // extractResult holds the lazily-extracted chart and provenance blobs.
 type extractResult struct {
 	chartBlob blob.ReadOnlyBlob
@@ -68,6 +75,7 @@ func (c *ChartBlob) ProvFile() (blob.ReadOnlyBlob, error) {
 }
 
 // extractFromTar reads a tar archive blob and extracts the chart tgz and optional prov file.
+// This function will read the complete component of the chart file into memory.
 func extractFromTar(tarBlob blob.ReadOnlyBlob) (chartBlob blob.ReadOnlyBlob, provBlob blob.ReadOnlyBlob, err error) {
 	rc, err := tarBlob.ReadCloser()
 	if err != nil {
@@ -81,30 +89,42 @@ func extractFromTar(tarBlob blob.ReadOnlyBlob) (chartBlob blob.ReadOnlyBlob, pro
 
 	tr := tar.NewReader(rc)
 	for {
-		header, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break // End of archive
 		}
 		if err != nil {
-			return nil, nil, fmt.Errorf("error reading tar entry: %w", err)
+			return nil, nil, fmt.Errorf("error reading tar blob: %w", err)
 		}
 
-		data, err := io.ReadAll(tr)
-		if err != nil {
-			return nil, nil, fmt.Errorf("error reading tar entry %s: %w", header.Name, err)
-		}
+		// TODO(matthiasbruns): remove me when done
+		// fmt.Printf("Contents of %s:\n", hdr.Name)
+		//if _, err := io.Copy(os.Stdout, tr); err != nil {
+		//	log.Fatal(err)
+		//}
+		//fmt.Println()
 
 		switch {
-		case strings.HasSuffix(header.Name, ".tgz"):
+		case strings.HasSuffix(hdr.Name, TarGzSuffix):
+			fallthrough
+		case strings.HasSuffix(hdr.Name, TGZSuffix):
+			data, err := io.ReadAll(tr)
+			if err != nil {
+				return nil, nil, fmt.Errorf("error reading chart tarball: %w", err)
+			}
 			if chartBlob != nil {
-				return nil, nil, fmt.Errorf("tar archive contains multiple .tgz entries; expected exactly one chart archive")
+				return nil, nil, fmt.Errorf("tar archive contains multiple chart entries; expected exactly one chart archive")
 			}
 			chartBlob = inmemory.New(
 				bytes.NewReader(data),
 				inmemory.WithMediaType(compression.MediaTypeGzip),
 				inmemory.WithSize(int64(len(data))),
 			)
-		case strings.HasSuffix(header.Name, ".prov"):
+		case strings.HasSuffix(hdr.Name, ".prov"):
+			data, err := io.ReadAll(tr)
+			if err != nil {
+				return nil, nil, fmt.Errorf("error reading prov tarball: %w", err)
+			}
 			provBlob = inmemory.New(
 				bytes.NewReader(data),
 				inmemory.WithMediaType(filesystem.DefaultFileMediaType),
@@ -114,7 +134,7 @@ func extractFromTar(tarBlob blob.ReadOnlyBlob) (chartBlob blob.ReadOnlyBlob, pro
 	}
 
 	if chartBlob == nil {
-		return nil, nil, fmt.Errorf("no chart (.tgz) found in tar archive")
+		return nil, nil, ErrNoChartFound
 	}
 
 	return chartBlob, provBlob, nil

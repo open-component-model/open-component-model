@@ -95,6 +95,15 @@ func TestChartBlob_ExtractChartAndProv(t *testing.T) {
 			provSrcPath:  testdataProvFile,
 		},
 		{
+			name: "subdirectory tar.gz paths with provenance",
+			tarFiles: map[string]string{
+				"helmRemoteChart123/mychart-0.1.0.tar.gz":   testdataChartWithProv,
+				"helmRemoteChart123/mychart-0.1.0.tgz.prov": testdataProvFile,
+			},
+			chartSrcPath: testdataChartWithProv,
+			provSrcPath:  testdataProvFile,
+		},
+		{
 			name: "chart without provenance",
 			tarFiles: map[string]string{
 				"mychart-0.1.0.tgz": testdataChartOnly,
@@ -142,7 +151,7 @@ func TestChartBlob_NoChartInTar(t *testing.T) {
 
 	_, err := cb.ChartArchive()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no chart (.tgz) found")
+	assert.ErrorIs(t, err, helmblob.ErrNoChartFound)
 }
 
 func TestChartBlob_EmptyTar(t *testing.T) {
@@ -154,7 +163,7 @@ func TestChartBlob_EmptyTar(t *testing.T) {
 
 	_, err := cb.ChartArchive()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no chart (.tgz) found")
+	assert.ErrorIs(t, err, helmblob.ErrNoChartFound)
 }
 
 func TestChartBlob_ExtractionIsLazy(t *testing.T) {

@@ -2,7 +2,6 @@ package digest
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,10 +12,10 @@ import (
 	"helm.sh/helm/v4/pkg/repo/v1"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/helm/access"
-	helmv1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/helm/internal/download"
+	"ocm.software/open-component-model/bindings/go/helm/spec/access"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
@@ -56,15 +55,7 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 		return nil, nil
 	}
 
-	identity, err := helminternal.CredentialConsumerIdentity(helm.HelmRepository)
-	switch {
-	case errors.Is(err, helminternal.ErrLocalHelmInputDoesNotRequireCredentials):
-		return nil, nil
-	case err != nil:
-		return nil, fmt.Errorf("error resolving credential consumer identity: %w", err)
-	}
-
-	return identity, nil
+	return helminternal.CredentialConsumerIdentity(helm.HelmRepository)
 }
 
 func (p *DigestProcessor) ProcessResourceDigest(
