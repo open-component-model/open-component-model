@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -17,9 +18,10 @@ import (
 )
 
 type Builder struct {
-	scheme       *runtime.Scheme
-	transformers map[runtime.Type]graphRuntime.Transformer
-	events       chan graphRuntime.ProgressEvent
+	scheme             *runtime.Scheme
+	transformers       map[runtime.Type]graphRuntime.Transformer
+	credentialProvider credentials.Resolver
+	events             chan graphRuntime.ProgressEvent
 }
 
 func NewBuilder(scheme *runtime.Scheme) *Builder {
@@ -79,10 +81,11 @@ func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition
 	}
 
 	return &Graph{
-		env:          env,
-		checked:      g,
-		transformers: b.transformers,
-		events:       b.events,
+		env:                env,
+		checked:            g,
+		transformers:       b.transformers,
+		credentialProvider: b.credentialProvider,
+		events:             b.events,
 	}, nil
 }
 
@@ -105,11 +108,19 @@ func (b *Builder) WithTransformer(typed interface {
 	return b
 }
 
+// WithCredentialProvider sets the credential resolver used to resolve credentials
+// for transformer consumer identities during graph processing.
+func (b *Builder) WithCredentialProvider(provider credentials.Resolver) *Builder {
+	b.credentialProvider = provider
+	return b
+}
+
 type Graph struct {
-	env          *cel.Env
-	checked      *dag.DirectedAcyclicGraph[string]
-	transformers map[runtime.Type]graphRuntime.Transformer
-	events       chan graphRuntime.ProgressEvent
+	env                *cel.Env
+	checked            *dag.DirectedAcyclicGraph[string]
+	transformers       map[runtime.Type]graphRuntime.Transformer
+	credentialProvider credentials.Resolver
+	events             chan graphRuntime.ProgressEvent
 }
 
 func (g *Graph) Process(ctx context.Context) error {
@@ -118,6 +129,7 @@ func (g *Graph) Process(ctx context.Context) error {
 		Processor: &graphRuntime.Runtime{
 			Environment:              g.env,
 			Transformers:             g.transformers,
+			CredentialProvider:       g.credentialProvider,
 			EvaluatedExpressionCache: make(map[string]any),
 			EvaluatedTransformations: make(map[string]any),
 			Events:                   g.events,
