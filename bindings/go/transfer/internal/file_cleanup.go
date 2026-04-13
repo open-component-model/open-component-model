@@ -151,30 +151,57 @@ func filePathFromURI(uri string) (string, error) {
 	return parsed.Path, nil
 }
 
-// fileBufferRef describes a CEL expression that resolves to a file access spec
-// buffered to the local filesystem during a transformation. The expression
-// references the file through its *consumer's* spec (e.g. the Add
-// transformation's spec.file), not through the producer's output. This ensures
-// the dependency discovery system creates edges from the consumer to the
-// cleanup node, so cleanup only runs after consumers have finished reading
-// the file.
-type fileBufferRef struct {
-	expression string
+// fileBufferKind identifies which kind of resource produced a file buffer.
+// Each kind maps to a fixed set of spec field expressions in the cleanup node.
+type fileBufferKind int
+
+const (
+	fileBufferLocalBlob fileBufferKind = iota
+	fileBufferOCIArtifact
+	fileBufferHelm
+)
+
+// fileBufferHint records which transformation IDs are responsible for consuming
+// a file buffer. The graph emits hints — it only knows IDs and resource kinds.
+// The path-to-spec-field mapping lives here, not in graph construction.
+type fileBufferHint struct {
+	kind      fileBufferKind
+	addID     string // Add transformation ID (consumer of the file buffer)
+	convertID string // Convert transformation ID (Helm only)
 }
 
-// addFileCleanupTransformation appends a FileCleanup transformation to the
-// graph that removes all buffered temporary files. File references use CEL
-// expressions that point to consumer spec fields (e.g. ${addId.spec.file}),
-// which implicitly creates DAG edges from those consumers to the cleanup
-// node via the dependency discovery system.
-func addFileCleanupTransformation(tgd *transformv1alpha1.TransformationGraphDefinition, refs []fileBufferRef) {
-	if len(refs) == 0 {
+// expressions returns the CEL spec-field expressions for this hint.
+// Each expression references a *consumer's* spec field (not a producer's output),
+// which causes the dependency discovery system to add edges from those
+// consumers to the cleanup node — guaranteeing cleanup runs last.
+func (h fileBufferHint) expressions() []string {
+	switch h.kind {
+	case fileBufferHelm:
+		return []string{
+			fmt.Sprintf("${%s.spec.chartFile}", h.convertID),
+			// provFile is optional; cleanup transformer skips empty URIs.
+			fmt.Sprintf("${%s.spec.?provFile}", h.convertID),
+			fmt.Sprintf("${%s.spec.file}", h.addID),
+		}
+	default: // localBlob and OCIArtifact both use spec.file on the Add node
+		return []string{
+			fmt.Sprintf("${%s.spec.file}", h.addID),
+		}
+	}
+}
+
+// addFileCleanupTransformation appends a FileCleanup transformation to the graph.
+// It is the only place that maps resource kinds to spec field path expressions.
+func addFileCleanupTransformation(tgd *transformv1alpha1.TransformationGraphDefinition, hints []fileBufferHint) {
+	if len(hints) == 0 {
 		return
 	}
 
-	files := make([]any, 0, len(refs))
-	for _, ref := range refs {
-		files = append(files, ref.expression)
+	var files []any
+	for _, hint := range hints {
+		for _, expr := range hint.expressions() {
+			files = append(files, expr)
+		}
 	}
 
 	cleanup := transformv1alpha1.GenericTransformation{
@@ -188,39 +215,4 @@ func addFileCleanupTransformation(tgd *transformv1alpha1.TransformationGraphDefi
 	}
 
 	tgd.Transformations = append(tgd.Transformations, cleanup)
-}
-
-// collectLocalBlobFileRefs returns file buffer references for a local blob
-// resource. The file is referenced through the Add transformation's spec,
-// creating an Add → Cleanup dependency edge.
-func collectLocalBlobFileRefs(addResourceID string) []fileBufferRef {
-	return []fileBufferRef{
-		{expression: fmt.Sprintf("${%s.spec.file}", addResourceID)},
-	}
-}
-
-// collectOCIArtifactFileRefs returns file buffer references for an OCI
-// artifact resource. The file is referenced through the Add transformation's
-// spec, creating an Add → Cleanup dependency edge.
-func collectOCIArtifactFileRefs(addResourceID string) []fileBufferRef {
-	return []fileBufferRef{
-		{expression: fmt.Sprintf("${%s.spec.file}", addResourceID)},
-	}
-}
-
-// collectHelmFileRefs returns file buffer references for Helm chart
-// transformations. Three temporary files may be created:
-//   - The chart file from GetHelmChart, referenced through Convert's spec
-//   - The optional prov file from GetHelmChart, referenced through Convert's spec
-//   - The OCI layout file from ConvertHelmToOCI, referenced through Add's spec
-//
-// This creates Convert → Cleanup and Add → Cleanup dependency edges,
-// ensuring cleanup runs after both Convert and Add have consumed their inputs.
-func collectHelmFileRefs(convertResourceID, addResourceID string) []fileBufferRef {
-	return []fileBufferRef{
-		{expression: fmt.Sprintf("${%s.spec.chartFile}", convertResourceID)},
-		// provFile is optional; the cleanup transformer skips empty URIs.
-		{expression: fmt.Sprintf("${%s.spec.?provFile}", convertResourceID)},
-		{expression: fmt.Sprintf("${%s.spec.file}", addResourceID)},
-	}
 }
