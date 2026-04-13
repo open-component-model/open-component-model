@@ -37,7 +37,18 @@
     font-size: 1.05rem;
   }
 
-  /* Leaf / page links — slightly compact */
+  /* Sub-section headers inside list-nested should align with sibling entries,
+     not be indented. Move the theme's padding from the <details> element down
+     to the inner ul so only the children are indented, not the summary. */
+  ul.list-nested details {
+    padding-left: 0;
+  }
+
+  ul.list-nested details > ul.list-nested {
+    padding-left: 1rem;
+  }
+
+  /* Leaf / page links -- slightly compact */
   .docs-link {
     font-size: 0.95rem;
     line-height: 1.4;

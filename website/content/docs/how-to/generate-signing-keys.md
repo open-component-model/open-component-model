@@ -117,4 +117,4 @@ You should see both files:
 ## Related documentation
 
 - [Concept: Signing and Verification]({{< relref "signing-and-verification-concept.md" >}}) - Understand how OCM signing and verification works
-- [Tutorial: Sign Your First Component]({{< relref "signing-and-verification.md" >}}) - A hands-on tutorial for signing components end-to-end
+- [Tutorial: Sign Your First Component]({{< relref "docs/tutorials/signing/plain.md" >}}) - A hands-on tutorial for signing components end-to-end
