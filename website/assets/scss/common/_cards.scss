@@ -438,3 +438,51 @@
     height: 48px;
   }
 }
+
+/* ============================================
+   Person Card (used on Governance page)
+   ============================================ */
+.person-card {
+  display: inline-block;
+  width: 160px;
+
+  .person-card-inner {
+    height: 100%;
+    min-height: 160px;
+    justify-content: center;
+  }
+}
+
+.person-card-avatar {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border: 2px solid var(--ocm-card-border);
+}
+
+.person-card-name {
+  color: var(--ocm-card-title-color);
+  font-size: 0.9rem;
+}
+
+.person-card-role {
+  color: var(--ocm-card-desc-color);
+  font-size: 0.8rem;
+}
+
+.person-card-company {
+  color: var(--ocm-card-desc-color);
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.person-section-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1.5rem;
+  align-items: start;
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
+}
