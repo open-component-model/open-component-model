@@ -1,0 +1,19 @@
+{{- $name := .Get "name" -}}
+{{- $role := .Get "role" -}}
+{{- $github := .Get "github" -}}
+{{- $company := .Get "company" -}}
+{{- $profile := .Get "profile" -}}
+{{- $profileUrl := printf "https://openprofile.dev/profile/%s" $profile -}}
+{{- $avatarUrl := printf "https://github.com/%s.png?size=120" $github -}}
+<a href="{{ $profileUrl }}" target="_blank" rel="noopener noreferrer" class="ocm-card person-card text-decoration-none">
+  <div class="person-card-inner d-flex flex-column align-items-center text-center p-3 gap-2">
+    <img src="{{ $avatarUrl }}" alt="{{ $name }}" width="80" height="80" class="rounded-circle person-card-avatar" loading="lazy">
+    <div>
+      <div class="person-card-name fw-semibold">{{ $name }}</div>
+      <div class="person-card-role small">{{ $role }}</div>
+      {{- with $company }}
+      <div class="person-card-company small">{{ . }}</div>
+      {{- end }}
+    </div>
+  </div>
+</a>
