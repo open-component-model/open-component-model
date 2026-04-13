@@ -22,6 +22,7 @@ const (
 var FileCleanupVersionedType = runtime.NewVersionedType(FileCleanupType, fileCleanupVersion)
 
 // FileCleanupSpec is the input specification for a FileCleanup transformation.
+// +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type FileCleanupSpec struct {
 	// Files is a list of file access specifications to clean up.
@@ -29,16 +30,8 @@ type FileCleanupSpec struct {
 	Files []accessv1alpha1.File `json:"files"`
 }
 
-// DeepCopyInto copies FileCleanupSpec into out.
-func (in *FileCleanupSpec) DeepCopyInto(out *FileCleanupSpec) {
-	*out = *in
-	if in.Files != nil {
-		out.Files = make([]accessv1alpha1.File, len(in.Files))
-		copy(out.Files, in.Files)
-	}
-}
-
 // FileCleanupOutput is the output of a FileCleanup transformation.
+// +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type FileCleanupOutput struct {
 	// CleanedFiles is the number of files that were successfully removed.
@@ -49,6 +42,7 @@ type FileCleanupOutput struct {
 // temporary files that were buffered to the local filesystem during Get
 // transformations. It runs as a final node in the transformation graph,
 // after all other transformations have completed.
+// +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +ocm:jsonschema-gen=true
 type FileCleanupTransformation struct {
@@ -61,25 +55,6 @@ type FileCleanupTransformation struct {
 
 func (t *FileCleanupTransformation) GetType() runtime.Type    { return t.Type }
 func (t *FileCleanupTransformation) SetType(typ runtime.Type) { t.Type = typ }
-
-// DeepCopyTyped implements runtime.Typed.
-func (in *FileCleanupTransformation) DeepCopyTyped() runtime.Typed {
-	if in == nil {
-		return nil
-	}
-	out := &FileCleanupTransformation{}
-	out.Type = in.Type
-	out.ID = in.ID
-	if in.Spec != nil {
-		out.Spec = &FileCleanupSpec{}
-		in.Spec.DeepCopyInto(out.Spec)
-	}
-	if in.Output != nil {
-		copied := *in.Output
-		out.Output = &copied
-	}
-	return out
-}
 
 // FileCleanup is a transformer that removes temporary files from the local
 // filesystem that were buffered during Get transformations.
