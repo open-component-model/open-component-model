@@ -9,6 +9,11 @@
   weight = 20
 
 [[main]]
+  name = "Governance"
+  url = "governance/"
+  weight = 25
+
+[[main]]
   name = "Roadmap"
   url = "https://github.com/orgs/open-component-model/projects/10/views/5"
   weight = 30
