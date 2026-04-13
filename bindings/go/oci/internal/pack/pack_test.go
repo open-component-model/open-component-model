@@ -314,7 +314,7 @@ func TestResourceBlob(t *testing.T) {
 			opts: Options{
 				AccessScheme:        runtime.NewScheme(),
 				BaseReference:       "test-ref",
-				EnforceGlobalAccess: true,
+				GlobalAccessPolicy: GlobalAccessPolicyAlways,
 			},
 			checkGlobalAccess: func(t *testing.T, resource *descriptor.Resource) {
 				access, ok := resource.Access.(*v2.LocalBlob)
@@ -341,6 +341,31 @@ func TestResourceBlob(t *testing.T) {
 				default:
 					t.Fatalf("unexpected global access type: %T", globalAccess)
 				}
+			},
+		},
+		{
+			name: "success with never global access policy",
+			blob: &testBlob{
+				content:   content,
+				mediaType: "application/vnd.test",
+				digest:    digest,
+			},
+			resource: &descriptor.Resource{
+				Access: &v2.LocalBlob{
+					Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					LocalReference: digest.String(),
+					MediaType:      "application/vnd.test",
+				},
+			},
+			opts: Options{
+				AccessScheme:       runtime.NewScheme(),
+				BaseReference:      "test-ref",
+				GlobalAccessPolicy: GlobalAccessPolicyNever,
+			},
+			checkGlobalAccess: func(t *testing.T, resource *descriptor.Resource) {
+				access, ok := resource.Access.(*v2.LocalBlob)
+				require.True(t, ok, "access should be of type LocalBlob")
+				assert.Nil(t, access.GlobalAccess, "global access should not be set with Never policy")
 			},
 		},
 		{
@@ -804,7 +829,7 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 			opts: Options{
 				AccessScheme:        runtime.NewScheme(),
 				BaseReference:       "test-ref",
-				EnforceGlobalAccess: true,
+				GlobalAccessPolicy: GlobalAccessPolicyAlways,
 			},
 			checkGlobalAccess: func(t *testing.T, resource *descriptor.Resource) {
 				access, ok := resource.Access.(*v2.LocalBlob)

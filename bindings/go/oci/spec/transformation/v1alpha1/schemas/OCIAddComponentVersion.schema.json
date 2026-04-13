@@ -758,6 +758,10 @@
         {
           "description": "GlobalAccessPolicyAlways enforces global access on all local blobs, regardless of whether the\nstorage backend is globally reachable. This can result in invalid global access references\nif the storage is not globally accessible (e.g. a CTF).",
           "const": "always"
+        },
+        {
+          "description": "GlobalAccessPolicyNever suppresses global access on all local blobs, even when the storage\nbackend is globally reachable. Use this when global access references are not desired.",
+          "const": "never"
         }
       ]
     },

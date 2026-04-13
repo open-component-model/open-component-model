@@ -439,10 +439,10 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, compon
 	}
 
 	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, pack.Options{
-		AccessScheme:        repo.scheme,
-		CopyGraphOptions:    repo.resourceCopyOptions.CopyGraphOptions,
-		BaseReference:       reference,
-		EnforceGlobalAccess: repo.globalAccessPolicy == GlobalAccessPolicyAlways,
+		AccessScheme:       repo.scheme,
+		CopyGraphOptions:   repo.resourceCopyOptions.CopyGraphOptions,
+		BaseReference:      reference,
+		GlobalAccessPolicy: pack.GlobalAccessPolicy(repo.globalAccessPolicy),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to pack resource blob: %w", err)

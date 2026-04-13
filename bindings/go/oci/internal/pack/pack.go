@@ -28,6 +28,18 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// GlobalAccessPolicy controls whether global access references are added to local blobs.
+type GlobalAccessPolicy int
+
+const (
+	// GlobalAccessPolicyDefault auto-detects based on whether the storage backend is globally reachable.
+	GlobalAccessPolicyDefault GlobalAccessPolicy = iota
+	// GlobalAccessPolicyAlways forces global access on all local blobs.
+	GlobalAccessPolicyAlways
+	// GlobalAccessPolicyNever suppresses global access even on remote registries.
+	GlobalAccessPolicyNever
+)
+
 // Options defines the configuration options for packing a single-layer OCI artifact.
 type Options struct {
 	// AccessScheme is the scheme used for converting resource access types.
@@ -43,9 +55,11 @@ type Options struct {
 	// They are not used for OCI Layouts.
 	ManifestAnnotations map[string]string
 
-	// EnforceGlobalAccess indicates if new resources should contain a global access regardless whether the
-	// access is guaranteed to be valid or not
-	EnforceGlobalAccess bool
+	// GlobalAccessPolicy controls whether global access references are added to local blobs.
+	// Default (zero value) auto-detects based on storage backend.
+	// Always forces global access regardless of backend.
+	// Never suppresses global access even on remote registries.
+	GlobalAccessPolicy GlobalAccessPolicy
 }
 
 // ArtifactBlob packs a [ociblob.ArtifactBlob] into an OCI Storage
@@ -96,7 +110,7 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 	annotations := maps.Clone(layer.Annotations)
 	maps.Copy(annotations, opts.ManifestAnnotations)
 
-	global := backedByGlobalStore(storage) || opts.EnforceGlobalAccess
+	global := resolveGlobalAccess(opts.GlobalAccessPolicy, storage)
 
 	if err := updateArtifactAccess(b.Artifact, access, layer, updateAccessOptions{opts, global}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
@@ -115,7 +129,7 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy OCI layout: %w", err)
 	}
-	global := backedByGlobalStore(storage) || opts.EnforceGlobalAccess
+	global := resolveGlobalAccess(opts.GlobalAccessPolicy, storage)
 	if err := updateArtifactAccess(b.Artifact, access, index, updateAccessOptions{opts, global}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
@@ -305,5 +319,17 @@ func backedByGlobalStore(storage content.Storage) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// resolveGlobalAccess determines whether global access should be set based on the policy and storage backend.
+func resolveGlobalAccess(policy GlobalAccessPolicy, storage content.Storage) bool {
+	switch policy {
+	case GlobalAccessPolicyAlways:
+		return true
+	case GlobalAccessPolicyNever:
+		return false
+	default:
+		return backedByGlobalStore(storage)
 	}
 }

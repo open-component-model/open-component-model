@@ -195,6 +195,8 @@ func globalAccessPolicyFromOCI(policy ocirepospecv1.GlobalAccessPolicy) oci.Repo
 	switch policy {
 	case ocirepospecv1.GlobalAccessPolicyAlways:
 		return oci.WithGlobalAccessPolicy(oci.GlobalAccessPolicyAlways)
+	case ocirepospecv1.GlobalAccessPolicyNever:
+		return oci.WithGlobalAccessPolicy(oci.GlobalAccessPolicyNever)
 	default:
 		return nil
 	}

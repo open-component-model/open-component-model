@@ -96,6 +96,9 @@ const (
 	// storage backend is globally reachable. This can result in invalid global access references
 	// if the storage is not globally accessible (e.g. a CTF).
 	GlobalAccessPolicyAlways
+	// GlobalAccessPolicyNever suppresses global access on all local blobs, even when the storage
+	// backend is globally reachable. Use this when global access references are not desired.
+	GlobalAccessPolicyNever
 )
 
 // RepositoryOption is a function that modifies RepositoryOptions.
