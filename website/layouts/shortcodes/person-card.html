@@ -3,6 +3,10 @@
 {{- $github := .Get "github" -}}
 {{- $company := .Get "company" -}}
 {{- $profile := .Get "profile" -}}
+{{- if not $name }}{{ errorf "person-card shortcode: missing required param 'name' at %s" .Position }}{{ end -}}
+{{- if not $role }}{{ errorf "person-card shortcode: missing required param 'role' at %s" .Position }}{{ end -}}
+{{- if not $github }}{{ errorf "person-card shortcode: missing required param 'github' at %s" .Position }}{{ end -}}
+{{- if not $profile }}{{ errorf "person-card shortcode: missing required param 'profile' at %s" .Position }}{{ end -}}
 {{- $profileUrl := printf "https://openprofile.dev/profile/%s" $profile -}}
 {{- $avatarUrl := printf "https://github.com/%s.png?size=120" $github -}}
 <a href="{{ $profileUrl }}" target="_blank" rel="noopener noreferrer" class="ocm-card person-card text-decoration-none">
