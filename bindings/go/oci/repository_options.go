@@ -55,6 +55,12 @@ type RepositoryOptions struct {
 	// DescriptorUnmarshalFunc is used to unmarshal descriptors from OCI stores.
 	// If not provided, DefaultDescriptorUnmarshalFunc will be used.
 	DescriptorUnmarshalFunc descriptor.UnmarshalFunc
+
+	// GlobalAccessPolicy controls whether global access references are added to local blobs
+	// when adding local resources or sources. By default, global access is only added when the
+	// storage backend is a globally reachable store (e.g. a remote OCI registry).
+	// Setting this to GlobalAccessPolicyAlways will enforce global access regardless of the storage backend.
+	GlobalAccessPolicy GlobalAccessPolicy
 }
 
 // ReferrerTrackingPolicy defines how OCI referrers are used in the repository.
@@ -77,6 +83,19 @@ const (
 	// see https://github.com/opencontainers/distribution-spec/blob/main/spec.md#backwards-compatibility
 	// for details on backwards-compatibility and behavior.
 	ReferrerTrackingPolicyByIndexAndSubject ReferrerTrackingPolicy = iota
+)
+
+// GlobalAccessPolicy defines how global access references are handled when adding local blobs.
+type GlobalAccessPolicy int
+
+const (
+	// GlobalAccessPolicyDefault only adds global access when the storage backend is a globally reachable
+	// store (e.g. a remote OCI registry). This is the default policy.
+	GlobalAccessPolicyDefault GlobalAccessPolicy = iota
+	// GlobalAccessPolicyAlways enforces global access on all local blobs, regardless of whether the
+	// storage backend is globally reachable. This can result in invalid global access references
+	// if the storage is not globally accessible (e.g. a CTF).
+	GlobalAccessPolicyAlways
 )
 
 // RepositoryOption is a function that modifies RepositoryOptions.
@@ -135,6 +154,14 @@ func WithTempDir(tempDir string) RepositoryOption {
 func WithDescriptorUnmarshalFunc(unmarshal descriptor.UnmarshalFunc) RepositoryOption {
 	return func(o *RepositoryOptions) {
 		o.DescriptorUnmarshalFunc = unmarshal
+	}
+}
+
+// WithGlobalAccessPolicy sets the global access policy for the repository.
+// By default, global access is only added when the storage backend is globally reachable.
+func WithGlobalAccessPolicy(policy GlobalAccessPolicy) RepositoryOption {
+	return func(o *RepositoryOptions) {
+		o.GlobalAccessPolicy = policy
 	}
 }
 
@@ -199,5 +226,6 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		logger:                      options.Logger,
 		unmarshalDescriptorFunc:     options.DescriptorUnmarshalFunc,
 		tempDir:                     options.TempDir,
+		globalAccessPolicy:          options.GlobalAccessPolicy,
 	}, nil
 }

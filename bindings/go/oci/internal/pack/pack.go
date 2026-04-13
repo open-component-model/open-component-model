@@ -115,7 +115,7 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy OCI layout: %w", err)
 	}
-	global := backedByGlobalStore(storage)
+	global := backedByGlobalStore(storage) || opts.EnforceGlobalAccess
 	if err := updateArtifactAccess(b.Artifact, access, index, updateAccessOptions{opts, global}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}

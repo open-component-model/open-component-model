@@ -773,11 +773,12 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 	ociLayout := buf.Bytes()
 
 	tests := []struct {
-		name          string
-		blob          *testBlob
-		resource      *descriptor.Resource
-		opts          Options
-		expectedError string
+		name              string
+		blob              *testBlob
+		resource          *descriptor.Resource
+		opts              Options
+		expectedError     string
+		checkGlobalAccess func(t *testing.T, resource *descriptor.Resource)
 	}{
 		{
 			name: "success with valid input",
@@ -790,6 +791,37 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 			opts: Options{
 				AccessScheme:  runtime.NewScheme(),
 				BaseReference: "test-ref",
+			},
+		},
+		{
+			name: "success with enforced global access on OCI layout",
+			blob: &testBlob{
+				content:   ociLayout,
+				mediaType: "application/vnd.oci.image.layout.v1+tar",
+				digest:    digest.FromBytes(ociLayout),
+			},
+			resource: &descriptor.Resource{},
+			opts: Options{
+				AccessScheme:        runtime.NewScheme(),
+				BaseReference:       "test-ref",
+				EnforceGlobalAccess: true,
+			},
+			checkGlobalAccess: func(t *testing.T, resource *descriptor.Resource) {
+				access, ok := resource.Access.(*v2.LocalBlob)
+				require.True(t, ok, "access should be of type LocalBlob")
+				require.NotNil(t, access.GlobalAccess, "global access should be set")
+
+				scheme := runtime.NewScheme()
+				v2.MustAddToScheme(scheme)
+				oci.MustAddToScheme(scheme)
+
+				globalAccess, err := scheme.NewObject(access.GlobalAccess.GetType())
+				require.NoError(t, err)
+				require.NoError(t, scheme.Convert(access.GlobalAccess, globalAccess))
+
+				typed, ok := globalAccess.(*accessv1.OCIImage)
+				require.True(t, ok, "global access should be of type OCIImage for OCI layout, got %T", globalAccess)
+				assert.Contains(t, typed.ImageReference, "test-ref@")
 			},
 		},
 		{
@@ -828,6 +860,10 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, fromStore.MediaType)
 			content.Equal(fromStore, desc)
+
+			if tt.checkGlobalAccess != nil {
+				tt.checkGlobalAccess(t, tt.resource)
+			}
 		})
 	}
 }
