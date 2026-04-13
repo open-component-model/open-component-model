@@ -2,8 +2,6 @@ name: "Website: Legacy Update OCM CLI Docs"
 
 permissions:
   contents: read
-  actions: write
-  pull-requests: write
 
 on:
   repository_dispatch:
