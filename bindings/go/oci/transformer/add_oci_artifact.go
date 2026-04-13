@@ -2,11 +2,9 @@ package transformer
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -15,12 +13,31 @@ import (
 
 // AddOCIArtifact is a transformer that uploads OCI artifacts to remote registries.
 type AddOCIArtifact struct {
-	Scheme             *runtime.Scheme
-	Repository         repository.ResourceRepository
-	CredentialProvider credentials.Resolver
+	Scheme     *runtime.Scheme
+	Repository repository.ResourceRepository
 }
 
-func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+func (t *AddOCIArtifact) GetCredentialConsumerIdentities(ctx context.Context, step runtime.Typed) (map[string]runtime.Identity, error) {
+	var transformation v1alpha1.AddOCIArtifact
+	if err := t.Scheme.Convert(step, &transformation); err != nil {
+		return nil, fmt.Errorf("failed converting generic transformation to add oci artifact transformation: %w", err)
+	}
+	if transformation.Spec == nil || transformation.Spec.Resource == nil {
+		return nil, nil
+	}
+
+	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
+	identity, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource)
+	if err != nil {
+		return nil, err
+	}
+	if identity == nil {
+		return nil, nil
+	}
+	return map[string]runtime.Identity{"resource": identity}, nil
+}
+
+func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error) {
 	var transformation v1alpha1.AddOCIArtifact
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to add oci artifact transformation: %w", err)
@@ -44,14 +61,10 @@ func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	// Convert resource to internal format
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
 
-	// Resolve credentials if credential provider is available
+	// Resolve credentials if provided
 	var creds map[string]string
-	if t.CredentialProvider != nil {
-		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
-			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
-				return nil, fmt.Errorf("failed resolving credentials: %w", err)
-			}
-		}
+	if credentials != nil {
+		creds = credentials["resource"]
 	}
 
 	// Get blob from file spec
