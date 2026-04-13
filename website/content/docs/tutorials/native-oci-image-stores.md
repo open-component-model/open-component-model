@@ -461,17 +461,13 @@ Under the hood, OCM v2 stores component versions as [OCI Image Indexes](https://
 ```mermaid
 flowchart TB
     subgraph index ["Component Version (OCI Index)"]
-        direction TB
         Desc["Descriptor Manifest<br/>software.ocm.descriptor=true"]
         NativeImg["Image Manifest<br/>(native OCI artifact)"]
-        NonOCI["Layer: config.yaml<br/>(non-OCI blob)"]
     end
 
-    Desc --> NonOCI
-    index --> NativeImg
-
-    NativeImg --> Pull["docker pull / oras pull / crane pull"]
-    Desc --> OCM["ocm download resource"]
+    Desc -- "layer" --> NonOCI["config.yaml<br/>(non-OCI blob)"]
+    Desc -- "ocm download resource" --> OCM["OCM CLI consumer"]
+    NativeImg -- "docker pull / oras pull / crane pull" --> Pull["Any OCI client"]
 
     style Pull fill:#dcfce7,color:#166534
     style OCM fill:#dbeafe,color:#1e40af
@@ -490,8 +486,8 @@ The media type (`application/vnd.ocm.software.oci.layout.v1+tar`) tells OCM that
 
 {{< details "What is the difference between localReference and globalAccess?" >}}
 
-- **`localReference`** is the digest used internally by OCM to locate the blob within the component version's storage. It works with any OCM repository implementation (CTF archives, OCI registries).
-- **`globalAccess`** is an external access specification that provides a location-independent way to access the artifact. In OCI registries, this is typically an `OCIImage/v1` reference with a full image reference including the digest. It allows non-OCM tools to access the artifact directly.
+- **`localReference`** is a content-addressable digest that identifies the blob within the component version's storage. It is **stable across transfers** — the same digest works regardless of which registry hosts the component, because it is derived from the blob content itself. It works with any OCM repository implementation (CTF archives, OCI registries).
+- **`globalAccess`** is a location-specific access specification that points to the artifact in a particular registry. In OCI registries, this is typically an `OCIImage/v1` reference like `registry.example.com/repo@sha256:...`. It allows non-OCM tools to access the artifact directly, but **changes when the component is transferred** to a different registry. After each transfer, OCM updates `globalAccess` to reflect the new location, while `localReference` remains the same.
 
 {{< /details >}}
 
