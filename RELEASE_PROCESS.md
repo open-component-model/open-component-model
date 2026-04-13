@@ -172,7 +172,7 @@ The workflow summary shows exactly what **would** happen:
 When releasing a patch for an older version line (e.g., `v0.16.1` when `v0.17.0` already exists),
 the dry-run summary will show:
 
-```
+```text
 Set Latest: false
 Highest Final Version: 0.17.0
 ```
@@ -187,15 +187,15 @@ users from accidentally downgrading when pulling `latest`.
 <summary>What happens in the background?</summary>
 
 - **CLI path (`cli-release.yml`)**
-   - `prepare`: compute next RC metadata + changelog.
-   - `tag_rc`: create/push RC tag (skipped on dry-run).
-   - `build`: call `cli.yml` to build binaries and OCI artifacts.
-   - `release_rc`: publish GitHub pre-release with binary and OCI tarball assets.
+  - `prepare`: compute next RC metadata + changelog.
+  - `tag_rc`: create/push RC tag (skipped on dry-run).
+  - `build`: call `cli.yml` to build binaries and OCI artifacts.
+  - `release_rc`: publish GitHub pre-release with binary and OCI tarball assets.
 - **Controller path (`controller-release.yml`)**
-   - `prepare`: compute next RC metadata + changelog (shared `release-candidate-version.yml`).
-   - `tag_rc`: create/push RC tag via `release` environment gate (skipped on dry-run).
-   - `build`: call `kubernetes-controller.yml` to build the controller image and Helm chart.
-   - `release_rc`: publish GitHub pre-release with Helm chart `.tgz` as asset.
+  - `prepare`: compute next RC metadata + changelog (shared `release-candidate-version.yml`).
+  - `tag_rc`: create/push RC tag via `release` environment gate (skipped on dry-run).
+  - `build`: call `kubernetes-controller.yml` to build the controller image and Helm chart.
+  - `release_rc`: publish GitHub pre-release with Helm chart `.tgz` as asset.
 - If one component fails, do not proceed to final promotion.
 
 </details>
@@ -234,18 +234,18 @@ and the respective environment gate is approved.
 <summary>What happens in the background?</summary>
 
 - **CLI path (`cli-release.yml`)**
-   - `verify_attestations`: verify binary and OCI image attestations (gated by `release` environment).
-   - `promote_final`: create final tag from RC commit, promote OCI image tags.
-   - `release_final`: publish final GitHub release with assets from RC.
+  - `verify_attestations`: verify binary and OCI image attestations (gated by `release` environment).
+  - `promote_final`: create final tag from RC commit, promote OCI image tags.
+  - `release_final`: publish final GitHub release with assets from RC.
 - **Controller path (`controller-release.yml`)**
-   - `verify_attestations`: verify controller image and Helm chart attestations (gated by `release` environment).
-   - `promote_and_release_final` (single combined job):
-     - Create final tag from RC commit.
-     - Promote controller image tags via ORAS.
-     - Re-package Helm chart with final version strings (`Chart.yaml`, `values.yaml`), push to OCI registry, and create build-provenance attestation.
-     - Run `helm/verify-promote` to validate RC-to-Final chart consistency.
-     - Publish final GitHub release with the re-packaged Helm chart.
-   - Due to Helm specifics, the chart cannot simply be re-tagged from RC to Final — it must be re-packaged and re-attested because it embeds version strings.
+  - `verify_attestations`: verify controller image and Helm chart attestations (gated by `release` environment).
+  - `promote_and_release_final` (single combined job):
+    - Create final tag from RC commit.
+    - Promote controller image tags via ORAS.
+    - Re-package Helm chart with final version strings (`Chart.yaml`, `values.yaml`), push to OCI registry, and create build-provenance attestation.
+    - Run `helm/verify-promote` to validate RC-to-Final chart consistency.
+    - Publish final GitHub release with the re-packaged Helm chart.
+  - Due to Helm specifics, the chart cannot simply be re-tagged from RC to Final — it must be re-packaged and re-attested because it embeds version strings.
 - Final is only valid when both components are promoted in the same cycle.
 
 </details>
@@ -304,22 +304,27 @@ changelog is derived from conventional commit messages.
 If something goes wrong during a release, check the following common issues:
 
 **RC was not created**
+
 - Check if the workflow run failed before tag creation.
 - Rerun as dry-run first, then rerun with `dry_run=false`.
 
 **Final promotion fails with "no RC found"**
+
 - Verify that the latest RC tag exists on the release branch.
 - Create a new RC for both components, then promote again.
 
 **CLI and Controller versions diverged**
+
 - Ensure both workflows were run for the same release branch in the same cycle.
 - Stop promotion and align on a fresh RC cycle in lockstep.
 
 **Final release exists for one component but not the other**
+
 - Check the status of both workflow runs and the release pages.
 - Complete or rerun the missing component release immediately.
 
 **Attestation verification failed**
+
 - Verify that the RC release binaries have valid build provenance attestations.
 - Check that the OCI image was pushed to GHCR with attestation metadata.
 - Use `gh attestation verify <file> --repo <repo>` to manually verify CLI binaries.
@@ -334,7 +339,7 @@ If a release needs to be retracted due to critical bugs or security issues:
 
 1. Edit the GitHub Release and mark it as "Pre-release" to hide it from the latest release view.
 2. Prepend a deprecation notice to the release notes:
-   ```
+   ```markdown
    > ⚠️ **RETRACTED**: This release has been retracted due to [reason].
    > Please upgrade to vX.Y.Z instead.
    ```

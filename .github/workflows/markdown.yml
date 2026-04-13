@@ -150,10 +150,24 @@ jobs:
 
       - name: Run linkspector
         if: steps.check_changes.outputs.has_website_changes == 'true'
-        uses: umbrelladocs/action-linkspector@874d01cae9fd488e3077b08952093235bd626977 # v1
+        uses: umbrelladocs/action-linkspector@37c85bcde51b30bf929936502bac6bfb7e8f0a4d # v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
           fail_level: any
           config_file: .github/config/website-linkspector.yaml
           show_stats: true
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      - name: Read tool versions
+        id: versions
+        run: |
+          source .env
+          echo "markdownlint_cli2=${MARKDOWNLINT_CLI2_VERSION}" >> $GITHUB_OUTPUT
+      - name: Run linter
+        run: npx markdownlint-cli2@${{ steps.versions.outputs.markdownlint_cli2 }} --config .github/config/.markdownlint-cli2.yaml "**/*.md"
