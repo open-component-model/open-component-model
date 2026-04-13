@@ -7,9 +7,11 @@ on:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
+
 jobs:
   stale:  # call reusable workflow from central '.github' repo
+    permissions:
+      issues: write
+      pull-requests: write
     uses: open-component-model/.github/.github/workflows/stale.yml@c878408ef4362b719549404c49c47833dba69e5a # main
     secrets: inherit
