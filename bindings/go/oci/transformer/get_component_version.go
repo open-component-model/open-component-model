@@ -2,10 +2,8 @@ package transformer
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -13,12 +11,39 @@ import (
 )
 
 type GetComponentVersion struct {
-	Scheme             *runtime.Scheme
-	RepoProvider       repository.ComponentVersionRepositoryProvider
-	CredentialProvider credentials.Resolver
+	Scheme       *runtime.Scheme
+	RepoProvider repository.ComponentVersionRepositoryProvider
 }
 
-func (t *GetComponentVersion) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+func (t *GetComponentVersion) GetCredentialConsumerIdentities(ctx context.Context, step runtime.Typed) (map[string]runtime.Identity, error) {
+	transformation, err := t.Scheme.NewObject(step.GetType())
+	if err != nil {
+		return nil, fmt.Errorf("failed creating download component transformation object: %w", err)
+	}
+	if err := t.Scheme.Convert(step, transformation); err != nil {
+		return nil, fmt.Errorf("failed converting generic transformation to download component transformation: %w", err)
+	}
+	var repoSpec runtime.Typed
+	switch tr := transformation.(type) {
+	case *v1alpha1.OCIGetComponentVersion:
+		repoSpec = &tr.Spec.Repository
+	case *v1alpha1.CTFGetComponentVersion:
+		repoSpec = &tr.Spec.Repository
+	default:
+		return nil, fmt.Errorf("unexpected transformation type: %T", transformation)
+	}
+
+	identity, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec)
+	if err != nil {
+		return nil, err
+	}
+	if identity == nil {
+		return nil, nil
+	}
+	return map[string]runtime.Identity{"repository": identity}, nil
+}
+
+func (t *GetComponentVersion) Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error) {
 	transformation, err := t.Scheme.NewObject(step.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("failed creating download component transformation object: %w", err)
@@ -40,12 +65,8 @@ func (t *GetComponentVersion) Transform(ctx context.Context, step runtime.Typed)
 	}
 
 	var creds map[string]string
-	if t.CredentialProvider != nil {
-		if consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec); err == nil {
-			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
-				return nil, fmt.Errorf("failed resolving credentials: %w", err)
-			}
-		}
+	if credentials != nil {
+		creds = credentials["repository"]
 	}
 
 	repo, err := t.RepoProvider.GetComponentVersionRepository(ctx, repoSpec, creds)

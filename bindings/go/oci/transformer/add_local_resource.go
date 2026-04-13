@@ -2,12 +2,10 @@ package transformer
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -21,12 +19,39 @@ import (
 // in OCI and CTF repositories. It downloads the blob from the resource's access spec
 // and uploads it as a local resource to the target repository.
 type AddLocalResource struct {
-	Scheme             *runtime.Scheme
-	RepoProvider       repository.ComponentVersionRepositoryProvider
-	CredentialProvider credentials.Resolver
+	Scheme       *runtime.Scheme
+	RepoProvider repository.ComponentVersionRepositoryProvider
 }
 
-func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+func (t *AddLocalResource) GetCredentialConsumerIdentities(ctx context.Context, step runtime.Typed) (map[string]runtime.Identity, error) {
+	transformation, err := t.Scheme.NewObject(step.GetType())
+	if err != nil {
+		return nil, fmt.Errorf("failed creating add local resource transformation object: %w", err)
+	}
+	if err := t.Scheme.Convert(step, transformation); err != nil {
+		return nil, fmt.Errorf("failed converting generic transformation to add local resource transformation: %w", err)
+	}
+	var repoSpec runtime.Typed
+	switch tr := transformation.(type) {
+	case *v1alpha1.OCIAddLocalResource:
+		repoSpec = &tr.Spec.Repository
+	case *v1alpha1.CTFAddLocalResource:
+		repoSpec = &tr.Spec.Repository
+	default:
+		return nil, fmt.Errorf("unexpected transformation type: %T", transformation)
+	}
+
+	identity, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec)
+	if err != nil {
+		return nil, err
+	}
+	if identity == nil {
+		return nil, nil
+	}
+	return map[string]runtime.Identity{"repository": identity}, nil
+}
+
+func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error) {
 	transformation, err := t.Scheme.NewObject(step.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("failed creating add local resource transformation object: %w", err)
@@ -82,14 +107,9 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		return nil, fmt.Errorf("file URI is required to access the resource data to be uploaded")
 	}
 
-	// Resolve credentials if provider available
 	var creds map[string]string
-	if t.CredentialProvider != nil {
-		if consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec); err == nil {
-			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
-				return nil, fmt.Errorf("failed resolving credentials: %w", err)
-			}
-		}
+	if credentials != nil {
+		creds = credentials["repository"]
 	}
 
 	// Get repository
