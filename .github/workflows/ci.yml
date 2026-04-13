@@ -14,7 +14,6 @@ env:
 
 permissions:
   contents: read
-  checks: read
 
 jobs:
   discover_modules:

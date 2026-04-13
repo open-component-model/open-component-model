@@ -45,6 +45,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
       - name: Run linkspector
         uses: umbrelladocs/action-linkspector@37c85bcde51b30bf929936502bac6bfb7e8f0a4d # v1
         with:
@@ -63,6 +65,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
 
       - name: Check for website changes
         id: check_changes
@@ -138,6 +142,7 @@ jobs:
           dirs:
             - ./website/content
           baseUrl: "${BASEURL}"
+          modifiedFilesOnly: true
           replacementPatterns:
             - pattern: "^/"
               replacement: "${BASEURL}/"
