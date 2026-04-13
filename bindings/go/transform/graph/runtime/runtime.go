@@ -9,6 +9,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph"
 	"ocm.software/open-component-model/bindings/go/transform/graph/runtime/resolver"
@@ -16,10 +17,14 @@ import (
 )
 
 type Transformer interface {
-	Transform(
-		ctx context.Context,
-		step runtime.Typed,
-	) (runtime.Typed, error)
+	// GetCredentialConsumerIdentities returns credential identities this transformer needs for the given step.
+	// Map key is a transformer-defined name (e.g. "repository", "source", "target").
+	// Returns nil or empty map when no credentials are needed.
+	GetCredentialConsumerIdentities(ctx context.Context, step runtime.Typed) (map[string]runtime.Identity, error)
+
+	// Transform executes the transformation with resolved credentials.
+	// credentials is nil when no credentials were requested or resolver is absent.
+	Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error)
 }
 
 // State represents the state of a transformation node.
@@ -59,8 +64,9 @@ type Runtime struct {
 	EvaluatedExpressionCache map[string]any
 	EvaluatedTransformations map[string]any
 
-	Transformers map[runtime.Type]Transformer
-	Events       chan<- ProgressEvent
+	Transformers       map[runtime.Type]Transformer
+	CredentialProvider credentials.Resolver
+	Events             chan<- ProgressEvent
 }
 
 func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transformation) error {
@@ -131,7 +137,26 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 		return fmt.Errorf("no transformer runtime registered for type %s", runtimeType)
 	}
 
-	transformed, err := transformer.Transform(ctx, transformation.AsRaw())
+	step := transformation.AsRaw()
+
+	identities, err := transformer.GetCredentialConsumerIdentities(ctx, step)
+	if err != nil {
+		return fmt.Errorf("failed to get credential consumer identities for transformation %q: %w", transformation.ID, err)
+	}
+
+	var creds map[string]map[string]string
+	if len(identities) > 0 && b.CredentialProvider != nil {
+		creds = make(map[string]map[string]string, len(identities))
+		for name, identity := range identities {
+			resolved, err := b.CredentialProvider.Resolve(ctx, identity)
+			if err != nil && !errors.Is(err, credentials.ErrNotFound) {
+				return fmt.Errorf("failed to resolve credentials %q for transformation %q: %w", name, transformation.ID, err)
+			}
+			creds[name] = resolved
+		}
+	}
+
+	transformed, err := transformer.Transform(ctx, step, creds)
 	if err != nil {
 		return fmt.Errorf("failed to transform transformation %q: %w", transformation.ID, err)
 	}
