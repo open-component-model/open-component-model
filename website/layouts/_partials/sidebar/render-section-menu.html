@@ -37,22 +37,26 @@ Based on: https://discourse.gohugo.io/t/automated-nested-menus/42835/2
     {{- $linkContent = .LinkTitle }}
   {{- end }}
 
+  {{- $page := $node.Page }}
+  {{- if not $page }}{{- $page = $node }}{{- end }}
+  {{- $children := $page.Pages }}
+
   {{- $ariaCurrent := "" }}
   {{- $liClass := "" }}
 
-  {{- if in $currentPage.Ancestors $node.Page }}
+  {{- if in $currentPage.Ancestors $page }}
     {{- $ariaCurrent = "true" }}
   {{- end }}
 
-  {{- if $currentPage.Eq $node.Page }}
+  {{- if $currentPage.Eq $page }}
     {{- $ariaCurrent = "page" }}
     {{- $liClass = "active" }}
   {{- end }}
 
   <li {{- with $liClass }} class="{{ . }}" {{ end -}}>
-    {{- with $node.Page.Pages }}
-    <details{{- with $ariaCurrent }} open{{- else}}{{- if ne $node.Page.Params.sidebar.collapsed true }} open{{- end }}{{- end}}>
-      <summary><a {{- with $ariaCurrent }} aria-current="{{ . }}" {{- end }} class="docs-link{{- if eq $ariaCurrent "page" }} active{{ end }}" href="{{- $node.Page.RelPermalink }}">{{ $linkContent }}</a></summary>
+    {{- with $children }}
+    <details{{- with $ariaCurrent }} open{{- else}}{{- if ne $page.Params.sidebar.collapsed true }} open{{- end }}{{- end}}>
+      <summary><a {{- with $ariaCurrent }} aria-current="{{ . }}" {{- end }} class="docs-link{{- if eq $ariaCurrent "page" }} active{{ end }}" href="{{- $page.RelPermalink }}">{{ $linkContent }}</a></summary>
       <ul class="list-unstyled list-nested">
         {{- range . }}
           {{- template "walk" (dict "node" . "currentPage" $currentPage) }}
@@ -60,7 +64,7 @@ Based on: https://discourse.gohugo.io/t/automated-nested-menus/42835/2
       </ul>
     </details>
     {{- else }}
-      <a {{- with $ariaCurrent }} aria-current="{{ . }}" {{- end }} class="docs-link{{- if eq $ariaCurrent "page" }} active{{ end }}" href="{{- $node.Page.RelPermalink }}">{{ $linkContent }}</a>
+      <a {{- with $ariaCurrent }} aria-current="{{ . }}" {{- end }} class="docs-link{{- if eq $ariaCurrent "page" }} active{{ end }}" href="{{- $page.RelPermalink }}">{{ $linkContent }}</a>
     {{- end }}
   </li>
 {{- end }}
