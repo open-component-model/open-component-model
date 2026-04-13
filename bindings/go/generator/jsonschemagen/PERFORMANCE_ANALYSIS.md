@@ -308,21 +308,15 @@ Or use a glob: `**/go.sum`.
 **Risk**: Larger cache size, slower cache restore. May not be worth it if improvements 1-3 are
 implemented.
 
-### 5. Parallelize generators in task generate (Estimated: overlap savings)
+### 5. ~~Parallelize generators in task generate~~ — NOT SAFE
 
-Currently the root `Taskfile.yml` runs generators sequentially:
-```yaml
-generate:
-  cmds:
-    - task: 'bindings/go/generator:ocmtypegen/generate'      # sequential
-    - task: 'bindings/go/generator:jsonschemagen/generate'    # sequential
-    - task: 'tools:deepcopy-gen/generate-deepcopy'            # sequential
-```
+`ocmtypegen` and `jsonschemagen` share 27 of 28 target directories. While they write to
+different files (`zz_generated.ocm_type.go` vs `zz_generated.ocm_jsonschema.go`),
+`jsonschemagen` uses `packages.Load(NeedSyntax)` which parses ALL `.go` files in each
+package — including `zz_generated.ocm_type.go`. Running both generators concurrently would
+create a race condition where `jsonschemagen` reads partially-written `ocmtypegen` output.
 
-If `jsonschemagen` doesn't depend on `ocmtypegen` output (it doesn't — they process different
-markers), they can run in parallel using `deps:` instead of `cmds:`.
-
-**Risk**: Need to verify there are no implicit ordering dependencies between generators.
+The sequential ordering in `Taskfile.yml` is correct and must be preserved.
 
 ---
 
@@ -353,5 +347,5 @@ markers), they can run in parallel using `deps:` instead of `cmds:`.
 | 2. Targeted package loading | **-3-4s** | -0.2s | Medium |
 | 3. WalkDir for marker scan | -0.1s | -0.07s | Easy |
 | 4. CI cache improvement | -5-10s | N/A | Easy |
-| 5. Parallel generators | -overlap | -overlap | Easy |
-| **Combined** | **~20s → <2s** | **~6.5s → <0.3s** | |
+| ~~5. Parallel generators~~ | ~~N/A~~ | ~~N/A~~ | **NOT SAFE** (race on shared dirs) |
+| **Combined (1-4)** | **~20s → <2s** | **~6.5s → <0.3s** | |
