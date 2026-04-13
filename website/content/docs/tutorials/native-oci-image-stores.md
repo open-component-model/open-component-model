@@ -148,7 +148,7 @@ EOF
 Key points:
 - The `type: file/v1` input embeds the tar file by value as a local blob
 - The `mediaType: application/vnd.ocm.software.oci.layout.v1+tar` tells OCM this is an OCI image layout, not an opaque blob
-- When transferred to an OCI registry, OCM unpacks this layout and stores it as a native OCI manifest
+- During `ocm add cv`, OCM unpacks the layout and stores the contained manifest directly — the resulting local blob has the native OCI media type (e.g. `application/vnd.oci.image.manifest.v1+json`), not the tar media type
 
 {{< /step >}}
 
@@ -193,7 +193,7 @@ ocm get cv ./transport-archive//github.com/acme.org/native-oci-demo:1.0.0 -o yam
     resources:
       - access:
           localReference: sha256:...
-          mediaType: application/vnd.ocm.software.oci.layout.v1+tar
+          mediaType: application/vnd.oci.image.manifest.v1+json
           type: localBlob/v1
         name: my-oci-artifact
         relation: local
@@ -206,7 +206,7 @@ ocm get cv ./transport-archive//github.com/acme.org/native-oci-demo:1.0.0 -o yam
 
 </details>
 
-Notice the resource has `access.type: localBlob/v1` with the OCI layout media type. The `localReference` contains the digest of the embedded tar archive.
+Notice that the resource has `access.type: localBlob/v1` with the native OCI manifest media type. OCM recognized the OCI image layout during ingestion, unpacked it, and stored the manifest directly. The `localReference` contains the digest of the embedded manifest.
 
 {{< /step >}}
 
@@ -223,9 +223,13 @@ ocm transfer cv \
   <your-registry>
 ```
 
-Replace `<your-registry>` with your registry address (e.g. `localhost:5001` for a local registry).
+Replace `<your-registry>` with your registry address (e.g. `http://localhost:5001` for a local HTTP registry, or `ghcr.io/my-org/ocm` for a remote HTTPS registry).
 
-During transfer, OCM unpacks the OCI image layout tar and stores the contained manifests and layers as native OCI objects in the registry. The component version's index references these manifests directly.
+{{< callout type="info" >}}
+For local registries running without TLS, use the `http://` scheme prefix (e.g. `http://localhost:5001`). HTTPS registries work without a scheme prefix.
+{{< /callout >}}
+
+During transfer, OCM stores the OCI manifest and its layers as native OCI objects in the registry. The component version's index references the manifest directly.
 
 {{< /step >}}
 
@@ -244,12 +248,12 @@ Look for the `globalAccess` field in the resource's access specification — it 
 ```yaml
 resources:
   - access:
-      localReference: sha256:abc123...
-      mediaType: application/vnd.ocm.software.oci.layout.v1+tar
+      localReference: sha256:...
+      mediaType: application/vnd.oci.image.manifest.v1+json
       type: localBlob/v1
       globalAccess:
         type: OCIImage/v1
-        imageReference: <your-registry>/...@sha256:abc123...
+        imageReference: <your-registry>/component-descriptors/github.com/acme.org/native-oci-demo:1.0.0@sha256:...
     name: my-oci-artifact
     type: ociArtifact
 ```
@@ -363,6 +367,10 @@ ocm transfer cv \
   <your-registry>
 ```
 
+{{< callout type="info" >}}
+For local registries running without TLS, use the `http://` scheme prefix (e.g. `http://localhost:5001`). HTTPS registries work without a scheme prefix.
+{{< /callout >}}
+
 With `--copy-resources`, OCM:
 1. Downloads the image from `ghcr.io/stefanprodan/podinfo:6.9.1`
 2. Stores it as a local blob in the target component version
@@ -386,13 +394,13 @@ resources:
   - access:
       localReference: sha256:...
       mediaType: application/vnd.oci.image.index.v1+json
-      referenceName: ghcr.io/stefanprodan/podinfo:6.9.1
+      referenceName: stefanprodan/podinfo:6.9.1
       type: localBlob/v1
       globalAccess:
         type: OCIImage/v1
-        imageReference: <your-registry>/...@sha256:...
+        imageReference: <your-registry>/component-descriptors/github.com/acme.org/transfer-demo:1.0.0@sha256:...
     name: app-image
-    relation: local
+    relation: external
     type: ociImage
     version: 1.0.0
 ```
@@ -403,6 +411,7 @@ Key observations:
 - `mediaType` is `application/vnd.oci.image.index.v1+json` (or `application/vnd.oci.image.manifest.v1+json` for single-platform images)
 - `referenceName` preserves the original image reference for traceability
 - `globalAccess` provides the native OCI reference in the target registry
+- `relation` remains `external` — this indicates the resource was originally sourced externally, even though it is now stored locally
 
 {{< /step >}}
 
@@ -472,7 +481,7 @@ This means:
 ## Check Your Understanding
 
 {{< details "Why does the media type matter when embedding an OCI image layout?" >}}
-The media type (`application/vnd.ocm.software.oci.layout.v1+tar`) tells OCM that the blob contains a valid OCI image layout. During transfer to an OCI registry, OCM unpacks the tar, extracts the manifests and layers, and stores them as native OCI objects. Without the correct media type, OCM would store the tar as an opaque layer that cannot be accessed natively.
+The media type (`application/vnd.ocm.software.oci.layout.v1+tar`) tells OCM that the blob contains a valid OCI image layout. During `ocm add cv`, OCM unpacks the tar, extracts the manifests and layers, and stores them as native OCI objects. The resulting local blob has the native OCI media type (e.g. `application/vnd.oci.image.manifest.v1+json`). Without the correct media type, OCM would store the tar as an opaque layer that cannot be accessed natively.
 {{< /details >}}
 
 {{< details "What is the difference between localReference and globalAccess?" >}}
