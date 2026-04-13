@@ -31,7 +31,7 @@ spent in Go toolchain compilation and `golang.org/x/tools/go/packages` loading.
 
 ## Architecture Overview
 
-```
+```text
 main.go (cmd/main.go)
     │
     ├── Phase 1: Module Discovery (findModuleRoots)
@@ -209,6 +209,7 @@ generate:
 ```
 
 **Issues**:
+
 1. `cache-dependency-path` only caches the generator module's dependencies, NOT the dependencies
    of the 15 target modules that `packages.Load` needs to resolve
 2. `task generate` runs 6 generators sequentially (ocmtypegen, jsonschemagen, deepcopy-gen,
@@ -242,16 +243,19 @@ jsonschemagen/generate:
 ### 2. Load only annotated packages, not entire modules (Estimated: -60-80% of load time)
 
 Replace the current flow:
-```
+
+```text
 discover modules → check which modules have markers → load entire modules
 ```
 
 With:
-```
+
+```text
 discover modules → find specific files with markers → derive package import paths → load only those packages
 ```
 
 This requires changes to `universe/build.go`:
+
 - `discoverLoadTargets` should return per-package targets, not per-module
 - `loadTarget` should accept individual import paths (it already supports `LoadTargetTypeImport`)
 - Each annotated package needs its module's `Dir` set in the config for resolution

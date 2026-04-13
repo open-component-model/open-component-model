@@ -354,6 +354,7 @@ js
 json
 jsonNormalisation
 jsonschema
+jsonschemagen
 kelch
 keyless
 keypair
