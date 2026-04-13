@@ -1079,6 +1079,18 @@ func TestApply_ConflictDetection(t *testing.T) {
 				if conflictErr.DesiredApplySetID != applySetIDA {
 					t.Errorf("DesiredApplySetID = %q, want %q", conflictErr.DesiredApplySetID, applySetIDA)
 				}
+
+				// Verify the live object was not mutated - the early return
+				// should have prevented SSA from overwriting the label.
+				liveObj := &unstructured.Unstructured{}
+				liveObj.SetGroupVersionKind(schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"})
+				err := fakeClient.Get(ctx, client.ObjectKey{Name: "cm1", Namespace: "default"}, liveObj)
+				if err != nil {
+					t.Fatalf("failed to get live object after conflict: %v", err)
+				}
+				if got := liveObj.GetLabels()[ApplysetPartOfLabel]; got != applySetIDB {
+					t.Errorf("live object label was mutated: got %q, want %q (original owner)", got, applySetIDB)
+				}
 			} else {
 				if item.Error != nil {
 					t.Errorf("Apply() unexpected error: %v", item.Error)
