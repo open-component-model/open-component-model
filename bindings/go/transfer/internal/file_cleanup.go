@@ -22,6 +22,7 @@ const (
 var FileCleanupVersionedType = runtime.NewVersionedType(FileCleanupType, fileCleanupVersion)
 
 // FileCleanupSpec is the input specification for a FileCleanup transformation.
+// +ocm:jsonschema-gen=true
 type FileCleanupSpec struct {
 	// Files is a list of file access specifications to clean up.
 	// Each entry references a file that was buffered during a Get transformation.
@@ -38,6 +39,7 @@ func (in *FileCleanupSpec) DeepCopyInto(out *FileCleanupSpec) {
 }
 
 // FileCleanupOutput is the output of a FileCleanup transformation.
+// +ocm:jsonschema-gen=true
 type FileCleanupOutput struct {
 	// CleanedFiles is the number of files that were successfully removed.
 	CleanedFiles int `json:"cleanedFiles"`
@@ -47,7 +49,10 @@ type FileCleanupOutput struct {
 // temporary files that were buffered to the local filesystem during Get
 // transformations. It runs as a final node in the transformation graph,
 // after all other transformations have completed.
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +ocm:jsonschema-gen=true
 type FileCleanupTransformation struct {
+	// +ocm:jsonschema-gen:enum=FileCleanup/v1alpha1
 	Type   runtime.Type       `json:"type"`
 	ID     string             `json:"id"`
 	Spec   *FileCleanupSpec   `json:"spec"`
@@ -56,11 +61,6 @@ type FileCleanupTransformation struct {
 
 func (t *FileCleanupTransformation) GetType() runtime.Type    { return t.Type }
 func (t *FileCleanupTransformation) SetType(typ runtime.Type) { t.Type = typ }
-
-// JSONSchema returns a minimal JSON Schema for FileCleanupTransformation.
-func (FileCleanupTransformation) JSONSchema() []byte {
-	return []byte(`{"type":"object","properties":{"type":{"type":"string"},"id":{"type":"string"},"spec":{"type":"object"}}}`)
-}
 
 // DeepCopyTyped implements runtime.Typed.
 func (in *FileCleanupTransformation) DeepCopyTyped() runtime.Typed {
