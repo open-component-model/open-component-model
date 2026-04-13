@@ -26,46 +26,39 @@ func NewDefaultBuilder(
 	transformerScheme.MustRegisterScheme(helmv1alpha1.Scheme)
 
 	ociGet := &ocitransformer.GetComponentVersion{
-		Scheme:             transformerScheme,
-		RepoProvider:       repoProvider,
-		CredentialProvider: credentialProvider,
+		Scheme:       transformerScheme,
+		RepoProvider: repoProvider,
 	}
 	ociAdd := &ocitransformer.AddComponentVersion{
-		Scheme:             transformerScheme,
-		RepoProvider:       repoProvider,
-		CredentialProvider: credentialProvider,
+		Scheme:       transformerScheme,
+		RepoProvider: repoProvider,
 	}
 
 	// Resource transformers
 	ociGetResource := &ocitransformer.GetLocalResource{
-		Scheme:             transformerScheme,
-		RepoProvider:       repoProvider,
-		CredentialProvider: credentialProvider,
+		Scheme:       transformerScheme,
+		RepoProvider: repoProvider,
 	}
 	ociAddResource := &ocitransformer.AddLocalResource{
-		Scheme:             transformerScheme,
-		RepoProvider:       repoProvider,
-		CredentialProvider: credentialProvider,
+		Scheme:       transformerScheme,
+		RepoProvider: repoProvider,
 	}
 
 	// OCI Artifact transformers
 	ociGetOCIArtifact := &ocitransformer.GetOCIArtifact{
-		Scheme:             transformerScheme,
-		Repository:         resourceRepo,
-		CredentialProvider: credentialProvider,
+		Scheme:     transformerScheme,
+		Repository: resourceRepo,
 	}
 
 	ociAddOCIArtifact := &ocitransformer.AddOCIArtifact{
-		Scheme:             transformerScheme,
-		Repository:         resourceRepo,
-		CredentialProvider: credentialProvider,
+		Scheme:     transformerScheme,
+		Repository: resourceRepo,
 	}
 
 	// Helm transformers
 	getHelmChart := &helmtransformer.GetHelmChart{
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
-		CredentialProvider: credentialProvider,
 	}
 	convertHelmToOCI := &helmtransformer.ConvertHelmChartToOCI{
 		Scheme: transformerScheme,
@@ -78,6 +71,7 @@ func NewDefaultBuilder(
 	}
 
 	return builder.NewBuilder(transformerScheme).
+		WithCredentialProvider(credentialProvider).
 		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
 		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
 		WithTransformer(&ociv1alpha1.CTFGetComponentVersion{}, ociGet).
