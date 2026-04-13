@@ -131,7 +131,7 @@ head -n 1 /tmp/keys/public-key.pem
 ## Next Steps
 
 - [How-to: Sign Component Versions]({{< relref "sign-component-version.md" >}}) - Add signatures to your components
-- [Tutorial: Signing and Verification]({{< relref "signing-and-verification.md" >}}) - Learn how to sign and verify components in a complete tutorial
+- [Tutorial: Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}}) - Learn how to sign and verify components in a complete tutorial
 
 ## Related Documentation
 
