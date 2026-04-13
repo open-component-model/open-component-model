@@ -3,6 +3,7 @@ package applyset
 import (
 	"context"
 	"errors"
+	"fmt"
 	"regexp"
 	"testing"
 
@@ -17,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
 // testParent is a minimal implementation of the parent interface for testing.
@@ -1083,5 +1085,59 @@ func TestApply_ConflictDetection(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestApply_ConflictDetection_GetFailure verifies that a non-NotFound error
+// during the live-object GET (e.g. network failure, RBAC denial) is surfaced
+// as an item-level error instead of silently skipping the conflict check.
+func TestApply_ConflictDetection_GetFailure(t *testing.T) {
+	ctx := context.Background()
+	mapper := newTestRESTMapper()
+
+	parentGVK := schema.GroupVersionKind{
+		Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind",
+	}
+	parent := newTestParent(parentGVK)
+
+	getErr := fmt.Errorf("simulated API server error")
+
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				return getErr
+			},
+		}).
+		Build()
+
+	applier := New(Config{
+		Client:          fakeClient,
+		RESTMapper:      mapper,
+		Log:             logr.Discard(),
+		ParentNamespace: "default",
+	}, parent)
+
+	resources := []Resource{
+		{ID: "cm1", Object: newConfigMap("cm1", "default")},
+	}
+
+	result, _, err := applier.Apply(ctx, resources, ApplyMode{})
+	if err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+
+	if len(result.Applied) != 1 {
+		t.Fatalf("Apply() applied %d resources, want 1", len(result.Applied))
+	}
+
+	item := result.Applied[0]
+	if item.Error == nil {
+		t.Fatal("Apply() expected error from failed GET, got nil")
+	}
+	if !errors.Is(item.Error, getErr) {
+		t.Errorf("Apply() error = %v, want wrapped %v", item.Error, getErr)
 	}
 }
