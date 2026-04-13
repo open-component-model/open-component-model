@@ -349,9 +349,6 @@ func (a *ApplySet) applyResource(
 	}
 
 	// Check live cluster state for ApplySet membership conflict.
-	// Resources are freshly constructed from manifests and never carry the part-of
-	// label, so checking the in-memory object would be ineffective (see #2090).
-	// Instead, GET the live object and check its labels.
 	//
 	// NOTE: There is a small TOCTOU window between this GET and the subsequent SSA
 	// Apply - another controller could claim the resource in between. This is
