@@ -10,7 +10,7 @@ const (
 // Options holds configuration options for the wget resource repository.
 type Options struct {
 	Client          *http.Client
-	MaxDownloadSize int64
+	MaxDownloadSize *int64
 }
 
 // Option is a function that configures Options.
@@ -24,9 +24,10 @@ func WithHTTPClient(client *http.Client) Option {
 }
 
 // WithMaxDownloadSize sets the maximum number of bytes to read from a response body.
-// Defaults to DefaultMaxDownloadSize (100 MiB). Use 0 for unlimited (not recommended).
+// Defaults to DefaultMaxDownloadSize (100 MiB) when not set.
+// Pass 0 to allow unlimited download size (not recommended for untrusted sources).
 func WithMaxDownloadSize(size int64) Option {
 	return func(o *Options) {
-		o.MaxDownloadSize = size
+		o.MaxDownloadSize = &size
 	}
 }

@@ -39,8 +39,10 @@ func NewResourceRepository(opts ...Option) *ResourceRepository {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	maxSize := options.MaxDownloadSize
-	if maxSize == 0 {
+	var maxSize int64
+	if options.MaxDownloadSize != nil {
+		maxSize = *options.MaxDownloadSize
+	} else {
 		maxSize = DefaultMaxDownloadSize
 	}
 	return &ResourceRepository{
@@ -125,13 +127,21 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, fmt.Errorf("HTTP request to %s returned status %d", wget.URL, resp.StatusCode)
 	}
 
-	limitedReader := io.LimitReader(resp.Body, r.maxDownloadSize+1)
-	data, err := io.ReadAll(limitedReader)
-	if err != nil {
-		return nil, fmt.Errorf("error reading HTTP response body from %s: %w", wget.URL, err)
-	}
-	if int64(len(data)) > r.maxDownloadSize {
-		return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", wget.URL, r.maxDownloadSize)
+	var data []byte
+	if r.maxDownloadSize > 0 {
+		limitedReader := io.LimitReader(resp.Body, r.maxDownloadSize+1)
+		data, err = io.ReadAll(limitedReader)
+		if err != nil {
+			return nil, fmt.Errorf("error reading HTTP response body from %s: %w", wget.URL, err)
+		}
+		if int64(len(data)) > r.maxDownloadSize {
+			return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", wget.URL, r.maxDownloadSize)
+		}
+	} else {
+		data, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("error reading HTTP response body from %s: %w", wget.URL, err)
+		}
 	}
 
 	mediaType := wget.MediaType
@@ -183,6 +193,7 @@ func applyCredentials(req *http.Request, client **http.Client, credentials map[s
 		}
 
 		tlsCfg := &tls.Config{
+			MinVersion:   tls.VersionTLS12,
 			Certificates: []tls.Certificate{cert},
 		}
 
@@ -194,16 +205,21 @@ func applyCredentials(req *http.Request, client **http.Client, credentials map[s
 			tlsCfg.RootCAs = pool
 		}
 
-		// Clone the client and install an mTLS transport so the certificate is
-		// used for this single request only without mutating the shared client.
+		// Clone the client and install an mTLS transport, preserving the
+		// original transport's settings (proxy, timeouts, connection pooling).
 		existing := *client
+		var baseTransport *http.Transport
+		if t, ok := existing.Transport.(*http.Transport); ok && t != nil {
+			baseTransport = t.Clone()
+		} else {
+			baseTransport = &http.Transport{}
+		}
+		baseTransport.TLSClientConfig = tlsCfg
 		cloned := &http.Client{
 			Timeout:       existing.Timeout,
 			Jar:           existing.Jar,
 			CheckRedirect: existing.CheckRedirect,
-			Transport: &http.Transport{
-				TLSClientConfig: tlsCfg,
-			},
+			Transport:     baseTransport,
 		}
 		*client = cloned
 		return nil
