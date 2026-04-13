@@ -14,7 +14,7 @@ actions:
   - icon: "lock-plus"
     label: "Sign"
     description: "Add cryptographic signatures. End-to-end trust from source to deployment."
-    link: "signing-and-verification.md"
+    link: "docs/tutorials/signing/plain.md"
   - icon: "truck"
     label: "Transport"
     description: "Works across boundaries — public cloud, on-prem, air-gapped. Tamper-proof."
