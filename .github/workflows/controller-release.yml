@@ -126,7 +126,7 @@ jobs:
           path: ${{ runner.temp }}/assets
 
       - name: Create RC Release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: ${{ env.COMPONENT_NAME }} ${{ needs.prepare.outputs.new_version }}
           tag_name: ${{ needs.prepare.outputs.new_tag }}
