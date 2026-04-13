@@ -200,7 +200,7 @@ jobs:
           task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_REPOSITORY="${IMAGE_NAME}"
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         id: upload-artifacts
         with:
           if-no-files-found: error
@@ -211,7 +211,7 @@ jobs:
 
       # Upload chart artifact separately for easier access in PR conformance testing
       - name: Upload Chart Artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           if-no-files-found: error
           retention-days: 1
@@ -454,7 +454,7 @@ jobs:
           push-to-registry: true
 
       - name: Upload chart artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: controller-chart-${{ needs.build.outputs.version }}
           retention-days: 1
