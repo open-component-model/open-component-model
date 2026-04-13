@@ -99,10 +99,10 @@ func extractFromTar(tarBlob blob.ReadOnlyBlob) (chartBlob blob.ReadOnlyBlob, pro
 
 		// TODO(matthiasbruns): remove me when done
 		// fmt.Printf("Contents of %s:\n", hdr.Name)
-		//if _, err := io.Copy(os.Stdout, tr); err != nil {
+		// if _, err := io.Copy(os.Stdout, tr); err != nil {
 		//	log.Fatal(err)
-		//}
-		//fmt.Println()
+		// }
+		// fmt.Println()
 
 		switch {
 		case strings.HasSuffix(hdr.Name, TarGzSuffix):
