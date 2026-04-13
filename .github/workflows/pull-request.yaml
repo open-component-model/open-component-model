@@ -111,6 +111,7 @@ jobs:
               process.exit(1);
             }
   labeler:
+    needs: [conventional-commit-labeler]
     name: Label PR based on Config
     permissions:
       contents: read
