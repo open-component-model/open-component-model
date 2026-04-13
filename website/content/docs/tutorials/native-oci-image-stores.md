@@ -146,6 +146,7 @@ EOF
 ```
 
 Key points:
+
 - The `type: file/v1` input embeds the tar file by value as a local blob
 - The `mediaType: application/vnd.ocm.software.oci.layout.v1+tar` tells OCM this is an OCI image layout, not an opaque blob
 - During `ocm add cv`, OCM unpacks the layout and stores the contained manifest directly — the resulting local blob has the native OCI media type (e.g. `application/vnd.oci.image.manifest.v1+json`), not the tar media type
@@ -372,6 +373,7 @@ For local registries running without TLS, use the `http://` scheme prefix (e.g. 
 {{< /callout >}}
 
 With `--copy-resources`, OCM:
+
 1. Downloads the image from `ghcr.io/stefanprodan/podinfo:6.9.1`
 2. Stores it as a local blob in the target component version
 3. Maps it to a native OCI manifest in the component version's index
@@ -406,6 +408,7 @@ resources:
 ```
 
 Key observations:
+
 - `access.type` changed from `ociArtifact` to `localBlob/v1` — the image is now embedded
 - `localReference` contains the digest of the stored image
 - `mediaType` is `application/vnd.oci.image.index.v1+json` (or `application/vnd.oci.image.manifest.v1+json` for single-platform images)
@@ -475,6 +478,7 @@ flowchart TB
 ```
 
 This means:
+
 - **Non-OCI blobs** (plain files, config data) are stored as layers in the descriptor manifest, accessed only through OCM tooling
 - **Native OCI artifacts** (images, Helm charts) are stored as separate manifests in the index, accessible both through OCM and directly through any OCI client
 
@@ -485,12 +489,15 @@ The media type (`application/vnd.ocm.software.oci.layout.v1+tar`) tells OCM that
 {{< /details >}}
 
 {{< details "What is the difference between localReference and globalAccess?" >}}
+
 - **`localReference`** is the digest used internally by OCM to locate the blob within the component version's storage. It works with any OCM repository implementation (CTF archives, OCI registries).
 - **`globalAccess`** is an external access specification that provides a location-independent way to access the artifact. In OCI registries, this is typically an `OCIImage/v1` reference with a full image reference including the digest. It allows non-OCM tools to access the artifact directly.
+
 {{< /details >}}
 
 {{< details "Can I use `--upload-as` to control how artifacts are stored?" >}}
 Yes. The `ocm transfer cv` command supports `--upload-as` with two values:
+
 - `--upload-as localBlob` — stores OCI artifacts as local blobs within the component version (default behavior with `--copy-resources`)
 - `--upload-as ociArtifact` — uploads OCI artifacts as standalone OCI artifacts in the target registry, separate from the component version
 
