@@ -9,6 +9,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph"
 	"ocm.software/open-component-model/bindings/go/transform/graph/internal/testutils"
@@ -18,8 +19,44 @@ import (
 
 type mockFailingTransformer struct{}
 
-func (m *mockFailingTransformer) Transform(_ context.Context, _ runtime.Typed) (runtime.Typed, error) {
+func (m *mockFailingTransformer) GetCredentialConsumerIdentities(_ context.Context, _ runtime.Typed) (map[string]runtime.Identity, error) {
+	return nil, nil
+}
+
+func (m *mockFailingTransformer) Transform(_ context.Context, _ runtime.Typed, _ map[string]map[string]string) (runtime.Typed, error) {
 	return nil, fmt.Errorf("transformer failed")
+}
+
+type mockCredentialTransformer struct {
+	scheme     *runtime.Scheme
+	identities map[string]runtime.Identity
+	gotCreds   map[string]map[string]string
+}
+
+func (m *mockCredentialTransformer) GetCredentialConsumerIdentities(_ context.Context, _ runtime.Typed) (map[string]runtime.Identity, error) {
+	return m.identities, nil
+}
+
+func (m *mockCredentialTransformer) Transform(ctx context.Context, step runtime.Typed, creds map[string]map[string]string) (runtime.Typed, error) {
+	m.gotCreds = creds
+	mock := &testutils.MockGetObject{Scheme: m.scheme}
+	return mock.Transform(ctx, step, creds)
+}
+
+type mockCredentialResolver struct {
+	creds map[string]map[string]string
+	err   error
+}
+
+func (m *mockCredentialResolver) Resolve(_ context.Context, identity runtime.Identity) (map[string]string, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	key := identity[runtime.IdentityAttributeType]
+	if c, ok := m.creds[key]; ok {
+		return c, nil
+	}
+	return nil, credentials.ErrNotFound
 }
 
 func newTestRuntime(t *testing.T, transformer Transformer, events chan ProgressEvent) *Runtime {
@@ -93,5 +130,132 @@ func TestProcessValueEvents(t *testing.T) {
 
 		require.Nil(t, rt.Events, "Events channel should be nil")
 		require.NoError(t, rt.ProcessValue(t.Context(), transformation), "ProcessValue should succeed without events")
+	})
+}
+
+func TestProcessTransformationCredentialResolution(t *testing.T) {
+	scheme := runtime.NewScheme()
+	scheme.MustRegisterScheme(testutils.Scheme)
+	transformation := newTestTransformation(t)
+
+	t.Run("single identity resolved and passed to Transform", func(t *testing.T) {
+		identity := runtime.Identity{runtime.IdentityAttributeType: "test-repo"}
+		mock := &mockCredentialTransformer{
+			scheme:     scheme,
+			identities: map[string]runtime.Identity{"repository": identity},
+		}
+		resolver := &mockCredentialResolver{
+			creds: map[string]map[string]string{
+				"test-repo": {"username": "user", "password": "pass"},
+			},
+		}
+		rt := &Runtime{
+			EvaluatedExpressionCache: map[string]any{},
+			EvaluatedTransformations: map[string]any{},
+			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			CredentialProvider:       resolver,
+		}
+		require.NoError(t, rt.ProcessValue(t.Context(), transformation))
+		require.Equal(t, map[string]map[string]string{
+			"repository": {"username": "user", "password": "pass"},
+		}, mock.gotCreds)
+	})
+
+	t.Run("multiple identities resolved", func(t *testing.T) {
+		mock := &mockCredentialTransformer{
+			scheme: scheme,
+			identities: map[string]runtime.Identity{
+				"source": {runtime.IdentityAttributeType: "src"},
+				"target": {runtime.IdentityAttributeType: "tgt"},
+			},
+		}
+		resolver := &mockCredentialResolver{
+			creds: map[string]map[string]string{
+				"src": {"username": "src-user"},
+				"tgt": {"username": "tgt-user"},
+			},
+		}
+		rt := &Runtime{
+			EvaluatedExpressionCache: map[string]any{},
+			EvaluatedTransformations: map[string]any{},
+			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			CredentialProvider:       resolver,
+		}
+		require.NoError(t, rt.ProcessValue(t.Context(), transformation))
+		require.Equal(t, map[string]map[string]string{
+			"source": {"username": "src-user"},
+			"target": {"username": "tgt-user"},
+		}, mock.gotCreds)
+	})
+
+	t.Run("nil identities passes nil credentials", func(t *testing.T) {
+		mock := &mockCredentialTransformer{
+			scheme:     scheme,
+			identities: nil,
+		}
+		rt := &Runtime{
+			EvaluatedExpressionCache: map[string]any{},
+			EvaluatedTransformations: map[string]any{},
+			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			CredentialProvider:       &mockCredentialResolver{},
+		}
+		require.NoError(t, rt.ProcessValue(t.Context(), transformation))
+		require.Nil(t, mock.gotCreds)
+	})
+
+	t.Run("nil credential provider passes nil credentials", func(t *testing.T) {
+		identity := runtime.Identity{runtime.IdentityAttributeType: "test-repo"}
+		mock := &mockCredentialTransformer{
+			scheme:     scheme,
+			identities: map[string]runtime.Identity{"repository": identity},
+		}
+		rt := &Runtime{
+			EvaluatedExpressionCache: map[string]any{},
+			EvaluatedTransformations: map[string]any{},
+			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			CredentialProvider:       nil,
+		}
+		require.NoError(t, rt.ProcessValue(t.Context(), transformation))
+		require.Nil(t, mock.gotCreds)
+	})
+
+	t.Run("ErrNotFound swallowed with nil entry", func(t *testing.T) {
+		identity := runtime.Identity{runtime.IdentityAttributeType: "missing"}
+		mock := &mockCredentialTransformer{
+			scheme:     scheme,
+			identities: map[string]runtime.Identity{"repository": identity},
+		}
+		resolver := &mockCredentialResolver{
+			creds: map[string]map[string]string{},
+		}
+		rt := &Runtime{
+			EvaluatedExpressionCache: map[string]any{},
+			EvaluatedTransformations: map[string]any{},
+			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			CredentialProvider:       resolver,
+		}
+		require.NoError(t, rt.ProcessValue(t.Context(), transformation))
+		require.NotNil(t, mock.gotCreds)
+		require.Nil(t, mock.gotCreds["repository"])
+	})
+
+	t.Run("other resolve error fails transformation", func(t *testing.T) {
+		identity := runtime.Identity{runtime.IdentityAttributeType: "test-repo"}
+		mock := &mockCredentialTransformer{
+			scheme:     scheme,
+			identities: map[string]runtime.Identity{"repository": identity},
+		}
+		resolver := &mockCredentialResolver{
+			err: fmt.Errorf("connection refused: %w", credentials.ErrUnknown),
+		}
+		rt := &Runtime{
+			EvaluatedExpressionCache: map[string]any{},
+			EvaluatedTransformations: map[string]any{},
+			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			CredentialProvider:       resolver,
+		}
+		err := rt.ProcessValue(t.Context(), transformation)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to resolve credentials")
 	})
 }
