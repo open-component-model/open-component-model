@@ -2,9 +2,9 @@
 
 * **Status**: proposed
 * **Deciders**: OCM Technical Steering Committee
-* **Date**: 2025.02.06
+* **Date**: 2026.03.12
 
-**Technical Story**: [ocm-project#823](https://github.com/open-component-model/ocm-project/issues/823) — Implement ownership annotations to OCI image resources (asset-to-owner scenario). Parent epic: [ocm-project#457](https://github.com/open-component-model/ocm-project/issues/457).
+**Technical Story**: Given an OCI artifact stored in a registry, there is no standardized way to trace it back to the OCM component version that owns it. This ADR evaluates approaches to attach ownership metadata (component name, version, artifact identity) to OCI resources to make this possible.
 
 ---
 
@@ -24,16 +24,14 @@ This is the **"asset-to-owner" problem**: given an OCI artifact, find the compon
 ## Decision Drivers
 
 * Security and compliance tools need to trace artifacts back to their component versions
-* The OCM spec already defines the annotation keys — we should follow it
+* The [OCM OCI spec (section 6.3)](https://github.com/open-component-model/ocm-spec/blob/e9273b126045b96e11cc9caf056363728c76bec8/doc/04-extensions/03-storage-backends/oci.md#63-asset-annotations) already defines the annotation keys — we should follow it
 * Annotations must not break digest verification or signatures
-* Ownership metadata must survive air-gapped transfers without external infrastructure
+* Ownership metadata must survive air-gapped transfers
 * The solution must work with both the current manifest-based format and the index-based format from [ADR 0012](./0012_oci_format_compatibility.md)
 
 ---
 
 ## Considered Options
-
-**Problem**: Given an OCI artifact in a registry, how does a consumer find the component version that owns it? Without a standardized tracing method, security teams, auditors, and platform operators must manually cross-reference images to component versions using external databases or OCM-specific tooling.
 
 Two approaches are considered for how ownership metadata is stored and discovered:
 
@@ -45,6 +43,7 @@ Per the [OCM OCI spec section 6.3](https://github.com/open-component-model/ocm-s
 | --- | --- | --- |
 | `software.ocm.component.name` | Component name | Plain string |
 | `software.ocm.component.version` | Component version | Plain string |
+| `software.ocm.artifact` | Artifact identity and kind from the CD | JSON (SHOULD be [JCS-canonicalized](https://www.rfc-editor.org/rfc/rfc8785)), e.g. `{"identity":{"name":"my-resource"},"kind":"resource"}` |
 | `software.ocm.base.digest` | Digest of the manifest before annotations were injected | `<algorithm>:<hex>` (e.g. `sha256:abc123...`) |
 
 #### Direct Lookup from a Resource Image
@@ -116,17 +115,17 @@ Adding annotations changes the manifest bytes and produces a new digest. The CD 
 
 #### Implementation Details
 
-The change is to write `software.ocm.component.name`, `software.ocm.component.version` and `software.ocm.base.digest`on the **resource's own manifest/index** (per the spec).
+The change would write `software.ocm.component.name`, `software.ocm.component.version`, `software.ocm.artifact`, and `software.ocm.base.digest` on the **resource's own manifest/index** (per the spec).
 
 ##### Injection Point
 
-Annotations should only be injected when a resource is stored **by value** (e.g. `copyPolicy: byValue` in the constructor, or local file input). Resources stored by reference must not be modified.
+Annotations would only be injected when a resource is stored **by value** (e.g. `copyPolicy: byValue` in the constructor, or local file input). Resources stored by reference would not be modified.
 
-The changes go through the OCI binding library (`bindings/go/oci`):
+The changes would go through the OCI binding library (`bindings/go/oci`):
 
-1. [`repository.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/repository.go) `uploadAndUpdateLocalArtifact` — populate `ManifestAnnotations` in `pack.Options` with `software.ocm.component.name` and `software.ocm.component.version` (the `component` and `version` parameters are already available).
-2. [`pack.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/internal/pack/pack.go) `ResourceLocalBlobOCILayout` — already forwards `opts.ManifestAnnotations` to `CopyOCILayoutWithIndex`; no changes needed.
-3. [`blob_io.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/tar/blob_io.go) `proxyOCIStoreWithTopLevelDescriptor` — already handles annotation injection when `ManifestAnnotations` is non-empty: captures the pre-annotation digest, unmarshals the top-level manifest/index, merges the annotations, adds `software.ocm.base.digest`, re-marshals, and recomputes the descriptor. No changes needed.
+1. [`repository.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/repository.go) `uploadAndUpdateLocalArtifact` — populate `ManifestAnnotations` in `pack.Options` with `software.ocm.component.name`, `software.ocm.component.version`, and `software.ocm.artifact` (the `component` and `version` parameters are already available).
+2. [`pack.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/internal/pack/pack.go) `ResourceLocalBlobOCILayout` — forward `opts.ManifestAnnotations` to `CopyOCILayoutWithIndex`.
+3. [`blob_io.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/tar/blob_io.go) `proxyOCIStoreWithTopLevelDescriptor` — capture the pre-annotation digest, unmarshal the top-level manifest/index, merge the annotations, add `software.ocm.base.digest`, re-marshal, and recompute the descriptor.
 
 ##### Signature Compatibility
 
@@ -150,7 +149,7 @@ OCI Distribution Spec v1.1 introduced the [Referrers API](https://github.com/ope
 2. **Push an ownership referrer** — a minimal OCI manifest is pushed with:
    - `subject`: a descriptor pointing to the resource's original manifest (digest, mediaType, size).
    - `artifactType`: a dedicated media type, e.g. `application/vnd.ocm.ownership.v1+json`.
-   - `annotations`: the ownership metadata (`software.ocm.component.name`, `software.ocm.component.version`).
+   - `annotations`: the ownership metadata (`software.ocm.component.name`, `software.ocm.component.version`, `software.ocm.artifact`).
 
 ```json
 {
@@ -170,7 +169,8 @@ OCI Distribution Spec v1.1 introduced the [Referrers API](https://github.com/ope
   },
   "annotations": {
     "software.ocm.component.name": "github.com/acme/myapp",
-    "software.ocm.component.version": "1.2.3"
+    "software.ocm.component.version": "1.2.3",
+    "software.ocm.artifact": "{\"identity\":{\"name\":\"my-image\"},\"kind\":\"resource\"}"
   }
 }
 ```
@@ -196,7 +196,8 @@ Attach ownership annotations as a referrer to an existing resource image:
 oras attach ghcr.io/piotrjanik/open-component-model/hello-ocm@sha256:e22e4bb2a42521598d0cddaaca53f5a4354e9d4ebb3a55d604591e3cf30e7836 \
   --artifact-type "application/vnd.ocm.ownership.v1+json" \
   --annotation "software.ocm.component.name=acme.org/hello-ocm" \
-  --annotation "software.ocm.component.version=1.0.0"
+  --annotation "software.ocm.component.version=1.0.0" \
+  --annotation 'software.ocm.artifact={"identity":{"name":"hello-ocm"},"kind":"resource"}'
 ```
 
 Discover ownership metadata starting from the original resource manifest:
@@ -220,7 +221,8 @@ Output:
       "size": 789,
       "annotations": {
         "software.ocm.component.name": "acme.org/hello-ocm",
-        "software.ocm.component.version": "1.0.0"
+        "software.ocm.component.version": "1.0.0",
+        "software.ocm.artifact": "{\"identity\":{\"name\":\"hello-ocm\"},\"kind\":\"resource\"}"
       },
       "artifactType": "application/vnd.ocm.ownership.v1+json"
     }
@@ -254,7 +256,8 @@ The annotations in the referrer list directly reveal the owning component versio
   },
   "annotations": {
     "software.ocm.component.name": "acme.org/hello-ocm",
-    "software.ocm.component.version": "1.0.0"
+    "software.ocm.component.version": "1.0.0",
+    "software.ocm.artifact": "{\"identity\":{\"name\":\"hello-ocm\"},\"kind\":\"resource\"}"
   }
 }
 ```
@@ -306,7 +309,7 @@ After a resource is uploaded to the registry, push a second OCI manifest (the ow
    - `ArtifactType`: `application/vnd.ocm.ownership.v1+json`
    - `Config`: `ocispec.DescriptorEmptyJSON` (standard empty `{}`)
    - `Layers`: single `ocispec.DescriptorEmptyJSON` entry (required by the [OCI artifact guidance](https://github.com/opencontainers/image-spec/blob/v1.1.0/manifest.md#guidelines-for-artifact-usage))
-   - `Annotations`: `software.ocm.component.name` and `software.ocm.component.version`
+   - `Annotations`: `software.ocm.component.name`, `software.ocm.component.version`, and `software.ocm.artifact`
 4. **Push via ORAS** — marshal the manifest to JSON, compute the descriptor (`digest.FromBytes`), then call `store.Push(ctx, manifestDesc, bytes.NewReader(manifestJSON))`. The `store` is a `content.Storage` (ORAS interface) — the same store used for the resource itself. When pushing to a remote registry, ORAS automatically handles:
    - **Referrers API (v1.1)**: the registry detects the `subject` field and indexes the referrer. The response includes the `OCI-Subject` header confirming support.
    - **Tag fallback (v1.0)**: ORAS automatically falls back to the [referrers tag schema](https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#unavailable-referrers-api) for registries that don't support the Referrers API.
@@ -355,7 +358,7 @@ Given a resource image digest, query the registry's Referrers API filtered by ar
 GET /v2/<name>/referrers/<digest>?artifactType=application/vnd.ocm.ownership.v1+json
 ```
 
-The response is an OCI Index whose `manifests` array contains descriptors for each matching referrer. The ownership annotations (`software.ocm.component.name`, `software.ocm.component.version`) are inlined in each descriptor's `annotations` field — no need to fetch the referrer manifest separately.
+The response is an OCI Index whose `manifests` array contains descriptors for each matching referrer. The ownership annotations (`software.ocm.component.name`, `software.ocm.component.version`, `software.ocm.artifact`) are inlined in each descriptor's `annotations` field — no need to fetch the referrer manifest separately.
 
 With standard tooling:
 
@@ -365,7 +368,8 @@ oras discover <registry>/<repo>@<digest> \
   --format json | jq '.referrers[0].annotations'
 # {
 #   "software.ocm.component.name": "github.com/acme/myapp",
-#   "software.ocm.component.version": "1.2.3"
+#   "software.ocm.component.version": "1.2.3",
+#   "software.ocm.artifact": "{\"identity\":{\"name\":\"my-image\"},\"kind\":\"resource\"}"
 # }
 ```
 
@@ -454,7 +458,7 @@ Ownership annotations are a new feature. New features are developed in the new O
 
 ### Steps
 
-1. **Implement referrer creation** — after a resource is uploaded to the registry, push an ownership referrer artifact (`application/vnd.ocm.ownership.v1+json`) with `subject` pointing to the resource's original manifest. The referrer carries `software.ocm.component.name` and `software.ocm.component.version` in its annotations. ORAS handles Referrers API vs tag fallback automatically.
+1. **Implement referrer creation** — after a resource is uploaded to the registry, push an ownership referrer artifact (`application/vnd.ocm.ownership.v1+json`) with `subject` pointing to the resource's original manifest. The referrer carries `software.ocm.component.name`, `software.ocm.component.version`, and `software.ocm.artifact` in its annotations. ORAS handles Referrers API vs tag fallback automatically.
 
 2. **Implement referrer transfer** — ensure `ocm transfer` copies ownership referrers alongside resources. Either re-create referrers on upload (simplest) or discover and copy them from the source registry.
 
