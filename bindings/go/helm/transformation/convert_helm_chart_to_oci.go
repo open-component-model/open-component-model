@@ -25,7 +25,11 @@ type ConvertHelmChartToOCI struct {
 	Scheme *runtime.Scheme
 }
 
-func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+func (t *ConvertHelmChartToOCI) GetCredentialConsumerIdentities(_ context.Context, _ runtime.Typed) (map[string]runtime.Identity, error) {
+	return nil, nil
+}
+
+func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Typed, _ map[string]map[string]string) (runtime.Typed, error) {
 	var transformation v1alpha1.ConvertHelmToOCI
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to convert helm transformation: %w", err)

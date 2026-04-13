@@ -2,7 +2,6 @@ package transformation
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -11,7 +10,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/credentials"
+	ocmcreds "ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access"
@@ -29,10 +28,33 @@ type GetHelmChart struct {
 	Scheme *runtime.Scheme
 	// ResourceRepository is used to download helm chart resources and resolve credential consumer identities.
 	ResourceRepository repository.ResourceRepository
-	CredentialProvider credentials.Resolver
 }
 
-func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+func (t *GetHelmChart) GetCredentialConsumerIdentities(ctx context.Context, step runtime.Typed) (map[string]runtime.Identity, error) {
+	var transformation v1alpha1.GetHelmChart
+	if err := t.Scheme.Convert(step, &transformation); err != nil {
+		return nil, fmt.Errorf("failed converting generic transformation to get helm transformation: %w", err)
+	}
+	if transformation.Spec == nil || transformation.Spec.Resource == nil {
+		return nil, nil
+	}
+
+	if t.ResourceRepository == nil {
+		return nil, nil
+	}
+
+	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
+	identity, err := t.ResourceRepository.GetResourceCredentialConsumerIdentity(ctx, targetResource)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting resource consumer identity for credential resolution: %w", err)
+	}
+	if identity == nil {
+		return nil, nil
+	}
+	return map[string]runtime.Identity{ocmcreds.CredentialKeyResource: identity}, nil
+}
+
+func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error) {
 	var transformation v1alpha1.GetHelmChart
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to get helm transformation: %w", err)
@@ -53,9 +75,9 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
 
-	creds, err := t.resolveCredentials(ctx, targetResource)
-	if err != nil {
-		return nil, err
+	var creds map[string]string
+	if credentials != nil {
+		creds = credentials[ocmcreds.CredentialKeyResource]
 	}
 
 	slog.InfoContext(ctx, "Getting helm chart", "resource", transformation.Spec.Resource)
@@ -109,27 +131,6 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	transformation.Output.Resource = v2Resource
 
 	return &transformation, nil
-}
-
-// resolveCredentials returns credentials for downloading targetResource, or nil if
-// no credential provider is configured or the resource has no consumer identity.
-// An ErrNotFound from the resolver is treated as "no credentials" rather than an error.
-func (t *GetHelmChart) resolveCredentials(ctx context.Context, targetResource *descriptor.Resource) (map[string]string, error) {
-	if t.CredentialProvider == nil {
-		return nil, nil
-	}
-	consumerId, err := t.ResourceRepository.GetResourceCredentialConsumerIdentity(ctx, targetResource)
-	if err != nil {
-		return nil, fmt.Errorf("failed getting resource consumer identity for credential resolution: %w", err)
-	}
-	if consumerId == nil {
-		return nil, nil
-	}
-	creds, err := t.CredentialProvider.Resolve(ctx, consumerId)
-	if err != nil && !errors.Is(err, credentials.ErrNotFound) {
-		return nil, fmt.Errorf("failed resolving credentials: %w", err)
-	}
-	return creds, nil
 }
 
 // writeChartAndProvFiles buffers the chart archive and, if present, the provenance file
