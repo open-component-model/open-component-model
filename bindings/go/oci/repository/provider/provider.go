@@ -139,6 +139,9 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		if err != nil {
 			return nil, err
 		}
+		if opt := globalAccessPolicyFromOCI(obj.GlobalAccessPolicy); opt != nil {
+			opts = append(opts, opt)
+		}
 		return ocirepository.NewFromOCIRepoV1(ctx, obj, &auth.Client{
 			Client:     b.httpClient,
 			Cache:      auth.NewCache(),
@@ -161,7 +164,11 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve store from cache: %w", err)
 		}
-		repo, err := oci.NewRepository(append(opts, ocictf.WithCTF(store))...)
+		ctfOpts := append(opts, ocictf.WithCTF(store))
+		if opt := globalAccessPolicyFromCTF(obj.GlobalAccessPolicy); opt != nil {
+			ctfOpts = append(ctfOpts, opt)
+		}
+		repo, err := oci.NewRepository(ctfOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create ctf repo from spec: %w", err)
 		}
@@ -184,4 +191,26 @@ func getConvertedTypedSpec(scheme *runtime.Scheme, repositorySpecification runti
 		return nil, err
 	}
 	return obj, nil
+}
+
+// globalAccessPolicyFromOCI converts an OCI repository spec's GlobalAccessPolicy
+// to an oci.RepositoryOption. Returns nil if the policy is the default.
+func globalAccessPolicyFromOCI(policy ocirepospecv1.GlobalAccessPolicy) oci.RepositoryOption {
+	switch policy {
+	case ocirepospecv1.GlobalAccessPolicyAlways:
+		return oci.WithGlobalAccessPolicy(oci.GlobalAccessPolicyAlways)
+	default:
+		return nil
+	}
+}
+
+// globalAccessPolicyFromCTF converts a CTF repository spec's GlobalAccessPolicy
+// to an oci.RepositoryOption. Returns nil if the policy is the default.
+func globalAccessPolicyFromCTF(policy ctfrepospecv1.GlobalAccessPolicy) oci.RepositoryOption {
+	switch policy {
+	case ctfrepospecv1.GlobalAccessPolicyAlways:
+		return oci.WithGlobalAccessPolicy(oci.GlobalAccessPolicyAlways)
+	default:
+		return nil
+	}
 }

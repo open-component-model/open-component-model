@@ -57,8 +57,27 @@ type Repository struct {
 	//     BaseUrl="ghcr.io/open-component-model/ocm" + SubPath=""
 	//     → Auto-extracts to: BaseUrl="ghcr.io", SubPath="open-component-model/ocm"
 	SubPath string `json:"subPath,omitempty"`
+	// GlobalAccessPolicy controls whether global access references are added to local blobs
+	// when adding local resources or sources. By default, global access is only added when the
+	// storage backend is a globally reachable store (e.g. a remote OCI registry).
+	// Valid values are "default" and "always".
+	// If not set, the default policy is used.
+	GlobalAccessPolicy GlobalAccessPolicy `json:"globalAccessPolicy,omitempty"`
 }
 
 func (spec *Repository) String() string {
 	return spec.BaseUrl
 }
+
+// GlobalAccessPolicy defines how global access references are handled when adding local blobs.
+type GlobalAccessPolicy string
+
+const (
+	// GlobalAccessPolicyDefault only adds global access when the storage backend is a globally
+	// reachable store (e.g. a remote OCI registry). This is the default policy.
+	GlobalAccessPolicyDefault GlobalAccessPolicy = ""
+	// GlobalAccessPolicyAlways enforces global access on all local blobs, regardless of whether the
+	// storage backend is globally reachable. This can result in invalid global access references
+	// if the storage is not globally accessible (e.g. a CTF).
+	GlobalAccessPolicyAlways GlobalAccessPolicy = "always"
+)
