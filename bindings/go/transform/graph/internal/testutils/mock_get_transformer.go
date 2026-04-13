@@ -3,6 +3,7 @@ package testutils
 import (
 	"context"
 	"fmt"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
