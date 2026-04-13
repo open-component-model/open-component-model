@@ -87,6 +87,13 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, fmt.Errorf("unsupported url scheme %q: only http and https are allowed", parsedURL.Scheme)
 	}
 
+	// safeURL strips userinfo and query params so presigned URLs and credentials
+	// are never leaked into error messages or logs.
+	safeURL := *parsedURL
+	safeURL.User = nil
+	safeURL.RawQuery = ""
+	safeURL.Fragment = ""
+
 	method := http.MethodGet
 	if wget.Verb != "" {
 		method = wget.Verb
@@ -119,12 +126,12 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("error performing HTTP request to %s: %w", wget.URL, err)
+		return nil, fmt.Errorf("error performing HTTP request to %s: %w", safeURL.String(), err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP request to %s returned status %d", wget.URL, resp.StatusCode)
+		return nil, fmt.Errorf("HTTP request to %s returned status %d", safeURL.String(), resp.StatusCode)
 	}
 
 	var data []byte
@@ -132,15 +139,15 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		limitedReader := io.LimitReader(resp.Body, r.maxDownloadSize+1)
 		data, err = io.ReadAll(limitedReader)
 		if err != nil {
-			return nil, fmt.Errorf("error reading HTTP response body from %s: %w", wget.URL, err)
+			return nil, fmt.Errorf("error reading HTTP response body from %s: %w", safeURL.String(), err)
 		}
 		if int64(len(data)) > r.maxDownloadSize {
-			return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", wget.URL, r.maxDownloadSize)
+			return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL.String(), r.maxDownloadSize)
 		}
 	} else {
 		data, err = io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, fmt.Errorf("error reading HTTP response body from %s: %w", wget.URL, err)
+			return nil, fmt.Errorf("error reading HTTP response body from %s: %w", safeURL.String(), err)
 		}
 	}
 
