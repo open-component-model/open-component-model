@@ -352,6 +352,13 @@ func (a *ApplySet) applyResource(
 	// Resources are freshly constructed from manifests and never carry the part-of
 	// label, so checking the in-memory object would be ineffective (see #2090).
 	// Instead, GET the live object and check its labels.
+	//
+	// NOTE: There is a small TOCTOU window between this GET and the subsequent SSA
+	// Apply - another controller could claim the resource in between. This is
+	// acceptable because the reconciliation loop will detect the conflict on the
+	// next pass. The check targets the steady-state scenario where two Deployers
+	// are permanently configured to manage the same resource, not brief races
+	// during rollouts.
 	liveObj := &unstructured.Unstructured{}
 	liveObj.SetGroupVersionKind(r.Object.GroupVersionKind())
 	err := a.client.Get(ctx, client.ObjectKey{Name: r.Object.GetName(), Namespace: lookupNamespace}, liveObj)
@@ -363,7 +370,7 @@ func (a *ApplySet) applyResource(
 		}
 		// NotFound: object is new, no conflict possible.
 	} else {
-		// Object exists on cluster — check its part-of label for ownership conflict.
+		// Object exists on cluster - check its part-of label for ownership conflict.
 		liveLabels := liveObj.GetLabels()
 		if existingID, exists := liveLabels[ApplysetPartOfLabel]; exists && existingID != a.applySetID {
 			item.Error = &ApplySetConflictError{
