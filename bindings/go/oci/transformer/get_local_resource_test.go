@@ -145,7 +145,7 @@ func TestGetLocalResource_Transform_OCI(t *testing.T) {
 	}
 
 	// Execute transformation
-	result, err := transformer.Transform(ctx, spec)
+	result, err := transformer.Transform(ctx, spec, nil)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -239,7 +239,7 @@ func TestGetLocalResource_Transform_CTF(t *testing.T) {
 	}
 
 	// Execute transformation
-	result, err := transformer.Transform(ctx, spec)
+	result, err := transformer.Transform(ctx, spec, nil)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -327,7 +327,7 @@ func TestGetLocalResource_Transform_ValidationErrors(t *testing.T) {
 				Spec: tt.spec,
 			}
 
-			result, err := transformer.Transform(ctx, spec)
+			result, err := transformer.Transform(ctx, spec, nil)
 			assert.Error(t, err)
 			assert.Nil(t, result)
 			assert.Contains(t, err.Error(), tt.expectedErr)

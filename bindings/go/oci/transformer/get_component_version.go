@@ -40,7 +40,7 @@ func (t *GetComponentVersion) GetCredentialConsumerIdentities(ctx context.Contex
 	if identity == nil {
 		return nil, nil
 	}
-	return map[string]runtime.Identity{"repository": identity}, nil
+	return map[string]runtime.Identity{CredentialSlotRepository: identity}, nil
 }
 
 func (t *GetComponentVersion) Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error) {
@@ -66,7 +66,7 @@ func (t *GetComponentVersion) Transform(ctx context.Context, step runtime.Typed,
 
 	var creds map[string]string
 	if credentials != nil {
-		creds = credentials["repository"]
+		creds = credentials[CredentialSlotRepository]
 	}
 
 	repo, err := t.RepoProvider.GetComponentVersionRepository(ctx, repoSpec, creds)

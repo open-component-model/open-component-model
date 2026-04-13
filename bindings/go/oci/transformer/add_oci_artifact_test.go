@@ -89,9 +89,8 @@ func TestAddOCIArtifact_Transform(t *testing.T) {
 	combinedScheme.MustRegisterWithAlias(&v1alpha1.AddOCIArtifact{}, runtime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.Version))
 
 	transformer := &AddOCIArtifact{
-		Scheme:             combinedScheme,
-		Repository:         mockRepo,
-		CredentialProvider: mockCreds,
+		Scheme:     combinedScheme,
+		Repository: mockRepo,
 	}
 
 	// Create transformation spec
@@ -119,8 +118,20 @@ func TestAddOCIArtifact_Transform(t *testing.T) {
 		},
 	}
 
+	// Resolve credentials via GetCredentialConsumerIdentities (as the runtime would)
+	identities, err := transformer.GetCredentialConsumerIdentities(ctx, spec)
+	require.NoError(t, err)
+	require.NotNil(t, identities)
+
+	resolvedCreds := make(map[string]map[string]string, len(identities))
+	for name, id := range identities {
+		cred, err := mockCreds.Resolve(ctx, id)
+		require.NoError(t, err)
+		resolvedCreds[name] = cred
+	}
+
 	// Execute transformation
-	result, err := transformer.Transform(ctx, spec)
+	result, err := transformer.Transform(ctx, spec, resolvedCreds)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -206,7 +217,7 @@ func TestAddOCIArtifact_ValidationErrors(t *testing.T) {
 				Spec: tt.spec,
 			}
 
-			result, err := transformer.Transform(ctx, spec)
+			result, err := transformer.Transform(ctx, spec, nil)
 			assert.Error(t, err)
 			assert.Nil(t, result)
 			assert.Contains(t, err.Error(), tt.expectedErr)

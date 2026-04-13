@@ -17,6 +17,18 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
+type mockFailingIdentityTransformer struct {
+	err error
+}
+
+func (m *mockFailingIdentityTransformer) GetCredentialConsumerIdentities(_ context.Context, _ runtime.Typed) (map[string]runtime.Identity, error) {
+	return nil, m.err
+}
+
+func (m *mockFailingIdentityTransformer) Transform(_ context.Context, _ runtime.Typed, _ map[string]map[string]string) (runtime.Typed, error) {
+	return nil, fmt.Errorf("should not be called")
+}
+
 type mockFailingTransformer struct{}
 
 func (m *mockFailingTransformer) GetCredentialConsumerIdentities(_ context.Context, _ runtime.Typed) (map[string]runtime.Identity, error) {
@@ -257,5 +269,20 @@ func TestProcessTransformationCredentialResolution(t *testing.T) {
 		err := rt.ProcessValue(t.Context(), transformation)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "failed to resolve credentials")
+	})
+
+	t.Run("GetCredentialConsumerIdentities error fails transformation", func(t *testing.T) {
+		mock := &mockFailingIdentityTransformer{
+			err: fmt.Errorf("identity lookup failed"),
+		}
+		rt := &Runtime{
+			EvaluatedExpressionCache: map[string]any{},
+			EvaluatedTransformations: map[string]any{},
+			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			CredentialProvider:       &mockCredentialResolver{},
+		}
+		err := rt.ProcessValue(t.Context(), transformation)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to get credential consumer identities")
 	})
 }

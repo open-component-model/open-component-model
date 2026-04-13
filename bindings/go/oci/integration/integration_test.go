@@ -1076,9 +1076,8 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 	combinedScheme.MustRegisterWithAlias(&v1alpha1.GetOCIArtifact{}, v1alpha1.GetOCIArtifactV1alpha1)
 
 	transform := transformer.GetOCIArtifact{
-		Scheme:             combinedScheme,
-		Repository:         repo,
-		CredentialProvider: credsResolver,
+		Scheme:     combinedScheme,
+		Repository: repo,
 	}
 
 	v2Resource, err := descriptor.ConvertToV2Resource(ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()), newRes)
@@ -1092,8 +1091,22 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 		},
 	}
 
+	// Resolve credentials as the runtime would
+	identities, err := transform.GetCredentialConsumerIdentities(ctx, spec)
+	r.NoError(err)
+	var resolvedCreds map[string]map[string]string
+	if len(identities) > 0 {
+		resolvedCreds = make(map[string]map[string]string, len(identities))
+		for name, id := range identities {
+			c, err := credsResolver.Resolve(ctx, id)
+			if err == nil {
+				resolvedCreds[name] = c
+			}
+		}
+	}
+
 	// Execute transformation
-	result, err := transform.Transform(ctx, spec)
+	result, err := transform.Transform(ctx, spec, resolvedCreds)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -1166,9 +1179,8 @@ func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 	combinedScheme.MustRegisterWithAlias(&v1alpha1.AddOCIArtifact{}, v1alpha1.AddOCIArtifactV1alpha1)
 
 	transform := transformer.AddOCIArtifact{
-		Scheme:             combinedScheme,
-		Repository:         repo,
-		CredentialProvider: credsResolver,
+		Scheme:     combinedScheme,
+		Repository: repo,
 	}
 
 	spec := &v1alpha1.AddOCIArtifact{
@@ -1183,8 +1195,22 @@ func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 		},
 	}
 
+	// Resolve credentials as the runtime would
+	identities, err := transform.GetCredentialConsumerIdentities(ctx, spec)
+	r.NoError(err)
+	var resolvedCreds map[string]map[string]string
+	if len(identities) > 0 {
+		resolvedCreds = make(map[string]map[string]string, len(identities))
+		for name, id := range identities {
+			c, err := credsResolver.Resolve(ctx, id)
+			if err == nil {
+				resolvedCreds[name] = c
+			}
+		}
+	}
+
 	// Execute transformation
-	result, err := transform.Transform(ctx, spec)
+	result, err := transform.Transform(ctx, spec, resolvedCreds)
 	r.NoError(err)
 	r.NotNil(result)
 

@@ -34,7 +34,7 @@ func (t *AddOCIArtifact) GetCredentialConsumerIdentities(ctx context.Context, st
 	if identity == nil {
 		return nil, nil
 	}
-	return map[string]runtime.Identity{"resource": identity}, nil
+	return map[string]runtime.Identity{CredentialSlotResource: identity}, nil
 }
 
 func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error) {
@@ -64,7 +64,7 @@ func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed, cred
 	// Resolve credentials if provided
 	var creds map[string]string
 	if credentials != nil {
-		creds = credentials["resource"]
+		creds = credentials[CredentialSlotResource]
 	}
 
 	// Get blob from file spec

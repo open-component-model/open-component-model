@@ -92,7 +92,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 				},
 			}
 
-			result, err := transform.Transform(ctx, spec)
+			result, err := transform.Transform(ctx, spec, nil)
 			r.NoError(err)
 			r.NotNil(result)
 
@@ -160,7 +160,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 				},
 			}
 
-			result, err := transform.Transform(ctx, spec)
+			result, err := transform.Transform(ctx, spec, nil)
 			r.NoError(err)
 			r.NotNil(result)
 
@@ -231,7 +231,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 				},
 			}
 
-			result, err := transform.Transform(ctx, spec)
+			result, err := transform.Transform(ctx, spec, nil)
 			r.NoError(err)
 			r.NotNil(result)
 
@@ -289,7 +289,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			},
 		}
 
-		result, err := transform.Transform(ctx, spec)
+		result, err := transform.Transform(ctx, spec, nil)
 		r.NoError(err)
 		r.NotNil(result)
 
@@ -333,7 +333,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			Spec: nil,
 		}
 
-		result, err := transform.Transform(ctx, spec)
+		result, err := transform.Transform(ctx, spec, nil)
 		r.Error(err)
 		r.Nil(result)
 		assert.Contains(t, err.Error(), "spec is required")

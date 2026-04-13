@@ -16,14 +16,31 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
+// Well-known credential slot names used by transformers in GetCredentialConsumerIdentities
+// and consumed by Transform. Using these constants prevents silent mismatches when one
+// side is renamed but not the other.
+const (
+	// CredentialSlotRepository identifies credentials for a component version repository.
+	CredentialSlotRepository = "repository"
+	// CredentialSlotResource identifies credentials for a resource (e.g. OCI artifact, Helm chart).
+	CredentialSlotResource = "resource"
+)
+
 type Transformer interface {
 	// GetCredentialConsumerIdentities returns credential identities this transformer needs for the given step.
-	// Map key is a transformer-defined name (e.g. "repository", "source", "target").
+	// Map key is a transformer-defined slot name (e.g. CredentialSlotRepository, CredentialSlotResource).
+	// Multi-credential transformers may use keys like "source" and "target" for both ends of a transfer.
 	// Returns nil or empty map when no credentials are needed.
 	GetCredentialConsumerIdentities(ctx context.Context, step runtime.Typed) (map[string]runtime.Identity, error)
 
 	// Transform executes the transformation with resolved credentials.
-	// credentials is nil when no credentials were requested or resolver is absent.
+	//
+	// The credentials parameter follows these semantics:
+	//   - nil: no credentials were requested (GetCredentialConsumerIdentities returned nil/empty)
+	//     or no credential resolver is configured.
+	//   - non-nil map with nil value for a slot key: the resolver was present and the identity
+	//     was looked up, but no matching credentials were found (ErrNotFound was swallowed).
+	//     Implementations should treat a nil inner map the same as missing credentials.
 	Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error)
 }
 

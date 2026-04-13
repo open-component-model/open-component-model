@@ -80,7 +80,7 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 	}
 
 	// Execute transformation
-	result, err := transformer.Transform(ctx, spec)
+	result, err := transformer.Transform(ctx, spec, nil)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -157,7 +157,7 @@ func TestGetOCIArtifact_Transform_OCI_WithOutputPath(t *testing.T) {
 	}
 
 	// Execute transformation
-	result, err := transformer.Transform(ctx, spec)
+	result, err := transformer.Transform(ctx, spec, nil)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -231,7 +231,7 @@ func TestGetOCIArtifact_Transform_OCI_Should_Default_No_Ext(t *testing.T) {
 	}
 
 	// Execute transformation
-	result, err := transformer.Transform(ctx, spec)
+	result, err := transformer.Transform(ctx, spec, nil)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -291,7 +291,7 @@ func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {
 				Spec: tt.spec,
 			}
 
-			result, err := transformer.Transform(ctx, spec)
+			result, err := transformer.Transform(ctx, spec, nil)
 			assert.Error(t, err)
 			assert.Nil(t, result)
 			assert.Contains(t, err.Error(), tt.expectedErr)

@@ -20,6 +20,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// credentialSlotResource identifies credentials for a Helm chart resource.
+const credentialSlotResource = "resource"
+
 // GetHelmChart is a transformer that retrieves Helm charts from remote Helm repositories and buffers them to files.
 // It uses the Helm spec specification to determine the repository URL, chart name, version, and any necessary credentials.
 // This transformer is designed to support the helm access with classic helm charts.

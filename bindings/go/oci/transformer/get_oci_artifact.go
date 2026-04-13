@@ -36,7 +36,7 @@ func (t *GetOCIArtifact) GetCredentialConsumerIdentities(ctx context.Context, st
 	if identity == nil {
 		return nil, nil
 	}
-	return map[string]runtime.Identity{"resource": identity}, nil
+	return map[string]runtime.Identity{CredentialSlotResource: identity}, nil
 }
 
 func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error) {
@@ -67,7 +67,7 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed, cred
 
 	var creds map[string]string
 	if credentials != nil {
-		creds = credentials["resource"]
+		creds = credentials[CredentialSlotResource]
 	}
 
 	blobContent, err := t.Repository.DownloadResource(ctx, targetResource, creds)
