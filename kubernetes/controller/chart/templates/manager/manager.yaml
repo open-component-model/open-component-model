@@ -13,12 +13,16 @@ spec:
     replicas: 1
     selector:
         matchLabels:
+            app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
             control-plane: controller-manager
     template:
         metadata:
             annotations:
                 kubectl.kubernetes.io/default-container: manager
             labels:
+                app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+                app.kubernetes.io/instance: {{ .Release.Name }}
                 control-plane: controller-manager
         spec:
             {{- with .Values.manager.tolerations }}
