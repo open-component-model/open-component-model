@@ -115,6 +115,7 @@ func (t *FileCleanup) Transform(ctx context.Context, step runtime.Typed) (runtim
 }
 
 // filePathFromURI extracts the filesystem path from a file:// URI.
+// Only local file URIs are accepted: no opaque form, no remote host.
 func filePathFromURI(uri string) (string, error) {
 	parsed, err := url.Parse(uri)
 	if err != nil {
@@ -122,6 +123,15 @@ func filePathFromURI(uri string) (string, error) {
 	}
 	if parsed.Scheme != "file" {
 		return "", fmt.Errorf("unsupported URI scheme %q, expected \"file\"", parsed.Scheme)
+	}
+	if parsed.Opaque != "" {
+		return "", fmt.Errorf("opaque file URI %q not supported, use file:///path form", uri)
+	}
+	if parsed.Host != "" && parsed.Host != "localhost" {
+		return "", fmt.Errorf("remote file URI %q not supported, host must be empty or localhost", uri)
+	}
+	if parsed.Path == "" {
+		return "", fmt.Errorf("file URI %q has no path", uri)
 	}
 	return parsed.Path, nil
 }

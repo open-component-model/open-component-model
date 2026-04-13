@@ -202,6 +202,26 @@ func TestFilePathFromURI(t *testing.T) {
 			uri:         "://broken",
 			expectError: true,
 		},
+		{
+			name:        "opaque file URI",
+			uri:         "file:relative/path",
+			expectError: true,
+		},
+		{
+			name:        "remote host",
+			uri:         "file://remotehost/path/to/file",
+			expectError: true,
+		},
+		{
+			name:     "localhost host accepted",
+			uri:      "file://localhost/tmp/file",
+			expected: "/tmp/file",
+		},
+		{
+			name:        "empty path",
+			uri:         "file://",
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
