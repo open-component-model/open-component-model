@@ -84,9 +84,7 @@ Handles Helm charts stored in HTTP/HTTPS-based chart repositories.
 {{< callout type="info" >}}
 Upload is not supported because traditional Helm chart repositories are read-only HTTP servers that serve a static
 `index.yaml` and packaged chart archives. There is no standardized upload API.
-{{< /callout >}}
 
-{{< callout type="note" >}}
 For Helm charts stored in OCI registries, use the [OCI resource repository](#oci-resource-repository) with an [
 `OCIImage/v1`]({{< relref "input-and-access-types.md" >}}#ociimagev1) access type instead.
 {{< /callout >}}
