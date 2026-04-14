@@ -17,8 +17,8 @@ Handles OCI artifacts stored in OCI-compliant registries.
 
 ### Supported Access Types
 
-| Access Type                                                             |
-|-------------------------------------------------------------------------|
+| Access Type                                                            |
+|------------------------------------------------------------------------|
 | [`OCIImage/v1`]({{< relref "input-and-access-types.md" >}}#ociimagev1) |
 
 ### Capabilities
@@ -58,7 +58,9 @@ information (e.g., the final image reference with digest) after upload.
 
 ### Digest Processing
 
-The OCI resource repository also implements digest processing. When constructing a component version with a by-reference resource, OCM queries the registry to resolve and verify the artifact's digest, ensuring the resource descriptor is pinned to an immutable reference.
+The OCI resource repository also implements digest processing. When constructing a component version with a by-reference
+resource, OCM queries the registry to resolve and verify the artifact's digest, ensuring the resource descriptor is
+pinned to an immutable reference.
 
 ---
 
@@ -68,8 +70,8 @@ Handles Helm charts stored in HTTP/HTTPS-based chart repositories.
 
 ### Supported Access Types
 
-| Access Type                                                     |
-|-----------------------------------------------------------------|
+| Access Type                                                    |
+|----------------------------------------------------------------|
 | [`Helm/v1`]({{< relref "input-and-access-types.md" >}}#helmv1) |
 
 ### Capabilities
@@ -120,7 +122,9 @@ reference used for download.
 
 ### Digest Processing
 
-The Helm digest processor resolves chart digests from the remote repository. For HTTP/HTTPS repositories it downloads the `index.yaml` and extracts the digest for the specified chart and version. For OCI-based Helm repositories it resolves the OCI manifest digest via the registry API.
+The Helm digest processor resolves chart digests from the remote repository. For HTTP/HTTPS repositories it downloads
+the `index.yaml` and extracts the digest for the specified chart and version. For OCI-based Helm repositories it
+resolves the OCI manifest digest via the registry API.
 
 ---
 

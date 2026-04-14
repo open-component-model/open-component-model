@@ -115,7 +115,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 	slog.DebugContext(ctx, "Helm chart downloaded successfully, creating tar archive", "chartReference", helmURL)
 
-	// TODO(matthiasbruns): try to migrate to filesystem.GetBlobFromPath
+	// TODO(matthiasbruns): try to migrate to filesystem.GetBlobFromPath (https://github.com/open-component-model/ocm-project/issues/1014)
 	tarBlob, err := tarDirectoryRecursive(ctx, downloadDir)
 	if err != nil {
 		return nil, fmt.Errorf("error creating tar archive from helm download: %w", err)

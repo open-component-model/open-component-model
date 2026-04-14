@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/provenance"
 	"helm.sh/helm/v4/pkg/registry"
-	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 
 	"ocm.software/open-component-model/bindings/go/helm/input"
+	v1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 

@@ -9,6 +9,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
+	"ocm.software/open-component-model/bindings/go/helm/spec/input"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
@@ -19,15 +20,6 @@ import (
 var _ interface {
 	constructor.ResourceInputMethod
 } = (*InputMethod)(nil)
-
-var Scheme = runtime.NewScheme()
-
-func init() {
-	Scheme.MustRegisterWithAlias(&v1.Helm{},
-		runtime.NewVersionedType(v1.Type, v1.Version),
-		runtime.NewUnversionedType(v1.Type),
-	)
-}
 
 // InputMethod implements the ResourceInputMethod and SourceInputMethod interfaces for helm-based inputs.
 // It provides functionality to process local filesystem directories, which have helm chart structure,
@@ -47,7 +39,7 @@ type InputMethod struct {
 const LegacyHelmChartConsumerType = "HelmChartRepository"
 
 func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
-	return Scheme
+	return input.Scheme
 }
 
 // GetResourceCredentialConsumerIdentity returns credentials consumer identity for remote helm repositories
