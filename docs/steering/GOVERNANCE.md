@@ -34,7 +34,7 @@ Meetings are intended to be open to the public and may be conducted electronical
 
 The TSC approves the creation, modification, and dissolution of Working Groups and SIGs. SIG charters must be submitted to the TSC for formal vote as described in the [SIG Handbook](../community/SIGs/SIG-Handbook.md).
 
-Major SIG decisions—such as charter changes, leadership changes, or dissolution—require TSC approval in addition to the SIG's own supermajority vote.
+Major SIG decisions — such as charter changes, leadership changes, or dissolution — require TSC approval in addition to the SIG's own supermajority vote.
 
 ## Security
 
