@@ -35,10 +35,8 @@ type GlobalAccessPolicy int
 const (
 	// GlobalAccessPolicyNever suppresses global access even on remote registries. This is the default.
 	GlobalAccessPolicyNever GlobalAccessPolicy = iota
-	// GlobalAccessPolicyDefault auto-detects based on whether the storage backend is globally reachable.
-	GlobalAccessPolicyDefault
-	// GlobalAccessPolicyAlways forces global access on all local blobs.
-	GlobalAccessPolicyAlways
+	// GlobalAccessPolicyAuto auto-detects based on whether the storage backend is globally reachable.
+	GlobalAccessPolicyAuto
 )
 
 // Options defines the configuration options for packing a single-layer OCI artifact.
@@ -326,11 +324,9 @@ func backedByGlobalStore(storage content.Storage) bool {
 // resolveGlobalAccess determines whether global access should be set based on the policy and storage backend.
 func resolveGlobalAccess(policy GlobalAccessPolicy, storage content.Storage) bool {
 	switch policy {
-	case GlobalAccessPolicyAlways:
-		return true
-	case GlobalAccessPolicyNever:
-		return false
-	default:
+	case GlobalAccessPolicyAuto:
 		return backedByGlobalStore(storage)
+	default:
+		return false
 	}
 }

@@ -194,10 +194,8 @@ func getConvertedTypedSpec(scheme *runtime.Scheme, repositorySpecification runti
 // since the zero value of oci.GlobalAccessPolicy is already Never.
 func globalAccessPolicyFromOCI(policy ocirepospecv1.GlobalAccessPolicy) oci.RepositoryOption {
 	switch policy {
-	case ocirepospecv1.GlobalAccessPolicyDefault:
-		return oci.WithGlobalAccessPolicy(oci.GlobalAccessPolicyDefault)
-	case ocirepospecv1.GlobalAccessPolicyAlways:
-		return oci.WithGlobalAccessPolicy(oci.GlobalAccessPolicyAlways)
+	case ocirepospecv1.GlobalAccessPolicyAuto:
+		return oci.WithGlobalAccessPolicy(oci.GlobalAccessPolicyAuto)
 	default:
 		return nil
 	}

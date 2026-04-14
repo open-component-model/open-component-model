@@ -59,8 +59,7 @@ type RepositoryOptions struct {
 	// GlobalAccessPolicy controls whether global access references are added to local blobs
 	// when adding local resources or sources. By default (zero value), global access is never added
 	// to discourage reliance on global access references.
-	// Set to GlobalAccessPolicyDefault to auto-detect based on the storage backend, or
-	// GlobalAccessPolicyAlways to enforce global access regardless of the storage backend.
+	// Set to GlobalAccessPolicyAuto to auto-detect based on the storage backend.
 	GlobalAccessPolicy GlobalAccessPolicy
 }
 
@@ -96,13 +95,9 @@ const (
 	// backend is globally reachable. This is the default policy to discourage reliance on
 	// global access references.
 	GlobalAccessPolicyNever GlobalAccessPolicy = iota
-	// GlobalAccessPolicyDefault auto-detects based on the storage backend. Global access is only
+	// GlobalAccessPolicyAuto auto-detects based on the storage backend. Global access is only
 	// added when the storage backend is globally reachable (e.g. a remote OCI registry).
-	GlobalAccessPolicyDefault
-	// GlobalAccessPolicyAlways enforces global access on all local blobs, regardless of whether the
-	// storage backend is globally reachable. This can result in invalid global access references
-	// if the storage is not globally accessible (e.g. a CTF).
-	GlobalAccessPolicyAlways
+	GlobalAccessPolicyAuto
 )
 
 // RepositoryOption is a function that modifies RepositoryOptions.
@@ -165,8 +160,8 @@ func WithDescriptorUnmarshalFunc(unmarshal descriptor.UnmarshalFunc) RepositoryO
 }
 
 // WithGlobalAccessPolicy sets the global access policy for the repository.
-// By default (zero value), global access is never added. Use GlobalAccessPolicyDefault
-// to auto-detect based on storage backend, or GlobalAccessPolicyAlways to force it.
+// By default (zero value), global access is never added. Use GlobalAccessPolicyAuto
+// to auto-detect based on storage backend.
 func WithGlobalAccessPolicy(policy GlobalAccessPolicy) RepositoryOption {
 	return func(o *RepositoryOptions) {
 		o.GlobalAccessPolicy = policy

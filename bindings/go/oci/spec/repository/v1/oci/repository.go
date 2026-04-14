@@ -60,7 +60,7 @@ type Repository struct {
 	// GlobalAccessPolicy controls whether global access references are added to local blobs
 	// when adding local resources or sources.
 	// If not set (empty), global access is never added to discourage reliance on global access references.
-	// Valid values are "default" (auto-detect from storage backend) and "always" (force global access).
+	// Set to "auto" to auto-detect based on the storage backend.
 	GlobalAccessPolicy GlobalAccessPolicy `json:"globalAccessPolicy,omitempty"`
 }
 
@@ -78,11 +78,7 @@ const (
 	// backend is globally reachable. This is the default (zero value) to discourage reliance on
 	// global access references.
 	GlobalAccessPolicyNever GlobalAccessPolicy = ""
-	// GlobalAccessPolicyDefault auto-detects based on the storage backend. Global access is only
+	// GlobalAccessPolicyAuto auto-detects based on the storage backend. Global access is only
 	// added when the storage backend is globally reachable (e.g. a remote OCI registry).
-	GlobalAccessPolicyDefault GlobalAccessPolicy = "default"
-	// GlobalAccessPolicyAlways enforces global access on all local blobs, regardless of whether the
-	// storage backend is globally reachable. This can result in invalid global access references
-	// if the storage is not globally accessible (e.g. a CTF).
-	GlobalAccessPolicyAlways GlobalAccessPolicy = "always"
+	GlobalAccessPolicyAuto GlobalAccessPolicy = "auto"
 )

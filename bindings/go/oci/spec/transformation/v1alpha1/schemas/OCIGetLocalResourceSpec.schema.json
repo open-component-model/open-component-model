@@ -47,12 +47,8 @@
           "const": ""
         },
         {
-          "description": "GlobalAccessPolicyDefault auto-detects based on the storage backend. Global access is only\nadded when the storage backend is globally reachable (e.g. a remote OCI registry).",
-          "const": "default"
-        },
-        {
-          "description": "GlobalAccessPolicyAlways enforces global access on all local blobs, regardless of whether the\nstorage backend is globally reachable. This can result in invalid global access references\nif the storage is not globally accessible (e.g. a CTF).",
-          "const": "always"
+          "description": "GlobalAccessPolicyAuto auto-detects based on the storage backend. Global access is only\nadded when the storage backend is globally reachable (e.g. a remote OCI registry).",
+          "const": "auto"
         }
       ]
     },
@@ -69,7 +65,7 @@
         },
         "globalAccessPolicy": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.repository.v1.oci.GlobalAccessPolicy",
-          "description": "GlobalAccessPolicy controls whether global access references are added to local blobs\nwhen adding local resources or sources.\nIf not set (empty), global access is never added to discourage reliance on global access references.\nValid values are \"default\" (auto-detect from storage backend) and \"always\" (force global access)."
+          "description": "GlobalAccessPolicy controls whether global access references are added to local blobs\nwhen adding local resources or sources.\nIf not set (empty), global access is never added to discourage reliance on global access references.\nSet to \"auto\" to auto-detect based on the storage backend."
         },
         "subPath": {
           "type": "string",
