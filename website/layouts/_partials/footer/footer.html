@@ -41,11 +41,21 @@
             </div>
           </div>
           <div class="neonephos-logos d-flex justify-content-center justify-content-lg-end">
-            <div class="d-flex align-items-center gap-2 text-center text-lg-end" style="font-size: 0.75rem; color: #98989f;">
-              <span class="text-nowrap">Building this site is powered by</span>
-              <a href="https://www.netlify.com/" target="_blank" rel="noopener noreferrer" class="d-inline-flex align-items-center flex-shrink-0 ms-2">
-                <img src="{{ `images/netlify-symbol.svg` | relURL }}" alt="Netlify" class="netlify-logo flex-shrink-0" style="height: 23px; width: auto;" />
+            <div class="d-flex flex-column align-items-center align-items-lg-end gap-1 text-center text-lg-end">
+              <div class="d-flex align-items-center gap-2" style="font-size: 0.75rem; color: #98989f;">
+                <span class="text-nowrap">Building this site is powered by</span>
+                <a href="https://www.netlify.com/" target="_blank" rel="noopener noreferrer" class="d-inline-flex align-items-center flex-shrink-0 ms-2">
+                  <img src="{{ `images/netlify-symbol.svg` | relURL }}" alt="Netlify" class="netlify-logo flex-shrink-0" style="height: 23px; width: auto;" />
+                </a>
+              </div>
+              {{ with site.Params.commitfull -}}
+              <a href="https://github.com/open-component-model/open-component-model/commit/{{ . }}"
+                 target="_blank" rel="noopener noreferrer"
+                 class="text-nowrap text-decoration-none"
+                 style="font-size: 0.625rem; color: #6c757d;">
+                Commit {{ site.Params.commitshort | default (substr . 0 7) }}
               </a>
+              {{- end }}
             </div>
           </div>
         </div>
