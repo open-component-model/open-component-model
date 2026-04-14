@@ -55,9 +55,8 @@ type Options struct {
 	ManifestAnnotations map[string]string
 
 	// GlobalAccessPolicy controls whether global access references are added to local blobs.
-	// Default (zero value) auto-detects based on storage backend.
-	// Always forces global access regardless of backend.
-	// Never suppresses global access even on remote registries.
+	// The zero value is GlobalAccessPolicyNever, which suppresses global access by default.
+	// Set GlobalAccessPolicyAuto to auto-detect based on whether the storage backend is globally reachable.
 	GlobalAccessPolicy GlobalAccessPolicy
 }
 
