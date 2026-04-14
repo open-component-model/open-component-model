@@ -107,6 +107,27 @@ signatures:
 {{< /step >}}
 {{< /steps >}}
 
+## Advanced: Choosing an Encoding Policy
+
+By default, OCM uses **Plain encoding** -- the raw signature bytes are hex-encoded and stored directly. No extra configuration is needed.
+
+To use **PEM encoding** (embeds the signer's X.509 certificate chain in the signature), create a signer spec file and pass it with `--signer-spec`:
+
+```yaml
+# pem-signer.yaml
+type: RSASigningConfiguration/v1alpha1
+signatureAlgorithm: RSASSA-PSS
+signatureEncodingPolicy: PEM
+```
+
+```bash
+ocm sign cv \
+  --signer-spec pem-signer.yaml \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+PEM encoding requires that `public_key_pem_file` in `.ocmconfig` points to an X.509 certificate chain (leaf + any intermediates), not a bare public key. Verifiers only need the root CA. See [Tutorial: Certificate Chains (PEM)]({{< relref "docs/tutorials/signing/pem.md" >}}) for the full workflow.
+
 ## Troubleshooting
 
 ### Symptom: "no private key found"
@@ -140,4 +161,4 @@ See [How-To: Configure Credentials for Multiple Registries]({{< relref "configur
 ## Related Documentation
 
 - [Concept: Signing and Verification]({{< relref "signing-and-verification-concept.md" >}}) — Understand how OCM signing works
-- [Tutorial: Sign and Verify Components]({{< relref "signing-and-verification.md" >}}) — End-to-end signing workflow
+- [Tutorial: Sign and Verify Components]({{< relref "docs/tutorials/signing/plain.md" >}}) -- End-to-end signing workflow

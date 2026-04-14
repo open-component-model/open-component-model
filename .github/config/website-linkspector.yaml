@@ -1,6 +1,7 @@
 dirs:
   - ./website/content
 baseUrl: "https://ocm.software"
+modifiedFilesOnly: true
 replacementPatterns:
   - pattern: "^/"
     replacement: "{{BASEURL}}/"

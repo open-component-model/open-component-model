@@ -25,7 +25,6 @@ on:
 
 permissions:
   contents: read
-  packages: read
 
 env:
   # Repository selection for checkout
@@ -39,6 +38,7 @@ jobs:
       group: plugin-registry-publish
       cancel-in-progress: false  # Queue updates, don't cancel
     permissions:
+      contents: read
       packages: write
     steps:
       - name: Checkout

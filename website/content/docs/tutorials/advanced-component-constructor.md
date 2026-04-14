@@ -243,7 +243,7 @@ cat >> component-constructor.yaml << 'EOF'
 EOF
 ```
 
-Notice the `signing: true` field on the `release` label. Labels marked with `signing: true` are included in the component descriptor's signature digest — changing their value after signing invalidates the signature. Labels without this field are excluded from signing and can be modified freely. For more details, see [Signing and Verification]({{< relref "docs/tutorials/signing-and-verification.md" >}}).
+Notice the `signing: true` field on the `release` label. Labels marked with `signing: true` are included in the component descriptor's signature digest — changing their value after signing invalidates the signature. Labels without this field are excluded from signing and can be modified freely. For more details, see [Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}}).
 
 You already used `componentReferences` in the product-web component to wire together the frontend and backend components. Here the same mechanism links the platform to its sub-products. Each reference points to another component by its full name and version.
 
@@ -630,7 +630,7 @@ rm -rf /tmp/ocm-multi-component
 
 ## Next Steps
 
-- [Tutorial: Sign and Verify Components]({{< relref "docs/tutorials/signing-and-verification.md" >}}) - add signing to your components
+- [Tutorial: Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) - add signing to your components
 - [How-to: Transfer Helm Charts]({{< relref "docs/how-to/transfer-helm-charts.md" >}}) - transfer components to a remote registry
 
 ## Related documentation
