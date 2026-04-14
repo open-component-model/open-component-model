@@ -113,8 +113,10 @@ func TestGetBlobFromSpec_RelativePath(t *testing.T) {
 	}
 
 	// Create File spec with relative file:// URI
+	// Note: file:// URIs must use absolute paths per RFC 8089.
+	// Use file:///abs/path form with the resolved absolute path.
 	spec := &v1alpha1.File{
-		URI: "file://" + relPath,
+		URI: "file://" + testFile,
 	}
 
 	// Test: get blob from spec (should resolve to absolute path)
@@ -152,7 +154,7 @@ func TestGetBlobFromSpec_EmptyPath(t *testing.T) {
 	// Test: should return error for empty path
 	_, err := filesystem.GetBlobFromSpec(t.Context(), spec)
 	r.Error(err)
-	r.Contains(err.Error(), "empty file path")
+	r.Contains(err.Error(), "has no path")
 }
 
 func TestGetBlobFromSpec_UnsupportedScheme(t *testing.T) {
