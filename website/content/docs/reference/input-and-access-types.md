@@ -217,6 +217,10 @@ resources:
     helmRepository: https://charts.bitnami.com/bitnami
 ```
 
+{{< callout type="note" >}}
+For Helm charts stored in OCI registries, use the [`OCIImage/v1`](#ocimagev1) access type instead. The [Helm resource repository]({{< relref "resource-repositories.md" >}}#helm-resource-repository) only supports HTTP/HTTPS-based chart repositories.
+{{< /callout >}}
+
 ### `File/v1alpha1`
 
 References a file by URI ([RFC 8089](https://datatracker.ietf.org/doc/html/rfc8089)). Legacy alias: `file`.
