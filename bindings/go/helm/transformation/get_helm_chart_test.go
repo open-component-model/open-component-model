@@ -340,6 +340,237 @@ func TestGetHelmChart_Transform(t *testing.T) {
 	})
 }
 
+// mockIdentityProvider returns a fixed identity for any resource.
+type mockIdentityProvider struct {
+	identity runtime.Identity
+}
+
+func (m *mockIdentityProvider) GetResourceCredentialConsumerIdentity(_ context.Context, _ *descriptor.Resource) (runtime.Identity, error) {
+	return m.identity, nil
+}
+
+// newAuthChartRepoServer starts an httptest server that requires Basic Auth and serves files from dir.
+func newAuthChartRepoServer(t *testing.T, dir, username, password string) *httptest.Server {
+	t.Helper()
+	fs := http.FileServer(http.Dir(dir))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		if !ok || u != username || p != password {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		fs.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestGetHelmChart_CredentialFlow(t *testing.T) {
+	t.Parallel()
+
+	scheme := newTestScheme()
+
+	t.Run("GetCredentialConsumerIdentities returns resource slot", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+
+		identity := runtime.Identity{"type": "helmChartRepository", "hostname": "charts.example.com"}
+
+		transform := &transformation.GetHelmChart{
+			Scheme:                           scheme,
+			ResourceConsumerIdentityProvider: &mockIdentityProvider{identity: identity},
+		}
+
+		helmAccessData, err := json.Marshal(map[string]string{
+			"helmRepository": "https://charts.example.com/mychart-0.1.0.tgz",
+		})
+		r.NoError(err)
+
+		spec := &v1alpha1.GetHelmChart{
+			Type: runtime.NewVersionedType(v1alpha1.GetHelmChartType, v1alpha1.Version),
+			ID:   "test-creds-identity",
+			Spec: &v1alpha1.GetHelmChartSpec{
+				Resource: &v2.Resource{
+					ElementMeta: v2.ElementMeta{
+						ObjectMeta: v2.ObjectMeta{
+							Name:    "mychart",
+							Version: "0.1.0",
+						},
+					},
+					Type: "helmChart",
+					Access: &runtime.Raw{
+						Type: runtime.Type{Name: "helm", Version: "v1"},
+						Data: helmAccessData,
+					},
+				},
+			},
+		}
+
+		identities, err := transform.GetCredentialConsumerIdentities(ctx, spec)
+		r.NoError(err)
+		r.NotNil(identities)
+		r.Contains(identities, "resource")
+		assert.Equal(t, identity, identities["resource"])
+	})
+
+	t.Run("GetCredentialConsumerIdentities returns nil for nil resource", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+
+		transform := &transformation.GetHelmChart{
+			Scheme:                           scheme,
+			ResourceConsumerIdentityProvider: &mockIdentityProvider{identity: runtime.Identity{"type": "test"}},
+		}
+
+		spec := &v1alpha1.GetHelmChart{
+			Type: runtime.NewVersionedType(v1alpha1.GetHelmChartType, v1alpha1.Version),
+			ID:   "test-nil-resource",
+			Spec: &v1alpha1.GetHelmChartSpec{},
+		}
+
+		identities, err := transform.GetCredentialConsumerIdentities(ctx, spec)
+		r.NoError(err)
+		r.Nil(identities)
+	})
+
+	t.Run("GetCredentialConsumerIdentities returns nil for nil provider", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+
+		helmAccessData, err := json.Marshal(map[string]string{
+			"helmRepository": "https://charts.example.com/mychart-0.1.0.tgz",
+		})
+		r.NoError(err)
+
+		transform := &transformation.GetHelmChart{
+			Scheme: scheme,
+		}
+
+		spec := &v1alpha1.GetHelmChart{
+			Type: runtime.NewVersionedType(v1alpha1.GetHelmChartType, v1alpha1.Version),
+			ID:   "test-nil-provider",
+			Spec: &v1alpha1.GetHelmChartSpec{
+				Resource: &v2.Resource{
+					ElementMeta: v2.ElementMeta{
+						ObjectMeta: v2.ObjectMeta{
+							Name:    "mychart",
+							Version: "0.1.0",
+						},
+					},
+					Type: "helmChart",
+					Access: &runtime.Raw{
+						Type: runtime.Type{Name: "helm", Version: "v1"},
+						Data: helmAccessData,
+					},
+				},
+			},
+		}
+
+		identities, err := transform.GetCredentialConsumerIdentities(ctx, spec)
+		r.NoError(err)
+		r.Nil(identities)
+	})
+
+	t.Run("Transform uses resolved credentials for authenticated chart download", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+
+		srv := newAuthChartRepoServer(t, "../testdata/provenance", "helm-user", "helm-pass")
+
+		identity := runtime.Identity{"type": "helmChartRepository", "hostname": "localhost"}
+
+		transform := &transformation.GetHelmChart{
+			Scheme:                           scheme,
+			ResourceConsumerIdentityProvider: &mockIdentityProvider{identity: identity},
+		}
+
+		helmAccessData, err := json.Marshal(map[string]string{
+			"helmRepository": fmt.Sprintf("%s/mychart-0.1.0.tgz", srv.URL),
+		})
+		r.NoError(err)
+
+		spec := &v1alpha1.GetHelmChart{
+			Type: runtime.NewVersionedType(v1alpha1.GetHelmChartType, v1alpha1.Version),
+			ID:   "test-creds-transform",
+			Spec: &v1alpha1.GetHelmChartSpec{
+				Resource: &v2.Resource{
+					ElementMeta: v2.ElementMeta{
+						ObjectMeta: v2.ObjectMeta{
+							Name:    "mychart",
+							Version: "0.1.0",
+						},
+					},
+					Type: "helmChart",
+					Access: &runtime.Raw{
+						Type: runtime.Type{Name: "helm", Version: "v1"},
+						Data: helmAccessData,
+					},
+				},
+			},
+		}
+
+		resolvedCreds := map[string]map[string]string{
+			"resource": {"username": "helm-user", "password": "helm-pass"},
+		}
+
+		result, err := transform.Transform(ctx, spec, resolvedCreds)
+		r.NoError(err)
+		r.NotNil(result)
+
+		helmOutput, ok := result.(*v1alpha1.GetHelmChart)
+		r.True(ok)
+		r.NotNil(helmOutput.Output)
+
+		// Verify chart file was created
+		chartPath := strings.TrimPrefix(helmOutput.Output.ChartFile.URI, "file://")
+		assert.FileExists(t, chartPath)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(chartPath)
+		})
+	})
+
+	t.Run("Transform fails without credentials on authenticated server", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+
+		srv := newAuthChartRepoServer(t, "../testdata/provenance", "helm-user", "helm-pass")
+
+		transform := &transformation.GetHelmChart{
+			Scheme:                           scheme,
+			ResourceConsumerIdentityProvider: &stubIdentityProvider{},
+		}
+
+		helmAccessData, err := json.Marshal(map[string]string{
+			"helmRepository": fmt.Sprintf("%s/mychart-0.1.0.tgz", srv.URL),
+		})
+		r.NoError(err)
+
+		spec := &v1alpha1.GetHelmChart{
+			Type: runtime.NewVersionedType(v1alpha1.GetHelmChartType, v1alpha1.Version),
+			ID:   "test-no-creds-transform",
+			Spec: &v1alpha1.GetHelmChartSpec{
+				Resource: &v2.Resource{
+					ElementMeta: v2.ElementMeta{
+						ObjectMeta: v2.ObjectMeta{
+							Name:    "mychart",
+							Version: "0.1.0",
+						},
+					},
+					Type: "helmChart",
+					Access: &runtime.Raw{
+						Type: runtime.Type{Name: "helm", Version: "v1"},
+						Data: helmAccessData,
+					},
+				},
+			},
+		}
+
+		result, err := transform.Transform(ctx, spec, nil)
+		r.Error(err)
+		r.Nil(result)
+	})
+}
+
 func compareFiles(t *testing.T, original string, downloaded string) {
 	r := require.New(t)
 

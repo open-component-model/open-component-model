@@ -1099,9 +1099,10 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 		resolvedCreds = make(map[string]map[string]string, len(identities))
 		for name, id := range identities {
 			c, err := credsResolver.Resolve(ctx, id)
-			if err == nil {
-				resolvedCreds[name] = c
+			if err != nil && !errors.Is(err, credentials.ErrNotFound) {
+				r.NoError(err)
 			}
+			resolvedCreds[name] = c
 		}
 	}
 
@@ -1203,9 +1204,10 @@ func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 		resolvedCreds = make(map[string]map[string]string, len(identities))
 		for name, id := range identities {
 			c, err := credsResolver.Resolve(ctx, id)
-			if err == nil {
-				resolvedCreds[name] = c
+			if err != nil && !errors.Is(err, credentials.ErrNotFound) {
+				r.NoError(err)
 			}
+			resolvedCreds[name] = c
 		}
 	}
 
