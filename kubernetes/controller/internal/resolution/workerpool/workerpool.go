@@ -146,7 +146,7 @@ func (wp *WorkerPool) Subscribe() <-chan []RequesterInfo {
 	wp.subscribersMu.Lock()
 	defer wp.subscribersMu.Unlock()
 
-	ch := make(chan []RequesterInfo, 10)
+	ch := make(chan []RequesterInfo, 100)
 	wp.subscribers = append(wp.subscribers, ch)
 	return ch
 }
