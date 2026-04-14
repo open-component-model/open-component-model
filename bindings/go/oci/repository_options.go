@@ -57,9 +57,10 @@ type RepositoryOptions struct {
 	DescriptorUnmarshalFunc descriptor.UnmarshalFunc
 
 	// GlobalAccessPolicy controls whether global access references are added to local blobs
-	// when adding local resources or sources. By default, global access is only added when the
-	// storage backend is a globally reachable store (e.g. a remote OCI registry).
-	// Setting this to GlobalAccessPolicyAlways will enforce global access regardless of the storage backend.
+	// when adding local resources or sources. By default (zero value), global access is never added
+	// to discourage reliance on global access references.
+	// Set to GlobalAccessPolicyDefault to auto-detect based on the storage backend, or
+	// GlobalAccessPolicyAlways to enforce global access regardless of the storage backend.
 	GlobalAccessPolicy GlobalAccessPolicy
 }
 
@@ -86,19 +87,22 @@ const (
 )
 
 // GlobalAccessPolicy defines how global access references are handled when adding local blobs.
+// The default policy (zero value) is GlobalAccessPolicyNever, which suppresses global access
+// to discourage reliance on global access references.
 type GlobalAccessPolicy int
 
 const (
-	// GlobalAccessPolicyDefault only adds global access when the storage backend is a globally reachable
-	// store (e.g. a remote OCI registry). This is the default policy.
-	GlobalAccessPolicyDefault GlobalAccessPolicy = iota
+	// GlobalAccessPolicyNever suppresses global access on all local blobs, even when the storage
+	// backend is globally reachable. This is the default policy to discourage reliance on
+	// global access references.
+	GlobalAccessPolicyNever GlobalAccessPolicy = iota
+	// GlobalAccessPolicyDefault auto-detects based on the storage backend. Global access is only
+	// added when the storage backend is globally reachable (e.g. a remote OCI registry).
+	GlobalAccessPolicyDefault
 	// GlobalAccessPolicyAlways enforces global access on all local blobs, regardless of whether the
 	// storage backend is globally reachable. This can result in invalid global access references
 	// if the storage is not globally accessible (e.g. a CTF).
 	GlobalAccessPolicyAlways
-	// GlobalAccessPolicyNever suppresses global access on all local blobs, even when the storage
-	// backend is globally reachable. Use this when global access references are not desired.
-	GlobalAccessPolicyNever
 )
 
 // RepositoryOption is a function that modifies RepositoryOptions.
@@ -161,7 +165,8 @@ func WithDescriptorUnmarshalFunc(unmarshal descriptor.UnmarshalFunc) RepositoryO
 }
 
 // WithGlobalAccessPolicy sets the global access policy for the repository.
-// By default, global access is only added when the storage backend is globally reachable.
+// By default (zero value), global access is never added. Use GlobalAccessPolicyDefault
+// to auto-detect based on storage backend, or GlobalAccessPolicyAlways to force it.
 func WithGlobalAccessPolicy(policy GlobalAccessPolicy) RepositoryOption {
 	return func(o *RepositoryOptions) {
 		o.GlobalAccessPolicy = policy

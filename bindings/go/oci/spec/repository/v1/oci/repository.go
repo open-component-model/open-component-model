@@ -58,10 +58,9 @@ type Repository struct {
 	//     → Auto-extracts to: BaseUrl="ghcr.io", SubPath="open-component-model/ocm"
 	SubPath string `json:"subPath,omitempty"`
 	// GlobalAccessPolicy controls whether global access references are added to local blobs
-	// when adding local resources or sources. By default, global access is only added when the
-	// storage backend is a globally reachable store (e.g. a remote OCI registry).
-	// Valid values are "default" and "always".
-	// If not set, the default policy is used.
+	// when adding local resources or sources.
+	// If not set (empty), global access is never added to discourage reliance on global access references.
+	// Valid values are "default" (auto-detect from storage backend) and "always" (force global access).
 	GlobalAccessPolicy GlobalAccessPolicy `json:"globalAccessPolicy,omitempty"`
 }
 
@@ -70,17 +69,20 @@ func (spec *Repository) String() string {
 }
 
 // GlobalAccessPolicy defines how global access references are handled when adding local blobs.
+// The zero value (empty string) maps to never adding global access, discouraging reliance on
+// global access references.
 type GlobalAccessPolicy string
 
 const (
-	// GlobalAccessPolicyDefault only adds global access when the storage backend is a globally
-	// reachable store (e.g. a remote OCI registry). This is the default policy.
-	GlobalAccessPolicyDefault GlobalAccessPolicy = ""
+	// GlobalAccessPolicyNever suppresses global access on all local blobs, even when the storage
+	// backend is globally reachable. This is the default (zero value) to discourage reliance on
+	// global access references.
+	GlobalAccessPolicyNever GlobalAccessPolicy = ""
+	// GlobalAccessPolicyDefault auto-detects based on the storage backend. Global access is only
+	// added when the storage backend is globally reachable (e.g. a remote OCI registry).
+	GlobalAccessPolicyDefault GlobalAccessPolicy = "default"
 	// GlobalAccessPolicyAlways enforces global access on all local blobs, regardless of whether the
 	// storage backend is globally reachable. This can result in invalid global access references
 	// if the storage is not globally accessible (e.g. a CTF).
 	GlobalAccessPolicyAlways GlobalAccessPolicy = "always"
-	// GlobalAccessPolicyNever suppresses global access on all local blobs, even when the storage
-	// backend is globally reachable. Use this when global access references are not desired.
-	GlobalAccessPolicyNever GlobalAccessPolicy = "never"
 )

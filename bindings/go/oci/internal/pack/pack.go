@@ -29,15 +29,16 @@ import (
 )
 
 // GlobalAccessPolicy controls whether global access references are added to local blobs.
+// The zero value is GlobalAccessPolicyNever, suppressing global access by default.
 type GlobalAccessPolicy int
 
 const (
+	// GlobalAccessPolicyNever suppresses global access even on remote registries. This is the default.
+	GlobalAccessPolicyNever GlobalAccessPolicy = iota
 	// GlobalAccessPolicyDefault auto-detects based on whether the storage backend is globally reachable.
-	GlobalAccessPolicyDefault GlobalAccessPolicy = iota
+	GlobalAccessPolicyDefault
 	// GlobalAccessPolicyAlways forces global access on all local blobs.
 	GlobalAccessPolicyAlways
-	// GlobalAccessPolicyNever suppresses global access even on remote registries.
-	GlobalAccessPolicyNever
 )
 
 // Options defines the configuration options for packing a single-layer OCI artifact.

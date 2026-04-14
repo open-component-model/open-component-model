@@ -190,13 +190,14 @@ func getConvertedTypedSpec(scheme *runtime.Scheme, repositorySpecification runti
 }
 
 // globalAccessPolicyFromOCI converts an OCI repository spec's GlobalAccessPolicy
-// to an oci.RepositoryOption. Returns nil if the policy is the default.
+// to an oci.RepositoryOption. Returns nil if the policy is the default (never),
+// since the zero value of oci.GlobalAccessPolicy is already Never.
 func globalAccessPolicyFromOCI(policy ocirepospecv1.GlobalAccessPolicy) oci.RepositoryOption {
 	switch policy {
+	case ocirepospecv1.GlobalAccessPolicyDefault:
+		return oci.WithGlobalAccessPolicy(oci.GlobalAccessPolicyDefault)
 	case ocirepospecv1.GlobalAccessPolicyAlways:
 		return oci.WithGlobalAccessPolicy(oci.GlobalAccessPolicyAlways)
-	case ocirepospecv1.GlobalAccessPolicyNever:
-		return oci.WithGlobalAccessPolicy(oci.GlobalAccessPolicyNever)
 	default:
 		return nil
 	}

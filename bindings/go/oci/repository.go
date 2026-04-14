@@ -91,6 +91,7 @@ type Repository struct {
 	tempDir string
 
 	// globalAccessPolicy controls whether global access references are added to local blobs.
+	// Default (zero value) is Never, suppressing global access to discourage reliance on it.
 	globalAccessPolicy GlobalAccessPolicy
 }
 
