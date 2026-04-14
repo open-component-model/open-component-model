@@ -44,6 +44,7 @@ type FileCleanupOutput struct {
 // after all other transformations have completed.
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type FileCleanupTransformation struct {
 	// +ocm:jsonschema-gen:enum=FileCleanup/v1alpha1
@@ -52,9 +53,6 @@ type FileCleanupTransformation struct {
 	Spec   *FileCleanupSpec   `json:"spec"`
 	Output *FileCleanupOutput `json:"output,omitempty"`
 }
-
-func (t *FileCleanupTransformation) GetType() runtime.Type    { return t.Type }
-func (t *FileCleanupTransformation) SetType(typ runtime.Type) { t.Type = typ }
 
 // FileCleanup is a transformer that removes temporary files from the local
 // filesystem that were buffered during Get transformations.
@@ -136,57 +134,18 @@ func filePathFromURI(uri string) (string, error) {
 	return parsed.Path, nil
 }
 
-// fileBufferKind identifies which kind of resource produced a file buffer.
-// Each kind maps to a fixed set of spec field expressions in the cleanup node.
-type fileBufferKind int
-
-const (
-	fileBufferLocalBlob fileBufferKind = iota
-	fileBufferOCIArtifact
-	fileBufferHelm
-)
-
-// fileBufferHint records which transformation IDs are responsible for consuming
-// a file buffer. The graph emits hints — it only knows IDs and resource kinds.
-// The path-to-spec-field mapping lives here, not in graph construction.
-type fileBufferHint struct {
-	kind      fileBufferKind
-	addID     string // Add transformation ID (consumer of the file buffer)
-	convertID string // Convert transformation ID (Helm only)
-}
-
-// expressions returns the CEL spec-field expressions for this hint.
-// Each expression references a *consumer's* spec field (not a producer's output),
-// which causes the dependency discovery system to add edges from those
-// consumers to the cleanup node — guaranteeing cleanup runs last.
-func (h fileBufferHint) expressions() []string {
-	switch h.kind {
-	case fileBufferHelm:
-		return []string{
-			fmt.Sprintf("${%s.spec.chartFile}", h.convertID),
-			// provFile is optional; cleanup transformer skips empty URIs.
-			fmt.Sprintf("${%s.spec.?provFile}", h.convertID),
-			fmt.Sprintf("${%s.spec.file}", h.addID),
-		}
-	default: // localBlob and OCIArtifact both use spec.file on the Add node
-		return []string{
-			fmt.Sprintf("${%s.spec.file}", h.addID),
-		}
-	}
-}
-
 // addFileCleanupTransformation appends a FileCleanup transformation to the graph.
-// It is the only place that maps resource kinds to spec field path expressions.
-func addFileCleanupTransformation(tgd *transformv1alpha1.TransformationGraphDefinition, hints []fileBufferHint) {
-	if len(hints) == 0 {
+// fileExpressions is a list of CEL spec-field expressions referencing each consumer's
+// spec field (not the producer's output), so the dependency discovery system creates
+// edges from those consumers to the cleanup node — guaranteeing cleanup runs last.
+func addFileCleanupTransformation(tgd *transformv1alpha1.TransformationGraphDefinition, fileExpressions []string) {
+	if len(fileExpressions) == 0 {
 		return
 	}
 
-	var files []any
-	for _, hint := range hints {
-		for _, expr := range hint.expressions() {
-			files = append(files, expr)
-		}
+	files := make([]any, len(fileExpressions))
+	for i, expr := range fileExpressions {
+		files[i] = expr
 	}
 
 	cleanup := transformv1alpha1.GenericTransformation{

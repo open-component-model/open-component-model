@@ -237,68 +237,17 @@ func TestFilePathFromURI(t *testing.T) {
 	}
 }
 
-// --- Graph helper tests (fileBufferHint) ---
-
-func TestFileBufferHint_LocalBlob_Expressions(t *testing.T) {
-	hint := fileBufferHint{kind: fileBufferLocalBlob, addID: "compAddMyResource"}
-	exprs := hint.expressions()
-
-	require.Len(t, exprs, 1)
-	assert.Equal(t, "${compAddMyResource.spec.file}", exprs[0])
-}
-
-func TestFileBufferHint_OCIArtifact_Expressions(t *testing.T) {
-	hint := fileBufferHint{kind: fileBufferOCIArtifact, addID: "compAddMyImage"}
-	exprs := hint.expressions()
-
-	require.Len(t, exprs, 1)
-	assert.Equal(t, "${compAddMyImage.spec.file}", exprs[0])
-}
-
-func TestFileBufferHint_Helm_Expressions(t *testing.T) {
-	hint := fileBufferHint{kind: fileBufferHelm, convertID: "compConvertMyChart", addID: "compAddMyChart"}
-	exprs := hint.expressions()
-
-	require.Len(t, exprs, 3)
-	assert.Equal(t, "${compConvertMyChart.spec.chartFile}", exprs[0],
-		"chart file should reference Convert spec")
-	assert.Equal(t, "${compConvertMyChart.spec.?provFile}", exprs[1],
-		"prov file should reference Convert spec with optional accessor")
-	assert.Equal(t, "${compAddMyChart.spec.file}", exprs[2],
-		"OCI layout file should reference Add spec")
-}
-
-func TestFileBufferHint_Helm_DependsOnBothConvertAndAdd(t *testing.T) {
-	hint := fileBufferHint{kind: fileBufferHelm, convertID: "convert1", addID: "add1"}
-	exprs := hint.expressions()
-
-	// Extract unique transformation IDs referenced in expressions.
-	ids := make(map[string]bool)
-	for _, expr := range exprs {
-		if len(expr) > 2 && expr[0] == '$' && expr[1] == '{' {
-			inner := expr[2 : len(expr)-1]
-			for i, c := range inner {
-				if c == '.' {
-					ids[inner[:i]] = true
-					break
-				}
-			}
-		}
-	}
-
-	assert.True(t, ids["convert1"], "should depend on Convert transformation")
-	assert.True(t, ids["add1"], "should depend on Add transformation")
-}
+// --- Graph helper tests ---
 
 func TestAddFileCleanupTransformation(t *testing.T) {
 	tgd := &transformv1alpha1.TransformationGraphDefinition{}
 
-	hints := []fileBufferHint{
-		{kind: fileBufferLocalBlob, addID: "addRes1"},
-		{kind: fileBufferOCIArtifact, addID: "addRes2"},
+	exprs := []string{
+		"${addRes1.spec.file}",
+		"${addRes2.spec.file}",
 	}
 
-	addFileCleanupTransformation(tgd, hints)
+	addFileCleanupTransformation(tgd, exprs)
 
 	require.Len(t, tgd.Transformations, 1)
 
@@ -313,31 +262,35 @@ func TestAddFileCleanupTransformation(t *testing.T) {
 	assert.Equal(t, "${addRes2.spec.file}", files[1])
 }
 
-func TestAddFileCleanupTransformation_NoHintsNoNode(t *testing.T) {
+func TestAddFileCleanupTransformation_NoExpressionsNoNode(t *testing.T) {
 	tgd := &transformv1alpha1.TransformationGraphDefinition{}
 
 	addFileCleanupTransformation(tgd, nil)
-	assert.Empty(t, tgd.Transformations, "should not add cleanup when there are no hints")
+	assert.Empty(t, tgd.Transformations, "should not add cleanup when there are no expressions")
 
-	addFileCleanupTransformation(tgd, []fileBufferHint{})
+	addFileCleanupTransformation(tgd, []string{})
 	assert.Empty(t, tgd.Transformations, "should not add cleanup for empty slice")
 }
 
-func TestFileBufferHint_ExpressionsReferenceConsumerNotProducer(t *testing.T) {
-	// All hint kinds must produce expressions referencing .spec (consumer input)
-	// not .output (producer output), so DAG edges point from consumers to cleanup.
+func TestFileCleanupExpressions_ReferenceConsumerNotProducer(t *testing.T) {
+	// Expressions must reference .spec (consumer input), not .output (producer output),
+	// so DAG edges point from consumers to the cleanup node.
 	tests := []struct {
-		name string
-		hint fileBufferHint
+		name  string
+		exprs []string
 	}{
-		{"local blob", fileBufferHint{kind: fileBufferLocalBlob, addID: "addId"}},
-		{"OCI artifact", fileBufferHint{kind: fileBufferOCIArtifact, addID: "addId"}},
-		{"Helm chart", fileBufferHint{kind: fileBufferHelm, convertID: "convertId", addID: "addId"}},
+		{"local blob", []string{"${addId.spec.file}"}},
+		{"OCI artifact", []string{"${addId.spec.file}"}},
+		{"Helm chart", []string{
+			"${convertId.spec.chartFile}",
+			"${convertId.spec.?provFile}",
+			"${addId.spec.file}",
+		}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			for _, expr := range tt.hint.expressions() {
+			for _, expr := range tt.exprs {
 				assert.Contains(t, expr, ".spec.",
 					"expression %q should reference consumer spec, not producer output", expr)
 				assert.NotContains(t, expr, ".output.",
