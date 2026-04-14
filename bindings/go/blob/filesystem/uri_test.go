@@ -32,6 +32,11 @@ func TestFilePathFromURI(t *testing.T) {
 			expected: "/tmp/file",
 		},
 		{
+			name:     "LOCALHOST accepted case-insensitively",
+			uri:      "file://LOCALHOST/tmp/file",
+			expected: "/tmp/file",
+		},
+		{
 			name:        "non-file scheme",
 			uri:         "https://example.com/file",
 			expectError: true,

@@ -3,6 +3,7 @@ package filesystem
 import (
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // FilePathFromURI extracts the filesystem path from a file:// URI.
@@ -22,7 +23,7 @@ func FilePathFromURI(uri string) (string, error) {
 	if parsed.Opaque != "" {
 		return "", fmt.Errorf("opaque file URI %q not supported, use file:///path form", uri)
 	}
-	if parsed.Host != "" && parsed.Host != "localhost" {
+	if parsed.Host != "" && !strings.EqualFold(parsed.Host, "localhost") {
 		return "", fmt.Errorf("remote file URI %q not supported, host must be empty or localhost", uri)
 	}
 	if parsed.Path == "" {
