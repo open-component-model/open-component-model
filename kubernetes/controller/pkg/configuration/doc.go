@@ -5,7 +5,7 @@
 // credentials and
 //   - flattens multiple configuration sources into a single [Configuration],
 //   - calculates a content-addressable hash, and
-//   - enforces a hardedcoded strict allowlist of accepted config types (config
+//   - enforces a hardcoded strict allowlist of accepted config types (config
 //     types outside of the allowlist are dropped).
 //
 // WARNING: This package is still under active development. APIs may change in
