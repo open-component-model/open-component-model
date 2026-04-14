@@ -160,6 +160,10 @@ git describe --tags --match "cli/v[0-9]*"
 * Promotion without rebuild: final tags point to the same digest (OCI images) and the same binary checksums; no new build occurs.
 * Provenance/Signatures: RCs are signed/attested (using [actions/attest-build-provenance](https://github.com/actions/attest-build-provenance)); promotion adds a final attestation referencing the same subject digest.
 
+#### GPG-signed tags
+
+All release tags (RC and final) are GPG-signed (`git tag -s`) to satisfy the OpenSSF Best Practices `version_tags_signed` criterion. The release workflows import a GPG key from repository secrets (`GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`) using [crazy-max/ghaction-import-gpg](https://github.com/crazy-max/ghaction-import-gpg) before creating any tag.
+
 ### Rollback & Immutability Policy
 
 * Tags are immutable. Never delete or overwrite a published annotated tag.
