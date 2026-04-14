@@ -159,3 +159,15 @@
   target = "static/latest/schemas/kubernetes/controller"
   [imports.mounts.sites.matrix]
     versions = ["latest"]
+
+[[imports]]
+  path = "ocm.software/open-component-model/bindings/go/helm"
+  version = "latest"
+  [[imports.mounts]]
+  source = "spec/input/v1/schemas"
+  target = "static/latest/schemas/bindings/go/helm/spec/input/v1/schemas"
+  [[imports.mounts]]
+  source = "spec/access/v1/schemas"
+  target = "static/latest/schemas/bindings/go/helm/spec/access/v1/schemas"
+  [imports.mounts.sites.matrix]
+    versions = ["latest"]

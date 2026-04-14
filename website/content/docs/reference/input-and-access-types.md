@@ -66,6 +66,9 @@ resources:
 
 Embeds a Helm chart from the local filesystem or a remote repository. Exactly one of `path` or `helmRepository` must be specified.
 
+{{< schema-renderer url="/schemas/bindings/go/helm/spec/input/v1/schemas/Helm.schema.json" >}}
+
+
 | Field | Type | Required | Description |
 | ----- | ---- | -------- | ----------- |
 | `path` | string | no | Path to a local chart directory or `.tgz` archive. |
@@ -196,6 +199,8 @@ resources:
 ```
 
 ### `Helm/v1`
+
+{{< schema-renderer url="/schemas/bindings/go/helm/spec/access/v1/schemas/Helm.schema.json" >}}
 
 References a Helm chart in a Helm chart repository or OCI registry. Legacy alias: `helm`.
 
