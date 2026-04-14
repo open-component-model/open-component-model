@@ -6,7 +6,7 @@ toc: true
 hasMermaid: true
 ---
 
-A component version describes a set of resources — container images, Helm charts, configuration files — but it does not necessarily store those resources itself. Resource repositories are the abstraction OCM uses to upload, download, and authenticate against the actual storage backends where resource artifacts live.
+A component version describes a set of resources (container images, Helm charts, configuration files) but it does not necessarily store those resources itself. Resource repositories are the abstraction OCM uses to upload, download, and authenticate against the actual storage backends where resource artifacts live.
 
 ## Why Separate Resource Storage?
 
@@ -15,7 +15,7 @@ Component versions are stored in a component version repository (typically an OC
 This separation exists for practical reasons:
 
 - **Resources predate component versions.** A container image often exists in a registry long before anyone wraps it in a component version. OCM needs to reference it where it already lives rather than requiring a copy.
-- **Different storage, different protocols.** OCI images use the OCI distribution spec. Helm charts use HTTP index-based repositories or OCI. Future resource types may use entirely different protocols. A single abstraction cannot hide these differences — each needs its own implementation.
+- **Different storage, different protocols.** OCI images use the OCI distribution spec. Helm charts use HTTP index-based repositories or OCI. Future resource types may use entirely different protocols. A single abstraction cannot hide these differences, so each needs its own implementation.
 - **Credentials differ per backend.** Accessing an OCI registry requires OCI credentials. Accessing a Helm repository requires Helm-style credentials. Resource repositories resolve the correct [credential consumer identity]({{< relref "docs/reference/credential-consumer-identities.md" >}}) for each backend, integrating with OCM's [credential system]({{< relref "docs/concepts/credential-system.md" >}}).
 
 ```mermaid
@@ -41,11 +41,11 @@ Every resource in a component descriptor carries an **access specification** wit
 
 Each resource repository implements three operations:
 
-1. **Resolve credential identity** — determine what credentials are needed to access the resource.
-2. **Download** — fetch the resource content as a blob.
-3. **Upload** — push resource content to the backend (not all backends support this).
+1. **Resolve credential identity**: determine what credentials are needed to access the resource.
+2. **Download**: fetch the resource content as a blob.
+3. **Upload**: push resource content to the backend (not all backends support this).
 
-OCM ships with built-in resource repositories for OCI artifacts and Helm charts. For the full technical details — supported access types, credential resolution rules, and per-repository capabilities — see the [Resource Repositories Reference]({{< relref "docs/reference/resource-repositories.md" >}}).
+OCM ships with built-in resource repositories for OCI artifacts and Helm charts. For the full technical details (supported access types, credential resolution rules, and per-repository capabilities), see the [Resource Repositories Reference]({{< relref "docs/reference/resource-repositories.md" >}}).
 
 ## Extensibility Through Plugins
 
@@ -61,11 +61,11 @@ Without resource repositories, transfer would only be able to copy component des
 
 ## What's Next?
 
-- [Reference: Resource Repositories]({{< relref "docs/reference/resource-repositories.md" >}}) — Complete technical reference for each built-in resource repository
-- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) — Access type specifications that resource repositories handle
+- [Reference: Resource Repositories]({{< relref "docs/reference/resource-repositories.md" >}}): complete technical reference for each built-in resource repository
+- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}): access type specifications that resource repositories handle
 
 ## Related Documentation
 
-- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) — How credentials are resolved for resource access
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — How resource repositories enable artifact transfer
-- [Concept: Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}) — How to extend OCM with custom resource repository plugins
+- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}): how credentials are resolved for resource access
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}): how resource repositories enable artifact transfer
+- [Concept: Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}): how to extend OCM with custom resource repository plugins

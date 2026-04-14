@@ -113,7 +113,7 @@ See [Concept: Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}) fo
 
 ## Related Documentation
 
-- [Concept: Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}) — Why resource repositories exist and how they fit into OCM
-- [Reference: Input and Access Types]({{< relref "input-and-access-types.md" >}}) — Access type specifications handled by resource repositories
-- [Reference: Credential Consumer Identities]({{< relref "credential-consumer-identities.md" >}}) — Identity types and matching rules for credential resolution
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — How resource repositories enable artifact transfer
+- [Concept: Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}): why resource repositories exist and how they fit into OCM
+- [Reference: Input and Access Types]({{< relref "input-and-access-types.md" >}}): access type specifications handled by resource repositories
+- [Reference: Credential Consumer Identities]({{< relref "credential-consumer-identities.md" >}}): identity types and matching rules for credential resolution
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}): how resource repositories enable artifact transfer
