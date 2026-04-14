@@ -25,10 +25,10 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 var repositoryKey = ".spec.repositoryRef"
