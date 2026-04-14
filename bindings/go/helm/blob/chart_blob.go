@@ -91,7 +91,7 @@ func extractFromTar(tarBlob blob.ReadOnlyBlob) (chartBlob blob.ReadOnlyBlob, pro
 	for {
 		hdr, err := tr.Next()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break // End of archive
 			}
 			return nil, nil, fmt.Errorf("error reading tar blob: %w", err)
