@@ -108,8 +108,7 @@ func (b *Builder) WithTransformer(typed interface {
 	return b
 }
 
-// WithCredentialProvider sets the credential resolver used to resolve credentials
-// for transformer consumer identities during graph processing.
+// WithCredentialProvider sets the credential resolver for transformer identity resolution.
 func (b *Builder) WithCredentialProvider(provider credentials.Resolver) *Builder {
 	b.credentialProvider = provider
 	return b

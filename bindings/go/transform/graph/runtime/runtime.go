@@ -17,20 +17,12 @@ import (
 )
 
 type Transformer interface {
-	// GetCredentialConsumerIdentities returns credential identities this transformer needs for the given step.
-	// Map key is a transformer-defined slot name (e.g. "repository", "resource").
-	// Multi-credential transformers may use keys like "source" and "target" for both ends of a transfer.
-	// Returns nil or empty map when no credentials are needed.
+	// GetCredentialConsumerIdentities returns named credential identities this transformer needs.
+	// Returns nil when no credentials are needed.
 	GetCredentialConsumerIdentities(ctx context.Context, step runtime.Typed) (map[string]runtime.Identity, error)
 
-	// Transform executes the transformation with resolved credentials.
-	//
-	// The credentials parameter follows these semantics:
-	//   - nil: no credentials were requested (GetCredentialConsumerIdentities returned nil/empty)
-	//     or no credential resolver is configured.
-	//   - non-nil map with nil value for a slot key: the resolver was present and the identity
-	//     was looked up, but no matching credentials were found (ErrNotFound was swallowed).
-	//     Implementations should treat a nil inner map the same as missing credentials.
+	// Transform executes the transformation with pre-resolved credentials.
+	// nil credentials means none were requested or no resolver is configured.
 	Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error)
 }
 

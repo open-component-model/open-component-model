@@ -61,7 +61,6 @@ func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed, cred
 	// Convert resource to internal format
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
 
-	// Resolve credentials if provided
 	var creds map[string]string
 	if credentials != nil {
 		creds = credentials[CredentialSlotResource]

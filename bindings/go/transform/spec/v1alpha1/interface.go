@@ -8,10 +8,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-// Transformation is the spec-level interface for a typed transformation object.
-// Unlike runtime.Transformer (which receives the step as a generic runtime.Typed parameter),
-// Transformation methods operate on the concrete object itself — the receiver already holds
-// its own data, so no step parameter is needed.
 type Transformation interface {
 	GetTransformationMeta() *meta.TransformationMeta
 	NestedTypedFields() []string

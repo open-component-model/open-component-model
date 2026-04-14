@@ -471,6 +471,9 @@ func TestGetHelmChart_CredentialFlow(t *testing.T) {
 		r.Nil(identities)
 	})
 
+	// The following two subtests verify credentials survive through the helm download stack
+	// (transform → downloader → HTTP). Other credential tests use mocks; these are the only
+	// tests that prove auth actually reaches the wire.
 	t.Run("Transform uses resolved credentials for authenticated chart download", func(t *testing.T) {
 		r := require.New(t)
 		ctx := t.Context()
