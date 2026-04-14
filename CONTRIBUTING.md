@@ -79,6 +79,29 @@ task test
   - If you want to apply auto-fixing: `task tools:lint -- --fix`
 - Generated code lives alongside source — run `task generate` if you change schemas
 
+## Test Requirements
+
+All code changes must include appropriate tests. This is a mandatory part of the review process.
+
+### New Features
+
+All new features **must** include unit tests that cover the expected behaviour. PRs without tests for new functionality will not be merged.
+
+### Bug Fixes
+
+All bug fixes **must** include a regression test that reproduces the original bug and verifies the fix. This ensures the same issue does not resurface.
+
+### Coverage
+
+PRs must not decrease overall test coverage. If existing uncovered code makes this impractical, discuss it in the PR description.
+
+### Testing Patterns by Module
+
+| Module | Framework | Key conventions |
+|---|---|---|
+| `bindings/go/` and `cli/` | testify (`require`, `mock`) | Table-driven tests with `t.Run()`. Start each test with `r := require.New(t)`. Prefer `t.Context()` over `context.Background()`. |
+| `kubernetes/controller/` | Ginkgo v2 + Gomega | Use `--ginkgo.focus` to run specific specs, not `-run`. |
+
 ## Pull Requests
 
 1. Fork the repo

@@ -35,5 +35,8 @@ ocm transfer xxx
 
 ##### Verification
 
+- [ ] I have added/updated tests for my changes
+- [ ] Tests pass locally with `task test`
+- [ ] My changes do not decrease test coverage
 - [ ] I have tested the changes locally by running `ocm`
   
