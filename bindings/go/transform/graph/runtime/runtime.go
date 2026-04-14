@@ -16,19 +16,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
-// Well-known credential slot names used by transformers in GetCredentialConsumerIdentities
-// and consumed by Transform. Using these constants prevents silent mismatches when one
-// side is renamed but not the other.
-const (
-	// CredentialSlotRepository identifies credentials for a component version repository.
-	CredentialSlotRepository = "repository"
-	// CredentialSlotResource identifies credentials for a resource (e.g. OCI artifact, Helm chart).
-	CredentialSlotResource = "resource"
-)
-
 type Transformer interface {
 	// GetCredentialConsumerIdentities returns credential identities this transformer needs for the given step.
-	// Map key is a transformer-defined slot name (e.g. CredentialSlotRepository, CredentialSlotResource).
+	// Map key is a transformer-defined slot name (e.g. "repository", "resource").
 	// Multi-credential transformers may use keys like "source" and "target" for both ends of a transfer.
 	// Returns nil or empty map when no credentials are needed.
 	GetCredentialConsumerIdentities(ctx context.Context, step runtime.Typed) (map[string]runtime.Identity, error)

@@ -58,14 +58,17 @@ func (m *mockRepositoryForGet) GetLocalSource(ctx context.Context, component, ve
 
 // mockRepoProviderForGet implements ComponentVersionRepositoryProvider for testing GetLocalResource
 type mockRepoProviderForGet struct {
-	repo *mockRepositoryForGet
+	repo     *mockRepositoryForGet
+	gotCreds map[string]string
+	identity runtime.Identity
 }
 
 func (m *mockRepoProviderForGet) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
-	return nil, nil
+	return m.identity, nil
 }
 
 func (m *mockRepoProviderForGet) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
+	m.gotCreds = credentials
 	return m.repo, nil
 }
 
@@ -333,4 +336,87 @@ func TestGetLocalResource_Transform_ValidationErrors(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.expectedErr)
 		})
 	}
+}
+
+func TestGetLocalResource_CredentialFlow(t *testing.T) {
+	ctx := t.Context()
+
+	testBlobData := []byte("test resource content")
+	testBlob := inmemory.New(bytes.NewReader(testBlobData))
+	testBlob.SetMediaType("application/test")
+
+	testResource := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{
+				Name:    "test-resource",
+				Version: "1.0.0",
+			},
+		},
+		Type:     "helmChart",
+		Relation: descriptor.LocalRelation,
+		Access: &v2.LocalBlob{
+			Type: runtime.Type{
+				Name:    v2.LocalBlobAccessType,
+				Version: v2.LocalBlobAccessTypeVersion,
+			},
+			MediaType:      "application/test",
+			LocalReference: "sha256:test-digest",
+		},
+	}
+
+	mockRepo := &mockRepositoryForGet{
+		returnBlob:     testBlob,
+		returnResource: testResource,
+	}
+	mockProvider := &mockRepoProviderForGet{
+		repo:     mockRepo,
+		identity: runtime.Identity{"type": "ociRegistry", "hostname": "ghcr.io"},
+	}
+
+	combinedScheme := runtime.NewScheme()
+	v2.MustAddToScheme(combinedScheme)
+	filesystemaccess.MustAddToScheme(combinedScheme)
+	combinedScheme.MustRegisterWithAlias(&v1alpha1.OCIGetLocalResource{}, v1alpha1.OCIGetLocalResourceV1alpha1)
+	combinedScheme.MustRegisterWithAlias(&v1alpha1.CTFGetLocalResource{}, v1alpha1.CTFGetLocalResourceV1alpha1)
+
+	transformer := &GetLocalResource{
+		Scheme:       combinedScheme,
+		RepoProvider: mockProvider,
+	}
+
+	spec := &v1alpha1.OCIGetLocalResource{
+		Type: runtime.NewVersionedType(v1alpha1.OCIGetLocalResourceType, v1alpha1.Version),
+		ID:   "test-get-creds",
+		Spec: &v1alpha1.OCIGetLocalResourceSpec{
+			Repository: ocispec.Repository{
+				Type:    runtime.Type{Name: ocispec.Type, Version: "v1"},
+				BaseUrl: "ghcr.io/test/components",
+			},
+			Component: "ocm.software/test-component",
+			Version:   "1.0.0",
+			ResourceIdentity: runtime.Identity{
+				"name":    "test-resource",
+				"version": "1.0.0",
+			},
+			OutputPath: t.TempDir(),
+		},
+	}
+
+	// Resolve credentials as runtime would
+	identities, err := transformer.GetCredentialConsumerIdentities(ctx, spec)
+	require.NoError(t, err)
+	require.NotNil(t, identities)
+	require.Contains(t, identities, CredentialSlotRepository)
+
+	resolvedCreds := map[string]map[string]string{
+		CredentialSlotRepository: {"username": "repo-user", "password": "repo-pass"},
+	}
+
+	result, err := transformer.Transform(ctx, spec, resolvedCreds)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify credentials were passed through to repository provider
+	assert.Equal(t, "repo-user", mockProvider.gotCreds["username"])
+	assert.Equal(t, "repo-pass", mockProvider.gotCreds["password"])
 }

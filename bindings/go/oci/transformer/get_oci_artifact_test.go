@@ -25,10 +25,16 @@ import (
 type mockRepositoryForGetOCI struct {
 	repository.ResourceRepository
 	returnBlob blob.ReadOnlyBlob
+	gotCreds   map[string]string
 }
 
-func (m mockRepositoryForGetOCI) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (m *mockRepositoryForGetOCI) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+	m.gotCreds = credentials
 	return m.returnBlob, nil
+}
+
+func (m *mockRepositoryForGetOCI) GetResourceCredentialConsumerIdentity(ctx context.Context, res *descriptor.Resource) (runtime.Identity, error) {
+	return runtime.Identity{"type": "ociRegistry", "hostname": "ghcr.io"}, nil
 }
 
 func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
@@ -297,4 +303,63 @@ func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.expectedErr)
 		})
 	}
+}
+
+func TestGetOCIArtifact_CredentialFlow(t *testing.T) {
+	ctx := t.Context()
+
+	testBlobData := []byte("test oci artifact content")
+	testBlob := inmemory.New(bytes.NewReader(testBlobData))
+	testBlob.SetMediaType("application/vnd.oci.image.layer.v1.tar+gzip")
+
+	mockRepo := &mockRepositoryForGetOCI{returnBlob: testBlob}
+
+	combinedScheme := runtime.NewScheme()
+	v2.MustAddToScheme(combinedScheme)
+	filesystemaccess.MustAddToScheme(combinedScheme)
+	combinedScheme.MustRegisterWithAlias(&v1alpha1.GetOCIArtifact{}, v1alpha1.GetOCIArtifactV1alpha1)
+
+	transformer := &GetOCIArtifact{
+		Scheme:     combinedScheme,
+		Repository: mockRepo,
+	}
+
+	spec := &v1alpha1.GetOCIArtifact{
+		Type: runtime.NewVersionedType(v1alpha1.GetOCIArtifactType, v1alpha1.Version),
+		ID:   "test-get-oci-creds",
+		Spec: &v1alpha1.GetOCIArtifactSpec{
+			Resource: &v2.Resource{
+				ElementMeta: v2.ElementMeta{
+					ObjectMeta: v2.ObjectMeta{
+						Name:    "test-image",
+						Version: "1.0.0",
+					},
+				},
+				Type:     "ociImage",
+				Relation: "external",
+				Access: &runtime.Raw{
+					Type: runtime.Type{Name: "ociArtifact", Version: "v1"},
+					Data: []byte(`{"imageReference": "ghcr.io/test/image:1.0.0"}`),
+				},
+			},
+		},
+	}
+
+	// Resolve credentials as runtime would
+	identities, err := transformer.GetCredentialConsumerIdentities(ctx, spec)
+	require.NoError(t, err)
+	require.NotNil(t, identities)
+	require.Contains(t, identities, CredentialSlotResource)
+
+	resolvedCreds := map[string]map[string]string{
+		CredentialSlotResource: {"username": "test-user", "password": "test-pass"},
+	}
+
+	result, err := transformer.Transform(ctx, spec, resolvedCreds)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify credentials were passed through to repository
+	assert.Equal(t, "test-user", mockRepo.gotCreds["username"])
+	assert.Equal(t, "test-pass", mockRepo.gotCreds["password"])
 }

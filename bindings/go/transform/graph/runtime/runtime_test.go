@@ -248,6 +248,7 @@ func TestProcessTransformationCredentialResolution(t *testing.T) {
 		}
 		require.NoError(t, rt.ProcessValue(t.Context(), transformation))
 		require.NotNil(t, mock.gotCreds)
+		require.Contains(t, mock.gotCreds, "repository")
 		require.Nil(t, mock.gotCreds["repository"])
 	})
 
