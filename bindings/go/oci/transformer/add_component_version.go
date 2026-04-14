@@ -19,10 +19,10 @@ type AddComponentVersion struct {
 func (t *AddComponentVersion) GetCredentialConsumerIdentities(ctx context.Context, step runtime.Typed) (map[string]runtime.Identity, error) {
 	transformation, err := t.Scheme.NewObject(step.GetType())
 	if err != nil {
-		return nil, fmt.Errorf("failed creating download component transformation object: %w", err)
+		return nil, fmt.Errorf("failed creating add component version transformation object: %w", err)
 	}
 	if err := t.Scheme.Convert(step, transformation); err != nil {
-		return nil, fmt.Errorf("failed converting generic transformation to download component transformation: %w", err)
+		return nil, fmt.Errorf("failed converting generic transformation to add component version transformation: %w", err)
 	}
 	var repoSpec runtime.Typed
 	switch tr := transformation.(type) {
@@ -36,7 +36,7 @@ func (t *AddComponentVersion) GetCredentialConsumerIdentities(ctx context.Contex
 
 	identity, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed getting repository consumer identity for credential resolution: %w", err)
 	}
 	if identity == nil {
 		return nil, nil
@@ -47,10 +47,10 @@ func (t *AddComponentVersion) GetCredentialConsumerIdentities(ctx context.Contex
 func (t *AddComponentVersion) Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error) {
 	transformation, err := t.Scheme.NewObject(step.GetType())
 	if err != nil {
-		return nil, fmt.Errorf("failed creating download component transformation object: %w", err)
+		return nil, fmt.Errorf("failed creating add component version transformation object: %w", err)
 	}
 	if err := t.Scheme.Convert(step, transformation); err != nil {
-		return nil, fmt.Errorf("failed converting generic transformation to download component transformation: %w", err)
+		return nil, fmt.Errorf("failed converting generic transformation to add component version transformation: %w", err)
 	}
 	var repoSpec runtime.Typed
 	var v2desc *v2.Descriptor

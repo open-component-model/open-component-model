@@ -31,7 +31,7 @@ func (t *GetOCIArtifact) GetCredentialConsumerIdentities(ctx context.Context, st
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
 	identity, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed getting resource consumer identity for credential resolution: %w", err)
 	}
 	if identity == nil {
 		return nil, nil

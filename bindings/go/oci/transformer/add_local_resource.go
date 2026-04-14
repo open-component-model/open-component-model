@@ -43,7 +43,7 @@ func (t *AddLocalResource) GetCredentialConsumerIdentities(ctx context.Context, 
 
 	identity, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed getting repository consumer identity for credential resolution: %w", err)
 	}
 	if identity == nil {
 		return nil, nil
