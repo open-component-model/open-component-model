@@ -8,8 +8,8 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
-	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
+	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"

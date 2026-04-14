@@ -9,10 +9,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/input"
-	v1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -20,9 +20,9 @@ func TestInputMethodGetResourceCredentialConsumerIdentity(t *testing.T) {
 	inputMethod := &input.InputMethod{}
 
 	tests := []struct {
-		name           string
-		helmSpec       v1.Helm
-		expectError    bool
+		name        string
+		helmSpec    v1.Helm
+		expectError bool
 		expectIdentity bool
 	}{
 		{

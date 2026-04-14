@@ -14,7 +14,7 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	helminput "ocm.software/open-component-model/bindings/go/helm/input"
-	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
