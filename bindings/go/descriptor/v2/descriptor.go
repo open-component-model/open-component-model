@@ -370,6 +370,12 @@ type Label struct {
 	Signing bool `json:"signing,omitempty"`
 	// Version is the optional specification version of the attribute value
 	Version string `json:"version,omitempty"`
+	// Merge optionally specifies the algorithm used to merge this label's value
+	// during component version transfers. If nil, the "default" algorithm
+	// with "inbound" overwrite mode is used.
+	//
+	// See https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/label-merge-algorithms.md
+	Merge *MergeSpec `json:"merge,omitempty"`
 }
 
 // String is a custom string representation of the Label that takes into account the raw string value of the label

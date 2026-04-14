@@ -70,5 +70,42 @@
 //		   value: ...
 //
 // Additional fields MAY be defined, such as `extraIdentity` or `labels`.
+//
+// # Label Merge
+//
+// Labels can carry an optional merge specification ([MergeSpec]) that controls
+// how their values are reconciled during component version transfers. When a
+// component version is transferred to a repository that already contains it,
+// non-signing labels may differ between the source (inbound) and target (local).
+//
+// The [MergeLabels] function resolves these differences using one of the four
+// built-in algorithms:
+//
+//   - "default" ([MergeAlgorithmDefault]) — binary comparison; on conflict the
+//     configured [OverwriteMode] decides (default: inbound wins).
+//   - "simpleMapMerge" ([MergeAlgorithmSimpleMapMerge]) — union of JSON object
+//     keys with configurable conflict resolution and optional recursive nested
+//     merge via the entries field.
+//   - "simpleListMerge" ([MergeAlgorithmSimpleListMerge]) — union of JSON array
+//     entries; entries present only in local are appended to inbound.
+//   - "mapListMerge" ([MergeAlgorithmMapListMerge]) — merge lists of objects by
+//     a configurable key field (default: "name").
+//
+// A label with merge configuration looks like this:
+//
+//	labels:
+//	  - name: routing-slip
+//	    value:
+//	      destinations:
+//	        - name: staging
+//	          url: https://staging.example.com
+//	    merge:
+//	      algorithm: mapListMerge
+//	      config:
+//	        keyField: name
+//	        overwrite: inbound
+//
+// See https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/label-merge-algorithms.md
+//
 // To read more about the specification of a component visit https://github.com/open-component-model/ocm-spec/.
 package v2
