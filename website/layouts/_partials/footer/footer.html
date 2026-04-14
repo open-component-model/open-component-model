@@ -51,8 +51,8 @@
               {{ with site.Params.commitfull -}}
               <a href="https://github.com/open-component-model/open-component-model/commit/{{ . }}"
                  target="_blank" rel="noopener noreferrer"
-                 class="text-nowrap text-decoration-none"
-                 style="font-size: 0.625rem; color: #6c757d;">
+                 class="text-nowrap"
+                 style="font-size: 0.625rem; color: #98989f;">
                 Commit {{ site.Params.commitshort | default (substr . 0 7) }}
               </a>
               {{- end }}
