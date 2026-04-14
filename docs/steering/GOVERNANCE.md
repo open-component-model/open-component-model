@@ -2,7 +2,7 @@
 
 This document describes governance procedures specific to the OCM Technical Steering Committee (TSC).
 
-For general community governance, roles, decision-making principles, ways of working, and specification development process, see the [OCM Community Governance Policy](https://github.com/open-component-model/ocm-spec/blob/main/GOVERNANCE.md).
+For general community governance, roles, decision-making principles, ways of working, and specification development process, see the [OCM Specification Governance](https://github.com/open-component-model/ocm-spec/blob/main/5._Governance.md).
 
 ## Scope
 
@@ -34,7 +34,7 @@ Meetings are intended to be open to the public and may be conducted electronical
 
 The TSC approves the creation, modification, and dissolution of Working Groups and SIGs. SIG charters must be submitted to the TSC for formal vote as described in the [SIG Handbook](../community/SIGs/SIG-Handbook.md).
 
-Major SIG decisions like, changes to charter, leadership, or dissolution, require TSC approval in addition to the SIG's own supermajority vote.
+Major SIG decisions — such as charter changes, leadership changes, or dissolution — require TSC approval in addition to the SIG's own supermajority vote.
 
 ## Security
 
@@ -44,7 +44,7 @@ The Security Officer role is currently delegated to the entire TSC. The TSC can 
 
 | Document | Purpose |
 |---|---|
-| [Community Governance](https://github.com/open-component-model/ocm-spec/blob/main/GOVERNANCE.md) | General roles, decision-making, ways of working |
+| [Specification Governance](https://github.com/open-component-model/ocm-spec/blob/main/5._Governance.md) | OCM specification development process and ways of working |
 | [Project Charter](./CHARTER.md) | Structure, purpose, and organization of the project |
 | [OWNERS.md](./OWNERS.md) | TSC members and Chair |
 | [SIG Handbook](../community/SIGs/SIG-Handbook.md) | SIG creation, lifecycle, and operations |

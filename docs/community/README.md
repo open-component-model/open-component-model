@@ -4,7 +4,7 @@ Welcome to the Open Component Model community. OCM is an open standard for descr
 
 ## Governance
 
-- [Community Governance Policy](https://github.com/open-component-model/ocm-spec/blob/main/GOVERNANCE.md) — Roles, decision-making, ways of working, and specification development process
+- [Specification Governance](https://github.com/open-component-model/ocm-spec/blob/main/5._Governance.md) — OCM specification development process, decision-making, and ways of working
 - [TSC Governance](../steering/GOVERNANCE.md) — Technical Steering Committee operating procedures
 - [Project Charter](../steering/CHARTER.md) — Structure, purpose, and organization of the project
 - [TSC Members](../steering/OWNERS.md) — Current TSC voting members and Chair
@@ -18,7 +18,7 @@ SIGs are groups of contributors focused on specific technical or community topic
 
 ## Community Calls
 
-For information about joining community calls, see the [OCM Community](https://ocm.software/community/engagement) page.
+For information about joining community calls, see the [OCM Community](https://ocm.software/community/) page.
 
 ## Community Call History
 
