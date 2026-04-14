@@ -7,16 +7,16 @@ require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.11.1
-	github.com/testcontainers/testcontainers-go v0.40.0
-	github.com/testcontainers/testcontainers-go/modules/registry v0.40.0
-	golang.org/x/crypto v0.48.0
+	github.com/testcontainers/testcontainers-go v0.41.0
+	github.com/testcontainers/testcontainers-go/modules/registry v0.41.0
+	golang.org/x/crypto v0.49.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
 	ocm.software/open-component-model/bindings/go/configuration v0.0.12
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
-	ocm.software/open-component-model/bindings/go/ctf v0.3.0
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260402061016-e120070fd921
+	ocm.software/open-component-model/bindings/go/ctf v0.4.0
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260414061810-b7809b82b15a
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/oci v0.0.37
+	ocm.software/open-component-model/bindings/go/oci v0.0.39
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
 	oras.land/oras-go/v2 v2.6.0
@@ -74,10 +74,12 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect
-	go.opentelemetry.io/otel v1.42.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.42.0 // indirect
-	go.opentelemetry.io/otel/metric v1.42.0 // indirect
-	go.opentelemetry.io/otel/trace v1.42.0 // indirect
+	go.opentelemetry.io/otel v1.43.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0 // indirect
+	go.opentelemetry.io/otel/metric v1.43.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.43.0 // indirect
+	go.opentelemetry.io/otel/sdk/metric v1.43.0 // indirect
+	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect

@@ -1,0 +1,70 @@
+name: "Website: Legacy Update OCM CLI Docs"
+
+permissions:
+  contents: read
+
+on:
+  repository_dispatch:
+    types: [ocm-cli-release]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'OCM CLI release tag'
+        required: true
+        type: string
+
+jobs:
+  generate-cli-reference:
+    name: Update website/content_versioned/version-legacy/docs/reference/ocm-cli
+    if: github.event.client_payload != '' || github.event.inputs.tag != ''
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
+      REF: main
+    permissions:
+      contents: 'write'
+      id-token: 'write'
+      pull-requests: 'write'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+          ref: ${{ env.REF }}
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: '${{ github.workspace }}/website/hack/generate-cli-docs/go.mod'
+
+      - name: Regenerate CLI docs
+        working-directory: website/hack/generate-cli-docs
+        run: |
+          go get ocm.software/ocm@$TAG
+          go mod tidy
+          go run ./... --output-dir=${{ github.workspace }}/website/content_versioned/version-legacy/docs/reference/ocm-cli
+
+      - name: Get OCMBot installation token
+        id: generate_token
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2
+        with:
+          app_id: ${{ secrets.OCMBOT_APP_ID }}
+          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          base: main
+          token: ${{ steps.generate_token.outputs.token }}
+          title: "Update CLI docs for version-legacy"
+          commit-message: "[github-actions] automated change"
+          add-paths: |
+            website/config/
+            website/content_versioned/version-legacy/
+            website/hack/generate-cli-docs/go.mod
+            website/hack/generate-cli-docs/go.sum
+          branch: update-cli-docs/auto
+          branch-suffix: timestamp
+          delete-branch: true
+          sign-commits: true
+          body: |
+            Update OCM CLI documentation for new release in folder website/content_versioned/version-legacy

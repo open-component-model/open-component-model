@@ -10,6 +10,9 @@ on:
         default: true
         type: boolean
 
+permissions:
+  contents: read
+
 env:
   REGISTRY: ghcr.io
   COMPONENT_PATH: kubernetes/controller
@@ -49,7 +52,7 @@ jobs:
     steps:
       - name: Generate App Token
         id: get_token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
@@ -111,19 +114,19 @@ jobs:
       actions: read
     steps:
       - name: Download changelog artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ needs.prepare.outputs.changelog_artifact }}
           path: ${{ runner.temp }}
 
       - name: Download chart artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ needs.build.outputs.chart_artifact_name }}
           path: ${{ runner.temp }}/assets
 
       - name: Create RC Release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: ${{ env.COMPONENT_NAME }} ${{ needs.prepare.outputs.new_version }}
           tag_name: ${{ needs.prepare.outputs.new_tag }}
@@ -221,7 +224,7 @@ jobs:
     steps:
       - name: Generate App Token
         id: get_token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
@@ -290,7 +293,7 @@ jobs:
           version: v4.1.3
 
       - name: Download RC chart artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ needs.build.outputs.chart_artifact_name }}
           path: ${{ runner.temp }}/rc-chart

@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=${BUILDPLATFORM} golang:1.26.1@sha256:5e69504bb541a36b859ee1c3daeb670b544b74b3dfd054aea934814e9107f6eb AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26.1@sha256:cd78d88e00afadbedd272f977d375a6247455f3a4b1178f8ae8bbcb201743a8a AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -15,6 +15,7 @@ RUN go mod download
 COPY cmd/main.go cmd/main.go
 COPY api/ api/
 COPY internal/ internal/
+COPY pkg/ pkg/
 
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command

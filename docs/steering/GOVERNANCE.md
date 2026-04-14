@@ -34,7 +34,7 @@ Meetings are intended to be open to the public and may be conducted electronical
 
 The TSC approves the creation, modification, and dissolution of Working Groups and SIGs. SIG charters must be submitted to the TSC for formal vote as described in the [SIG Handbook](../community/SIGs/SIG-Handbook.md).
 
-Major SIG decisions like, changes to charter, leadership, or dissolution, require TSC approval in addition to the SIG's own supermajority vote.
+Major SIG decisions—such as charter changes, leadership changes, or dissolution—require TSC approval in addition to the SIG's own supermajority vote.
 
 ## Security
 
@@ -48,3 +48,7 @@ The Security Officer role is currently delegated to the entire TSC. The TSC can 
 | [Project Charter](./CHARTER.md) | Structure, purpose, and organization of the project |
 | [OWNERS.md](./OWNERS.md) | TSC members and Chair |
 | [SIG Handbook](../community/SIGs/SIG-Handbook.md) | SIG creation, lifecycle, and operations |
+
+## Repository Guidelines
+
+All new repositories repository under the [github.com/open-component-model](https://github.com/open-component-model) organization should follow the guidelines set out at [CONTRIBUTING.md](https://github.com/open-component-model/.github/blob/main/CONTRIBUTING.md).
