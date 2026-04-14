@@ -90,28 +90,22 @@ func extractFromTar(tarBlob blob.ReadOnlyBlob) (chartBlob blob.ReadOnlyBlob, pro
 	tr := tar.NewReader(rc)
 	for {
 		hdr, err := tr.Next()
-		if err == io.EOF {
-			break // End of archive
-		}
 		if err != nil {
+			if err == io.EOF {
+				break // End of archive
+			}
 			return nil, nil, fmt.Errorf("error reading tar blob: %w", err)
 		}
 
-		// TODO(matthiasbruns): remove me when done
-		// fmt.Printf("Contents of %s:\n", hdr.Name)
-		// if _, err := io.Copy(os.Stdout, tr); err != nil {
-		//	log.Fatal(err)
-		// }
-		// fmt.Println()
+		data, err := io.ReadAll(tr)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error reading chart tarball: %w", err)
+		}
 
 		switch {
 		case strings.HasSuffix(hdr.Name, TarGzSuffix):
 			fallthrough
 		case strings.HasSuffix(hdr.Name, TGZSuffix):
-			data, err := io.ReadAll(tr)
-			if err != nil {
-				return nil, nil, fmt.Errorf("error reading chart tarball: %w", err)
-			}
 			if chartBlob != nil {
 				return nil, nil, fmt.Errorf("tar archive contains multiple chart entries; expected exactly one chart archive")
 			}
@@ -121,10 +115,6 @@ func extractFromTar(tarBlob blob.ReadOnlyBlob) (chartBlob blob.ReadOnlyBlob, pro
 				inmemory.WithSize(int64(len(data))),
 			)
 		case strings.HasSuffix(hdr.Name, ".prov"):
-			data, err := io.ReadAll(tr)
-			if err != nil {
-				return nil, nil, fmt.Errorf("error reading prov tarball: %w", err)
-			}
 			provBlob = inmemory.New(
 				bytes.NewReader(data),
 				inmemory.WithMediaType(filesystem.DefaultFileMediaType),

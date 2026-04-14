@@ -115,12 +115,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 	slog.DebugContext(ctx, "Helm chart downloaded successfully, creating tar archive", "chartReference", helmURL)
 
-	// TODO(matthiasbruns): debug why streaming might break this
-	// tarBlob, err := filesystem.GetBlobFromPath(ctx, result.ChartDir, filesystem.DirOptions{})
-	// if err != nil {
-	//	return nil, fmt.Errorf("error creating tar archive from helm download: %w", err)
-	//}
-
+	// TODO(matthiasbruns): try to migrate to filesystem.GetBlobFromPath
 	tarBlob, err := tarDirectoryRecursive(ctx, downloadDir)
 	if err != nil {
 		return nil, fmt.Errorf("error creating tar archive from helm download: %w", err)
