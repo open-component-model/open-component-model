@@ -58,8 +58,7 @@ information (e.g., the final image reference with digest) after upload.
 
 ### Digest Processing
 
-The OCI resource repository also implements digest processing. After a resource is stored, OCM can query the registry to
-retrieve and verify the artifact's digest, ensuring the access specification is pinned to an immutable reference.
+The OCI resource repository also implements digest processing. When constructing a component version with a by-reference resource, OCM queries the registry to resolve and verify the artifact's digest, ensuring the resource descriptor is pinned to an immutable reference.
 
 ---
 
@@ -79,7 +78,7 @@ Handles Helm charts stored in HTTP/HTTPS-based chart repositories.
 |-------------------|-----------|
 | Download          | Yes       |
 | Upload            | No        |
-| Digest Processing | No        |
+| Digest Processing | Yes       |
 
 {{< callout type="info" >}}
 Upload is not supported because traditional Helm chart repositories are read-only HTTP servers that serve a static
@@ -101,6 +100,7 @@ type is `HelmChartRepository`.
 | `type`     | `HelmChartRepository`    |
 | `hostname` | `stefanprodan.github.io` |
 | `scheme`   | `https`                  |
+| `path`     | `podinfo`                |
 
 If the resource has no `helmRepository` (a local chart embedded via input), no credential identity is returned — local
 charts do not require remote authentication.
@@ -117,6 +117,10 @@ tar archive and returned as an in-memory blob.
 
 The `helmChart` and `helmRepository` fields from the access specification are combined to construct the full chart
 reference used for download.
+
+### Digest Processing
+
+The Helm digest processor resolves chart digests from the remote repository. For HTTP/HTTPS repositories it downloads the `index.yaml` and extracts the digest for the specified chart and version. For OCI-based Helm repositories it resolves the OCI manifest digest via the registry API.
 
 ---
 
