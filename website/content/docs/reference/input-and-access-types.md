@@ -15,7 +15,8 @@ Resources in a component version are added using either an **input type** or an 
   references an external location (e.g. an OCI registry) rather than embedding the content.
 
 A resource must have exactly one of `input` or `access`. See the
-[Component Constructor]({{< relref "component-constructor.md" >}}) reference for the full YAML schema.
+[Component Constructor]({{< relref "component-constructor.md" >}})
+reference for the full YAML schema.
 
 ## Input Types
 
