@@ -17,9 +17,9 @@ Handles OCI artifacts stored in OCI-compliant registries.
 
 ### Supported Access Types
 
-| Access Type                                                            | Aliases                                  |
-|------------------------------------------------------------------------|------------------------------------------|
-| [`OCIImage/v1`]({{< relref "input-and-access-types.md" >}}#ociimagev1) | `ociArtifact`, `ociRegistry`, `ociImage` |
+| Access Type                                                             |
+|-------------------------------------------------------------------------|
+| [`OCIImage/v1`]({{< relref "input-and-access-types.md" >}}#ociimagev1) |
 
 ### Capabilities
 
@@ -68,9 +68,9 @@ Handles Helm charts stored in HTTP/HTTPS-based chart repositories.
 
 ### Supported Access Types
 
-| Access Type                                                    | Aliases |
-|----------------------------------------------------------------|---------|
-| [`Helm/v1`]({{< relref "input-and-access-types.md" >}}#helmv1) | `helm`  |
+| Access Type                                                     |
+|-----------------------------------------------------------------|
+| [`Helm/v1`]({{< relref "input-and-access-types.md" >}}#helmv1) |
 
 ### Capabilities
 
