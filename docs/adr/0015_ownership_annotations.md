@@ -2,7 +2,7 @@
 
 * **Status**: proposed
 * **Deciders**: OCM Technical Steering Committee
-* **Date**: 2026.03.12
+* **Date**: 2026-03-12
 
 **Technical Story**: Given an OCI artifact stored in a registry, there is no standardized way to trace it back to the OCM component version that owns it. This ADR evaluates approaches to attach ownership metadata (component name, version, artifact identity) to OCI resources to make this possible.
 
