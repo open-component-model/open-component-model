@@ -137,12 +137,16 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         id: branch-check
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          INPUT_REF: ${{ inputs.ref }}
         with:
           script: |
+            const tagPattern = /^cli\/v\d+\.\d+(\.\d+)?(-.*)?$/;
             core.setOutput(
               "should_push_oci_image",
               process.env.GITHUB_REF_NAME === context.payload.repository.default_branch ||
-              /^cli\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(process.env.GITHUB_REF_NAME)
+              tagPattern.test(process.env.GITHUB_REF_NAME) ||
+              tagPattern.test(process.env.INPUT_REF || '')
             )
 
       # Upload CLI binaries and OCI layout as build artifacts
