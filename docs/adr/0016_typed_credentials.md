@@ -2,7 +2,7 @@
 
 * Status: proposed
 * Deciders: OCM Technical Steering Committee
-* Date: 2026.04.02
+* Date: 2026.04.15
 
 Technical Story: Evolve the OCM credential system from untyped `map[string]string` credentials into a type-safe, self-documenting system that validates credential and identity types at both configuration time and consumption time.
 
