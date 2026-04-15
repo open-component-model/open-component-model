@@ -18,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
 // --- test helpers ---
@@ -168,10 +169,12 @@ func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 3)
+	assert.Len(t, tgd.Transformations, 4)
 	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
 	assert.Contains(t, tgd.Transformations[2].ID, "Upload")
+	assert.Equal(t, FileCleanupVersionedType, tgd.Transformations[3].Type)
+	assert.Equal(t, "fileBufferCleanup", tgd.Transformations[3].ID)
 }
 
 func TestBuildGraphDefinition_OCIImageSkippedInDefaultMode(t *testing.T) {
@@ -200,7 +203,7 @@ func TestBuildGraphDefinition_OCIImageWithCopyAllResources(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeAllResources, UploadAsDefault)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 3)
+	assert.Len(t, tgd.Transformations, 4)
 	assert.Equal(t, ociv1alpha1.GetOCIArtifactV1alpha1, tgd.Transformations[0].Type)
 }
 
@@ -215,7 +218,7 @@ func TestBuildGraphDefinition_OCIImageUploadAsOCIArtifact(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeAllResources, UploadAsOciArtifact)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 3)
+	assert.Len(t, tgd.Transformations, 4)
 	assert.Equal(t, ociv1alpha1.GetOCIArtifactV1alpha1, tgd.Transformations[0].Type)
 	addOCIType := runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version)
 	assert.Equal(t, addOCIType, tgd.Transformations[1].Type)
@@ -232,7 +235,7 @@ func TestBuildGraphDefinition_HelmResource(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeAllResources, UploadAsDefault)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 4)
+	assert.Len(t, tgd.Transformations, 5)
 	assert.Equal(t, helmv1alpha1.GetHelmChartV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, helmv1alpha1.ConvertHelmToOCIV1alpha1, tgd.Transformations[1].Type)
 }
@@ -248,7 +251,7 @@ func TestBuildGraphDefinition_CTFTarget(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 3)
+	assert.Len(t, tgd.Transformations, 4)
 	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, ociv1alpha1.CTFAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
 	assert.Equal(t, ociv1alpha1.CTFAddComponentVersionV1alpha1, tgd.Transformations[2].Type)
@@ -374,8 +377,8 @@ func TestBuildGraphDefinition_MultiTargetWithResources(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
 	require.NoError(t, err)
 
-	// With 1 resource and 2 targets: each target needs get + add + upload = 3, total 6
-	assert.Len(t, tgd.Transformations, 6)
+	// With 1 resource and 2 targets: each target needs get + add + upload = 3, total 6, plus 1 cleanup = 7
+	assert.Len(t, tgd.Transformations, 7)
 }
 
 func TestBuildGraphDefinition_RecursiveTargetPropagation(t *testing.T) {
@@ -454,4 +457,180 @@ func TestBuildGraphDefinition_RecursiveResolverPropagation(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 2, uploadCount, "expected 2 upload transformations after recursive resolver propagation")
+}
+
+// --- FileCleanup graph integration tests ---
+
+// findCleanupTransformation returns the FileCleanup transformation from the graph, or nil.
+func findCleanupTransformation(tgd *transformv1alpha1.TransformationGraphDefinition) *transformv1alpha1.GenericTransformation {
+	for i := range tgd.Transformations {
+		if tgd.Transformations[i].ID == "fileBufferCleanup" {
+			return &tgd.Transformations[i]
+		}
+	}
+	return nil
+}
+
+// cleanupFileExpressions extracts the files list from a cleanup transformation's spec.
+func cleanupFileExpressions(t *testing.T, cleanup *transformv1alpha1.GenericTransformation) []string {
+	t.Helper()
+	require.NotNil(t, cleanup)
+	require.NotNil(t, cleanup.Spec)
+
+	filesRaw, ok := cleanup.Spec.Data["files"]
+	require.True(t, ok, "cleanup spec should have a 'files' field")
+
+	filesSlice, ok := filesRaw.([]any)
+	require.True(t, ok, "files should be []any")
+
+	exprs := make([]string, len(filesSlice))
+	for i, f := range filesSlice {
+		exprs[i], ok = f.(string)
+		require.True(t, ok, "each file entry should be a string CEL expression")
+	}
+	return exprs
+}
+
+func TestBuildGraphDefinition_CleanupReferencesAddSpec_LocalBlob(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{localBlobResource("my-resource", "1.0.0")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
+	require.NoError(t, err)
+
+	cleanup := findCleanupTransformation(tgd)
+	require.NotNil(t, cleanup, "cleanup node should be present when resources exist")
+
+	exprs := cleanupFileExpressions(t, cleanup)
+	require.Len(t, exprs, 1)
+
+	// The expression should reference the Add transformation's spec.file,
+	// not the Get transformation's output.file.
+	assert.Contains(t, exprs[0], "Add")
+	assert.Contains(t, exprs[0], ".spec.file")
+	assert.NotContains(t, exprs[0], ".output.")
+}
+
+func TestBuildGraphDefinition_CleanupReferencesAddSpec_OCIArtifact(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeAllResources, UploadAsDefault)
+	require.NoError(t, err)
+
+	cleanup := findCleanupTransformation(tgd)
+	require.NotNil(t, cleanup)
+
+	exprs := cleanupFileExpressions(t, cleanup)
+	require.Len(t, exprs, 1)
+
+	assert.Contains(t, exprs[0], "Add")
+	assert.Contains(t, exprs[0], ".spec.file")
+	assert.NotContains(t, exprs[0], ".output.")
+}
+
+func TestBuildGraphDefinition_CleanupReferencesConvertAndAddSpec_Helm(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{helmResource("my-chart", "1.0.0", "https://charts.example.com", "my-chart")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeAllResources, UploadAsDefault)
+	require.NoError(t, err)
+
+	cleanup := findCleanupTransformation(tgd)
+	require.NotNil(t, cleanup)
+
+	exprs := cleanupFileExpressions(t, cleanup)
+	require.Len(t, exprs, 3)
+
+	// Chart file and prov file reference Convert's spec
+	assert.Contains(t, exprs[0], "Convert")
+	assert.Contains(t, exprs[0], ".spec.chartFile")
+	assert.Contains(t, exprs[1], "Convert")
+	assert.Contains(t, exprs[1], ".spec.?provFile")
+
+	// OCI layout file references Add's spec
+	assert.Contains(t, exprs[2], "Add")
+	assert.Contains(t, exprs[2], ".spec.file")
+
+	// None should reference .output (producer)
+	for _, expr := range exprs {
+		assert.NotContains(t, expr, ".output.",
+			"expression %q must reference consumer spec, not producer output", expr)
+	}
+}
+
+func TestBuildGraphDefinition_NoCleanupWhenNoResources(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0", nil, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
+	require.NoError(t, err)
+
+	cleanup := findCleanupTransformation(tgd)
+	assert.Nil(t, cleanup, "cleanup node should not be present when there are no resources")
+}
+
+func TestBuildGraphDefinition_NoCleanupWhenResourcesSkipped(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	// OCI image resource is skipped in CopyModeLocalBlobResources
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
+	require.NoError(t, err)
+
+	cleanup := findCleanupTransformation(tgd)
+	assert.Nil(t, cleanup, "cleanup node should not be present when all resources are skipped")
+}
+
+func TestBuildGraphDefinition_CleanupMultiTarget_AggregatesAllRefs(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	target1 := testOCIRepo("ghcr.io/target1")
+	target2 := testOCIRepo("ghcr.io/target2")
+
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{localBlobResource("my-resource", "1.0.0")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+
+	roots := map[string]TransferRoot{
+		"ocm.software/test:1.0.0": {
+			RootComponentKey: "ocm.software/test:1.0.0",
+			Targets:          []runtime.Typed{target1, target2},
+			SourceResolver:   resolver,
+		},
+	}
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
+	require.NoError(t, err)
+
+	cleanup := findCleanupTransformation(tgd)
+	require.NotNil(t, cleanup)
+
+	exprs := cleanupFileExpressions(t, cleanup)
+	// 2 targets × 1 resource = 2 file refs
+	assert.Len(t, exprs, 2, "should have one file ref per target")
+
+	// Both should reference Add spec, and IDs should differ (target-suffixed)
+	for _, expr := range exprs {
+		assert.Contains(t, expr, ".spec.file")
+	}
+	assert.NotEqual(t, exprs[0], exprs[1], "multi-target refs should have different Add IDs")
 }
