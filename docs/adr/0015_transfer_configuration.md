@@ -225,14 +225,14 @@ overwrites:
       repository: target-org/images/my-pod
       tag: "1.0.0"
 
-  # Partial overwrite — only registry and path, tag preserved from source.
-  # A resource originally at myrepo.org/project/my-pod:1.0.0 would be
-  # relocated to ghcr.io/target-org/images/my-pod:1.0.0.
+  # Partial overwrite — only registry and repository, tag preserved from source.
+  # A resource originally at myrepo.org/project/my-sidecar:2.1.0 would be
+  # relocated to ghcr.io/target-org/images/my-sidecar:2.1.0.
   - resource:
-      name: my-pod
+      name: my-sidecar
     imageReference:
       registry: ghcr.io
-      repository: target-org/images/my-pod
+      repository: target-org/images/my-sidecar
 
   # Resource in a referenced component, disambiguated by referencePath
   - referencePath:
