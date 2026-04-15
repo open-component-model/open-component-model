@@ -14,6 +14,10 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.blob.filesystem.spec.access.v1alpha1.File",
       "description": "File is the access specification to the file that should be added"
     },
+    "globalAccessPolicy": {
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.repository.v1.oci.GlobalAccessPolicy",
+      "description": "GlobalAccessPolicy controls whether global access references are added to local blobs.\nIf not set (empty), global access is never added to discourage reliance on global access references.\nSet to \"auto\" to auto-detect based on the storage backend.\n\nExperimental: This policy is carried over from OCM v1 for backwards compatibility.\nIts future availability is being evaluated by the community."
+    },
     "repository": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.repository.v1.oci.Repository",
       "description": "Repository is the OCI repository specification"
@@ -328,10 +332,6 @@
         "baseUrl": {
           "type": "string",
           "description": "BaseURL is the base url of the OCI registry (host + optional port).\nShould not include repository paths - use SubPath for that.\n\nExamples:\n- \"https://registry.example.com\"\n- \"https://registry.example.com:5000\"\n- \"oci://registry.example.com:5000\"\n- \"docker.io\"\n- \"ghcr.io\"\n\nIf BaseUrl contains a path (e.g., \"ghcr.io/org/repo\"),\nthe path will be auto-extracted and used as SubPath."
-        },
-        "globalAccessPolicy": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.repository.v1.oci.GlobalAccessPolicy",
-          "description": "GlobalAccessPolicy controls whether global access references are added to local blobs\nwhen adding local resources or sources.\nIf not set (empty), global access is never added to discourage reliance on global access references.\nSet to \"auto\" to auto-detect based on the storage backend (experimental, carried over from OCM v1)."
         },
         "subPath": {
           "type": "string",

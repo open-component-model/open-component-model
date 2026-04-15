@@ -57,11 +57,9 @@ type Repository struct {
 	//     BaseUrl="ghcr.io/open-component-model/ocm" + SubPath=""
 	//     → Auto-extracts to: BaseUrl="ghcr.io", SubPath="open-component-model/ocm"
 	SubPath string `json:"subPath,omitempty"`
-	// GlobalAccessPolicy controls whether global access references are added to local blobs
-	// when adding local resources or sources.
-	// If not set (empty), global access is never added to discourage reliance on global access references.
-	// Set to "auto" to auto-detect based on the storage backend (experimental, carried over from OCM v1).
-	GlobalAccessPolicy GlobalAccessPolicy `json:"globalAccessPolicy,omitempty"`
+	// GlobalAccessPolicy controls whether global access references are added to local blobs.
+	// This field is not serialized and is set programmatically by transformers.
+	GlobalAccessPolicy GlobalAccessPolicy `json:"-"`
 }
 
 func (spec *Repository) String() string {

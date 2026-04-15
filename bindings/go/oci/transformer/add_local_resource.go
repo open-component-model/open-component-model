@@ -42,6 +42,7 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 
 	switch tr := transformation.(type) {
 	case *v1alpha1.OCIAddLocalResource:
+		tr.Spec.Repository.GlobalAccessPolicy = tr.Spec.GlobalAccessPolicy
 		repoSpec = &tr.Spec.Repository
 		component = tr.Spec.Component
 		version = tr.Spec.Version
