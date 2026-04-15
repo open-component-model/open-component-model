@@ -22,7 +22,6 @@ RGD's
 ResourceGraphDefinitions
 Taskfiles
 Testcontainers
-Testcontainers
 TransformationGraphDefinition
 accessTypes
 accessmethod
@@ -683,7 +682,6 @@ steffen
 stichting
 storable
 struct
-structs
 structs
 subchart
 subcharts

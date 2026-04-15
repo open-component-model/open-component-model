@@ -154,26 +154,26 @@ reads the capabilities and registers types into the schemes. Consumers that need
 register their own Go struct for the same type — `scheme.Convert` handles the `Raw` → struct conversion.
 
 **Plugin type naming convention:** External plugin type names must be prefixed with the plugin's reverse-domain ID (
-e.g., `com.hashicorp.vault.VaultCredentials/v1`). Builtin types use short names (e.g., `HelmHTTPCredentials/v1`).
+e.g., `com.hashicorp.vault.VaultCredentials/v1`). Built-in types use short names (e.g., `HelmHTTPCredentials/v1`).
 
 Why enforce this? Without namespace prefixes, nothing prevents two independent plugins from registering the same type
-name — or a plugin from shadowing a builtin type. For example, a malicious or misconfigured plugin could register
-`OCICredentials/v1` and intercept credentials intended for the builtin OCI binding. The reverse-domain prefix creates
+name — or a plugin from shadowing a built-in type. For example, a malicious or misconfigured plugin could register
+`OCICredentials/v1` and intercept credentials intended for the built-in OCI binding. The reverse-domain prefix creates
 namespace isolation: each plugin can only register types under its own namespace, so collisions between plugins and
-between plugins and builtins are structurally impossible.
+between plugins and built-ins are structurally impossible.
 
 Enforcement is two-layered: the composition root validates that external plugin type names start with the plugin's
 registered ID (soft enforcement via convention), and `runtime.Scheme` rejects duplicate type registrations at runtime
-(hard enforcement via error). Builtins register first at startup, plugins register after discovery — so a plugin
-attempting to re-register a builtin type name will always fail.
+(hard enforcement via error). Built-ins register first at startup, plugins register after discovery — so a plugin
+attempting to re-register a built-in type name will always fail.
 
 This means:
 
 - Adding a new binding or plugin does not modify the credential graph
 - The graph validates and resolves types generically through the scheme
-- Builtin types are registered as Go structs, external plugin types as `runtime.Raw` — consumers use `scheme.Convert` to
+- Built-in types are registered as Go structs, external plugin types as `runtime.Raw` — consumers use `scheme.Convert` to
   get typed structs
-- Builtins register first (at startup), plugins register after (at discovery) — builtins always take precedence
+- Built-ins register first (at startup), plugins register after (at discovery) — built-ins always take precedence
 - Both schemes are optional (nil-safe) — the graph degrades to `DirectCredentials` behavior when no scheme is provided
 
 ### Backward Compatibility
@@ -212,8 +212,8 @@ creds, err := HelmHTTPCredentials.FromDirectCredentials(credentials)
 ```
 
 **Type naming for plugins:** External plugin credential and identity type names must be prefixed with a reverse-domain
-namespace derived from the plugin identity (e.g., `com.hashicorp.vault.VaultCredentials/v1`). Builtin types use short
-names (e.g., `HelmHTTPCredentials/v1`). This prevents collisions between plugins and builtins. `runtime.Scheme` enforces
+namespace derived from the plugin identity (e.g., `com.hashicorp.vault.VaultCredentials/v1`). Built-in types use short
+names (e.g., `HelmHTTPCredentials/v1`). This prevents collisions between plugins and built-ins. `runtime.Scheme` enforces
 uniqueness via duplicate registration errors.
 
 **Consumer-side conversion:** Consumers that need to work with plugin-declared credential types can either register
