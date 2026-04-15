@@ -19,7 +19,7 @@ Most of the active development happens in the
 [open-component-model](https://github.com/open-component-model/open-component-model) mono-repo. It contains the Go
 bindings, CLI, Kubernetes controllers, and this website.
 
-{{<callout context="caution" title="Legacy repositories" icon="shield-lock">}}
+{{<callout context="caution" title="Legacy repositories" icon="outline/alert-triangle">}}
 The [ocm](https://github.com/open-component-model/ocm) and
 [ocm-controller](https://github.com/open-component-model/ocm-controller) repositories are legacy and no longer
 actively developed. Please direct new contributions to the mono-repo above.
@@ -76,7 +76,7 @@ git checkout -b my-feature-branch upstream/main
 
 #### Make your changes and commit
 
-{{<callout context="note" title="Sign-off and signed commits" icon="key">}}
+{{<callout context="note" title="Sign-off and signed commits" icon="outline/signature">}}
 All commits must meet two requirements:
 
 1. **DCO sign-off** - Add `-s` to your `git commit` command. This appends a `Signed-off-by` line to your commit
