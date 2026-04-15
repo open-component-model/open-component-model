@@ -4,7 +4,8 @@
 * Deciders: OCM Maintainer Team
 * Date: 2026-04-15
 
-Technical Story: This ADR outlines the decision on how to integrate Sigstore/Cosign keyless signing into the OCM CLI, comparing a CLI wrapper approach with a direct library integration.
+Technical Story: This ADR outlines the decision on how to integrate Sigstore/Cosign keyless signing
+into the OCM CLI, comparing a CLI wrapper approach with a direct library integration.
 
 ## Context and Problem Statement
 
@@ -35,7 +36,8 @@ Justification:
 - **Seamless User Experience:** The `cosign` binary is managed automatically by the OCM CLI, making it invisible to the end-user. The user experience is a true single-tool experience.
 - **Familiarity:** The configuration model mirrors `cosign` conventions, which is beneficial for users already familiar with it.
 
-The main trade-off (dependency on an external binary) is fully mitigated by the transparent auto-download and caching mechanism with SHA256 verification.
+The main trade-off (dependency on an external binary) is fully mitigated by the transparent auto-download and
+caching mechanism with SHA256 verification of the downloaded binary.
 
 ## Pros and Cons of the Options
 
@@ -74,8 +76,13 @@ Cons:
 
 ## Discovery and Distribution
 
-The Sigstore handler will be implemented as a built-in OCM plugin. The `cosign` binary will be downloaded on-demand and cached in the user's home directory (`~/.cache/ocm/cosign/...`). The version of `cosign` will be pinned and managed by Renovate. The user will interact with the feature through the standard `ocm sign` and `ocm verify` commands, with `sigstore` as the algorithm name.
+The Sigstore handler will be implemented as an internal OCM plugin.
+The `cosign` binary will be downloaded on-demand and cached in the user's home directory (`~/.cache/ocm/cosign/...`).
+The version of `cosign` will be pinned and managed by Renovate. The user will interact with the feature through the standard `ocm sign` and `ocm verify` commands,
+with `sigstore` as the algorithm name.
 
 ## Conclusion
 
-Option A provides a pragmatic and robust solution for integrating Sigstore signing into OCM. It minimizes dependencies, leverages a mature toolchain, and provides a seamless experience for the end-user. The architecture is clean, maintainable, and flexible for future evolution.
+Option A provides a pragmatic and robust solution for integrating Sigstore signing into OCM. It minimizes dependencies,
+leverages a mature toolchain, and provides a seamless experience for the end-user.
+The architecture is clean, maintainable, and flexible for future evolution.
