@@ -566,10 +566,6 @@ resourceRules:
   familiar with CEL syntax, optional types, or the `${...}` delimiter
   convention. Error messages from CEL evaluation failures are
   notoriously hard to interpret for non-experts.
-* **Hard to validate statically.** CEL expressions are only fully
-  evaluable at runtime. Typos in variable names (`resoruce.name`) or
-  type mismatches (`access.imageReference` on a non-OCI resource)
-  surface as runtime errors, not parse-time errors.
 * **Over-engineered for the common case.** The vast majority of transfer
   configurations will be "resource X goes to image reference Y". A
   match/template engine is disproportionate machinery for literal
