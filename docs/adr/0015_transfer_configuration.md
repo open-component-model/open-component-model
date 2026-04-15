@@ -440,7 +440,8 @@ single format.
 * **Less powerful.** No pattern matching across resources. Each resource
   must be listed explicitly. This is acceptable — we do not anticipate
   most users needing dynamic, expression-based routing. Pattern-based
-  matching can be added via a new typed config when needed.
+  matching can be added via a new typed config when needed. Also, this could 
+  easily be added through another typed config if users need it later.
 
 ### Option 2: Generic Transfer Configuration
 
