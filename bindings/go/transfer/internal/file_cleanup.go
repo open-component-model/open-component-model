@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	accessv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -82,7 +82,7 @@ func (t *FileCleanup) Transform(ctx context.Context, step runtime.Typed) (runtim
 			continue
 		}
 
-		filePath, err := filePathFromURI(file.URI)
+		filePath, err := filesystem.FilePathFromURI(file.URI)
 		if err != nil {
 			slog.WarnContext(ctx, "skipping file cleanup: invalid URI",
 				"uri", file.URI, "error", err)
@@ -110,28 +110,6 @@ func (t *FileCleanup) Transform(ctx context.Context, step runtime.Typed) (runtim
 		"cleanedFiles", cleaned, "totalFiles", len(transformation.Spec.Files))
 
 	return &transformation, nil
-}
-
-// filePathFromURI extracts the filesystem path from a file:// URI.
-// Only local file URIs are accepted: no opaque form, no remote host.
-func filePathFromURI(uri string) (string, error) {
-	parsed, err := url.Parse(uri)
-	if err != nil {
-		return "", fmt.Errorf("invalid URI %q: %w", uri, err)
-	}
-	if parsed.Scheme != "file" {
-		return "", fmt.Errorf("unsupported URI scheme %q, expected \"file\"", parsed.Scheme)
-	}
-	if parsed.Opaque != "" {
-		return "", fmt.Errorf("opaque file URI %q not supported, use file:///path form", uri)
-	}
-	if parsed.Host != "" && parsed.Host != "localhost" {
-		return "", fmt.Errorf("remote file URI %q not supported, host must be empty or localhost", uri)
-	}
-	if parsed.Path == "" {
-		return "", fmt.Errorf("file URI %q has no path", uri)
-	}
-	return parsed.Path, nil
 }
 
 // addFileCleanupTransformation appends a FileCleanup transformation to the graph.

@@ -175,68 +175,6 @@ func TestFileCleanup_Transform_VerifiesFilesRemoved(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
-func TestFilePathFromURI(t *testing.T) {
-	tests := []struct {
-		name        string
-		uri         string
-		expected    string
-		expectError bool
-	}{
-		{
-			name:     "valid file URI",
-			uri:      "file:///tmp/oci-artifact-abc123",
-			expected: "/tmp/oci-artifact-abc123",
-		},
-		{
-			name:     "file URI with nested path",
-			uri:      "file:///var/tmp/buffers/resource-001",
-			expected: "/var/tmp/buffers/resource-001",
-		},
-		{
-			name:        "non-file scheme",
-			uri:         "https://example.com/file",
-			expectError: true,
-		},
-		{
-			name:        "invalid URI",
-			uri:         "://broken",
-			expectError: true,
-		},
-		{
-			name:        "opaque file URI",
-			uri:         "file:relative/path",
-			expectError: true,
-		},
-		{
-			name:        "remote host",
-			uri:         "file://remotehost/path/to/file",
-			expectError: true,
-		},
-		{
-			name:     "localhost host accepted",
-			uri:      "file://localhost/tmp/file",
-			expected: "/tmp/file",
-		},
-		{
-			name:        "empty path",
-			uri:         "file://",
-			expectError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := filePathFromURI(tt.uri)
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
-			}
-		})
-	}
-}
-
 // --- Graph helper tests ---
 
 func TestAddFileCleanupTransformation(t *testing.T) {
