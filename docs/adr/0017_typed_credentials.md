@@ -154,10 +154,18 @@ reads the capabilities and registers types into the schemes. Consumers that need
 register their own Go struct for the same type — `scheme.Convert` handles the `Raw` → struct conversion.
 
 **Plugin type naming convention:** External plugin type names must be prefixed with the plugin's reverse-domain ID (
-e.g., `com.hashicorp.vault.VaultCredentials/v1`). Builtin types use short names (e.g., `HelmHTTPCredentials/v1`). The
-composition root enforces that external plugin type names start with the plugin ID — this prevents plugins from
-registering types that collide with builtins or other plugins. `runtime.Scheme` provides the hard enforcement via
-duplicate registration errors; the naming convention provides the soft enforcement via namespace isolation.
+e.g., `com.hashicorp.vault.VaultCredentials/v1`). Builtin types use short names (e.g., `HelmHTTPCredentials/v1`).
+
+Why enforce this? Without namespace prefixes, nothing prevents two independent plugins from registering the same type
+name — or a plugin from shadowing a builtin type. For example, a malicious or misconfigured plugin could register
+`OCICredentials/v1` and intercept credentials intended for the builtin OCI binding. The reverse-domain prefix creates
+namespace isolation: each plugin can only register types under its own namespace, so collisions between plugins and
+between plugins and builtins are structurally impossible.
+
+Enforcement is two-layered: the composition root validates that external plugin type names start with the plugin's
+registered ID (soft enforcement via convention), and `runtime.Scheme` rejects duplicate type registrations at runtime
+(hard enforcement via error). Builtins register first at startup, plugins register after discovery — so a plugin
+attempting to re-register a builtin type name will always fail.
 
 This means:
 
