@@ -157,7 +157,7 @@ jobs:
           script: |
             const modules = JSON.parse(`${{ steps.discover.outputs.modules_json || '[]' }}`);
             const filtered = JSON.parse(`${{ steps.filtered.outputs.modules_json || '[]' }}`);
-            const infraChanged = `${{ steps.infra_changes.outputs.infra || 'false' }}` === 'true';
+            const infraChanged = `${{ steps.infra_changes.outputs.infra }}` === 'true';
             const unitTests = JSON.parse(`${{ steps.filtered_test.outputs.unit_test_modules_json || '[]' }}`);
             const integrationTests = JSON.parse(`${{ steps.filtered_test.outputs.integration_test_modules_json || '[]' }}`);
             
