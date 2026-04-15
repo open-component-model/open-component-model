@@ -36,6 +36,9 @@ const (
 	// GlobalAccessPolicyNever suppresses global access even on remote registries. This is the default.
 	GlobalAccessPolicyNever GlobalAccessPolicy = iota
 	// GlobalAccessPolicyAuto auto-detects based on whether the storage backend is globally reachable.
+	//
+	// Experimental: This policy is carried over from OCM v1 for backwards compatibility.
+	// Its future availability is being evaluated by the community.
 	GlobalAccessPolicyAuto
 )
 

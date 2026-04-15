@@ -60,7 +60,7 @@ type Repository struct {
 	// GlobalAccessPolicy controls whether global access references are added to local blobs
 	// when adding local resources or sources.
 	// If not set (empty), global access is never added to discourage reliance on global access references.
-	// Set to "auto" to auto-detect based on the storage backend.
+	// Set to "auto" to auto-detect based on the storage backend (experimental, carried over from OCM v1).
 	GlobalAccessPolicy GlobalAccessPolicy `json:"globalAccessPolicy,omitempty"`
 }
 
@@ -80,5 +80,8 @@ const (
 	GlobalAccessPolicyNever GlobalAccessPolicy = ""
 	// GlobalAccessPolicyAuto auto-detects based on the storage backend. Global access is only
 	// added when the storage backend is globally reachable (e.g. a remote OCI registry).
+	//
+	// Experimental: This policy is carried over from OCM v1 for backwards compatibility.
+	// Its future availability is being evaluated by the community.
 	GlobalAccessPolicyAuto GlobalAccessPolicy = "auto"
 )

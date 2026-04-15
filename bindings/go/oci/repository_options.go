@@ -97,6 +97,9 @@ const (
 	GlobalAccessPolicyNever GlobalAccessPolicy = iota
 	// GlobalAccessPolicyAuto auto-detects based on the storage backend. Global access is only
 	// added when the storage backend is globally reachable (e.g. a remote OCI registry).
+	//
+	// Experimental: This policy is carried over from OCM v1 for backwards compatibility.
+	// Its future availability is being evaluated by the community.
 	GlobalAccessPolicyAuto
 )
 
