@@ -542,3 +542,14 @@ new typed config without modifying the existing ones.
   applies uniformly and does not distinguish between source access
   types. The overwrite configs proposed here would then layer on top to
   control *where* each converted resource ends up.
+* **Global Helm-to-OCI conversion instead of
+  `HelmToOCIConversionOverwriteConfig`:** If a global flag or config
+  (e.g. `--convert-helm-to-oci`) enables Helm-to-OCI conversion for all
+  Helm chart resources with a default target location,
+  `HelmToOCIConversionOverwriteConfig` may be unnecessary.
+  `OCIImageOverwriteConfig` already handles overwriting the target image
+  reference for any resource that ends up as an OCI artifact — regardless
+  of whether the source was originally OCI or Helm. In that model, the
+  global flag handles the *policy* ("convert Helm to OCI") and
+  `OCIImageOverwriteConfig` handles the *location* ("put it here"). This
+  would reduce the initial surface to a single typed config.
