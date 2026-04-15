@@ -451,7 +451,6 @@ OCIImageOverwriteConfig           HelmToOCIConversionOverwriteConfig
                    └─ no match → default behaviour
                         (--upload-as / --copy-resources)
 ```
-```
 
 ### Adding New Typed Configurations
 
