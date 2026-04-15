@@ -22,13 +22,13 @@ jobs:
     permissions:
       pull-requests: read
     outputs:
-      # modules_json = changed modules only (filtered by paths)
+      # modules_json = all modules when .env or CI workflow changed, else changed modules only
       modules_json: ${{ steps.filtered.outputs.modules_json }}
-      # lint_modules_json = all modules when .env changed, else changed modules
+      # lint_modules_json = all modules when .env or CI workflow changed, else changed modules
       lint_modules_json: ${{ steps.filtered.outputs.lint_modules_json }}
       integration_test_modules_json: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
       unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
-      env_changed: ${{ steps.env_changes.outputs.env }}
+      infra_changed: ${{ steps.infra_changes.outputs.infra }}
     env:
       DIR: ${{ github.workspace }}
     steps:
@@ -38,13 +38,14 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      # Detect .env changes to decide whether to run golangci-lint on all or only changed modules
+      # Detect infrastructure changes (.env, CI workflow) to run all modules instead of only changed ones
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
-        id: env_changes
+        id: infra_changes
         with:
           filters: |
-            env:
+            infra:
               - '.env'
+              - '.github/workflows/ci.yml'
       - name: Discover Go Modules
         id: discover
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
@@ -91,26 +92,29 @@ jobs:
         env:
           MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
           CHANGE_JSON: ${{ steps.changes.outputs.changes }}
-          ENV_CHANGED: ${{ steps.env_changes.outputs.env }}
+          ENV_CHANGED: ${{ steps.infra_changes.outputs.infra }}
         with:
           script: |
             const modulesJson = JSON.parse(process.env.MODULES_JSON || '[]');
             const changeJson = JSON.parse(process.env.CHANGE_JSON || '[]');
-            const envChanged = process.env.ENV_CHANGED === 'true';
-            const lintModulesFromEnv = envChanged ? modulesJson : null;
-            
-            if (process.env.check_only_changed === "true") {
+            const infraChanged = process.env.ENV_CHANGED === 'true';
+
+            if (infraChanged) {
+              console.log("Infrastructure changed (.env or CI workflow), running all modules.");
+              core.setOutput("modules_json", JSON.stringify(modulesJson));
+              core.setOutput('lint_modules_json', JSON.stringify(modulesJson));
+            } else if (process.env.check_only_changed === "true") {
               console.log(`Filtering modules based on changes: ${JSON.stringify(changeJson)}`);
               const filteredModules = modulesJson.filter(module => {
                 return changeJson.some(change => change.includes(module));
               });
               console.log(`Filtered modules: ${JSON.stringify(filteredModules)}`);
               core.setOutput("modules_json", JSON.stringify(filteredModules));
-              core.setOutput('lint_modules_json', JSON.stringify(lintModulesFromEnv ?? filteredModules));
+              core.setOutput('lint_modules_json', JSON.stringify(filteredModules));
             } else {
               console.log("check_only_changed is false, no filtering applied.");
               core.setOutput("modules_json", JSON.stringify(modulesJson));
-              core.setOutput('lint_modules_json', JSON.stringify(lintModulesFromEnv ?? modulesJson));
+              core.setOutput('lint_modules_json', JSON.stringify(modulesJson));
             }
       - name: Filter based on Testability
         id: filtered_test
@@ -153,7 +157,7 @@ jobs:
           script: |
             const modules = JSON.parse(`${{ steps.discover.outputs.modules_json || '[]' }}`);
             const filtered = JSON.parse(`${{ steps.filtered.outputs.modules_json || '[]' }}`);
-            const envChanged = `${{ steps.env_changes.outputs.env || 'false' }}` === 'true';
+            const infraChanged = `${{ steps.infra_changes.outputs.infra || 'false' }}` === 'true';
             const unitTests = JSON.parse(`${{ steps.filtered_test.outputs.unit_test_modules_json || '[]' }}`);
             const integrationTests = JSON.parse(`${{ steps.filtered_test.outputs.integration_test_modules_json || '[]' }}`);
             
@@ -165,7 +169,7 @@ jobs:
             
             summary += `**🔍 Discovered Modules (${modules.length}):**\n${toMarkdownList(modules)}\n\n`;
             summary += `**🎯 Filtered Modules (${filtered.length}):**\n${toMarkdownList(filtered)}\n\n`;
-            summary += `**🧹 Lint Scope:** ${envChanged ? 'all modules (env changed)' : 'changed modules only'}\n\n`;
+            summary += `**🧹 Lint Scope:** ${infraChanged ? 'all modules (infra changed)' : 'changed modules only'}\n\n`;
             summary += `**🧪 Unit Test Modules (${unitTests.length}):**\n${toMarkdownList(unitTests)}\n\n`;
             summary += `**🧬 Integration Test Modules (${integrationTests.length}):**\n${toMarkdownList(integrationTests)}\n`;
             
