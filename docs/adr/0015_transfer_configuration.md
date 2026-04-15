@@ -13,14 +13,10 @@ compiling down to the existing transformation specification.
 
 * [Context and Problem Statement](#context-and-problem-statement)
 * [Decision Drivers](#decision-drivers)
-* [Solution Proposal: Transfer Configuration](#solution-proposal-transfer-configuration)
-  * [Overview](#overview)
-  * [Resource Rules](#resource-rules)
-  * [Reference Routing](#reference-routing)
-  * [Multi-Component and Multi-Target Transfers](#multi-component-and-multi-target-transfers)
-  * [Interaction with Existing CLI Flags](#interaction-with-existing-cli-flags)
-  * [Compilation to Transformation Specification](#compilation-to-transformation-specification)
 * [Considered Options](#considered-options)
+* [Decision Outcome](#decision-outcome)
+* [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+* [Implementation Phases](#implementation-phases)
 * [Open Questions](#open-questions)
 
 ## Context and Problem Statement
@@ -110,32 +106,57 @@ hand is not a good UX for these scenarios.
 * **Resource upload location control** — users must be able to declare
   where each resource ends up in the target storage system. This is the
   most critical gap.
-* **CEL consistency** — OCM uses CEL expressions throughout the
-  transformation specification. The transfer configuration must use the
-  same `${...}` expression syntax for consistency.
+* **Simplicity** — the configuration must be easy to write, read, and
+  understand without deep knowledge of OCM internals or expression
+  languages.
+* **Versionability** — the configuration format must be easy to evolve
+  independently of the transformation specification. Typed, narrowly
+  scoped configurations are straightforward to version (`v1alpha1` →
+  `v1beta1` → `v1`) without breaking consumers.
 * **Backwards compatibility** — the existing CLI flags and positional
   arguments must continue to work for simple transfers.
 * **Separation of concerns** — the transfer configuration is a
   user-facing format that compiles to a transformation specification. It
   must not leak transformation-level details (like transformation types)
   into the user-facing API.
-* **Extensibility** — adding a new storage backend (e.g. Maven) must not
-  require changes to the configuration format itself — only new access
-  types and their fields.
 
-## Solution Proposal: Transfer Configuration
+## Considered Options
 
-### Overview
+* **Option 1:** Typed Transfer Configurations (dedicated, narrowly scoped
+  config types per use case)
+* **Option 2:** Generic Transfer Configuration (single CEL-based config
+  with match/template rules)
 
-We introduce a YAML-based **Transfer Configuration** file. This file
-declaratively describes:
+## Decision Outcome
 
-1. **Which** components to transfer, from where, to where
-   (`transfers` section).
-2. **How** each resource should appear in the target component descriptor
-   (`resourceRules` section).
-3. **Where** recursively discovered referenced components should go
-   (`referenceRouting` section).
+Chosen [Option 1](#option-1-typed-transfer-configurations): "Typed
+Transfer Configurations".
+
+Justification:
+
+* We are not yet confident in what exactly customers need from transfer
+  configuration. Starting with the simplest possible solution lets us
+  ship quickly, gather real usage feedback, and evolve the configuration
+  surface based on actual demand rather than speculation.
+* Covers the two most common transfer customisation needs (OCI image
+  relocation, Helm-to-OCI conversion) without requiring users to learn
+  CEL or understand the transformation engine.
+* Each config type is small and independently versionable. If a type
+  turns out to be wrong, it can be deprecated without affecting the
+  others.
+* Implementation complexity is low — each config type is a thin compiler
+  to the existing transformation specification.
+* The generic approach (Option 2) can still be introduced later as an
+  additional, advanced option without invalidating the typed configs.
+
+## Option 1: Typed Transfer Configurations
+
+### Description
+
+Instead of a single, generic configuration format, we introduce
+**dedicated typed configuration resources** — one per use case. Each
+type has a narrow functional scope, is independently versioned, and
+compiles to transformation specification primitives.
 
 The CLI receives a new `--config` flag:
 
@@ -144,31 +165,299 @@ The CLI receives a new `--config` flag:
 ocm transfer cv ghcr.io/src//comp:1.0.0 ghcr.io/dst
 
 # Config-based transfer
-ocm transfer cv --config transfer.yaml
+ocm transfer cv --config transfer.yaml \
+    ghcr.io/src//comp:1.0.0 ghcr.io/dst
 
 # Preview the generated transformation specification
-ocm transfer cv --config transfer.yaml --dry-run -o yaml
+ocm transfer cv --config transfer.yaml --dry-run -o yaml \
+    ghcr.io/src//comp:1.0.0 ghcr.io/dst
 ```
 
-When `--config` is provided, positional arguments are forbidden (same
-pattern as the existing `--transfer-spec` flag).
+The positional source and target arguments remain required
+(multi-component and multi-target transfers are out of scope for
+phase 1).
 
-### Full Configuration Example
+### Single-File Configuration
+
+All typed configs are bundled in a single file using the existing
+[generic configuration](../../bindings/go/configuration/generic/v1/spec/config.go)
+wrapper (`generic.config.ocm.software/v1`). This is the same pattern
+used for OCM resolver and HTTP client configuration:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: ociImageOverwrite.transfer.config.ocm.software/v1alpha1
+    overwrites:
+      - resource:
+          name: my-pod
+        imageReference: ghcr.io/target-org/images/my-pod:1.0.0
+
+  - type: helmToOCIConversionOverwrite.transfer.config.ocm.software/v1alpha1
+    overwrites:
+      - resource:
+          name: mariadb
+        imageReference: ghcr.io/target-org/charts/mariadb:12.2.7
+```
+
+At load time, the generic config is parsed via the existing
+`configuration` package. Each entry is deserialized into its concrete
+Go type via `runtime.Scheme`. The transfer command collects all
+recognized transfer config types from the generic wrapper and feeds
+them to the compiler.
+
+### OCIImageOverwriteConfig
+
+Allows users to declare literal target image references for specific
+resources. This directly addresses [Limitation 1](#limitation-1-no-control-over-resource-upload-locations).
+
+```yaml
+type: ociImageOverwrite.transfer.config.ocm.software/v1alpha1
+overwrites:
+  # Resource in the root component — no referencePath needed
+  - resource:
+      name: my-pod
+    imageReference: ghcr.io/target-org/images/my-pod:1.0.0
+
+  # Resource in a referenced component, disambiguated by referencePath
+  - referencePath:
+      - name: db-stack
+    resource:
+      name: monitoring-agent
+      extraIdentity:
+        platform: linux/amd64
+    imageReference: ghcr.io/target-org/images/monitoring:2.3.1
+```
+
+#### Fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `overwrites[].referencePath` | `[]ResourceIdentity` | no | Path of component reference identities from the root component to the component that owns the resource. Empty or omitted for resources in the root component. |
+| `overwrites[].resource.name` | `string` | yes | Resource name |
+| `overwrites[].resource.extraIdentity` | `map[string]string` | no | Extra identity attributes (for disambiguation when multiple resources share a name) |
+| `overwrites[].imageReference` | `string` | yes | Literal OCI image reference for the target |
+
+A resource identity (`name` + `extraIdentity`) is only unique within a
+single component descriptor. During a recursive transfer, the same
+component may appear at multiple positions in the component tree (even
+in different versions). The `referencePath` traces the path of
+component references from the root to the owning component, making each
+entry globally unambiguous. This follows the same addressing scheme as
+the controller's
+[`ResourceReference`](../../kubernetes/controller/api/v1alpha1/common_types.go)
+type. For resources in the root component, `referencePath` is omitted.
+Each entry addresses exactly one resource — there is no pattern
+matching or globbing.
+
+#### Semantics
+
+* Each entry identifies a resource by its reference path and resource
+  identity, and declares the exact OCI image reference it should be
+  uploaded to in the target.
+* The compiler maps each overwrite to the appropriate Get → Add
+  transformation chain, embedding the literal `imageReference` in the
+  AddOCIArtifact transformation spec.
+* Resources not matched by any overwrite entry fall through to the
+  default behaviour (as determined by `--upload-as` / `--copy-resources`
+  flags).
+* Duplicate entries (same reference path + resource identity appearing
+  more than once) are rejected at parse time.
+
+#### Go Types
+
+```go
+// OCIImageOverwriteConfig declares literal target image references for
+// specific resources.
+type OCIImageOverwriteConfig struct {
+    runtime.Type `json:",inline"`
+
+    Overwrites []OCIImageOverwrite `json:"overwrites"`
+}
+
+type OCIImageOverwrite struct {
+    ReferencePath  []ResourceIdentity `json:"referencePath,omitempty"`
+    Resource       ResourceIdentity   `json:"resource"`
+    ImageReference string             `json:"imageReference"`
+}
+
+// ResourceIdentity identifies a single element (resource or component
+// reference) within a component descriptor. Name is always required.
+// ExtraIdentity is only needed when multiple elements share the same
+// name.
+type ResourceIdentity struct {
+    Name          string            `json:"name"`
+    ExtraIdentity map[string]string `json:"extraIdentity,omitempty"`
+}
+```
+
+### HelmToOCIConversionOverwriteConfig
+
+Allows users to declare that specific Helm chart resources should be
+converted to OCI artifacts and uploaded to a given image reference.
+This config controls the *target location* of the conversion. A
+general "convert all Helm charts to OCI" behaviour could later be
+provided via a CLI flag or a separate config type — this config then
+overwrites the default target location for specific charts.
+
+```yaml
+type: helmToOCIConversionOverwrite.transfer.config.ocm.software/v1alpha1
+overwrites:
+  - resource:
+      name: mariadb
+    imageReference: ghcr.io/target-org/charts/mariadb:12.2.7
+
+  - referencePath:
+      - name: db-stack
+    resource:
+      name: redis
+    imageReference: ghcr.io/target-org/charts/redis:7.0.0
+```
+
+#### Fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `overwrites[].referencePath` | `[]ResourceIdentity` | no | Path of component reference identities from the root to the owning component. Omitted for resources in the root component. |
+| `overwrites[].resource.name` | `string` | yes | Resource name |
+| `overwrites[].resource.extraIdentity` | `map[string]string` | no | Extra identity attributes (for disambiguation) |
+| `overwrites[].imageReference` | `string` | yes | Literal OCI image reference for the converted artifact |
+
+As with `OCIImageOverwriteConfig`, each entry is scoped via
+`referencePath` and addresses exactly one resource by its identity.
+
+#### Semantics
+
+* Each entry identifies a Helm chart resource by its reference path
+  and resource identity, and declares the OCI image reference it should
+  be converted to and uploaded at.
+* The compiler maps each conversion to a GetHelmChart →
+  ConvertHelmToOCI → AddOCIArtifact transformation chain, embedding the
+  literal `imageReference`.
+* If a matched resource does not have a Helm access type, the compiler
+  rejects the configuration with a clear error.
+* Resources not matched by any overwrite entry are unaffected.
+
+#### Go Types
+
+```go
+// HelmToOCIConversionOverwriteConfig declares Helm chart resources
+// that should be converted to OCI artifacts at specific image
+// references.
+type HelmToOCIConversionOverwriteConfig struct {
+    runtime.Type `json:",inline"`
+
+    Overwrites []HelmToOCIConversionOverwrite `json:"overwrites"`
+}
+
+type HelmToOCIConversionOverwrite struct {
+    ReferencePath  []ResourceIdentity `json:"referencePath,omitempty"`
+    Resource       ResourceIdentity   `json:"resource"`
+    ImageReference string             `json:"imageReference"`
+}
+```
+
+### Interaction with Existing CLI Flags
+
+| Scenario | Behaviour |
+|---|---|
+| No `--config` | Today's behaviour. Positional args + flags. |
+| `--config transfer.yaml` | Config entries override matching resources. Non-matching resources follow flag behaviour. |
+| `--config` + `--dry-run` | Config-based generation, output the transformation spec. |
+
+### Compilation to Transformation Specification
+
+Each typed config has a dedicated compiler that emits transformation
+specification primitives:
+
+```
+generic.config.ocm.software/v1 (YAML)
+    │ parse via configuration package
+    ▼
+[]runtime.Raw
+    │ deserialize each entry by type
+    ▼
+OCIImageOverwriteConfig           HelmToOCIConversionOverwriteConfig
+    │ compile                          │ compile
+    │ - find resource by reference     │ - find resource by reference
+    │   path + identity                │   path + identity
+    │ - emit Get → AddOCIArtifact      │ - emit GetHelm → ConvertToOCI → AddOCIArtifact
+    │   with literal imageReference    │   with literal imageReference
+    ▼                                  ▼
+         transfer.BuildGraphDefinition(...)
+                    │
+                    ▼
+         TransformationGraphDefinition
+                    │
+                    ▼
+                  Result
+```
+
+### Adding New Typed Configurations
+
+When a new use case arises (e.g. Maven artifact routing, reference
+routing for recursive transfers), a new typed configuration is
+introduced:
+
+1. Define a new type (e.g. `MavenArtifactUploadConfig`,
+   `ReferenceRoutingConfig`).
+2. Register it in the `runtime.Scheme` so the generic config wrapper
+   can deserialize it.
+3. Implement a compiler from the new type to transformation
+   specification primitives.
+4. Version independently (`v1alpha1` → `v1`).
+
+The existing typed configs remain unchanged. Users add a new entry to
+their `configurations` list — no combinatorial explosion of fields in a
+single format.
+
+## Pros and Cons of the Options
+
+### Option 1: Typed Transfer Configurations
+
+**Pros:**
+
+* **Simple to understand.** Each config type does one thing. A user who
+  needs OCI image relocation reads only `OCIImageOverwriteConfig` — no
+  CEL, no match expressions, no template syntax.
+* **Easy to version.** Each type evolves on its own lifecycle. A
+  breaking change to `HelmToOCIConversionOverwriteConfig` does not
+  affect `OCIImageOverwriteConfig`.
+* **Low implementation complexity.** Each compiler is a small, focused
+  function. No generic CEL evaluation pipeline, no expression
+  compilation, no partial-merge engine.
+* **Easy to validate.** Literal values can be validated at parse time
+  (e.g. "is this a valid OCI image reference?"). No runtime expression
+  evaluation surprises.
+* **Backwards compatible.** Existing flags and positional arguments
+  continue to work. Configs only override matching resources.
+* **Composable.** Multiple typed configs coexist in a single file via
+  the existing generic config wrapper. Each typed entry is
+  self-contained and independently versionable.
+
+**Cons:**
+
+* **Less powerful.** No pattern matching across resources. Each resource
+  must be listed explicitly. This is acceptable — we do not anticipate
+  most users needing dynamic, expression-based routing.
+* **More config types over time.** Each new use case requires a new
+  type. This is mitigated by the narrow scope of each type — they are
+  small and quick to implement.
+* **No cross-resource logic.** Cannot express "all Helm charts go to
+  this registry" in a single rule. Users must list each chart
+  individually. A future typed config (e.g.
+  `OCIImageOverwriteByTypeConfig`) could add type-level matching without
+  retroactively complicating the existing types.
+
+### Option 2: Generic Transfer Configuration
+
+A single YAML configuration file with CEL-based `match` expressions and
+template-style `resource` overrides that declaratively describe the
+target state of each resource.
 
 ```yaml
 apiVersion: ocm.software/v1alpha1
 kind: TransferConfiguration
-
-defaults:
-  recursive: true
-  copyResources: true
-
-transfers:
-  - components:
-      - name: ocm.software/myapp
-        version: 1.0.0
-    source: ghcr.io/source-org/ocm
-    target: ghcr.io/target-org/ocm
 
 resourceRules:
   - match: "${resource.type == 'helmChart'}"
@@ -187,565 +476,69 @@ resourceRules:
     resource:
       access:
         type: localBlob/v1
-
-referenceRouting:
-  - match: "${component.name.startsWith('ocm.software/shared/')}"
-    target: ghcr.io/shared-components/ocm
-
-  - match: "${component.name.startsWith('ocm.software/infra/')}"
-    target: ghcr.io/infra-team/ocm
 ```
 
-### Resource Rules
-
-Resource rules are the core of this proposal. They give users per-resource
-control over **how a resource appears in the target component descriptor**
-— primarily its access specification (which determines the upload
-location and storage format).
-
-#### Design Rationale
-
-We went through several design iterations before arriving at the current
-design. This section documents the rationale.
-
-##### Iteration 1: `upload.as` + `upload.imageReference`
-
-The first design introduced a per-resource `upload` block with an `as`
-field (mirroring the `--upload-as` CLI flag) and an `imageReference`
-field:
-
-```yaml
-resourceRules:
-  - match: "${resource.type == 'helmChart'}"
-    upload:
-      as: ociArtifact
-      imageReference: "${'ghcr.io/target-org/charts/' + resource.name + ':' + resource.version}"
-```
-
-This was rejected because it conflates two concerns:
-
-1. **Which transformations to apply** — `as: ociArtifact` implies the
-   compiler has to know how to convert e.g. a Helm chart to an OCI
-   artifact (GetHelmChart → ConvertHelmToOCI → AddOCIArtifact). The
-   conversion chain is an implementation detail that depends on the
-   source access type and target access type.
-2. **Where the resource ends up** — the `imageReference`.
-
-Furthermore, `imageReference` is specific to the OCI storage backend.
-A Maven upload would need `groupId`, `artifactId` etc. — the `upload`
-block would have to be access-type-specific anyway.
-
-##### Iteration 2: Explicit Transformation Pipelines
-
-The second design allowed users to specify the entire transformation
-chain:
-
-```yaml
-resourceRules:
-  - match: "${resource.type == 'helmChart'}"
-    transformations:
-      - type: helm.transformation/getHelmChart/v1alpha1
-      - type: helm.transformation/convertHelmToOCI/v1alpha1
-      - type: oci.transformation/addOCIArtifact/v1alpha1
-        spec:
-          imageReference: "${'ghcr.io/target-org/charts/' + resource.name + ':' + resource.version}"
-```
-
-This was rejected because it leaks transformation-level implementation
-details into the user-facing configuration. Most users do not want to
-know about transformation types. They want to say "my Helm chart should
-end up as an OCI image at this reference."
-
-##### Iteration 3: Declare the Add Transformation
-
-The third design asked users to declare only the final **Add
-transformation** — the compiler would infer the Get and intermediate
-conversions:
-
-```yaml
-resourceRules:
-  - match: "${resource.type == 'helmChart'}"
-    add:
-      type: oci.transformation/addOCIArtifact/v1alpha1
-      spec:
-        imageReference: "${'ghcr.io/target-org/charts/' + resource.name + ':' + resource.version}"
-```
-
-This was better but still required users to name transformation types.
-The `type: oci.transformation/addOCIArtifact/v1alpha1` is still an
-implementation detail.
-
-##### Final Design: Declare the Target Resource
-
-The user declares the **desired state of the resource in the target
-component descriptor**. The compiler figures out the transformation
-chain:
-
-```yaml
-resourceRules:
-  - match: "${resource.type == 'helmChart'}"
-    resource:
-      access:
-        type: ociImage/v1
-        imageReference: "${'ghcr.io/target-org/charts/' + resource.name + ':' + resource.version}"
-```
-
-The user thinks in terms of "my resource should be accessible via this
-access method at this location." The compiler:
-
-1. Looks at the source access type (e.g. `helm/v1`)
-2. Looks at the desired target access type (e.g. `ociImage/v1`)
-3. Finds a transformation chain that bridges them — or errors:
-   "unsupported conversion from helm/v1 to ociImage/v1"
-
-No transformation types leak into the user-facing API.
-
-#### Rule Structure
-
-```yaml
-resourceRules:
-  - match: "<cel-bool-expression>"
-    resource:
-      # Partial v2 resource specification.
-      # Omitted fields are inherited from the source resource.
-      # String values may contain ${...} CEL expressions.
-      name: "..."          # optional — inherited from source if omitted
-      version: "..."       # optional — inherited from source if omitted
-      type: "..."          # optional — inherited from source if omitted
-      relation: "..."      # optional — inherited from source if omitted
-      labels:              # optional — inherited from source if omitted
-        - name: "..."
-          value: "..."
-      extraIdentity:       # optional — inherited from source if omitted
-        key: value
-      access:              # required — determines storage strategy
-        type: "..."        # required — target access type
-        # access-type-specific fields
-```
-
-Rules are evaluated **top-down, first match wins**. If no rule matches,
-the transfer falls through to the behaviour specified in `defaults`.
-
-##### Merge Semantics
-
-The rule's `resource` is a **partial specification**. Omitted fields
-are inherited from the source resource. The merge logic:
-
-1. Deep-copy the source resource as base.
-2. Walk the rule's `resource`:
-   - For each `${...}` string value: evaluate the CEL expression and
-     replace with the result.
-   - For each literal value: use as-is.
-3. Overlay the evaluated rule values onto the base. `access` is replaced
-   entirely when specified (not merged — access specs are atomic per
-   type).
-
-This means the minimal rule only needs to declare what changes:
-
-```yaml
-# Only change the upload location — everything else stays the same
-- match: "${access.type == 'ociImage/v1'}"
-  resource:
-    access:
-      type: ociImage/v1
-      imageReference: "${'ghcr.io/mirror/' + access.originalRepository + ':' + access.originalTag}"
-```
-
-Full override when needed (rename, relabel, and reroute):
-
-```yaml
-- match: "${resource.name == 'legacy-db'}"
-  resource:
-    name: database
-    version: "${resource.version}"
-    labels:
-      - name: migrated
-        value: "true"
-    access:
-      type: ociImage/v1
-      imageReference: "${'ghcr.io/target-org/db:' + resource.version}"
-```
-
-#### CEL Environment
-
-Both `match` and `resource` field values use the `${...}` delimiter,
-consistent with the transformation specification.
-
-The following variables are available in the CEL environment:
-
-| Variable | CEL Type | Description |
-|---|---|---|
-| `resource.name` | `string` | Resource name from descriptor |
-| `resource.version` | `string` | Resource version from descriptor |
-| `resource.type` | `string` | Resource type (e.g. `ociImage`, `helmChart`) |
-| `resource.relation` | `string` | `"local"` or `"external"` |
-| `resource.labels` | `list(map(string,dyn))` | Resource labels |
-| `resource.extraIdentity` | `map(string,string)` | Extra identity attributes |
-| `component.name` | `string` | Owning component name |
-| `component.version` | `string` | Owning component version |
-| `access.type` | `string` | Source access type (e.g. `localBlob/v1`, `ociImage/v1`) |
-| `access.mediaType` | `optional(string)` | Media type (LocalBlob only) |
-| `access.referenceName` | `optional(string)` | Reference name (LocalBlob only) |
-| `access.imageReference` | `optional(string)` | Full image ref (OCIImage only) |
-| `access.originalDomain` | `optional(string)` | Registry domain parsed from imageReference |
-| `access.originalRepository` | `optional(string)` | Repository path without domain |
-| `access.originalTag` | `optional(string)` | Tag parsed from imageReference |
-| `access.helmRepository` | `optional(string)` | Helm repo URL (Helm only) |
-| `access.helmChart` | `optional(string)` | Helm chart name (Helm only) |
-| `target.baseUrl` | `string` | Target registry base URL |
-| `target.subPath` | `optional(string)` | Target registry sub-path |
-
-The `match` expression must evaluate to `bool`.
-String values in `resource` are either literal strings or `${...}`
-CEL expressions evaluating to the appropriate type.
-
-Optional types (already supported in the CEL environment via
-`cel.OptionalTypes()`) ensure that `access.imageReference` is only
-present for OCI access types — no runtime errors when matching across
-access types.
-
-#### Go Types
-
-The resource rule type reuses the existing `v2.Resource` type from the
-descriptor package, which already uses `*runtime.Raw` for the `Access`
-field — the same unstructured representation used throughout the
-transformation specification:
-
-```go
-// ResourceRule defines a per-resource routing and transformation policy.
-type ResourceRule struct {
-    // Match is a CEL expression (${...} delimited) evaluating to bool.
-    Match string `json:"match"`
-
-    // Resource is a partial v2 resource specification.
-    // Omitted fields are inherited from the source resource.
-    // String values may contain ${...} CEL expressions.
-    Resource *descriptorv2.Resource `json:"resource"`
-}
-```
-
-Using `*descriptorv2.Resource` directly avoids inventing a new type.
-The `Access` field (`*runtime.Raw`) handles arbitrary access
-specifications. Validation of required fields is skipped for the rule's
-resource — it is a partial specification, not a complete descriptor
-entry.
-
-New option for the transfer library:
-
-```go
-func WithResourceRules(rules []ResourceRule) Option {
-    return func(o *Options) {
-        o.ResourceRules = rules
-    }
-}
-```
-
-#### The Compiler: Conversion Matrix
-
-The compiler maintains a registry of supported conversions:
-
-```
-(source access type) → (target access type) = transformation chain
-```
-
-The initial matrix:
-
-| Source | Target `ociImage/v1` | Target `localBlob/v1` |
-|---|---|---|
-| `localBlob/v1` | Get → AddOCIArtifact | Get → AddLocalResource |
-| `ociImage/v1` | Get → AddOCIArtifact | Get → AddLocalResource |
-| `helm/v1` | Get → ConvertToOCI → AddOCIArtifact | Get → ConvertToOCI → AddLocalResource |
-
-When a new storage backend is added (e.g. Maven), a new column is added
-to the matrix with the required conversion transformations. The
-configuration format does not change — users write
-`type: maven/v1` with the appropriate fields (`groupId`,
-`artifactId`, `version`, `repository`).
-
-If a conversion is not supported, the compiler returns a clear error:
-
-```
-resource "my-resource" (source access type helm/v1):
-  conversion to target access type maven/v1 is not supported
-```
-
-#### CEL Compilation Strategy
-
-Resource rule CEL expressions are compiled **once** during
-`BuildGraphDefinition`, not per-resource. The CEL environment (variable
-declarations) is the same for all resources — only the activation
-record (variable values) changes per resource.
-
-```
-BuildGraphDefinition
-  ├─ compile all rule.Match expressions → []cel.Program   (once)
-  ├─ compile all rule's ${...} expressions  → []cel.Program (once)
-  │
-  └─ fillGraphDefinitionWithPrefetchedComponents
-       └─ processResources
-            └─ for each resource:
-                 evaluate pre-compiled programs with resource-specific activation
-```
-
-#### How `imageReference` Evaluation Works
-
-The rule's `imageReference` CEL is evaluated at **graph construction
-time** (when we have the descriptor data), not at graph execution time.
-The result is a concrete string like
-`"ghcr.io/target-org/charts/mariadb:12.2.7"` that is embedded in the
-AddOCIArtifact transformation spec.
-
-This is different from the current hardcoded
-`${getResourceID.output.resource.access.referenceName}` pattern, which
-is evaluated at execution time. The key insight: for rule-matched
-resources, we already know the upload location at graph construction time
-because we have the full descriptor.
-
-**Example: Helm Chart**
-
-Source resource:
-```yaml
-name: my-chart
-version: 12.2.7
-type: helmChart
-relation: external
-access:
-  type: helm/v1
-  helmRepository: https://charts.bitnami.com/bitnami
-  helmChart: mariadb
-  version: 12.2.7
-```
-
-Rule:
-```yaml
-- match: "${resource.type == 'helmChart'}"
-  resource:
-    labels:
-      - name: migrated
-        value: "true"
-    access:
-      type: ociImage/v1
-      imageReference: "${'ghcr.io/target-org/charts/' + resource.name + ':' + resource.version}"
-```
-
-After CEL evaluation and merge, the target resource is:
-```yaml
-name: my-chart              # inherited from source
-version: 12.2.7             # inherited from source
-type: helmChart             # inherited from source
-relation: external          # inherited from source
-labels:                     # overridden by rule
-  - name: migrated
-    value: "true"
-access:                     # overridden by rule (CEL evaluated)
-  type: ociImage/v1
-  imageReference: ghcr.io/target-org/charts/my-chart:12.2.7
-```
-
-The compiler:
-1. Sees source access `helm/v1` → target access `ociImage/v1`.
-2. Looks up the conversion chain: GetHelmChart → ConvertHelmToOCI →
-   AddOCIArtifact.
-3. Emits transformations with `imageReference:
-   "ghcr.io/target-org/charts/my-chart:12.2.7"`.
-
-The user specified the full `imageReference` using descriptor-level data
-(`resource.name`, `resource.version`). No dependency on conversion
-output.
-
-#### What This Replaces
-
-The **reference name concept** is no longer needed as the mechanism for
-determining upload locations. Today:
-
-- `localblob.go` hardcodes
-  `imageReference: targetRepoBaseURL/${referenceName}`
-- `oci.go` does the same via `staticReferenceName()`
-
-With resource rules, the `imageReference` in the AddOCIArtifact
-transformation spec comes from the rule's evaluated CEL expression.
-The reference name may still appear in the CEL environment as
-`access.referenceName` for users who want to reference it, but it is no
-longer the implicit upload path.
-
-### Reference Routing
-
-During recursive discovery, child components currently inherit the root's
-single target. Reference routing lets users split referenced components
-across different registries.
-
-```yaml
-referenceRouting:
-  - match: "${component.name.startsWith('ocm.software/shared/')}"
-    target: ghcr.io/shared-components/ocm
-
-  - match: "${component.name.startsWith('ocm.software/infra/')}"
-    target: ghcr.io/infra-team/ocm
-```
-
-Rules are evaluated top-down, first match wins. Unmatched children fall
-through to the root's target.
-
-The CEL environment provides:
-
-| Variable | CEL Type | Description |
-|---|---|---|
-| `component.name` | `string` | Referenced component name |
-| `component.version` | `string` | Referenced component version |
-| `parent.name` | `string` | Parent component name |
-| `parent.version` | `string` | Parent component version |
-
-During the discovery phase, when a child component is found via a
-component reference, the child is matched against `referenceRouting`
-rules. A match overrides the inherited target with the rule's target.
-
-### Multi-Component and Multi-Target Transfers
-
-The `transfers` section supports multiple root components and multiple
-targets:
-
-```yaml
-transfers:
-  # Multiple components to the same target
-  - components:
-      - name: ocm.software/frontend
-        version: 2.0.0
-      - name: ocm.software/backend
-        version: 3.1.0
-    source: ghcr.io/source-org/ocm
-    target: ghcr.io/target-org/ocm
-
-  # Same component to multiple targets (fan-out)
-  - components:
-      - name: ocm.software/myapp
-        version: 1.0.0
-    source: ghcr.io/source-org/ocm
-    targets:
-      - ghcr.io/target-a/ocm
-      - ghcr.io/target-b/ocm
-```
-
-Each entry maps to a `transfer.WithTransfer()` call in the transfer
-library.
-
-### Interaction with Existing CLI Flags
-
-| Scenario | Behaviour |
-|---|---|
-| No `--config` | Today's behaviour. Positional args + flags. |
-| `--config transfer.yaml` | Config file drives the transfer. Positional args forbidden. |
-| `--config` + `--dry-run` | Config-based generation, output the transformation spec. |
-| `--config` + `--recursive` changed | Warning: flag ignored, config's `defaults` takes precedence. |
-
-Global defaults in the config (`defaults.recursive`,
-`defaults.copyResources`) subsume the `--recursive` and
-`--copy-resources` flags. When `resourceRules` is present, it takes
-precedence over `defaults.uploadAs`.
-
-When `resourceRules` is absent, `defaults.uploadAs` behaves identically
-to today's `--upload-as` flag.
-
-### Compilation to Transformation Specification
-
-The transfer configuration compiles to a transformation specification
-before execution. The pipeline:
-
-```
-TransferConfiguration (YAML)
-    │ parse
-    ▼
-TransferConfiguration (Go struct)
-    │ compile
-    │ - resolve transfers → transfer.WithTransfer() options
-    │ - evaluate resourceRules CEL → per-resource target state
-    │ - look up conversion matrix → transformation chains
-    │ - resolve referenceRouting → target overrides during discovery
-    ▼
-transfer.BuildGraphDefinition(...)
-    │
-    ▼
-TransformationGraphDefinition
-    │ build + execute (or --dry-run)
-    ▼
-Result
-```
-
-The resource rules are applied during graph construction phase 2
-(`processResource`). Instead of the current hardcoded
-`staticReferenceName()` / `imageReferenceFromAccess()`, the rule engine
-evaluates the matching rule's target access spec to produce the concrete
-values in the Add transformation.
-
-## Considered Options
-
-### Option 1: Transfer Configuration (this proposal)
-
-A declarative YAML configuration file that compiles to a transformation
-specification.
-
-**Pro:**
-* Clean separation between user intent (what the target should look
-  like) and implementation (which transformations are needed).
-* CEL consistency with the rest of OCM.
-* Backwards compatible — existing flags continue to work.
-* Extensible — new storage backends do not require format changes.
-
-**Con:**
-* Additional compilation step between config and transformation spec.
-* Users who need full transformation-level control must still use
-  `--transfer-spec`.
-
-### Option 2: Extend CLI Flags
-
-Add more flags to the existing command: `--resource-rule`, `--target-for`,
-`--reference-route`, etc.
-
-**Pro:**
-* No config file needed for moderate complexity.
-
-**Con:**
-* Flag combinatorics become unmanageable.
-* Per-resource rules with CEL expressions do not fit well into CLI flags.
-* No good way to express partial resource specs as flag values.
-
-### Option 3: Write Transfer Specs by Hand
-
-Rely on `--transfer-spec` for all advanced use cases.
-
-**Pro:**
-* No new format to maintain.
-* Full power of the transformation engine.
-
-**Con:**
-* Writing a transformation spec is extremely verbose (see
-  [construct-as-transformation ADR](0012_construct_as_transformation.md)
-  — even a simple transfer produces many transformations).
-* Requires knowledge of transformation types and CEL data flow between
-  them.
-* Error-prone — the spec is a low-level representation not designed for
-  hand-authoring.
+**Pros:**
+
+* **Powerful.** A single rule can match many resources via CEL
+  expressions. Supports pattern-based routing, conditional logic, and
+  access to the full descriptor data model.
+* **Single format.** One configuration kind covers all use cases.
+
+**Cons:**
+
+* **High implementation complexity.** Requires a generic CEL evaluation
+  pipeline with expression compilation, partial resource merge
+  semantics, and a conversion matrix that maps (source access type ×
+  target access type) to transformation chains. This is a significant
+  amount of machinery for what is fundamentally a config-to-config
+  compilation step.
+* **Difficult to evolve and version.** The single `TransferConfiguration`
+  kind bundles multiple concerns (`resourceRules`, `referenceRouting`,
+  `transfers`). Evolving one section risks breaking others. Versioning
+  the entire kind (`v1alpha1` → `v1beta1`) forces all sections to move
+  in lockstep.
+* **Difficult to switch away from.** Once users adopt CEL-based rules,
+  the expressions become load-bearing configuration artifacts. Changing
+  the expression language, variable names, or evaluation semantics is a
+  breaking change that is hard to migrate away from.
+* **CEL as end-user interface.** CEL is powerful but requires significant
+  learning investment. Most users transferring components are not
+  familiar with CEL syntax, optional types, or the `${...}` delimiter
+  convention. Error messages from CEL evaluation failures are
+  notoriously hard to interpret for non-experts.
+* **Hard to validate statically.** CEL expressions are only fully
+  evaluable at runtime. Typos in variable names (`resoruce.name`) or
+  type mismatches (`access.imageReference` on a non-OCI resource)
+  surface as runtime errors, not parse-time errors.
+* **Over-engineered for the common case.** The vast majority of transfer
+  configurations will be "resource X goes to image reference Y". A
+  match/template engine is disproportionate machinery for literal
+  overwrites.
 
 ## Implementation Phases
 
 | Phase | Scope | Priority |
 |---|---|---|
-| **1** | `resourceRules` — per-resource upload location and access type control. Replaces reference name dependency. | Critical |
-| **2** | `referenceRouting` — target resolver for recursive transfers. | High |
-| **3** | Multi-component + multi-target `transfers` section. | Medium |
-| **4** | Extended `match` conditions (labels, extra identity). Broader CEL variable set. | Lower |
+| **1** | `OCIImageOverwriteConfig` — literal per-resource OCI image reference control. Replaces reference name dependency. | Critical |
+| **2** | `HelmToOCIConversionOverwriteConfig` — literal per-resource Helm-to-OCI conversion with target image reference. | High |
+| **3** | Reference routing typed config — target overrides for recursive transfers. | Medium |
+| **4** | Multi-component + multi-target transfers typed config. | Lower |
 
-Phase 1 alone solves the most critical problem. The configuration format
-is forward-compatible with phases 2-4 without breaking changes.
+Phase 1 alone solves the most critical problem. Each phase introduces a
+new typed config without modifying the existing ones.
 
 ## Open Questions
 
-* **Resource rules and multiple targets:** When a component goes to
-  multiple targets (phase 3), should resource rules be evaluated
-  per-target (so the same resource can go to different locations
-  depending on the target)? Per-target seems correct since
-  `target.baseUrl` is in the CEL environment, but this needs
-  confirmation.
-* **Source repository in CEL environment:** Is matching on
-  `resource.*` + `access.*` + `component.*` + `target.*` sufficient,
-  or do we need to match on the source repository too (e.g. "resources
-  coming from ghcr.io get routed differently than those from quay.io")?
+* **Wildcard / pattern matching:** Should a future typed config allow
+  matching by resource type or label (e.g. "all `helmChart` resources")
+  in addition to matching by name? This would reduce verbosity for
+  users with many resources of the same type, without requiring full CEL.
+* **Config replacements for existing flags:** Should we immediately
+  introduce typed configs that supersede the current CLI flags like
+  `--upload-as`? For example, a config that declares conversion
+  strategies (e.g. "convert all Helm charts to OCI artifacts") would be
+  more expressive than the current `--upload-as ociArtifact` flag, which
+  applies uniformly and does not distinguish between source access
+  types. The overwrite configs proposed here would then layer on top to
+  control *where* each converted resource ends up.
