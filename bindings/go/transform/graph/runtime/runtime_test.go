@@ -252,6 +252,60 @@ func TestProcessTransformationCredentialResolution(t *testing.T) {
 		require.Nil(t, mock.gotCreds["repository"])
 	})
 
+	t.Run("partial resolution - one found one missing", func(t *testing.T) {
+		r := require.New(t)
+		sourceIdentity := runtime.Identity{runtime.IdentityAttributeType: "source-repo"}
+		targetIdentity := runtime.Identity{runtime.IdentityAttributeType: "missing-repo"}
+		mock := &mockCredentialTransformer{
+			scheme: scheme,
+			identities: map[string]runtime.Identity{
+				"source": sourceIdentity,
+				"target": targetIdentity,
+			},
+		}
+		resolver := &mockCredentialResolver{
+			creds: map[string]map[string]string{
+				"source-repo": {"username": "admin", "password": "secret"},
+			},
+		}
+		rt := &Runtime{
+			EvaluatedExpressionCache: map[string]any{},
+			EvaluatedTransformations: map[string]any{},
+			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			CredentialProvider:       resolver,
+		}
+		r.NoError(rt.ProcessValue(t.Context(), transformation))
+		r.NotNil(mock.gotCreds)
+		r.Equal(map[string]string{"username": "admin", "password": "secret"}, mock.gotCreds["source"])
+		r.Nil(mock.gotCreds["target"])
+	})
+
+	t.Run("all identities unresolvable - all nil entries", func(t *testing.T) {
+		r := require.New(t)
+		sourceIdentity := runtime.Identity{runtime.IdentityAttributeType: "missing-a"}
+		targetIdentity := runtime.Identity{runtime.IdentityAttributeType: "missing-b"}
+		mock := &mockCredentialTransformer{
+			scheme: scheme,
+			identities: map[string]runtime.Identity{
+				"source": sourceIdentity,
+				"target": targetIdentity,
+			},
+		}
+		resolver := &mockCredentialResolver{
+			creds: map[string]map[string]string{},
+		}
+		rt := &Runtime{
+			EvaluatedExpressionCache: map[string]any{},
+			EvaluatedTransformations: map[string]any{},
+			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			CredentialProvider:       resolver,
+		}
+		r.NoError(rt.ProcessValue(t.Context(), transformation))
+		r.NotNil(mock.gotCreds)
+		r.Nil(mock.gotCreds["source"])
+		r.Nil(mock.gotCreds["target"])
+	})
+
 	t.Run("other resolve error fails transformation", func(t *testing.T) {
 		identity := runtime.Identity{runtime.IdentityAttributeType: "test-repo"}
 		mock := &mockCredentialTransformer{
