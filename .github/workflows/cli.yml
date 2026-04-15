@@ -1,11 +1,18 @@
 name: CLI
 
 on:
-  # Trigger workflow on pushes to main or release branches, and on PRs targeting main as well as release tags.
-  # Pushes on 'releases/v**' don't automatically publish,
-  # they just run the build to validate the release branch.
-  # If we are on a PR, limit runtime and only build the cli if it has been modified.
-  # If we are on a push, build the CLI regardless of what has changed to always be up to date.
+  # This workflow serves two roles:
+  #
+  # 1. CI workflow — triggered directly by push/PR events.
+  #    Pushes to main or cli/v* tags build AND publish (OCI image + conformance).
+  #    Pushes to releases/v* branches only build+test (no publish).
+  #    PRs to main only build+test if cli/ files changed.
+  #
+  # 2. Reusable build step — called by cli-release.yml via workflow_call.
+  #    cli-release.yml passes inputs.ref = the RC tag (e.g. cli/v0.4.0-rc.1).
+  #    IMPORTANT: github.ref_name inside this workflow inherits the CALLER's ref
+  #    (the release branch, e.g. releases/v0.4), not inputs.ref. The branch-check
+  #    step uses inputs.ref when set to correctly determine publish eligibility.
   push:
     branches:
       - main
@@ -131,11 +138,18 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-path: "${{ env.LOCATION }}/tmp/bin/ocm-*"
 
-      # Determine if this build is eligible for publishing.
-      # Direct triggers: publish on main push or cli/v* tag push.
-      # Release branches (releases/v*) only build+test on direct push.
-      # workflow_call from cli-release.yml: inputs.ref carries the RC tag
-      # (e.g. cli/v0.4.0-rc.1), which matches the cli/v* pattern.
+      # Determine if this build should publish (push OCI image to GHCR).
+      #
+      # Uses inputs.ref when set (workflow_call from cli-release.yml), otherwise
+      # GITHUB_REF_NAME. This distinction matters because workflow_call inherits
+      # the caller's github.ref_name (the release branch), not our inputs.ref.
+      #
+      # Publish eligibility:
+      #   push to main              → GITHUB_REF_NAME = "main"            → yes (default branch)
+      #   push tag cli/v0.4.0       → GITHUB_REF_NAME = "cli/v0.4.0"     → yes (cli/v* match)
+      #   push to releases/v0.4     → GITHUB_REF_NAME = "releases/v0.4"  → no  (build-only)
+      #   workflow_call (release)    → inputs.ref = "cli/v0.4.0-rc.1"     → yes (cli/v* match)
+      #   pull_request              → step skipped entirely               → no
       - name: Determine if this is a push-eligible branch
         if: ${{ github.event_name != 'pull_request' }}
         id: branch-check
