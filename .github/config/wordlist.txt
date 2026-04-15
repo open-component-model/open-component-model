@@ -186,6 +186,7 @@ deduplication
 deepcopy
 deepdive
 defs
+deps
 deliveryspec
 dependabot
 deployable
@@ -202,6 +203,7 @@ dev
 devops
 diataxis
 digesters
+dirs
 directorytree
 dirtree
 dl
@@ -354,6 +356,7 @@ js
 json
 jsonNormalisation
 jsonschema
+jsonschemagen
 kelch
 keyless
 keypair
@@ -521,6 +524,7 @@ packagename
 packagespec
 packageversion
 parameterization
+parallelize
 patchstrategicmerge
 patchstrategicmergesource
 patchstrategicmergetarget
@@ -684,6 +688,7 @@ subheadline
 subpath
 subpaths
 subprocesses
+subprocess
 subresource
 subsitution
 subst
@@ -704,6 +709,8 @@ templater
 templaters
 templating
 terraform
+testdata
+Testcontainers
 tgz
 timeframes
 tls
