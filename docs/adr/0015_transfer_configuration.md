@@ -421,8 +421,13 @@ users unfamiliar with the conversion pipeline.
 
 ### Compilation to Transformation Specification
 
-Each typed config has a dedicated compiler that emits transformation
-specification primitives:
+The typed configs are loaded once and indexed by resource identity
+before graph construction begins. During `processResource` — the
+existing per-resource loop inside `BuildGraphDefinition` — each
+resource is checked against the index. If a matching overwrite entry
+exists, its literal `imageReference` is used to emit the appropriate
+transformation chain. Otherwise, the resource falls through to the
+default behaviour.
 
 ```text
 generic.config.ocm.software/v1 (YAML)
@@ -432,19 +437,20 @@ generic.config.ocm.software/v1 (YAML)
     │ deserialize each entry by type
     ▼
 OCIImageOverwriteConfig           HelmToOCIConversionOverwriteConfig
-    │ compile                          │ compile
-    │ - find resource by reference     │ - find resource by reference
-    │   path + identity                │   path + identity
-    │ - emit Get → AddOCIArtifact      │ - emit GetHelm → ConvertToOCI → AddOCIArtifact
-    │   with literal imageReference    │   with literal imageReference
-    ▼                                  ▼
+    │ index by (referencePath +         │ index by (referencePath +
+    │   resource identity)              │   resource identity)
+    ▼                                   ▼
          transfer.BuildGraphDefinition(...)
-                    │
-                    ▼
-         TransformationGraphDefinition
-                    │
-                    ▼
-                  Result
+              │
+              └─ processResource (for each resource):
+                   │ look up resource in overwrite index
+                   │
+                   ├─ match found → emit transformation chain
+                   │   with literal imageReference from config
+                   │
+                   └─ no match → default behaviour
+                        (--upload-as / --copy-resources)
+```
 ```
 
 ### Adding New Typed Configurations
