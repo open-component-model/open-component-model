@@ -16,27 +16,27 @@ require (
 	golang.org/x/term v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.11
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260414061810-b7809b82b15a
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260415105257-4b97d24fcafc
 	ocm.software/open-component-model/bindings/go/configuration v0.0.12
 	ocm.software/open-component-model/bindings/go/constructor v0.0.7
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260414061810-b7809b82b15a
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260414061810-b7809b82b15a
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260415105257-4b97d24fcafc
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260415105257-4b97d24fcafc
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260414061810-b7809b82b15a
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260415105257-4b97d24fcafc
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260414061810-b7809b82b15a
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260415105257-4b97d24fcafc
 	ocm.software/open-component-model/bindings/go/oci v0.0.39
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260414061810-b7809b82b15a
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260415105257-4b97d24fcafc
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260414061810-b7809b82b15a
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260414061810-b7809b82b15a
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260414061810-b7809b82b15a
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260415105257-4b97d24fcafc
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260415105257-4b97d24fcafc
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260415105257-4b97d24fcafc
 	sigs.k8s.io/yaml v1.6.0
 )
 
