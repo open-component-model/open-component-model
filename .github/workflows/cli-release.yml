@@ -2,6 +2,19 @@ name: CLI Release
 
 run-name: CLI Release from ${{ github.ref_name }}${{ github.event.inputs.dry_run == 'true' && '(dry-run)' || '' }}
 
+# Dispatch model:
+# The operator MUST select a release branch (e.g. releases/v0.4) in the
+# GitHub UI "Use workflow from" dropdown. This sets github.ref_name for
+# the entire run — there is no separate branch input.
+# parseBranch() in release-versioning.js validates the format and rejects
+# anything that doesn't match releases/v0.\d+.
+#
+# Interaction with cli.yml:
+# This workflow calls cli.yml via workflow_call. In that context,
+# github.ref_name in cli.yml inherits THIS workflow's ref (the release
+# branch), NOT the ref input we pass. We pass inputs.ref = the RC tag
+# (e.g. cli/v0.4.0-rc.1) so cli.yml checks out the right code AND uses
+# it to determine publish eligibility. See cli.yml's branch-check step.
 on:
   workflow_dispatch:
     inputs:
@@ -88,7 +101,11 @@ jobs:
             core.info(`✅ Created RC tag ${tag}`);
 
   # --------------------------------------------------------
-  # 3. BUILD CLI
+  # 3. BUILD CLI: calls cli.yml via workflow_call
+  #    ref = RC tag (e.g. cli/v0.4.0-rc.1) → used for checkout and publish eligibility.
+  #    Note: github.ref_name inside cli.yml will be the release branch (inherited from
+  #    this workflow), not the ref input. cli.yml's branch-check uses inputs.ref to
+  #    resolve this. See cli.yml for details.
   # --------------------------------------------------------
   build:
     name: Build CLI for ${{ needs.prepare.outputs.new_tag }}
