@@ -220,8 +220,7 @@ jobs:
 
   E2E:
     name: E2E Tests
-    # Loads amd64 images into Kind cluster via skopeo --override-arch amd64.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     needs: build
     permissions:
@@ -255,7 +254,10 @@ jobs:
         uses: docker/setup-docker-action@1a6edb0ba9ac496f6850236981f15d8f9a82254d # v5
 
       - name: Setup ocm
-        uses: open-component-model/ocm-setup-action@655f3525fd283ca7d22e6b2ceec42324331df401 # v1.0.0
+        run: |
+          VERSION="$(basename "$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/open-component-model/ocm/releases/latest)")"
+          curl -Ls "https://github.com/open-component-model/ocm/releases/download/${VERSION}/ocm-${VERSION#v}-linux-arm64.tar.gz" | tar xz -C /usr/local/bin ocm
+          ocm version
 
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@871be9b40d53627786d3a3835a3ddba1e3234bd2 # v2.8.3
@@ -275,9 +277,9 @@ jobs:
         working-directory: ${{ env.LOCATION }}
         run: task oci/extract TAR_PATH=tmp/oci/controller.tar OUTPUT_DIR=tmp/oci-dir
 
-      - name: Extract linux/amd64 image for E2E testing
+      - name: Extract image for E2E testing
         # Skopeo can extract by platform (--override-arch) AND convert to docker-archive.
-        # Skopeo is pre-installed on ubuntu-latest runners.
+        # Skopeo is pre-installed on GitHub-hosted runners.
         # Set tag to "latest" to match the controller's Helm chart default for E2E testing
         working-directory: ${{ env.LOCATION }}
         env:
@@ -285,16 +287,16 @@ jobs:
           IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
         run: |
           mkdir -p tmp/docker
-          skopeo --override-arch amd64 --override-os linux copy \
+          skopeo --override-arch arm64 --override-os linux copy \
             oci:tmp/oci-dir:${VERSION} \
-            docker-archive:tmp/docker/controller-amd64.tar:${IMAGE_NAME}:latest
+            docker-archive:tmp/docker/controller.tar:${IMAGE_NAME}:latest
           echo "CONTROLLER_IMG=${IMAGE_NAME}:${VERSION}" >> "$GITHUB_ENV"
 
       - name: Run E2E tests
         run: |
           set -a && source ${{ env.LOCATION }}/.env && set +a
           bash ${{ env.LOCATION }}/test/e2e/hacks/setup.sh
-          kind load image-archive "${{ env.LOCATION }}/tmp/docker/controller-amd64.tar"
+          kind load image-archive "${{ env.LOCATION }}/tmp/docker/controller.tar"
           task ${{ env.LOCATION }}:test/e2e
 
       - name: Debug cluster state
