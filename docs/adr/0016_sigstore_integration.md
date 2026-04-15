@@ -14,15 +14,15 @@ OCM's current signing system is based on a `signing.Handler` interface, which is
 
 ## Decision Drivers
 
-*   **User Experience:** The end user should only need to install and interact with the `ocm` CLI. Any additional tools should be managed transparently.
-*   **Dependency Management:** The number of third-party dependencies should be minimized to reduce the supply chain attack surface and maintenance overhead.
-*   **Maturity and Stability:** The chosen solution should be based on a mature, battle-tested implementation of the Sigstore protocol.
-*   **Maintainability:** The integration should be easy to maintain and upgrade.
+- **User Experience:** The end user should only need to install and interact with the `ocm` CLI. Any additional tools should be managed transparently.
+- **Dependency Management:** The number of third-party dependencies should be minimized to reduce the supply chain attack surface and maintenance overhead.
+- **Maturity and Stability:** The chosen solution should be based on a mature, battle-tested implementation of the Sigstore protocol.
+- **Maintainability:** The integration should be easy to maintain and upgrade.
 
 ## Considered Options
 
-*   **Option A: Cosign CLI Wrapper:** Delegate all Sigstore operations to the `cosign` binary as an external process. The handler would manage the `cosign` binary transparently (auto-download, caching).
-*   **Option B: sigstore-go Library:** Use the official `sigstore-go` library to perform signing and verification operations entirely in-process.
+- **Option A: Cosign CLI Wrapper:** Delegate all Sigstore operations to the `cosign` binary as an external process. The handler would manage the `cosign` binary transparently (auto-download, caching).
+- **Option B: sigstore-go Library:** Use the official `sigstore-go` library to perform signing and verification operations entirely in-process.
 
 ## Decision Outcome
 
@@ -30,10 +30,10 @@ Chosen [Option A](#option-a-cosign-cli-wrapper): "Cosign CLI Wrapper".
 
 Justification:
 
-*   **Minimal Dependency Risk:** This option adds zero new Go dependencies to the OCM module, leveraging the most mature and widely-used Sigstore client (`cosign`).
-*   **Clean Architecture:** The proposed `Executor` interface provides a clean abstraction that is easily testable.
-*   **Seamless User Experience:** The `cosign` binary is managed automatically by the OCM CLI, making it invisible to the end-user. The user experience is a true single-tool experience.
-*   **Familiarity:** The configuration model mirrors `cosign` conventions, which is beneficial for users already familiar with it.
+- **Minimal Dependency Risk:** This option adds zero new Go dependencies to the OCM module, leveraging the most mature and widely-used Sigstore client (`cosign`).
+- **Clean Architecture:** The proposed `Executor` interface provides a clean abstraction that is easily testable.
+- **Seamless User Experience:** The `cosign` binary is managed automatically by the OCM CLI, making it invisible to the end-user. The user experience is a true single-tool experience.
+- **Familiarity:** The configuration model mirrors `cosign` conventions, which is beneficial for users already familiar with it.
 
 The main trade-off (dependency on an external binary) is fully mitigated by the transparent auto-download and caching mechanism with SHA256 verification.
 
@@ -43,34 +43,34 @@ The main trade-off (dependency on an external binary) is fully mitigated by the 
 
 Pros:
 
-*   Zero sigstore Go dependencies.
-*   `cosign` is the battle-tested reference implementation.
-*   Clean `Executor` abstraction for testing.
-*   Automatic feature inheritance by updating the `cosign` binary.
-*   No manual tool installation for the user.
-*   Familiar UX for `cosign` users.
+- Zero sigstore Go dependencies.
+- `cosign` is the battle-tested reference implementation.
+- Clean `Executor` abstraction for testing.
+- Automatic feature inheritance by updating the `cosign` binary.
+- No manual tool installation for the user.
+- Familiar UX for `cosign` users.
 
 Cons:
 
-*   Text-based error handling from `stderr`.
-*   Implicit version coupling with the `cosign` binary.
-*   Network access required for the initial download of the `cosign` binary.
+- Text-based error handling from `stderr`.
+- Implicit version coupling with the `cosign` binary.
+- Network access required for the initial download of the `cosign` binary.
 
 ### Option B: sigstore-go Library
 
 Pros:
 
-*   Self-contained with no external binary.
-*   Typed Go error handling.
-*   Fine-grained control over the Sigstore process.
+- Self-contained with no external binary.
+- Typed Go error handling.
+- Fine-grained control over the Sigstore process.
 
 Cons:
 
-*   Heavy dependency tree with over 15 transitive modules.
-*   Larger supply chain attack surface.
-*   Tighter coupling with the `sigstore-go` API, requiring recompilation for updates.
-*   `sigstore-go` is less mature than the `cosign` CLI.
-*   A panic in the library could crash the OCM CLI.
+- Heavy dependency tree with over 15 transitive modules.
+- Larger supply chain attack surface.
+- Tighter coupling with the `sigstore-go` API, requiring recompilation for updates.
+- `sigstore-go` is less mature than the `cosign` CLI.
+- A panic in the library could crash the OCM CLI.
 
 ## Discovery and Distribution
 
