@@ -63,6 +63,7 @@ mainSections = ["docs", "community"]
 
   # Repository
   repoHost = "GitHub" # GitHub (default), Gitea, GitLab, Bitbucket, or BitbucketServer
+  docsRepo = "https://github.com/open-component-model/open-component-model"
 
 # Debug
 [render_hooks.image]
