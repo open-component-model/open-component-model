@@ -302,6 +302,7 @@ jobs:
   analyze-go:
     name: "Analyze Go Modules"
     needs: discover_modules
+    # CodeQL bundles (codeql-action, codeql-cli-binaries) ship linux64 only - no ARM64 binary.
     runs-on: ubuntu-latest
     timeout-minutes: 360
     permissions:

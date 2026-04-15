@@ -28,6 +28,8 @@ jobs:
 
   spellcheck:
     name: Spellcheck
+    # rojopolis/spellcheck-github-actions uses docker://jonasbn/github-action-spellcheck
+    # which is an amd64-only image with no ARM64 manifest.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6

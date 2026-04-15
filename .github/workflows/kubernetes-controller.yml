@@ -220,6 +220,7 @@ jobs:
 
   E2E:
     name: E2E Tests
+    # Loads amd64 images into Kind cluster via skopeo --override-arch amd64.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: build

@@ -125,6 +125,7 @@ jobs:
         with:
           configuration-path: .github/config/labeler.yml
   size-labeler:
+    # codelytv/pr-size-labeler Dockerfile downloads x86_64-only docpars binary.
     runs-on: ubuntu-latest
     name: Label PR based on size
     permissions:
@@ -153,6 +154,7 @@ jobs:
   verify-labels:
     needs: [labeler, size-labeler, conventional-commit-labeler]
     name: verify labels
+    # docker://agilepathway/pull-request-label-checker is an amd64-only image.
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read

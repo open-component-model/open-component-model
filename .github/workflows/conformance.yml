@@ -65,6 +65,7 @@ env:
 jobs:
   conformance:
     name: Sovereign Scenario
+    # Loads amd64 images into Kind cluster via skopeo --override-arch amd64.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
