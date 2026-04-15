@@ -424,7 +424,7 @@ users unfamiliar with the conversion pipeline.
 Each typed config has a dedicated compiler that emits transformation
 specification primitives:
 
-```
+```text
 generic.config.ocm.software/v1 (YAML)
     │ parse via configuration package
     ▼
