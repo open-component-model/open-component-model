@@ -35,6 +35,7 @@ same process applies to all repositories.
 
 {{< steps >}}
 {{< step >}}
+
 #### Fork and clone the repository
 
 [Fork the repository](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo#forking-a-repository)
@@ -48,6 +49,7 @@ git remote add upstream https://github.com/open-component-model/open-component-m
 {{< /step >}}
 
 {{< step >}}
+
 #### Create a branch for your changes
 
 Always branch off the latest `main`:
@@ -59,6 +61,7 @@ git checkout -b my-feature-branch upstream/main
 {{< /step >}}
 
 {{< step >}}
+
 #### Make your changes and commit
 
 {{<callout context="note" title="Sign-off and signed commits" icon="signature">}}
@@ -79,6 +82,7 @@ git commit -s -m "Brief description of your changes"
 {{< /step >}}
 
 {{< step >}}
+
 #### Push and open a pull request
 
 ```bash
