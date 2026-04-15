@@ -71,6 +71,7 @@ External plugins declare their produced types in their capability spec. After pl
 **Plugin type naming convention:** External plugin type names must be prefixed with the plugin's reverse-domain ID (e.g., `com.hashicorp.vault.VaultCredentials/v1`). Builtin types use short names (e.g., `HelmHTTPCredentials/v1`). The composition root enforces that external plugin type names start with the plugin ID — this prevents plugins from registering types that collide with builtins or other plugins. `runtime.Scheme` provides the hard enforcement via duplicate registration errors; the naming convention provides the soft enforcement via namespace isolation.
 
 This means:
+
 - Adding a new binding or plugin does not modify the credential graph
 - The graph validates and resolves types generically through the scheme
 - Builtin types are registered as Go structs, external plugin types as `runtime.Raw` — consumers use `scheme.Convert` to get typed structs
