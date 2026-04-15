@@ -146,8 +146,6 @@ Justification:
   others.
 * Implementation complexity is low — each config type is a thin compiler
   to the existing transformation specification.
-* The generic approach (Option 2) can still be introduced later as an
-  additional, advanced option without invalidating the typed configs.
 
 ## Option 1: Typed Transfer Configurations
 
