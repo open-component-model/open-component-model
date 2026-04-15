@@ -13,6 +13,18 @@ bug, adding a feature, or improving documentation - every contribution matters a
 This guide gives you a general overview of how to contribute. For repository-specific instructions (coding style,
 testing, build setup), refer to the `CONTRIBUTING.md` in the root of the repository you want to work on.
 
+## Where to Contribute
+
+Most of the active development happens in the
+[open-component-model](https://github.com/open-component-model/open-component-model) mono-repo. It contains the Go
+bindings, CLI, Kubernetes controllers, and this website.
+
+{{<callout context="caution" title="Legacy repositories" icon="alert-triangle">}}
+The [ocm](https://github.com/open-component-model/ocm) and
+[ocm-controller](https://github.com/open-component-model/ocm-controller) repositories are legacy and no longer
+actively developed. Please direct new contributions to the mono-repo above.
+{{</callout>}}
+
 ## Finding Things to Work On
 
 Not sure where to start? Here are some ways to find work:
@@ -68,8 +80,7 @@ git checkout -b my-feature-branch upstream/main
 All commits must meet two requirements:
 
 1. **DCO sign-off** - Add `-s` to your `git commit` command. This appends a `Signed-off-by` line to your commit
-   message, certifying that you have the right to submit the code under the project's license
-   ([Developer Certificate of Origin](https://developercertificate.org/)).
+   message, certifying that you have the right to submit the code under the project's license ([Developer Certificate of Origin](https://developercertificate.org/)).
 2. **Cryptographic signature** - Commits must be signed with a GPG or SSH key so GitHub can verify authorship.
    See the [GitHub signing guide](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits)
    for setup instructions.
@@ -83,17 +94,7 @@ git commit -s -m "Brief description of your changes"
 
 {{< step >}}
 
-#### Push and open a pull request
-
-```bash
-git push origin my-feature-branch
-```
-
-Then open a pull request from your fork's branch to the upstream repository's `main` branch on GitHub.
-{{< /step >}}
-{{< /steps >}}
-
-## Before You Submit
+#### Before you push
 
 - **Read the repository's `CONTRIBUTING.md`** - It contains project-specific requirements such as coding style,
   required tools, and testing instructions.
@@ -101,13 +102,28 @@ Then open a pull request from your fork's branch to the upstream repository's `m
   round-trip. Make use of the `Taskfile` or `Makefile` as the test and lint commands usually incorporate a
   specific version or configuration.
 - **Keep your branch up to date** - Rebase on the latest `main` before submitting to avoid merge conflicts.
-- **Write a clear PR description** - Explain what you changed and why. If your PR fixes an issue, reference it
-  (e.g., `Fixes #123`). We squash all commits when merging, so your PR title and description become the final
-  commit message.
 - **Elaborate changes** - If you are planning significant or potentially controversial changes, please discuss them
   with the maintainers first - either in a GitHub issue, on
   [Slack](https://kubernetes.slack.com/archives/C05UWBE8R1D), or in the
   [community call](/community/engagement#community-calls).
+{{< /step >}}
+
+{{< step >}}
+
+#### Push and open a pull request
+
+```bash
+git push origin my-feature-branch
+```
+
+Then [open a pull request](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request?tool=webui)
+from your fork's branch to the upstream repository's `main` branch on GitHub.
+
+- **Write a clear PR description** - Explain what you changed and why. If your PR fixes an issue, reference it
+  (e.g., `Fixes #123`). We squash all commits when merging, so your PR title and description become the final
+  commit message.
+{{< /step >}}
+{{< /steps >}}
 
 Once you open a pull request, CI checks run automatically (linting, tests, CodeQL analysis, DCO verification).
 Maintainers will review your changes and may ask for adjustments - this is normal and part of the collaborative
@@ -149,7 +165,7 @@ AI-generated code or content can be contributed to SAP Open Source Software proj
 ## Getting Help
 
 - **Slack** - Join [#open-component-model](https://kubernetes.slack.com/archives/C05UWBE8R1D) in the Kubernetes
-  Slack workspace. ([Request an invitation](https://slack.k8s.io) if you are not yet a member.)
+  Slack workspace ([Request an invitation](https://slack.k8s.io) if you are not yet a member).
 - **Community calls** - We hold regular calls on the first Wednesday of each month. See the
   [community page](/community/engagement#community-calls) for details.
 - **Issues** - Browse existing [issues](https://github.com/open-component-model/open-component-model/issues) or
