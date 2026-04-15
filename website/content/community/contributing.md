@@ -19,7 +19,7 @@ Most of the active development happens in the
 [open-component-model](https://github.com/open-component-model/open-component-model) mono-repo. It contains the Go
 bindings, CLI, Kubernetes controllers, and this website.
 
-{{<callout context="caution" title="Legacy repositories" icon="alert-triangle">}}
+{{<callout context="caution" title="Legacy repositories" icon="shield-lock">}}
 The [ocm](https://github.com/open-component-model/ocm) and
 [ocm-controller](https://github.com/open-component-model/ocm-controller) repositories are legacy and no longer
 actively developed. Please direct new contributions to the mono-repo above.
@@ -76,7 +76,7 @@ git checkout -b my-feature-branch upstream/main
 
 #### Make your changes and commit
 
-{{<callout context="note" title="Sign-off and signed commits" icon="signature">}}
+{{<callout context="note" title="Sign-off and signed commits" icon="key">}}
 All commits must meet two requirements:
 
 1. **DCO sign-off** - Add `-s` to your `git commit` command. This appends a `Signed-off-by` line to your commit
@@ -101,7 +101,8 @@ git commit -s -m "Brief description of your changes"
 - **Run tests and linters locally** - Most repositories enforce these in CI. Running them locally first saves you a
   round-trip. Make use of the `Taskfile` or `Makefile` as the test and lint commands usually incorporate a
   specific version or configuration.
-- **Keep your branch up to date** - Rebase on the latest `main` before submitting to avoid merge conflicts.
+- **Keep your branch up to date** - Merge the latest `main` into your branch before submitting to avoid merge
+  conflicts. There is no need to rebase because we squash all commits when merging a pull request.
 - **Elaborate changes** - If you are planning significant or potentially controversial changes, please discuss them
   with the maintainers first - either in a GitHub issue, on
   [Slack](https://kubernetes.slack.com/archives/C05UWBE8R1D), or in the
