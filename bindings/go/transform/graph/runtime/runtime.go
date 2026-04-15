@@ -143,6 +143,8 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 		return fmt.Errorf("failed to get credential consumer identities for transformation %q: %w", transformation.ID, err)
 	}
 
+	// Resolve named credential slots declared by the transformer.
+	// ErrNotFound yields a nil entry (credential is optional); all other errors abort the transformation.
 	var creds map[string]map[string]string
 	if len(identities) > 0 && b.CredentialProvider != nil {
 		creds = make(map[string]map[string]string, len(identities))
