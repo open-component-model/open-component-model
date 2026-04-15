@@ -18,7 +18,7 @@ testing, build setup), refer to the `CONTRIBUTING.md` in the root of the reposit
 Not sure where to start? Here are some ways to find work:
 
 - **Good first issues** - Look for issues labeled
-  [`good first issue`](https://github.com/search?q=org%3Aopen-component-model+label%3A%22good+first+issue%22+state%3Aopen&type=issues)
+  [`kind/good-first-issue`](https://github.com/search?q=org%3Aopen-component-model+label%3A%22kind%2Fgood-first-issue%22+state%3Aopen&type=issues)
   across our repositories. These are specifically chosen to be approachable for newcomers.
 - **Bug reports** - Browse open issues and help fix bugs.
 - **Documentation** - Improvements to documentation are always welcome. See the
@@ -94,7 +94,8 @@ Then open a pull request from your fork's branch to the upstream repository's `m
 - **Read the repository's `CONTRIBUTING.md`** - It contains project-specific requirements such as coding style,
   required tools, and testing instructions.
 - **Run tests and linters locally** - Most repositories enforce these in CI. Running them locally first saves you a
-  round-trip.
+  round-trip. Make use of the `Taskfile` or `Makefile` as the test and lint commands usually incorporate a
+  specific version or configuration.
 - **Keep your branch up to date** - Rebase on the latest `main` before submitting to avoid merge conflicts.
 - **Write a clear PR description** - Explain what you changed and why. If your PR fixes an issue, reference it
   (e.g., `Fixes #123`). We squash all commits when merging, so your PR title and description become the final
