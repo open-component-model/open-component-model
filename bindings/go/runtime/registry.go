@@ -274,6 +274,23 @@ func (r *Scheme) IsRegistered(typ Type) bool {
 	return exists
 }
 
+// ResolveType resolves a type to its default type in the scheme.
+// If the type is a default type, it is returned as-is.
+// If the type is an alias, the default type it maps to is returned.
+// If the type is unknown, it is returned unchanged.
+func (r *Scheme) ResolveType(typ Type) Type {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if _, exists := r.defaults.GetLeft(typ); exists {
+		return typ
+	}
+	if def, ok := r.aliases[typ]; ok {
+		return def
+	}
+	return typ
+}
+
 func (r *Scheme) MustRegisterWithAlias(prototype Typed, types ...Type) {
 	if err := r.RegisterWithAlias(prototype, types...); err != nil {
 		panic(err)

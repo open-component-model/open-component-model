@@ -1,8 +1,8 @@
 # Typed Credentials and Consumer Identity Types
 
 * Status: proposed
-* Deciders: Matthias Bruns, Gergely Brautigam, Fabian Burth, Jakob Moeller
-* Date: 2026.04.01
+* Deciders: OCM Technical Steering Committee
+* Date: 2026.04.02
 
 Technical Story: Evolve the OCM credential system from untyped `map[string]string` credentials into a type-safe, self-documenting system that validates credential and identity types at both configuration time and consumption time.
 
@@ -53,9 +53,29 @@ The existing `Resolver` interface gains a `ResolveTyped` method that returns `ru
 
 Adding a method to an interface only breaks implementors (all in our codebase), not consumers. Each binding migrates from `Resolve` to `ResolveTyped` independently.
 
-### Identity as Builder, Map for Matching
+### Typed Identity Structs
 
-Typed identity structs implement `IdentityProvider` to produce `runtime.Identity` maps. The graph continues to use the map representation internally for its matching semantics (wildcard paths, URL normalization, port defaulting). Typed structs are builders and validators, not replacements for the map.
+Typed identity structs implement `IdentityProvider` to produce `runtime.Identity` maps for graph lookup. They provide structured construction and validation while remaining compatible with the graph's existing matching system.
+
+### Scheme Wiring and Graph Independence
+
+The credential graph must remain independent of binding-specific types. It accepts two optional schemes via its configuration:
+
+- **`CredentialTypeScheme`** — knows how to create typed credential objects (e.g., `HelmHTTPCredentials/v1`)
+- **`ConsumerIdentityTypeScheme`** — knows how to create typed identity objects for validation (e.g., `HelmChartRepository/v1`)
+
+Each binding provides a `MustRegisterCredentialType(scheme)` and `MustRegisterIdentityType(scheme)` function. The application entry point (CLI, controller) creates the schemes, calls each binding's registration function, and passes the populated schemes to the graph via options. The graph never imports binding packages — it only works with `runtime.Typed` and `runtime.Scheme`.
+
+External plugins declare their produced types in their capability spec. After plugin discovery, the composition root reads the capabilities and registers types into the schemes. Consumers that need typed access to plugin credentials can register their own Go struct for the same type — `scheme.Convert` handles the `Raw` → struct conversion.
+
+**Plugin type naming convention:** External plugin type names must be prefixed with the plugin's reverse-domain ID (e.g., `com.hashicorp.vault.VaultCredentials/v1`). Builtin types use short names (e.g., `HelmHTTPCredentials/v1`). The composition root enforces that external plugin type names start with the plugin ID — this prevents plugins from registering types that collide with builtins or other plugins. `runtime.Scheme` provides the hard enforcement via duplicate registration errors; the naming convention provides the soft enforcement via namespace isolation.
+
+This means:
+- Adding a new binding or plugin does not modify the credential graph
+- The graph validates and resolves types generically through the scheme
+- Builtin types are registered as Go structs, external plugin types as `runtime.Raw` — consumers use `scheme.Convert` to get typed structs
+- Builtins register first (at startup), plugins register after (at discovery) — builtins always take precedence
+- Both schemes are optional (nil-safe) — the graph degrades to `DirectCredentials` behavior when no scheme is provided
 
 ### Backward Compatibility
 
@@ -64,6 +84,20 @@ Typed identity structs implement `IdentityProvider` to produce `runtime.Identity
 - Each typed credential provides a `FromDirectCredentials` converter
 - Unversioned identity types work through `runtime.Scheme` alias resolution
 - External plugin wire format stays `map[string]string`
+
+### External Plugin Integration
+
+External plugins (separate binaries) communicate with the plugin manager via HTTP using `map[string]string` as the credential wire format. This does not change. Typed credentials integrate with external plugins as follows:
+
+**At discovery time:** The plugin manager runs each plugin binary with `capabilities` and reads the capability JSON. Each `SupportedConsumerIdentityType` in the capability spec includes an `AcceptedCredentialTypes` field — the JSON equivalent of the Go `CredentialAcceptor` interface. This allows plugins written in any language to declare the identity → credential type mapping. The composition root reads these declarations and builds the identity/credential schemes for the graph.
+
+**At the plugin boundary:** When the graph resolves credentials via a repository plugin, the resolved `runtime.Typed` is converted to `map[string]string` at the HTTP transport layer before being sent to the plugin. The plugin receives a flat map.
+
+**Inside the plugin:** The plugin converts the received `map[string]string` to its typed credential struct using `FromDirectCredentials`. This gives the plugin typed access to credential fields with compile-time safety. The existing Helm input plugin (`bindings/go/helm/cmd`) demonstrates this pattern.
+
+**Type naming for plugins:** External plugin credential and identity type names must be prefixed with a reverse-domain namespace derived from the plugin identity (e.g., `com.hashicorp.vault.VaultCredentials/v1`). Builtin types use short names (e.g., `HelmHTTPCredentials/v1`). This prevents collisions between plugins and builtins. `runtime.Scheme` enforces uniqueness via duplicate registration errors.
+
+**Consumer-side conversion:** Consumers that need to work with plugin-declared credential types can either register their own Go struct in the credential type scheme (giving direct type-assertion support) or use `scheme.Convert` to convert from `*runtime.Raw` to a typed struct after resolution.
 
 ## Migration Path
 

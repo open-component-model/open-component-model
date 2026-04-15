@@ -244,7 +244,7 @@ func validateConsumerIdentityTypes(ctx context.Context, g *Graph, config *cfgRun
 					// DirectCredentials/Credentials are always accepted
 					continue
 				}
-				if !isAccepted(credType, accepted) {
+				if !isAccepted(g.credentialTypeScheme, credType, accepted) {
 					slog.WarnContext(ctx, "credential type not accepted by identity type",
 						"credentialType", credType.String(),
 						"identityType", identityType.String(),
@@ -256,9 +256,22 @@ func validateConsumerIdentityTypes(ctx context.Context, g *Graph, config *cfgRun
 	}
 }
 
-func isAccepted(credType runtime.Type, accepted []runtime.Type) bool {
+// isAccepted checks whether a credential type is in the list of accepted types.
+// It first tries exact matching, then falls back to alias resolution through the
+// scheme — so that e.g. "HelmHTTPCredentials" (unversioned alias) matches
+// "HelmHTTPCredentials/v1" (default type) and vice versa.
+func isAccepted(credentialTypeScheme *runtime.Scheme, credType runtime.Type, accepted []runtime.Type) bool {
 	for _, a := range accepted {
 		if a.Equal(credType) {
+			return true
+		}
+	}
+	if credentialTypeScheme == nil {
+		return false
+	}
+	resolved := credentialTypeScheme.ResolveType(credType)
+	for _, a := range accepted {
+		if credentialTypeScheme.ResolveType(a).Equal(resolved) {
 			return true
 		}
 	}

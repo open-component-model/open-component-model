@@ -46,6 +46,21 @@ func (r *RepositoryRegistry) RepositoryScheme() *runtime.Scheme {
 	return r.scheme
 }
 
+// DeclaredConsumerIdentityTypes returns all consumer identity types declared by
+// registered plugins (both internal and external), along with their accepted
+// credential types. This allows the composition root to build identity and
+// credential type schemes from plugin capabilities.
+func (r *RepositoryRegistry) DeclaredConsumerIdentityTypes() []mtypes.Type {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var result []mtypes.Type
+	for _, capability := range r.capabilities {
+		result = append(result, capability.SupportedConsumerIdentityTypes...)
+	}
+	return result
+}
+
 // AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.
 // This function will return an error if the given capability + type already has a registered plugin.
 // Multiple plugins for the same cap+typ is not allowed.

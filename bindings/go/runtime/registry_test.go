@@ -548,6 +548,29 @@ func TestScheme_GetTypes(t *testing.T) {
 	}
 }
 
+func TestScheme_ResolveType(t *testing.T) {
+	scheme := NewScheme()
+	defaultType := NewVersionedType("HelmHTTPCredentials", "v1")
+	alias := NewUnversionedType("HelmHTTPCredentials")
+	scheme.MustRegisterWithAlias(&TestType{}, defaultType, alias)
+
+	t.Run("default type resolves to itself", func(t *testing.T) {
+		resolved := scheme.ResolveType(defaultType)
+		assert.Equal(t, defaultType, resolved)
+	})
+
+	t.Run("alias resolves to default type", func(t *testing.T) {
+		resolved := scheme.ResolveType(alias)
+		assert.Equal(t, defaultType, resolved)
+	})
+
+	t.Run("unknown type resolves to itself", func(t *testing.T) {
+		unknown := NewVersionedType("Unknown", "v1")
+		resolved := scheme.ResolveType(unknown)
+		assert.Equal(t, unknown, resolved)
+	})
+}
+
 func TestRegistry_RegisterSchemes(t *testing.T) {
 	// Create test types
 	typ1 := NewVersionedType("test1", "v1")
