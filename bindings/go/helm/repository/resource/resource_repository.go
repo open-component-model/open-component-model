@@ -152,8 +152,12 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.H
 // from the filesystem would fail.
 func tarDirectoryRecursive(ctx context.Context, dir string) (blob.ReadOnlyBlob, error) {
 	var buf bytes.Buffer
+	twClosed := false
 	tw := tar.NewWriter(&buf)
 	defer func(tw *tar.Writer) {
+		if twClosed {
+			return
+		}
 		err := tw.Close()
 		if err != nil {
 			slog.WarnContext(ctx, "Error closing tar writer", "error", err)
@@ -218,6 +222,8 @@ func tarDirectoryRecursive(ctx context.Context, dir string) (blob.ReadOnlyBlob, 
 	if err := tw.Close(); err != nil {
 		return nil, fmt.Errorf("error closing tar writer: %w", err)
 	}
+
+	twClosed = true
 
 	return inmemory.New(&buf, inmemory.WithMediaType(filesystem.DefaultTarMediaType)), nil
 }

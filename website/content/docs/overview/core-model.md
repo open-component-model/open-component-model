@@ -64,7 +64,7 @@ This means you can transport component versions across boundaries — from a pub
 
 ## How Resources Are Accessed
 
-A component descriptor lists resources, but the actual artifacts (container images, Helm charts, etc.) live in external storage backends. Each resource carries an **access specification** that describes where and how to retrieve it.
+A component descriptor lists resources, but the actual artifacts (container images, Helm charts, etc.) may live in external storage backends or be embedded alongside the component descriptor. Each resource carries an **access specification** that describes where and how to retrieve it.
 
 OCM delegates the actual download and upload of resources to **resource repositories**, backend-specific implementations that know how to interact with a particular storage technology. For example, an `OCIImage/v1` access is handled by the OCI resource repository, while a `Helm/v1` access is handled by the Helm resource repository.
 

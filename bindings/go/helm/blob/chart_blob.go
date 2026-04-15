@@ -87,10 +87,7 @@ func extractFromTar(tarBlob blob.ReadOnlyBlob) (chartBlob blob.ReadOnlyBlob, pro
 		}
 	}()
 
-	// make sure to get all from pipe (won't work :D )
-	tarBytes, err := io.ReadAll(rc)
-
-	tr := tar.NewReader(bytes.NewReader(tarBytes))
+	tr := tar.NewReader(rc)
 	for {
 		hdr, err := tr.Next()
 		if err != nil {
