@@ -13,8 +13,9 @@ The credential graph (see [ADR 0002](0002_credentials.md)) resolves credentials 
 The resolution model is sound, but credentials and identities are untyped:
 
 - **Credentials are `map[string]string`** — key names like `username`, `password`, `accessToken` are scattered string
-  constants with no compile-time guarantees. A real bug existed where OCI resource downloads used `access_token` (
-  snake_case) while docker config resolution used `accessToken` (camelCase), causing silent auth failures.
+  constants with no compile-time guarantees.
+  A real bug exists where OCI resource downloads used `access_token` (snake_case) while docker config resolution used
+  `accessToken` (camelCase), causing silent auth failures.
 
 - **Consumer identity types are scattered strings** — `"OCIRegistry"`, `"HelmChartRepository"`, `"RSA/v1alpha1"` defined
   independently per binding with no central registry, inconsistent versioning, and no way to enumerate them.
@@ -37,6 +38,11 @@ The resolution model is sound, but credentials and identities are untyped:
 6. **Extensibility** — Plugins can register custom types without collisions
 
 ## Decision Outcome
+
+> **Composition root** — the single place near the application entry point (CLI `main`, controller setup) where all
+> components are assembled, configured, and wired together. In OCM, this is where schemes are created, binding
+> registration functions are called, and the populated schemes are passed to the graph. The term is used throughout this
+> ADR.
 
 ### Typed Credential and Identity Specs
 
@@ -69,6 +75,38 @@ config when a `CredentialTypeScheme` is provided. `DirectCredentials/v1` serves 
 Adding a method to an interface only breaks implementors (all in our codebase), not consumers. Each binding migrates
 from `Resolve` to `ResolveTyped` independently.
 
+```go
+// Pseudocode — updated Resolver interface
+type Resolver interface {
+    Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)    // existing
+    ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error)   // new
+}
+
+// Pseudocode — consumer usage
+identity := HelmChartRepositoryIdentity{Host: "charts.example.com", Path: "/stable"}
+typed, err := resolver.ResolveTyped(ctx, identity.Identity())
+creds := typed.(*HelmHTTPCredentials)  // type-safe access
+fmt.Println(creds.CertFile, creds.KeyFile)
+```
+
+```mermaid
+sequenceDiagram
+    participant C as Consumer<br/>(e.g., Helm downloader)
+    participant I as Typed Identity<br/>(HelmChartRepositoryIdentity)
+    participant G as Credential Graph
+    participant S as CredentialTypeScheme
+
+    C->>I: construct typed identity
+    I-->>C: .Identity() → map[string]string
+    C->>G: ResolveTyped(identity)
+    G->>G: match identity in DAG
+    G->>G: resolve raw credential from config
+    G->>S: convert to runtime.Typed
+    S-->>G: typed credential
+    G-->>C: HelmHTTPCredentials
+    C->>C: type-assert fields<br/>(CertFile, KeyFile, Keyring)
+```
+
 ### Typed Identity Structs
 
 Typed identity structs implement `IdentityProvider` to produce `runtime.Identity` maps for graph lookup. They provide
@@ -87,6 +125,29 @@ Each binding provides a `MustRegisterCredentialType(scheme)` and `MustRegisterId
 application entry point (CLI, controller) creates the schemes, calls each binding's registration function, and passes
 the populated schemes to the graph via options. The graph never imports binding packages — it only works with
 `runtime.Typed` and `runtime.Scheme`.
+
+```mermaid
+flowchart LR
+    subgraph Composition Root
+        CR["CLI main /<br/>controller"]
+    end
+
+    subgraph Schemes
+        CTS["CredentialTypeScheme"]
+        CITS["ConsumerIdentityTypeScheme"]
+    end
+
+    CR -->|creates| CTS
+    CR -->|creates| CITS
+
+    Bindings["Bindings<br/>(Helm, OCI, ...)"] -->|register types| CTS
+    Bindings -->|register types| CITS
+    Plugins["Plugin Discovery"] -->|register types<br/>from capability specs| CTS
+    Plugins -->|register types<br/>from capability specs| CITS
+
+    CTS -->|passed to| Graph["Credential Graph"]
+    CITS -->|passed to| Graph
+```
 
 External plugins declare their produced types in their capability spec. After plugin discovery, the composition root
 reads the capabilities and registers types into the schemes. Consumers that need typed access to plugin credentials can
@@ -111,7 +172,8 @@ This means:
 
 - `.ocmconfig` format is unchanged — `Credentials/v1` with `properties` continues to work
 - `DirectCredentials/v1` is the universal fallback, registered with all aliases
-- Each typed credential provides a `FromDirectCredentials` converter
+- Each typed credential provides a `FromDirectCredentials` converter that constructs the typed struct from a
+  `map[string]string`
 - Unversioned identity types work through `runtime.Scheme` alias resolution
 - External plugin wire format stays `map[string]string`
 
@@ -127,12 +189,19 @@ identity → credential type mapping. The composition root reads these declarati
 schemes for the graph.
 
 **At the plugin boundary:** When the graph resolves credentials via a repository plugin, the resolved `runtime.Typed` is
-converted to `map[string]string` at the HTTP transport layer before being sent to the plugin. The plugin receives a flat
-map.
+converted to `map[string]string` at the HTTP transport layer before being sent to the plugin.
 
-**Inside the plugin:** The plugin converts the received `map[string]string` to its typed credential struct using
-`FromDirectCredentials`. This gives the plugin typed access to credential fields with compile-time safety. The existing
-Helm input plugin (`bindings/go/helm/cmd`) demonstrates this pattern.
+**Inside the plugin:** The plugin converts the received `map[string]string` back to its typed credential struct. Each
+typed credential struct provides a `FromDirectCredentials` constructor that maps well-known keys to struct fields with
+compile-time safety:
+
+```go
+// Pseudocode — plugin-side credential conversion
+// The plugin receives credentials as map[string]string over HTTP.
+// FromDirectCredentials maps the well-known keys to typed struct fields.
+creds, err := HelmHTTPCredentials.FromDirectCredentials(credentials)
+// creds.CertFile, creds.KeyFile, creds.Keyring are now typed fields
+```
 
 **Type naming for plugins:** External plugin credential and identity type names must be prefixed with a reverse-domain
 namespace derived from the plugin identity (e.g., `com.hashicorp.vault.VaultCredentials/v1`). Builtin types use short
@@ -183,17 +252,6 @@ Deprecate `Resolve` method. Remove internal map conversion helpers and legacy cr
 - Phase 4 blocks on Phase 2 completion.
 - Phase 6 is the only step that removes backward compatibility.
 - Old `.ocmconfig` files work at every stage.
-
-## POC Validation
-
-Branch `feat/800_typed_credentials_poc` validates the design end-to-end using Helm as the reference binding:
-
-- Typed `HelmHTTPCredentials/v1` and `HelmChartRepositoryIdentity/v1` specs
-- Graph resolves typed credentials from config via `CredentialTypeScheme`
-- `CredentialAcceptor` validation at the consumer level — incompatible types rejected with errors
-- Full test coverage: spec unit tests, graph integration tests, CLI integration tests
-- Backward compatibility verified with old `Credentials/v1` configs
-- Download library fully migrated to typed credentials internally
 
 ## Conclusion
 
