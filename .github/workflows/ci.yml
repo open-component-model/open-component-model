@@ -18,7 +18,7 @@ permissions:
 jobs:
   discover_modules:
     name: "Discover Go Modules"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       pull-requests: read
     outputs:
@@ -173,7 +173,7 @@ jobs:
 
   golangci_lint_verify:
     name: "golangci-lint-verify"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       # Automatically downgraded to read-only for pull requests from forks
@@ -205,7 +205,7 @@ jobs:
     needs:
      - discover_modules
      - golangci_lint_verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       # Automatically downgraded to read-only for pull requests from forks
@@ -245,7 +245,7 @@ jobs:
   run_integration_tests:
     name: "Integration Tests"
     needs: discover_modules
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     if: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
@@ -275,7 +275,7 @@ jobs:
   run_unit_tests:
     name: "Unit Tests"
     needs: discover_modules
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     if: ${{ fromJSON(needs.discover_modules.outputs.unit_test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
@@ -302,7 +302,7 @@ jobs:
   analyze-go:
     name: "Analyze Go Modules"
     needs: discover_modules
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 360
     permissions:
       actions: read
@@ -337,7 +337,7 @@ jobs:
           category: "/language:go"
 
   generate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     name: "Code Generation"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -370,7 +370,7 @@ jobs:
   # see https://github.com/orgs/community/discussions/60792 for details on why this is needed
   check-completion:
     name: "Completion"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs:
       - discover_modules
       - generate
