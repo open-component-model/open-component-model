@@ -1,7 +1,7 @@
 # Transfer Configuration
 
 * **Status**: proposed
-* **Deciders**: Fabian Burth, SIG Runtime
+* **Deciders**: SIG Runtime
 * **Date**: 2026-04-07
 
 **Technical Story:** Design a user-facing configuration format for the
@@ -430,8 +430,10 @@ single format.
 * **Composable.** Multiple typed configs coexist in a single file via
   the existing generic config wrapper. Each typed entry is
   self-contained and independently versionable.
-* **Versioned specs as documentation.** Typed configs with JSON schemas
-  can be generated and published as versioned reference documentation.
+* **Versioned specs as documentation.** JSON schemas can be generated
+  from the Go types and published as versioned reference documentation
+  on the website. Each typed config gets its own schema page — users
+  can look up exactly which fields are available for a given version.
 
 **Cons:**
 
