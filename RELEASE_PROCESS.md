@@ -142,9 +142,9 @@ Once created, only bug fixes and documentation changes are allowed.
 Release candidates are created for both components sequentially, in lock-step.
 
 1. Run workflow **[CLI Release](https://github.com/open-component-model/open-component-model/actions/workflows/cli-release.yml)** with:
+   - **"Use workflow from"** set to the release branch created in step 1 (e.g., `releases/v0.17`)
    - `dry_run = true` first to validate
    - `dry_run = false` for actual release
-   - `Branch to release from` set to the release branch created in step 1 (e.g., `releases/v0.17`)
 2. Run workflow **[Controller Release](https://github.com/open-component-model/open-component-model/actions/workflows/controller-release.yml)** with equivalent inputs.
 3. Verify both pre-releases were created successfully on the GitHub Releases page.
    - CLI assets: platform binaries (`ocm-*`) and OCI tarballs
