@@ -63,7 +63,7 @@ concurrency:
 jobs:
   verify-chart:
     name: Verify Chart
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -106,7 +106,7 @@ jobs:
 
   build:
     name: Build Controller
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     needs: verify-chart
     outputs:
@@ -328,7 +328,7 @@ jobs:
 
   publish:
     name: Publish and Attest Image & Chart
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [build, E2E, conformance]
     if: ${{ needs.build.outputs.should_publish == 'true' }}
     outputs:

@@ -302,7 +302,7 @@ jobs:
   analyze-go:
     name: "Analyze Go Modules"
     needs: discover_modules
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     timeout-minutes: 360
     permissions:
       actions: read
