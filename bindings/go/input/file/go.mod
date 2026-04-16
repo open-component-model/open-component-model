@@ -5,7 +5,7 @@ go 1.26.1
 require (
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/stretchr/testify v1.11.1
-	ocm.software/open-component-model/bindings/go/blob v0.0.11
+	ocm.software/open-component-model/bindings/go/blob v0.0.12
 	ocm.software/open-component-model/bindings/go/constructor v0.0.7
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
 )
