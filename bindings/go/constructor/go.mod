@@ -7,7 +7,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.20.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.11
+	ocm.software/open-component-model/bindings/go/blob v0.0.12
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260415105257-4b97d24fcafc
