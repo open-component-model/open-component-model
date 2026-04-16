@@ -1,5 +1,6 @@
 title = "Open Component Model"
 baseurl = "https://ocm.software"
+copyright = "The Open Component Model contributors"
 canonifyURLs = false
 disableAliases = true
 disableHugoGeneratorInject = true
@@ -8,7 +9,6 @@ enableEmoji = true
 enableGitInfo = false
 enableRobotsTXT = true
 languageCode = "en-US"
-rssLimit = 10
 summarylength = 20
 
 defaultContentLanguage = "en"
@@ -101,3 +101,7 @@ defaultContentVersion = "latest"
     weight = 1
   [versions."legacy"]
     weight = 2
+
+[services]
+  [services.rss]
+    limit = 20
