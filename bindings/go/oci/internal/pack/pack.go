@@ -22,24 +22,19 @@ import (
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
+	"ocm.software/open-component-model/bindings/go/oci/internal/policy"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// GlobalAccessPolicy controls whether global access references are added to local blobs.
-// The zero value is GlobalAccessPolicyNever, suppressing global access by default.
-type GlobalAccessPolicy int
+// GlobalAccessPolicy is an alias for [policy.GlobalAccessPolicy].
+type GlobalAccessPolicy = policy.GlobalAccessPolicy
 
 const (
-	// GlobalAccessPolicyNever suppresses global access even on remote registries. This is the default.
-	GlobalAccessPolicyNever GlobalAccessPolicy = iota
-	// GlobalAccessPolicyAuto auto-detects based on whether the storage backend is globally reachable.
-	//
-	// Experimental: This policy is carried over from OCM v1 for backwards compatibility.
-	// Its future availability is being evaluated by the community.
-	GlobalAccessPolicyAuto
+	GlobalAccessPolicyNever = policy.GlobalAccessPolicyNever
+	GlobalAccessPolicyAuto  = policy.GlobalAccessPolicyAuto
 )
 
 // Options defines the configuration options for packing a single-layer OCI artifact.

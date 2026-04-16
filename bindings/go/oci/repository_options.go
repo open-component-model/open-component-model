@@ -11,6 +11,7 @@ import (
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
+	"ocm.software/open-component-model/bindings/go/oci/internal/policy"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -85,22 +86,17 @@ const (
 	ReferrerTrackingPolicyByIndexAndSubject ReferrerTrackingPolicy = iota
 )
 
-// GlobalAccessPolicy defines how global access references are handled when adding local blobs.
-// The default policy (zero value) is GlobalAccessPolicyNever, which suppresses global access
-// to discourage reliance on global access references.
-type GlobalAccessPolicy int
+// GlobalAccessPolicy is an alias for [policy.GlobalAccessPolicy].
+type GlobalAccessPolicy = policy.GlobalAccessPolicy
 
 const (
-	// GlobalAccessPolicyNever suppresses global access on all local blobs, even when the storage
-	// backend is globally reachable. This is the default policy to discourage reliance on
-	// global access references.
-	GlobalAccessPolicyNever GlobalAccessPolicy = iota
-	// GlobalAccessPolicyAuto auto-detects based on the storage backend. Global access is only
-	// added when the storage backend is globally reachable (e.g. a remote OCI registry).
+	// GlobalAccessPolicyNever suppresses global access on all local blobs.
+	// This is the default (zero value).
+	GlobalAccessPolicyNever = policy.GlobalAccessPolicyNever
+	// GlobalAccessPolicyAuto auto-detects based on the storage backend.
 	//
-	// Experimental: This policy is carried over from OCM v1 for backwards compatibility.
-	// Its future availability is being evaluated by the community.
-	GlobalAccessPolicyAuto
+	// Experimental: Carried over from OCM v1. Future availability being evaluated.
+	GlobalAccessPolicyAuto = policy.GlobalAccessPolicyAuto
 )
 
 // RepositoryOption is a function that modifies RepositoryOptions.
