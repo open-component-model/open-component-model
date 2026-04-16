@@ -15,7 +15,8 @@ The resolution model is sound, but credentials and identities are untyped:
 - **Credentials are `map[string]string`** — key names like `username`, `password`, `accessToken` are scattered string
   constants with no compile-time guarantees.
   A real bug exists where OCI resource downloads used `access_token` (snake_case) while docker config resolution used
-  `accessToken` (camelCase), causing silent auth failures.
+  `accessToken` (camelCase), causing silent auth failures
+  ([ocm-project#985](https://github.com/open-component-model/ocm-project/issues/985)).
 
 - **Consumer identity types are scattered strings** — `"OCIRegistry"`, `"HelmChartRepository"`, `"RSA/v1alpha1"` defined
   independently per binding with no central registry, inconsistent versioning, and no way to enumerate them.
@@ -78,14 +79,14 @@ from `Resolve` to `ResolveTyped` independently.
 ```go
 // Pseudocode — updated Resolver interface
 type Resolver interface {
-    Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)    // existing
-    ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error)   // new
+Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) // existing
+ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) // new
 }
 
 // Pseudocode — consumer usage
 identity := HelmChartRepositoryIdentity{Host: "charts.example.com", Path: "/stable"}
 typed, err := resolver.ResolveTyped(ctx, identity.Identity())
-creds := typed.(*HelmHTTPCredentials)  // type-safe access
+creds := typed.(*HelmHTTPCredentials) // type-safe access
 fmt.Println(creds.CertFile, creds.KeyFile)
 ```
 
@@ -153,25 +154,22 @@ External plugins declare their produced types in their capability spec. After pl
 reads the capabilities and registers types into the schemes. Consumers that need typed access to plugin credentials can
 register their own Go struct for the same type — `scheme.Convert` handles the `Raw` → struct conversion.
 
-**Plugin type naming convention:** External plugin type names must be prefixed with the plugin's reverse-domain ID (
-e.g., `com.hashicorp.vault.VaultCredentials/v1`). Built-in types use short names (e.g., `HelmHTTPCredentials/v1`).
+**Plugin type naming convention — for coexistence, not collision prevention:** External plugin type names are prefixed
+with the plugin's reverse-domain ID (e.g., `com.hashicorp.vault.VaultCredentials/v1`); built-ins use short names (e.g.,
+`HelmHTTPCredentials/v1`). This is a *naming convention*, not a safety mechanism — uniqueness is already enforced
+mechanically by `runtime.Scheme.TypeAlreadyRegisteredError`, which rejects duplicate registrations at startup.
 
-Why enforce this? Without namespace prefixes, nothing prevents two independent plugins from registering the same type
-name — or a plugin from shadowing a built-in type. For example, a malicious or misconfigured plugin could register
-`OCICredentials/v1` and intercept credentials intended for the built-in OCI binding. The reverse-domain prefix creates
-namespace isolation: each plugin can only register types under its own namespace, so collisions between plugins and
-between plugins and built-ins are structurally impossible.
-
-Enforcement is two-layered: the composition root validates that external plugin type names start with the plugin's
-registered ID (soft enforcement via convention), and `runtime.Scheme` rejects duplicate type registrations at runtime
-(hard enforcement via error). Built-ins register first at startup, plugins register after discovery — so a plugin
-attempting to re-register a built-in type name will always fail.
+The convention exists to **let two independent plugin authors coexist** when they independently pick the same short
+name. Without namespacing, two plugins both declaring `OCICredentials/v1` collide at startup and the user has to drop
+one. With reverse-domain prefixes, `com.vendora.OCICredentials/v1` and `com.vendorb.OCICredentials/v1` load side by
+side. This follows the same idea as Jenkins plugin identifiers.
 
 This means:
 
 - Adding a new binding or plugin does not modify the credential graph
 - The graph validates and resolves types generically through the scheme
-- Built-in types are registered as Go structs, external plugin types as `runtime.Raw` — consumers use `scheme.Convert` to
+- Built-in types are registered as Go structs, external plugin types as `runtime.Raw` — consumers use `scheme.Convert`
+  to
   get typed structs
 - Built-ins register first (at startup), plugins register after (at discovery) — built-ins always take precedence
 - Both schemes are optional (nil-safe) — the graph degrades to `DirectCredentials` behavior when no scheme is provided
@@ -180,15 +178,21 @@ This means:
 
 - `.ocmconfig` format is unchanged — `Credentials/v1` with `properties` continues to work
 - `DirectCredentials/v1` is the universal fallback, registered with all aliases
-- Each typed credential provides a `FromDirectCredentials` converter that constructs the typed struct from a
-  `map[string]string`
+- Bindings MAY expose a `FromDirectCredentials` helper to lift legacy `Credentials/v1` configs
+  (nested `properties` map) into their typed struct (flat fields). It is **not required by the framework** and the
+  graph never calls it; it is an optional per-binding convenience at legacy-map boundaries (plugin binary receiving
+  a map, or a consumer still holding an old `Credentials/v1` config). Generic `scheme.Convert` cannot do this lift
+  because the JSON shapes differ (nested vs flat).
 - Unversioned identity types work through `runtime.Scheme` alias resolution
-- External plugin wire format stays `map[string]string`
 
 ### External Plugin Integration
 
-External plugins (separate binaries) communicate with the plugin manager via HTTP using `map[string]string` as the
-credential wire format. This does not change. Typed credentials integrate with external plugins as follows:
+External plugins (separate binaries) communicate with the plugin manager over HTTP carrying JSON. The transport is
+unchanged. Today the contract signature is `credentials map[string]string`; Phase 3 changes the **Go contract
+signature** to `credentials runtime.Typed`, with `scheme.Convert(typed, *runtime.Raw)` /
+`scheme.Convert(*runtime.Raw, typed)` handling serialization at the sender and receiver. The HTTP bytes are JSON either
+way — only the Go API shape
+changes.
 
 **At discovery time:** The plugin manager runs each plugin binary with `capabilities` and reads the capability JSON.
 Each `SupportedConsumerIdentityType` in the capability spec includes an `AcceptedCredentialTypes` field — the JSON
@@ -196,25 +200,12 @@ equivalent of the Go `CredentialAcceptor` interface. This allows plugins written
 identity → credential type mapping. The composition root reads these declarations and builds the identity/credential
 schemes for the graph.
 
-**At the plugin boundary:** When the graph resolves credentials via a repository plugin, the resolved `runtime.Typed` is
-converted to `map[string]string` at the HTTP transport layer before being sent to the plugin.
+**At the plugin boundary (post Phase 3):** The graph hands the resolved `runtime.Typed` directly to the plugin
+contract; the plugin transport marshals it to canonical JSON via the scheme and the plugin-side handler unmarshals
+back into its typed struct. No per-type `FromDirectCredentials` call is needed on this path.
 
-**Inside the plugin:** The plugin converts the received `map[string]string` back to its typed credential struct. Each
-typed credential struct provides a `FromDirectCredentials` constructor that maps well-known keys to struct fields with
-compile-time safety:
-
-```go
-// Pseudocode — plugin-side credential conversion
-// The plugin receives credentials as map[string]string over HTTP.
-// FromDirectCredentials maps the well-known keys to typed struct fields.
-creds, err := HelmHTTPCredentials.FromDirectCredentials(credentials)
-// creds.CertFile, creds.KeyFile, creds.Keyring are now typed fields
-```
-
-**Type naming for plugins:** External plugin credential and identity type names must be prefixed with a reverse-domain
-namespace derived from the plugin identity (e.g., `com.hashicorp.vault.VaultCredentials/v1`). Built-in types use short
-names (e.g., `HelmHTTPCredentials/v1`). This prevents collisions between plugins and built-ins. `runtime.Scheme` enforces
-uniqueness via duplicate registration errors.
+**Type naming for plugins:** See *Plugin type naming convention* above — reverse-domain prefixes are a naming
+convention that lets two independent plugins coexist; `runtime.Scheme` still enforces uniqueness.
 
 **Consumer-side conversion:** Consumers that need to work with plugin-declared credential types can either register
 their own Go struct in the credential type scheme (giving direct type-assertion support) or use `scheme.Convert` to
