@@ -831,7 +831,7 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 	}
 
 	logger.Info("applying ApplySet")
-	applyResult, _, err := set.Apply(ctx, resourcesToAdd, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
+	applyResult, metadata, err := set.Apply(ctx, resourcesToAdd, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
 	if err != nil {
 		return fmt.Errorf("failed to apply ApplySet: %w", err)
 	}
