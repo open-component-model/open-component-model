@@ -188,8 +188,8 @@ used for OCM resolver and HTTP client configuration:
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
-  - type: ImageReferenceOverwrite/v1alpha1
-    overwrites:
+  - type: OCIImageReferenceOverride/v1alpha1
+    overrides:
       - resource:
           name: my-pod
         imageReference:
@@ -204,7 +204,7 @@ Go type via `runtime.Scheme`. The transfer command collects all
 recognized transfer config types from the generic wrapper and feeds
 them to the compiler.
 
-### ImageReferenceOverwrite
+### OCIImageReferenceOverride
 
 Allows users to declare target image references for specific resources,
 regardless of the source access type (OCI, Helm, local blob, etc.).
@@ -215,9 +215,9 @@ source access type of each matched resource. This directly addresses
 #### Example
 
 ```yaml
-type: ImageReferenceOverwrite/v1alpha1
-overwrites:
-  # Full overwrite — resource in the root component
+type: OCIImageReferenceOverride/v1alpha1
+overrides:
+  # Full override — resource in the root component
   - resource:
       name: my-pod
     imageReference:
@@ -225,7 +225,7 @@ overwrites:
       repository: target-org/images/my-pod
       tag: "1.0.0"
 
-  # Partial overwrite — only registry and repository, tag preserved from source.
+  # Partial override — only registry and repository, tag preserved from source.
   # A resource originally at myrepo.org/project/my-sidecar:2.1.0 would be
   # relocated to ghcr.io/target-org/images/my-sidecar:2.1.0.
   - resource:
@@ -262,13 +262,13 @@ every version bump.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `overwrites[].referencePath` | `[]Identity` | no | Path of component reference identities from the root component to the component that owns the resource. Empty or omitted for resources in the root component. |
-| `overwrites[].resource.name` | `string` | yes | Resource name |
-| `overwrites[].resource.<key>` | `string` | no | Extra identity attributes as additional keys (for disambiguation when multiple resources share a name) |
-| `overwrites[].imageReference` | `object` | yes | Target image reference. |
-| `overwrites[].imageReference.registry` | `string` | no | Target registry (e.g. `ghcr.io`). |
-| `overwrites[].imageReference.repository` | `string` | no | Target repository path (e.g. `target-org/images/my-pod`). |
-| `overwrites[].imageReference.tag` | `string` | no | Target tag (e.g. `1.0.0`). When omitted, the tag is preserved from the source. |
+| `overrides[].referencePath` | `[]Identity` | no | Path of component reference identities from the root component to the component that owns the resource. Empty or omitted for resources in the root component. |
+| `overrides[].resource.name` | `string` | yes | Resource name |
+| `overrides[].resource.<key>` | `string` | no | Extra identity attributes as additional keys (for disambiguation when multiple resources share a name) |
+| `overrides[].imageReference` | `object` | yes | Target image reference. |
+| `overrides[].imageReference.registry` | `string` | no | Target registry (e.g. `ghcr.io`). |
+| `overrides[].imageReference.repository` | `string` | no | Target repository path (e.g. `target-org/images/my-pod`). |
+| `overrides[].imageReference.tag` | `string` | no | Target tag (e.g. `1.0.0`). When omitted, the tag is preserved from the source. |
 
 #### Resource Identity
 
@@ -307,7 +307,7 @@ matching or globbing.
   * `helm/v1` → GetHelmChart → ConvertHelmToOCI → AddOCIArtifact
   * `localBlob/v1` → Get → AddOCIArtifact
   * Unsupported source type → clear error
-* Resources not matched by any overwrite entry fall through to the
+* Resources not matched by any override entry fall through to the
   default behaviour (as determined by `--upload-as` / `--copy-resources`
   flags).
 * Duplicate entries (same reference path + resource identity appearing
@@ -316,15 +316,15 @@ matching or globbing.
 #### Go Types
 
 ```go
-// ImageReferenceOverwriteConfig declares target image references
+// OCIImageReferenceOverrideConfig declares target image references
 // for specific resources, regardless of source access type.
-type ImageReferenceOverwriteConfig struct {
+type OCIImageReferenceOverrideConfig struct {
     runtime.Type `json:",inline"`
 
-    Overwrites []ImageReferenceOverwrite `json:"overwrites"`
+    Overrides []OCIImageReferenceOverride `json:"overrides"`
 }
 
-type ImageReferenceOverwrite struct {
+type OCIImageReferenceOverride struct {
     ReferencePath  []runtime.Identity `json:"referencePath,omitempty"`
     Resource       runtime.Identity   `json:"resource"`
     ImageReference ImageReference     `json:"imageReference"`
@@ -359,7 +359,7 @@ Additional keys are extra identity attributes.
 The config is loaded once and indexed by resource identity before graph
 construction begins. During `processResource` — the existing
 per-resource loop inside `BuildGraphDefinition` — each resource is
-checked against the index. If a matching overwrite entry exists, the
+checked against the index. If a matching override entry exists, the
 compiler infers the transformation chain from the source access type
 and emits it with the configured `imageReference`. Otherwise, the
 resource falls through to the default behaviour.
@@ -371,13 +371,13 @@ generic.config.ocm.software/v1 (YAML)
 []runtime.Raw
     │ deserialize each entry by type
     ▼
-ImageReferenceOverwrite
+OCIImageReferenceOverride
     │ index by (referencePath + resource identity)
     ▼
 transfer.BuildGraphDefinition(...)
     │
     └─ processResource (for each resource):
-         │ look up resource in overwrite index
+         │ look up resource in override index
          │
          ├─ match found → infer chain from source access type
          │   emit transformation chain with imageReference
@@ -416,7 +416,7 @@ single format.
 
 * **Simple to understand.** Each config type does one thing. A user who
   needs image reference relocation reads only
-  `ImageReferenceOverwrite` — no CEL, no match
+  `OCIImageReferenceOverride` — no CEL, no match
   expressions, no template syntax.
 * **Easy to version.** Each type evolves on its own lifecycle.
 * **Low implementation complexity.** Each compiler is a small, focused
@@ -504,13 +504,13 @@ resourceRules:
 * **Over-engineered for the common case.** The vast majority of transfer
   configurations will be "resource X goes to image reference Y". A
   match/template engine is disproportionate machinery for literal
-  overwrites.
+  overrides.
 
 ## Implementation Phases
 
 | Phase | Scope | Priority |
 |---|---|---|
-| **1** | `ImageReferenceOverwrite` — per-resource image reference control. Replaces reference name dependency. | Critical |
+| **1** | `OCIImageReferenceOverride` — per-resource image reference control. Replaces reference name dependency. | Critical |
 | **2** | Reference routing typed config — target overrides for recursive transfers. | Medium |
 | **3** | Multi-component + multi-target transfers typed config. | Lower |
 
@@ -529,5 +529,5 @@ new typed config without modifying the existing ones.
   strategies (e.g. "convert all Helm charts to OCI artifacts") would be
   more expressive than the current `--upload-as ociArtifact` flag, which
   applies uniformly and does not distinguish between source access
-  types. The overwrite configs proposed here would then layer on top to
+  types. The override configs proposed here would then layer on top to
   control *where* each converted resource ends up.
