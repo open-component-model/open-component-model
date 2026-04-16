@@ -1,6 +1,5 @@
 title = "Open Component Model"
 baseurl = "https://ocm.software"
-copyright = "The Open Component Model contributors"
 canonifyURLs = false
 disableAliases = true
 disableHugoGeneratorInject = true

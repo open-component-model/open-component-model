@@ -14,8 +14,7 @@
     <link>{{ .Permalink }}</link>
     <description>{{ with .Site.Params.description }}{{ . }}{{ else }}Recent content{{ with .Title }} in {{ . }}{{ end }} on {{ .Site.Title }}{{ end }}</description>
     <generator>Hugo -- gohugo.io</generator>
-    <language>{{ .Site.LanguageCode }}</language>{{ with .Site.Copyright }}
-    <copyright>{{ . }}</copyright>{{ end }}
+    <language>{{ .Site.LanguageCode }}</language>
     <lastBuildDate>{{ now.Format "Mon, 02 Jan 2006 15:04:05 -0700" }}</lastBuildDate>
     {{- with .OutputFormats.Get "rss" }}
     <atom:link href="{{ .Permalink }}" rel="self" type="application/rss+xml" />
