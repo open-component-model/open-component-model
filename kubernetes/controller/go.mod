@@ -36,7 +36,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260416102202-f251beded4be
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260416102202-f251beded4be
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260416102202-f251beded4be
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260416131247-22074468c601
 	ocm.software/open-component-model/bindings/go/oci v0.0.39
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
