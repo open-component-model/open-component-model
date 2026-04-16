@@ -1045,7 +1045,7 @@ func TestApply_ConflictDetection(t *testing.T) {
 				{ID: "cm1", Object: newConfigMap("cm1", "default")},
 			}
 
-			result, _, err := applier.Apply(ctx, resources, ApplyMode{})
+			result, err := applier.Apply(ctx, resources, ApplyMode{})
 			if err != nil {
 				t.Fatalf("Apply() error = %v", err)
 			}
@@ -1130,7 +1130,7 @@ func TestApply_ConflictDetection_ListFailure(t *testing.T) {
 		{ID: "cm1", Object: newConfigMap("cm1", "default")},
 	}
 
-	_, _, err := applier.Apply(ctx, resources, ApplyMode{})
+	_, err := applier.Apply(ctx, resources, ApplyMode{})
 	if err == nil {
 		t.Fatal("Apply() expected error from failed LIST, got nil")
 	}
@@ -1183,7 +1183,7 @@ func TestApply_ConflictDetection_MultiGVK(t *testing.T) {
 		{ID: "secret1", Object: newSecret("secret1", "default")},
 	}
 
-	result, _, err := applier.Apply(ctx, resources, ApplyMode{})
+	result, err := applier.Apply(ctx, resources, ApplyMode{})
 	if err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}

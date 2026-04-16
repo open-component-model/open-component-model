@@ -260,7 +260,7 @@ func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMo
 	// GVK+namespace combos).
 	conflicts, err := a.detectConflicts(ctx, toApply)
 	if err != nil {
-		return result, Metadata{}, fmt.Errorf("conflict detection failed: %w", err)
+		return result, fmt.Errorf("conflict detection failed: %w", err)
 	}
 
 	// Apply resources
