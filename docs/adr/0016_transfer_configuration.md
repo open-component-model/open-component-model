@@ -270,6 +270,17 @@ every version bump.
 | `spec[].oci.repository` | `string` | no | Target repository path (e.g. `target-org/images/my-pod`). |
 | `spec[].oci.tag` | `string` | no | Target tag (e.g. `1.0.0`). When omitted, the tag is preserved from the source. |
 
+#### Field Defaults
+
+All `oci` fields are optional. When a field is omitted, the compiler
+resolves a default based on the source access type:
+
+| Field | Source: `ociImage` | Source: `localBlob` |
+|---|---|---|
+| `registry` | Transfer target registry | Transfer target registry |
+| `repository` | Original repository from source access | **Error** — local blobs have no repository; field is required |
+| `tag` | Original tag from source access | Resource version from the component descriptor |
+
 #### Resource Identity
 
 A resource identity is represented as a flat map: `name` is always
@@ -531,3 +542,10 @@ new typed config without modifying the existing ones.
   applies uniformly and does not distinguish between source access
   types. The override configs proposed here would then layer on top to
   control *where* each converted resource ends up.
+* **Field default semantics:** The current default behaviour for omitted
+  `oci` fields (especially `repository` and `tag`) depends on the source
+  access type. The proposed defaults are practical but should be
+  revisited once we have real usage feedback — particularly whether
+  falling back to the resource version for `tag` on local blobs is the
+  right choice, and whether erroring on a missing `repository` for local
+  blobs is too strict.
