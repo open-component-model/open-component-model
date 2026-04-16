@@ -98,17 +98,21 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		return nil, fmt.Errorf("failed getting component version repository: %w", err)
 	}
 
-	// Apply global access policy from transformer spec if set
-	if globalAccessPolicy != "" {
-		ociRepo, ok := repo.(*oci.Repository)
-		if !ok {
+	// Apply global access policy from transformer spec.
+	// Always set explicitly (including Never) to avoid leaking state from prior transforms
+	// on the same cached repository instance.
+	if _, ok := transformation.(*v1alpha1.OCIAddLocalResource); ok {
+		if ociRepo, ok := repo.(*oci.Repository); ok {
+			switch globalAccessPolicy {
+			case ocirepospecv1.GlobalAccessPolicyNever:
+				ociRepo.SetGlobalAccessPolicy(oci.GlobalAccessPolicyNever)
+			case ocirepospecv1.GlobalAccessPolicyAuto:
+				ociRepo.SetGlobalAccessPolicy(oci.GlobalAccessPolicyAuto)
+			default:
+				return nil, fmt.Errorf("unsupported globalAccessPolicy %q", globalAccessPolicy)
+			}
+		} else if globalAccessPolicy != ocirepospecv1.GlobalAccessPolicyNever {
 			return nil, fmt.Errorf("globalAccessPolicy is only supported for OCI repositories, got %T", repo)
-		}
-		switch globalAccessPolicy {
-		case ocirepospecv1.GlobalAccessPolicyAuto:
-			ociRepo.SetGlobalAccessPolicy(oci.GlobalAccessPolicyAuto)
-		default:
-			return nil, fmt.Errorf("unsupported globalAccessPolicy %q", globalAccessPolicy)
 		}
 	}
 
