@@ -1100,10 +1100,10 @@ func TestApply_ConflictDetection(t *testing.T) {
 	}
 }
 
-// TestApply_ConflictDetection_GetFailure verifies that a non-NotFound error
-// during the live-object GET (e.g. network failure, RBAC denial) is surfaced
-// as an item-level error instead of silently skipping the conflict check.
-func TestApply_ConflictDetection_GetFailure(t *testing.T) {
+// TestApply_ConflictDetection_ListFailure verifies that a LIST error during
+// batch conflict detection (e.g. network failure, RBAC denial) is surfaced
+// as a top-level Apply error instead of silently skipping the conflict check.
+func TestApply_ConflictDetection_ListFailure(t *testing.T) {
 	ctx := context.Background()
 	mapper := newTestRESTMapper()
 
@@ -1112,15 +1112,15 @@ func TestApply_ConflictDetection_GetFailure(t *testing.T) {
 	}
 	parent := newTestParent(parentGVK)
 
-	getErr := fmt.Errorf("simulated API server error")
+	listErr := fmt.Errorf("simulated API server error")
 
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithInterceptorFuncs(interceptor.Funcs{
-			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-				return getErr
+			List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+				return listErr
 			},
 		}).
 		Build()
@@ -1136,20 +1136,11 @@ func TestApply_ConflictDetection_GetFailure(t *testing.T) {
 		{ID: "cm1", Object: newConfigMap("cm1", "default")},
 	}
 
-	result, _, err := applier.Apply(ctx, resources, ApplyMode{})
-	if err != nil {
-		t.Fatalf("Apply() error = %v", err)
+	_, _, err := applier.Apply(ctx, resources, ApplyMode{})
+	if err == nil {
+		t.Fatal("Apply() expected error from failed LIST, got nil")
 	}
-
-	if len(result.Applied) != 1 {
-		t.Fatalf("Apply() applied %d resources, want 1", len(result.Applied))
-	}
-
-	item := result.Applied[0]
-	if item.Error == nil {
-		t.Fatal("Apply() expected error from failed GET, got nil")
-	}
-	if !errors.Is(item.Error, getErr) {
-		t.Errorf("Apply() error = %v, want wrapped %v", item.Error, getErr)
+	if !errors.Is(err, listErr) {
+		t.Errorf("Apply() error = %v, want wrapped %v", err, listErr)
 	}
 }
