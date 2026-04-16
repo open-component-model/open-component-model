@@ -401,6 +401,8 @@ ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2 h1:loF
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2/go.mod h1:FTKrAPkR0865aUlDBrzmmHTdFxuy7AbqQZrgG6pB9YY=
 ocm.software/open-component-model/bindings/go/helm v0.0.0-20260416102202-f251beded4be h1:KMBlJvXiPAnxi2/BJGVqHUPMJo1eRiw3ofAqgizeEPU=
 ocm.software/open-component-model/bindings/go/helm v0.0.0-20260416102202-f251beded4be/go.mod h1:BKbb290bzvHwrf055/K4fYOg7hZDAfG67XyTGuRUJdw=
+ocm.software/open-component-model/bindings/go/helm v0.0.0-20260416131247-22074468c601 h1:RTAdXgrz7K/2YUP36ALevoO+8od5CA60LCaNjEtzt2I=
+ocm.software/open-component-model/bindings/go/helm v0.0.0-20260416131247-22074468c601/go.mod h1:ASQNijdztYMrnAwFa/7krMEWYwoDRrAV6atOYFgU6E8=
 ocm.software/open-component-model/bindings/go/input/dir v0.0.2 h1:5n9k0J0W5jDWuzf2uhuzQKnNeqMwBDHop0mAfv4naiw=
 ocm.software/open-component-model/bindings/go/input/dir v0.0.2/go.mod h1:3qfxxgMZRSsp6aeiRirkaXSuIZ5oJF1ViUbVGTw1F6U=
 ocm.software/open-component-model/bindings/go/input/file v0.0.3 h1:fOs+mpqEIwCtR8qYGbUQrh4E9m8S47tH9GD6/dPPKO4=
