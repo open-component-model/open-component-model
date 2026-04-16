@@ -1,12 +1,8 @@
 package resource
 
 import (
-	"archive/tar"
-	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"io/fs"
 	"log/slog"
 	"os"
 
@@ -115,11 +111,24 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 	slog.DebugContext(ctx, "Helm chart downloaded successfully, creating tar archive", "chartReference", helmURL)
 
-	// TODO(matthiasbruns): try to migrate to filesystem.GetBlobFromPath (https://github.com/open-component-model/ocm-project/issues/1014)
-	tarBlob, err := tarDirectoryRecursive(ctx, downloadDir)
+	streamingBlob, err := filesystem.GetBlobFromPath(ctx, downloadDir, filesystem.DirOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("error creating tar archive from helm download: %w", err)
 	}
+
+	// GetBlobFromPath returns a lazy streaming blob that reads files on demand.
+	// Since the download directory is removed when this function returns, the blob
+	// must be fully materialized into memory before cleanup.
+	rc, err := streamingBlob.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("error reading tar archive from helm download: %w", err)
+	}
+	tarBlob := inmemory.New(rc, inmemory.WithMediaType(filesystem.DefaultTarMediaType))
+	if err := tarBlob.Load(); err != nil {
+		_ = rc.Close()
+		return nil, fmt.Errorf("error buffering tar archive from helm download: %w", err)
+	}
+	_ = rc.Close()
 
 	slog.DebugContext(ctx, "Created tar archive from downloaded helm chart files")
 
@@ -143,87 +152,4 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.H
 		return nil, fmt.Errorf("error converting access to helm spec: %w", err)
 	}
 	return &helm, nil
-}
-
-// tarDirectoryRecursive creates an in-memory tar archive from all files in the given
-// directory tree. The blob must be fully buffered in memory because the download
-// directory is cleaned up immediately after this function returns -- the caller
-// removes the temp directory once it has the resulting blob, so any lazy reading
-// from the filesystem would fail.
-func tarDirectoryRecursive(ctx context.Context, dir string) (blob.ReadOnlyBlob, error) {
-	var buf bytes.Buffer
-	twClosed := false
-	tw := tar.NewWriter(&buf)
-	defer func(tw *tar.Writer) {
-		if twClosed {
-			return
-		}
-		err := tw.Close()
-		if err != nil {
-			slog.WarnContext(ctx, "Error closing tar writer", "error", err)
-		}
-	}(tw)
-
-	// os.OpenRoot restricts all subsequent file operations to the given directory tree,
-	// preventing path traversal (e.g. via symlinks) outside of it.
-	root, err := os.OpenRoot(dir)
-	if err != nil {
-		return nil, fmt.Errorf("error opening root directory %s: %w", dir, err)
-	}
-	defer func() { _ = root.Close() }()
-
-	fsRoot := os.DirFS(dir)
-	err = fs.WalkDir(fsRoot, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-
-		info, err := d.Info()
-		if err != nil {
-			return fmt.Errorf("error getting file info for %s: %w", path, err)
-		}
-
-		header, err := tar.FileInfoHeader(info, "")
-		if err != nil {
-			return fmt.Errorf("error creating tar header for %s: %w", path, err)
-		}
-		header.Name = path
-
-		if err := tw.WriteHeader(header); err != nil {
-			return fmt.Errorf("error writing tar header for %s: %w", path, err)
-		}
-
-		// Open through the rooted directory to prevent path escape via symlinks.
-		f, err := root.Open(path)
-		if err != nil {
-			return fmt.Errorf("error opening file %s: %w", path, err)
-		}
-
-		_, copyErr := io.Copy(tw, f)
-		closeErr := f.Close()
-		if copyErr != nil {
-			return fmt.Errorf("error writing file %s to tar: %w", path, copyErr)
-		}
-		if closeErr != nil {
-			return fmt.Errorf("error closing file %s: %w", path, closeErr)
-		}
-
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error walking download directory: %w", err)
-	}
-
-	// Explicitly close the tar writer before reading the buffer to ensure the
-	// tar footer (two 512-byte zero blocks) is flushed.
-	if err := tw.Close(); err != nil {
-		return nil, fmt.Errorf("error closing tar writer: %w", err)
-	}
-
-	twClosed = true
-
-	return inmemory.New(&buf, inmemory.WithMediaType(filesystem.DefaultTarMediaType)), nil
 }
