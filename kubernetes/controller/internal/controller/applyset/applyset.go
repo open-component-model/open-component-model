@@ -40,9 +40,9 @@ type Interface interface {
 	// Returns error if RESTMapping fails for any resource.
 	Project(resources []Resource) (Metadata, error)
 
-	// Apply runs SSA on resources and returns batch-only metadata.
-	// Batch metadata contains only GKs/namespaces from THIS apply (not parent memory).
-	Apply(ctx context.Context, resources []Resource, mode ApplyMode) (*ApplyResult, Metadata, error)
+	// Apply runs SSA on resources. Returns the apply result.
+	// Caller should use Project() output for prune scope, not Apply() output.
+	Apply(ctx context.Context, resources []Resource, mode ApplyMode) (*ApplyResult, error)
 
 	// Prune deletes orphaned resources (those with applyset label but not in KeepUIDs).
 	// Pass Project().PruneScope() to search both current batch locations AND parent memory.
@@ -224,14 +224,10 @@ func (a *ApplySet) Project(resources []Resource) (Metadata, error) {
 	return a.buildMetadata(gks, namespaces), nil
 }
 
-// Apply runs SSA on all resources and returns batch-only metadata.
-// Caller should call Prune separately after Apply succeeds.
-func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMode) (*ApplyResult, Metadata, error) {
+// Apply runs SSA on all resources.
+// Caller should call Prune separately after Apply succeeds, using Project() output for scope.
+func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMode) (*ApplyResult, error) {
 	result := &ApplyResult{}
-
-	// Collect GKs and namespaces for batch metadata
-	desiredGKs := sets.New[schema.GroupKind]()
-	desiredNamespaces := sets.New[string]()
 
 	// Resources with resolved mappings, ready to apply
 	toApply := make([]struct {
@@ -249,14 +245,7 @@ func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMo
 
 		mapping, err := a.restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err != nil {
-			return result, Metadata{}, fmt.Errorf("failed to get REST mapping for %v: %w", gvk, err)
-		}
-
-		// Only include GKs for resources actually being applied
-		desiredGKs.Insert(gvk.GroupKind())
-
-		if ns, ok := a.resolvedNamespace(mapping, r.Object); ok && ns != a.parentNamespace {
-			desiredNamespaces.Insert(ns)
+			return result, fmt.Errorf("failed to get REST mapping for %v: %w", gvk, err)
 		}
 
 		// Membership labels are injected just-in-time inside applyResource.
@@ -295,12 +284,10 @@ func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMo
 	}
 
 	if err := eg.Wait(); err != nil {
-		return result, Metadata{}, err
+		return result, err
 	}
 
-	// Return batch-only metadata. Caller decides whether to union with parent
-	// based on prune outcome.
-	return result, a.buildMetadata(desiredGKs, desiredNamespaces), nil
+	return result, nil
 }
 
 // Prune deletes orphaned resources (those with applyset label but not in KeepUIDs).
