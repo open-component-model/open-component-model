@@ -464,35 +464,46 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 	}
 
 	conflicts := make(map[conflictKey]string)
+	var mu sync.Mutex
 
+	eg, egCtx := errgroup.WithContext(ctx)
 	for task := range tasks {
-		list := &unstructured.UnstructuredList{}
-		list.SetGroupVersionKind(task.gvk.GroupVersion().WithKind(task.gvk.Kind + "List"))
+		eg.Go(func() error {
+			list := &unstructured.UnstructuredList{}
+			list.SetGroupVersionKind(task.gvk.GroupVersion().WithKind(task.gvk.Kind + "List"))
 
-		listOpts := []client.ListOption{
-			client.HasLabels{ApplysetPartOfLabel},
-		}
-		if task.namespace != "" {
-			listOpts = append(listOpts, client.InNamespace(task.namespace))
-		}
-
-		if err := a.client.List(ctx, list, listOpts...); err != nil {
+			listOpts := []client.ListOption{
+				client.HasLabels{ApplysetPartOfLabel},
+			}
 			if task.namespace != "" {
-				return nil, fmt.Errorf("conflict detection list %v in %s: %w", task.gvk, task.namespace, err)
+				listOpts = append(listOpts, client.InNamespace(task.namespace))
 			}
-			return nil, fmt.Errorf("conflict detection list %v: %w", task.gvk, err)
-		}
 
-		for i := range list.Items {
-			ownerID := list.Items[i].GetLabels()[ApplysetPartOfLabel]
-			if ownerID != "" && ownerID != a.applySetID {
-				conflicts[conflictKey{
-					gvk:       task.gvk,
-					namespace: list.Items[i].GetNamespace(),
-					name:      list.Items[i].GetName(),
-				}] = ownerID
+			if err := a.client.List(egCtx, list, listOpts...); err != nil {
+				if task.namespace != "" {
+					return fmt.Errorf("conflict detection list %v in %s: %w", task.gvk, task.namespace, err)
+				}
+				return fmt.Errorf("conflict detection list %v: %w", task.gvk, err)
 			}
-		}
+
+			mu.Lock()
+			defer mu.Unlock()
+			for i := range list.Items {
+				ownerID := list.Items[i].GetLabels()[ApplysetPartOfLabel]
+				if ownerID != "" && ownerID != a.applySetID {
+					conflicts[conflictKey{
+						gvk:       task.gvk,
+						namespace: list.Items[i].GetNamespace(),
+						name:      list.Items[i].GetName(),
+					}] = ownerID
+				}
+			}
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, err
 	}
 
 	return conflicts, nil
