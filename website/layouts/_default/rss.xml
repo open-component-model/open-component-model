@@ -2,7 +2,10 @@
 {{- if .IsHome -}}
   {{- $pctx = .Site.GetPage "section" "blog" -}}
 {{- end -}}
-{{- $pages := $pctx.RegularPages -}}
+{{- $pages := slice -}}
+{{- with $pctx -}}
+  {{- $pages = .RegularPages -}}
+{{- end -}}
 {{- $limit := .Site.Config.Services.RSS.Limit -}}
 {{- if ge $limit 1 -}}
   {{- $pages = $pages | first $limit -}}
