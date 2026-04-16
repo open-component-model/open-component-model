@@ -2,6 +2,8 @@ package applyset
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"regexp"
 	"testing"
 
@@ -16,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
 // testParent is a minimal implementation of the parent interface for testing.
@@ -967,5 +970,249 @@ func TestMetadata_Annotations(t *testing.T) {
 
 	if got := annotations[ApplySetAdditionalNamespacesAnnotation]; got != "default" {
 		t.Errorf("Annotations()[%s] = %q, want %q", ApplySetAdditionalNamespacesAnnotation, got, "default")
+	}
+}
+
+func TestApply_ConflictDetection(t *testing.T) {
+	ctx := context.Background()
+	mapper := newTestRESTMapper()
+
+	parentGVK := schema.GroupVersionKind{
+		Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind",
+	}
+
+	parentA := newTestParent(parentGVK)
+	applySetIDA := ID(parentA)
+
+	parentB := &testParent{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "other-instance",
+			Namespace: "default",
+			UID:       types.UID("other-parent-uid"),
+		},
+		gvk: parentGVK,
+	}
+	applySetIDB := ID(parentB)
+
+	tests := map[string]struct {
+		existingObjs []client.Object
+		wantConflict bool
+	}{
+		"conflict: live object owned by different applyset": {
+			existingObjs: func() []client.Object {
+				cm := newConfigMap("cm1", "default")
+				cm.SetLabels(map[string]string{ApplysetPartOfLabel: applySetIDB})
+				cm.SetUID(types.UID("existing-uid"))
+				return []client.Object{cm}
+			}(),
+			wantConflict: true,
+		},
+		"no conflict: live object owned by same applyset": {
+			existingObjs: func() []client.Object {
+				cm := newConfigMap("cm1", "default")
+				cm.SetLabels(map[string]string{ApplysetPartOfLabel: applySetIDA})
+				cm.SetUID(types.UID("existing-uid"))
+				return []client.Object{cm}
+			}(),
+			wantConflict: false,
+		},
+		"no conflict: object does not exist yet": {
+			existingObjs: nil,
+			wantConflict: false,
+		},
+		"no conflict: live object has no part-of label": {
+			existingObjs: func() []client.Object {
+				cm := newConfigMap("cm1", "default")
+				cm.SetUID(types.UID("existing-uid"))
+				return []client.Object{cm}
+			}(),
+			wantConflict: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			fakeClient := newFakeClient(tt.existingObjs...)
+
+			applier := New(Config{
+				Client:          fakeClient,
+				RESTMapper:      mapper,
+				Log:             logr.Discard(),
+				ParentNamespace: "default",
+			}, parentA)
+
+			resources := []Resource{
+				{ID: "cm1", Object: newConfigMap("cm1", "default")},
+			}
+
+			result, _, err := applier.Apply(ctx, resources, ApplyMode{})
+			if err != nil {
+				t.Fatalf("Apply() error = %v", err)
+			}
+
+			if len(result.Applied) != 1 {
+				t.Fatalf("Apply() applied %d resources, want 1", len(result.Applied))
+			}
+
+			item := result.Applied[0]
+
+			if tt.wantConflict {
+				if item.Error == nil {
+					t.Fatal("Apply() expected conflict error, got nil")
+				}
+				if !errors.Is(item.Error, ErrApplySetConflict) {
+					t.Errorf("Apply() error = %v, want ErrApplySetConflict", item.Error)
+				}
+				var conflictErr *ApplySetConflictError
+				if !errors.As(item.Error, &conflictErr) {
+					t.Fatalf("Apply() error is not *ApplySetConflictError: %T", item.Error)
+				}
+				if conflictErr.CurrentApplySetID != applySetIDB {
+					t.Errorf("CurrentApplySetID = %q, want %q", conflictErr.CurrentApplySetID, applySetIDB)
+				}
+				if conflictErr.DesiredApplySetID != applySetIDA {
+					t.Errorf("DesiredApplySetID = %q, want %q", conflictErr.DesiredApplySetID, applySetIDA)
+				}
+
+				// Verify the live object was not mutated - the early return
+				// should have prevented SSA from overwriting the label.
+				liveObj := &unstructured.Unstructured{}
+				liveObj.SetGroupVersionKind(schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"})
+				err := fakeClient.Get(ctx, client.ObjectKey{Name: "cm1", Namespace: "default"}, liveObj)
+				if err != nil {
+					t.Fatalf("failed to get live object after conflict: %v", err)
+				}
+				if got := liveObj.GetLabels()[ApplysetPartOfLabel]; got != applySetIDB {
+					t.Errorf("live object label was mutated: got %q, want %q (original owner)", got, applySetIDB)
+				}
+			} else {
+				if item.Error != nil {
+					t.Errorf("Apply() unexpected error: %v", item.Error)
+				}
+			}
+		})
+	}
+}
+
+// TestApply_ConflictDetection_ListFailure verifies that a LIST error during
+// batch conflict detection (e.g. network failure, RBAC denial) is surfaced
+// as a top-level Apply error instead of silently skipping the conflict check.
+func TestApply_ConflictDetection_ListFailure(t *testing.T) {
+	ctx := context.Background()
+	mapper := newTestRESTMapper()
+
+	parentGVK := schema.GroupVersionKind{
+		Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind",
+	}
+	parent := newTestParent(parentGVK)
+
+	listErr := fmt.Errorf("simulated API server error")
+
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithInterceptorFuncs(interceptor.Funcs{
+			List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+				return listErr
+			},
+		}).
+		Build()
+
+	applier := New(Config{
+		Client:          fakeClient,
+		RESTMapper:      mapper,
+		Log:             logr.Discard(),
+		ParentNamespace: "default",
+	}, parent)
+
+	resources := []Resource{
+		{ID: "cm1", Object: newConfigMap("cm1", "default")},
+	}
+
+	_, _, err := applier.Apply(ctx, resources, ApplyMode{})
+	if err == nil {
+		t.Fatal("Apply() expected error from failed LIST, got nil")
+	}
+	if !errors.Is(err, listErr) {
+		t.Errorf("Apply() error = %v, want wrapped %v", err, listErr)
+	}
+}
+
+// TestApply_ConflictDetection_MultiGVK verifies that batch conflict detection
+// works across multiple GVKs: a ConfigMap owned by another ApplySet should
+// conflict, while a Secret with no prior owner should apply successfully.
+func TestApply_ConflictDetection_MultiGVK(t *testing.T) {
+	ctx := context.Background()
+	mapper := newTestRESTMapper()
+
+	parentGVK := schema.GroupVersionKind{
+		Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind",
+	}
+
+	parentA := newTestParent(parentGVK)
+	applySetIDA := ID(parentA)
+
+	parentB := &testParent{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "other-instance",
+			Namespace: "default",
+			UID:       types.UID("other-parent-uid"),
+		},
+		gvk: parentGVK,
+	}
+	applySetIDB := ID(parentB)
+
+	// Existing ConfigMap owned by a different ApplySet (should conflict)
+	existingCM := newConfigMap("cm1", "default")
+	existingCM.SetLabels(map[string]string{ApplysetPartOfLabel: applySetIDB})
+	existingCM.SetUID(types.UID("existing-cm-uid"))
+
+	// No existing Secret (should apply without conflict)
+	fakeClient := newFakeClient(existingCM)
+
+	applier := New(Config{
+		Client:          fakeClient,
+		RESTMapper:      mapper,
+		Log:             logr.Discard(),
+		ParentNamespace: "default",
+	}, parentA)
+
+	resources := []Resource{
+		{ID: "cm1", Object: newConfigMap("cm1", "default")},
+		{ID: "secret1", Object: newSecret("secret1", "default")},
+	}
+
+	result, _, err := applier.Apply(ctx, resources, ApplyMode{})
+	if err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+
+	if len(result.Applied) != 2 {
+		t.Fatalf("Apply() applied %d resources, want 2", len(result.Applied))
+	}
+
+	byID := result.ByID()
+
+	// ConfigMap should have a conflict error
+	cmItem := byID["cm1"]
+	if cmItem.Error == nil {
+		t.Fatal("expected conflict error for cm1, got nil")
+	}
+	var conflictErr *ApplySetConflictError
+	if !errors.As(cmItem.Error, &conflictErr) {
+		t.Fatalf("cm1 error is not *ApplySetConflictError: %T", cmItem.Error)
+	}
+	if conflictErr.CurrentApplySetID != applySetIDB {
+		t.Errorf("CurrentApplySetID = %q, want %q", conflictErr.CurrentApplySetID, applySetIDB)
+	}
+	if conflictErr.DesiredApplySetID != applySetIDA {
+		t.Errorf("DesiredApplySetID = %q, want %q", conflictErr.DesiredApplySetID, applySetIDA)
+	}
+
+	// Secret should have succeeded (no conflict, no error)
+	secretItem := byID["secret1"]
+	if secretItem.Error != nil {
+		t.Errorf("unexpected error for secret1: %v", secretItem.Error)
 	}
 }

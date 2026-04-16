@@ -14,7 +14,7 @@ import (
 	"helm.sh/helm/v4/pkg/registry"
 
 	"ocm.software/open-component-model/bindings/go/helm/input"
-	v1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	v1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 

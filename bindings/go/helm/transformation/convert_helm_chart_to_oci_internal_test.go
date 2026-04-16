@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
+	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 )
 
 func TestReferenceFromHelmAccess(t *testing.T) {
