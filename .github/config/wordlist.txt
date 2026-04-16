@@ -793,3 +793,4 @@ zot
 zsh
 zshrc
 zulip
+ux
