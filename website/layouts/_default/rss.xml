@@ -4,7 +4,7 @@
 {{- end -}}
 {{- $pages := slice -}}
 {{- with $pctx -}}
-  {{- $pages = .RegularPages -}}
+  {{- $pages = .RegularPages.ByDate.Reverse -}}
 {{- end -}}
 {{- $limit := .Site.Config.Services.RSS.Limit -}}
 {{- if ge $limit 1 -}}
