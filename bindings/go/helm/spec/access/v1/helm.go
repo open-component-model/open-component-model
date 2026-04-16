@@ -15,6 +15,7 @@ const (
 
 // Helm describes the access for a helm chart hosted in a classic HTTP/HTTPS
 // Helm repository.
+// This spec is aligned with ocm v1 https://github.com/open-component-model/ocm/blob/main/api/ocm/extensions/accessmethods/helm/method.go#L41
 //
 // TLS credentials (CA certificates, client certificates, private keys) should be
 // provided through the credential resolver.

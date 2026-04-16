@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -51,19 +51,11 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	}
 	slog.DebugContext(ctx, "Going to use chart output path", "path", chartOutputPath)
 
-	// Convert resource to internal format
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
 
-	// Resolve credentials if credential provider is available
-	var creds map[string]string
-	if t.CredentialProvider != nil {
-		if consumerId, err := t.ResourceRepository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err != nil {
-			return nil, fmt.Errorf("failed getting resource consumer identity for credential resolution: %w", err)
-		} else if consumerId != nil {
-			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
-				return nil, fmt.Errorf("failed resolving credentials: %w", err)
-			}
-		}
+	creds, err := t.resolveCredentials(ctx, targetResource)
+	if err != nil {
+		return nil, err
 	}
 
 	slog.InfoContext(ctx, "Getting helm chart", "resource", transformation.Spec.Resource)
@@ -87,42 +79,18 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		return nil, fmt.Errorf("error extracting chart archive from download: %w", err)
 	}
 
-	// Convert chart blob to file spec
-	chartFileSpec, err := filesystem.BlobToSpec(chartArchive, chartOutputPath)
+	chartFileSpec, provFileSpec, err := writeChartAndProvFiles(ctx, chartBlob, chartArchive, chartOutputPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed buffering chart blob to file: %w", err)
-	}
-	slog.DebugContext(ctx, "Converted chart blob to file spec", "uri", chartFileSpec.URI)
-
-	// Convert prov blob to file spec if it exists
-	var provFileSpec *blobv1alpha1.File
-	provArchive, err := chartBlob.ProvFile()
-	if err != nil {
-		return nil, fmt.Errorf("error extracting prov file from download: %w", err)
-	}
-	if provArchive != nil {
-		provSpec, err := filesystem.BlobToSpec(provArchive, fmt.Sprintf("%s.prov", chartOutputPath))
-		if err != nil {
-			return nil, fmt.Errorf("failed buffering prov blob to file: %w", err)
-		}
-		slog.DebugContext(ctx, "Converted prov blob to file spec", "uri", provSpec.URI)
-		provFileSpec = provSpec
+		return nil, err
 	}
 
-	// Load the chart from the written file to get the resolved name and version
-	closer, err := chartArchive.ReadCloser()
+	name, version, err := readChartMetadata(ctx, chartArchive)
 	if err != nil {
-		return nil, fmt.Errorf("error reading chart archive: %w", err)
+		return nil, err
 	}
-	defer func(closer io.ReadCloser) {
-		_ = closer.Close()
-	}(closer)
-	loadedChart, err := loader.LoadArchive(closer)
-	if err != nil {
-		return nil, fmt.Errorf("failed loading downloaded chart to read metadata: %w", err)
-	}
-	helmAccess.HelmChart = loadedChart.Name()
-	helmAccess.Version = loadedChart.Metadata.Version
+
+	helmAccess.HelmChart = name
+	helmAccess.Version = version
 	slog.InfoContext(ctx, "Successfully retrieved helm chart", "chart", helmAccess.HelmChart, "version", helmAccess.Version)
 
 	updatedAccess := runtime.Raw{}
@@ -131,16 +99,80 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	}
 	targetResource.Access = &updatedAccess
 
-	// Convert resource to v2 format
 	v2Resource, err := descriptor.ConvertToV2Resource(t.Scheme, targetResource)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting resource to v2 format: %w", err)
 	}
 
-	// Populate output
 	transformation.Output.ChartFile = *chartFileSpec
 	transformation.Output.ProvFile = provFileSpec
 	transformation.Output.Resource = v2Resource
 
 	return &transformation, nil
+}
+
+// resolveCredentials returns credentials for downloading targetResource, or nil if
+// no credential provider is configured or the resource has no consumer identity.
+// An ErrNotFound from the resolver is treated as "no credentials" rather than an error.
+func (t *GetHelmChart) resolveCredentials(ctx context.Context, targetResource *descriptor.Resource) (map[string]string, error) {
+	if t.CredentialProvider == nil {
+		return nil, nil
+	}
+	consumerId, err := t.ResourceRepository.GetResourceCredentialConsumerIdentity(ctx, targetResource)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting resource consumer identity for credential resolution: %w", err)
+	}
+	if consumerId == nil {
+		return nil, nil
+	}
+	creds, err := t.CredentialProvider.Resolve(ctx, consumerId)
+	if err != nil && !errors.Is(err, credentials.ErrNotFound) {
+		return nil, fmt.Errorf("failed resolving credentials: %w", err)
+	}
+	return creds, nil
+}
+
+// writeChartAndProvFiles buffers the chart archive and, if present, the provenance file
+// to disk at chartOutputPath and chartOutputPath+".prov" respectively, returning file specs
+// for each. The prov file spec is nil when no provenance file is present in the download.
+func writeChartAndProvFiles(ctx context.Context, chartBlob *helmblob.ChartBlob, chartArchive blob.ReadOnlyBlob, chartOutputPath string) (*blobv1alpha1.File, *blobv1alpha1.File, error) {
+	chartFileSpec, err := filesystem.BlobToSpec(chartArchive, chartOutputPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed buffering chart blob to file: %w", err)
+	}
+	slog.DebugContext(ctx, "Converted chart blob to file spec", "uri", chartFileSpec.URI)
+
+	provArchive, err := chartBlob.ProvFile()
+	if err != nil {
+		return nil, nil, fmt.Errorf("error extracting prov file from download: %w", err)
+	}
+	if provArchive == nil {
+		return chartFileSpec, nil, nil
+	}
+	provFileSpec, err := filesystem.BlobToSpec(provArchive, fmt.Sprintf("%s.prov", chartOutputPath))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed buffering prov blob to file: %w", err)
+	}
+	slog.DebugContext(ctx, "Converted prov blob to file spec", "uri", provFileSpec.URI)
+	return chartFileSpec, provFileSpec, nil
+}
+
+// readChartMetadata loads the Helm chart archive in order to extract the resolved
+// chart name and version from its Chart.yaml metadata.
+func readChartMetadata(ctx context.Context, chartArchive blob.ReadOnlyBlob) (name, version string, err error) {
+	closer, err := chartArchive.ReadCloser()
+	if err != nil {
+		return "", "", fmt.Errorf("error reading chart archive: %w", err)
+	}
+	defer func() {
+		if cerr := closer.Close(); cerr != nil {
+			slog.WarnContext(ctx, "error closing chart archive", "error", cerr)
+		}
+	}()
+
+	loadedChart, err := loader.LoadArchive(closer)
+	if err != nil {
+		return "", "", fmt.Errorf("failed loading downloaded chart to read metadata: %w", err)
+	}
+	return loadedChart.Name(), loadedChart.Metadata.Version, nil
 }

@@ -1,3 +1,4 @@
+// TODO(matthiasbruns): Drop plugin support in favour of built-in helm support https://github.com/open-component-model/ocm-project/issues/1029
 package main
 
 import (
