@@ -26,12 +26,12 @@ func TestFileCleanup_Transform(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		setup           func(t *testing.T) []accessv1alpha1.File
+		setup           func(t *testing.T) []*accessv1alpha1.File
 		expectedCleaned int
 	}{
 		{
 			name: "cleans up multiple temp files",
-			setup: func(t *testing.T) []accessv1alpha1.File {
+			setup: func(t *testing.T) []*accessv1alpha1.File {
 				t.Helper()
 				dir := t.TempDir()
 
@@ -40,7 +40,7 @@ func TestFileCleanup_Transform(t *testing.T) {
 				require.NoError(t, os.WriteFile(f1, []byte("blob1"), 0o600))
 				require.NoError(t, os.WriteFile(f2, []byte("blob2"), 0o600))
 
-				return []accessv1alpha1.File{
+				return []*accessv1alpha1.File{
 					{URI: "file://" + f1},
 					{URI: "file://" + f2},
 				}
@@ -49,39 +49,40 @@ func TestFileCleanup_Transform(t *testing.T) {
 		},
 		{
 			name: "skips non-existent files",
-			setup: func(t *testing.T) []accessv1alpha1.File {
+			setup: func(t *testing.T) []*accessv1alpha1.File {
 				t.Helper()
-				return []accessv1alpha1.File{
+				return []*accessv1alpha1.File{
 					{URI: "file:///tmp/does-not-exist-cleanup-test-12345"},
 				}
 			},
 			expectedCleaned: 0,
 		},
 		{
-			name: "skips empty URIs",
-			setup: func(t *testing.T) []accessv1alpha1.File {
+			name: "skips nil and empty URIs",
+			setup: func(t *testing.T) []*accessv1alpha1.File {
 				t.Helper()
 				dir := t.TempDir()
 				f := filepath.Join(dir, "real-file")
 				require.NoError(t, os.WriteFile(f, []byte("data"), 0o600))
 
-				return []accessv1alpha1.File{
+				return []*accessv1alpha1.File{
+					nil,
 					{URI: ""},
 					{URI: "file://" + f},
-					{URI: ""},
+					nil,
 				}
 			},
 			expectedCleaned: 1,
 		},
 		{
 			name: "handles mixed existing and non-existing files",
-			setup: func(t *testing.T) []accessv1alpha1.File {
+			setup: func(t *testing.T) []*accessv1alpha1.File {
 				t.Helper()
 				dir := t.TempDir()
 				existing := filepath.Join(dir, "exists")
 				require.NoError(t, os.WriteFile(existing, []byte("data"), 0o600))
 
-				return []accessv1alpha1.File{
+				return []*accessv1alpha1.File{
 					{URI: "file://" + existing},
 					{URI: "file:///tmp/cleanup-nonexistent-xyz"},
 				}
@@ -90,9 +91,9 @@ func TestFileCleanup_Transform(t *testing.T) {
 		},
 		{
 			name: "handles empty file list",
-			setup: func(t *testing.T) []accessv1alpha1.File {
+			setup: func(t *testing.T) []*accessv1alpha1.File {
 				t.Helper()
-				return []accessv1alpha1.File{}
+				return []*accessv1alpha1.File{}
 			},
 			expectedCleaned: 0,
 		},
@@ -158,7 +159,7 @@ func TestFileCleanup_Transform_VerifiesFilesRemoved(t *testing.T) {
 		Type: FileCleanupVersionedType,
 		ID:   "testCleanup",
 		Spec: &FileCleanupSpec{
-			Files: []accessv1alpha1.File{
+			Files: []*accessv1alpha1.File{
 				{URI: "file://" + f1},
 			},
 		},
