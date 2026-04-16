@@ -8,7 +8,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
@@ -119,16 +119,10 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	// GetBlobFromPath returns a lazy streaming blob that reads files on demand.
 	// Since the download directory is removed when this function returns, the blob
 	// must be fully materialized into memory before cleanup.
-	rc, err := streamingBlob.ReadCloser()
+	tarBlob, err := cache.Cache(streamingBlob)
 	if err != nil {
-		return nil, fmt.Errorf("error reading tar archive from helm download: %w", err)
-	}
-	tarBlob := inmemory.New(rc, inmemory.WithMediaType(filesystem.DefaultTarMediaType))
-	if err := tarBlob.Load(); err != nil {
-		_ = rc.Close()
 		return nil, fmt.Errorf("error buffering tar archive from helm download: %w", err)
 	}
-	_ = rc.Close()
 
 	slog.DebugContext(ctx, "Created tar archive from downloaded helm chart files")
 
