@@ -24,6 +24,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -485,7 +486,49 @@ func Test_Integration_DownloadResource_HelmAccess(t *testing.T) {
 	// The ResourceRepository returns a tar archive containing the chart .tgz and .prov files.
 	chartPath := filepath.Join(chartDir, "mychart-0.1.0.tgz")
 	provPath := filepath.Join(chartDir, "mychart-0.1.0.tgz.prov")
-	internal.AssertHelmChartTar(t, output, chartPath, provPath)
+	assertHelmChartTar(t, output, chartPath, provPath)
+}
+
+// assertHelmChartTar verifies that a tar file contains the expected chart and
+// optional provenance file by comparing their contents byte-for-byte against
+// the originals. This is useful for verifying raw downloads from the Helm
+// ResourceRepository, which returns a tar archive (not an OCI layout).
+func assertHelmChartTar(t *testing.T, tarPath, originalChartPath, originalProvPath string) {
+	t.Helper()
+	r := require.New(t)
+
+	expectedChart, err := os.ReadFile(originalChartPath)
+	r.NoError(err, "should read original chart")
+
+	tarBlob, err := filesystem.GetBlobFromOSPath(tarPath)
+	r.NoError(err, "should open downloaded tar")
+
+	chartBlob := helmblob.NewChartBlob(tarBlob)
+
+	chartArchive, err := chartBlob.ChartArchive()
+	r.NoError(err, "tar should contain the chart .tgz")
+	r.Equal(expectedChart, readAllFromBlob(t, chartArchive), "downloaded chart should match the original")
+
+	provFile, err := chartBlob.ProvFile()
+	r.NoError(err, "reading prov file from chart blob should succeed")
+	if originalProvPath != "" {
+		r.NotNil(provFile, "tar should contain the .prov file")
+		expectedProv, err := os.ReadFile(originalProvPath)
+		r.NoError(err, "should read original prov file")
+		r.Equal(expectedProv, readAllFromBlob(t, provFile), "downloaded prov file should match the original")
+	}
+}
+
+// readAllFromBlob reads the full content of a read-only blob, failing the test on error.
+func readAllFromBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
+	t.Helper()
+	r := require.New(t)
+	rc, err := b.ReadCloser()
+	r.NoError(err, "should open blob reader")
+	defer func() { _ = rc.Close() }()
+	data, err := io.ReadAll(rc)
+	r.NoError(err, "should read blob content")
+	return data
 }
 
 func Test_Integration_ConstructorCompress(t *testing.T) {
