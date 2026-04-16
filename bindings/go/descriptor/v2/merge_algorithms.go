@@ -141,8 +141,7 @@ func mergeSimpleList(local, inbound json.RawMessage, cfgRaw json.RawMessage) (js
 		}
 	}
 
-	result := make([]any, len(inboundList))
-	copy(result, inboundList)
+	result := append([]any{}, inboundList...)
 
 	for _, le := range localList {
 		found := false
@@ -204,13 +203,13 @@ func mergeMapList(local, inbound json.RawMessage, cfgRaw json.RawMessage, depth 
 		inboundIndex[kv] = i
 	}
 
-	result := make([]map[string]any, len(inboundList))
-	for i, entry := range inboundList {
+	result := make([]map[string]any, 0, len(inboundList)+len(localList))
+	for _, entry := range inboundList {
 		cp := make(map[string]any, len(entry))
 		for k, v := range entry {
 			cp[k] = v
 		}
-		result[i] = cp
+		result = append(result, cp)
 	}
 
 	for i, le := range localList {
