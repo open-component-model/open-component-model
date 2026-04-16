@@ -165,8 +165,8 @@ func readChartMetadata(ctx context.Context, chartArchive blob.ReadOnlyBlob) (nam
 		return "", "", fmt.Errorf("error reading chart archive: %w", err)
 	}
 	defer func() {
-		if cerr := closer.Close(); cerr != nil {
-			slog.WarnContext(ctx, "error closing chart archive", "error", cerr)
+		if err := closer.Close(); err != nil {
+			slog.WarnContext(ctx, "error closing chart archive", "error", err)
 		}
 	}()
 
