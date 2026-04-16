@@ -321,6 +321,32 @@ func TestResourceBlob(t *testing.T) {
 			},
 		},
 		{
+			name: "success with auto global access policy on local store",
+			blob: &testBlob{
+				content:   content,
+				mediaType: "application/vnd.test",
+				digest:    digest,
+			},
+			resource: &descriptor.Resource{
+				Access: &v2.LocalBlob{
+					Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					LocalReference: digest.String(),
+					MediaType:      "application/vnd.test",
+				},
+			},
+			opts: Options{
+				AccessScheme:       runtime.NewScheme(),
+				BaseReference:      "test-ref",
+				GlobalAccessPolicy: GlobalAccessPolicyAuto,
+			},
+			checkGlobalAccess: func(t *testing.T, resource *descriptor.Resource) {
+				access, ok := resource.Access.(*v2.LocalBlob)
+				require.True(t, ok, "access should be of type LocalBlob")
+				// Auto on local (non-remote) store should not set global access
+				assert.Nil(t, access.GlobalAccess, "global access should not be set for auto policy on local store")
+			},
+		},
+		{
 			name: "empty type but typed access",
 			blob: &testBlob{
 				content:   content,
