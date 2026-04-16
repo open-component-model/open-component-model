@@ -112,6 +112,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	slog.DebugContext(ctx, "Helm chart downloaded successfully, creating tar archive", "chartReference", helmURL)
 
 	streamingBlob, err := filesystem.GetBlobFromPath(ctx, result.ChartDir, filesystem.DirOptions{
+		// Reproducible ensures that the tar header is not affected by times, uid or other meta infos and the digests stay stable
 		Reproducible: true,
 	})
 	if err != nil {

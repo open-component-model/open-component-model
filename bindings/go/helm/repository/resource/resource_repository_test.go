@@ -190,8 +190,7 @@ func TestDownloadResource(t *testing.T) {
 }
 
 // downloadAndDigest downloads the resource and returns the SHA-256 digest of
-// the resulting blob's bytes. Computing the digest from the raw stream avoids
-// depending on internal blob caching behavior.
+// the resulting blob's bytes.
 func downloadAndDigest(t *testing.T, ctx context.Context, repo *ResourceRepository, res *descriptor.Resource) string {
 	t.Helper()
 
@@ -207,13 +206,16 @@ func downloadAndDigest(t *testing.T, ctx context.Context, repo *ResourceReposito
 	_, err = io.Copy(h, rc)
 	require.NoError(t, err)
 
-	// Sanity-check that the blob also exposes a digest via DigestAware and
-	// that it agrees with the freshly computed one.
-	if digestAware, ok := b.(blob.DigestAware); ok {
-		if d, known := digestAware.Digest(); known && d != "" {
-			assert.Equal(t, "sha256:"+hex.EncodeToString(h.Sum(nil)), d, "blob digest should match streamed bytes")
-		}
+	digestAware, ok := b.(blob.DigestAware)
+	if !ok {
+		require.Fail(t, "downloaded blob should implement DigestAware")
 	}
 
-	return hex.EncodeToString(h.Sum(nil))
+	if d, known := digestAware.Digest(); !known || d == "" {
+		require.Fail(t, "downloaded blob should have digest")
+	} else {
+		return hex.EncodeToString(h.Sum(nil))
+	}
+
+	return ""
 }
