@@ -1510,15 +1510,16 @@ var _ = Describe("Deployer Controller ApplySet Prune", func() {
 		// of the projected metadata (from Project), so prune never searched for the
 		// Secret's GroupKind and the orphan survived.
 
+		sanitized := test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 		namespace := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: "deployer-prune-scope"},
+			ObjectMeta: metav1.ObjectMeta{Name: sanitized},
 		}
 		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
 
-		componentName := "ocm.software/test-prune-scope"
-		componentObjName := "prune-scope-component"
-		resourceName := "prune-scope-resource"
-		deployerObjName := "deployer-prune-scope"
+		componentName := "ocm.software/test-prune-scope-" + sanitized
+		componentObjName := "prune-scope-component-" + sanitized
+		resourceName := "prune-scope-resource-" + sanitized
+		deployerObjName := "deployer-prune-scope-" + sanitized
 
 		// --- v1: ConfigMap + Secret ---
 
