@@ -189,10 +189,10 @@ used for OCM resolver and HTTP client configuration:
 type: generic.config.ocm.software/v1
 configurations:
   - type: OCIImageReferenceOverride/v1alpha1
-    overrides:
+    spec:
       - resource:
           name: my-pod
-        imageReference:
+        oci:
           registry: ghcr.io
           repository: target-org/images/my-pod
           tag: "1.0.0"
@@ -216,11 +216,11 @@ source access type of each matched resource. This directly addresses
 
 ```yaml
 type: OCIImageReferenceOverride/v1alpha1
-overrides:
+spec:
   # Full override — resource in the root component
   - resource:
       name: my-pod
-    imageReference:
+    oci:
       registry: ghcr.io
       repository: target-org/images/my-pod
       tag: "1.0.0"
@@ -230,7 +230,7 @@ overrides:
   # relocated to ghcr.io/target-org/images/my-sidecar:2.1.0.
   - resource:
       name: my-sidecar
-    imageReference:
+    oci:
       registry: ghcr.io
       repository: target-org/images/my-sidecar
 
@@ -240,7 +240,7 @@ overrides:
     resource:
       name: monitoring-agent
       platform: linux/amd64
-    imageReference:
+    oci:
       registry: ghcr.io
       repository: target-org/images/monitoring
       tag: "2.3.1"
@@ -248,13 +248,13 @@ overrides:
   # Helm chart — compiler infers GetHelm → ConvertToOCI → AddOCIArtifact
   - resource:
       name: mariadb
-    imageReference:
+    oci:
       registry: ghcr.io
       repository: target-org/charts/mariadb
       tag: "12.2.7"
 ```
 
-The `imageReference` is always an object. When `tag` is omitted, the
+The `oci` field is always an object. When `tag` is omitted, the
 tag is preserved from the source — this avoids updating the config on
 every version bump.
 
@@ -262,13 +262,13 @@ every version bump.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `overrides[].referencePath` | `[]Identity` | no | Path of component reference identities from the root component to the component that owns the resource. Empty or omitted for resources in the root component. |
-| `overrides[].resource.name` | `string` | yes | Resource name |
-| `overrides[].resource.<key>` | `string` | no | Extra identity attributes as additional keys (for disambiguation when multiple resources share a name) |
-| `overrides[].imageReference` | `object` | yes | Target image reference. |
-| `overrides[].imageReference.registry` | `string` | no | Target registry (e.g. `ghcr.io`). |
-| `overrides[].imageReference.repository` | `string` | no | Target repository path (e.g. `target-org/images/my-pod`). |
-| `overrides[].imageReference.tag` | `string` | no | Target tag (e.g. `1.0.0`). When omitted, the tag is preserved from the source. |
+| `spec[].referencePath` | `[]Identity` | no | Path of component reference identities from the root component to the component that owns the resource. Empty or omitted for resources in the root component. |
+| `spec[].resource.name` | `string` | yes | Resource name |
+| `spec[].resource.<key>` | `string` | no | Extra identity attributes as additional keys (for disambiguation when multiple resources share a name) |
+| `spec[].oci` | `object` | yes | Target OCI image reference. |
+| `spec[].oci.registry` | `string` | no | Target registry (e.g. `ghcr.io`). |
+| `spec[].oci.repository` | `string` | no | Target repository path (e.g. `target-org/images/my-pod`). |
+| `spec[].oci.tag` | `string` | no | Target tag (e.g. `1.0.0`). When omitted, the tag is preserved from the source. |
 
 #### Resource Identity
 
@@ -299,7 +299,7 @@ matching or globbing.
 #### Semantics
 
 * Each entry identifies a resource by its reference path and resource
-  identity, and declares the target image reference it should be
+  identity, and declares the target OCI reference it should be
   uploaded to. Omitted fields are preserved from the source.
 * The compiler looks at the source access type of the matched resource
   and infers the appropriate transformation chain:
@@ -321,18 +321,18 @@ matching or globbing.
 type OCIImageReferenceOverrideConfig struct {
     runtime.Type `json:",inline"`
 
-    Overrides []OCIImageReferenceOverride `json:"overrides"`
+    Spec []OCIImageReferenceOverride `json:"spec"`
 }
 
 type OCIImageReferenceOverride struct {
     ReferencePath  []runtime.Identity `json:"referencePath,omitempty"`
     Resource       runtime.Identity   `json:"resource"`
-    ImageReference ImageReference     `json:"imageReference"`
+    OCI            OCIReference       `json:"oci"`
 }
 
-// ImageReference specifies the target image location.
+// OCIReference specifies the target OCI image location.
 // All fields are optional — omitted fields are preserved from the source.
-type ImageReference struct {
+type OCIReference struct {
     // Registry is the target registry (e.g. "ghcr.io").
     Registry string `json:"registry,omitempty"`
     // Repository is the repository path (e.g. "org/repo").
@@ -361,7 +361,7 @@ construction begins. During `processResource` — the existing
 per-resource loop inside `BuildGraphDefinition` — each resource is
 checked against the index. If a matching override entry exists, the
 compiler infers the transformation chain from the source access type
-and emits it with the configured `imageReference`. Otherwise, the
+and emits it with the configured `oci` target. Otherwise, the
 resource falls through to the default behaviour.
 
 ```text
@@ -380,7 +380,7 @@ transfer.BuildGraphDefinition(...)
          │ look up resource in override index
          │
          ├─ match found → infer chain from source access type
-         │   emit transformation chain with imageReference
+         │   emit transformation chain with oci target
          │
          └─ no match → default behaviour
               (--upload-as / --copy-resources)
