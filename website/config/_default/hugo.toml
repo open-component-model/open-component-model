@@ -14,10 +14,6 @@ defaultContentLanguage = "en"
 disableLanguages = ["de", "nl"]
 defaultContentLanguageInSubdir = false
 
-repoHost = "GitHub"
-docsRepo = "https://github.com/open-component-model/open-component-model"
-docsRepoBranch = "main"
-docsRepoSubPath = "website"
 editPage = false
 lastMod = false
 
