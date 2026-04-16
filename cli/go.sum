@@ -399,10 +399,6 @@ ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260416
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260416102202-f251beded4be/go.mod h1:gB2z/xXiBqridb+jfkKgukfCP8y6+EhNylCNAK3iVWY=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2 h1:loFXVXXXgCaBlpzs7gPizIopzyB3+SXIWHou8Xlp3Mc=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2/go.mod h1:FTKrAPkR0865aUlDBrzmmHTdFxuy7AbqQZrgG6pB9YY=
-ocm.software/open-component-model/bindings/go/helm v0.0.0-20260416102202-f251beded4be h1:KMBlJvXiPAnxi2/BJGVqHUPMJo1eRiw3ofAqgizeEPU=
-ocm.software/open-component-model/bindings/go/helm v0.0.0-20260416102202-f251beded4be/go.mod h1:BKbb290bzvHwrf055/K4fYOg7hZDAfG67XyTGuRUJdw=
-ocm.software/open-component-model/bindings/go/helm v0.0.0-20260416131247-22074468c601 h1:RTAdXgrz7K/2YUP36ALevoO+8od5CA60LCaNjEtzt2I=
-ocm.software/open-component-model/bindings/go/helm v0.0.0-20260416131247-22074468c601/go.mod h1:ASQNijdztYMrnAwFa/7krMEWYwoDRrAV6atOYFgU6E8=
 ocm.software/open-component-model/bindings/go/input/dir v0.0.2 h1:5n9k0J0W5jDWuzf2uhuzQKnNeqMwBDHop0mAfv4naiw=
 ocm.software/open-component-model/bindings/go/input/dir v0.0.2/go.mod h1:3qfxxgMZRSsp6aeiRirkaXSuIZ5oJF1ViUbVGTw1F6U=
 ocm.software/open-component-model/bindings/go/input/file v0.0.3 h1:fOs+mpqEIwCtR8qYGbUQrh4E9m8S47tH9GD6/dPPKO4=
@@ -421,8 +417,6 @@ ocm.software/open-component-model/bindings/go/runtime v0.0.7 h1:/4RDxVVubr6IC+ZK
 ocm.software/open-component-model/bindings/go/runtime v0.0.7/go.mod h1:hbas6Al4VECYKFk51SLIi8zdzhFgZ2WvFpPljatbJHo=
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20260416102202-f251beded4be h1:XCyyRfCE60i7j/4UVRJoWqyQ71QsnmhLLYbz3bG9Qpk=
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20260416102202-f251beded4be/go.mod h1:5hOzMcTYbRT+A9ffAPDSNDomqwVGxeik4SQKDIewoTQ=
-ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260416102202-f251beded4be h1:2CgKpryQ6pxJ1BhLJIg/oIYue4fsn5hh9zlJ4lrwXbA=
-ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260416102202-f251beded4be/go.mod h1:bRxlcBg5mYi+6T29OcdXgYKEj55O/REbOAeJhYVLgOQ=
 ocm.software/open-component-model/bindings/go/transform v0.0.0-20260416102202-f251beded4be h1:bTcweHJx50oysa93Yo/mLNFSlEbRmjFk6BocBbuA04k=
 ocm.software/open-component-model/bindings/go/transform v0.0.0-20260416102202-f251beded4be/go.mod h1:QOu13NEBqdp4oozQupCH1dwTncn/uH64+2uU5g3HLng=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
