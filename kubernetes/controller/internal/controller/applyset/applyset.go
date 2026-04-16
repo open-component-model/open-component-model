@@ -467,7 +467,7 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 
 	for task := range tasks {
 		list := &unstructured.UnstructuredList{}
-		list.SetGroupVersionKind(task.gvk)
+		list.SetGroupVersionKind(task.gvk.GroupVersion().WithKind(task.gvk.Kind + "List"))
 
 		listOpts := []client.ListOption{
 			client.HasLabels{ApplysetPartOfLabel},
@@ -564,7 +564,7 @@ func (a *ApplySet) prune(
 	for _, task := range tasks {
 		listGroup.Go(func() error {
 			list := &unstructured.UnstructuredList{}
-			list.SetGroupVersionKind(task.gvk)
+			list.SetGroupVersionKind(task.gvk.GroupVersion().WithKind(task.gvk.Kind + "List"))
 
 			listOpts := &client.ListOptions{
 				LabelSelector: labelSelector,
