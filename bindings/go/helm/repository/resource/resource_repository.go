@@ -104,14 +104,16 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		helmdownload.WithAlwaysDownloadProv(true),
 	}
 
-	_, err = helmdownload.NewReadOnlyChartFromRemote(ctx, helmURL, downloadDir, opts...)
+	result, err := helmdownload.NewReadOnlyChartFromRemote(ctx, helmURL, downloadDir, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading helm chart %q: %w", helmURL, err)
 	}
 
 	slog.DebugContext(ctx, "Helm chart downloaded successfully, creating tar archive", "chartReference", helmURL)
 
-	streamingBlob, err := filesystem.GetBlobFromPath(ctx, downloadDir, filesystem.DirOptions{})
+	streamingBlob, err := filesystem.GetBlobFromPath(ctx, result.ChartDir, filesystem.DirOptions{
+		Reproducible: true,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("error creating tar archive from helm download: %w", err)
 	}

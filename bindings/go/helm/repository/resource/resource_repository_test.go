@@ -2,15 +2,20 @@ package resource
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
@@ -160,4 +165,55 @@ func TestDownloadResource(t *testing.T) {
 		_, err := repo.DownloadResource(ctx, res, nil)
 		require.Error(t, err)
 	})
+
+	// Ensures that two consecutive downloads of the same chart produce a
+	// byte-identical tar archive (and thus an identical digest). This guards
+	// against regressions in the reproducible tar packaging, since the helm
+	// download writes files with the current timestamps into a fresh temp
+	// directory on each call. Without DirOptions.Reproducible those mtimes
+	// would leak into the tar headers and shift the digest.
+	t.Run("produces identical digest on repeated downloads", func(t *testing.T) {
+		res := helmResource(t, srv.URL, "mychart-0.1.0.tgz")
+
+		digest1 := downloadAndDigest(t, ctx, repo, res)
+
+		// Sleep past the 1s tar header granularity so the on-disk mtimes
+		// of the second download definitely differ from the first. If the
+		// reproducible flag were dropped, this delta would surface as a
+		// digest mismatch.
+		time.Sleep(1100 * time.Millisecond)
+
+		digest2 := downloadAndDigest(t, ctx, repo, res)
+
+		assert.Equal(t, digest1, digest2, "expected reproducible tar to yield the same digest across downloads")
+	})
+}
+
+// downloadAndDigest downloads the resource and returns the SHA-256 digest of
+// the resulting blob's bytes. Computing the digest from the raw stream avoids
+// depending on internal blob caching behavior.
+func downloadAndDigest(t *testing.T, ctx context.Context, repo *ResourceRepository, res *descriptor.Resource) string {
+	t.Helper()
+
+	b, err := repo.DownloadResource(ctx, res, nil)
+	require.NoError(t, err)
+	require.NotNil(t, b)
+
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = rc.Close() })
+
+	h := sha256.New()
+	_, err = io.Copy(h, rc)
+	require.NoError(t, err)
+
+	// Sanity-check that the blob also exposes a digest via DigestAware and
+	// that it agrees with the freshly computed one.
+	if digestAware, ok := b.(blob.DigestAware); ok {
+		if d, known := digestAware.Digest(); known && d != "" {
+			assert.Equal(t, "sha256:"+hex.EncodeToString(h.Sum(nil)), d, "blob digest should match streamed bytes")
+		}
+	}
+
+	return hex.EncodeToString(h.Sum(nil))
 }
