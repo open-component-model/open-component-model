@@ -21,6 +21,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	resourceblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	. "ocm.software/open-component-model/bindings/go/oci/internal/pack"
+	"ocm.software/open-component-model/bindings/go/oci/internal/policy"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
@@ -312,7 +313,7 @@ func TestResourceBlob(t *testing.T) {
 			opts: Options{
 				AccessScheme:       runtime.NewScheme(),
 				BaseReference:      "test-ref",
-				GlobalAccessPolicy: GlobalAccessPolicyNever,
+				GlobalAccessPolicy: policy.GlobalAccessPolicyNever,
 			},
 			checkGlobalAccess: func(t *testing.T, resource *descriptor.Resource) {
 				access, ok := resource.Access.(*v2.LocalBlob)
@@ -337,7 +338,7 @@ func TestResourceBlob(t *testing.T) {
 			opts: Options{
 				AccessScheme:       runtime.NewScheme(),
 				BaseReference:      "test-ref",
-				GlobalAccessPolicy: GlobalAccessPolicyAuto,
+				GlobalAccessPolicy: policy.GlobalAccessPolicyAuto,
 			},
 			checkGlobalAccess: func(t *testing.T, resource *descriptor.Resource) {
 				access, ok := resource.Access.(*v2.LocalBlob)

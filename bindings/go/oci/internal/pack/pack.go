@@ -29,14 +29,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// GlobalAccessPolicy is an alias for [policy.GlobalAccessPolicy].
-type GlobalAccessPolicy = policy.GlobalAccessPolicy
-
-const (
-	GlobalAccessPolicyNever = policy.GlobalAccessPolicyNever
-	GlobalAccessPolicyAuto  = policy.GlobalAccessPolicyAuto
-)
-
 // Options defines the configuration options for packing a single-layer OCI artifact.
 type Options struct {
 	// AccessScheme is the scheme used for converting resource access types.
@@ -53,9 +45,9 @@ type Options struct {
 	ManifestAnnotations map[string]string
 
 	// GlobalAccessPolicy controls whether global access references are added to local blobs.
-	// The zero value is GlobalAccessPolicyNever, which suppresses global access by default.
-	// Set GlobalAccessPolicyAuto to auto-detect based on whether the storage backend is globally reachable.
-	GlobalAccessPolicy GlobalAccessPolicy
+	// The zero value is policy.GlobalAccessPolicyNever, which suppresses global access by default.
+	// Set policy.GlobalAccessPolicyAuto to auto-detect based on whether the storage backend is globally reachable.
+	GlobalAccessPolicy policy.GlobalAccessPolicy
 }
 
 // ArtifactBlob packs a [ociblob.ArtifactBlob] into an OCI Storage
@@ -319,9 +311,9 @@ func backedByGlobalStore(storage content.Storage) bool {
 }
 
 // resolveGlobalAccess determines whether global access should be set based on the policy and storage backend.
-func resolveGlobalAccess(policy GlobalAccessPolicy, storage content.Storage) bool {
-	switch policy {
-	case GlobalAccessPolicyAuto:
+func resolveGlobalAccess(p policy.GlobalAccessPolicy, storage content.Storage) bool {
+	switch p {
+	case policy.GlobalAccessPolicyAuto:
 		return backedByGlobalStore(storage)
 	default:
 		return false
