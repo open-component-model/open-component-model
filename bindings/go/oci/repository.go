@@ -95,6 +95,11 @@ type Repository struct {
 	globalAccessPolicy GlobalAccessPolicy
 }
 
+// SetGlobalAccessPolicy overrides the global access policy for this repository.
+func (repo *Repository) SetGlobalAccessPolicy(policy GlobalAccessPolicy) {
+	repo.globalAccessPolicy = policy
+}
+
 // AddComponentVersion adds a new component version to the repository.
 func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) (err error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)

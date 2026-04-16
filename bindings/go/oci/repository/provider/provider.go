@@ -139,13 +139,6 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		if err != nil {
 			return nil, err
 		}
-		opt, err := globalAccessPolicyFromOCI(obj.GlobalAccessPolicy)
-		if err != nil {
-			return nil, err
-		}
-		if opt != nil {
-			opts = append(opts, opt)
-		}
 		return ocirepository.NewFromOCIRepoV1(ctx, obj, &auth.Client{
 			Client:     b.httpClient,
 			Cache:      auth.NewCache(),
@@ -191,18 +184,4 @@ func getConvertedTypedSpec(scheme *runtime.Scheme, repositorySpecification runti
 		return nil, err
 	}
 	return obj, nil
-}
-
-// globalAccessPolicyFromOCI converts an OCI repository spec's GlobalAccessPolicy
-// to an oci.RepositoryOption. Returns nil option if the policy is never (zero value).
-// Returns an error for unrecognized policy values.
-func globalAccessPolicyFromOCI(policy ocirepospecv1.GlobalAccessPolicy) (oci.RepositoryOption, error) {
-	switch policy {
-	case ocirepospecv1.GlobalAccessPolicyNever:
-		return nil, nil
-	case ocirepospecv1.GlobalAccessPolicyAuto:
-		return oci.WithGlobalAccessPolicy(oci.GlobalAccessPolicyAuto), nil
-	default:
-		return nil, fmt.Errorf("unsupported globalAccessPolicy %q", policy)
-	}
 }
