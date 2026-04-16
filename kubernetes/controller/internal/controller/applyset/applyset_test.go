@@ -1144,3 +1144,81 @@ func TestApply_ConflictDetection_ListFailure(t *testing.T) {
 		t.Errorf("Apply() error = %v, want wrapped %v", err, listErr)
 	}
 }
+
+// TestApply_ConflictDetection_MultiGVK verifies that batch conflict detection
+// works across multiple GVKs: a ConfigMap owned by another ApplySet should
+// conflict, while a Secret with no prior owner should apply successfully.
+func TestApply_ConflictDetection_MultiGVK(t *testing.T) {
+	ctx := context.Background()
+	mapper := newTestRESTMapper()
+
+	parentGVK := schema.GroupVersionKind{
+		Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind",
+	}
+
+	parentA := newTestParent(parentGVK)
+	applySetIDA := ID(parentA)
+
+	parentB := &testParent{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "other-instance",
+			Namespace: "default",
+			UID:       types.UID("other-parent-uid"),
+		},
+		gvk: parentGVK,
+	}
+	applySetIDB := ID(parentB)
+
+	// Existing ConfigMap owned by a different ApplySet (should conflict)
+	existingCM := newConfigMap("cm1", "default")
+	existingCM.SetLabels(map[string]string{ApplysetPartOfLabel: applySetIDB})
+	existingCM.SetUID(types.UID("existing-cm-uid"))
+
+	// No existing Secret (should apply without conflict)
+	fakeClient := newFakeClient(existingCM)
+
+	applier := New(Config{
+		Client:          fakeClient,
+		RESTMapper:      mapper,
+		Log:             logr.Discard(),
+		ParentNamespace: "default",
+	}, parentA)
+
+	resources := []Resource{
+		{ID: "cm1", Object: newConfigMap("cm1", "default")},
+		{ID: "secret1", Object: newSecret("secret1", "default")},
+	}
+
+	result, _, err := applier.Apply(ctx, resources, ApplyMode{})
+	if err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+
+	if len(result.Applied) != 2 {
+		t.Fatalf("Apply() applied %d resources, want 2", len(result.Applied))
+	}
+
+	byID := result.ByID()
+
+	// ConfigMap should have a conflict error
+	cmItem := byID["cm1"]
+	if cmItem.Error == nil {
+		t.Fatal("expected conflict error for cm1, got nil")
+	}
+	var conflictErr *ApplySetConflictError
+	if !errors.As(cmItem.Error, &conflictErr) {
+		t.Fatalf("cm1 error is not *ApplySetConflictError: %T", cmItem.Error)
+	}
+	if conflictErr.CurrentApplySetID != applySetIDB {
+		t.Errorf("CurrentApplySetID = %q, want %q", conflictErr.CurrentApplySetID, applySetIDB)
+	}
+	if conflictErr.DesiredApplySetID != applySetIDA {
+		t.Errorf("DesiredApplySetID = %q, want %q", conflictErr.DesiredApplySetID, applySetIDA)
+	}
+
+	// Secret should have succeeded (no conflict, no error)
+	secretItem := byID["secret1"]
+	if secretItem.Error != nil {
+		t.Errorf("unexpected error for secret1: %v", secretItem.Error)
+	}
+}
