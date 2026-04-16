@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/helm/spec/access/v1/schemas/Helm.schema.json",
   "title": "Helm",
   "type": "object",
-  "description": "Helm describes the access for a helm chart hosted in a classic HTTP/HTTPS\nHelm repository.\n\nTLS credentials (CA certificates, client certificates, private keys) should be\nprovided through the credential resolver.\n\nFor Helm charts stored in OCI registries (oci:// scheme), use the OCI access\ntype instead.",
+  "description": "Helm describes the access for a helm chart hosted in a classic HTTP/HTTPS\nHelm repository.\nThis spec is aligned with ocm v1 https://github.com/open-component-model/ocm/blob/main/api/ocm/extensions/accessmethods/helm/method.go#L41\n\nTLS credentials (CA certificates, client certificates, private keys) should be\nprovided through the credential resolver.\n\nFor Helm charts stored in OCI registries (oci:// scheme), use the OCI access\ntype instead.",
   "properties": {
     "helmChart": {
       "type": "string",
