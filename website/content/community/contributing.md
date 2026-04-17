@@ -195,7 +195,7 @@ AI-generated code or content can be contributed to SAP Open Source Software proj
   Slack workspace ([Request an invitation](https://slack.k8s.io) if you are not yet a member).
 - **Community calls** - We hold regular calls on the first Wednesday of each month. See the
   [community page](/community/engagement#community-calls) for details.
-- **Issues** - Browse existing [issues](https://github.com/open-component-model/open-component-model/issues) or
+- **Issues** - Browse existing [issues](https://github.com/open-component-model/ocm-project/issues) or
   open a new one.
 
 ## Code of Conduct
