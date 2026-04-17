@@ -221,6 +221,80 @@ FIXTURE
 }
 
 # ---------------------------------------------------------------------------
+# Pagination tests
+# ---------------------------------------------------------------------------
+
+test_pagination_finds_stable_on_second_page() {
+    echo "--- pagination: stable CLI tag on page 2 ---"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    TMP_METADATA="${tmpdir}/ocm.json"
+
+    download() {
+        case "$2" in
+            *page=1)
+                cat > "$1" <<'FIXTURE'
+[
+  {"tag_name": "kubernetes/controller/v1.0.0"},
+  {"tag_name": "website/v2.0.0"},
+  {"tag_name": "cli/v0.4.0-rc.1"}
+]
+FIXTURE
+                ;;
+            *page=2)
+                cat > "$1" <<'FIXTURE'
+[
+  {"tag_name": "cli/v0.3.0"},
+  {"tag_name": "cli/v0.2.0"}
+]
+FIXTURE
+                ;;
+            *)
+                cat > "$1" <<'FIXTURE'
+[]
+FIXTURE
+                ;;
+        esac
+    }
+
+    unset OCM_VERSION 2>/dev/null || true
+    get_release_version >/dev/null 2>&1
+    assert_equals "finds 0.3.0 on page 2" "0.3.0" "${VERSION_OCM}"
+    rm -r "${tmpdir}"
+}
+
+test_pagination_stops_on_empty_page() {
+    echo "--- pagination: empty page -> fatal ---"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    TMP_METADATA="${tmpdir}/ocm.json"
+
+    download() {
+        case "$2" in
+            *page=1)
+                cat > "$1" <<'FIXTURE'
+[
+  {"tag_name": "cli/v0.4.0-rc.2"},
+  {"tag_name": "cli/v0.4.0-rc.1"}
+]
+FIXTURE
+                ;;
+            *)
+                cat > "$1" <<'FIXTURE'
+[]
+FIXTURE
+                ;;
+        esac
+    }
+
+    unset OCM_VERSION 2>/dev/null || true
+    local status=0
+    (get_release_version) >/dev/null 2>&1 || status=$?
+    assert_equals "no stable tag across pages -> exit 1" "1" "${status}"
+    rm -r "${tmpdir}"
+}
+
+# ---------------------------------------------------------------------------
 # Verification tests
 # ---------------------------------------------------------------------------
 
@@ -296,6 +370,8 @@ test_arch_detection
 test_only_prereleases_fatals
 test_empty_response_fatals
 test_single_stable_release
+test_pagination_finds_stable_on_second_page
+test_pagination_stops_on_empty_page
 test_verify_skips_when_gh_not_found
 test_verify_skips_when_gh_not_authenticated
 test_verify_skips_when_explicitly_disabled

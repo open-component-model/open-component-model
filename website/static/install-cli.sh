@@ -132,23 +132,46 @@ setup_tmp() {
     trap cleanup INT EXIT
 }
 
+# Extract a stable CLI version from a releases JSON file.
+# Returns the version string (e.g. "0.3.0") or empty if none found.
+extract_stable_version() {
+    grep '"tag_name":' "$1" \
+        | grep -E "\"${TAG_PREFIX}v[0-9]+\.[0-9]+\.[0-9]+\"" \
+        | head -1 \
+        | sed -E "s|.*\"${TAG_PREFIX}v([^\"]+)\".*|\1|" \
+        || true # grep returns non-zero when no lines match; prevent set -e from killing the subshell
+}
+
 # Find version from Github metadata
 get_release_version() {
     if [[ -n "${OCM_VERSION:-}" ]]; then
         METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${TAG_PREFIX}v${OCM_VERSION}"
+        info "Downloading metadata ${METADATA_URL}"
+        download "${TMP_METADATA}" "${METADATA_URL}"
+        VERSION_OCM=$(extract_stable_version "${TMP_METADATA}")
     else
         # Use the list endpoint so we can filter by TAG_PREFIX; /releases/latest may
         # point to a non-CLI release (e.g. a website or docs tag published more recently).
-        METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases"
+        # Paginate with per_page=100 because non-CLI releases can push CLI tags off page 1.
+        local page max_pages
+        max_pages=10
+        VERSION_OCM=""
+        for (( page=1; page<=max_pages; page++ )); do
+            METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100&page=${page}"
+            info "Downloading metadata ${METADATA_URL}"
+            download "${TMP_METADATA}" "${METADATA_URL}"
+
+            VERSION_OCM=$(extract_stable_version "${TMP_METADATA}")
+            if [[ -n "${VERSION_OCM}" ]]; then
+                break
+            fi
+
+            if ! grep -q '"tag_name":' "${TMP_METADATA}"; then
+                break
+            fi
+        done
     fi
 
-    info "Downloading metadata ${METADATA_URL}"
-    download "${TMP_METADATA}" "${METADATA_URL}"
-
-    # tag_name has the format "cli/v0.1.0" - strip the prefix and leading "v".
-    # When OCM_VERSION is unset the response is a JSON array; match only stable
-    # releases (exactly X.Y.Z, no -rc suffix) that start with TAG_PREFIX.
-    VERSION_OCM=$(grep '"tag_name":' "${TMP_METADATA}" | grep -E "\"${TAG_PREFIX}v[0-9]+\.[0-9]+\.[0-9]+\"" | head -1 | sed -E "s|.*\"${TAG_PREFIX}v([^\"]+)\".*|\1|")
     if [[ -n "${VERSION_OCM}" ]]; then
         info "Using ${VERSION_OCM} as release"
     else
