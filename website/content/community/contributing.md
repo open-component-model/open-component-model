@@ -149,7 +149,10 @@ process. Once approved and all checks pass, a maintainer will merge your pull re
 
 To help your pull request move through review smoothly, keep these points in mind:
 
-- **Tests** - New behavior should be covered by tests. Bug fixes should include a test that reproduces the issue.
+- **Tests** - All code changes must include appropriate tests. New features must include unit tests covering expected
+  behavior and bug fixes must include a regression test that reproduces the original bug. PRs must not decrease overall
+  test coverage - if existing uncovered code makes this impractical, explain in the PR description. This policy is
+  required for [OpenSSF Best Practices](https://www.bestpractices.dev/) compliance.
 - **Focused changes** - Keep pull requests scoped to a single concern. Avoid mixing unrelated refactors or formatting
   changes with functional work.
 - **Commit hygiene** - Write a clear PR title and description. There is no need to clean up individual commits because
