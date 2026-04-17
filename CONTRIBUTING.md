@@ -37,7 +37,7 @@ Each area has its own contributing guide with area-specific setup, testing conve
 | Go library | [`bindings/go/CONTRIBUTING.md`](bindings/go/CONTRIBUTING.md) | Module structure, testify conventions, integration tests |
 | CLI | [`cli/CONTRIBUTING.md`](cli/CONTRIBUTING.md) | Building, testing, documentation generation |
 | Kubernetes controller | [`kubernetes/controller/CONTRIBUTING.md`](kubernetes/controller/CONTRIBUTING.md) | Ginkgo tests, envtest, CRD generation, Helm chart |
-| Website | [`website/CONTRIBUTING.md`](website/CONTRIBUTING.md) | Hugo, Diataxis framework, content templates |
+| Website | [`website/CONTRIBUTING.md`](website/CONTRIBUTING.md) | Local dev setup, Diataxis framework, content templates |
 
 ## Common Tasks
 
