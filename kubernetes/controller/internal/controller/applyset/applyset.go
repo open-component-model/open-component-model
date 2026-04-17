@@ -335,6 +335,10 @@ func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMo
 
 // Prune deletes orphaned resources (those with applyset label but not in KeepUIDs).
 func (a *ApplySet) Prune(ctx context.Context, opts PruneOptions) (*PruneResult, error) {
+	if opts.Scope == nil {
+		return nil, fmt.Errorf("prune scope is required")
+	}
+
 	scopeGKs := opts.Scope.GroupKinds
 
 	// Always include parent namespace in prune scope
