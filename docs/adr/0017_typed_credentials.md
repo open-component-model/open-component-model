@@ -73,14 +73,22 @@ The existing `Resolver` interface gains a `ResolveTyped` method that returns `ru
 `map[string]string`. The graph stores credentials as `runtime.Typed` internally and resolves typed credentials from
 config when a `CredentialTypeScheme` is provided. `DirectCredentials/v1` serves as the fallback for old configurations.
 
-Adding a method to an interface only breaks implementors (all in our codebase), not consumers. Each binding migrates
-from `Resolve` to `ResolveTyped` independently.
+Adding a method to an interface breaks implementors (all in our codebase), not consumers. Each binding migrates from
+`Resolve` to `ResolveTyped` independently, with no changes to function signatures, context wiring, or intermediate
+layers that thread the resolver through.
+
+A separate `TypedResolver` interface was considered and prototyped. It creates cascading signature changes: every
+intermediate layer (context, builder, transformers) must carry and pass both interfaces during migration. A single
+interface with two methods avoids this — bindings change only the method they call, not what they accept. A generic
+interface (`TypedResolver[T any]`) was also tested; it does not work because the graph returns `runtime.Typed`
+(type-erased) and Go generics are invariant, so `TypedResolver[runtime.Typed]` cannot satisfy
+`TypedResolver[*HelmHTTPCredentials]`.
 
 ```go
 // Pseudocode — updated Resolver interface
 type Resolver interface {
-Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) // existing
-ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) // new
+    Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)  // existing
+    ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) // new
 }
 
 // Pseudocode — consumer usage
@@ -88,6 +96,31 @@ identity := HelmChartRepositoryIdentity{Host: "charts.example.com", Path: "/stab
 typed, err := resolver.ResolveTyped(ctx, identity.Identity())
 creds := typed.(*HelmHTTPCredentials) // type-safe access
 fmt.Println(creds.CertFile, creds.KeyFile)
+```
+
+#### `ResolveAs[T]` — optional generic helper
+
+A free-standing generic function provides compile-time type safety at call sites without requiring generic interfaces
+(Go does not support type parameters on interface methods —
+[golang/go#49085](https://github.com/golang/go/issues/49085)). Consumers MAY use this helper instead of manual
+type assertions after `ResolveTyped`.
+
+```go
+func ResolveAs[T runtime.Typed](ctx context.Context, r Resolver, id runtime.Identity) (T, error) {
+    var zero T
+    typed, err := r.ResolveTyped(ctx, id)
+    if err != nil {
+        return zero, err
+    }
+    out, ok := typed.(T)
+    if !ok {
+        return zero, fmt.Errorf("credential type mismatch: want %T, got %T", zero, typed)
+    }
+    return out, nil
+}
+
+// Consumer usage with ResolveAs
+creds, err := credentials.ResolveAs[*HelmHTTPCredentials](ctx, resolver, identity.ToIdentity())
 ```
 
 ```mermaid
@@ -121,6 +154,22 @@ configuration:
 - **`CredentialTypeScheme`** — knows how to create typed credential objects (e.g., `HelmHTTPCredentials/v1`)
 - **`ConsumerIdentityTypeScheme`** — knows how to create typed identity objects for validation (e.g.,
   `HelmChartRepository/v1`)
+
+The schemes are the **single unified mechanism** for type registration. Both internal bindings and external plugins
+register through the same schemes — the graph never knows or cares where a type came from. Internal bindings register
+Go structs directly; external plugins register as `runtime.Raw` from their capability specs. The composition root
+aggregates both sources into the same scheme instances and passes them to the graph.
+
+This is deliberate: one registration path means less conceptual load, no "is this internal or external?" distinction,
+and a single place to debug type registration issues. Routing type registration through the plugin system was
+considered and rejected — it would actually create two paths (internal bindings registering through plugins vs.
+plugins declaring capabilities), which is the opposite of simplification.
+
+The schemes serve a fundamentally different purpose than the credential plugins. The `CredentialPlugin` interface
+resolves credentials from external sources (Vault, AWS) at **query time**. The schemes deserialize typed credentials
+from `.ocmconfig` at **ingestion time** — before any plugin is called. Inline typed credentials configured directly by
+the user (e.g., `type: HelmHTTPCredentials/v1` with `username`/`certFile` fields) do not involve a plugin at all; only
+the scheme is needed to turn the config JSON into a Go struct.
 
 Each binding provides a `MustRegisterCredentialType(scheme)` and `MustRegisterIdentityType(scheme)` function. The
 application entry point (CLI, controller) creates the schemes, calls each binding's registration function, and passes
@@ -169,8 +218,7 @@ This means:
 - Adding a new binding or plugin does not modify the credential graph
 - The graph validates and resolves types generically through the scheme
 - Built-in types are registered as Go structs, external plugin types as `runtime.Raw` — consumers use `scheme.Convert`
-  to
-  get typed structs
+  to get typed structs
 - Built-ins register first (at startup), plugins register after (at discovery) — built-ins always take precedence
 - Both schemes are optional (nil-safe) — the graph degrades to `DirectCredentials` behavior when no scheme is provided
 
@@ -191,8 +239,7 @@ External plugins (separate binaries) communicate with the plugin manager over HT
 unchanged. Today the contract signature is `credentials map[string]string`; Phase 3 changes the **Go contract
 signature** to `credentials runtime.Typed`, with `scheme.Convert(typed, *runtime.Raw)` /
 `scheme.Convert(*runtime.Raw, typed)` handling serialization at the sender and receiver. The HTTP bytes are JSON either
-way — only the Go API shape
-changes.
+way — only the Go API shape changes.
 
 **At discovery time:** The plugin manager runs each plugin binary with `capabilities` and reads the capability JSON.
 Each `SupportedConsumerIdentityType` in the capability spec includes an `AcceptedCredentialTypes` field — the JSON
@@ -218,13 +265,15 @@ module boundaries. Without `go.work`, modules resolve from the proxy — so chan
 
 ### Phase 1: Foundation
 
-Add `ResolveTyped` to `Resolver`, typed credential/identity scheme support to the graph, and `IdentityProvider`/
-`CredentialAcceptor` interfaces to runtime. No downstream breakage — all existing code continues to work.
+Add `ResolveTyped` to `Resolver`, the `ResolveAs[T]` generic helper, typed credential/identity scheme support to the
+graph, and `IdentityProvider`/`CredentialAcceptor` interfaces to runtime. No downstream breakage — all existing code
+continues to work.
 
 ### Phase 2: Binding migration (parallelizable)
 
-Each binding creates its typed credential and identity specs, migrates internal code to use `ResolveTyped`, and rejects
-incompatible credential types. Bindings can be migrated independently in separate PRs.
+Each binding creates its typed credential and identity specs, migrates internal code to use `ResolveTyped` (or
+`ResolveAs[T]` for type-safe call sites), and rejects incompatible credential types. Bindings can be migrated
+independently in separate PRs.
 
 ### Phase 3: Plugin interfaces
 
