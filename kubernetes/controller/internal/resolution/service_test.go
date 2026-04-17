@@ -25,7 +25,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )

@@ -119,6 +119,12 @@ metrics:
   enable: false
   # -- Metrics server port
   port: 8443
+## Webhook configuration
+webhook:
+  # -- Enable conversion webhook for CRD version conversion
+  enable: false
+  # -- Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually)
+  certSecret: ""
 ## Cert-manager integration
 certManager:
   # -- Enable cert-manager for TLS certificates

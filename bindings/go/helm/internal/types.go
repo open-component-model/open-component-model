@@ -8,6 +8,7 @@ import (
 type ChartData struct {
 	Name      string
 	Version   string
+	ChartDir  string
 	ChartBlob *filesystem.Blob
 	ProvBlob  *filesystem.Blob
 }
