@@ -595,6 +595,11 @@ func TestProject_ReturnsUnionMetadata(t *testing.T) {
 	if !scope.GroupKinds.Has(schema.GroupKind{Kind: "Secret"}) {
 		t.Error("PruneScope should include Secret from parent memory to find orphans")
 	}
+
+	// PruneScope includes namespaces from parent annotation so prune searches old-ns
+	if !scope.Namespaces.Has("old-ns") {
+		t.Errorf("PruneScope.Namespaces should include old-ns from parent memory, got %v", scope.Namespaces.UnsortedList())
+	}
 }
 
 func TestPrune_ClusterScopedResource(t *testing.T) {
