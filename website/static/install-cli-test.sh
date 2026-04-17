@@ -10,6 +10,7 @@ TESTS_FAILED=0
 FAILURES=""
 
 # Source the install script; the BASH_SOURCE guard prevents execution.
+# Tests manage their own TMP_METADATA via local tmpdirs - do not call setup_tmp().
 source "${SCRIPT_DIR}/install-cli.sh"
 
 assert_equals() {
