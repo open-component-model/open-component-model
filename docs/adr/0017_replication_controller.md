@@ -17,7 +17,7 @@ Definitions for transfers, already used by the CLI via `bindings/go/transfer/`.
 
 ### Constraints
 
-* TGDs for large component trees can exceed etcd's 2MiB object size limit.
+* TGDs for large component trees can approach or exceed Kubernetes storage practical limits due to etcd's default 1.5 MiB max request size.
 * Only the latest resolved component version is replicated for now.
 
 ## Decision Drivers
@@ -101,7 +101,9 @@ status:
 
 ### Reconciliation Flow
 
-Similar to the resolution service, this is the two-phase process for transfer:
+Similar to the resolution service, this is the two-phase process for transfer.
+Following the existing `ErrResolutionInProgress` pattern, phase 2 introduces a
+transfer-specific in-progress sentinel error named `ErrTransferInProgress`.
 
 #### Phase 1: Plan (build TGD)
 
@@ -152,7 +154,7 @@ TGDs are written to a scratch volume (emptyDir or PVC):
 
 * Path: `/var/run/ocm/transfer-specs/{namespace}-{name}-{version}.json`
 * GC on CR deletion (finalizer) or version supersession.
-* Path in `status.transferSpecPath` for operator inspection.
+* Path available for operator inspection.
 
 ### Watches
 
@@ -200,7 +202,7 @@ TGDs are written to a scratch volume (emptyDir or PVC):
 
 #### Con
 
-* TGDs can exceed 2MiB, still need external storage.
+* TGDs can exceed Kubernetes/etcd object size constraints, so external storage is still needed.
 * Two CRDs from day one with no user demand.
 
 ### Option 3: Replication + Job
