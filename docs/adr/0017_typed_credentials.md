@@ -65,7 +65,10 @@ AcceptedCredentialTypes() []runtime.Type
 ```
 
 The graph validates during ingestion that configured credential types are compatible with the identity type.
-Incompatible pairs produce warnings. Consumers reject credentials of the wrong type with clear errors.
+Incompatible pairs produce **warnings, not errors** — ingestion continues and the credentials are still stored. This is
+deliberate: during migration, not all types will be registered in the scheme, and plugins loaded after ingestion may
+introduce types unknown at ingestion time. Rejecting eagerly would break valid configs. Instead, consumers reject
+credentials of the wrong type at resolution time with clear errors.
 
 ### Resolver Evolution
 
@@ -219,7 +222,8 @@ This means:
 - The graph validates and resolves types generically through the scheme
 - Built-in types are registered as Go structs, external plugin types as `runtime.Raw` — consumers use `scheme.Convert`
   to get typed structs
-- Built-ins register first (at startup), plugins register after (at discovery) — built-ins always take precedence
+- Built-ins register first (at startup), plugins register after (at discovery) — duplicate registrations error out
+  via `runtime.Scheme.TypeAlreadyRegisteredError`; there is no silent override or precedence
 - Both schemes are optional (nil-safe) — the graph degrades to `DirectCredentials` behavior when no scheme is provided
 
 ### Backward Compatibility
