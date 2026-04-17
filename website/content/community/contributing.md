@@ -3,6 +3,7 @@ title: "Contributing to OCM"
 description: "How to contribute to the Open Component Model project"
 slug: "contributing"
 toc: true
+weight: 2
 ---
 
 ## Welcome
