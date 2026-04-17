@@ -105,9 +105,10 @@ const (
 
 // LoadTarget represents something that should be loaded into the universe
 type LoadTarget struct {
-	Type     string // LoadTargetTypeModule or LoadTargetTypeImport
-	Path     string // module directory path or import path
-	Required bool   // whether failure should stop the build
+	Type     string   // LoadTargetTypeModule or LoadTargetTypeImport
+	Path     string   // module directory path or import path
+	Patterns []string // specific package patterns within a module (nil = "./...")
+	Required bool     // whether failure should stop the build
 }
 
 // PackageLoader handles loading packages from various sources with consistent configuration
@@ -169,7 +170,11 @@ func (pl *PackageLoader) loadTarget(ctx context.Context, target LoadTarget) ([]*
 	switch target.Type {
 	case LoadTargetTypeModule:
 		cfg.Dir = target.Path
-		pkgs, err = packages.Load(cfg, "./...")
+		patterns := target.Patterns
+		if len(patterns) == 0 {
+			patterns = []string{"./..."}
+		}
+		pkgs, err = packages.Load(cfg, patterns...)
 	case LoadTargetTypeImport:
 		pkgs, err = packages.Load(cfg, target.Path)
 	default:
@@ -192,7 +197,7 @@ func (pl *PackageLoader) loadTarget(ctx context.Context, target LoadTarget) ([]*
 // it only considers modules whose files have at least the given marker.
 // this is mainly to reduce build time.
 func Build(ctx context.Context, marker string, roots ...string) (*Universe, error) {
-	// Phase 1: Discovery - Find modules with schema markers
+	// Phase 1: Discovery - Find packages with schema markers
 	targets, err := discoverLoadTargets(ctx, marker, roots...)
 	if err != nil {
 		return nil, err
@@ -203,7 +208,7 @@ func Build(ctx context.Context, marker string, roots ...string) (*Universe, erro
 		return New(), nil
 	}
 
-	// Phase 2: Loading - Load all packages from discovered targets
+	// Phase 2: Loading - Load only the specific annotated packages
 	loader := NewPackageLoader(ctx)
 	pkgs, err := loader.LoadTargets(targets)
 	if err != nil {
@@ -216,7 +221,9 @@ func Build(ctx context.Context, marker string, roots ...string) (*Universe, erro
 	return universe, nil
 }
 
-// discoverLoadTargets finds all modules with schema markers and prepares load targets
+// discoverLoadTargets finds specific packages with schema markers and prepares targeted load targets.
+// Instead of loading entire modules with "./...", it identifies the specific packages containing
+// markers and loads only those, dramatically reducing the number of packages type-checked.
 func discoverLoadTargets(ctx context.Context, marker string, roots ...string) ([]LoadTarget, error) {
 	modRoots, err := findModuleRoots(roots)
 	if err != nil {
@@ -224,19 +231,22 @@ func discoverLoadTargets(ctx context.Context, marker string, roots ...string) ([
 	}
 
 	slog.InfoContext(ctx, "scanning for schema markers", "modules", len(modRoots))
-	relevantModules, err := findModulesWithSchemaMarkers(ctx, marker, modRoots)
+	pkgsByModule, err := findPackagesWithSchemaMarkers(ctx, marker, modRoots)
 	if err != nil {
 		return nil, err
 	}
 
-	slog.InfoContext(ctx, "found modules with schema markers", "modules", len(relevantModules), "total", len(modRoots))
+	slog.InfoContext(ctx, "found packages with schema markers",
+		"modules", len(pkgsByModule),
+		"total_modules", len(modRoots),
+	)
 
-	// Prepare load targets for schema modules
 	var targets []LoadTarget
-	for _, module := range relevantModules {
+	for modRoot, relPkgs := range pkgsByModule {
 		targets = append(targets, LoadTarget{
 			Type:     LoadTargetTypeModule,
-			Path:     module,
+			Path:     modRoot,
+			Patterns: relPkgs,
 			Required: true,
 		})
 	}
@@ -295,22 +305,25 @@ func findModuleRoots(roots []string) ([]string, error) {
 	return modules, nil
 }
 
-// findModulesWithSchemaMarkers scans modules for schema markers and returns only relevant modules
-func findModulesWithSchemaMarkers(ctx context.Context, marker string, modRoots []string) ([]string, error) {
-	var relevantModules []string
+// findPackagesWithSchemaMarkers walks module roots using the filesystem to find
+// Go files containing the marker, returning a map of module root -> relative package patterns.
+// This uses direct filesystem walking instead of packages.Load(NeedFiles) to avoid
+// spawning expensive go list subprocesses during discovery.
+func findPackagesWithSchemaMarkers(_ context.Context, marker string, modRoots []string) (map[string][]string, error) {
+	result := make(map[string][]string)
 	var mu sync.Mutex
-	g, ctx := errgroup.WithContext(ctx)
+	var g errgroup.Group
 
 	for _, modRoot := range modRoots {
 		g.Go(func() error {
-			hasMarker, err := moduleHasSchemaMarkers(ctx, modRoot, marker)
+			relPkgs, err := walkModuleForMarkers(modRoot, marker)
 			if err != nil {
 				return err
 			}
 
-			if hasMarker {
+			if len(relPkgs) > 0 {
 				mu.Lock()
-				relevantModules = append(relevantModules, modRoot)
+				result[modRoot] = relPkgs
 				mu.Unlock()
 			}
 			return nil
@@ -321,38 +334,59 @@ func findModulesWithSchemaMarkers(ctx context.Context, marker string, modRoots [
 		return nil, err
 	}
 
-	return relevantModules, nil
+	return result, nil
 }
 
-// moduleHasSchemaMarkers checks if a module contains any files with schema markers
-func moduleHasSchemaMarkers(ctx context.Context, modRoot, marker string) (bool, error) {
-	// Use go list to discover all packages (much faster than file walking)
-	cfg := &packages.Config{
-		Context: ctx,
-		Dir:     modRoot,
-		Tests:   false,
-		Mode:    packages.NeedFiles, // Only need file paths
-	}
+// walkModuleForMarkers walks a module directory tree and returns relative package
+// patterns (e.g. "./spec/v1") for directories containing Go files with the marker.
+func walkModuleForMarkers(modRoot, marker string) ([]string, error) {
+	seen := map[string]struct{}{}
+	var relPkgs []string
 
-	allPkgs, err := packages.Load(cfg, "./...")
-	if err != nil {
-		return false, err
-	}
-
-	for _, pkg := range allPkgs {
-		// Check if any Go files in this package contain schema markers
-		for _, goFile := range pkg.GoFiles {
-			found, err := fileContainsSchemaMarker(goFile, marker)
-			if err != nil {
-				continue // skip files we can't read
-			}
-			if found {
-				return true, nil
-			}
+	err := filepath.WalkDir(modRoot, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
+		if d.IsDir() {
+			// Skip directories the Go tool ignores: vendor, testdata, hidden, underscore-prefixed
+			name := d.Name()
+			if name == "vendor" || name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(p, ".go") {
+			return nil
+		}
+		name := d.Name()
+		// Skip test files and generated files — they don't contain source markers
+		if strings.HasSuffix(name, "_test.go") || strings.HasPrefix(name, "zz_generated") {
+			return nil
+		}
+
+		dir := filepath.Dir(p)
+		if _, ok := seen[dir]; ok {
+			return nil
+		}
+
+		found, err := fileContainsSchemaMarker(p, marker)
+		if err != nil || !found {
+			return nil //nolint:nilerr // skip unreadable files
+		}
+		seen[dir] = struct{}{}
+
+		rel, err := filepath.Rel(modRoot, dir)
+		if err != nil {
+			return err
+		}
+		relPkgs = append(relPkgs, "./"+filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	return false, nil
+	return relPkgs, nil
 }
 
 // fileContainsSchemaMarker quickly checks if a Go file contains the schema marker

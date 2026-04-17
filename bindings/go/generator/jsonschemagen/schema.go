@@ -168,9 +168,19 @@ func (g *generation) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo, field 
 	case *ast.StarExpr:
 		return g.schemaForExpr(t.X, ctx, field)
 	case *ast.ArrayType:
+		itemSchema := g.schemaForExpr(t.Elt, ctx, field)
+		// Pointer element types (e.g. []*File) allow null items in JSON.
+		if _, isPtr := t.Elt.(*ast.StarExpr); isPtr {
+			itemSchema = &JSONSchemaDraft202012{
+				OneOf: []*JSONSchemaDraft202012{
+					itemSchema,
+					{Type: "null"},
+				},
+			}
+		}
 		return &JSONSchemaDraft202012{
 			Type:  "array",
-			Items: g.schemaForExpr(t.Elt, ctx, field),
+			Items: itemSchema,
 		}
 	case *ast.MapType:
 		return &JSONSchemaDraft202012{

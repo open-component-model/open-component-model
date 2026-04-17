@@ -249,6 +249,17 @@
                     "type": "boolean"
                 }
             }
+        },
+        "webhook": {
+            "type": "object",
+            "properties": {
+                "certSecret": {
+                    "type": "string"
+                },
+                "enable": {
+                    "type": "boolean"
+                }
+            }
         }
     }
 }
