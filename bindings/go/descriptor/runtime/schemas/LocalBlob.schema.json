@@ -23,7 +23,23 @@
       "description": "ReferenceName is an optional static name the object should be\nuse in a local repository context. It is use by a repository\nto optionally determine a globally referenceable access according\nto the OCI distribution spec. The result will be stored\nby the repository in the field ImageReference.\nThe value is typically an OCI repository name optionally\nfollowed by a colon ':' and a tag"
     },
     "type": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
+      "oneOf": [
+        {
+          "const": "LocalBlob/v1"
+        },
+        {
+          "const": "localBlob/v1"
+        },
+        {
+          "deprecated": true,
+          "const": "LocalBlob"
+        },
+        {
+          "deprecated": true,
+          "const": "localBlob"
+        }
+      ]
     }
   },
   "required": [
