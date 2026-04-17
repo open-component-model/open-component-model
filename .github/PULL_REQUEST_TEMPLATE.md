@@ -35,5 +35,8 @@ ocm transfer xxx
 
 ##### Verification
 
+- [ ] I have added/updated tests for my changes (see [Test Requirements](../CONTRIBUTING.md#test-requirements))
+- [ ] Tests pass locally (`task test` and `task test/integration` if applicable)
+- [ ] If touching multiple modules, `go work` is enabled (see `go.work`)
+- [ ] My changes do not decrease test coverage
 - [ ] I have tested the changes locally by running `ocm`
-  
