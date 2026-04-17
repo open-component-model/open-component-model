@@ -27,14 +27,16 @@ actively developed. Please direct new contributions to the mono-repo above.
 
 ## Finding Things to Work On
 
-Not sure where to start? Here are some ways to find work:
+Not sure where to start? Most issues are tracked centrally in the
+[ocm-project](https://github.com/open-component-model/ocm-project/issues) repository. Each repository also contains
+issues specific to that repository. Here are some ways to find work:
 
 - **Good first issues** - Look for issues labeled
   [`kind/good-first-issue`](https://github.com/search?q=org%3Aopen-component-model+label%3A%22kind%2Fgood-first-issue%22+state%3Aopen&type=issues)
   across our repositories. These are specifically chosen to be approachable for newcomers.
 - **Bug reports** - Browse open issues and help fix bugs.
-- **Documentation** - Improvements to documentation are always welcome. See the
-  [documentation contribution guidelines](https://github.com/open-component-model/open-component-model/blob/main/website/CONTRIBUTING.md)
+- **Documentation** - Improvements to documentation are always welcome. If you want to contribute to this website, see
+  the [website contribution guidelines](https://github.com/open-component-model/open-component-model/blob/main/website/CONTRIBUTING.md)
   for guidance on structure and style.
 - **Feature ideas** - If you have an idea for a new feature, open an issue first to discuss it with the maintainers
   before investing time in an implementation.
