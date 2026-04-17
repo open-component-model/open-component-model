@@ -144,25 +144,20 @@ extract_stable_version() {
 
 # Find version from Github metadata
 get_release_version() {
-    if [[ -n "${OCM_VERSION:-}" ]]; then
-        METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${TAG_PREFIX}v${OCM_VERSION}"
-        info "Downloading metadata ${METADATA_URL}"
-        download "${TMP_METADATA}" "${METADATA_URL}"
-        VERSION_OCM="${OCM_VERSION}"
-    else
+    if [[ -z "${OCM_VERSION:-}" ]]; then
         # Use the list endpoint so we can filter by TAG_PREFIX; /releases/latest may
         # point to a non-CLI release (e.g. a website or docs tag published more recently).
         # Paginate with per_page=100 because non-CLI releases can push CLI tags off page 1.
         local page max_pages
         max_pages=10
-        VERSION_OCM=""
+        OCM_VERSION=""
         for (( page=1; page<=max_pages; page++ )); do
             METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100&page=${page}"
             info "Downloading metadata ${METADATA_URL}"
             download "${TMP_METADATA}" "${METADATA_URL}"
 
-            VERSION_OCM=$(extract_stable_version "${TMP_METADATA}")
-            if [[ -n "${VERSION_OCM}" ]]; then
+            OCM_VERSION=$(extract_stable_version "${TMP_METADATA}")
+            if [[ -n "${OCM_VERSION}" ]]; then
                 break
             fi
 
@@ -172,8 +167,8 @@ get_release_version() {
         done
     fi
 
-    if [[ -n "${VERSION_OCM}" ]]; then
-        info "Using ${VERSION_OCM} as release"
+    if [[ -n "${OCM_VERSION}" ]]; then
+        info "Using ${OCM_VERSION} as release"
     else
         fatal "Unable to determine release version"
     fi
@@ -199,7 +194,7 @@ download() {
 # Download binary from Github URL
 # Assets follow the naming scheme: ocm-{OS}-{ARCH} (no version, no archive)
 download_binary() {
-    BIN_URL="https://github.com/${GITHUB_REPO}/releases/download/${TAG_PREFIX}v${VERSION_OCM}/ocm-${OS}-${ARCH}"
+    BIN_URL="https://github.com/${GITHUB_REPO}/releases/download/${TAG_PREFIX}v${OCM_VERSION}/ocm-${OS}-${ARCH}"
     info "Downloading binary ${BIN_URL}"
     download "${TMP_BIN}" "${BIN_URL}"
 }
@@ -261,5 +256,5 @@ if [[ -z "${BASH_SOURCE[0]:-}" ]] || [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     ensure_bin_dir
     setup_binary
     ensure_path
-    info "OCM CLI v${VERSION_OCM} installed successfully"
+    info "OCM CLI v${OCM_VERSION} installed successfully"
 fi

@@ -48,7 +48,7 @@ FIXTURE
 
     unset OCM_VERSION 2>/dev/null || true
     get_release_version >/dev/null 2>&1
-    assert_equals "picks stable 0.3.0 from mixed releases" "0.3.0" "${VERSION_OCM}"
+    assert_equals "picks stable 0.3.0 from mixed releases" "0.3.0" "${OCM_VERSION}"
     rm -r "${tmpdir}"
 }
 
@@ -72,7 +72,7 @@ FIXTURE
 
     unset OCM_VERSION 2>/dev/null || true
     get_release_version >/dev/null 2>&1
-    assert_equals "skips rc tags, picks 0.3.0" "0.3.0" "${VERSION_OCM}"
+    assert_equals "skips rc tags, picks 0.3.0" "0.3.0" "${OCM_VERSION}"
     rm -r "${tmpdir}"
 }
 
@@ -93,44 +93,26 @@ FIXTURE
 
     unset OCM_VERSION 2>/dev/null || true
     get_release_version >/dev/null 2>&1
-    assert_equals "ignores non-cli tags, picks 0.5.0" "0.5.0" "${VERSION_OCM}"
+    assert_equals "ignores non-cli tags, picks 0.5.0" "0.5.0" "${OCM_VERSION}"
     rm -r "${tmpdir}"
 }
 
 test_explicit_ocm_version() {
     echo "--- explicit OCM_VERSION ---"
-    local tmpdir
-    tmpdir=$(mktemp -d)
-    TMP_METADATA="${tmpdir}/ocm.json"
-
-    download() { cat > "$1" <<'FIXTURE'
-{"tag_name": "cli/v1.2.3", "other": "data"}
-FIXTURE
-    }
 
     OCM_VERSION="1.2.3"
     get_release_version >/dev/null 2>&1
-    assert_equals "uses explicit version 1.2.3" "1.2.3" "${VERSION_OCM}"
+    assert_equals "uses explicit version 1.2.3" "1.2.3" "${OCM_VERSION}"
     unset OCM_VERSION
-    rm -r "${tmpdir}"
 }
 
 test_explicit_prerelease_ocm_version() {
     echo "--- explicit pre-release OCM_VERSION ---"
-    local tmpdir
-    tmpdir=$(mktemp -d)
-    TMP_METADATA="${tmpdir}/ocm.json"
-
-    download() { cat > "$1" <<'FIXTURE'
-{"tag_name": "cli/v0.4.0-rc.2", "other": "data"}
-FIXTURE
-    }
 
     OCM_VERSION="0.4.0-rc.2"
     get_release_version >/dev/null 2>&1
-    assert_equals "allows explicit pre-release 0.4.0-rc.2" "0.4.0-rc.2" "${VERSION_OCM}"
+    assert_equals "allows explicit pre-release 0.4.0-rc.2" "0.4.0-rc.2" "${OCM_VERSION}"
     unset OCM_VERSION
-    rm -r "${tmpdir}"
 }
 
 # ---------------------------------------------------------------------------
@@ -235,7 +217,7 @@ FIXTURE
 
     unset OCM_VERSION 2>/dev/null || true
     get_release_version >/dev/null 2>&1
-    assert_equals "single release -> 1.0.0" "1.0.0" "${VERSION_OCM}"
+    assert_equals "single release -> 1.0.0" "1.0.0" "${OCM_VERSION}"
     rm -r "${tmpdir}"
 }
 
@@ -278,7 +260,7 @@ FIXTURE
 
     unset OCM_VERSION 2>/dev/null || true
     get_release_version >/dev/null 2>&1
-    assert_equals "finds 0.3.0 on page 2" "0.3.0" "${VERSION_OCM}"
+    assert_equals "finds 0.3.0 on page 2" "0.3.0" "${OCM_VERSION}"
     rm -r "${tmpdir}"
 }
 
