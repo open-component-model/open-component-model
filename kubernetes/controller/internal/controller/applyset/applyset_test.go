@@ -176,7 +176,7 @@ func TestApply_BasicSSA(t *testing.T) {
 				ParentNamespace: "default",
 			}, parent)
 
-			result, _, err := applier.Apply(ctx, tt.resources, ApplyMode{})
+			result, err := applier.Apply(ctx, tt.resources, ApplyMode{})
 			if err != nil {
 				t.Fatalf("Apply() error = %v", err)
 			}
@@ -211,7 +211,7 @@ func TestApply_MembershipLabels(t *testing.T) {
 		{ID: "cm1", Object: newConfigMap("cm1", "default")},
 	}
 
-	result, _, err := applier.Apply(ctx, resources, ApplyMode{})
+	result, err := applier.Apply(ctx, resources, ApplyMode{})
 	if err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
@@ -273,7 +273,7 @@ func TestApply_ChangeDetection(t *testing.T) {
 				{ID: "cm1", Object: newConfigMap("cm1", "default"), CurrentRevision: tt.currentRevision},
 			}
 
-			result, _, err := applier.Apply(ctx, resources, ApplyMode{})
+			result, err := applier.Apply(ctx, resources, ApplyMode{})
 			if err != nil {
 				t.Fatalf("Apply() error = %v", err)
 			}
@@ -358,7 +358,7 @@ func TestPrune(t *testing.T) {
 				ParentNamespace: "default",
 			}, parent)
 
-			result, _, err := applier.Apply(ctx, tt.resources, ApplyMode{})
+			result, err := applier.Apply(ctx, tt.resources, ApplyMode{})
 			if err != nil {
 				t.Fatalf("Apply() error = %v", err)
 			}
@@ -520,14 +520,9 @@ func TestPrune_ParentAnnotationsContributeToPruneScope(t *testing.T) {
 	}
 
 	// Apply first to get UIDs
-	result, batchMeta, err := applier.Apply(ctx, resources, ApplyMode{})
+	result, err := applier.Apply(ctx, resources, ApplyMode{})
 	if err != nil {
 		t.Fatalf("Apply() error = %v", err)
-	}
-
-	// Apply returns batch-only metadata
-	if batchMeta.GroupKinds.Len() != 1 {
-		t.Errorf("Apply() batchMeta.GroupKinds has %d items, want 1 (batch only)", batchMeta.GroupKinds.Len())
 	}
 
 	// Prune with scope from Project()
@@ -549,11 +544,10 @@ func TestPrune_ParentAnnotationsContributeToPruneScope(t *testing.T) {
 	}
 }
 
-func TestApply_ReturnsBatchOnlyMetadata(t *testing.T) {
-	ctx := context.Background()
+func TestProject_ReturnsUnionMetadata(t *testing.T) {
 	mapper := newTestRESTMapper()
 
-	// Parent with existing annotations
+	// Parent with existing annotations (memory from previous reconcile that had Secret)
 	parent := &testParent{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-instance",
@@ -576,30 +570,35 @@ func TestApply_ReturnsBatchOnlyMetadata(t *testing.T) {
 		ParentNamespace: "default",
 	}, parent)
 
+	// Current batch only has ConfigMap
 	resources := []Resource{
 		{ID: "cm1", Object: newConfigMap("cm1", "default")},
 	}
 
-	_, batchMeta, err := applier.Apply(ctx, resources, ApplyMode{})
-	if err != nil {
-		t.Fatalf("Apply() error = %v", err)
-	}
-
-	// Batch metadata should only have current batch GKs
-	if batchMeta.GroupKinds.Len() != 1 {
-		t.Errorf("Apply() batchMeta.GroupKinds has %d items, want 1", batchMeta.GroupKinds.Len())
-	}
-	if !batchMeta.GroupKinds.Has(schema.GroupKind{Kind: "ConfigMap"}) {
-		t.Error("batchMeta.GroupKinds should have ConfigMap")
-	}
-
-	// Project() returns union
+	// Project() returns union of batch + parent memory
 	unionMeta, err := applier.Project(resources)
 	if err != nil {
 		t.Fatalf("Project() error = %v", err)
 	}
 	if unionMeta.GroupKinds.Len() != 2 {
-		t.Errorf("Project() unionMeta.GroupKinds has %d items, want 2", unionMeta.GroupKinds.Len())
+		t.Errorf("Project() unionMeta.GroupKinds has %d items, want 2 (ConfigMap from batch + Secret from parent)", unionMeta.GroupKinds.Len())
+	}
+	if !unionMeta.GroupKinds.Has(schema.GroupKind{Kind: "ConfigMap"}) {
+		t.Error("unionMeta.GroupKinds should have ConfigMap (from current batch)")
+	}
+	if !unionMeta.GroupKinds.Has(schema.GroupKind{Kind: "Secret"}) {
+		t.Error("unionMeta.GroupKinds should have Secret (from parent memory)")
+	}
+
+	// PruneScope includes both GKs so prune can find orphaned Secrets
+	scope := unionMeta.PruneScope()
+	if !scope.GroupKinds.Has(schema.GroupKind{Kind: "Secret"}) {
+		t.Error("PruneScope should include Secret from parent memory to find orphans")
+	}
+
+	// PruneScope includes namespaces from parent annotation so prune searches old-ns
+	if !scope.Namespaces.Has("old-ns") {
+		t.Errorf("PruneScope.Namespaces should include old-ns from parent memory, got %v", scope.Namespaces.UnsortedList())
 	}
 }
 
@@ -643,7 +642,7 @@ func TestPrune_ClusterScopedResource(t *testing.T) {
 		{ID: "cm1", Object: newConfigMap("cm1", "default")},
 	}
 
-	result, _, err := applier.Apply(ctx, resources, ApplyMode{})
+	result, err := applier.Apply(ctx, resources, ApplyMode{})
 	if err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
@@ -1051,7 +1050,7 @@ func TestApply_ConflictDetection(t *testing.T) {
 				{ID: "cm1", Object: newConfigMap("cm1", "default")},
 			}
 
-			result, _, err := applier.Apply(ctx, resources, ApplyMode{})
+			result, err := applier.Apply(ctx, resources, ApplyMode{})
 			if err != nil {
 				t.Fatalf("Apply() error = %v", err)
 			}
@@ -1136,7 +1135,7 @@ func TestApply_ConflictDetection_ListFailure(t *testing.T) {
 		{ID: "cm1", Object: newConfigMap("cm1", "default")},
 	}
 
-	_, _, err := applier.Apply(ctx, resources, ApplyMode{})
+	_, err := applier.Apply(ctx, resources, ApplyMode{})
 	if err == nil {
 		t.Fatal("Apply() expected error from failed LIST, got nil")
 	}
@@ -1189,7 +1188,7 @@ func TestApply_ConflictDetection_MultiGVK(t *testing.T) {
 		{ID: "secret1", Object: newSecret("secret1", "default")},
 	}
 
-	result, _, err := applier.Apply(ctx, resources, ApplyMode{})
+	result, err := applier.Apply(ctx, resources, ApplyMode{})
 	if err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
