@@ -213,6 +213,7 @@ docker's
 dockerconfig
 dockerconfigjson
 dockermulti
+Doks
 downgradable
 downloadconstraint
 downloader
@@ -712,6 +713,7 @@ terraform
 testdata
 Testcontainers
 tgz
+Thulite
 timeframes
 tls
 toc
