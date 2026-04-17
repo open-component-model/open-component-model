@@ -20,7 +20,7 @@ Transfer a signed component version from a source registry into an air-gapped ta
 
 - [OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) installed
 - A signed component version in a source registry or CTF archive
-- The public key used to sign the component version, configured in `.ocmconfig` (see [Signing and Verification]({{< relref "docs/tutorials/signing-and-verification.md" >}}) for setup)
+- The public key used to sign the component version, configured in `.ocmconfig` (see [Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}}) for setup)
 - Write access to the target registry in the air-gapped environment
 
 ## Steps
@@ -30,7 +30,7 @@ Transfer a signed component version from a source registry into an air-gapped ta
 
 ### Verify the source component
 
-Confirm integrity and provenance before transferring. The OCM CLI resolves verification credentials from your [`.ocmconfig`]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) automatically. For background on how signing works, see [Signing and Verification]({{< relref "docs/tutorials/signing-and-verification.md" >}}).
+Confirm integrity and provenance before transferring. The OCM CLI resolves verification credentials from your [`.ocmconfig`]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) automatically. For background on how signing works, see [Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}}).
 
 ```bash
 ocm verify cv <source-repository>//<component-name>:<version>
@@ -42,7 +42,7 @@ To verify a specific signature by name:
 ocm verify cv --signature <signature-name> <source-repository>//<component-name>:<version>
 ```
 
-You should see: `SIGNATURE VERIFICATION SUCCESSFUL` and exit code `0`. For detailed verification options, see [Signing and Verification]({{< relref "docs/tutorials/signing-and-verification.md" >}}).
+You should see: `SIGNATURE VERIFICATION SUCCESSFUL` and exit code `0`. For detailed verification options, see [Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}}).
 
 > **Tip: CTF as source**
 >
@@ -155,7 +155,7 @@ If you encounter authentication or credential errors during transfer or verifica
 see [Credentials in .ocmconfig]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}).
 
 If signature verification fails after transfer, ensure the public key in your `.ocmconfig` matches the key used to sign the component.
-See [Signing and Verification]({{< relref "docs/tutorials/signing-and-verification.md" >}}).
+See [Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}}).
 
 ## Cleanup
 
@@ -176,4 +176,4 @@ Only delete the archive after you have verified the component in the target regi
 ## Related Documentation
 
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - Understand the transfer model, resource handling, and signature preservation
-- [Tutorial: Signing and Verification]({{< relref "docs/tutorials/signing-and-verification.md" >}}) - Learn how to sign and verify component versions
+- [Tutorial: Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}}) - Learn how to sign and verify component versions

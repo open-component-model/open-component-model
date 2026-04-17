@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	"ocm.software/open-component-model/bindings/go/runtime"
 

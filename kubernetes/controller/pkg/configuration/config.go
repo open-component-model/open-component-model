@@ -1,5 +1,3 @@
-// Package configuration provides functionality to load and manage OCM configurations
-// from Kubernetes resources (Secrets and ConfigMaps).
 package configuration
 
 import (

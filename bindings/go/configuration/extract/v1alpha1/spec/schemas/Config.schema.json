@@ -124,7 +124,14 @@
           "type": "array",
           "description": "LayerSelectors defines multiple selection criteria for layers to include in this file.\nLayers matching any of these selectors will be included.",
           "items": {
-            "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.extract.v1alpha1.spec.LayerSelector"
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.extract.v1alpha1.spec.LayerSelector"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
