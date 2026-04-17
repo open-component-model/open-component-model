@@ -75,7 +75,7 @@ type PruneOptions struct {
 	// KeepUIDs are UIDs of resources that should NOT be pruned.
 	// Typically from ApplyResult.ObservedUIDs().
 	KeepUIDs sets.Set[types.UID]
-	// Scope defines GKs and namespaces to prune from (required).
+	// Scope defines GKs and namespaces to prune from.
 	// Use Metadata.PruneScope() to get the scope from Project() output.
 	// Pass the superset scope (union of batch + parent) to ensure
 	// prune finds all orphans.
@@ -335,14 +335,17 @@ func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMo
 
 // Prune deletes orphaned resources (those with applyset label but not in KeepUIDs).
 func (a *ApplySet) Prune(ctx context.Context, opts PruneOptions) (*PruneResult, error) {
-	if opts.Scope == nil {
-		return nil, fmt.Errorf("prune scope is required")
+	var scopeGKs sets.Set[schema.GroupKind]
+	var scopeNamespaces sets.Set[string]
+	if opts.Scope != nil {
+		scopeGKs = opts.Scope.GroupKinds
+		scopeNamespaces = opts.Scope.Namespaces.Clone()
 	}
 
-	scopeGKs := opts.Scope.GroupKinds
-
 	// Always include parent namespace in prune scope
-	scopeNamespaces := opts.Scope.Namespaces.Clone()
+	if scopeNamespaces == nil {
+		scopeNamespaces = sets.New[string]()
+	}
 	if a.parentNamespace != "" {
 		scopeNamespaces.Insert(a.parentNamespace)
 	} else {
