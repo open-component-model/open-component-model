@@ -54,6 +54,7 @@ task kubernetes/controller:test
 ```
 
 This command:
+
 1. Generates CRD manifests and Go code (if needed).
 2. Downloads envtest binaries for the configured Kubernetes version.
 3. Runs all tests except those in `test/e2e/`.
