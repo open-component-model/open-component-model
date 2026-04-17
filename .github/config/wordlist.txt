@@ -14,6 +14,7 @@ GetHelmChart
 GetOCIArtifact
 GmbH
 KEP
+LLM
 OCIAddComponentVersion
 OCIAddLocalResource
 OCIGetComponentVersion
@@ -21,6 +22,7 @@ Preact
 RGD's
 ResourceGraphDefinitions
 Taskfiles
+Testcontainers
 Testcontainers
 TransformationGraphDefinition
 accessTypes
@@ -186,13 +188,13 @@ deduplication
 deepcopy
 deepdive
 defs
-deps
 deliveryspec
 dependabot
 deployable
 deployer
 deployers
 deployscript
+deps
 descriptor's
 deserializable
 deserialization
@@ -203,8 +205,8 @@ dev
 devops
 diataxis
 digesters
-dirs
 directorytree
+dirs
 dirtree
 dl
 dn
@@ -517,14 +519,15 @@ os
 ospo
 oss
 outputspecification
+overexplain
 overriden
 overwritable
 packageidentifier
 packagename
 packagespec
 packageversion
-parameterization
 parallelize
+parameterization
 patchstrategicmerge
 patchstrategicmergesource
 patchstrategicmergetarget
@@ -687,8 +690,8 @@ subfolders
 subheadline
 subpath
 subpaths
-subprocesses
 subprocess
+subprocesses
 subresource
 subsitution
 subst
@@ -710,7 +713,6 @@ templaters
 templating
 terraform
 testdata
-Testcontainers
 tgz
 timeframes
 tls
@@ -756,11 +758,13 @@ utf
 util
 utils
 uwe
+ux
 valuemergehandler
 valuemergehandlerdescriptor
 valueset
 valuesfrom
 valuessource
+variadic
 verifier
 verifiers
 versionable
@@ -793,4 +797,3 @@ zot
 zsh
 zshrc
 zulip
-ux
