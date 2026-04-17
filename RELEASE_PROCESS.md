@@ -348,3 +348,23 @@ If a release needs to be retracted due to critical bugs or security issues:
 
 The OCI image tags remain available in GHCR for users who have pinned to the specific version,
 but the retraction notice guides new users to the replacement release.
+
+## Verifying release tags
+
+All release tags are GPG-signed. To verify a tag:
+
+1. Import the public signing key:
+   ```bash
+   gpg --import website/static/gpg/OCM-RELEASES-PUBLIC-CURRENT.gpg
+   ```
+   Or fetch it directly from the repository:
+   ```bash
+   curl -sSL https://raw.githubusercontent.com/open-component-model/open-component-model/main/website/static/gpg/OCM-RELEASES-PUBLIC-CURRENT.gpg | gpg --import
+   ```
+
+2. Verify a tag:
+   ```bash
+   git tag -v cli/v0.1.0
+   ```
+
+The signing key fingerprint is `36BDEEDF40C1A3077DE4A9D9F11241A047C49B13`.

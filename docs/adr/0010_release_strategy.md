@@ -162,7 +162,16 @@ git describe --tags --match "cli/v[0-9]*"
 
 #### GPG-signed tags
 
-All release tags (RC and final) are GPG-signed (`git tag -s`) to satisfy the OpenSSF Best Practices `version_tags_signed` criterion. The release workflows import a GPG key from repository secrets (`GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`) using [crazy-max/ghaction-import-gpg](https://github.com/crazy-max/ghaction-import-gpg) before creating any tag.
+All release tags (RC and final) are GPG-signed (`git tag -s`) to satisfy the OpenSSF Best Practices `version_tags_signed` criterion. The release workflows import a GPG key from org-level secrets (`GPG_PRIVATE_KEY_FOR_SIGNING`, `GPG_PASSPHRASE`) using [crazy-max/ghaction-import-gpg](https://github.com/crazy-max/ghaction-import-gpg) before creating any tag.
+
+The corresponding public key is stored at `website/static/gpg/OCM-RELEASES-PUBLIC-CURRENT.gpg` and can be used to verify tags locally:
+
+```bash
+gpg --import website/static/gpg/OCM-RELEASES-PUBLIC-CURRENT.gpg
+git tag -v <tag>
+```
+
+> **TODO:** Consider removing the key expiry (currently 2028-11-10) and relying on a stored revocation certificate instead. For smaller projects like OCM, a non-expiring key with a revocation certificate is simpler operationally and avoids user-facing breakage — e.g., Kubernetes' Nov 2024 incident where an expired package-signing key broke apt/yum installs for all users worldwide. The revocation certificate and private key are stored in the team password vault.
 
 ### Rollback & Immutability Policy
 
