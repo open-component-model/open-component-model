@@ -12,7 +12,7 @@ import (
 
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/input"
-	v1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	v1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -33,7 +33,7 @@ func TestInputMethodGetResourceCredentialConsumerIdentity(t *testing.T) {
 				},
 				Path: "/path/to/local/chart",
 			},
-			expectError:    true, // Should return ErrLocalHelmInputDoesNotRequireCredentials
+			expectError:    false, // Local inputs return nil, nil — no credentials needed
 			expectIdentity: false,
 		},
 		{

@@ -10,7 +10,7 @@ import (
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	helmv1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
@@ -169,6 +169,8 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	slog.DebugContext(ctx, "building transformations for discovered components",
 		"components", len(d.Vertices))
 
+	var allFileRefs []string
+
 	for key, v := range d.Vertices {
 		val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
 		component := val.Descriptor.Component.Name
@@ -205,33 +207,39 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				"targetIndex", targetIdx, "targetType", fmt.Sprintf("%T", target),
 				"transformID", id)
 
-			resourceTransformIDs, err := processResources(ctx, v2desc, id, val, tgd, target, copyMode, uploadType)
+			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, id, val, tgd, target, copyMode, uploadType)
 			if err != nil {
 				return err
 			}
+			allFileRefs = append(allFileRefs, fileRefs...)
 
 			if err := addUploadTransformation(v2desc, id, baseID, target, tgd, resourceTransformIDs); err != nil {
 				return err
 			}
 		}
 	}
+
+	addFileCleanupTransformation(tgd, allFileRefs)
+
 	return nil
 }
 
 // processResources iterates over resources in a v2 descriptor and creates the appropriate
 // get/add transformation pairs based on access type, copy mode, and upload type.
-func processResources(ctx context.Context, v2desc *descriptorv2.Descriptor, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, copyMode int, uploadType int) (map[int]string, error) {
+// It returns CEL spec-field expressions for all Get transformations that buffer content to disk.
+func processResources(ctx context.Context, v2desc *descriptorv2.Descriptor, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, copyMode int, uploadType int) (map[int]string, []string, error) {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 	resourceTransformIDs := make(map[int]string)
+	var fileExpressions []string
 
 	for i, resource := range v2desc.Component.Resources {
 		access, err := scheme.NewObject(resource.Access.Type)
 		if err != nil {
-			return nil, fmt.Errorf("cannot create new object for resource access type %q: %w", resource.Access.Type.String(), err)
+			return nil, nil, fmt.Errorf("cannot create new object for resource access type %q: %w", resource.Access.Type.String(), err)
 		}
 		if err := scheme.Convert(resource.Access, access); err != nil {
-			return nil, fmt.Errorf("cannot convert resource access to typed object: %w", err)
+			return nil, nil, fmt.Errorf("cannot convert resource access to typed object: %w", err)
 		}
 
 		if copyMode == CopyModeLocalBlobResources && !descriptorv2.IsLocalBlob(access) {
@@ -239,11 +247,13 @@ func processResources(ctx context.Context, v2desc *descriptorv2.Descriptor, id s
 			continue
 		}
 
-		if err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i, uploadType); err != nil {
-			return nil, err
+		exprs, err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i, uploadType)
+		if err != nil {
+			return nil, nil, err
 		}
+		fileExpressions = append(fileExpressions, exprs...)
 	}
-	return resourceTransformIDs, nil
+	return resourceTransformIDs, fileExpressions, nil
 }
 
 func logSkippedResource(ctx context.Context, component, version string, resource descriptorv2.Resource, copyMode, uploadType int) {
@@ -265,30 +275,45 @@ func logSkippedResource(ctx context.Context, component, version string, resource
 // transformation (uploading it to the target). The uploadType and target type determine whether
 // resources are stored as local blobs or separate OCI artifacts (including Helm charts) in the
 // target repository.
-func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType int) error {
+// It returns CEL spec-field expressions for the file buffers produced, referencing consumer spec
+// fields (not producer outputs) so the DAG edge points from consumer to the cleanup node.
+func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType int) ([]string, error) {
 	_, isOCITarget := toSpec.(*oci.Repository)
 	uploadAsArtifact := isOCITarget && uploadType == UploadAsOciArtifact
+
+	resourceIdentity := resource.ToIdentity()
+	resourceID := identityToTransformationID(resourceIdentity)
+	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 
 	switch acc := access.(type) {
 	case *descriptorv2.LocalBlob:
 		shouldUpload := uploadAsArtifact && isOCICompliantManifest(acc.MediaType) && acc.ReferenceName != ""
 		if err := processLocalBlob(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i, shouldUpload); err != nil {
-			return fmt.Errorf("failed processing local blob resource: %w", err)
+			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
 		}
+		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *ociv1.OCIImage:
 		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
-			return fmt.Errorf("cannot process OCI artifact resource: %w", err)
+			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
 		}
+		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *helmv1.Helm:
+		convertResourceID := fmt.Sprintf("%sConvert%s", id, resourceID)
 		if err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
-			return fmt.Errorf("cannot process Helm Chart resource: %w", err)
+			return nil, fmt.Errorf("cannot process Helm Chart resource: %w", err)
 		}
+		return []string{
+			fmt.Sprintf("${%s.spec.chartFile}", convertResourceID),
+			// provFile is optional; cleanup transformer skips empty URIs.
+			fmt.Sprintf("${%s.spec.?provFile}", convertResourceID),
+			fmt.Sprintf("${%s.spec.file}", addResourceID),
+		}, nil
 	default:
 		slog.Info("Unsupported resource access type, skipping resource. Only local blob, OCI artifact, and Helm chart resources are supported for transformation.",
 			"component", val.Descriptor.Component.Name, "version", val.Descriptor.Component.Version,
 			"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 	}
-	return nil
+	return nil, nil
 }
 
 // addDescriptorToEnvironment marshals the v2 descriptor and adds it to the graph environment.

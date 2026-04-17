@@ -3,7 +3,6 @@ package filesystem
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"path/filepath"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -33,28 +32,19 @@ func GetBlobFromSpec(ctx context.Context, spec runtime.Typed) (blob.ReadOnlyBlob
 		return nil, fmt.Errorf("cannot convert spec to File: %w", err)
 	}
 
-	parsed, err := url.Parse(file.URI)
+	path, err := FilePathFromURI(file.URI)
 	if err != nil {
-		return nil, fmt.Errorf("invalid URI: %w", err)
+		return nil, fmt.Errorf("invalid file URI: %w", err)
 	}
 
-	switch parsed.Scheme {
-	case "file":
-		path := parsed.Path
-		if path == "" {
-			return nil, fmt.Errorf("empty file path in URI")
-		}
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			return nil, fmt.Errorf("cannot resolve absolute path: %w", err)
-		}
-		return GetBlobFromPath(ctx, absPath, DirOptions{
-			MediaType:    file.MediaType,
-			Reproducible: true,
-		})
-	default:
-		return nil, fmt.Errorf("unsupported URI scheme: %s", parsed.Scheme)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("cannot resolve absolute path: %w", err)
 	}
+	return GetBlobFromPath(ctx, absPath, DirOptions{
+		MediaType:    file.MediaType,
+		Reproducible: true,
+	})
 }
 
 // BlobToSpec writes a blob to the filesystem and returns a File access specification.
