@@ -118,7 +118,7 @@ git commit -s -m "Brief description of your changes"
   commands rather than running tools directly, as they incorporate the correct versions and settings.
 - **Keep your branch up to date** - Merge the latest `main` into your branch before submitting to avoid merge
   conflicts. There is no need to rebase because we squash all commits when merging a pull request.
-- **Elaborate changes** - If you are planning significant or potentially controversial changes, please discuss them
+- **Discuss large changes** - If you are planning significant or potentially controversial changes, please discuss them
   with the maintainers first - either in a GitHub issue, on
   [Slack](https://kubernetes.slack.com/archives/C05UWBE8R1D), or in the
   [community call](/community/engagement#community-calls).
@@ -199,17 +199,6 @@ AI-generated code or content can be contributed to SAP Open Source Software proj
 - **Issues** - Browse existing [issues](https://github.com/open-component-model/ocm-project/issues) or
   open a new one.
 
-## Code of Conduct
-
-We want OCM to be a welcoming and harassment-free experience for everyone. All participants are expected to follow the
-[NeoNephos Code of Conduct](https://github.com/neonephos/.github/blob/main/CODE_OF_CONDUCT.md).
-
-## License
-
-The Open Component Model is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). By
-contributing to any repository in the organization, you agree that your contributions will be licensed under the same
-license.
-
 ## Reporting Security Vulnerabilities
 
 {{<callout context="danger" title="Do not open a public issue for security vulnerabilities" icon="outline/alert-triangle">}}
@@ -219,3 +208,14 @@ instead of opening a public issue. Each repository in the organization has this 
 **Security** tab of the affected repository to submit a report. This allows maintainers to assess and address the issue
 before it is disclosed publicly.
 {{</callout>}}
+
+## License
+
+The Open Component Model is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). By
+contributing to any repository in the organization, you agree that your contributions will be licensed under the same
+license.
+
+## Code of Conduct
+
+We want OCM to be a welcoming and harassment-free experience for everyone. All participants are expected to follow the
+[NeoNephos Code of Conduct](https://github.com/neonephos/.github/blob/main/CODE_OF_CONDUCT.md).
