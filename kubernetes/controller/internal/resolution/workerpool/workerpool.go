@@ -95,6 +95,9 @@ type PoolOptions struct {
 	WorkerCount int
 	// QueueSize is the size of the work queue buffer.
 	QueueSize int
+	// SubscriberBufferSize is the buffer size for each subscriber's event channel.
+	// A larger buffer reduces the probability of dropped events under load.
+	SubscriberBufferSize int
 	// Logger for the worker pool.
 	Logger *logr.Logger
 	// Client for Kubernetes API access.
@@ -129,6 +132,10 @@ func NewWorkerPool(opts PoolOptions) *WorkerPool {
 		opts.QueueSize = 1000
 	}
 
+	if opts.SubscriberBufferSize <= 0 {
+		opts.SubscriberBufferSize = 10
+	}
+
 	return &WorkerPool{
 		PoolOptions: opts,
 		workQueue:   make(chan *WorkItem, opts.QueueSize),
@@ -146,7 +153,7 @@ func (wp *WorkerPool) Subscribe() <-chan []RequesterInfo {
 	wp.subscribersMu.Lock()
 	defer wp.subscribersMu.Unlock()
 
-	ch := make(chan []RequesterInfo, 100)
+	ch := make(chan []RequesterInfo, wp.SubscriberBufferSize)
 	wp.subscribers = append(wp.subscribers, ch)
 	return ch
 }

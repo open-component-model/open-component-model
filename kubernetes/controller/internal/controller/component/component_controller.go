@@ -33,7 +33,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
@@ -41,6 +40,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 // Reconciler reconciles a Component object.
@@ -297,14 +297,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	desc, err := cacheBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)
 	switch {
 	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes.
-		// RequeueAfter acts as a safety net in case the event notification is dropped (e.g. channel buffer full).
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.ResolutionInProgress, err.Error())
 		logger.Info("component version resolution in progress, waiting for event notification",
 			"component", component.Spec.Component,
 			"version", version)
 
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{}, nil
 	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 		// Ignore error, but log event
 		event.New(r.EventRecorder, component, nil, v1alpha1.EventSeverityError, err.Error())
