@@ -41,6 +41,18 @@ issues specific to that repository. Here are some ways to find work:
 - **Feature ideas** - If you have an idea for a new feature, open an issue first to discuss it with the maintainers
   before investing time in an implementation.
 
+### Writing a Good Issue
+
+A well-written issue helps maintainers understand and act on your report quickly. When filing a bug report, include:
+
+- A clear and descriptive title.
+- Steps to reproduce the problem.
+- What you expected to happen versus what actually happened.
+- Your environment (OS, Go version, OCM CLI version, Kubernetes version if applicable).
+
+For feature requests, describe the use case and the problem you are trying to solve rather than jumping straight to a
+proposed solution. This gives maintainers the context they need to evaluate the idea.
+
 ## How to Contribute
 
 We follow the standard GitHub fork-and-pull workflow. The steps below use the
@@ -132,6 +144,18 @@ Once you open a pull request, CI checks run automatically (linting, tests, CodeQ
 Maintainers will review your changes and may ask for adjustments - this is normal and part of the collaborative
 process. Once approved and all checks pass, a maintainer will merge your pull request.
 
+### What Reviewers Look For
+
+To help your pull request move through review smoothly, keep these points in mind:
+
+- **Tests** - New behavior should be covered by tests. Bug fixes should include a test that reproduces the issue.
+- **Focused changes** - Keep pull requests scoped to a single concern. Avoid mixing unrelated refactors or formatting
+  changes with functional work.
+- **Commit hygiene** - Write a clear PR title and description. There is no need to clean up individual commits because
+  we squash on merge, but the PR description should explain what changed and why.
+- **Backwards compatibility** - If your change affects a public API or CLI command, call it out in the PR description so
+  reviewers can evaluate the impact.
+
 ## Guideline for AI-Generated Code Contributions
 
 As artificial intelligence evolves, AI-generated code is becoming valuable for many software projects, including
@@ -178,3 +202,18 @@ AI-generated code or content can be contributed to SAP Open Source Software proj
 
 We want OCM to be a welcoming and harassment-free experience for everyone. All participants are expected to follow the
 [NeoNephos Code of Conduct](https://github.com/neonephos/.github/blob/main/CODE_OF_CONDUCT.md).
+
+## License
+
+The Open Component Model is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). By
+contributing to any repository in the organization, you agree that your contributions will be licensed under the same
+license.
+
+## Reporting Security Vulnerabilities
+
+{{<callout context="danger" title="Do not open a public issue for security vulnerabilities" icon="outline/alert-triangle">}}
+If you discover a security vulnerability, please report it responsibly through
+[GitHub's private vulnerability reporting](https://github.com/open-component-model/open-component-model/security/advisories/new)
+instead of opening a public issue. This allows maintainers to assess and address the issue before it is disclosed
+publicly.
+{{</callout>}}
