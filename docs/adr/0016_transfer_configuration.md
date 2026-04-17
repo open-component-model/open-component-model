@@ -275,11 +275,11 @@ every version bump.
 All `oci` fields are optional. When a field is omitted, the compiler
 resolves a default based on the source access type:
 
-| Field | Source: `ociImage` | Source: `localBlob` |
-|---|---|---|
-| `registry` | Transfer target registry | Transfer target registry |
-| `repository` | Original repository from source access | **Error** — local blobs have no repository; field is required |
-| `tag` | Original tag from source access | Resource version from the component descriptor |
+| Field | Source: `ociImage` | Source: `localBlob` | Source: `helm` |
+|---|---|---|---|
+| `registry` | Transfer target registry | Transfer target registry | Transfer target registry |
+| `repository` | Original repository from source access | **Error** — local blobs have no repository; field is required | **Error** — the Helm-to-OCI conversion (GetHelmChart → ConvertHelmToOCI → AddOCIArtifact) does not produce a default repository path; field is required |
+| `tag` | Original tag from source access | Resource version from the component descriptor | Chart version from the Helm chart metadata (available after GetHelmChart) |
 
 #### Resource Identity
 
@@ -318,6 +318,14 @@ matching or globbing.
   * `helm/v1` → GetHelmChart → ConvertHelmToOCI → AddOCIArtifact
   * `localBlob/v1` → Get → AddOCIArtifact
   * Unsupported source type → clear error
+* For `helm/v1` sources, the `repository` field is required because
+  the Helm-to-OCI conversion chain does not preserve a source
+  repository path — the original Helm chart reference (chart name +
+  repo URL) has no direct OCI repository equivalent. The `tag` field
+  defaults to the chart version from the Helm chart metadata, which
+  is available after the GetHelmChart step in the conversion chain.
+  The `registry` field follows the same default as all other source
+  types (the transfer target registry).
 * Resources not matched by any override entry fall through to the
   default behaviour (as determined by `--upload-as` / `--copy-resources`
   flags).
@@ -547,5 +555,11 @@ new typed config without modifying the existing ones.
   access type. The proposed defaults are practical but should be
   revisited once we have real usage feedback — particularly whether
   falling back to the resource version for `tag` on local blobs is the
-  right choice, and whether erroring on a missing `repository` for local
-  blobs is too strict.
+  right choice, whether erroring on a missing `repository` for local
+  blobs is too strict, and whether the Helm-specific defaults (chart
+  version for `tag`, required `repository`) hold up in practice. The
+  Helm defaults deserve special scrutiny before final implementation
+  because the chart version may diverge from the resource version, and
+  it is not yet clear whether requiring `repository` or providing a
+  convention-based fallback (e.g. derived from the chart name) is the
+  better UX.
