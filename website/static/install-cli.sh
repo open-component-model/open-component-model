@@ -145,10 +145,10 @@ get_release_version() {
     info "Downloading metadata ${METADATA_URL}"
     download "${TMP_METADATA}" "${METADATA_URL}"
 
-    # tag_name has the format "cli/v0.1.0" – strip the prefix and leading "v".
-    # When OCM_VERSION is unset the response is a JSON array; grep the first
-    # tag_name that starts with TAG_PREFIX to avoid picking a non-CLI release.
-    VERSION_OCM=$(grep '"tag_name":' "${TMP_METADATA}" | grep "\"${TAG_PREFIX}v" | head -1 | sed -E "s|.*\"${TAG_PREFIX}v([^\"]+)\".*|\1|")
+    # tag_name has the format "cli/v0.1.0" - strip the prefix and leading "v".
+    # When OCM_VERSION is unset the response is a JSON array; match only stable
+    # releases (exactly X.Y.Z, no -rc suffix) that start with TAG_PREFIX.
+    VERSION_OCM=$(grep '"tag_name":' "${TMP_METADATA}" | grep -E "\"${TAG_PREFIX}v[0-9]+\.[0-9]+\.[0-9]+\"" | head -1 | sed -E "s|.*\"${TAG_PREFIX}v([^\"]+)\".*|\1|")
     if [[ -n "${VERSION_OCM}" ]]; then
         info "Using ${VERSION_OCM} as release"
     else
@@ -217,8 +217,8 @@ setup_binary() {
     fi
 }
 
-# Run the install process
-{
+# Run the install process -- skip when sourced for testing.
+if [[ -z "${BASH_SOURCE[0]:-}" ]] || [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     case "${1:-}" in -h|--help) usage ;; esac
     setup_verify_os
     setup_verify_arch
@@ -231,4 +231,4 @@ setup_binary() {
     setup_binary
     ensure_path
     info "OCM CLI v${VERSION_OCM} installed successfully"
-}
+fi
