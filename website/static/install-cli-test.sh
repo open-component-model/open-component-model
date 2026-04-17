@@ -221,6 +221,65 @@ FIXTURE
 }
 
 # ---------------------------------------------------------------------------
+# Verification tests
+# ---------------------------------------------------------------------------
+
+test_verify_skips_when_gh_not_found() {
+    echo "--- verify_binary skips when gh not found ---"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    TMP_BIN="${tmpdir}/ocm"
+    echo "fake" > "${TMP_BIN}"
+
+    # Hide gh from PATH
+    command() { return 1; }
+
+    local output
+    output=$(verify_binary 2>&1)
+    local status=$?
+    assert_equals "verify_binary returns 0 when gh missing" "0" "${status}"
+
+    unset -f command
+    rm -r "${tmpdir}"
+}
+
+test_verify_skips_when_gh_not_authenticated() {
+    echo "--- verify_binary skips when gh not authenticated ---"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    TMP_BIN="${tmpdir}/ocm"
+    echo "fake" > "${TMP_BIN}"
+
+    # gh exists but is not authenticated
+    gh() { return 1; }
+
+    local output
+    output=$(verify_binary 2>&1)
+    local status=$?
+    assert_equals "verify_binary returns 0 when gh not authenticated" "0" "${status}"
+
+    unset -f gh
+    rm -r "${tmpdir}"
+}
+
+test_verify_skips_when_explicitly_disabled() {
+    echo "--- verify_binary skips when OCM_SKIP_VERIFY=true ---"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    TMP_BIN="${tmpdir}/ocm"
+    echo "fake" > "${TMP_BIN}"
+
+    OCM_SKIP_VERIFY="true"
+    local output
+    output=$(verify_binary 2>&1)
+    local status=$?
+    assert_equals "verify_binary returns 0 when skip set" "0" "${status}"
+
+    unset OCM_SKIP_VERIFY
+    rm -r "${tmpdir}"
+}
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -237,6 +296,9 @@ test_arch_detection
 test_only_prereleases_fatals
 test_empty_response_fatals
 test_single_stable_release
+test_verify_skips_when_gh_not_found
+test_verify_skips_when_gh_not_authenticated
+test_verify_skips_when_explicitly_disabled
 
 echo ""
 echo "========================================"

@@ -195,6 +195,15 @@ verify_binary() {
         warn "GitHub CLI (gh) not found. Skipping attestation verification."
         warn "To verify the binary, install gh: https://cli.github.com/"
         warn "Or set OCM_SKIP_VERIFY=true to suppress this warning."
+        error
+        return 0
+    fi
+
+    # Check if gh CLI is authenticated to github.com
+    if ! gh auth status --hostname github.com &> /dev/null; then
+        warn "GitHub CLI is not authenticated. Skipping attestation verification."
+        warn "To verify the binary, run: gh auth login"
+        warn "Or set OCM_SKIP_VERIFY=true to suppress this warning."
         return 0
     fi
 
