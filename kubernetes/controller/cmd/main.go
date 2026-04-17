@@ -111,7 +111,8 @@ func main() {
 	flag.IntVar(&resolverWorkerQueueLength, "resolver-worker-queue-length", 1000, //nolint:mnd // no magic number
 		"The maximum number of work items in the queue for the workers to pick up component versions to resolve from.")
 	flag.IntVar(&resolverSubscriberBuffer, "resolver-subscriber-buffer-size", 10, //nolint:mnd // no magic number
-		"The buffer size for each subscriber's event channel. A larger buffer reduces the probability of dropped resolution events under load.")
+		"The buffer size for each subscriber's event channel. A larger buffer reduces the probability of dropped resolution events under load. "+
+			"Tune upward if the resolver_event_channel_drops_total metric is non-zero.")
 
 	opts := zap.Options{
 		Development: true,

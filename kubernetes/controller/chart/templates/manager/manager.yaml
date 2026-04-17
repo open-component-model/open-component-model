@@ -66,6 +66,9 @@ spec:
                     {{- if .workerQueueLength }}
                     - --resolver-worker-queue-length={{ .workerQueueLength }}
                     {{- end }}
+                    {{- if .subscriberBufferSize }}
+                    - --resolver-subscriber-buffer-size={{ .subscriberBufferSize }}
+                    {{- end }}
                     {{- end }}
                     {{- /* Cache */}}
                     {{- with .Values.manager.cache }}

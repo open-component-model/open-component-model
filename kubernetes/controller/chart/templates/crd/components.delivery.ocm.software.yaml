@@ -4,23 +4,8 @@ kind: CustomResourceDefinition
 metadata:
     annotations:
         controller-gen.kubebuilder.io/version: v0.20.1
-        {{- if and .Values.webhook.enable .Values.certManager.enable }}
-        cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "serving-cert" "context" $) }}
-        {{- end }}
     name: components.delivery.ocm.software
 spec:
-    {{- if .Values.webhook.enable }}
-    conversion:
-        strategy: Webhook
-        webhook:
-            clientConfig:
-                service:
-                    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "webhook-service" "context" $) }}
-                    namespace: {{ .Release.Namespace }}
-                    path: /convert
-            conversionReviewVersions:
-                - v1
-    {{- end }}
     group: delivery.ocm.software
     names:
         kind: Component
