@@ -425,7 +425,7 @@ Used sparingly — primarily in DAG processing and generic utility functions.
 func Process[K cmp.Ordered, V any](ctx context.Context, graph *Graph[K]) error
 ```
 
-Controller utilities use generics with pointer type constraints for K8s objects:
+Controller utilities use generics with pointer-type constraints for K8s objects:
 
 ```go
 func GetReadyObject[T any, P ObjectPointer[T]](ctx context.Context, c client.Reader, key client.ObjectKey) (P, error)
@@ -543,6 +543,7 @@ scheme.MustRegisterWithAlias(&v1.Config{},
 ```
 
 What happens internally:
+
 1. `defaults` bimap stores: `Type{Name:"config", Version:"v1"}` ↔ `reflect.TypeOf(&v1.Config{})`
 2. `aliases` stores: `Type{Name:"config", Version:""}` → `Type{Name:"config", Version:"v1"}`
 3. `instances` stores: `reflect.TypeOf(&v1.Config{})` → `&v1.Config{}` (the prototype, via `DeepCopyTyped()`)
@@ -569,6 +570,7 @@ obj, err := scheme.NewObject(runtime.NewVersionedType("config", "v1"))
 ```
 
 Resolution path:
+
 1. Look up in `defaults` bimap → found? Use that reflect.Type
 2. Not found → look up in `aliases` → get the default Type → look up in `defaults`
 3. Get the prototype from `instances[reflect.Type]`

@@ -11,7 +11,7 @@ OCM is a multi-module Go monorepo implementing the Open Component Model specific
 - **kubernetes/controller/** — A controller-runtime-based Kubernetes operator
 
 Check each module's `go.mod` for the Go version in use. The build system uses **Task** (not Make).
-The task file documentation should be followed located here: https://taskfile.dev/docs/guide.
+The task file documentation should be followed located here: <https://taskfile.dev/docs/guide>.
 
 ## Agent Behavior Rules
 
@@ -25,15 +25,18 @@ The task file documentation should be followed located here: https://taskfile.de
 ## Code Review Rules
 
 ### No Cross-Module Pollution
+
 - PRs must not mix changes across multiple Go modules.
 - Each PR should focus on a single module unless there's a clear dependency relationship.
 
 ### Follow Package Structure and Order
+
 - Changes must align with the architecture described in doc.go files of each module and package if it exists.
 - Respect the established package hierarchy and dependencies.
 - Maintain consistency with existing patterns in the package.
 
 ### Controller Performance
+
 - Pay special attention to operations handling large numbers of objects.
 - Consider: watch/list efficiency, reconciliation loop performance, memory usage, caching strategies.
 
@@ -73,7 +76,7 @@ var ErrNotFound = errors.New("credentials not found")
 
 ### Commit Convention (enforced by CI)
 
-```
+```text
 type(scope): subject
 
 feat(cli): add new command
