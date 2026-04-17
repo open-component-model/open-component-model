@@ -45,6 +45,11 @@ tasks:
     cmds: [ task: build ]
 
   # Development
+  # TODO: Rework CRD generation pipeline to eliminate kustomize dependency.
+  # Use a post-processing script (like ESO's hack/helm.generate.sh) to inject
+  # Helm template wrappers (crd.enable, webhook.enable, cert-manager annotations)
+  # into generated CRDs. This would let us drop config/ as a checked-in directory
+  # and remove the helm/sync-manifests kubebuilder plugin step.
   manifests:
     desc: "Generate CRD manifests, RBAC, and webhook configurations"
     deps: [controller-gen]

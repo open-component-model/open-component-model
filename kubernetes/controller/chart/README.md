@@ -100,6 +100,8 @@ Kubernetes: `>=1.26.0-0`
 | metrics.port | int | `8443` | Metrics server port |
 | prometheus.enable | bool | `false` | Enable Prometheus ServiceMonitor (requires prometheus-operator) |
 | rbacHelpers.enable | bool | `false` | Install convenience admin/editor/viewer roles for CRDs |
+| webhook.certSecret | string | `""` | Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually) |
+| webhook.enable | bool | `false` | Enable conversion webhook for CRD version conversion |
 
 ## Development
 
