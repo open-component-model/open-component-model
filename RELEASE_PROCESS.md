@@ -51,12 +51,12 @@ This role rotates each sprint and involves:
 Copy this checklist to your "Sprint Responsible" issue:
 
 ```markdown
-- [ ] New release branch created (e.g `releases/v0.17`)
-- [ ] CLI RC created and verified (`v0.17-rc.1`)
-- [ ] Controller RC created and verified (`v0.17-rc.1`)
-- [ ] CLI Final promoted from last RC (`v0.16-rc.1` --> `v0.16.0`)
-- [ ] Controller Final promoted from last RC (`v0.16-rc.1` --> `v0.16.0`)
-- [ ] Both releases visible on GitHub Releases page (`v0.16.0`)
+- [ ] New release branch created (e.g `releases/v0.4`)
+- [ ] CLI RC created and verified (`v0.4.0-rc.1`)
+- [ ] Controller RC created and verified (`v0.4.0-rc.1`)
+- [ ] CLI Final promoted from last RC (`v0.3.0-rc.1` --> `v0.3.0`)
+- [ ] Controller Final promoted from last RC (`v0.3.0-rc.1` --> `v0.3.0`)
+- [ ] Both releases visible on GitHub Releases page (`v0.3.0`)
 ```
 
 ### Timeline
@@ -113,7 +113,7 @@ gitGraph TB:
 A new release branch marks the cut-off point for that minor release line.
 Once created, only bug fixes and documentation changes are allowed.
 
-1. Run workflow **[Release Branch Creation](https://github.com/open-component-model/open-component-model/actions/workflows/release-branch.yml)**.
+1. Run workflow **[Create OCM Release Branch](https://github.com/open-component-model/open-component-model/actions/workflows/release-branch.yml)**.
 2. Set target branch to `releases/vX.Y`.
 3. Confirm the branch was created successfully.
 
