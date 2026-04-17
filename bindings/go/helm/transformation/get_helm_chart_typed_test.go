@@ -208,8 +208,9 @@ consumers:
 	assert.Equal(t, "some-token", direct.Properties["access_token"])
 	assert.Equal(t, "some-value", direct.Properties["unknown_field"])
 
-	// Converting to HelmHTTPCredentials yields empty fields (property names don't match)
-	helmCreds, err := toHelmHTTPCredentials(typed)
+	// resolveHelmHTTPCredentials falls back to DirectCredentials and converts —
+	// property names don't match, so fields are empty
+	helmCreds, err := resolveHelmHTTPCredentials(t.Context(), graph, identity)
 	require.NoError(t, err)
 	require.NotNil(t, helmCreds) // FromDirectCredentials always succeeds
 	assert.Empty(t, helmCreds.Username)
@@ -263,45 +264,83 @@ consumers:
 	assert.Empty(t, helmCreds.Keyring)
 }
 
-func TestToHelmHTTPCredentials_TypeSwitch(t *testing.T) {
-	t.Run("nil returns nil", func(t *testing.T) {
-		result, err := toHelmHTTPCredentials(nil)
+func TestResolveHelmHTTPCredentials(t *testing.T) {
+	t.Run("HelmHTTPCredentials resolves directly", func(t *testing.T) {
+		yaml := `
+type: credentials.config.ocm.software/v1
+consumers:
+  - identity:
+      type: HelmChartRepository
+      hostname: "charts.example.com"
+    credentials:
+      - type: HelmHTTPCredentials/v1
+        username: user
+        certFile: /cert.pem
+`
+		credTypeScheme := runtime.NewScheme()
+		helmcredsv1.MustRegisterCredentialType(credTypeScheme)
+
+		graph := mustBuildGraph(t, yaml, credentials.Options{
+			CredentialTypeScheme: credTypeScheme,
+		})
+		identity := runtime.Identity{"type": "HelmChartRepository", "hostname": "charts.example.com"}
+
+		result, err := resolveHelmHTTPCredentials(t.Context(), graph, identity)
 		require.NoError(t, err)
-		assert.Nil(t, result)
+		assert.Equal(t, "user", result.Username)
+		assert.Equal(t, "/cert.pem", result.CertFile)
 	})
 
-	t.Run("HelmHTTPCredentials passes through", func(t *testing.T) {
-		creds := &helmcredsv1.HelmHTTPCredentials{
-			Username: "user",
-			CertFile: "/cert.pem",
-		}
-		result, err := toHelmHTTPCredentials(creds)
-		require.NoError(t, err)
-		assert.Equal(t, creds, result)
-	})
+	t.Run("DirectCredentials converts to HelmHTTPCredentials", func(t *testing.T) {
+		yaml := `
+type: credentials.config.ocm.software/v1
+consumers:
+  - identity:
+      type: HelmChartRepository
+      hostname: "charts.example.com"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: user
+          certFile: /cert.pem
+`
+		graph := mustBuildGraph(t, yaml, credentials.Options{})
+		identity := runtime.Identity{"type": "HelmChartRepository", "hostname": "charts.example.com"}
 
-	t.Run("DirectCredentials converts", func(t *testing.T) {
-		direct := &credentialsv1.DirectCredentials{
-			Properties: map[string]string{
-				"username": "user",
-				"certFile": "/cert.pem",
-			},
-		}
-		result, err := toHelmHTTPCredentials(direct)
+		result, err := resolveHelmHTTPCredentials(t.Context(), graph, identity)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, "user", result.Username)
 		assert.Equal(t, "/cert.pem", result.CertFile)
 	})
 
-	t.Run("unknown type returns error", func(t *testing.T) {
-		unknown := &runtime.Raw{Type: runtime.NewUnversionedType("RSACredentials")}
-		result, err := toHelmHTTPCredentials(unknown)
+	t.Run("not found returns error", func(t *testing.T) {
+		yaml := `
+type: credentials.config.ocm.software/v1
+consumers: []
+`
+		graph := mustBuildGraph(t, yaml, credentials.Options{})
+		identity := runtime.Identity{"type": "HelmChartRepository", "hostname": "unknown.example.com"}
+
+		result, err := resolveHelmHTTPCredentials(t.Context(), graph, identity)
 		require.Error(t, err)
 		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "unsupported credential type")
-		assert.Contains(t, err.Error(), "RSACredentials")
+		assert.ErrorIs(t, err, credentials.ErrNotFound)
 	})
+}
+
+func mustBuildGraph(t *testing.T, yaml string, opts credentials.Options) *credentials.Graph {
+	t.Helper()
+	cfgScheme := runtime.NewScheme()
+	credentialsv1.MustRegister(cfgScheme)
+
+	var configv1 credentialsv1.Config
+	require.NoError(t, cfgScheme.Decode(strings.NewReader(yaml), &configv1))
+	config := credentialruntime.ConvertFromV1(&configv1)
+
+	graph, err := credentials.ToGraph(t.Context(), config, opts)
+	require.NoError(t, err)
+	return graph
 }
 
 func TestCredentialAcceptorValidation_WarnsOnMismatch(t *testing.T) {

@@ -61,13 +61,9 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		if consumerId, err := t.ResourceConsumerIdentityProvider.GetResourceCredentialConsumerIdentity(ctx, targetResource); err != nil {
 			return nil, fmt.Errorf("failed getting resource consumer identity for credential resolution: %w", err)
 		} else if consumerId != nil {
-			resolved, err := t.CredentialProvider.ResolveTyped(ctx, consumerId)
+			helmHTTPCreds, err = resolveHelmHTTPCredentials(ctx, t.CredentialProvider, consumerId)
 			if err != nil && !errors.Is(err, credentials.ErrNotFound) {
 				return nil, fmt.Errorf("failed resolving credentials: %w", err)
-			}
-			helmHTTPCreds, err = toHelmHTTPCredentials(resolved)
-			if err != nil {
-				return nil, fmt.Errorf("invalid credentials for helm chart retrieval: %w", err)
 			}
 		}
 	}
@@ -155,22 +151,20 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 	return &transformation, nil
 }
 
-// toHelmHTTPCredentials converts a runtime.Typed credential to *HelmHTTPCredentials.
-// Returns an error if the credential type is not compatible with HTTP Helm repositories.
-func toHelmHTTPCredentials(cred runtime.Typed) (*helmcredsv1.HelmHTTPCredentials, error) {
-	if cred == nil {
-		return nil, nil
+// resolveHelmHTTPCredentials resolves credentials for a Helm HTTP repository.
+// It first tries to resolve as typed HelmHTTPCredentials, then falls back to
+// DirectCredentials (legacy Credentials/v1) with property-based conversion.
+func resolveHelmHTTPCredentials(ctx context.Context, r credentials.Resolver, identity runtime.Identity) (*helmcredsv1.HelmHTTPCredentials, error) {
+	creds, err := credentials.ResolveAs[*helmcredsv1.HelmHTTPCredentials](ctx, r, identity)
+	if err == nil {
+		return creds, nil
 	}
-	switch c := cred.(type) {
-	case *helmcredsv1.HelmHTTPCredentials:
-		return c, nil
-	case *credentialsconfigv1.DirectCredentials:
-		return helmcredsv1.FromDirectCredentials(c.Properties), nil
-	default:
-		return nil, fmt.Errorf("unsupported credential type %q for Helm HTTP repository, expected %s or %s",
-			cred.GetType(),
-			helmcredsv1.HelmHTTPCredentialsType+"/"+helmcredsv1.Version,
-			credentialsconfigv1.CredentialsType+"/"+credentialsconfigv1.Version,
-		)
+
+	// Fall back to DirectCredentials (legacy Credentials/v1 configs).
+	direct, directErr := credentials.ResolveAs[*credentialsconfigv1.DirectCredentials](ctx, r, identity)
+	if directErr != nil {
+		// Return the original error — neither type matched.
+		return nil, err
 	}
+	return helmcredsv1.FromDirectCredentials(direct.Properties), nil
 }
