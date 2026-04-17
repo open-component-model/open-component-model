@@ -9,7 +9,14 @@
     "configurations": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw"
+        "oneOf": [
+          {
+            "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw"
+          },
+          {
+            "type": "null"
+          }
+        ]
       }
     },
     "type": {
