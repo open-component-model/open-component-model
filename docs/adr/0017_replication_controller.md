@@ -174,7 +174,7 @@ TGDs are written to a scratch volume (emptyDir or PVC):
 * Long transfers block a worker pool slot. Mitigated by configurable pool size.
 * Filesystem TGD storage lost on pod restart. Acceptable since TGDs regenerate
   on next reconciliation.
-* If filesystem isn't available because of read only disks, this does not work.
+* If filesystem isn't available because of read-only disks, this does not work.
 * Transfer not independently observable as a K8s resource.
 
 ## Pros and Cons of the Options
