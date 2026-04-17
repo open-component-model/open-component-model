@@ -114,6 +114,24 @@ FIXTURE
     rm -r "${tmpdir}"
 }
 
+test_explicit_prerelease_ocm_version() {
+    echo "--- explicit pre-release OCM_VERSION ---"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    TMP_METADATA="${tmpdir}/ocm.json"
+
+    download() { cat > "$1" <<'FIXTURE'
+{"tag_name": "cli/v0.4.0-rc.2", "other": "data"}
+FIXTURE
+    }
+
+    OCM_VERSION="0.4.0-rc.2"
+    get_release_version >/dev/null 2>&1
+    assert_equals "allows explicit pre-release 0.4.0-rc.2" "0.4.0-rc.2" "${VERSION_OCM}"
+    unset OCM_VERSION
+    rm -r "${tmpdir}"
+}
+
 # ---------------------------------------------------------------------------
 # OS and arch detection tests
 # ---------------------------------------------------------------------------
@@ -365,6 +383,7 @@ test_stable_version_from_mixed_releases
 test_prerelease_excluded
 test_non_cli_tags_excluded
 test_explicit_ocm_version
+test_explicit_prerelease_ocm_version
 test_os_detection
 test_arch_detection
 test_only_prereleases_fatals

@@ -148,7 +148,7 @@ get_release_version() {
         METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${TAG_PREFIX}v${OCM_VERSION}"
         info "Downloading metadata ${METADATA_URL}"
         download "${TMP_METADATA}" "${METADATA_URL}"
-        VERSION_OCM=$(extract_stable_version "${TMP_METADATA}")
+        VERSION_OCM="${OCM_VERSION}"
     else
         # Use the list endpoint so we can filter by TAG_PREFIX; /releases/latest may
         # point to a non-CLI release (e.g. a website or docs tag published more recently).
