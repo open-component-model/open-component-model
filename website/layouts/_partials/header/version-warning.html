@@ -1,0 +1,10 @@
+{{- $currentVer := .Site.Version.Name -}}
+{{- $isDefault := .Site.Version.IsDefault -}}
+
+{{/* Droplet badge: show "Legacy" for the legacy version */}}
+{{ if eq $currentVer "legacy" }}
+<div class="version-droplet" role="status" aria-live="polite"
+    data-tooltip="You are viewing documentation for our legacy version of OCM. For the latest features and updates, please check out our current documentation.">
+    <span class="text">Legacy</span>
+</div>
+{{ end }}

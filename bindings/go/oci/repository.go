@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -23,6 +24,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
+	"ocm.software/open-component-model/bindings/go/oci/compref"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
@@ -31,6 +33,7 @@ import (
 	complister "ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	"ocm.software/open-component-model/bindings/go/oci/internal/pack"
+	"ocm.software/open-component-model/bindings/go/oci/internal/validate"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -42,7 +45,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var _ ComponentVersionRepository = (*Repository)(nil)
+var (
+	_            ComponentVersionRepository = (*Repository)(nil)
+	versionRegex                            = regexp.MustCompile(compref.VersionRegex)
+)
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
 // Each component may be stored in a separate OCI repository, but ultimately the storage is determined by the Resolver.
@@ -83,6 +89,15 @@ type Repository struct {
 
 	// tempDir is the temporary directory used for OCI buffering operations.
 	tempDir string
+
+	// globalAccessPolicy controls whether global access references are added to local blobs.
+	// Default (zero value) is Never, suppressing global access to discourage reliance on it.
+	globalAccessPolicy GlobalAccessPolicy
+}
+
+// SetGlobalAccessPolicy overrides the global access policy for this repository.
+func (repo *Repository) SetGlobalAccessPolicy(policy GlobalAccessPolicy) {
+	repo.globalAccessPolicy = policy
 }
 
 // AddComponentVersion adds a new component version to the repository.
@@ -430,9 +445,10 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, compon
 	}
 
 	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, pack.Options{
-		AccessScheme:     repo.scheme,
-		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
-		BaseReference:    reference,
+		AccessScheme:       repo.scheme,
+		CopyGraphOptions:   repo.resourceCopyOptions.CopyGraphOptions,
+		BaseReference:      reference,
+		GlobalAccessPolicy: repo.globalAccessPolicy,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to pack resource blob: %w", err)
@@ -848,4 +864,44 @@ func findDescriptorFromReference(descriptors []ociImageSpecV1.Descriptor, refere
 		}
 	}
 	return ociImageSpecV1.Descriptor{}, fmt.Errorf("no matching descriptor found for reference %s", reference)
+}
+
+func (repo *Repository) AddComponentVersionAlias(ctx context.Context, component, versionOrAlias, alias string) (err error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	done := log.Operation(ctx, "add component version alias",
+		slog.String("component", component),
+		slog.String("versionOrAlias", versionOrAlias),
+		slog.String("alias", alias))
+	defer func() {
+		done(err)
+	}()
+
+	if versionRegex.MatchString(alias) {
+		return fmt.Errorf("alias %q uses semantic version format and cannot be used as an alias (use non-semver names like 'edge' or 'latest' instead)", alias)
+	}
+
+	reference, store, err := repo.getStore(ctx, component, versionOrAlias)
+	if err != nil {
+		return fmt.Errorf("failed to get store for component version %s/%s: %w", component, versionOrAlias, err)
+	}
+
+	base, err := store.Resolve(ctx, reference)
+	if err != nil {
+		if errors.Is(err, errdef.ErrNotFound) {
+			return errors.Join(repository.ErrNotFound,
+				fmt.Errorf("component version %s/%s not found: %w", component, versionOrAlias, err))
+		}
+		return fmt.Errorf("failed to resolve component version %s/%s: %w", component, versionOrAlias, err)
+	}
+
+	if _, err := validate.ComponentVersionDescriptor(ctx, store, base, component, reference); err != nil {
+		return fmt.Errorf("reference %q does not point to a valid OCM component version: %w", reference, err)
+	}
+
+	if err := store.Tag(ctx, base, alias); err != nil {
+		return fmt.Errorf("failed to tag component version %s/%s with alias %q: %w",
+			component, versionOrAlias, alias, err)
+	}
+
+	return nil
 }

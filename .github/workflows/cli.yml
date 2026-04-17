@@ -1,11 +1,18 @@
 name: CLI
 
 on:
-  # Trigger workflow on pushes to main or release branches, and on PRs targeting main as well as release tags.
-  # Pushes on 'releases/v**' don't automatically publish,
-  # they just run the build to validate the release branch.
-  # If we are on a PR, limit runtime and only build the cli if it has been modified.
-  # If we are on a push, build the CLI regardless of what has changed to always be up to date.
+  # This workflow serves two roles:
+  #
+  # 1. CI workflow — triggered directly by push/PR events.
+  #    Pushes to main or cli/v* tags build AND publish (OCI image + conformance).
+  #    Pushes to releases/v* branches only build+test (no publish).
+  #    PRs to main only build+test if cli/ files changed.
+  #
+  # 2. Reusable build step — called by cli-release.yml via workflow_call.
+  #    cli-release.yml passes inputs.ref = the RC tag (e.g. cli/v0.4.0-rc.1).
+  #    IMPORTANT: github.ref_name inside this workflow inherits the CALLER's ref
+  #    (the release branch, e.g. releases/v0.4), not inputs.ref. The branch-check
+  #    step uses inputs.ref when set to correctly determine publish eligibility.
   push:
     branches:
       - main
@@ -42,6 +49,9 @@ on:
       image_digest:
         description: "The digest of the pushed OCI image (sha256:...)."
         value: ${{ jobs.publish.outputs.image_digest }}
+
+permissions:
+  contents: read
 
 env:
   LOCATION: "cli"                       # Folder containing the CLI source
@@ -128,23 +138,36 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-path: "${{ env.LOCATION }}/tmp/bin/ocm-*"
 
-      # Determine if this branch is eligible for publishing, but only if we're not on a PR.
-      # Release branches (releases/v*) only build+test; publish happens on main or release tags.
+      # Determine if this build should publish (push OCI image to GHCR).
+      #
+      # Uses inputs.ref when set (workflow_call from cli-release.yml), otherwise
+      # GITHUB_REF_NAME. This distinction matters because workflow_call inherits
+      # the caller's github.ref_name (the release branch), not our inputs.ref.
+      #
+      # Publish eligibility:
+      #   push to main              → GITHUB_REF_NAME = "main"            → yes (default branch)
+      #   push tag cli/v0.4.0       → GITHUB_REF_NAME = "cli/v0.4.0"     → yes (cli/v* match)
+      #   push to releases/v0.4     → GITHUB_REF_NAME = "releases/v0.4"  → no  (build-only)
+      #   workflow_call (release)    → inputs.ref = "cli/v0.4.0-rc.1"     → yes (cli/v* match)
+      #   pull_request              → step skipped entirely               → no
       - name: Determine if this is a push-eligible branch
         if: ${{ github.event_name != 'pull_request' }}
         id: branch-check
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          INPUT_REF: ${{ inputs.ref }}
         with:
           script: |
+            const ref = process.env.INPUT_REF || process.env.GITHUB_REF_NAME;
             core.setOutput(
               "should_push_oci_image",
-              process.env.GITHUB_REF_NAME === context.payload.repository.default_branch ||
-              /^cli\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(process.env.GITHUB_REF_NAME)
+              ref === context.payload.repository.default_branch ||
+              /^cli\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(ref)
             )
 
       # Upload CLI binaries and OCI layout as build artifacts
       - name: Upload Artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         id: upload-artifacts
         with:
           if-no-files-found: 'error'
@@ -173,7 +196,7 @@ jobs:
     steps:
       # Retrieve artifacts produced by the build job
       - name: Download build artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ env.ARTIFACT_NAME }}
 

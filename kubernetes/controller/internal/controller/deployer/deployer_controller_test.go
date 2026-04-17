@@ -1502,6 +1502,314 @@ data:
 	})
 })
 
+var _ = Describe("Deployer Controller ApplySet Prune", func() {
+	It("prunes removed resources when the OCM resource content changes", func(ctx SpecContext) {
+		// Regression test: when a YAML stream goes from 2 resources (ConfigMap+Secret)
+		// to 1 resource (ConfigMap only), the Secret must be pruned. The bug was that
+		// applyWithApplySet passed the batch-only metadata (from Apply) to Prune instead
+		// of the projected metadata (from Project), so prune never searched for the
+		// Secret's GroupKind and the orphan survived.
+
+		sanitized := test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
+		namespace := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: sanitized},
+		}
+		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+
+		componentName := "ocm.software/test-prune-scope-" + sanitized
+		componentObjName := "prune-scope-component-" + sanitized
+		resourceName := "prune-scope-resource-" + sanitized
+		deployerObjName := "deployer-prune-scope-" + sanitized
+
+		// --- v1: ConfigMap + Secret ---
+
+		v1Version := "v1.0.0"
+		v1ResourceVersion := "1.0.0"
+
+		v1YamlStream := []byte(fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prune-cm
+  namespace: %[1]s
+data:
+  version: v1
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: prune-secret
+  namespace: %[1]s
+type: Opaque
+stringData:
+  key: should-be-pruned
+`, namespace.GetName()))
+
+		v1CTFPath := GinkgoT().TempDir()
+		Expect(os.MkdirAll(v1CTFPath, 0o777)).To(Succeed())
+
+		v1FS, err := filesystem.NewFS(v1CTFPath, os.O_RDWR)
+		Expect(err).NotTo(HaveOccurred())
+		v1Store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(v1FS))
+		v1Repo, err := oci.NewRepository(ocictf.WithCTF(v1Store), oci.WithTempDir(v1CTFPath))
+		Expect(err).NotTo(HaveOccurred())
+
+		v1Resource := &descruntime.Resource{
+			ElementMeta: descruntime.ElementMeta{
+				ObjectMeta: descruntime.ObjectMeta{
+					Name:    resourceName,
+					Version: v1ResourceVersion,
+				},
+			},
+			Type:     "plainText",
+			Relation: descruntime.LocalRelation,
+			Access: &v2.LocalBlob{
+				Type: runtime.Type{
+					Name:    v2.LocalBlobAccessType,
+					Version: v2.LocalBlobAccessTypeVersion,
+				},
+				MediaType: "application/x-yaml",
+			},
+		}
+		v1Blob := inmemory.New(bytes.NewReader(v1YamlStream))
+		v1NewRes, err := v1Repo.AddLocalResource(ctx, componentName, v1Version, v1Resource, v1Blob)
+		Expect(err).NotTo(HaveOccurred())
+
+		v1Desc := &descruntime.Descriptor{
+			Meta: descruntime.Meta{Version: "v2"},
+			Component: descruntime.Component{
+				ComponentMeta: descruntime.ComponentMeta{
+					ObjectMeta: descruntime.ObjectMeta{
+						Name:    componentName,
+						Version: v1Version,
+					},
+				},
+				Provider:  descruntime.Provider{Name: "ocm.software"},
+				Resources: []descruntime.Resource{*v1NewRes},
+			},
+		}
+		Expect(v1Repo.AddComponentVersion(ctx, v1Desc)).To(Succeed())
+
+		v1RepoSpec := &ctfv1.Repository{
+			Type:       runtime.Type{Name: "ctf", Version: "v1"},
+			FilePath:   v1CTFPath,
+			AccessMode: ctfv1.AccessModeReadOnly,
+		}
+		v1SpecData, err := json.Marshal(v1RepoSpec)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("creating the v1 component and resource mocks")
+		componentObj := test.MockComponent(
+			ctx,
+			componentObjName,
+			namespace.GetName(),
+			&test.MockComponentOptions{
+				Client:   k8sClient,
+				Recorder: recorder,
+				Info: v1alpha1.ComponentInfo{
+					Component:      componentName,
+					Version:        v1Version,
+					RepositorySpec: &apiextensionsv1.JSON{Raw: v1SpecData},
+				},
+			},
+		)
+		DeferCleanup(func(ctx SpecContext) {
+			test.DeleteObject(ctx, k8sClient, componentObj)
+		})
+
+		resourceObj := test.MockResource(
+			ctx,
+			resourceName,
+			namespace.GetName(),
+			&test.MockResourceOptions{
+				ComponentRef: corev1.LocalObjectReference{Name: componentObjName},
+				Clnt:         k8sClient,
+				Recorder:     recorder,
+				ComponentInfo: &v1alpha1.ComponentInfo{
+					Component:      componentName,
+					Version:        v1Version,
+					RepositorySpec: &apiextensionsv1.JSON{Raw: v1SpecData},
+				},
+				ResourceInfo: &v1alpha1.ResourceInfo{
+					Name:    resourceName,
+					Type:    "plainText",
+					Version: v1ResourceVersion,
+					Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
+					Digest: &v2.Digest{
+						HashAlgorithm:          "SHA-256",
+						NormalisationAlgorithm: "genericBlobDigest/v1",
+						Value:                  "prune-scope-digest-v1",
+					},
+				},
+			},
+		)
+		DeferCleanup(func(ctx SpecContext) {
+			test.DeleteObject(ctx, k8sClient, resourceObj)
+		})
+
+		By("creating the deployer")
+		deployerObj := &v1alpha1.Deployer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: deployerObjName,
+			},
+			Spec: v1alpha1.DeployerSpec{
+				ResourceRef: v1alpha1.ObjectKey{
+					Name:      resourceObj.GetName(),
+					Namespace: namespace.GetName(),
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
+		DeferCleanup(func(ctx SpecContext) {
+			test.DeleteObject(ctx, k8sClient, deployerObj)
+		})
+
+		By("waiting for the deployer to be Ready with v1")
+		test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
+
+		By("verifying both ConfigMap and Secret exist after v1 deploy")
+		gotCM := &corev1.ConfigMap{}
+		Expect(k8sClient.Get(ctx, client.ObjectKey{
+			Namespace: namespace.GetName(),
+			Name:      "prune-cm",
+		}, gotCM)).To(Succeed())
+		Expect(gotCM.Data).To(HaveKeyWithValue("version", "v1"))
+
+		gotSecret := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, client.ObjectKey{
+			Namespace: namespace.GetName(),
+			Name:      "prune-secret",
+		}, gotSecret)).To(Succeed())
+		Expect(string(gotSecret.Data["key"])).To(Equal("should-be-pruned"))
+
+		// --- v2: ConfigMap only (Secret removed) ---
+
+		v2Version := "v2.0.0"
+		v2ResourceVersion := "2.0.0"
+
+		v2YamlStream := []byte(fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prune-cm
+  namespace: %[1]s
+data:
+  version: v2
+`, namespace.GetName()))
+
+		v2CTFPath := GinkgoT().TempDir()
+		Expect(os.MkdirAll(v2CTFPath, 0o777)).To(Succeed())
+
+		v2FS, err := filesystem.NewFS(v2CTFPath, os.O_RDWR)
+		Expect(err).NotTo(HaveOccurred())
+		v2Store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(v2FS))
+		v2Repo, err := oci.NewRepository(ocictf.WithCTF(v2Store), oci.WithTempDir(v2CTFPath))
+		Expect(err).NotTo(HaveOccurred())
+
+		v2Resource := &descruntime.Resource{
+			ElementMeta: descruntime.ElementMeta{
+				ObjectMeta: descruntime.ObjectMeta{
+					Name:    resourceName,
+					Version: v2ResourceVersion,
+				},
+			},
+			Type:     "plainText",
+			Relation: descruntime.LocalRelation,
+			Access: &v2.LocalBlob{
+				Type: runtime.Type{
+					Name:    v2.LocalBlobAccessType,
+					Version: v2.LocalBlobAccessTypeVersion,
+				},
+				MediaType: "application/x-yaml",
+			},
+		}
+		v2Blob := inmemory.New(bytes.NewReader(v2YamlStream))
+		v2NewRes, err := v2Repo.AddLocalResource(ctx, componentName, v2Version, v2Resource, v2Blob)
+		Expect(err).NotTo(HaveOccurred())
+
+		v2Desc := &descruntime.Descriptor{
+			Meta: descruntime.Meta{Version: "v2"},
+			Component: descruntime.Component{
+				ComponentMeta: descruntime.ComponentMeta{
+					ObjectMeta: descruntime.ObjectMeta{
+						Name:    componentName,
+						Version: v2Version,
+					},
+				},
+				Provider:  descruntime.Provider{Name: "ocm.software"},
+				Resources: []descruntime.Resource{*v2NewRes},
+			},
+		}
+		Expect(v2Repo.AddComponentVersion(ctx, v2Desc)).To(Succeed())
+
+		v2RepoSpec := &ctfv1.Repository{
+			Type:       runtime.Type{Name: "ctf", Version: "v1"},
+			FilePath:   v2CTFPath,
+			AccessMode: ctfv1.AccessModeReadOnly,
+		}
+		v2SpecData, err := json.Marshal(v2RepoSpec)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("updating the component mock to v2")
+		Eventually(func(ctx context.Context) error {
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(componentObj), componentObj)).To(Succeed())
+			old := componentObj.DeepCopy()
+			componentObj.Status.Component = v1alpha1.ComponentInfo{
+				Component:      componentName,
+				Version:        v2Version,
+				RepositorySpec: &apiextensionsv1.JSON{Raw: v2SpecData},
+			}
+			componentObj.SetObservedGeneration(componentObj.GetGeneration())
+			return k8sClient.Status().Patch(ctx, componentObj, client.MergeFrom(old))
+		}).WithContext(ctx).Should(Succeed())
+
+		By("updating the resource mock to v2 (triggers deployer re-reconciliation)")
+		Eventually(func(ctx context.Context) error {
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(resourceObj), resourceObj)).To(Succeed())
+			old := resourceObj.DeepCopy()
+			resourceObj.Status.Component = &v1alpha1.ComponentInfo{
+				Component:      componentName,
+				Version:        v2Version,
+				RepositorySpec: &apiextensionsv1.JSON{Raw: v2SpecData},
+			}
+			resourceObj.Status.Resource = &v1alpha1.ResourceInfo{
+				Name:    resourceName,
+				Type:    "plainText",
+				Version: v2ResourceVersion,
+				Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
+				Digest: &v2.Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "genericBlobDigest/v1",
+					Value:                  "prune-scope-digest-v2",
+				},
+			}
+			resourceObj.SetObservedGeneration(resourceObj.GetGeneration())
+			return k8sClient.Status().Patch(ctx, resourceObj, client.MergeFrom(old))
+		}).WithContext(ctx).Should(Succeed())
+
+		By("waiting for the deployer to re-reconcile and apply v2")
+		Eventually(func(ctx context.Context) string {
+			cm := &corev1.ConfigMap{}
+			if err := k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: namespace.GetName(),
+				Name:      "prune-cm",
+			}, cm); err != nil {
+				return ""
+			}
+			return cm.Data["version"]
+		}).WithContext(ctx).WithTimeout(60 * time.Second).Should(Equal("v2"))
+
+		By("verifying the Secret was pruned (this is the regression assertion)")
+		Eventually(func(ctx context.Context) bool {
+			err := k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: namespace.GetName(),
+				Name:      "prune-secret",
+			}, &corev1.Secret{})
+			return errors.IsNotFound(err)
+		}).WithContext(ctx).WithTimeout(30 * time.Second).Should(BeTrue(),
+			"Secret should have been pruned after being removed from the YAML stream, "+
+				"but it still exists. This indicates the prune scope is too narrow (batch-only instead of projected).")
+	})
+})
+
 var _ = Describe("Deployer Controller Finalizer Persistence", func() {
 	It("adds finalizers to the deployer object during the first reconciliation", func(ctx SpecContext) {
 		namespace := &corev1.Namespace{

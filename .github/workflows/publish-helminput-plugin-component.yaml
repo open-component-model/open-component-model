@@ -22,6 +22,9 @@ on:
         type: string
         required: false
 
+permissions:
+  contents: read
+
 env:
   # Repository selection for checkout:
   # - pull_request: Use head repository (fork) for PR changes
@@ -110,7 +113,7 @@ jobs:
 
       - name: Upload build artifacts
         if: ${{ steps.branch-check.outputs.should_push_oci_image == 'true' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: helm-plugin-build-artifacts
           path: bindings/go/helm/tmp/
@@ -130,7 +133,7 @@ jobs:
       packages: write
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: helm-plugin-build-artifacts
           path: bindings/go/helm/tmp/

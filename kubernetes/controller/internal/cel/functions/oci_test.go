@@ -14,7 +14,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	helmspec "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
+	helmspec "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"

@@ -199,6 +199,19 @@
       ],
       versioningTemplate: 'semver',
     },
+    // Track pinned pip install commands in GitHub Actions workflows (e.g. pip install foo==1.2.3)
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/.github/workflows/**/*.yml',
+        '/.github/workflows/**/*.yaml',
+      ],
+      matchStrings: [
+        'pip install (?<depName>\\S+)==(?<currentValue>\\S+)',
+      ],
+      datasourceTemplate: 'pypi',
+      versioningTemplate: 'pep440',
+    },
   ],
   postUpgradeTasks: {
     commands: [

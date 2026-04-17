@@ -1,0 +1,20 @@
+// -----------------------------------------------------------------------------
+// Override of @thulite/doks-core/assets/scss/components/_forms.scss
+/* */
+// This file overrides the theme original via Hugo's asset mount order
+// (own assets/ is mounted last and takes precedence).
+/* */
+// Reason: the original uses `@extend` without `!optional` on Bootstrap 4
+// classes (.form-group, .form-inline) that were removed in Bootstrap 5.
+// LibSass silently ignored missing targets; Dart Sass (required since Hugo
+// v0.153.0) throws a hard error. All rules are redeclared here with
+// `!optional` as the fix.
+/* */
+// See: https://sass-lang.com/documentation/at-rules/extend/#optional-extends
+// -----------------------------------------------------------------------------
+
+// The actual fix lives in common/_forms-dart-sass-compat.scss and is also
+// imported from common/_custom.scss for clarity. We forward it here so the
+// import path components/forms (used by the theme's app.scss) still resolves.
+@import "../common/forms-dart-sass-compat";
+

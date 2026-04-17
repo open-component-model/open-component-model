@@ -4,23 +4,28 @@ on:
   pull_request:
     branches:
       - main
+      - website/**
     paths:
       - '**/*.md'
+      - '.github/workflows/markdown.yml'
+
+permissions:
+  contents: read
 
 jobs:
-  verify-links:
-    name: Verify links
+  markdown-lint:
+    name: Lint Markdown (website)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - name: Run linkspector
-        uses: umbrelladocs/action-linkspector@37c85bcde51b30bf929936502bac6bfb7e8f0a4d # v1
+      - uses: DavidAnson/markdownlint-cli2-action@07035fd053f7be764496c0f8d8f9f41f98305101 # v22
         with:
-          github_token: ${{ secrets.github_token }}
-          reporter: github-pr-check
-          fail_level: any
-          config_file: .github/config/linkspector.yaml
-          show_stats: true
+          globs: |
+            website/**/*.md
+            !website/content/docs/reference/ocm-cli
+            !website/content/docs/reference/ocm-controller
+          config: .github/config/website.markdownlint-cli2.yaml
+
   spellcheck:
     name: Spellcheck
     runs-on: ubuntu-latest
@@ -32,3 +37,142 @@ jobs:
           config_path: .github/config/spellcheck.yml
           task_name: Markdown
 
+  verify-links:
+    name: Verify links (repo)
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
+      - name: Run linkspector
+        uses: umbrelladocs/action-linkspector@37c85bcde51b30bf929936502bac6bfb7e8f0a4d # v1
+        with:
+          github_token: ${{ secrets.github_token }}
+          reporter: github-pr-check
+          fail_level: any
+          config_file: .github/config/linkspector.yaml
+          show_stats: true
+
+  verify-links-website:
+    name: Verify links (website)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      checks: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
+
+      - name: Check for website changes
+        id: check_changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CHANGED=$(gh pr diff ${{ github.event.pull_request.number }} --name-only | grep -c '^website/' || true)
+          echo "has_website_changes=$([[ "$CHANGED" -gt 0 ]] && echo true || echo false)" >> $GITHUB_OUTPUT
+
+      - name: Wait for Netlify Deploy Preview
+        if: steps.check_changes.outputs.has_website_changes == 'true'
+        id: wait_for_preview
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "Waiting up to 10 minutes for Netlify deploy preview..."
+          export REPO="${{ github.repository }}"
+          export SHA="${{ github.event.pull_request.head.sha }}"
+
+          timeout 600 bash -c '
+            while true; do
+              SUITE_JSON=$(gh api repos/"$REPO"/commits/"$SHA"/check-suites 2>/dev/null)
+              if [ -z "$SUITE_JSON" ] || ! echo "$SUITE_JSON" | jq .check_suites > /dev/null 2>&1; then
+                echo "[ERROR] gh api or jq failed, retrying..."
+                sleep 5
+                continue
+              fi
+              NETLIFY_SUITE=$(echo "$SUITE_JSON" | jq "[ .check_suites[] | select(.app.slug == \"netlify\") ]")
+              NETLIFY_SUITE_LEN=$(echo "$NETLIFY_SUITE" | jq length)
+              if ! [[ "$NETLIFY_SUITE_LEN" =~ ^[0-9]+$ ]] || [ "$NETLIFY_SUITE_LEN" -eq 0 ]; then
+                echo "No Netlify suite found. Waiting..."
+                sleep 5
+                continue
+              fi
+              SUITE_ID=$(echo "$NETLIFY_SUITE" | jq -r ".[0].id")
+              STATUS=$(echo "$NETLIFY_SUITE" | jq -r ".[0].status")
+              CONCLUSION=$(echo "$NETLIFY_SUITE" | jq -r ".[0].conclusion")
+              echo "Netlify suite status: $STATUS, conclusion: $CONCLUSION"
+              if [ "$STATUS" = "completed" ]; then
+                if [[ "$CONCLUSION" = "success" || "$CONCLUSION" = "neutral" ]]; then
+                  STATUS_JSON=$(gh api repos/"$REPO"/commits/"$SHA"/status 2>/dev/null)
+                  STATUS_CODE=$?
+                  if [ $STATUS_CODE -ne 0 ]; then
+                    echo "[ERROR] gh api status call failed."
+                    exit 1
+                  fi
+                  PREVIEW_STATUS=$(echo "$STATUS_JSON" | jq ".statuses[] | select(.context==\"netlify/ocm-website/deploy-preview\")")
+                  PREVIEW_URL=$(echo "$PREVIEW_STATUS" | jq -r ".target_url")
+                  echo "Deploy Preview ready: $PREVIEW_URL"
+                  echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+                  exit 0
+                else
+                  echo "Deploy failed: $CONCLUSION"
+                  exit 1
+                fi
+              fi
+              sleep 15
+            done
+          '
+
+          if [ $? -eq 124 ]; then
+            echo "Timeout after 10 minutes"
+            exit 1
+          fi
+
+      - name: Generate linkspector config
+        if: steps.check_changes.outputs.has_website_changes == 'true'
+        env:
+          BASEURL: ${{ steps.wait_for_preview.outputs.preview_url }}
+        run: |
+          cat > .github/config/website-linkspector.yaml << EOF
+          dirs:
+            - ./website/content
+          baseUrl: "${BASEURL}"
+          modifiedFilesOnly: true
+          replacementPatterns:
+            - pattern: "^/"
+              replacement: "${BASEURL}/"
+          ignorePatterns:
+            - pattern: '/images/.*'
+          EOF
+
+          echo "Generated config:"
+          cat .github/config/website-linkspector.yaml
+
+      - name: Run linkspector
+        if: steps.check_changes.outputs.has_website_changes == 'true'
+        uses: umbrelladocs/action-linkspector@37c85bcde51b30bf929936502bac6bfb7e8f0a4d # v1
+        with:
+          github_token: ${{ secrets.github_token }}
+          reporter: github-pr-check
+          fail_level: any
+          config_file: .github/config/website-linkspector.yaml
+          show_stats: true
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      - name: Read tool versions
+        id: versions
+        run: |
+          source .env
+          echo "markdownlint_cli2=${MARKDOWNLINT_CLI2_VERSION}" >> $GITHUB_OUTPUT
+      - name: Run linter
+        run: npx markdownlint-cli2@${{ steps.versions.outputs.markdownlint_cli2 }} --config .github/config/.markdownlint-cli2.yaml "**/*.md"

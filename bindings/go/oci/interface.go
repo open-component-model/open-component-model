@@ -18,6 +18,7 @@ type LocalBlob fetch.LocalBlob
 // and their associated resources in a Store.
 type ComponentVersionRepository interface {
 	repository.ComponentVersionRepository
+	AliasComponentVersionRepository
 	repository.HealthCheckable
 	ResourceDigestProcessor
 }
@@ -62,4 +63,17 @@ type Resolver interface {
 	// Ping does a healthcheck for the underlying Store. The implementation varies based on the implementing
 	// technology.
 	Ping(ctx context.Context) error
+}
+
+// AliasComponentVersionRepository defines the interface for adding aliases to existing component versions.
+type AliasComponentVersionRepository interface {
+	// AddComponentVersionAlias adds an alias to an existing component version.
+	// The alias can be used as an alternative reference to access the same component version.
+	// The versionOrAlias parameter can be either a component version or an existing alias,
+	// enabling scenarios like pointing 'edge' to whatever 'latest' currently references.
+	// The alias parameter must NOT be a semantic version in "loose" format (e.g., "1.0.0", "v2.3.4") to prevent
+	// conflicts with actual component versions. Besides this, aliases must follow OCI tag syntax constraints.
+	// Like OCI tags, aliases are mutable - reusing the same alias for a different component version will move it.
+	// The target must be a valid OCM component version - aliasing arbitrary OCI artifacts will fail.
+	AddComponentVersionAlias(ctx context.Context, component, versionOrAlias, alias string) error
 }

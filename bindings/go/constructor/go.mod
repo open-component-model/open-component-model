@@ -7,13 +7,13 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.20.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.11
+	ocm.software/open-component-model/bindings/go/blob v0.0.12
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260407102747-5b24debae3cf
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260407102747-5b24debae3cf
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260417071914-50137d2b3f6f
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260417071914-50137d2b3f6f
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/oci v0.0.38
+	ocm.software/open-component-model/bindings/go/oci v0.0.39
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
 	sigs.k8s.io/yaml v1.6.0
@@ -32,6 +32,6 @@ require (
 	golang.org/x/text v0.35.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.12 // indirect
-	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
+	ocm.software/open-component-model/bindings/go/ctf v0.4.0 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 )

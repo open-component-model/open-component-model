@@ -140,8 +140,9 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 	}
 
 	result = &internal.ChartData{
-		Name:    chart.Name(),
-		Version: chart.Metadata.Version,
+		Name:     chart.Name(),
+		Version:  chart.Metadata.Version,
+		ChartDir: chartDir,
 	}
 
 	if result.ChartBlob, err = filesystem.GetBlobFromOSPath(savedPath); err != nil {

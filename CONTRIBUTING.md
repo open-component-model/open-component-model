@@ -21,7 +21,7 @@ task
 
 ## Project Structure
 
-```
+```text
 .
 ├── bindings/go/     # Go library modules (see bindings/go/README.md)
 ├── cli/             # OCM CLI
@@ -75,9 +75,36 @@ task test
 ## Code Style
 
 - Run `golangci-lint` before committing (CI enforces this)
-    - Convenience task to run over all modules: `task tools:lint`
-    - If you want to apply auto-fixing: `task tools:lint -- --fix`
+  - Convenience task to run over all modules: `task tools:lint`
+  - If you want to apply auto-fixing: `task tools:lint -- --fix`
 - Generated code lives alongside source — run `task generate` if you change schemas
+
+## Test Requirements
+
+All code changes must include appropriate tests. This policy is required for [OpenSSF Best Practices](https://www.bestpractices.dev/) compliance and is enforced during review.
+
+### New Features
+
+New features **must** include unit tests covering expected behaviour. PRs without tests for new functionality will not be merged.
+
+### Bug Fixes
+
+Bug fixes **must** include a regression test that reproduces the original bug and verifies the fix.
+
+### Coverage
+
+PRs must not decrease overall test coverage. If existing uncovered code makes this impractical, explain in the PR description.
+
+### Integration Tests
+
+If your change affects cross-module behaviour or external dependencies (OCI registries, Kubernetes), run `task test/integration` in addition to `task test`. Integration tests require Docker.
+
+### Testing Patterns by Module
+
+| Module | Framework | Key conventions |
+|---|---|---|
+| `bindings/go/` and `cli/` | testify (`require`, `mock`) | Table-driven tests with `t.Run()`. Use `r := require.New(t)` and `t.Context()`. |
+| `kubernetes/controller/` | Ginkgo v2 + Gomega | Use `--ginkgo.focus` for specific specs, not `-run`. Requires `ENVTEST_K8S_VERSION`. |
 
 ## Pull Requests
 

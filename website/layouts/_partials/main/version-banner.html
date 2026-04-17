@@ -1,0 +1,22 @@
+{{- $currentVer := .Site.Version.Name -}}
+{{- $isDefault := .Site.Version.IsDefault -}}
+
+{{/* Show warning banner on all non-default versions */}}
+{{- if not $isDefault -}}
+  {{/* Find the default version's home page to build link */}}
+  {{- $defaultLink := "/" -}}
+  {{- $defaultName := "" -}}
+  {{- with .Site.Home.Rotate "version" -}}
+    {{- range . -}}
+      {{- if .Site.Version.IsDefault -}}
+        {{- $defaultLink = .RelPermalink -}}
+        {{- $defaultName = .Site.Version.Name -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+  <div class="version-warning-banner" role="alert">
+    You are viewing documentation for an older OCM version, <strong>{{ $currentVer }}</strong>.
+    For up-to-date documentation, see the
+    <a class="version-warning-link" href="{{ $defaultLink }}">latest version{{ with $defaultName }} ({{ . }}){{ end }}</a>.
+  </div>
+{{- end -}}
