@@ -213,7 +213,8 @@ license.
 
 {{<callout context="danger" title="Do not open a public issue for security vulnerabilities" icon="outline/alert-triangle">}}
 If you discover a security vulnerability, please report it responsibly through
-[GitHub's private vulnerability reporting](https://github.com/open-component-model/open-component-model/security/advisories/new)
-instead of opening a public issue. This allows maintainers to assess and address the issue before it is disclosed
-publicly.
+[GitHub's private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability)
+instead of opening a public issue. Each repository in the organization has this feature enabled - navigate to the
+**Security** tab of the affected repository to submit a report. This allows maintainers to assess and address the issue
+before it is disclosed publicly.
 {{</callout>}}
