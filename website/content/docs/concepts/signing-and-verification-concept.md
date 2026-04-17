@@ -132,8 +132,8 @@ component:
       version: 1.0.0
       relation: local
       access:                          # NOT included in signature
-        type: localBlob
-        localReference: sha256:70a257...
+         type: LocalBlob/v1
+         localReference: sha256:70a257...
         mediaType: text/plain; charset=utf-8
       digest:                          # Included in signature
         hashAlgorithm: SHA-256
