@@ -9,7 +9,7 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	helmv1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -80,7 +80,8 @@ func testResolverFor(component, version string, repoSpec runtime.Typed, desc *de
 func testMultiResolver(entries map[string]struct {
 	spec runtime.Typed
 	desc *descriptor.Descriptor
-}) *mockCVRepoResolver {
+},
+) *mockCVRepoResolver {
 	specs := make(map[string]runtime.Typed)
 	allDescs := make(map[string]*descriptor.Descriptor)
 	for key, entry := range entries {

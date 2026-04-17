@@ -2,7 +2,7 @@ package internal
 
 import (
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	helm "ocm.software/open-component-model/bindings/go/helm/access"
+	helm "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"

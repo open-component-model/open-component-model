@@ -27,7 +27,9 @@ var FileCleanupVersionedType = runtime.NewVersionedType(FileCleanupType, fileCle
 type FileCleanupSpec struct {
 	// Files is a list of file access specifications to clean up.
 	// Each entry references a file that was buffered during a Get transformation.
-	Files []accessv1alpha1.File `json:"files"`
+	// Entries may be nil when an optional CEL expression (e.g. provFile)
+	// resolves to null at runtime; nil entries are silently skipped.
+	Files []*accessv1alpha1.File `json:"files"`
 }
 
 // FileCleanupOutput is the output of a FileCleanup transformation.
@@ -78,7 +80,7 @@ func (t *FileCleanup) Transform(ctx context.Context, step runtime.Typed) (runtim
 
 	cleaned := 0
 	for _, file := range transformation.Spec.Files {
-		if file.URI == "" {
+		if file == nil || file.URI == "" {
 			continue
 		}
 

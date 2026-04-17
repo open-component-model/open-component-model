@@ -1,3 +1,4 @@
+// TODO(matthiasbruns): Drop plugin support in favour of built-in helm support https://github.com/open-component-model/ocm-project/issues/1029
 package main
 
 import (
@@ -14,7 +15,8 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	helminput "ocm.software/open-component-model/bindings/go/helm/input"
-	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	inputspec "ocm.software/open-component-model/bindings/go/helm/spec/input"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
@@ -76,7 +78,7 @@ func main() {
 		Level: slog.LevelDebug,
 	}))
 
-	capabilities := endpoints.NewEndpoints(helminput.Scheme)
+	capabilities := endpoints.NewEndpoints(inputspec.Scheme)
 	helmPlugin := &HelmInputPlugin{}
 	if err := input.RegisterInputProcessor(&helmv1.Helm{}, helmPlugin, capabilities); err != nil {
 		logger.Error("failed to register helm input plugin", "error", err.Error())
