@@ -230,6 +230,7 @@ ecrplugin
 elementmeta
 enablement
 entrypoint
+envtest
 eol
 executables
 executoroptions
@@ -496,6 +497,7 @@ ocmops
 ocmrepository
 ocmresourcereference
 ocms
+ocmtypegen
 ocmv
 odg
 offboard
@@ -790,6 +792,7 @@ xxxx
 yaml
 yitsushi
 yml
+yq
 yy
 yyyy
 zkdev
