@@ -114,8 +114,8 @@ git commit -s -m "Brief description of your changes"
 - **Read the repository's `CONTRIBUTING.md`** - It contains project-specific requirements such as coding style,
   required tools, and testing instructions.
 - **Run tests and linters locally** - Most repositories enforce these in CI. Running them locally first saves you a
-  round-trip. Make use of the `Taskfile` or `Makefile` as the test and lint commands usually incorporate a
-  specific version or configuration.
+  round-trip. Every repository has its own setup and configuration in its `Taskfile` or `Makefile` - use those
+  commands rather than running tools directly, as they incorporate the correct versions and settings.
 - **Keep your branch up to date** - Merge the latest `main` into your branch before submitting to avoid merge
   conflicts. There is no need to rebase because we squash all commits when merging a pull request.
 - **Elaborate changes** - If you are planning significant or potentially controversial changes, please discuss them
