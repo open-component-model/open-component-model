@@ -10,8 +10,6 @@ vars:
     sh: 'git rev-parse --show-toplevel'
 
   # Tool versions: load from project root, then override with local .env if set
-  KUSTOMIZE_VERSION:
-    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$KUSTOMIZE_VERSION"'
   CONTROLLER_TOOLS_VERSION:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$CONTROLLER_TOOLS_VERSION"'
   ENVTEST_VERSION:
@@ -22,19 +20,15 @@ vars:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$KIND_NODE_IMAGE_VERSION"'
   HELM_DOCS_VERSION:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${HELM_DOCS_VERSION:-v1.14.2}"'
-  KUBEBUILDER_VERSION:
-    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${KUBEBUILDER_VERSION:-v4.11.1}"'
   YQ_VERSION:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${YQ_VERSION:-v4.49.2}"'
-  
+
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
   LOCALBIN: '{{.TASKFILE_DIR}}/bin'
   KUBECTL: '{{.KUBECTL | default "kubectl"}}'
-  KUSTOMIZE: '{{.LOCALBIN}}/kustomize-{{.KUSTOMIZE_VERSION}}'
   CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen-{{.CONTROLLER_TOOLS_VERSION}}'
   ENVTEST: '{{.LOCALBIN}}/setup-envtest-{{.ENVTEST_VERSION}}'
   HELM_DOCS: '{{.LOCALBIN}}/helm-docs-{{.HELM_DOCS_VERSION}}'
-  KUBEBUILDER: '{{.LOCALBIN}}/kubebuilder-{{.KUBEBUILDER_VERSION}}'
   YQ: '{{.LOCALBIN}}/yq-{{.YQ_VERSION}}'
   IGNORE_NOT_FOUND: '{{.IGNORE_NOT_FOUND | default "false"}}'
   PLATFORMS: '{{.PLATFORMS | default "linux/arm64,linux/amd64"}}'
@@ -45,15 +39,12 @@ tasks:
     cmds: [ task: build ]
 
   # Development
-  # TODO: Rework CRD generation pipeline to eliminate kustomize dependency.
-  # Use a post-processing script (like ESO's hack/helm.generate.sh) to inject
-  # Helm template wrappers (crd.enable, webhook.enable, cert-manager annotations)
-  # into generated CRDs. This would let us drop config/ as a checked-in directory
-  # and remove the helm/sync-manifests kubebuilder plugin step.
   manifests:
-    desc: "Generate CRD manifests, RBAC, and webhook configurations"
+    desc: "Generate raw CRD and webhook configuration YAML into bin/gen/crd (consumed by helm/generate-crds)"
     deps: [controller-gen]
-    cmd: '"{{.CONTROLLER_GEN}}" rbac:roleName=manager-role crd webhook paths="{{ .TASKFILE_DIR }}/..." output:crd:artifacts:config=config/crd/bases'
+    cmds:
+      - mkdir -p bin/gen/crd
+      - '"{{.CONTROLLER_GEN}}" crd webhook paths="{{ .TASKFILE_DIR }}/..." output:crd:artifacts:config=bin/gen/crd'
 
   generate:
     desc: "Generate Go deepcopy and runtime.Object implementations"
@@ -167,20 +158,11 @@ tasks:
       - mkdir -p "{{.OUTPUT_DIR}}"
       - tar -xf "{{.TAR_PATH}}" -C "{{.OUTPUT_DIR}}"
 
-  build-installer:
-    desc: "Build the Kustomize-based installer manifest"
-    deps: [manifests, generate, kustomize]
-    cmds:
-      - mkdir -p dist
-      - '{{.KUSTOMIZE}} build config/default > dist/install.yaml'
-
   # Helm chart tasks
-  helm/sync-manifests:
-    desc: "Regenerate CRDs and RBAC for Helm chart"
-    deps: [manifests, kubebuilder]
-    cmds:
-      - '"{{.KUBEBUILDER}}" edit --plugins=helm/v2-alpha --output-dir .'
-      - rm .github/workflows/test-chart.yml # Plugin generates github workflow which we do not need
+  helm/generate-crds:
+    desc: "Generate Helm-wrapped CRD templates from controller-gen output"
+    deps: [manifests, yq]
+    cmd: 'YQ="{{.YQ}}" {{.TASKFILE_DIR}}/hack/helm.generate.sh {{.TASKFILE_DIR}}/bin/gen/crd {{.TASKFILE_DIR}}/chart'
 
   helm/schema:
     desc: "Generate JSON schema from chart values.yaml"
@@ -198,18 +180,18 @@ tasks:
     cmd: 'helm lint chart/'
 
   helm/validate:
-    desc: "Validate the Helm chart (lint, template, and verify CRDs/RBAC are in sync)"
+    desc: "Validate the Helm chart (lint, template, and verify CRDs/schema/docs are in sync)"
     silent: true
     cmds:
       - task: helm/lint
       - task: helm/template
       - task: helm/schema
       - task: helm/docs
-      - task: helm/sync-manifests
+      - task: helm/generate-crds
       - |
-        if ! git diff --quiet chart/templates/crd chart/templates/rbac chart/values.schema.json chart/README.md; then
-          echo "ERROR: CRDs, RBAC, schema or docs are out of sync. Run 'task helm/sync-manifests' and commit the changes."
-          git diff chart/templates/crd chart/templates/rbac chart/values.schema.json chart/README.md
+        if ! git diff --quiet chart/templates/crd chart/values.schema.json chart/README.md; then
+          echo "ERROR: CRDs, schema or docs are out of sync. Run 'task helm/generate-crds' (and helm/schema / helm/docs as needed) and commit the changes."
+          git diff chart/templates/crd chart/values.schema.json chart/README.md
           exit 1
         fi
 
@@ -268,13 +250,6 @@ tasks:
       - chart/README.md
 
   # Tool installers (all via helper)
-  kustomize:
-    desc: "Install kustomize"
-    deps:
-      - task: go-install-tool
-        vars: { TOOL_PATH: '{{.KUSTOMIZE}}', PACKAGE: sigs.k8s.io/kustomize/kustomize/v5, VERSION: '{{.KUSTOMIZE_VERSION}}' }
-    generates: [ '{{.KUSTOMIZE}}' ]
-
   controller-gen:
     desc: "Install controller-gen"
     deps:
@@ -288,13 +263,6 @@ tasks:
       - task: go-install-tool
         vars: { TOOL_PATH: '{{.ENVTEST}}', PACKAGE: sigs.k8s.io/controller-runtime/tools/setup-envtest, VERSION: '{{.ENVTEST_VERSION}}' }
     generates: [ '{{.ENVTEST}}' ]
-
-  kubebuilder:
-    desc: "Install kubebuilder"
-    deps:
-      - task: go-install-tool
-        vars: { TOOL_PATH: '{{.KUBEBUILDER}}', PACKAGE: sigs.k8s.io/kubebuilder/v4, VERSION: '{{.KUBEBUILDER_VERSION}}' }
-    generates: [ '{{.KUBEBUILDER}}' ]
 
   yq:
     desc: "Install yq"

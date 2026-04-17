@@ -107,19 +107,23 @@ Kubernetes: `>=1.26.0-0`
 
 Run these tasks from the `kubernetes/controller` directory.
 
-### Regenerating CRDs and RBAC
+### Regenerating CRDs
 
-When API types or RBAC markers change, regenerate the Helm chart manifests:
+When API types change, regenerate the CRD templates in the Helm chart:
 
 ```bash
-task helm/sync-manifests
+task helm/generate-crds
 ```
 
-This runs `kubebuilder edit --plugins=helm/v2-alpha` which:
-1. Runs `controller-gen` to generate CRDs and RBAC from Go source markers
-2. Converts kustomize manifests to Helm-templated manifests in `chart/templates/`
+This runs `controller-gen` to produce raw CRDs into `bin/gen/crd` and then invokes
+`hack/helm.generate.sh` to reformat them and inject the chart's Helm template
+wrappers (`crd.enable`, cert-manager CA-injection annotation, conversion webhook
+block) before writing them to `chart/templates/crd/`.
 
-> **Note:** Only CRDs and RBAC manifests are regenerated automatically. Other templates (e.g., `manager.yaml`, `_helpers.tpl`) are managed manually.
+> **Note:** RBAC templates in `chart/templates/rbac/` are hand-maintained. When
+> `//+kubebuilder:rbac` markers in Go source change, update
+> `chart/templates/rbac/manager-role.yaml` manually. Other templates (e.g.,
+> `manager.yaml`, `_helpers.tpl`) are likewise managed by hand.
 
 ### Validating changes
 
@@ -132,7 +136,7 @@ task helm/validate
 This checks:
 - Chart linting passes
 - Templates render successfully
-- CRDs, RBAC, schema, and docs are up to date
+- CRDs, schema, and docs are up to date
 
 ### Regenerating artifacts after values.yaml changes
 
