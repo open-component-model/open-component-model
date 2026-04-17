@@ -350,9 +350,6 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer *delivery
 	}
 
 	componentDescriptor, matchedResource, err := r.resolveComponentAndMatchResource(ctx, deployer, resource, cfg)
-	if errors.Is(err, workerpool.ErrResolutionInProgress) {
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-	}
 	if componentDescriptor == nil {
 		return ctrl.Result{}, err
 	}
@@ -502,11 +499,10 @@ func (r *Reconciler) resolveComponentAndMatchResource(
 	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, cfg)
 	switch {
 	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes.
-		// RequeueAfter acts as a safety net in case the event notification is dropped (e.g. channel buffer full).
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
 
-		return nil, nil, workerpool.ErrResolutionInProgress
+		return nil, nil, nil
 	case errors.Is(err, ErrComponentVersionDrift):
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ComponentDriftResolutionInProgress, err.Error())
 
