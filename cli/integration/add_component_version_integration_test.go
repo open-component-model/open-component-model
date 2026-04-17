@@ -604,3 +604,101 @@ func Test_Integration_HelmInput_RemoteRepository(t *testing.T) {
 	layout := internal.ParseHelmOCILayout(t, downloadDir)
 	layout.AssertHelmChartLayer(t)
 }
+
+// Test_Integration_AddComponentVersion_HelmAccess verifies that a component version
+// with a helm access resource (remote chart reference) can be added to an OCI registry.
+// This exercises the Helm ResourceRepository plugin for resolving helm access types.
+func Test_Integration_AddComponentVersion_HelmAccess(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	root := getRepoRootBasedOnGit(t)
+	chartDir := filepath.Join(root, "bindings/go/helm/testdata/provenance")
+	_, err := os.Stat(filepath.Join(chartDir, "mychart-0.1.0.tgz"))
+	r.NoError(err, "test helm chart should exist")
+
+	srv := httptest.NewServer(http.FileServer(http.Dir(chartDir)))
+	t.Cleanup(srv.Close)
+
+	registry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: %[1]q
+      port: %[2]q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[3]q
+        password: %[4]q
+`, registry.Host, registry.Port, registry.User, registry.Password)
+
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
+	componentName := "ocm.software/helm-access-add-cv"
+	componentVersion := "v1.0.0"
+
+	constructor := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: mychart
+    version: 0.1.0
+    type: helmChart
+    access:
+      type: helm/v1
+      helmRepository: %s
+      helmChart: mychart-0.1.0.tgz
+`, componentName, componentVersion, srv.URL)
+
+	constructorPath := filepath.Join(tempDir, "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+		"--constructor", constructorPath,
+		"--config", cfgPath,
+		"--skip-reference-digest-processing",
+	})
+
+	addCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	r.NoError(addCMD.ExecuteContext(addCtx), "add cv with helm access to OCI registry should succeed")
+
+	// Verify the component version was added by retrieving it
+	client := internal.CreateAuthClient(registry.RegistryAddress, registry.User, registry.Password)
+	resolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(registry.RegistryAddress),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
+
+	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err, "should be able to retrieve the added component version")
+	r.Equal(componentName, desc.Component.Name)
+	r.Equal(componentVersion, desc.Component.Version)
+	r.Len(desc.Component.Resources, 1)
+	r.Equal("mychart", desc.Component.Resources[0].Name)
+	r.Equal("0.1.0", desc.Component.Resources[0].Version)
+	r.Equal("helmChart", desc.Component.Resources[0].Type)
+	r.Equal("helm/v1", desc.Component.Resources[0].Access.GetType().String())
+}
