@@ -248,7 +248,7 @@ func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMo
 
 		mapping, err := a.restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err != nil {
-			return result, fmt.Errorf("failed to get REST mapping for %v: %w", gvk, err)
+			return nil, fmt.Errorf("failed to get REST mapping for %v: %w", gvk, err)
 		}
 
 		// Membership labels are injected just-in-time inside applyResource.
@@ -260,7 +260,7 @@ func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMo
 	// GVK+namespace combos).
 	conflicts, err := a.detectConflicts(ctx, toApply)
 	if err != nil {
-		return result, fmt.Errorf("conflict detection failed: %w", err)
+		return nil, fmt.Errorf("conflict detection failed: %w", err)
 	}
 
 	// Apply resources
