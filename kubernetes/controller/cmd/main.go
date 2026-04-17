@@ -87,6 +87,7 @@ func main() {
 		resourceConcurrency       int
 		resolverWorkerCount       int
 		resolverWorkerQueueLength int
+		resolverSubscriberBuffer  int
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
@@ -109,6 +110,8 @@ func main() {
 		"This is the number of active resolver workers.")
 	flag.IntVar(&resolverWorkerQueueLength, "resolver-worker-queue-length", 1000, //nolint:mnd // no magic number
 		"The maximum number of work items in the queue for the workers to pick up component versions to resolve from.")
+	flag.IntVar(&resolverSubscriberBuffer, "resolver-subscriber-buffer-size", 100, //nolint:mnd // no magic number
+		"The buffer size for each subscriber's event channel. A larger buffer reduces the probability of dropped resolution events under load.")
 
 	opts := zap.Options{
 		Development: true,
@@ -237,11 +240,12 @@ func main() {
 
 	// Create worker pool with its own dependencies
 	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
-		WorkerCount: resolverWorkerCount,
-		QueueSize:   resolverWorkerQueueLength,
-		Logger:      &setupLog,
-		Client:      mgr.GetClient(),
-		Cache:       resolverCache,
+		WorkerCount:          resolverWorkerCount,
+		QueueSize:            resolverWorkerQueueLength,
+		SubscriberBufferSize: resolverSubscriberBuffer,
+		Logger:               &setupLog,
+		Client:               mgr.GetClient(),
+		Cache:                resolverCache,
 	})
 	if err := mgr.Add(workerPool); err != nil {
 		setupLog.Error(err, "unable to add worker pool")
