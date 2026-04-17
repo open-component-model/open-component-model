@@ -6,14 +6,17 @@ kubectl_cmd = "kubectl"
 if str(local("command -v " + kubectl_cmd + " || true", quiet = True)) == "":
     fail("Required command '" + kubectl_cmd + "' not found in PATH")
 
-# Use kustomize to build the install yaml files
-install = kustomize('config/default')
+# Render the Helm chart to obtain the install manifests.
+install = local(
+    'helm template ocm-k8s-toolkit chart/ --namespace ocm-k8s-toolkit-system -f chart/test-values.yaml',
+    quiet = True,
+)
 
 # Update the root security group. Tilt requires root access to update the
 # running process.
 objects = decode_yaml_stream(install)
 for o in objects:
-    if o.get('kind') == 'Deployment' and o.get('metadata').get('name') == 'ocm-k8s-toolkit-controller-manager':
+    if o.get('kind') == 'Deployment' and o.get('metadata', {}).get('name') == 'ocm-k8s-toolkit-controller-manager':
         o['spec']['template']['spec']['containers'][0]['securityContext']['runAsNonRoot'] = False
         break
 
