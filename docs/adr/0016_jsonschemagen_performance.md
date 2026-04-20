@@ -1,8 +1,8 @@
 # jsonschemagen Performance Optimization
 
-* Status: accepted
-* Deciders: jakobmoellerdev
-* Date: 2026.04.13
+* **Status**: accepted
+* **Deciders**: jakobmoellerdev
+* **Date**: 2026-04-13
 
 Technical Story: `jsonschemagen` generate task dominated CI wall time due to `go run`
 recompilation and loading 6.8x more packages than necessary.
