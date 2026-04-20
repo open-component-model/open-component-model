@@ -34,6 +34,7 @@ test_stable_version_from_mixed_releases() {
     echo "--- stable version from mixed releases ---"
     local tmpdir
     tmpdir=$(mktemp -d)
+    trap 'unset -f download 2>/dev/null; rm -r "${tmpdir}"' RETURN
     TMP_METADATA="${tmpdir}/ocm.json"
 
     download() { cat > "$1" <<'FIXTURE'
@@ -49,7 +50,6 @@ FIXTURE
     unset OCM_VERSION 2>/dev/null || true
     get_release_version >/dev/null 2>&1
     assert_equals "picks stable 0.3.0 from mixed releases" "0.3.0" "${OCM_VERSION}"
-    rm -r "${tmpdir}"
 }
 
 # Regression test: the script previously picked the first cli/ tag regardless
@@ -58,6 +58,7 @@ test_prerelease_excluded() {
     echo "--- pre-release tags excluded (regression) ---"
     local tmpdir
     tmpdir=$(mktemp -d)
+    trap 'unset -f download 2>/dev/null; rm -r "${tmpdir}"' RETURN
     TMP_METADATA="${tmpdir}/ocm.json"
 
     download() { cat > "$1" <<'FIXTURE'
@@ -73,13 +74,13 @@ FIXTURE
     unset OCM_VERSION 2>/dev/null || true
     get_release_version >/dev/null 2>&1
     assert_equals "skips rc tags, picks 0.3.0" "0.3.0" "${OCM_VERSION}"
-    rm -r "${tmpdir}"
 }
 
 test_non_cli_tags_excluded() {
     echo "--- non-CLI tags excluded ---"
     local tmpdir
     tmpdir=$(mktemp -d)
+    trap 'unset -f download 2>/dev/null; rm -r "${tmpdir}"' RETURN
     TMP_METADATA="${tmpdir}/ocm.json"
 
     download() { cat > "$1" <<'FIXTURE'
@@ -94,7 +95,6 @@ FIXTURE
     unset OCM_VERSION 2>/dev/null || true
     get_release_version >/dev/null 2>&1
     assert_equals "ignores non-cli tags, picks 0.5.0" "0.5.0" "${OCM_VERSION}"
-    rm -r "${tmpdir}"
 }
 
 test_explicit_ocm_version() {
@@ -167,6 +167,7 @@ test_only_prereleases_fatals() {
     echo "--- only pre-releases -> fatal ---"
     local tmpdir
     tmpdir=$(mktemp -d)
+    trap 'unset -f download 2>/dev/null; rm -r "${tmpdir}"' RETURN
     TMP_METADATA="${tmpdir}/ocm.json"
 
     download() { cat > "$1" <<'FIXTURE'
@@ -181,13 +182,13 @@ FIXTURE
     local status=0
     (get_release_version) >/dev/null 2>&1 || status=$?
     assert_equals "only pre-releases -> exit 1" "1" "${status}"
-    rm -r "${tmpdir}"
 }
 
 test_empty_response_fatals() {
     echo "--- empty response -> fatal ---"
     local tmpdir
     tmpdir=$(mktemp -d)
+    trap 'unset -f download 2>/dev/null; rm -r "${tmpdir}"' RETURN
     TMP_METADATA="${tmpdir}/ocm.json"
 
     download() { cat > "$1" <<'FIXTURE'
@@ -199,13 +200,13 @@ FIXTURE
     local status=0
     (get_release_version) >/dev/null 2>&1 || status=$?
     assert_equals "empty response -> exit 1" "1" "${status}"
-    rm -r "${tmpdir}"
 }
 
 test_single_stable_release() {
     echo "--- single stable release ---"
     local tmpdir
     tmpdir=$(mktemp -d)
+    trap 'unset -f download 2>/dev/null; rm -r "${tmpdir}"' RETURN
     TMP_METADATA="${tmpdir}/ocm.json"
 
     download() { cat > "$1" <<'FIXTURE'
@@ -218,7 +219,6 @@ FIXTURE
     unset OCM_VERSION 2>/dev/null || true
     get_release_version >/dev/null 2>&1
     assert_equals "single release -> 1.0.0" "1.0.0" "${OCM_VERSION}"
-    rm -r "${tmpdir}"
 }
 
 # ---------------------------------------------------------------------------
@@ -229,6 +229,7 @@ test_pagination_finds_stable_on_second_page() {
     echo "--- pagination: stable CLI tag on page 2 ---"
     local tmpdir
     tmpdir=$(mktemp -d)
+    trap 'unset -f download 2>/dev/null; rm -r "${tmpdir}"' RETURN
     TMP_METADATA="${tmpdir}/ocm.json"
 
     download() {
@@ -261,13 +262,13 @@ FIXTURE
     unset OCM_VERSION 2>/dev/null || true
     get_release_version >/dev/null 2>&1
     assert_equals "finds 0.3.0 on page 2" "0.3.0" "${OCM_VERSION}"
-    rm -r "${tmpdir}"
 }
 
 test_pagination_stops_on_empty_page() {
     echo "--- pagination: empty page -> fatal ---"
     local tmpdir
     tmpdir=$(mktemp -d)
+    trap 'unset -f download 2>/dev/null; rm -r "${tmpdir}"' RETURN
     TMP_METADATA="${tmpdir}/ocm.json"
 
     download() {
@@ -292,7 +293,6 @@ FIXTURE
     local status=0
     (get_release_version) >/dev/null 2>&1 || status=$?
     assert_equals "no stable tag across pages -> exit 1" "1" "${status}"
-    rm -r "${tmpdir}"
 }
 
 # ---------------------------------------------------------------------------
