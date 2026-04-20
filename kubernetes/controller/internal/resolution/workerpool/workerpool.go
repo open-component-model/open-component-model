@@ -161,7 +161,7 @@ func (wp *WorkerPool) Subscribe() <-chan []RequesterInfo {
 // Start begins the worker pool.
 // This method blocks until the context is canceled to implement graceful shutdown.
 func (wp *WorkerPool) Start(ctx context.Context) error {
-	wp.Logger.Info("starting worker pool", "workers", wp.WorkerCount, "queueSize", wp.QueueSize)
+	wp.Logger.Info("starting worker pool", "workers", wp.WorkerCount, "queueSize", wp.QueueSize, "subscriberBufferSize", wp.SubscriberBufferSize)
 
 	for i := range wp.WorkerCount {
 		wp.workersDone.Add(1)
