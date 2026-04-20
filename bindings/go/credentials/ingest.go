@@ -232,7 +232,7 @@ func validateConsumerIdentityTypes(ctx context.Context, g *Graph, config *cfgRun
 
 			// If the identity type declares accepted credential types, validate
 			// This does not fail on purpose - credentials should still be passed as the user configured them
-			acceptor, ok := identityObj.(runtime.CredentialAcceptor)
+			acceptor, ok := identityObj.(CredentialAcceptor)
 			if !ok {
 				continue
 			}

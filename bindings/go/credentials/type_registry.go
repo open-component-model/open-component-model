@@ -4,6 +4,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// CredentialAcceptor is an optional interface that typed identity structs can implement
+// to declare which credential types they accept. The graph validates during ingestion
+// that configured credential types are compatible with the identity type.
+type CredentialAcceptor interface {
+	AcceptedCredentialTypes() []runtime.Type
+}
+
 // CredentialTypeSchemeProvider provides read access to a scheme of known
 // credential types. The credential graph uses this during ingestion to
 // deserialize typed credentials and resolve type aliases.
