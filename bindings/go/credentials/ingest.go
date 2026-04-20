@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"reflect"
 
 	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
@@ -269,9 +270,18 @@ func isAccepted(credentialTypeScheme *runtime.Scheme, credType runtime.Type, acc
 	if credentialTypeScheme == nil {
 		return false
 	}
-	resolved := credentialTypeScheme.ResolveType(credType)
+	// Resolve through the scheme: if both types produce the same registered
+	// prototype, they are aliases of each other.
+	credObj, err := credentialTypeScheme.NewObject(credType)
+	if err != nil {
+		return false
+	}
 	for _, a := range accepted {
-		if credentialTypeScheme.ResolveType(a).Equal(resolved) {
+		aObj, err := credentialTypeScheme.NewObject(a)
+		if err != nil {
+			continue
+		}
+		if reflect.TypeOf(credObj) == reflect.TypeOf(aObj) {
 			return true
 		}
 	}

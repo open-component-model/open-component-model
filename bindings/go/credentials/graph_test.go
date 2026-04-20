@@ -447,6 +447,69 @@ func TestResolveCredentials(t *testing.T) {
 	}
 }
 
+func TestResolveTypedCredentials(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		yaml        string
+		identity    runtime.Identity
+		expectedErr require.ErrorAssertionFunc
+		validate    func(t *testing.T, typed runtime.Typed)
+	}{
+		{
+			name: "returns DirectCredentials with properties",
+			yaml: testYAML,
+			identity: runtime.Identity{
+				"type":     "OCIRegistry",
+				"hostname": "docker.io",
+			},
+			expectedErr: require.NoError,
+			validate: func(t *testing.T, typed runtime.Typed) {
+				direct, ok := typed.(*v1.DirectCredentials)
+				require.True(t, ok, "expected *v1.DirectCredentials, got %T", typed)
+				require.Equal(t, "foo", direct.Properties["username"])
+				require.Equal(t, "bar", direct.Properties["password"])
+			},
+		},
+		{
+			name: "not found returns error",
+			yaml: testYAML,
+			identity: runtime.Identity{
+				"type":     "OCIRegistry",
+				"hostname": "notfound.io",
+				"path":     "another-owner/another-repo",
+			},
+			expectedErr: func(t require.TestingT, err error, i ...interface{}) {
+				require.Error(t, err)
+				require.ErrorIs(t, err, credentials.ErrNotFound)
+			},
+			validate: func(t *testing.T, typed runtime.Typed) {},
+		},
+		{
+			name: "missing identity type returns error",
+			yaml: testYAML,
+			identity: runtime.Identity{
+				"hostname": "docker.io",
+			},
+			expectedErr: func(t require.TestingT, err error, i ...interface{}) {
+				require.Error(t, err)
+				require.ErrorIs(t, err, credentials.ErrUnknown)
+			},
+			validate: func(t *testing.T, typed runtime.Typed) {},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			graph, err := GetGraph(t, tc.yaml)
+			require.NoError(t, err)
+			typed, err := graph.ResolveTyped(t.Context(), tc.identity)
+			tc.expectedErr(t, err)
+			if err != nil {
+				return
+			}
+			tc.validate(t, typed)
+		})
+	}
+}
+
 func TestGraphRendering(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
