@@ -48,7 +48,7 @@ jobs:
         with:
           fetch-depth: 2
       - name: Run linkspector
-        uses: umbrelladocs/action-linkspector@37c85bcde51b30bf929936502bac6bfb7e8f0a4d # v1
+        uses: umbrelladocs/action-linkspector@963b6264d7de32c904942a70b488d3407453049e # v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
@@ -155,7 +155,7 @@ jobs:
 
       - name: Run linkspector
         if: steps.check_changes.outputs.has_website_changes == 'true'
-        uses: umbrelladocs/action-linkspector@37c85bcde51b30bf929936502bac6bfb7e8f0a4d # v1
+        uses: umbrelladocs/action-linkspector@963b6264d7de32c904942a70b488d3407453049e # v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check

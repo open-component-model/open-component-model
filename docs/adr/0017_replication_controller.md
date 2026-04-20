@@ -175,8 +175,8 @@ TGDs are written to a scratch volume:
 * Path: `/var/run/ocm/transfer-specs/{namespace}-{name}-{version}.json`.
 * GC on CR deletion (finalizer) or version supersession.
 
-Compressed inline storage on the CR and ConfigMap-backed storage were considered and rejected: both still hit Kubernetes object size limits and shift, rather than remove, the etcd pressure.
-* Path available for operator inspection.
+Compressed inline storage on the CR and ConfigMap-backed storage were considered and rejected: 
+both still hit Kubernetes object size limits and shift, rather than remove, the etcd pressure.
 
 ### Watches
 

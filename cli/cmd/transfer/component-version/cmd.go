@@ -18,11 +18,14 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/transfer"
+	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/render"
+	"ocm.software/open-component-model/cli/internal/render/progress"
+	"ocm.software/open-component-model/cli/internal/render/progress/bar"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
@@ -34,7 +37,7 @@ const (
 	FlagUploadAs      = "upload-as"
 	FlagTransferSpec  = "transfer-spec"
 
-	// Each node emits 2 events (Running + Completed/Failed) and since the renderer consumes
+	// Each node emits 2 events (Running + Completed/Failed) and since the tracker consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
 	eventBufferSize = 16
 )
@@ -56,7 +59,7 @@ This command constructs a TransformationGraphDefinition consisting of:
 
 We support OCI and CTF as well as Helm repositories as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
-The graph is built accordingly based on the provided references. 
+The graph is built accordingly based on the provided references.
 By default, only the component version itself is transferred, but with --copy-resources, all resources are also copied and transformed if necessary.
 
 The graph is validated, and then executed unless --dry-run is set.
@@ -164,21 +167,33 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting transfer-spec flag failed: %w", err)
 	}
 
+	// Progress goes to stderr so dry-run spec output on stdout remains clean for piping.
+	tracker := progress.NewTracker(ctx, cmd.ErrOrStderr(), bar.NewVisualizer[*graphPkg.Transformation])
+	defer tracker.Stop()
+
 	var tgd *transformv1alpha1.TransformationGraphDefinition
 
 	if specPath != "" {
+		op := tracker.StartOperation("Loading transfer spec")
 		tgd, err = loadTransferSpec(specPath, cmd.InOrStdin())
+		op.Finish(err)
 		if err != nil {
 			return err
 		}
 	} else {
+		opName := "Resolving component versions"
+		if dryRun {
+			opName += " (dry run)"
+		}
+		op := tracker.StartOperation(opName)
 		tgd, err = buildGraphDefinitionFromArgs(cmd, args, octx, pm, credGraph)
+		op.Finish(err)
 		if err != nil {
 			return err
 		}
 	}
 
-	// Build transformer builder
+	// Build transformation graph
 	b := transfer.NewDefaultBuilder(pm.ComponentVersionRepositoryRegistry, pm.ResourcePluginRegistry, credGraph)
 	graph, err := b.
 		WithEvents(make(chan graphRuntime.ProgressEvent, eventBufferSize)).
@@ -219,17 +234,18 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Create event channel and tracker
-	tracker := newProgressTracker(graph, cmd.OutOrStdout())
-	go tracker.Start(ctx) // Start event processing in a separate goroutine
+	// Execute graph with progress tracking
+	op := tracker.StartOperation("Transferring component versions",
+		progress.WithEvents(graph.Events(), mapEvent, graph.NodeCount()),
+		progress.WithErrorFormatter(formatError))
 
-	// Execute graph
 	if err := graph.Process(ctx); err != nil {
-		tracker.Summary(err)
-		return fmt.Errorf("graph execution failed")
+		op.Finish(err)
+		return fmt.Errorf("graph execution failed: %w", err)
 	}
-	tracker.Summary(nil)
+	op.Finish(nil)
 
+	tracker.Stop() // Restore slog before the log below; defer is the safety net for error paths.
 	slog.DebugContext(ctx, "transfer completed successfully")
 	return nil
 }
@@ -275,7 +291,6 @@ func buildGraphDefinitionFromArgs(
 
 	fromSpec, compErr := compref.Parse(args[0])
 	if compErr != nil {
-		// TODO add support for reference without component version
 		return nil, fmt.Errorf("invalid source component reference: %w", compErr)
 	}
 
@@ -321,7 +336,6 @@ func buildGraphDefinitionFromArgs(
 		upTyp = transfer.UploadAsOciArtifact
 	}
 
-	// Build TransformationGraphDefinition
 	tgd, err := transfer.BuildGraphDefinition(
 		ctx,
 		transfer.WithTransfer(
