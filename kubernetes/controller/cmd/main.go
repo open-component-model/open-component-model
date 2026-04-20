@@ -131,6 +131,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	if resolverSubscriberBuffer > resolverWorkerQueueLength {
+		setupLog.Error(nil, "invalid flag value", "flag", "resolver-subscriber-buffer-size",
+			"value", resolverSubscriberBuffer, "reason", "must not exceed resolver-worker-queue-length")
+		os.Exit(1)
+	}
+
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	ctx := context.Background()
