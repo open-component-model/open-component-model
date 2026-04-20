@@ -232,11 +232,12 @@ This means:
 
 - `.ocmconfig` format is unchanged — `Credentials/v1` with `properties` continues to work
 - `DirectCredentials/v1` is the universal fallback, registered with all aliases
-- Bindings MAY expose a `FromDirectCredentials` helper to lift legacy `Credentials/v1` configs
-  (nested `properties` map) into their typed struct (flat fields). It is **not required by the framework** and the
-  graph never calls it; it is an optional per-binding convenience at legacy-map boundaries (plugin binary receiving
-  a map, or a consumer still holding an old `Credentials/v1` config). Generic `scheme.Convert` cannot do this lift
-  because the JSON shapes differ (nested vs flat).
+- Bindings MUST provide a `FromDirectCredentials` helper to lift legacy `Credentials/v1` configs
+  (nested `properties` map) into their typed struct (flat fields). The graph never calls it — consumers call it when
+  `ResolveTyped` returns `*DirectCredentials` instead of the expected typed struct. Without this helper, the legacy
+  fallback path fails because generic `scheme.Convert` cannot do this lift (the JSON shapes differ: nested `properties`
+  map vs flat fields). This is not enforced by a framework interface, but every binding that supports legacy configs
+  needs it for the `DirectCredentials` → typed struct conversion at the consumer level.
 - Unversioned identity types work through `runtime.Scheme` alias resolution
 
 ### External Plugin Integration
