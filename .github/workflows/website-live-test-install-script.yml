@@ -96,7 +96,7 @@ jobs:
     name: Install without attestation
     runs-on: ubuntu-latest
     env:
-      OCM_VERSION: ${{ needs.resolve.outputs.version }}
+      EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -115,9 +115,9 @@ jobs:
         run: |
           version_json=$(ocm version 2>/dev/null)
           actual=$(echo "${version_json}" | jq -r '"\(.major).\(.minor).\(.patch)"')
-          if [[ "${actual}" != "${OCM_VERSION}" ]]; then
-            echo "::error::Version mismatch: expected ${OCM_VERSION}, got ${actual}"
+          if [[ "${actual}" != "${EXPECTED_VERSION}" ]]; then
+            echo "::error::Version mismatch: expected ${EXPECTED_VERSION}, got ${actual}"
             exit 1
           fi
-          echo "Installed version ${actual} matches expected ${OCM_VERSION}"
+          echo "Installed version ${actual} matches expected ${EXPECTED_VERSION}"
           ocm --help > /dev/null
