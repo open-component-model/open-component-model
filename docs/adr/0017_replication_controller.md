@@ -59,7 +59,6 @@ spec:
   transferConfig:
     recursive: false
     copyMode: localBlob     # localBlob | allResources
-    uploadAs: default        # default | localBlob | ociArtifact
 
   ocmConfig:
     - name: my-ocm-config
