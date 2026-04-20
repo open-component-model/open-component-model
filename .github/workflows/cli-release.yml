@@ -67,7 +67,9 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          sparse-checkout: ${{ env.COMPONENT_PATH }}
+          sparse-checkout: |
+            ${{ env.COMPONENT_PATH }}
+            .github/scripts
           ref: ${{ github.ref_name }}
 
       - name: Setup git config
@@ -83,30 +85,15 @@ jobs:
           git_user_signingkey: true
           git_tag_gpgsign: true
 
-      - name: Download changelog artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: ${{ needs.prepare.outputs.changelog_artifact }}
-          path: ${{ runner.temp }}
-
       - name: Create ${{ needs.prepare.outputs.new_tag }}
         id: tag
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           TAG: ${{ needs.prepare.outputs.new_tag }}
-          CHANGELOG_FILE: ${{ runner.temp }}/CHANGELOG.md
         with:
           script: |
-            const { execFileSync } = require("child_process");
-            const fs = require("fs");
-            const tag = process.env.TAG;
-            const msg = fs.readFileSync(process.env.CHANGELOG_FILE, "utf8");
-            try { execFileSync("git", ["rev-parse", `refs/tags/${tag}`], { stdio: "pipe" }); core.info(`Tag ${tag} exists`); core.setOutput("pushed","false"); return; } catch {}
-            fs.writeFileSync(".tagmsg", msg);
-            execFileSync("git", ["tag", "-s", tag, "-F", ".tagmsg"]);
-            execFileSync("git", ["push", "origin", `refs/tags/${tag}`]);
-            core.setOutput("pushed","true");
-            core.info(`✅ Created RC tag ${tag}`);
+            const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
+            await script.createRcTag({ core });
 
   # --------------------------------------------------------
   # 3. BUILD CLI: calls cli.yml via workflow_call
@@ -266,7 +253,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          sparse-checkout: ${{ env.COMPONENT_PATH }}
+          sparse-checkout: |
+            ${{ env.COMPONENT_PATH }}
+            .github/scripts
           fetch-depth: 0
           ref: ${{ github.ref_name }}
 
@@ -284,42 +273,14 @@ jobs:
           git_tag_gpgsign: true
 
       - name: Create new release tag
-        # Points new release tag to same commit as RC tag (no rebuild needed)
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
         with:
           script: |
-            const { execFileSync } = require("child_process");
-            const { RC_TAG: rcTag, NEW_RELEASE_TAG: newReleaseTag } = process.env;
-
-            // Pre-flight checks
-            if (!rcTag || !newReleaseTag) {
-              core.setFailed("Missing RC_TAG or NEW_RELEASE_TAG");
-              return;
-            }
-
-            // Check if new release tag already exists
-            try {
-              execFileSync("git", ["rev-parse", `refs/tags/${newReleaseTag}`], { stdio: "pipe" });
-              core.setFailed(`Tag ${newReleaseTag} already exists`);
-              return;
-            } catch {
-              // Expected: tag doesn't exist, continue
-            }
-
-            // Resolve RC commit
-            const rcSha = execFileSync("git", ["rev-parse", `refs/tags/${rcTag}^{commit}`], { stdio: "pipe" }).toString().trim();
-            if (!rcSha) {
-              core.setFailed(`Could not resolve commit for RC tag ${rcTag}`);
-              return;
-            }
-
-            // Create and push new release tag
-            execFileSync("git", ["tag", "-s", newReleaseTag, rcSha, "-m", `Promote ${rcTag} to ${newReleaseTag}`]);
-            execFileSync("git", ["push", "origin", `refs/tags/${newReleaseTag}`]);
-            core.info(`✅ Created new release tag ${newReleaseTag} from ${rcTag} (${rcSha.substring(0,7)})`);
+            const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
+            await script.createNewReleaseTag({ core });
 
       - name: Setup ORAS
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
