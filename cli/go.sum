@@ -377,8 +377,8 @@ k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 h1:HhDfevmPS+OalTjQRKbTHp
 k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4/go.mod h1:kdmbQkyfwUagLfXIad1y2TdrjPFWp2Q89B3qkRwf/pQ=
 k8s.io/kubectl v0.35.2 h1:aSmqhSOfsoG9NR5oR8OD5eMKpLN9x8oncxfqLHbJJII=
 k8s.io/kubectl v0.35.2/go.mod h1:+OJC779UsDJGxNPbHxCwvb4e4w9Eh62v/DNYU2TlsyM=
-k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 h1:AZYQSJemyQB5eRxqcPky+/7EdBj0xi3g0ZcxxJ7vbWU=
-k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2/go.mod h1:xDxuJ0whA3d0I4mf/C4ppKHxXynQ+fxnkmQH0vTHnuk=
+k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 h1:kBawHLSnx/mYHmRnNUf9d4CpjREbeZuxoSGOX/J+aYM=
+k8s.io/utils v0.0.0-20260319190234-28399d86e0b5/go.mod h1:xDxuJ0whA3d0I4mf/C4ppKHxXynQ+fxnkmQH0vTHnuk=
 ocm.software/open-component-model/bindings/go/blob v0.0.12 h1:5YOFDxERzF6w+rPWYuvnb5iVf3xgWJo9wLkzIPe+FmU=
 ocm.software/open-component-model/bindings/go/blob v0.0.12/go.mod h1:YswKfR/kxhdHHK7bN98S2O73ZZlPLsHfHO2Bjsr6Zww=
 ocm.software/open-component-model/bindings/go/cel v0.0.0-20260417071914-50137d2b3f6f h1:ZC068uEz0ZMM+zuoYoAGBsM8LGaeP1AJwu7cwCCLSww=
