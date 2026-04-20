@@ -8,14 +8,14 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.12
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260417071914-50137d2b3f6f
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260420110930-26bbb71688f0
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260417071914-50137d2b3f6f
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260420110930-26bbb71688f0
 	ocm.software/open-component-model/bindings/go/oci v0.0.39
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260417071914-50137d2b3f6f
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260417071914-50137d2b3f6f
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260420110930-26bbb71688f0
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260420110930-26bbb71688f0
 )
 
 require (
@@ -81,10 +81,10 @@ require (
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260417071914-50137d2b3f6f // indirect
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260420110930-26bbb71688f0 // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.12 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260417071914-50137d2b3f6f // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260420110930-26bbb71688f0 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
