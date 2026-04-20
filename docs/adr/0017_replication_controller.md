@@ -189,7 +189,7 @@ both still hit Kubernetes object size limits and shift, rather than remove, the 
 When a Replication CR is deleted:
 
 1. Finalizer blocks removal; reconciler observes `deletionTimestamp`.
-2. In-flight transfer is canceled via a per-item context keyed by CR UID. The worker cancelled as soon as possible.
+2. In-flight transfer is canceled via a per-item context keyed by CR UID. The worker canceled as soon as possible.
 3. Bounded drain (default 30s, controller flag) waits for worker acknowledgement.
 4. GC: remove TGD file, drop cache entry, unregister event source.
 5. Finalizer removed, CR deleted.
