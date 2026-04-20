@@ -76,9 +76,20 @@ jobs:
       - name: Run install script
         env:
           INSTALL_DIR: ${{ runner.temp }}/ocm-bin
+          INSTALL_LOG: ${{ runner.temp }}/install.log
         run: |
-          bash website/static/install-cli.sh "${INSTALL_DIR}"
+          bash website/static/install-cli.sh "${INSTALL_DIR}" 2>&1 | tee "${INSTALL_LOG}"
           echo "${INSTALL_DIR}" >> "$GITHUB_PATH"
+
+      - name: Verify attestation was checked
+        env:
+          INSTALL_LOG: ${{ runner.temp }}/install.log
+        run: |
+          if ! grep -q "Attestation verification successful" "${INSTALL_LOG}"; then
+            echo "::error::Attestation verification did not run or did not succeed"
+            cat "${INSTALL_LOG}"
+            exit 1
+          fi
 
       - name: Verify installed binary
         run: |
@@ -104,12 +115,23 @@ jobs:
       - name: Run install script without gh auth
         env:
           INSTALL_DIR: ${{ runner.temp }}/ocm-bin
+          INSTALL_LOG: ${{ runner.temp }}/install.log
           GH_TOKEN: ""
           GITHUB_TOKEN: ""
           GH_CONFIG_DIR: /nonexistent
         run: |
-          bash website/static/install-cli.sh "${INSTALL_DIR}"
+          bash website/static/install-cli.sh "${INSTALL_DIR}" 2>&1 | tee "${INSTALL_LOG}"
           echo "${INSTALL_DIR}" >> "$GITHUB_PATH"
+
+      - name: Verify attestation was skipped
+        env:
+          INSTALL_LOG: ${{ runner.temp }}/install.log
+        run: |
+          if ! grep -q "GitHub CLI is not authenticated. Skipping attestation verification." "${INSTALL_LOG}"; then
+            echo "::error::Expected unauthenticated skip message not found"
+            cat "${INSTALL_LOG}"
+            exit 1
+          fi
 
       - name: Verify installed binary
         run: |
