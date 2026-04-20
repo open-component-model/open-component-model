@@ -243,8 +243,8 @@ setup_binary() {
     fi
 }
 
-# Run the install process -- skip when sourced for testing.
-if [[ -z "${BASH_SOURCE[0]:-}" ]] || [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+# Run the install process
+{
     case "${1:-}" in -h|--help) usage ;; esac
     setup_verify_os
     setup_verify_arch
@@ -257,4 +257,4 @@ if [[ -z "${BASH_SOURCE[0]:-}" ]] || [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     setup_binary
     ensure_path
     info "OCM CLI v${OCM_VERSION} installed successfully"
-fi
+}
