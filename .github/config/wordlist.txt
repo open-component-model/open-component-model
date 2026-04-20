@@ -758,6 +758,7 @@ utf
 util
 utils
 uwe
+ux
 valuemergehandler
 valuemergehandlerdescriptor
 valueset
@@ -766,6 +767,7 @@ valuessource
 verifier
 verifiers
 versionable
+versionability
 versionedtypedobjects
 walkthrough
 warroom
