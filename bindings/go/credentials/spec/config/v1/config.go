@@ -15,6 +15,7 @@ const (
 	// CredentialsType defines the type identifier for credentials
 	CredentialsType = "Credentials"
 	// DirectCredentialsType is the legacy type identifier for direct credentials
+	//nolint: gosec // not a credential
 	DirectCredentialsType = "DirectCredentials"
 )
 
@@ -24,10 +25,10 @@ const (
 func MustRegister(scheme *runtime.Scheme) {
 	direct := &DirectCredentials{}
 	scheme.MustRegisterWithAlias(direct,
-		runtime.NewVersionedType(CredentialsType, Version),     // default: Credentials/v1
-		runtime.NewUnversionedType(CredentialsType),            // alias: Credentials
+		runtime.NewVersionedType(CredentialsType, Version),       // default: Credentials/v1
+		runtime.NewUnversionedType(CredentialsType),              // alias: Credentials
 		runtime.NewVersionedType(DirectCredentialsType, Version), // alias: DirectCredentials/v1
-		runtime.NewUnversionedType(DirectCredentialsType),      // alias: DirectCredentials
+		runtime.NewUnversionedType(DirectCredentialsType),        // alias: DirectCredentials
 	)
 	config := &Config{}
 	scheme.MustRegisterWithAlias(config,

@@ -164,9 +164,9 @@ func processRepositoryConfigurations(g *Graph, config *cfgRuntime.Config, repoTy
 }
 
 // extractResolvable separates credentials into two groups:
-// 1. Credentials resolvable without plugins — either typed credentials known to the CredentialTypeScheme,
-//    or DirectCredentials (Credentials/v1). Returns the first successfully resolved typed credential.
-// 2. Remaining credentials that require plugin-based resolution.
+//  1. Credentials resolvable without plugins — either typed credentials known to the CredentialTypeScheme,
+//     or DirectCredentials (Credentials/v1). Returns the first successfully resolved typed credential.
+//  2. Remaining credentials that require plugin-based resolution.
 func extractResolvable(g *Graph, creds []runtime.Typed) (runtime.Typed, []runtime.Typed, error) {
 	var resolved runtime.Typed
 	var remaining []runtime.Typed

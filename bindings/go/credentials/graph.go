@@ -23,14 +23,13 @@ type Options struct {
 	CredentialPluginProvider
 	CredentialRepositoryTypeScheme *runtime.Scheme
 	// IdentityTypeSchemeProvider provides access to known consumer identity types (e.g. OCIRegistry/v1).
-	IdentityTypeSchemeProvider IdentityTypeSchemeProvider
+	IdentityTypeSchemeProvider TypeSchemeProvider
 	// CredentialTypeSchemeProvider provides access to known credential types (e.g. HelmHTTPCredentials/v1).
-	CredentialTypeSchemeProvider CredentialTypeSchemeProvider
+	CredentialTypeSchemeProvider TypeSchemeProvider
 }
 
 // ToGraph creates a new credential graph from the provided configuration and options.
 // It initializes the graph structure and ingests the configuration into the graph.
-// The returned Graph implements both Resolver and TypedResolver.
 func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (*Graph, error) {
 	g := &Graph{
 		syncedDag:                    newSyncedDag(),
@@ -56,10 +55,10 @@ type Graph struct {
 
 	*syncedDag // The underlying DAG structure for managing dependencies
 
-	repositoryPluginProvider      RepositoryPluginProvider      // injection for resolving custom repository types
-	credentialPluginProvider      CredentialPluginProvider      // injection for resolving custom credential types
-	identityTypeSchemeProvider   IdentityTypeSchemeProvider   // validates consumer identity types from config
-	credentialTypeSchemeProvider CredentialTypeSchemeProvider // validates credential types from config
+	repositoryPluginProvider     RepositoryPluginProvider // injection for resolving custom repository types
+	credentialPluginProvider     CredentialPluginProvider // injection for resolving custom credential types
+	identityTypeSchemeProvider   TypeSchemeProvider       // validates consumer identity types from config
+	credentialTypeSchemeProvider TypeSchemeProvider       // validates credential types from config
 }
 
 // credentialTypeScheme returns the underlying scheme from the credential type
@@ -93,7 +92,7 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[str
 	return typedToMap(typed), nil
 }
 
-// ResolveTyped implements TypedResolver. It returns the stored runtime.Typed credential directly.
+// ResolveTyped returns the stored runtime.Typed credential directly.
 // The returned type depends on what was configured — currently *DirectCredentials for
 // inline Credentials/v1 configs, but will be the actual typed credential (e.g. *HelmCredentials)
 // when configs specify typed credential types.
