@@ -310,8 +310,8 @@ test_verify_skips_when_gh_not_found() {
     # Hide gh from PATH
     command() { return 1; }
 
-    local output status=0
-    output=$(verify_binary 2>&1) || status=$?
+    local status=0
+    verify_binary >/dev/null 2>&1 || status=$?
     assert_equals "verify_binary returns 0 when gh missing" "0" "${status}"
 }
 
@@ -326,8 +326,8 @@ test_verify_skips_when_gh_not_authenticated() {
     # gh exists but is not authenticated
     gh() { return 1; }
 
-    local output status=0
-    output=$(verify_binary 2>&1) || status=$?
+    local status=0
+    verify_binary >/dev/null 2>&1 || status=$?
     assert_equals "verify_binary returns 0 when gh not authenticated" "0" "${status}"
 }
 
@@ -340,8 +340,8 @@ test_verify_skips_when_explicitly_disabled() {
     echo "fake" > "${TMP_BIN}"
 
     OCM_SKIP_VERIFY="true"
-    local output status=0
-    output=$(verify_binary 2>&1) || status=$?
+    local status=0
+    verify_binary >/dev/null 2>&1 || status=$?
     assert_equals "verify_binary returns 0 when skip set" "0" "${status}"
 }
 
