@@ -65,9 +65,17 @@ spec:
       kind: Secret
       policy: Propagate
 
-  interval: 10m
   suspend: false
 ```
+
+`copyMode`:
+
+* `localBlob`: inline resource blobs into the component descriptor at the target. Default.
+* `allResources`: transfer every resource as a standalone artifact; keep external references intact.
+
+`recursive` controls whether referenced component versions are transferred alongside the root.
+
+Source and target credentials are resolved through `ocmConfig`; no separate credential fields on the CR.
 
 ### Status Design
 
@@ -98,6 +106,9 @@ status:
   observedGeneration: 3
 ```
 
+`componentInfo` reflects the currently observed source; `lastTransferredVersion`/`lastTransferredDigest` record the
+last successful transfer. A mismatch between them indicates a pending transfer.
+
 ### Reconciliation Flow
 
 Similar to the resolution service, this is the two-phase process for transfer.
@@ -108,9 +119,11 @@ transfer-specific in-progress sentinel error named `ErrTransferInProgress`.
 
 ```mermaid
 flowchart TD
-    A[Reconcile] --> B[Read Component CR status]
-    B --> C{Source digest == lastTransferredDigest?}
-    C -->|Yes| D{Target has version?}
+    A[Reconcile] --> A1[Read Component CR status]
+    A1 --> A2{Component Ready and digest present?}
+    A2 -->|No| A3[Requeue, wait for Component event]
+    A2 -->|Yes| C{Source digest == lastTransferredDigest?}
+    C -->|Yes| D{Target has matching digest?}
     D -->|Yes| E[No-op, requeue after interval]
     D -->|No| F[Load effective OCM config]
     C -->|No| F
@@ -119,6 +132,8 @@ flowchart TD
     H --> I[Set TransferInProgress=True]
     I --> J[Proceed to Phase 2]
 ```
+
+The reconciler gates on Component CR readiness: if the Component is not `Ready` or `status.componentInfo.digest` is absent, the Replication requeues and waits for a Component event rather than acting on incomplete source state.
 
 #### Phase 2: Execute (run TGD)
 
@@ -145,14 +160,22 @@ flowchart TD
 
 Dedicated transfer worker pool, separate from resolution. Non-blocking submission.
 On completion, emits an event to retrigger the reconciler. Results cached by
-composite key (source digest + target spec hash + config hash) with TTL.
+composite key (source digest + target spec hash + config hash); default TTL 1h,
+tunable via controller flag.
+
+Transient source/target errors (network, 5xx, rate limit) retry with exponential
+backoff inside the worker; terminal errors surface immediately as `Ready=False`.
 
 ### Transfer Spec Storage
 
-TGDs are written to a scratch volume (emptyDir or PVC):
+TGDs are written to a scratch volume:
 
-* Path: `/var/run/ocm/transfer-specs/{namespace}-{name}-{version}.json`
+* Default: `emptyDir`. TGDs regenerate cheaply on pod restart.
+* Optional: PVC for operators who need persistence across restarts.
+* Path: `/var/run/ocm/transfer-specs/{namespace}-{name}-{version}.json`.
 * GC on CR deletion (finalizer) or version supersession.
+
+Compressed inline storage on the CR and ConfigMap-backed storage were considered and rejected: both still hit Kubernetes object size limits and shift, rather than remove, the etcd pressure.
 * Path available for operator inspection.
 
 ### Watches
@@ -160,6 +183,21 @@ TGDs are written to a scratch volume (emptyDir or PVC):
 * **Component CR**: field index on `spec.componentRef`.
 * **Worker pool event source**: retriggers on async completion.
 * **Finalizer**: `delivery.ocm.software/replication-finalizer` for cleanup.
+
+### Deletion Semantics
+
+When a Replication CR is deleted:
+
+1. Finalizer blocks removal; reconciler observes `deletionTimestamp`.
+2. In-flight transfer is canceled via a per-item context keyed by CR UID. The worker cancelled as soon as possible.
+3. Bounded drain (default 30s, controller flag) waits for worker acknowledgement.
+4. GC: remove TGD file, drop cache entry, unregister event source.
+5. Finalizer removed, CR deleted.
+
+If the drain times out, the finalizer is force-removed and a warning is logged; the in-flight goroutine is reclaimed on pod restart.
+
+_**Note**_: A canceled transfer may leave partial or corrupted blobs at the target. This is expected since we are cancelling
+a stream and is reconciled by the next replication run, which is digest-idempotent.
 
 ### Pros
 
@@ -175,6 +213,8 @@ TGDs are written to a scratch volume (emptyDir or PVC):
   on next reconciliation.
 * If filesystem isn't available because of read-only disks, this does not work.
 * Transfer not independently observable as a K8s resource.
+* A pod crash between TGD write and status update can leave an orphan file;
+  reclaimed on the next reconcile or finalizer run.
 
 ## Pros and Cons of the Options
 

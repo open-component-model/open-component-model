@@ -14,12 +14,15 @@ GetHelmChart
 GetOCIArtifact
 GmbH
 KEP
+MiB
 OCIAddComponentVersion
 OCIAddLocalResource
 OCIGetComponentVersion
 Preact
 RGD's
 ResourceGraphDefinitions
+TGD
+TGDs
 Taskfiles
 Testcontainers
 TransformationGraphDefinition
@@ -230,6 +233,8 @@ elementmeta
 enablement
 entrypoint
 eol
+etcd
+etcd's
 executables
 executoroptions
 executorspecification
@@ -339,6 +344,7 @@ imagetagtransformer
 implementors
 infomation
 inlined
+inspectable
 installable
 instantiation
 integrations
@@ -759,6 +765,7 @@ util
 utils
 uwe
 ux
+ux
 valuemergehandler
 valuemergehandlerdescriptor
 valueset
@@ -766,8 +773,8 @@ valuesfrom
 valuessource
 verifier
 verifiers
-versionable
 versionability
+versionable
 versionedtypedobjects
 walkthrough
 warroom
@@ -797,4 +804,3 @@ zot
 zsh
 zshrc
 zulip
-ux
