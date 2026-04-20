@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 
+	_ "ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
+
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
@@ -77,6 +79,7 @@ func New() *cobra.Command {
 - --dry-run: compute only, do not persist signature
 - Default signature name: default
 - Default signer: RSASSA-PSS plugin (needs private key)
+- For Sigstore keyless signing (no keys needed), pass --signer-spec with a SigstoreSigningConfiguration/v1alpha1 config
 
 Use this command to establish provenance of component versions.`,
 			compref.DefaultPrefix,
@@ -152,6 +155,46 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
     type: RSASigningConfiguration/v1alpha1
     signatureAlgorithm: RSASSA-PSS
     signatureEncodingPolicy: PEM
+
+## Example Signer Spec File — Sigstore keyless (SigstoreSigningConfiguration/v1alpha1)
+#
+# Use when signing without private keys via Sigstore/Fulcio OIDC.
+# Endpoint discovery precedence:
+#   1. signingConfig — local signing_config.json (--signing-config)
+#   2. fulcioURL / rekorURL / timestampServerURL — explicit endpoint URLs
+#   3. Neither set — public-good Sigstore TUF (default)
+
+    type: SigstoreSigningConfiguration/v1alpha1
+
+# With explicit endpoints (private infrastructure):
+
+    type: SigstoreSigningConfiguration/v1alpha1
+    fulcioURL: https://fulcio.example.com
+    rekorURL: https://rekor.example.com
+    timestampServerURL: https://tsa.example.com
+
+# With a local signing config file (private infrastructure, endpoint discovery):
+
+    type: SigstoreSigningConfiguration/v1alpha1
+    signingConfig: /path/to/signing_config.json
+
+## Example Credential Config (.ocmconfig) — Sigstore OIDC token
+#
+# The SigstoreOIDC plugin checks SIGSTORE_ID_TOKEN env var first (CI/automation),
+# then falls back to an interactive browser-based OIDC flow.
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: OIDCIdentityToken/v1alpha1
+          name: sigstore
+        credentials:
+        - type: SigstoreOIDC/v1alpha1
+
+# Sign with Sigstore (requires sigstore signer spec):
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./sigstore-sign.yaml
 
 # Sign with custom signature name
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature

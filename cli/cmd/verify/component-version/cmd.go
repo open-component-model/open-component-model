@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	_ "ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
+
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
@@ -62,8 +64,10 @@ func New() *cobra.Command {
 - Without --signature: verify all signatures  
 - Fail fast on first invalid signature  
 - Default verifier: RSASSA-PSS plugin  
-  - Supports config-less verification  
-  - Uses discovered credentials or PEM certificates when possible  
+  - Uses public key from discovered credentials (config-less)
+- For Sigstore keyless verification, pass --verifier-spec with a SigstoreVerificationConfiguration/v1alpha1 config
+  - Identity constraints (certificateOIDCIssuer + certificateIdentity, or regexp variants) are REQUIRED
+  - Without them, verification cannot assert who produced the signature
 
 Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.`,
 			compref.DefaultPrefix,
@@ -112,6 +116,33 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
           properties:
             public_key_pem_file: /path/to/root-ca.pem
 
+## Example Verifier Spec — Sigstore keyless (SigstoreVerificationConfiguration/v1alpha1)
+#
+# Identity constraints are REQUIRED: (certificateOIDCIssuer or certificateOIDCIssuerRegexp)
+# AND (certificateIdentity or certificateIdentityRegexp) must be set.
+# See https://docs.sigstore.dev/cosign/verifying/verify/
+
+    type: SigstoreVerificationConfiguration/v1alpha1
+    certificateOIDCIssuer: https://accounts.google.com
+    certificateIdentity: jane.doe@example.com
+
+# With regexp identity constraints:
+
+    type: SigstoreVerificationConfiguration/v1alpha1
+    certificateOIDCIssuerRegexp: https://github.com/.*
+    certificateIdentityRegexp: https://github.com/my-org/my-repo/.*
+
+# For private Sigstore infrastructure (skips public transparency log verification):
+
+    type: SigstoreVerificationConfiguration/v1alpha1
+    certificateOIDCIssuer: https://fulcio.example.com
+    certificateIdentity: ci-user@example.com
+    trustedRoot: /path/to/trusted_root.json
+    privateInfrastructure: true
+
+# Verify with Sigstore verifier spec:
+verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./sigstore-verify.yaml
+
 # Verify a specific signature
 verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
 
@@ -124,7 +155,7 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().String(FlagSignature, "", "name of the signature to verify. If not set, all signatures are verified.")
-	cmd.Flags().String(FlagVerifierSpec, "", "path to an optional verifier specification file. If empty, defaults to an empty RSASSA-PSS configuration.")
+	cmd.Flags().String(FlagVerifierSpec, "", "path to a verifier specification file. If empty, defaults to RSASSA-PSS. For Sigstore keyless verification, use type SigstoreVerificationConfiguration/v1alpha1 (identity constraints required).")
 
 	return cmd
 }
