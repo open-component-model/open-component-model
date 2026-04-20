@@ -1,0 +1,123 @@
+name: "Website: Live Test Install Script"
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/website-live-test-install-script.yml'
+      - 'website/static/install-cli.sh'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: live-test-install-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    name: Resolve latest stable CLI release
+    outputs:
+      version: ${{ steps.find.outputs.version }}
+      tag: ${{ steps.find.outputs.tag }}
+    steps:
+      - name: Find latest stable CLI release
+        id: find
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const stablePattern = /^cli\/v(\d+\.\d+\.\d+)$/;
+
+            for (let page = 1; page <= 10; page++) {
+              const releases = await github.rest.repos.listReleases({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: 100,
+                page,
+              });
+
+              for (const release of releases.data) {
+                const match = release.tag_name.match(stablePattern);
+                if (match && !release.prerelease && !release.draft) {
+                  core.setOutput("version", match[1]);
+                  core.setOutput("tag", release.tag_name);
+                  core.info(`Resolved latest stable CLI release: ${release.tag_name}`);
+                  return;
+                }
+              }
+
+              if (releases.data.length < 100) break;
+            }
+
+            core.setFailed("No stable CLI release found");
+
+  install:
+    needs: resolve
+    name: Install + verify (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    env:
+      OCM_VERSION: ${{ needs.resolve.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Run install script
+        env:
+          INSTALL_DIR: ${{ runner.temp }}/ocm-bin
+        run: |
+          bash website/static/install-cli.sh "${INSTALL_DIR}"
+          echo "${INSTALL_DIR}" >> "$GITHUB_PATH"
+
+      - name: Verify installed version
+        run: |
+          actual_version=$(ocm version 2>/dev/null | jq -r '.gitVersion')
+          if [[ "${actual_version}" != "${OCM_VERSION}" ]]; then
+            echo "::error::Version mismatch: expected ${OCM_VERSION}, got ${actual_version}"
+            exit 1
+          fi
+          echo "Installed version ${actual_version} matches expected ${OCM_VERSION}"
+          ocm --help > /dev/null
+
+  install-without-auth:
+    needs: resolve
+    name: Install without attestation
+    runs-on: ubuntu-latest
+    env:
+      OCM_VERSION: ${{ needs.resolve.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Run install script without gh auth
+        env:
+          INSTALL_DIR: ${{ runner.temp }}/ocm-bin
+          GH_TOKEN: ""
+          GITHUB_TOKEN: ""
+          GH_CONFIG_DIR: /nonexistent
+        run: |
+          bash website/static/install-cli.sh "${INSTALL_DIR}"
+          echo "${INSTALL_DIR}" >> "$GITHUB_PATH"
+
+      - name: Verify installed version
+        run: |
+          actual_version=$(ocm version 2>/dev/null | jq -r '.gitVersion')
+          if [[ "${actual_version}" != "${OCM_VERSION}" ]]; then
+            echo "::error::Version mismatch: expected ${OCM_VERSION}, got ${actual_version}"
+            exit 1
+          fi
+          echo "Installed version ${actual_version} matches expected ${OCM_VERSION}"
+          ocm --help > /dev/null
