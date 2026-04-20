@@ -22,10 +22,10 @@ type Options struct {
 	RepositoryPluginProvider
 	CredentialPluginProvider
 	CredentialRepositoryTypeScheme *runtime.Scheme
-	// ConsumerIdentityTypeScheme is a registry of known consumer identity types (e.g. OCIRegistry/v1).
-	ConsumerIdentityTypeScheme *runtime.Scheme
-	// CredentialTypeScheme is a registry of known credential types (e.g. OCICredentials/v1).
-	CredentialTypeScheme *runtime.Scheme
+	// IdentityTypeSchemeProvider provides access to known consumer identity types (e.g. OCIRegistry/v1).
+	IdentityTypeSchemeProvider IdentityTypeSchemeProvider
+	// CredentialTypeSchemeProvider provides access to known credential types (e.g. HelmHTTPCredentials/v1).
+	CredentialTypeSchemeProvider CredentialTypeSchemeProvider
 }
 
 // ToGraph creates a new credential graph from the provided configuration and options.
@@ -33,11 +33,11 @@ type Options struct {
 // The returned Graph implements both Resolver and TypedResolver.
 func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (*Graph, error) {
 	g := &Graph{
-		syncedDag:                  newSyncedDag(),
-		credentialPluginProvider:   opts.CredentialPluginProvider,
-		repositoryPluginProvider:   opts.RepositoryPluginProvider,
-		consumerIdentityTypeScheme: opts.ConsumerIdentityTypeScheme,
-		credentialTypeScheme:       opts.CredentialTypeScheme,
+		syncedDag:                    newSyncedDag(),
+		credentialPluginProvider:     opts.CredentialPluginProvider,
+		repositoryPluginProvider:     opts.RepositoryPluginProvider,
+		identityTypeSchemeProvider:   opts.IdentityTypeSchemeProvider,
+		credentialTypeSchemeProvider: opts.CredentialTypeSchemeProvider,
 	}
 
 	if err := ingest(ctx, g, config, opts.CredentialRepositoryTypeScheme); err != nil {
@@ -56,10 +56,28 @@ type Graph struct {
 
 	*syncedDag // The underlying DAG structure for managing dependencies
 
-	repositoryPluginProvider   RepositoryPluginProvider // injection for resolving custom repository types
-	credentialPluginProvider   CredentialPluginProvider // injection for resolving custom credential types
-	consumerIdentityTypeScheme *runtime.Scheme          // validates consumer identity types from config
-	credentialTypeScheme       *runtime.Scheme          // validates credential types from config
+	repositoryPluginProvider      RepositoryPluginProvider      // injection for resolving custom repository types
+	credentialPluginProvider      CredentialPluginProvider      // injection for resolving custom credential types
+	identityTypeSchemeProvider   IdentityTypeSchemeProvider   // validates consumer identity types from config
+	credentialTypeSchemeProvider CredentialTypeSchemeProvider // validates credential types from config
+}
+
+// credentialTypeScheme returns the underlying scheme from the credential type
+// registry, or nil if no registry is configured.
+func (g *Graph) credentialTypeScheme() *runtime.Scheme {
+	if g.credentialTypeSchemeProvider == nil {
+		return nil
+	}
+	return g.credentialTypeSchemeProvider.Scheme()
+}
+
+// consumerIdentityTypeScheme returns the underlying scheme from the consumer
+// identity type registry, or nil if no registry is configured.
+func (g *Graph) consumerIdentityTypeScheme() *runtime.Scheme {
+	if g.identityTypeSchemeProvider == nil {
+		return nil
+	}
+	return g.identityTypeSchemeProvider.Scheme()
 }
 
 // Compile-time interface check.

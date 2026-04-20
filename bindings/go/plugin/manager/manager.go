@@ -27,7 +27,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/consumeridentitytype"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtype"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
@@ -54,6 +56,13 @@ type PluginManager struct {
 	BlobTransformerRegistry            *blobtransformer.Registry
 	SigningRegistry                    *signinghandler.SigningRegistry
 
+	// CredentialTypeRegistry manages known credential types (e.g. HelmHTTPCredentials/v1).
+	// Both builtin bindings and external plugins register their types here.
+	CredentialTypeRegistry *credentialtype.Registry
+	// ConsumerIdentityTypeRegistry manages known consumer identity types (e.g. OCIRegistry/v1).
+	// Both builtin bindings and external plugins register their types here.
+	ConsumerIdentityTypeRegistry *consumeridentitytype.Registry
+
 	mu sync.Mutex
 
 	// baseCtx is the context that is used for all plugins.
@@ -75,6 +84,8 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 		ResourcePluginRegistry:             resource.NewResourceRegistry(ctx),
 		BlobTransformerRegistry:            blobtransformer.NewBlobTransformerRegistry(ctx),
 		SigningRegistry:                    signinghandler.NewSigningRegistry(ctx),
+		CredentialTypeRegistry:             credentialtype.NewRegistry(),
+		ConsumerIdentityTypeRegistry:       consumeridentitytype.NewRegistry(),
 		baseCtx:                            ctx,
 	}
 }
@@ -308,6 +319,10 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 			if err := pm.CredentialRepositoryRegistry.AddPlugin(plugin, capability); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
+			// Register plugin-declared consumer identity and credential types into
+			// the manager's schemes so the credential graph can deserialize and
+			// validate them without the CLI manually aggregating types.
+			pm.registerPluginCredentialTypes(ctx, capability)
 		case *componentlisterv1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding component lister plugin", "id", plugin.ID)
 			if err := pm.ComponentListerRegistry.AddPlugin(plugin, capability); err != nil {
@@ -339,6 +354,19 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 	}
 
 	return nil
+}
+
+// registerPluginCredentialTypes registers consumer identity types and their
+// accepted credential types from a credential repository plugin's capability
+// spec into the manager's registries. Types already registered by builtins
+// are skipped — builtins always take precedence.
+func (pm *PluginManager) registerPluginCredentialTypes(ctx context.Context, capability *credentialrepositoryv1.CapabilitySpec) {
+	for _, idType := range capability.SupportedConsumerIdentityTypes {
+		pm.ConsumerIdentityTypeRegistry.RegisterFromPlugin(ctx, idType.Type, idType.Aliases...)
+		for _, credType := range idType.AcceptedCredentialTypes {
+			pm.CredentialTypeRegistry.RegisterFromPlugin(ctx, credType)
+		}
+	}
 }
 
 func determineConnectionType(ctx context.Context) (mtypes.ConnectionType, error) {

@@ -155,16 +155,19 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 // It first tries to resolve as typed HelmHTTPCredentials, then falls back to
 // DirectCredentials (legacy Credentials/v1) with property-based conversion.
 func resolveHelmHTTPCredentials(ctx context.Context, r credentials.Resolver, identity runtime.Identity) (*helmcredsv1.HelmHTTPCredentials, error) {
-	creds, err := credentials.ResolveAs[*helmcredsv1.HelmHTTPCredentials](ctx, r, identity)
-	if err == nil {
+	typed, err := r.ResolveTyped(ctx, identity)
+	if err != nil {
+		return nil, err
+	}
+
+	if creds, ok := typed.(*helmcredsv1.HelmHTTPCredentials); ok {
 		return creds, nil
 	}
 
 	// Fall back to DirectCredentials (legacy Credentials/v1 configs).
-	direct, directErr := credentials.ResolveAs[*credentialsconfigv1.DirectCredentials](ctx, r, identity)
-	if directErr != nil {
-		// Return the original error — neither type matched.
-		return nil, err
+	if direct, ok := typed.(*credentialsconfigv1.DirectCredentials); ok {
+		return helmcredsv1.FromDirectCredentials(direct.Properties), nil
 	}
-	return helmcredsv1.FromDirectCredentials(direct.Properties), nil
+
+	return nil, fmt.Errorf("credential type mismatch: got %T (%s): %w", typed, typed.GetType(), credentials.ErrUnknown)
 }

@@ -176,9 +176,9 @@ func extractResolvable(g *Graph, creds []runtime.Typed) (runtime.Typed, []runtim
 		}
 
 		// Try the credential type scheme first (e.g. HelmCredentials/v1, OCICredentials/v1).
-		if g.credentialTypeScheme != nil {
-			if typed, err := g.credentialTypeScheme.NewObject(cred.GetType()); err == nil {
-				if err := g.credentialTypeScheme.Convert(cred, typed); err == nil {
+		if g.credentialTypeScheme() != nil {
+			if typed, err := g.credentialTypeScheme().NewObject(cred.GetType()); err == nil {
+				if err := g.credentialTypeScheme().Convert(cred, typed); err == nil {
 					resolved = typed
 					continue
 				}
@@ -209,7 +209,7 @@ func extractResolvable(g *Graph, creds []runtime.Typed) (runtime.Typed, []runtim
 // compatible with the identity type. Unknown types produce warnings — they are not
 // rejected because plugins loaded later may introduce new types.
 func validateConsumerIdentityTypes(ctx context.Context, g *Graph, config *cfgRuntime.Config) {
-	if g.consumerIdentityTypeScheme == nil {
+	if g.consumerIdentityTypeScheme() == nil {
 		return
 	}
 	for _, consumer := range config.Consumers {
@@ -221,7 +221,7 @@ func validateConsumerIdentityTypes(ctx context.Context, g *Graph, config *cfgRun
 				continue
 			}
 
-			identityObj, err := g.consumerIdentityTypeScheme.NewObject(identityType)
+			identityObj, err := g.consumerIdentityTypeScheme().NewObject(identityType)
 			if err != nil {
 				slog.WarnContext(ctx, "consumer identity type not registered in scheme",
 					"type", identityType.String(),
@@ -244,7 +244,7 @@ func validateConsumerIdentityTypes(ctx context.Context, g *Graph, config *cfgRun
 					// DirectCredentials/Credentials are always accepted
 					continue
 				}
-				if !isAccepted(g.credentialTypeScheme, credType, accepted) {
+				if !isAccepted(g.credentialTypeScheme(), credType, accepted) {
 					slog.WarnContext(ctx, "credential type not accepted by identity type",
 						"credentialType", credType.String(),
 						"identityType", identityType.String(),

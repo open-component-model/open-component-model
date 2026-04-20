@@ -14,8 +14,6 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
-	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
-	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/configuration"
@@ -110,37 +108,9 @@ func CredentialGraph(cmd *cobra.Command) error {
 		return fmt.Errorf("could not get plugin manager to initialize credential graph")
 	}
 
-	// Register builtin credential types.
-	credentialTypeScheme := runtime.NewScheme()
-	helmcredsv1.MustRegisterCredentialType(credentialTypeScheme)
-
-	// Register builtin consumer identity types.
-	consumerIdentityTypeScheme := runtime.NewScheme()
-	helmidentityv1.MustRegisterIdentityType(consumerIdentityTypeScheme)
-
-	// Register plugin-declared types into the schemes, skipping types already
-	// registered by builtins. This prevents panics when a plugin declares a
-	// type that overlaps with a builtin (e.g. both declare OCICredentials/v1).
-	for _, idType := range pluginManager.CredentialRepositoryRegistry.DeclaredConsumerIdentityTypes() {
-		if !consumerIdentityTypeScheme.IsRegistered(idType.Type) {
-			if err := consumerIdentityTypeScheme.RegisterWithAlias(&runtime.Raw{}, idType.Type); err != nil {
-				slog.WarnContext(cmd.Context(), "could not register plugin consumer identity type",
-					"type", idType.Type.String(), "error", err)
-			}
-		} else {
-			slog.DebugContext(cmd.Context(), "skipping plugin consumer identity type already registered by builtin",
-				"type", idType.Type.String())
-		}
-		for _, credType := range idType.AcceptedCredentialTypes {
-			if !credentialTypeScheme.IsRegistered(credType) {
-				if err := credentialTypeScheme.RegisterWithAlias(&runtime.Raw{}, credType); err != nil {
-					slog.WarnContext(cmd.Context(), "could not register plugin credential type",
-						"type", credType.String(), "error", err)
-				}
-			}
-		}
-	}
-
+	// The plugin manager's schemes are already populated by both builtin
+	// bindings (via builtin.Register) and external plugins (via capability
+	// specs during RegisterPlugins). No manual aggregation needed here.
 	opts := credentials.Options{
 		RepositoryPluginProvider: pluginManager.CredentialRepositoryRegistry,
 		CredentialPluginProvider: credentials.GetCredentialPluginFn(
@@ -150,8 +120,8 @@ func CredentialGraph(cmd *cobra.Command) error {
 			},
 		),
 		CredentialRepositoryTypeScheme: pluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
-		ConsumerIdentityTypeScheme:     consumerIdentityTypeScheme,
-		CredentialTypeScheme:           credentialTypeScheme,
+		IdentityTypeSchemeProvider:   pluginManager.ConsumerIdentityTypeRegistry,
+		CredentialTypeSchemeProvider: pluginManager.CredentialTypeRegistry,
 	}
 
 	var credCfg *credentialsRuntime.Config

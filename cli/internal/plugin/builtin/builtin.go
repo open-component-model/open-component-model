@@ -42,8 +42,8 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := dir.Register(manager.InputRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register dir input plugin: %w", err)
 	}
-	if err := helm.Register(manager.InputRegistry, filesystemConfig); err != nil {
-		return fmt.Errorf("could not register helm input plugin: %w", err)
+	if err := helm.Register(manager.InputRegistry, manager.CredentialTypeRegistry, manager.ConsumerIdentityTypeRegistry, filesystemConfig); err != nil {
+		return fmt.Errorf("could not register helm inbuilt plugin: %w", err)
 	}
 	if err := manager.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(
 		helmdigest.NewDigestProcessor(filesystemConfig.TempFolder),

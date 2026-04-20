@@ -55,7 +55,7 @@ configurations:
 	helmcredsv1.MustRegisterCredentialType(credTypeScheme)
 
 	graph, err := credentials.ToGraph(ctx, credconf, credentials.Options{
-		CredentialTypeScheme: credTypeScheme,
+		CredentialTypeSchemeProvider: &credentials.SchemeAsCredentialTypeSchemeProvider{S: credTypeScheme},
 	})
 	require.NoError(t, err)
 

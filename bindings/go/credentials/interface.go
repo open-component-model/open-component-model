@@ -3,7 +3,6 @@ package credentials
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -24,18 +23,3 @@ type Resolver interface {
 	ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error)
 }
 
-// ResolveAs is a generic helper that resolves credentials via a Resolver and
-// type-asserts the result to T. This gives call-site type safety without requiring
-// generic interfaces (Go does not support type parameters on interface methods).
-func ResolveAs[T runtime.Typed](ctx context.Context, r Resolver, identity runtime.Identity) (T, error) {
-	var zero T
-	typed, err := r.ResolveTyped(ctx, identity)
-	if err != nil {
-		return zero, err
-	}
-	out, ok := typed.(T)
-	if !ok {
-		return zero, fmt.Errorf("credential type mismatch: want %T, got %T (%s): %w", zero, typed, typed.GetType(), ErrUnknown)
-	}
-	return out, nil
-}

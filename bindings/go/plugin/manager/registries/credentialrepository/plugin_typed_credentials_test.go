@@ -122,8 +122,8 @@ consumers:
 
 	// 5. Graph with both schemes
 	graph, err := credentials.ToGraph(ctx, config, credentials.Options{
-		CredentialTypeScheme:       credentialTypeScheme,
-		ConsumerIdentityTypeScheme: identityTypeScheme,
+		CredentialTypeSchemeProvider:       &credentials.SchemeAsCredentialTypeSchemeProvider{S: credentialTypeScheme},
+		IdentityTypeSchemeProvider: &credentials.SchemeAsIdentityTypeSchemeProvider{S: identityTypeScheme},
 	})
 	require.NoError(t, err)
 
@@ -191,7 +191,7 @@ consumers:
 	defer slog.SetDefault(oldLogger)
 
 	_, _ = credentials.ToGraph(ctx, config, credentials.Options{
-		ConsumerIdentityTypeScheme: identityTypeScheme,
+		IdentityTypeSchemeProvider: &credentials.SchemeAsIdentityTypeSchemeProvider{S: identityTypeScheme},
 		CredentialPluginProvider: credentials.GetCredentialPluginFn(func(ctx context.Context, typed runtime.Typed) (credentials.CredentialPlugin, error) {
 			return nil, fmt.Errorf("no plugin for %s", typed.GetType())
 		}),
@@ -255,8 +255,8 @@ consumers:
 	defer slog.SetDefault(oldLogger)
 
 	_, err := credentials.ToGraph(ctx, config, credentials.Options{
-		CredentialTypeScheme:       credentialTypeScheme,
-		ConsumerIdentityTypeScheme: identityTypeScheme,
+		CredentialTypeSchemeProvider:       &credentials.SchemeAsCredentialTypeSchemeProvider{S: credentialTypeScheme},
+		IdentityTypeSchemeProvider: &credentials.SchemeAsIdentityTypeSchemeProvider{S: identityTypeScheme},
 	})
 	require.NoError(t, err)
 
@@ -289,7 +289,7 @@ consumers:
 	config := credentialruntime.ConvertFromV1(&configv1)
 
 	graph, err := credentials.ToGraph(ctx, config, credentials.Options{
-		CredentialTypeScheme: credentialTypeScheme,
+		CredentialTypeSchemeProvider: &credentials.SchemeAsCredentialTypeSchemeProvider{S: credentialTypeScheme},
 	})
 	require.NoError(t, err)
 

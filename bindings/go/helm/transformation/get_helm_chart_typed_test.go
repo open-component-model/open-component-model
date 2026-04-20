@@ -48,7 +48,7 @@ consumers:
 	config := credentialruntime.ConvertFromV1(&configv1)
 
 	graph, err := credentials.ToGraph(t.Context(), config, credentials.Options{
-		CredentialTypeScheme: credTypeScheme,
+		CredentialTypeSchemeProvider: &credentials.SchemeAsCredentialTypeSchemeProvider{S: credTypeScheme},
 	})
 	require.NoError(t, err)
 
@@ -142,7 +142,7 @@ consumers:
 	config := credentialruntime.ConvertFromV1(&configv1)
 
 	graph, err := credentials.ToGraph(t.Context(), config, credentials.Options{
-		CredentialTypeScheme: credTypeScheme,
+		CredentialTypeSchemeProvider: &credentials.SchemeAsCredentialTypeSchemeProvider{S: credTypeScheme},
 	})
 	require.NoError(t, err)
 
@@ -241,7 +241,7 @@ consumers:
 	config := credentialruntime.ConvertFromV1(&configv1)
 
 	graph, err := credentials.ToGraph(t.Context(), config, credentials.Options{
-		CredentialTypeScheme: credTypeScheme,
+		CredentialTypeSchemeProvider: &credentials.SchemeAsCredentialTypeSchemeProvider{S: credTypeScheme},
 	})
 	require.NoError(t, err)
 
@@ -281,7 +281,7 @@ consumers:
 		helmcredsv1.MustRegisterCredentialType(credTypeScheme)
 
 		graph := mustBuildGraph(t, yaml, credentials.Options{
-			CredentialTypeScheme: credTypeScheme,
+			CredentialTypeSchemeProvider: &credentials.SchemeAsCredentialTypeSchemeProvider{S: credTypeScheme},
 		})
 		identity := runtime.Identity{"type": "HelmChartRepository", "hostname": "charts.example.com"}
 
@@ -378,8 +378,8 @@ consumers:
 	defer slog.SetDefault(oldLogger)
 
 	_, err := credentials.ToGraph(t.Context(), config, credentials.Options{
-		ConsumerIdentityTypeScheme: identityTypeScheme,
-		CredentialTypeScheme:       credTypeScheme,
+		IdentityTypeSchemeProvider: &credentials.SchemeAsIdentityTypeSchemeProvider{S: identityTypeScheme},
+		CredentialTypeSchemeProvider:     &credentials.SchemeAsCredentialTypeSchemeProvider{S: credTypeScheme},
 		CredentialPluginProvider: credentials.GetCredentialPluginFn(func(ctx context.Context, typed runtime.Typed) (credentials.CredentialPlugin, error) {
 			return nil, fmt.Errorf("no credential plugin for type %s", typed.GetType())
 		}),
@@ -433,8 +433,8 @@ consumers:
 	defer slog.SetDefault(oldLogger)
 
 	_, err := credentials.ToGraph(t.Context(), config, credentials.Options{
-		ConsumerIdentityTypeScheme: identityTypeScheme,
-		CredentialTypeScheme:       credTypeScheme,
+		IdentityTypeSchemeProvider: &credentials.SchemeAsIdentityTypeSchemeProvider{S: identityTypeScheme},
+		CredentialTypeSchemeProvider:     &credentials.SchemeAsCredentialTypeSchemeProvider{S: credTypeScheme},
 	})
 	require.NoError(t, err)
 
@@ -473,7 +473,7 @@ consumers:
 	defer slog.SetDefault(oldLogger)
 
 	_, err := credentials.ToGraph(t.Context(), config, credentials.Options{
-		ConsumerIdentityTypeScheme: identityTypeScheme,
+		IdentityTypeSchemeProvider: &credentials.SchemeAsIdentityTypeSchemeProvider{S: identityTypeScheme},
 	})
 	require.NoError(t, err)
 
