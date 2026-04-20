@@ -20,6 +20,7 @@ import (
 	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin/cosign"
 	"ocm.software/open-component-model/cli/internal/plugin/spec/config/v2alpha1"
 )
 
@@ -111,9 +112,11 @@ func CredentialGraph(cmd *cobra.Command) error {
 	opts := credentials.Options{
 		RepositoryPluginProvider: pluginManager.CredentialRepositoryRegistry,
 		CredentialPluginProvider: credentials.GetCredentialPluginFn(
-			// TODO(jakobmoellerdev): use the plugin manager to get the credential plugin once we have some.
-			func(ctx context.Context, typed runtime.Typed) (credentials.CredentialPlugin, error) {
-				return nil, fmt.Errorf("no credential plugin found for type %s", typed)
+			func(_ context.Context, typed runtime.Typed) (credentials.CredentialPlugin, error) {
+				if typed.GetType().GetName() == cosign.OIDCPluginType {
+					return &cosign.OIDCPlugin{}, nil
+				}
+				return nil, fmt.Errorf("no credential plugin found for type %s", typed.GetType())
 			},
 		),
 		CredentialRepositoryTypeScheme: pluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
