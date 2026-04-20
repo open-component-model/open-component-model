@@ -147,24 +147,11 @@ get_release_version() {
     if [[ -z "${OCM_VERSION:-}" ]]; then
         # Use the list endpoint so we can filter by TAG_PREFIX; /releases/latest may
         # point to a non-CLI release (e.g. a website or docs tag published more recently).
-        # Paginate with per_page=100 because non-CLI releases can push CLI tags off page 1.
-        local page max_pages
-        max_pages=10
-        OCM_VERSION=""
-        for (( page=1; page<=max_pages; page++ )); do
-            METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100&page=${page}"
-            info "Downloading metadata ${METADATA_URL}"
-            download "${TMP_METADATA}" "${METADATA_URL}"
+        METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100"
+        info "Downloading metadata ${METADATA_URL}"
+        download "${TMP_METADATA}" "${METADATA_URL}"
 
-            OCM_VERSION=$(extract_stable_version "${TMP_METADATA}")
-            if [[ -n "${OCM_VERSION}" ]]; then
-                break
-            fi
-
-            if ! grep -q '"tag_name":' "${TMP_METADATA}"; then
-                break
-            fi
-        done
+        OCM_VERSION=$(extract_stable_version "${TMP_METADATA}")
     fi
 
     if [[ -n "${OCM_VERSION}" ]]; then
