@@ -82,14 +82,15 @@ jobs:
           bash website/static/install-cli.sh "${INSTALL_DIR}"
           echo "${INSTALL_DIR}" >> "$GITHUB_PATH"
 
-      - name: Verify installed version
+      - name: Verify installed binary
         run: |
-          actual_version=$(ocm version 2>/dev/null | jq -r '.gitVersion')
-          if [[ "${actual_version}" != "${OCM_VERSION}" ]]; then
-            echo "::error::Version mismatch: expected ${OCM_VERSION}, got ${actual_version}"
+          version_json=$(ocm version 2>/dev/null)
+          actual=$(echo "${version_json}" | jq -r '"\(.major).\(.minor).\(.patch)"')
+          if [[ "${actual}" != "${OCM_VERSION}" ]]; then
+            echo "::error::Version mismatch: expected ${OCM_VERSION}, got ${actual}"
             exit 1
           fi
-          echo "Installed version ${actual_version} matches expected ${OCM_VERSION}"
+          echo "Installed version ${actual} matches expected ${OCM_VERSION}"
           ocm --help > /dev/null
 
   install-without-auth:
@@ -112,12 +113,13 @@ jobs:
           bash website/static/install-cli.sh "${INSTALL_DIR}"
           echo "${INSTALL_DIR}" >> "$GITHUB_PATH"
 
-      - name: Verify installed version
+      - name: Verify installed binary
         run: |
-          actual_version=$(ocm version 2>/dev/null | jq -r '.gitVersion')
-          if [[ "${actual_version}" != "${OCM_VERSION}" ]]; then
-            echo "::error::Version mismatch: expected ${OCM_VERSION}, got ${actual_version}"
+          version_json=$(ocm version 2>/dev/null)
+          actual=$(echo "${version_json}" | jq -r '"\(.major).\(.minor).\(.patch)"')
+          if [[ "${actual}" != "${OCM_VERSION}" ]]; then
+            echo "::error::Version mismatch: expected ${OCM_VERSION}, got ${actual}"
             exit 1
           fi
-          echo "Installed version ${actual_version} matches expected ${OCM_VERSION}"
+          echo "Installed version ${actual} matches expected ${OCM_VERSION}"
           ocm --help > /dev/null
