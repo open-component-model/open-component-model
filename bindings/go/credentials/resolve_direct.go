@@ -2,14 +2,17 @@ package credentials
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // resolveFromGraph resolves credentials for a given identity by traversing the graph.
-func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
+// Returns a runtime.Typed credential stored on the matching node.
+func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
 	// Check for cancellation to exit early
 	select {
 	case <-ctx.Done():
@@ -46,8 +49,11 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 			return nil, fmt.Errorf("could not get credential plugin for node %q: %w", childID, err)
 		}
 
+		// Extract map from child credentials for plugin resolution.
+		childMap := typedToMap(childCredentials)
+
 		// Let the plugin resolve the child's credentials.
-		credentials, err := plugin.Resolve(ctx, childID, childCredentials)
+		credentials, err := plugin.Resolve(ctx, childID, childMap)
 		if err != nil {
 			return nil, fmt.Errorf("no credentials for node %q resolved from plugin: %w", childID, err)
 		}
@@ -56,8 +62,54 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 		maps.Copy(result, credentials)
 	}
 
-	// Cache the resolved credentials for the identity
-	g.setCredentials(node, result)
+	// Store as DirectCredentials
+	typed := &v1.DirectCredentials{
+		Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+		Properties: result,
+	}
 
-	return result, nil
+	// Cache the resolved credentials for the identity
+	g.setCredentials(node, typed)
+
+	return typed, nil
+}
+
+// typedToMap extracts map[string]string from a runtime.Typed credential.
+// Used internally for plugin interfaces that still work with maps.
+// For DirectCredentials, it returns the Properties map directly.
+// For other typed credentials (e.g. HelmHTTPCredentials), it falls back to a JSON
+// round-trip, extracting only string-valued fields (excluding the "type" field).
+// TODO(matthiasbruns): Remove once plugin interfaces migrate to runtime.Typed https://github.com/open-component-model/ocm-project/issues/980
+func typedToMap(cred runtime.Typed) map[string]string {
+	if cred == nil {
+		return nil
+	}
+	if dc, ok := cred.(*v1.DirectCredentials); ok {
+		return dc.Properties
+	}
+
+	// Fallback: JSON round-trip for any typed credential.
+	// This allows Resolve() (backward-compat map interface) to return usable
+	// credentials even when the graph stores typed credential structs.
+	data, err := json.Marshal(cred)
+	if err != nil {
+		return nil
+	}
+	var rawAny map[string]any
+	if err := json.Unmarshal(data, &rawAny); err != nil {
+		return nil
+	}
+	result := make(map[string]string, len(rawAny))
+	for k, v := range rawAny {
+		if k == "type" {
+			continue // Don't leak the type field into credential properties
+		}
+		if s, ok := v.(string); ok && s != "" {
+			result[k] = s
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
