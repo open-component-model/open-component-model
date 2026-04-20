@@ -131,6 +131,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if resolverSubscriberBuffer <= 0 {
+		setupLog.Error(nil, "invalid flag value", "flag", "resolver-subscriber-buffer-size",
+			"value", resolverSubscriberBuffer, "reason", "must be > 0")
+		os.Exit(1)
+	}
 	// A subscriber channel deeper than the work queue is wasteful: the queue bounds
 	// how many resolution events can be in flight, so a larger buffer can never fill.
 	if resolverSubscriberBuffer > resolverWorkerQueueLength {
