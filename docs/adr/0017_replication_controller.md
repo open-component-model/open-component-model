@@ -58,16 +58,9 @@ spec:
     name: target-repository
     namespace: default
 
-  # Transfer options. Single field with a ref-or-inline union, aligned with the
-  # planned OCMConfiguration extension (ocm-project#869). Either a ref:
   transferOptions:
-    kind: ConfigMap
-    name: configmap-for-transferoptions
-  # or inline data:
-  # transferOptions:
-  #   inline:
-  #     recursive: false
-  #     copyMode: localBlob     # localBlob | allResources
+    recursive: false
+    copyMode: localBlob     # localBlob | allResources
 
   # References resolved in the Replication CR's namespace.
   ocmConfig:
@@ -78,21 +71,7 @@ spec:
   suspend: false
 ```
 
-Transfer options ConfigMap (when using the ref form):
-
-```yaml
-kind: ConfigMap
-metadata:
-  name: configmap-for-transferoptions
-data:
-  transfer.yaml: |
-    recursive: false
-    copyMode: localBlob
-```
-
-`transferOptions` follows the same ref-or-inline shape as the extended `OCMConfiguration`
-type (see [ocm-project#869](https://github.com/open-component-model/ocm-project/issues/869)); ref and inline are
-mutually exclusive and enforced via CRD validation. The inline form is typed as `apiextensionsv1.JSON`, trading
+`transferOptions` is an inline form and is of `apiextensionsv1.JSON` type, trading
 CRD-level schema validation for forward compatibility.
 
 `copyMode`:
