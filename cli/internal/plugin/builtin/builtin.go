@@ -6,8 +6,8 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
-	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin/cosign"
 	ocicredentialplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/credentials/oci"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/dir"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/file"
@@ -51,13 +51,11 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	); err != nil {
 		return fmt.Errorf("could not register helm digest processor plugin: %w", err)
 	}
-	if err := manager.ResourcePluginRegistry.RegisterInternalResourcePlugin(
-		helmresource.NewResourceRepository(filesystemConfig),
-	); err != nil {
-		return fmt.Errorf("could not register helm resource repository plugin: %w", err)
-	}
 	if err := rsa.Register(manager.SigningRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register RSA signing plugin: %w", err)
+	}
+	if err := cosign.Register(manager.SigningRegistry); err != nil {
+		return fmt.Errorf("could not register Cosign signing plugin: %w", err)
 	}
 
 	return nil
