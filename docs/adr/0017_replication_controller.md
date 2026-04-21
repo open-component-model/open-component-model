@@ -126,18 +126,18 @@ transfer-specific in-progress sentinel error named `ErrTransferInProgress`.
 
 ```mermaid
 flowchart TD
-    A[Reconcile] --> S{spec.suspend?}
-    S -->|Yes| SX[No-op]
-    S -->|No| A1[Read Component CR status]
-    A1 --> A2{Component Ready and digest present?}
-    A2 -->|No| A3[Requeue, wait for Component event]
-    A2 -->|Yes| C{Source digest == lastTransferredDigest?}
-    C -->|Yes| E[No-op, requeue after interval]
-    C -->|No| F[Load effective OCM config]
-    F --> G[BuildGraphDefinition]
-    G --> H[Write TGD to filesystem]
-    H --> I[Set TransferInProgress=True]
-    I --> J[Proceed to Phase 2]
+    A[Reconcile] --> B{spec.suspend?}
+    B -->|Yes| C[Exit reconciliation]
+    B -->|No| D[Read Component CR status]
+    D --> E{Component Ready and digest present?}
+    E -->|No| F[Requeue, wait for Component event]
+    E -->|Yes| G{Source digest matches lastTransferredDigest?}
+    G -->|Yes| H[No-op, requeue after interval]
+    G -->|No| I[Load effective OCM config]
+    I --> J[BuildGraphDefinition]
+    J --> K[Write TGD to filesystem]
+    K --> L[Set TransferInProgress=True]
+    L --> M[Proceed to Phase 2]
 ```
 
 The reconciler gates on Component CR readiness: if the Component is not `Ready` or `status.componentInfo.digest` is
@@ -152,21 +152,22 @@ to emit a completion event that triggers a new reconcile, which reads the result
 
 ```mermaid
 flowchart TD
-    A[Submit TGD to worker pool] --> B{ErrTransferInProgress?}
-    B -->|Yes| C[Exit reconciliation, wait for event]
-    B -->|No, submission accepted| C
-    C -.completion event.-> R[Reconcile reads worker result]
-    R --> D{Transfer result}
+    A[Submit TGD to worker pool] --> B[Exit reconciliation, wait for event]
+    B -.completion event.-> C[Reconcile reads worker result]
+    C --> D{Transfer result}
     D -->|Success| E[Update lastTransferredVersion/Digest, set Ready=True, TransferInProgress=False]
-    D -->|Failure| G[Set Ready=False with error, TransferInProgress=False, emit warning Event]
-    E --> I[Requeue after interval]
-    G --> I
+    D -->|Failure| F[Set Ready=False with error, TransferInProgress=False, emit warning Event]
+    E --> G[Requeue after interval]
+    F --> G
 ```
 
 Both terminal branches clear `TransferInProgress=False`.
 
-Stale condition on any reconcile entry, if `TransferInProgress=True` but the worker pool has no in-flight 
+Stale condition check: on any reconcile entry, if `TransferInProgress=True` but the worker pool has no in-flight
 key for this CR's UID (after pod crash or leader change), the condition is treated as stale, cleared, and Phase 1 runs again.
+
+Burst reconciles for an already-submitted key return `ErrTransferInProgress` from the worker pool and exit without re-submitting;
+the next completion event still triggers the status update above.
 
 ### Trigger Conditions
 
@@ -202,7 +203,6 @@ both still hit Kubernetes object size limits and shift, rather than remove, the 
 
 * **Component CR**: field index on `spec.componentRef`.
 * **Target Repository CR**: field index on `spec.targetRepositoryRef`; retriggers when the target repo spec changes (URL, auth).
-* **ConfigMap referenced by `transferOptions` (ref form)**: field index; edits retrigger reconciliation.
 * **Worker pool event source**: retriggers on async completion.
 * **Finalizer**: `delivery.ocm.software/replication-finalizer` for cleanup.
 
