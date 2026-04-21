@@ -4,11 +4,12 @@ This document contains accumulated knowledge about the OCM repository for any LL
 
 ## Repository Overview
 
-OCM is a multi-module Go monorepo implementing the Open Component Model specification. It consists of three main areas:
+OCM is a multi-module Go monorepo implementing the Open Component Model specification. It consists of four main areas:
 
 - **bindings/go/** — independent Go library modules (the core libraries). See `bindings/go/README.md` for the full module list.
 - **cli/** — The `ocm` CLI tool built with Cobra. See `cli/README.md` for details.
 - **kubernetes/controller/** — A controller-runtime-based Kubernetes operator. See `kubernetes/controller/README.md` for details.
+- **website/** — The Hugo-based documentation site published at <https://ocm.software>. See `website/README.md` and `website/CONTRIBUTING.md` for details.
 
 Check each module's `go.mod` for the Go version in use. The build system uses **Task** (not Make).
 See the Task documentation at <https://taskfile.dev/docs/guide>.
@@ -134,6 +135,21 @@ Analyze `kubernetes/controller/README.md` and `kubernetes/controller/api/` for s
 - **Logging**: `logr` via controller-runtime zap.
 - For reconciler structure, status conditions, predicates, finalizers, ApplySet, and dynamic informer management, see [docs/coding-patterns.md#controller-idioms](docs/coding-patterns.md#controller-idioms).
 
+### website/
+
+Hugo-based documentation site published at <https://ocm.software>. Read `website/README.md` and `website/CONTRIBUTING.md` before making changes.
+
+- **Stack**: Hugo Extended (provided via the `hugo-extended` npm package, no system Hugo install needed), Node.js ≥ 25.8.0, npm ≥ 11.11.0. Theme is `@thulite/doks-core`.
+- **Local dev**: `npm ci && npm run dev` serves at `http://localhost:1313` with live reload. Use `npm run dev:drafts` to include drafts.
+- **Content layout**: Live content under `content/` (`docs/concepts`, `docs/getting-started`, `docs/how-to`, `docs/overview`, `docs/reference`, `docs/tutorials`, `community`). Versioned snapshots under `content_versioned/version-x.y.z/` are script-generated and must not be edited by hand.
+- **Diataxis framework**: New content must be classified as Tutorial, How-to, Explanation, or Reference. See the mapping table and decision flowchart in `website/CONTRIBUTING.md`. Templates live in `content_templates/`.
+- **Frontmatter**: Every page needs `title`, `description`, optional `logo`, and `weight` (lower weight ranks higher).
+- **Internal links**: Always use `{{< relref "filename.md" >}}`. Use the bare filename when unique across `content/`, otherwise the full path relative to `content/`.
+- **CLI reference** (`content/docs/reference/`) is mounted via Hugo modules from source repos; do not edit those files in this repo.
+- **Versioning**: `npm run cutoff -- x.y.z` snapshots `content/` into `content_versioned/version-x.y.z` and updates `config/_default/hugo.toml` and `module.toml`. Add `--keepDefault` to keep the current `defaultContentVersion`. Never edit the version configs by hand.
+- **Linting**: `npm run lint` runs eslint, stylelint, and markdownlint. `npm run lint:scripts:fix` auto-fixes JS.
+- **Tests**: `npm test` runs the cutoff-version script tests via `node --test`.
+
 ## Common Pitfalls
 
 1. **Missing ENVTEST_K8S_VERSION** — Controller tests will fail silently with path errors
@@ -143,6 +159,8 @@ Analyze `kubernetes/controller/README.md` and `kubernetes/controller/api/` for s
 5. **Interactive git** — Don't use `-i` flags in scripts
 6. **Context** — Always pass `context.Context` through APIs
 7. **APIs are WIP** — Expect changes, especially in bindings
+8. **Editing versioned website content** — Files under `website/content_versioned/` are snapshots. Edit `website/content/` and cut a new version via `npm run cutoff`.
+9. **Hand-editing Hugo version configs** — `config/_default/hugo.toml` and `module.toml` version stanzas are managed by the cutoff script.
 
 ## Dependency Management
 
