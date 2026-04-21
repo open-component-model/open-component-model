@@ -104,7 +104,7 @@ The `Resource` object supports `additionalStatusFields`, a map of field names to
 ```yaml
 spec:
   additionalStatusFields:
-    registry: "resource.access.globalAccess.imageReference.split('/')[0]"
+    registry: "resource.access.toOCI().registry"
 ```
 
 Results are stored under `status.additional.<fieldName>` and can be consumed by downstream tools like [Kro](https://kro.run/) to wire values between resources in a `ResourceGraphDefinition`.
