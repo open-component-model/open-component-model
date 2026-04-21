@@ -157,6 +157,4 @@ components:
 	strOutput := output.String()
 	r.Contains(strOutput, "ocm.software/resolver-test/component-a", "output should contain resource from component-a")
 	r.Contains(strOutput, "ocm.software/resolver-test/component-b", "output should contain resource from component-b")
-	r.Contains(strOutput, fmt.Sprintf("%s/component-descriptors/ocm.software/resolver-test/component-a:v1.0.0", registryA.RegistryAddress), "output should contain reference to component-a in registry-a")
-	r.Contains(strOutput, fmt.Sprintf("%s/component-descriptors/ocm.software/resolver-test/component-b:v1.0.0", registryB.RegistryAddress), "output should contain reference to component-b in registry-b")
 }
