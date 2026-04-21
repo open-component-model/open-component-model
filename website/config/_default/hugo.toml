@@ -30,7 +30,7 @@ defaultContentVersion = "latest"
   enable = true
 
 [outputs]
-  home = ["HTML", "RSS", "searchIndex"]
+  home = ["HTML", "searchIndex"]
   section = ["HTML", "RSS", "SITEMAP"]
 
 [outputFormats.searchIndex]
