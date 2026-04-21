@@ -10,6 +10,7 @@ import (
 	"ocm.software/open-component-model/cli/cmd/configuration"
 	"ocm.software/open-component-model/cli/cmd/describe"
 	"ocm.software/open-component-model/cli/cmd/download"
+	"ocm.software/open-component-model/cli/cmd/tui"
 	"ocm.software/open-component-model/cli/cmd/generate"
 	"ocm.software/open-component-model/cli/cmd/get"
 	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
@@ -66,5 +67,6 @@ func New() *cobra.Command {
 	cmd.AddCommand(pluginregistry.New())
 	cmd.AddCommand(transfer.New())
 	cmd.AddCommand(describe.New())
+	cmd.AddCommand(tui.New())
 	return cmd
 }
