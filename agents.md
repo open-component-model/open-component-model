@@ -27,15 +27,18 @@ See the Task documentation at <https://taskfile.dev/docs/guide>.
 ## Code Review Rules
 
 ### No Cross-Module Pollution
+
 - PRs must not mix changes across multiple Go modules.
 - Each PR should focus on a single module unless there's a clear dependency relationship.
 
 ### Follow Package Structure and Order
+
 - Changes must align with the architecture described in doc.go files of each module and package if it exists.
 - Respect the established package hierarchy and dependencies.
 - Maintain consistency with existing patterns in the package.
 
 ### Controller Performance
+
 - Pay special attention to operations handling large numbers of objects.
 - Consider: watch/list efficiency, reconciliation loop performance, memory usage, caching strategies.
 
