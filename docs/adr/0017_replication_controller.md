@@ -54,20 +54,22 @@ spec:
     namespace: default
 
   # Ref of the `Repository` CRs that the transfer should happen to.
-  targetRefs:
-    - name: target-repository
-      namespace: default
+  targetRepositoryRef:
+    name: target-repository
+    namespace: default
 
-  # Since we don't want to make the spec replicate transfer config data, we reference it instead from
-  # either a ConfigMap or inlined apiextensionsv1.JSON values.
-  transferOptionsRef:
-    name: configmap-for-transferoptions
-
-  # apiextensionsv1.JSON map here, not hardcoded values in the spec of the Replication design.    
+  # Transfer options. Single field with a ref-or-inline union, aligned with the
+  # planned OCMConfiguration extension (ocm-project#869). Either a ref:
   transferOptions:
-    recursive: false
-    copyMode: localBlob     # localBlob | allResources    
+    kind: ConfigMap
+    name: configmap-for-transferoptions
+  # or inline data:
+  # transferOptions:
+  #   inline:
+  #     recursive: false
+  #     copyMode: localBlob     # localBlob | allResources
 
+  # References resolved in the Replication CR's namespace.
   ocmConfig:
     - name: my-ocm-config
       kind: Secret
@@ -76,14 +78,22 @@ spec:
   suspend: false
 ```
 
-Transfer config ConfigMap:
+Transfer options ConfigMap (when using the ref form):
 
 ```yaml
 kind: ConfigMap
-data: |
-  recursive: false
-  copyMode: localBlob     # localBlob | allResources
+metadata:
+  name: configmap-for-transferoptions
+data:
+  transfer.yaml: |
+    recursive: false
+    copyMode: localBlob
 ```
+
+`transferOptions` follows the same ref-or-inline shape as the extended `OCMConfiguration`
+type (see [ocm-project#869](https://github.com/open-component-model/ocm-project/issues/869)); ref and inline are
+mutually exclusive and enforced via CRD validation. The inline form is typed as `apiextensionsv1.JSON`, trading
+CRD-level schema validation for forward compatibility.
 
 `copyMode`:
 
@@ -124,7 +134,8 @@ status:
 ```
 
 `componentInfo` reflects the currently observed source; `lastTransferredVersion`/`lastTransferredDigest` record the
-last successful transfer. A mismatch between them indicates a pending transfer.
+last successful transfer. A mismatch means a transfer is pending, in-flight, or most recently failed; the `Ready`
+and `TransferInProgress` conditions disambiguate which.
 
 ### Reconciliation Flow
 
@@ -136,7 +147,9 @@ transfer-specific in-progress sentinel error named `ErrTransferInProgress`.
 
 ```mermaid
 flowchart TD
-    A[Reconcile] --> A1[Read Component CR status]
+    A[Reconcile] --> S{spec.suspend?}
+    S -->|Yes| SX[No-op]
+    S -->|No| A1[Read Component CR status]
     A1 --> A2{Component Ready and digest present?}
     A2 -->|No| A3[Requeue, wait for Component event]
     A2 -->|Yes| C{Source digest == lastTransferredDigest?}
@@ -148,22 +161,33 @@ flowchart TD
     I --> J[Proceed to Phase 2]
 ```
 
-The reconciler gates on Component CR readiness: if the Component is not `Ready` or `status.componentInfo.digest` is absent, the Replication requeues and waits for a Component event rather than acting on incomplete source state.
+The reconciler gates on Component CR readiness: if the Component is not `Ready` or `status.componentInfo.digest` is
+absent, the Replication requeues and waits for a Component event rather than acting on incomplete source state.
+
+`suspend: true` short-circuits the entire flow.
 
 #### Phase 2: Execute (run TGD)
+
+Phase 2 is asynchronous. Submission returns immediately; the submitting reconcile exits and waits for the worker pool
+to emit a completion event that triggers a new reconcile, which reads the result and updates status.
 
 ```mermaid
 flowchart TD
     A[Submit TGD to worker pool] --> B{ErrTransferInProgress?}
     B -->|Yes| C[Exit reconciliation, wait for event]
-    B -->|No| D{Transfer result}
-    D -->|Success| E[Update lastTransferredVersion/Digest]
-    E --> F[Set Ready=True]
-    D -->|Failure| G[Set Ready=False with error]
-    G --> H[Emit warning Event]
-    F --> I[Requeue after interval]
-    H --> I
+    B -->|No, submission accepted| C
+    C -.completion event.-> R[Reconcile reads worker result]
+    R --> D{Transfer result}
+    D -->|Success| E[Update lastTransferredVersion/Digest, set Ready=True, TransferInProgress=False]
+    D -->|Failure| G[Set Ready=False with error, TransferInProgress=False, emit warning Event]
+    E --> I[Requeue after interval]
+    G --> I
 ```
+
+Both terminal branches clear `TransferInProgress=False`.
+
+Stale condition on any reconcile entry, if `TransferInProgress=True` but the worker pool has no in-flight 
+key for this CR's UID (after pod crash or leader change), the condition is treated as stale, cleared, and Phase 1 runs again.
 
 ### Trigger Conditions
 
@@ -171,16 +195,15 @@ flowchart TD
 * Replication CR spec changes (via `observedGeneration`).
 * Interval elapsed.
 
-The controller does not do drift detection. Transfers are content-addressed at the blob level, so a re-transfer of an
-unchanged component version is near free by the technology. Manual changes are resolved by bumping the Replication spec
-or waiting for the source digest to move.
+The controller does not do drift detection. Transfers are content-addressed at the blob level so the registry takes care
+of duplicates. Manual changes are resolved by bumping the Replication spec or waiting for the source digest to move.
 
 ### Worker Pool
 
-Dedicated transfer worker pool, separate from resolution. Non-blocking submission.
-On completion, emits an event to retrigger the reconciler. Burst reconciles for an
-``in-flight key return `ErrTransferInProgress` without re-submitting.
-``
+Dedicated transfer worker pool, separate from resolution. Non-blocking submission backed by a bounded queue. If full
+a retry error is emitted. On completion, emits an event to retrigger the reconciler. Burst reconciles for an in-flight
+key return `ErrTransferInProgress` without re-submitting.
+
 Transient source/target errors (network, 5xx, rate limit) retry with exponential
 backoff inside the worker; terminal errors surface immediately as `Ready=False`.
 
@@ -190,9 +213,8 @@ TGDs are written to a scratch volume:
 
 * Default: `emptyDir`. TGDs regenerate cheaply on pod restart.
 * Optional: PVC for operators who need persistence across restarts.
-* Path: `/var/run/ocm/transfer-specs/{namespace}-{name}-{version}-{confighash}.json`. Where `{confighash}` is the hash
-  of the configuration belonging to this transfer.
-* GC on CR deletion (finalizer) or version supersession.
+* Path: `/var/run/ocm/transfer-specs/{namespace}-{name}-{sourceDigest}-{confighash}.json`.
+* GC on CR deletion (finalizer) or when a newer `(sourceDigest, confighash)` pair supersedes the file.
 
 Compressed inline storage on the CR and ConfigMap-backed storage were considered and rejected: 
 both still hit Kubernetes object size limits and shift, rather than remove, the etcd pressure.
@@ -200,6 +222,8 @@ both still hit Kubernetes object size limits and shift, rather than remove, the 
 ### Watches
 
 * **Component CR**: field index on `spec.componentRef`.
+* **Target Repository CR**: field index on `spec.targetRepositoryRef`; retriggers when the target repo spec changes (URL, auth).
+* **ConfigMap referenced by `transferOptions` (ref form)**: field index; edits retrigger reconciliation.
 * **Worker pool event source**: retriggers on async completion.
 * **Finalizer**: `delivery.ocm.software/replication-finalizer` for cleanup.
 
@@ -208,7 +232,7 @@ both still hit Kubernetes object size limits and shift, rather than remove, the 
 When a Replication CR is deleted:
 
 1. Finalizer blocks removal; reconciler observes `deletionTimestamp`.
-2. In-flight transfer is canceled via a per-item context keyed by CR UID. The worker canceled as soon as possible.
+2. In-flight transfer is canceled via a per-item context keyed by CR UID. Workers honor cancellation at the next safe point.
 3. Bounded drain (default 30s, controller flag) waits for worker acknowledgement.
 4. GC: remove TGD file, unregister event source.
 5. Finalizer removed, CR deleted.
