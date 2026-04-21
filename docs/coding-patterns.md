@@ -45,17 +45,6 @@ func NewManager(ctx context.Context) *Manager {
 }
 ```
 
-### Builder / Method Chaining
-
-Some packages use fluent builders where `With*()` methods return `*Builder` for chaining:
-
-```go
-b := NewBuilder(scheme).
-    WithTransformer(t).
-    WithEvents(ch)
-result, err := b.BuildAndCheck(ctx)
-```
-
 ---
 
 ## Type Definitions
