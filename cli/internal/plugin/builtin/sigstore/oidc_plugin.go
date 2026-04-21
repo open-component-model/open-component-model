@@ -1,4 +1,4 @@
-package cosign
+package sigstore
 
 import (
 	"context"
@@ -32,7 +32,8 @@ var OIDCPluginTypeVersioned = runtime.NewVersionedType(OIDCPluginType, OIDCPlugi
 //	consumers:
 //	- identity:
 //	    type: OIDCIdentityToken/v1alpha1
-//	    name: sigstore
+//	    algorithm: sigstore
+//	    signature: mysig
 //	  credentials:
 //	  - type: SigstoreOIDC/v1alpha1
 //	    issuer: https://oauth2.sigstore.dev/auth
