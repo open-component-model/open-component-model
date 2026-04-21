@@ -56,14 +56,15 @@ spec:
   # Ref of the `Repository` CRs that the transfer should happen to.
   targetRefs:
     - name: target-repository
+      namespace: default
 
   # Since we don't want to make the spec replicate transfer config data, we reference it instead from
   # either a ConfigMap or inlined apiextensionsv1.JSON values.
-  transferConfigRef:
-    name: configmap-for-transferconfig
+  transferOptionsRef:
+    name: configmap-for-transferoptions
 
   # apiextensionsv1.JSON map here, not hardcoded values in the spec of the Replication design.    
-  transferConfig:
+  transferOptions:
     recursive: false
     copyMode: localBlob     # localBlob | allResources    
 
@@ -79,7 +80,7 @@ Transfer config ConfigMap:
 
 ```yaml
 kind: ConfigMap
-data:
+data: |
   recursive: false
   copyMode: localBlob     # localBlob | allResources
 ```
@@ -209,7 +210,7 @@ When a Replication CR is deleted:
 1. Finalizer blocks removal; reconciler observes `deletionTimestamp`.
 2. In-flight transfer is canceled via a per-item context keyed by CR UID. The worker canceled as soon as possible.
 3. Bounded drain (default 30s, controller flag) waits for worker acknowledgement.
-4. GC: remove TGD file, drop cache entry, unregister event source.
+4. GC: remove TGD file, unregister event source.
 5. Finalizer removed, CR deleted.
 
 If the drain times out, the finalizer is force-removed and a warning is logged; the in-flight goroutine is reclaimed on pod restart.
