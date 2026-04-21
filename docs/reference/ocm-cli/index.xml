@@ -1,716 +1,225 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>OCM CLI — Open Component Model</title><link>https://ocm.software/docs/reference/ocm-cli/</link><description>Recent content in OCM CLI on Open Component Model</description><generator>Hugo -- gohugo.io</generator><language>en-US</language><lastBuildDate>Mon, 20 Apr 2026 13:57:16 +0000</lastBuildDate><atom:link href="https://ocm.software/docs/reference/ocm-cli/index.xml" rel="self" type="application/rss+xml"/><item><title>ocm version</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-version/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-version/</guid><description>&lt;h2 id="ocm-version"&gt;ocm version&lt;/h2&gt;
-&lt;p&gt;Retrieve the build version of the OCM CLI&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>OCM CLI on Open Component Model</title><link>https://ocm.software/docs/reference/ocm-cli/</link><description>Recent content in OCM CLI on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/docs/reference/ocm-cli/index.xml" rel="self" type="application/rss+xml"/><item><title>ocm</title><link>https://ocm.software/docs/reference/ocm-cli/ocm/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm/</guid><description>&lt;h2 id="ocm"&gt;ocm&lt;/h2&gt;
+&lt;p&gt;The official Open Component Model (OCM) CLI&lt;/p&gt;
 &lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
-&lt;p&gt;The version command retrieves the build version of the OCM CLI.&lt;/p&gt;</description></item><item><title>ocm verify component-version</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-verify-component-version/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-verify-component-version/</guid><description>&lt;h2 id="ocm-verify-component-version"&gt;ocm verify component-version&lt;/h2&gt;
-&lt;p&gt;Verify component version(s) inside an OCM repository&lt;/p&gt;
-&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
-&lt;p&gt;Verify component version(s) inside an OCM repository based on signatures.&lt;/p&gt;</description></item><item><title>ocm verify</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-verify/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-verify/</guid><description>&lt;h2 id="ocm-verify"&gt;ocm verify&lt;/h2&gt;
-&lt;p&gt;verify digests and signatures of component versions in OCM&lt;/p&gt;
+&lt;p&gt;The Open Component Model command line client supports the work with OCM
+artifacts, like Component Archives, Common Transport Archive,
+Component Repositories, and Component Versions.&lt;/p&gt;</description></item><item><title>ocm add</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-add/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-add/</guid><description>&lt;h2 id="ocm-add"&gt;ocm add&lt;/h2&gt;
+&lt;p&gt;Add anything to OCM&lt;/p&gt;
+
+
+
 &lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt;ocm verify {component-version|component-versions|cv|cvs} [flags]&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm add {component-version|component-versions|cv|cvs} [flags]&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
 &lt;/div&gt;
 &lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
 &lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for verify&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for add&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
 &lt;/div&gt;
 &lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
+
+
+
 &lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
-By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
-1. The path specified in the OCM_CONFIG environment variable
-2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
-- $XDG_CONFIG_HOME/ocm/config
-- $XDG_CONFIG_HOME/.ocmconfig
-- $HOME/.config/ocm/config
-- $HOME/.config/.ocmconfig
-- $HOME/.ocm/config
-- $HOME/.ocmconfig
-3. The current working directory:
-- $PWD/ocm/config
-- $PWD/.ocmconfig
-4. The directory of the current executable:
-- $EXE_DIR/ocm/config
-- $EXE_DIR/.ocmconfig
-If multiple configuration files are found, they will be merged in the order they are discovered.
-Using the option, this configuration file be used instead of the lookup above.
---logformat enum set the log output format that is used to print individual logs
-json: Output logs in JSON format, suitable for machine processing
-text: Output logs in human-readable text format, suitable for console output
-(must be one of [json text]) (default text)
---loglevel enum sets the logging level
-debug: Show all logs including detailed debugging information
-info: Show informational messages and above
-warn: Show warnings and errors only (default)
-error: Show errors only
-(must be one of [debug error info warn]) (default info)
---logoutput enum set the log output destination
-stdout: Write logs to standard output
-stderr: Write logs to standard error, useful for separating logs from normal output
-(must be one of [stderr stdout]) (default stderr)
---plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
---plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
---temp-folder string Specify a custom temporary folder path for filesystem operations.
---working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
+ By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
+ 1. The path specified in the OCM_CONFIG environment variable
+ 2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
+ - $XDG_CONFIG_HOME/ocm/config
+ - $XDG_CONFIG_HOME/.ocmconfig
+ - $HOME/.config/ocm/config
+ - $HOME/.config/.ocmconfig
+ - $HOME/.ocm/config
+ - $HOME/.ocmconfig
+ 3. The current working directory:
+ - $PWD/ocm/config
+ - $PWD/.ocmconfig
+ 4. The directory of the current executable:
+ - $EXE_DIR/ocm/config
+ - $EXE_DIR/.ocmconfig
+ If multiple configuration files are found, they will be merged in the order they are discovered.
+ Using the option, this configuration file be used instead of the lookup above.
+ --logformat enum set the log output format that is used to print individual logs
+ json: Output logs in JSON format, suitable for machine processing
+ text: Output logs in human-readable text format, suitable for console output
+ (must be one of [json text]) (default text)
+ --loglevel enum sets the logging level
+ debug: Show all logs including detailed debugging information
+ info: Show informational messages and above
+ warn: Show warnings and errors only (default)
+ error: Show errors only
+ (must be one of [debug error info warn]) (default info)
+ --logoutput enum set the log output destination
+ stdout: Write logs to standard output
+ stderr: Write logs to standard error, useful for separating logs from normal output
+ (must be one of [stderr stdout]) (default stderr)
+ --plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
+ --plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
+ --temp-folder string Specify a custom temporary folder path for filesystem operations.
+ --working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
 &lt;/div&gt;
 &lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
 &lt;ul&gt;
 &lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt; - The official Open Component Model (OCM) CLI&lt;/li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
 &lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-verify-component-version/"&gt;ocm verify component-version&lt;/a&gt; - Verify component version(s) inside an OCM repository&lt;/li&gt;
-&lt;/ul&gt;</description></item><item><title>ocm transfer component-version</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-transfer-component-version/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-transfer-component-version/</guid><description>&lt;h2 id="ocm-transfer-component-version"&gt;ocm transfer component-version&lt;/h2&gt;
-&lt;p&gt;Transfer a component version between OCM repositories&lt;/p&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-add-component-version/"&gt;ocm add component-version&lt;/a&gt;	 - Add component version(s) to an OCM Repository based on a &amp;ldquo;component-constructor&amp;rdquo; file&lt;/li&gt;
+&lt;/ul&gt;</description></item><item><title>ocm add component-version</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-add-component-version/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-add-component-version/</guid><description>&lt;h2 id="ocm-add-component-version"&gt;ocm add component-version&lt;/h2&gt;
+&lt;p&gt;Add component version(s) to an OCM Repository based on a &amp;ldquo;component-constructor&amp;rdquo; file&lt;/p&gt;
 &lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
-&lt;p&gt;Transfer a single component version from a source repository to
-a target repository using an internally generated transformation graph.&lt;/p&gt;</description></item><item><title>ocm transfer</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-transfer/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-transfer/</guid><description>&lt;h2 id="ocm-transfer"&gt;ocm transfer&lt;/h2&gt;
-&lt;p&gt;Transfer anything in OCM&lt;/p&gt;
+&lt;p&gt;Add component version(s) to an OCM repository that can be reused for transfers.&lt;/p&gt;</description></item><item><title>ocm completion</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-completion/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-completion/</guid><description>&lt;h2 id="ocm-completion"&gt;ocm completion&lt;/h2&gt;
+&lt;p&gt;Generate the autocompletion script for the specified shell&lt;/p&gt;
+&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
+&lt;p&gt;Generate the autocompletion script for ocm for the specified shell.
+See each sub-command&amp;rsquo;s help for details on how to use the generated script.&lt;/p&gt;</description></item><item><title>ocm completion bash</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-completion-bash/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-completion-bash/</guid><description>&lt;h2 id="ocm-completion-bash"&gt;ocm completion bash&lt;/h2&gt;
+&lt;p&gt;Generate the autocompletion script for bash&lt;/p&gt;
+&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
+&lt;p&gt;Generate the autocompletion script for the bash shell.&lt;/p&gt;
+&lt;p&gt;This script depends on the &amp;lsquo;bash-completion&amp;rsquo; package.
+If it is not installed already, you can install it via your OS&amp;rsquo;s package manager.&lt;/p&gt;</description></item><item><title>ocm completion fish</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-completion-fish/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-completion-fish/</guid><description>&lt;h2 id="ocm-completion-fish"&gt;ocm completion fish&lt;/h2&gt;
+&lt;p&gt;Generate the autocompletion script for fish&lt;/p&gt;
+&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
+&lt;p&gt;Generate the autocompletion script for the fish shell.&lt;/p&gt;
+&lt;p&gt;To load completions in your current shell session:&lt;/p&gt;</description></item><item><title>ocm completion powershell</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-completion-powershell/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-completion-powershell/</guid><description>&lt;h2 id="ocm-completion-powershell"&gt;ocm completion powershell&lt;/h2&gt;
+&lt;p&gt;Generate the autocompletion script for powershell&lt;/p&gt;
+&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
+&lt;p&gt;Generate the autocompletion script for powershell.&lt;/p&gt;
+&lt;p&gt;To load completions in your current shell session:&lt;/p&gt;</description></item><item><title>ocm completion zsh</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-completion-zsh/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-completion-zsh/</guid><description>&lt;h2 id="ocm-completion-zsh"&gt;ocm completion zsh&lt;/h2&gt;
+&lt;p&gt;Generate the autocompletion script for zsh&lt;/p&gt;
+&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
+&lt;p&gt;Generate the autocompletion script for the zsh shell.&lt;/p&gt;
+&lt;p&gt;If shell completion is not already enabled in your environment you will need
+to enable it. You can execute the following once:&lt;/p&gt;</description></item><item><title>ocm describe</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-describe/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-describe/</guid><description>&lt;h2 id="ocm-describe"&gt;ocm describe&lt;/h2&gt;
+&lt;p&gt;Describe OCM entities or metadata&lt;/p&gt;
+
+
+
 &lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt;ocm transfer {component-version|component-versions|cv|cvs} [flags]&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm describe [flags]&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
 &lt;/div&gt;
 &lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
 &lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for transfer&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for describe&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
 &lt;/div&gt;
 &lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
+
+
+
 &lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
-By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
-1. The path specified in the OCM_CONFIG environment variable
-2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
-- $XDG_CONFIG_HOME/ocm/config
-- $XDG_CONFIG_HOME/.ocmconfig
-- $HOME/.config/ocm/config
-- $HOME/.config/.ocmconfig
-- $HOME/.ocm/config
-- $HOME/.ocmconfig
-3. The current working directory:
-- $PWD/ocm/config
-- $PWD/.ocmconfig
-4. The directory of the current executable:
-- $EXE_DIR/ocm/config
-- $EXE_DIR/.ocmconfig
-If multiple configuration files are found, they will be merged in the order they are discovered.
-Using the option, this configuration file be used instead of the lookup above.
---logformat enum set the log output format that is used to print individual logs
-json: Output logs in JSON format, suitable for machine processing
-text: Output logs in human-readable text format, suitable for console output
-(must be one of [json text]) (default text)
---loglevel enum sets the logging level
-debug: Show all logs including detailed debugging information
-info: Show informational messages and above
-warn: Show warnings and errors only (default)
-error: Show errors only
-(must be one of [debug error info warn]) (default info)
---logoutput enum set the log output destination
-stdout: Write logs to standard output
-stderr: Write logs to standard error, useful for separating logs from normal output
-(must be one of [stderr stdout]) (default stderr)
---plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
---plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
---temp-folder string Specify a custom temporary folder path for filesystem operations.
---working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
+ By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
+ 1. The path specified in the OCM_CONFIG environment variable
+ 2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
+ - $XDG_CONFIG_HOME/ocm/config
+ - $XDG_CONFIG_HOME/.ocmconfig
+ - $HOME/.config/ocm/config
+ - $HOME/.config/.ocmconfig
+ - $HOME/.ocm/config
+ - $HOME/.ocmconfig
+ 3. The current working directory:
+ - $PWD/ocm/config
+ - $PWD/.ocmconfig
+ 4. The directory of the current executable:
+ - $EXE_DIR/ocm/config
+ - $EXE_DIR/.ocmconfig
+ If multiple configuration files are found, they will be merged in the order they are discovered.
+ Using the option, this configuration file be used instead of the lookup above.
+ --logformat enum set the log output format that is used to print individual logs
+ json: Output logs in JSON format, suitable for machine processing
+ text: Output logs in human-readable text format, suitable for console output
+ (must be one of [json text]) (default text)
+ --loglevel enum sets the logging level
+ debug: Show all logs including detailed debugging information
+ info: Show informational messages and above
+ warn: Show warnings and errors only (default)
+ error: Show errors only
+ (must be one of [debug error info warn]) (default info)
+ --logoutput enum set the log output destination
+ stdout: Write logs to standard output
+ stderr: Write logs to standard error, useful for separating logs from normal output
+ (must be one of [stderr stdout]) (default stderr)
+ --plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
+ --plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
+ --temp-folder string Specify a custom temporary folder path for filesystem operations.
+ --working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
 &lt;/div&gt;
 &lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
 &lt;ul&gt;
 &lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt; - The official Open Component Model (OCM) CLI&lt;/li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
 &lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-transfer-component-version/"&gt;ocm transfer component-version&lt;/a&gt; - Transfer a component version between OCM repositories&lt;/li&gt;
-&lt;/ul&gt;</description></item><item><title>ocm sign component-version</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-sign-component-version/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-sign-component-version/</guid><description>&lt;h2 id="ocm-sign-component-version"&gt;ocm sign component-version&lt;/h2&gt;
-&lt;p&gt;Sign component version(s) inside an OCM repository&lt;/p&gt;
-&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
-&lt;p&gt;Creates or update cryptographic signatures on component descriptors.&lt;/p&gt;
-&lt;h2 id="reference-format"&gt;Reference Format&lt;/h2&gt;
-&lt;pre&gt;&lt;code&gt;[type::]{repository}/[valid-prefix]/{component}[:version]
-&lt;/code&gt;&lt;/pre&gt;
-&lt;ul&gt;
-&lt;li&gt;Prefixes: {component-descriptors|none} (default: &amp;ldquo;component-descriptors&amp;rdquo;)&lt;/li&gt;
-&lt;li&gt;Repo types: {OCIRepository|CommonTransportFormat} (short: {OCI|oci|CTF|ctf})&lt;/li&gt;
-&lt;/ul&gt;
-&lt;h2 id="ocm-signing-explained-in-simple-steps"&gt;OCM Signing explained in simple steps&lt;/h2&gt;
-&lt;ul&gt;
-&lt;li&gt;Resolve OCM repository&lt;/li&gt;
-&lt;li&gt;Fetch component version&lt;/li&gt;
-&lt;li&gt;Verify digests (&amp;ndash;verify-digest-consistency)&lt;/li&gt;
-&lt;li&gt;Normalise descriptor (&amp;ndash;normalisation)&lt;/li&gt;
-&lt;li&gt;Hash normalised descriptor (&amp;ndash;hash)&lt;/li&gt;
-&lt;li&gt;Sign hash (&amp;ndash;signer-spec)&lt;/li&gt;
-&lt;/ul&gt;
-&lt;h2 id="behavior"&gt;Behavior&lt;/h2&gt;
-&lt;ul&gt;
-&lt;li&gt;Conflicting signatures cause failure unless &amp;ndash;force is set (then overwrite)&lt;/li&gt;
-&lt;li&gt;&amp;ndash;dry-run: compute only, do not persist signature&lt;/li&gt;
-&lt;li&gt;Default signature name: default&lt;/li&gt;
-&lt;li&gt;Default signer: RSASSA-PSS plugin (needs private key)&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;Use this command to establish provenance of component versions.&lt;/p&gt;</description></item><item><title>ocm sign</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-sign/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-sign/</guid><description>&lt;h2 id="ocm-sign"&gt;ocm sign&lt;/h2&gt;
-&lt;p&gt;create signatures for component versions in OCM&lt;/p&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt;ocm sign {component-version|component-versions|cv|cvs} [flags]&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options"&gt;Options&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for sign&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
-By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
-1. The path specified in the OCM_CONFIG environment variable
-2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
-- $XDG_CONFIG_HOME/ocm/config
-- $XDG_CONFIG_HOME/.ocmconfig
-- $HOME/.config/ocm/config
-- $HOME/.config/.ocmconfig
-- $HOME/.ocm/config
-- $HOME/.ocmconfig
-3. The current working directory:
-- $PWD/ocm/config
-- $PWD/.ocmconfig
-4. The directory of the current executable:
-- $EXE_DIR/ocm/config
-- $EXE_DIR/.ocmconfig
-If multiple configuration files are found, they will be merged in the order they are discovered.
-Using the option, this configuration file be used instead of the lookup above.
---logformat enum set the log output format that is used to print individual logs
-json: Output logs in JSON format, suitable for machine processing
-text: Output logs in human-readable text format, suitable for console output
-(must be one of [json text]) (default text)
---loglevel enum sets the logging level
-debug: Show all logs including detailed debugging information
-info: Show informational messages and above
-warn: Show warnings and errors only (default)
-error: Show errors only
-(must be one of [debug error info warn]) (default info)
---logoutput enum set the log output destination
-stdout: Write logs to standard output
-stderr: Write logs to standard error, useful for separating logs from normal output
-(must be one of [stderr stdout]) (default stderr)
---plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
---plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
---temp-folder string Specify a custom temporary folder path for filesystem operations.
---working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
-&lt;ul&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt; - The official Open Component Model (OCM) CLI&lt;/li&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-sign-component-version/"&gt;ocm sign component-version&lt;/a&gt; - Sign component version(s) inside an OCM repository&lt;/li&gt;
-&lt;/ul&gt;</description></item><item><title>ocm plugin registry list</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-list/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-list/</guid><description>&lt;h2 id="ocm-plugin-registry-list"&gt;ocm plugin registry list&lt;/h2&gt;
-&lt;p&gt;List available plugin binaries from a plugin registry.&lt;/p&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt;ocm plugin registry list [flags]&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="examples"&gt;Examples&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; # List available plugin binaries from a registry using the flag.
-ocm plugin registry list --registry ocm.software/plugin-registry:v1.0.0&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options"&gt;Options&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for list
--o, --output enum output format of the plugin list
-(must be one of [json ndjson table wide yaml]) (default table)
---registry string registry URL to list plugins from&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
-By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
-1. The path specified in the OCM_CONFIG environment variable
-2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
-- $XDG_CONFIG_HOME/ocm/config
-- $XDG_CONFIG_HOME/.ocmconfig
-- $HOME/.config/ocm/config
-- $HOME/.config/.ocmconfig
-- $HOME/.ocm/config
-- $HOME/.ocmconfig
-3. The current working directory:
-- $PWD/ocm/config
-- $PWD/.ocmconfig
-4. The directory of the current executable:
-- $EXE_DIR/ocm/config
-- $EXE_DIR/.ocmconfig
-If multiple configuration files are found, they will be merged in the order they are discovered.
-Using the option, this configuration file be used instead of the lookup above.
---logformat enum set the log output format that is used to print individual logs
-json: Output logs in JSON format, suitable for machine processing
-text: Output logs in human-readable text format, suitable for console output
-(must be one of [json text]) (default text)
---loglevel enum sets the logging level
-debug: Show all logs including detailed debugging information
-info: Show informational messages and above
-warn: Show warnings and errors only (default)
-error: Show errors only
-(must be one of [debug error info warn]) (default info)
---logoutput enum set the log output destination
-stdout: Write logs to standard output
-stderr: Write logs to standard error, useful for separating logs from normal output
-(must be one of [stderr stdout]) (default stderr)
---plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
---plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
---temp-folder string Specify a custom temporary folder path for filesystem operations.
---working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
-&lt;ul&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/"&gt;ocm plugin registry&lt;/a&gt; - Manage plugin registries&lt;/li&gt;
-&lt;/ul&gt;</description></item><item><title>ocm plugin registry get</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-get/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-get/</guid><description>&lt;h2 id="ocm-plugin-registry-get"&gt;ocm plugin registry get&lt;/h2&gt;
-&lt;p&gt;Get information about specified plugin from a plugin registry.&lt;/p&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt;ocm plugin registry get &amp;lt;plugin-name[:version]&amp;gt; [flags]&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="examples"&gt;Examples&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; # Get information about specified plugin from a plugin registry.
-ocm plugin registry get helminput&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options"&gt;Options&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; --component-descriptor return component descriptors of the plugins
--h, --help help for get
--o, --output enum output format of the plugin list
-(must be one of [json ndjson table yaml]) (default table)
---registry string registry URL to list plugins from
---version string specific version of the plugin to display (default: latest version)&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
-By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
-1. The path specified in the OCM_CONFIG environment variable
-2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
-- $XDG_CONFIG_HOME/ocm/config
-- $XDG_CONFIG_HOME/.ocmconfig
-- $HOME/.config/ocm/config
-- $HOME/.config/.ocmconfig
-- $HOME/.ocm/config
-- $HOME/.ocmconfig
-3. The current working directory:
-- $PWD/ocm/config
-- $PWD/.ocmconfig
-4. The directory of the current executable:
-- $EXE_DIR/ocm/config
-- $EXE_DIR/.ocmconfig
-If multiple configuration files are found, they will be merged in the order they are discovered.
-Using the option, this configuration file be used instead of the lookup above.
---logformat enum set the log output format that is used to print individual logs
-json: Output logs in JSON format, suitable for machine processing
-text: Output logs in human-readable text format, suitable for console output
-(must be one of [json text]) (default text)
---loglevel enum sets the logging level
-debug: Show all logs including detailed debugging information
-info: Show informational messages and above
-warn: Show warnings and errors only (default)
-error: Show errors only
-(must be one of [debug error info warn]) (default info)
---logoutput enum set the log output destination
-stdout: Write logs to standard output
-stderr: Write logs to standard error, useful for separating logs from normal output
-(must be one of [stderr stdout]) (default stderr)
---plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
---plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
---temp-folder string Specify a custom temporary folder path for filesystem operations.
---working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
-&lt;ul&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/"&gt;ocm plugin registry&lt;/a&gt; - Manage plugin registries&lt;/li&gt;
-&lt;/ul&gt;</description></item><item><title>ocm plugin registry</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/</guid><description>&lt;h2 id="ocm-plugin-registry"&gt;ocm plugin registry&lt;/h2&gt;
-&lt;p&gt;Manage plugin registries&lt;/p&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt;ocm plugin registry {get|list} [flags]&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options"&gt;Options&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for registry&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
-By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
-1. The path specified in the OCM_CONFIG environment variable
-2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
-- $XDG_CONFIG_HOME/ocm/config
-- $XDG_CONFIG_HOME/.ocmconfig
-- $HOME/.config/ocm/config
-- $HOME/.config/.ocmconfig
-- $HOME/.ocm/config
-- $HOME/.ocmconfig
-3. The current working directory:
-- $PWD/ocm/config
-- $PWD/.ocmconfig
-4. The directory of the current executable:
-- $EXE_DIR/ocm/config
-- $EXE_DIR/.ocmconfig
-If multiple configuration files are found, they will be merged in the order they are discovered.
-Using the option, this configuration file be used instead of the lookup above.
---logformat enum set the log output format that is used to print individual logs
-json: Output logs in JSON format, suitable for machine processing
-text: Output logs in human-readable text format, suitable for console output
-(must be one of [json text]) (default text)
---loglevel enum sets the logging level
-debug: Show all logs including detailed debugging information
-info: Show informational messages and above
-warn: Show warnings and errors only (default)
-error: Show errors only
-(must be one of [debug error info warn]) (default info)
---logoutput enum set the log output destination
-stdout: Write logs to standard output
-stderr: Write logs to standard error, useful for separating logs from normal output
-(must be one of [stderr stdout]) (default stderr)
---plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
---plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
---temp-folder string Specify a custom temporary folder path for filesystem operations.
---working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
-&lt;ul&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin/"&gt;ocm plugin&lt;/a&gt; - Manage OCM plugins&lt;/li&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-get/"&gt;ocm plugin registry get&lt;/a&gt; - Get information about specified plugin from a plugin registry.&lt;/li&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-list/"&gt;ocm plugin registry list&lt;/a&gt; - List available plugin binaries from a plugin registry.&lt;/li&gt;
-&lt;/ul&gt;</description></item><item><title>ocm plugin</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-plugin/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-plugin/</guid><description>&lt;h2 id="ocm-plugin"&gt;ocm plugin&lt;/h2&gt;
-&lt;p&gt;Manage OCM plugins&lt;/p&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt;ocm plugin [flags]&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options"&gt;Options&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for plugin&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
-By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
-1. The path specified in the OCM_CONFIG environment variable
-2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
-- $XDG_CONFIG_HOME/ocm/config
-- $XDG_CONFIG_HOME/.ocmconfig
-- $HOME/.config/ocm/config
-- $HOME/.config/.ocmconfig
-- $HOME/.ocm/config
-- $HOME/.ocmconfig
-3. The current working directory:
-- $PWD/ocm/config
-- $PWD/.ocmconfig
-4. The directory of the current executable:
-- $EXE_DIR/ocm/config
-- $EXE_DIR/.ocmconfig
-If multiple configuration files are found, they will be merged in the order they are discovered.
-Using the option, this configuration file be used instead of the lookup above.
---logformat enum set the log output format that is used to print individual logs
-json: Output logs in JSON format, suitable for machine processing
-text: Output logs in human-readable text format, suitable for console output
-(must be one of [json text]) (default text)
---loglevel enum sets the logging level
-debug: Show all logs including detailed debugging information
-info: Show informational messages and above
-warn: Show warnings and errors only (default)
-error: Show errors only
-(must be one of [debug error info warn]) (default info)
---logoutput enum set the log output destination
-stdout: Write logs to standard output
-stderr: Write logs to standard error, useful for separating logs from normal output
-(must be one of [stderr stdout]) (default stderr)
---plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
---plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
---temp-folder string Specify a custom temporary folder path for filesystem operations.
---working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
-&lt;ul&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt; - The official Open Component Model (OCM) CLI&lt;/li&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/"&gt;ocm plugin registry&lt;/a&gt; - Manage plugin registries&lt;/li&gt;
-&lt;/ul&gt;</description></item><item><title>ocm get types</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-get-types/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-get-types/</guid><description>&lt;h2 id="ocm-get-types"&gt;ocm get types&lt;/h2&gt;
-&lt;p&gt;Describe OCM types and their configuration schema&lt;/p&gt;
-&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
-&lt;p&gt;Describe OCM types registered in various subsystems.&lt;/p&gt;
-&lt;p&gt;WHAT ARE SUBSYSTEMS?
-OCM uses a plugin-based architecture where different types of functionality are organized
-into subsystems. Each subsystem is a collection of related type implementations. When you
-use OCM commands or configure OCM resources, you specify types from these subsystems.&lt;/p&gt;</description></item><item><title>ocm get component-version</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-get-component-version/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-get-component-version/</guid><description>&lt;h2 id="ocm-get-component-version"&gt;ocm get component-version&lt;/h2&gt;
-&lt;p&gt;Get component version(s) from an OCM repository&lt;/p&gt;
-&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
-&lt;p&gt;Get component version(s) from an OCM repository.&lt;/p&gt;
-&lt;p&gt;The format of a component reference is:
-[type::]{repository}/[valid-prefix]/{component}[:version]&lt;/p&gt;</description></item><item><title>ocm get</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-get/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-get/</guid><description>&lt;h2 id="ocm-get"&gt;ocm get&lt;/h2&gt;
-&lt;p&gt;Get anything from OCM&lt;/p&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt;ocm get {component-version|component-versions|cv|cvs} [flags]&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options"&gt;Options&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for get&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
-By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
-1. The path specified in the OCM_CONFIG environment variable
-2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
-- $XDG_CONFIG_HOME/ocm/config
-- $XDG_CONFIG_HOME/.ocmconfig
-- $HOME/.config/ocm/config
-- $HOME/.config/.ocmconfig
-- $HOME/.ocm/config
-- $HOME/.ocmconfig
-3. The current working directory:
-- $PWD/ocm/config
-- $PWD/.ocmconfig
-4. The directory of the current executable:
-- $EXE_DIR/ocm/config
-- $EXE_DIR/.ocmconfig
-If multiple configuration files are found, they will be merged in the order they are discovered.
-Using the option, this configuration file be used instead of the lookup above.
---logformat enum set the log output format that is used to print individual logs
-json: Output logs in JSON format, suitable for machine processing
-text: Output logs in human-readable text format, suitable for console output
-(must be one of [json text]) (default text)
---loglevel enum sets the logging level
-debug: Show all logs including detailed debugging information
-info: Show informational messages and above
-warn: Show warnings and errors only (default)
-error: Show errors only
-(must be one of [debug error info warn]) (default info)
---logoutput enum set the log output destination
-stdout: Write logs to standard output
-stderr: Write logs to standard error, useful for separating logs from normal output
-(must be one of [stderr stdout]) (default stderr)
---plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
---plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
---temp-folder string Specify a custom temporary folder path for filesystem operations.
---working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
-&lt;ul&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt; - The official Open Component Model (OCM) CLI&lt;/li&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-get-component-version/"&gt;ocm get component-version&lt;/a&gt; - Get component version(s) from an OCM repository&lt;/li&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-get-types/"&gt;ocm get types&lt;/a&gt; - Describe OCM types and their configuration schema&lt;/li&gt;
-&lt;/ul&gt;</description></item><item><title>ocm generate docs</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-generate-docs/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-generate-docs/</guid><description>&lt;h2 id="ocm-generate-docs"&gt;ocm generate docs&lt;/h2&gt;
-&lt;p&gt;Generate Documentation for the CLI&lt;/p&gt;
-&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
-&lt;p&gt;Generate documentation for the OCM CLI in various formats, including Hugo-compatible markdown.&lt;/p&gt;</description></item><item><title>ocm generate</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-generate/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-generate/</guid><description>&lt;h2 id="ocm-generate"&gt;ocm generate&lt;/h2&gt;
-&lt;p&gt;Generate documentation for the OCM CLI&lt;/p&gt;
-&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
-&lt;p&gt;A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:&lt;/p&gt;</description></item><item><title>ocm download resource</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-download-resource/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-download-resource/</guid><description>&lt;h2 id="ocm-download-resource"&gt;ocm download resource&lt;/h2&gt;
-&lt;p&gt;Download resources described in a component version in an OCM Repository&lt;/p&gt;
-&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
-&lt;p&gt;Download a resource from a component version located in an Open Component Model (OCM) repository.&lt;/p&gt;</description></item><item><title>ocm download plugin</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-download-plugin/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-download-plugin/</guid><description>&lt;h2 id="ocm-download-plugin"&gt;ocm download plugin&lt;/h2&gt;
-&lt;p&gt;Download plugin binaries from a component version.&lt;/p&gt;
-&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
-&lt;p&gt;Download a plugin binary from a component version located in a component version.&lt;/p&gt;</description></item><item><title>ocm download</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-download/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-download/</guid><description>&lt;h2 id="ocm-download"&gt;ocm download&lt;/h2&gt;
-&lt;p&gt;Download anything from OCM&lt;/p&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt;ocm download {resource|resources|plugin|plugins} [flags]&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options"&gt;Options&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for download&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
-&lt;div class="expressive-code"&gt;
-&lt;figure class="frame not-content"&gt;
-&lt;figcaption class="header"&gt;
-&lt;span class="title"&gt;&lt;/span&gt;
-&lt;/figcaption&gt;
-&lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
-By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
-1. The path specified in the OCM_CONFIG environment variable
-2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
-- $XDG_CONFIG_HOME/ocm/config
-- $XDG_CONFIG_HOME/.ocmconfig
-- $HOME/.config/ocm/config
-- $HOME/.config/.ocmconfig
-- $HOME/.ocm/config
-- $HOME/.ocmconfig
-3. The current working directory:
-- $PWD/ocm/config
-- $PWD/.ocmconfig
-4. The directory of the current executable:
-- $EXE_DIR/ocm/config
-- $EXE_DIR/.ocmconfig
-If multiple configuration files are found, they will be merged in the order they are discovered.
-Using the option, this configuration file be used instead of the lookup above.
---logformat enum set the log output format that is used to print individual logs
-json: Output logs in JSON format, suitable for machine processing
-text: Output logs in human-readable text format, suitable for console output
-(must be one of [json text]) (default text)
---loglevel enum sets the logging level
-debug: Show all logs including detailed debugging information
-info: Show informational messages and above
-warn: Show warnings and errors only (default)
-error: Show errors only
-(must be one of [debug error info warn]) (default info)
---logoutput enum set the log output destination
-stdout: Write logs to standard output
-stderr: Write logs to standard error, useful for separating logs from normal output
-(must be one of [stderr stdout]) (default stderr)
---plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
---plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
---temp-folder string Specify a custom temporary folder path for filesystem operations.
---working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
-&lt;/figure&gt;
-&lt;/div&gt;
-&lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
-&lt;ul&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt; - The official Open Component Model (OCM) CLI&lt;/li&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-download-plugin/"&gt;ocm download plugin&lt;/a&gt; - Download plugin binaries from a component version.&lt;/li&gt;
-&lt;li&gt;
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-download-resource/"&gt;ocm download resource&lt;/a&gt; - Download resources described in a component version in an OCM Repository&lt;/li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-describe-types/"&gt;ocm describe types&lt;/a&gt;	 - Describe OCM types and their configuration schema&lt;/li&gt;
 &lt;/ul&gt;</description></item><item><title>ocm describe types</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-describe-types/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-describe-types/</guid><description>&lt;h2 id="ocm-describe-types"&gt;ocm describe types&lt;/h2&gt;
 &lt;p&gt;Describe OCM types and their configuration schema&lt;/p&gt;
 &lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
@@ -718,4 +227,446 @@ stderr: Write logs to standard error, useful for separating logs from normal out
 &lt;p&gt;WHAT ARE SUBSYSTEMS?
 OCM uses a plugin-based architecture where different types of functionality are organized
 into subsystems. Each subsystem is a collection of related type implementations. When you
-use OCM commands or configure OCM resources, you specify types from these subsystems.&lt;/p&gt;</description></item></channel></rss>
+use OCM commands or configure OCM resources, you specify types from these subsystems.&lt;/p&gt;</description></item><item><title>ocm download</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-download/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-download/</guid><description>&lt;h2 id="ocm-download"&gt;ocm download&lt;/h2&gt;
+&lt;p&gt;Download anything from OCM&lt;/p&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm download {resource|resources|plugin|plugins} [flags]&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for download&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
+ By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
+ 1. The path specified in the OCM_CONFIG environment variable
+ 2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
+ - $XDG_CONFIG_HOME/ocm/config
+ - $XDG_CONFIG_HOME/.ocmconfig
+ - $HOME/.config/ocm/config
+ - $HOME/.config/.ocmconfig
+ - $HOME/.ocm/config
+ - $HOME/.ocmconfig
+ 3. The current working directory:
+ - $PWD/ocm/config
+ - $PWD/.ocmconfig
+ 4. The directory of the current executable:
+ - $EXE_DIR/ocm/config
+ - $EXE_DIR/.ocmconfig
+ If multiple configuration files are found, they will be merged in the order they are discovered.
+ Using the option, this configuration file be used instead of the lookup above.
+ --logformat enum set the log output format that is used to print individual logs
+ json: Output logs in JSON format, suitable for machine processing
+ text: Output logs in human-readable text format, suitable for console output
+ (must be one of [json text]) (default text)
+ --loglevel enum sets the logging level
+ debug: Show all logs including detailed debugging information
+ info: Show informational messages and above
+ warn: Show warnings and errors only (default)
+ error: Show errors only
+ (must be one of [debug error info warn]) (default info)
+ --logoutput enum set the log output destination
+ stdout: Write logs to standard output
+ stderr: Write logs to standard error, useful for separating logs from normal output
+ (must be one of [stderr stdout]) (default stderr)
+ --plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
+ --plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
+ --temp-folder string Specify a custom temporary folder path for filesystem operations.
+ --working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
+&lt;li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-download-plugin/"&gt;ocm download plugin&lt;/a&gt;	 - Download plugin binaries from a component version.&lt;/li&gt;
+&lt;li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-download-resource/"&gt;ocm download resource&lt;/a&gt;	 - Download resources described in a component version in an OCM Repository&lt;/li&gt;
+&lt;/ul&gt;</description></item><item><title>ocm download plugin</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-download-plugin/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-download-plugin/</guid><description>&lt;h2 id="ocm-download-plugin"&gt;ocm download plugin&lt;/h2&gt;
+&lt;p&gt;Download plugin binaries from a component version.&lt;/p&gt;
+&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
+&lt;p&gt;Download a plugin binary from a component version located in a component version.&lt;/p&gt;</description></item><item><title>ocm download resource</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-download-resource/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-download-resource/</guid><description>&lt;h2 id="ocm-download-resource"&gt;ocm download resource&lt;/h2&gt;
+&lt;p&gt;Download resources described in a component version in an OCM Repository&lt;/p&gt;
+&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
+&lt;p&gt;Download a resource from a component version located in an Open Component Model (OCM) repository.&lt;/p&gt;</description></item><item><title>ocm generate</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-generate/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-generate/</guid><description>&lt;h2 id="ocm-generate"&gt;ocm generate&lt;/h2&gt;
+&lt;p&gt;Generate documentation for the OCM CLI&lt;/p&gt;
+&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
+&lt;p&gt;A longer description that spans multiple lines and likely contains examples
+and usage of using your command. For example:&lt;/p&gt;</description></item><item><title>ocm generate docs</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-generate-docs/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-generate-docs/</guid><description>&lt;h2 id="ocm-generate-docs"&gt;ocm generate docs&lt;/h2&gt;
+&lt;p&gt;Generate Documentation for the CLI&lt;/p&gt;
+&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
+&lt;p&gt;Generate documentation for the OCM CLI in various formats, including Hugo-compatible markdown.&lt;/p&gt;</description></item><item><title>ocm get</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-get/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-get/</guid><description>&lt;h2 id="ocm-get"&gt;ocm get&lt;/h2&gt;
+&lt;p&gt;Get anything from OCM&lt;/p&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm get {component-version|component-versions|cv|cvs} [flags]&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for get&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
+ By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
+ 1. The path specified in the OCM_CONFIG environment variable
+ 2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
+ - $XDG_CONFIG_HOME/ocm/config
+ - $XDG_CONFIG_HOME/.ocmconfig
+ - $HOME/.config/ocm/config
+ - $HOME/.config/.ocmconfig
+ - $HOME/.ocm/config
+ - $HOME/.ocmconfig
+ 3. The current working directory:
+ - $PWD/ocm/config
+ - $PWD/.ocmconfig
+ 4. The directory of the current executable:
+ - $EXE_DIR/ocm/config
+ - $EXE_DIR/.ocmconfig
+ If multiple configuration files are found, they will be merged in the order they are discovered.
+ Using the option, this configuration file be used instead of the lookup above.
+ --logformat enum set the log output format that is used to print individual logs
+ json: Output logs in JSON format, suitable for machine processing
+ text: Output logs in human-readable text format, suitable for console output
+ (must be one of [json text]) (default text)
+ --loglevel enum sets the logging level
+ debug: Show all logs including detailed debugging information
+ info: Show informational messages and above
+ warn: Show warnings and errors only (default)
+ error: Show errors only
+ (must be one of [debug error info warn]) (default info)
+ --logoutput enum set the log output destination
+ stdout: Write logs to standard output
+ stderr: Write logs to standard error, useful for separating logs from normal output
+ (must be one of [stderr stdout]) (default stderr)
+ --plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
+ --plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
+ --temp-folder string Specify a custom temporary folder path for filesystem operations.
+ --working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
+&lt;li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-get-component-version/"&gt;ocm get component-version&lt;/a&gt;	 - Get component version(s) from an OCM repository&lt;/li&gt;
+&lt;li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-get-types/"&gt;ocm get types&lt;/a&gt;	 - Describe OCM types and their configuration schema&lt;/li&gt;
+&lt;/ul&gt;</description></item><item><title>ocm get component-version</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-get-component-version/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-get-component-version/</guid><description>&lt;h2 id="ocm-get-component-version"&gt;ocm get component-version&lt;/h2&gt;
+&lt;p&gt;Get component version(s) from an OCM repository&lt;/p&gt;
+&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
+&lt;p&gt;Get component version(s) from an OCM repository.&lt;/p&gt;
+&lt;p&gt;The format of a component reference is:
+[type::]{repository}/[valid-prefix]/{component}[:version]&lt;/p&gt;</description></item><item><title>ocm get types</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-get-types/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-get-types/</guid><description>&lt;h2 id="ocm-get-types"&gt;ocm get types&lt;/h2&gt;
+&lt;p&gt;Describe OCM types and their configuration schema&lt;/p&gt;
+&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
+&lt;p&gt;Describe OCM types registered in various subsystems.&lt;/p&gt;
+&lt;p&gt;WHAT ARE SUBSYSTEMS?
+OCM uses a plugin-based architecture where different types of functionality are organized
+into subsystems. Each subsystem is a collection of related type implementations. When you
+use OCM commands or configure OCM resources, you specify types from these subsystems.&lt;/p&gt;</description></item><item><title>ocm plugin</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-plugin/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-plugin/</guid><description>&lt;h2 id="ocm-plugin"&gt;ocm plugin&lt;/h2&gt;
+&lt;p&gt;Manage OCM plugins&lt;/p&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm plugin [flags]&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for plugin&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
+ By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
+ 1. The path specified in the OCM_CONFIG environment variable
+ 2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
+ - $XDG_CONFIG_HOME/ocm/config
+ - $XDG_CONFIG_HOME/.ocmconfig
+ - $HOME/.config/ocm/config
+ - $HOME/.config/.ocmconfig
+ - $HOME/.ocm/config
+ - $HOME/.ocmconfig
+ 3. The current working directory:
+ - $PWD/ocm/config
+ - $PWD/.ocmconfig
+ 4. The directory of the current executable:
+ - $EXE_DIR/ocm/config
+ - $EXE_DIR/.ocmconfig
+ If multiple configuration files are found, they will be merged in the order they are discovered.
+ Using the option, this configuration file be used instead of the lookup above.
+ --logformat enum set the log output format that is used to print individual logs
+ json: Output logs in JSON format, suitable for machine processing
+ text: Output logs in human-readable text format, suitable for console output
+ (must be one of [json text]) (default text)
+ --loglevel enum sets the logging level
+ debug: Show all logs including detailed debugging information
+ info: Show informational messages and above
+ warn: Show warnings and errors only (default)
+ error: Show errors only
+ (must be one of [debug error info warn]) (default info)
+ --logoutput enum set the log output destination
+ stdout: Write logs to standard output
+ stderr: Write logs to standard error, useful for separating logs from normal output
+ (must be one of [stderr stdout]) (default stderr)
+ --plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
+ --plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
+ --temp-folder string Specify a custom temporary folder path for filesystem operations.
+ --working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
+&lt;li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/"&gt;ocm plugin registry&lt;/a&gt;	 - Manage plugin registries&lt;/li&gt;
+&lt;/ul&gt;</description></item><item><title>ocm plugin registry</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/</guid><description>&lt;h2 id="ocm-plugin-registry"&gt;ocm plugin registry&lt;/h2&gt;
+&lt;p&gt;Manage plugin registries&lt;/p&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm plugin registry {get|list} [flags]&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for registry&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
+ By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
+ 1. The path specified in the OCM_CONFIG environment variable
+ 2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
+ - $XDG_CONFIG_HOME/ocm/config
+ - $XDG_CONFIG_HOME/.ocmconfig
+ - $HOME/.config/ocm/config
+ - $HOME/.config/.ocmconfig
+ - $HOME/.ocm/config
+ - $HOME/.ocmconfig
+ 3. The current working directory:
+ - $PWD/ocm/config
+ - $PWD/.ocmconfig
+ 4. The directory of the current executable:
+ - $EXE_DIR/ocm/config
+ - $EXE_DIR/.ocmconfig
+ If multiple configuration files are found, they will be merged in the order they are discovered.
+ Using the option, this configuration file be used instead of the lookup above.
+ --logformat enum set the log output format that is used to print individual logs
+ json: Output logs in JSON format, suitable for machine processing
+ text: Output logs in human-readable text format, suitable for console output
+ (must be one of [json text]) (default text)
+ --loglevel enum sets the logging level
+ debug: Show all logs including detailed debugging information
+ info: Show informational messages and above
+ warn: Show warnings and errors only (default)
+ error: Show errors only
+ (must be one of [debug error info warn]) (default info)
+ --logoutput enum set the log output destination
+ stdout: Write logs to standard output
+ stderr: Write logs to standard error, useful for separating logs from normal output
+ (must be one of [stderr stdout]) (default stderr)
+ --plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
+ --plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
+ --temp-folder string Specify a custom temporary folder path for filesystem operations.
+ --working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin/"&gt;ocm plugin&lt;/a&gt;	 - Manage OCM plugins&lt;/li&gt;
+&lt;li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-get/"&gt;ocm plugin registry get&lt;/a&gt;	 - Get information about specified plugin from a plugin registry.&lt;/li&gt;
+&lt;li&gt;
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-list/"&gt;ocm plugin registry list&lt;/a&gt;	 - List available plugin binaries from a plugin registry.&lt;/li&gt;
+&lt;/ul&gt;</description></item></channel></rss>
