@@ -20,7 +20,8 @@ vars:
   REGISTRY_PORT: "5001"
   REGISTRY_INTERNAL_PORT: "5000"
   KRO_VERSION: "0.9.0"
-  PLATFORMS: linux/amd64
+  PLATFORMS:
+    sh: 'echo "linux/$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/")"'
   ocm: >-
     docker run --rm
     --network {{ .DOCKER_NETWORK }}
