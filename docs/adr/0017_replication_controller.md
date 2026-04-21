@@ -53,6 +53,7 @@ spec:
     name: podinfo-component
     namespace: default
 
+  # Ref of the `Repository` CR.
   targetRef:
     name: target-repository
 
@@ -123,10 +124,8 @@ flowchart TD
     A1 --> A2{Component Ready and digest present?}
     A2 -->|No| A3[Requeue, wait for Component event]
     A2 -->|Yes| C{Source digest == lastTransferredDigest?}
-    C -->|Yes| D{Target has matching digest?}
-    D -->|Yes| E[No-op, requeue after interval]
-    D -->|No| F[Load effective OCM config]
-    C -->|No| F
+    C -->|Yes| E[No-op, requeue after interval]
+    C -->|No| F[Load effective OCM config]
     F --> G[BuildGraphDefinition]
     G --> H[Write TGD to filesystem]
     H --> I[Set TransferInProgress=True]
@@ -153,16 +152,19 @@ flowchart TD
 ### Trigger Conditions
 
 * Component CR digest differs from `status.lastTransferredDigest`.
-* Target repository does not contain the expected component version.
 * Replication CR spec changes (via `observedGeneration`).
+* Interval elapsed.
+
+The controller does not do drift detection. Transfers are content-addressed at the blob level, so a re-transfer of an
+unchanged component version is near free by the technology. Manual changes are resolved by bumping the Replication spec
+or waiting for the source digest to move.
 
 ### Worker Pool
 
 Dedicated transfer worker pool, separate from resolution. Non-blocking submission.
-On completion, emits an event to retrigger the reconciler. Results cached by
-composite key (source digest + target spec hash + config hash); default TTL 1h,
-tunable via controller flag.
-
+On completion, emits an event to retrigger the reconciler. Burst reconciles for an
+``in-flight key return `ErrTransferInProgress` without re-submitting.
+``
 Transient source/target errors (network, 5xx, rate limit) retry with exponential
 backoff inside the worker; terminal errors surface immediately as `Ready=False`.
 
@@ -172,7 +174,8 @@ TGDs are written to a scratch volume:
 
 * Default: `emptyDir`. TGDs regenerate cheaply on pod restart.
 * Optional: PVC for operators who need persistence across restarts.
-* Path: `/var/run/ocm/transfer-specs/{namespace}-{name}-{version}.json`.
+* Path: `/var/run/ocm/transfer-specs/{namespace}-{name}-{version}-{confighash}.json`. Where `{confighash}` is the hash
+  of the configuration belonging to this transfer.
 * GC on CR deletion (finalizer) or version supersession.
 
 Compressed inline storage on the CR and ConfigMap-backed storage were considered and rejected: 
@@ -209,8 +212,10 @@ a stream and is reconciled by the next replication run, which is digest-idempote
 ### Cons
 
 * Long transfers block a worker pool slot. Mitigated by configurable pool size.
-* Filesystem TGD storage lost on pod restart. Acceptable since TGDs regenerate
-  on next reconciliation.
+* Filesystem TGD storage lost on pod restart. Regenerated on the next transfer,
+  not on the next reconcile, so a pod restart while in sync leaves no TGD on
+  disk until the source or target drifts. Post-success inspection across
+  restarts requires a PVC.
 * If filesystem isn't available because of read-only disks, this does not work.
 * Transfer not independently observable as a K8s resource.
 * A pod crash between TGD write and status update can leave an orphan file;
