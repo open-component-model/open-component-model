@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"testing"
 	"time"
@@ -923,4 +924,15 @@ func Test_Integration_TransferOCIImageResource_CopyModeAllResources(t *testing.T
 	r.NotNil(gotAccess, "resource access should not be nil")
 	r.Equal(descriptorv2.LocalBlobAccessType, gotAccess.GetType().Name,
 		"OCI image resource should be stored as localBlob in target after CopyModeAllResources transfer")
+
+	// Verify the blob is actually present and readable in the target repository.
+	resourceIdentity := gotDesc.Component.Resources[0].ToIdentity()
+	localBlob, _, err := targetRepo.GetLocalResource(ctx, componentName, componentVersion, resourceIdentity)
+	r.NoError(err, "local blob should be retrievable from target repository")
+	reader, err := localBlob.ReadCloser()
+	r.NoError(err, "local blob should be readable")
+	content, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.NoError(reader.Close())
+	r.NotEmpty(content, "local blob content should not be empty")
 }
