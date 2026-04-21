@@ -134,10 +134,9 @@ flowchart TD
     E -->|Yes| G{Source digest matches lastTransferredDigest?}
     G -->|Yes| H[No-op, requeue after interval]
     G -->|No| I[Load effective OCM config]
-    I --> J[BuildGraphDefinition]
-    J --> K[Write TGD to filesystem]
-    K --> L[Set TransferInProgress=True]
-    L --> M[Proceed to Phase 2]
+    I --> J[BuildGraphDefinition in memory]
+    J --> K[Set TransferInProgress=True]
+    K --> L[Proceed to Phase 2]
 ```
 
 The reconciler gates on Component CR readiness: if the Component is not `Ready` or `status.componentInfo.digest` is
@@ -189,15 +188,21 @@ backoff inside the worker; terminal errors surface immediately as `Ready=False`.
 
 ### Transfer Spec Storage
 
-TGDs are written to a scratch volume:
+TGDs are held in memory only. `BuildGraphDefinition` runs in Phase 1, the result is handed to the worker pool
+in Phase 2, and the reference is dropped once the transfer terminates. Nothing is persisted.
 
-* Default: `emptyDir`. TGDs regenerate cheaply on pod restart.
-* Optional: PVC for operators who need persistence across restarts.
-* Path: `/var/run/ocm/transfer-specs/{namespace}-{name}-{sourceDigest}-{confighash}.json`.
-* GC on CR deletion (finalizer) or when a newer `(sourceDigest, confighash)` pair supersedes the file.
+Rationale:
 
-Compressed inline storage on the CR and ConfigMap-backed storage were considered and rejected: 
-both still hit Kubernetes object size limits and shift, rather than remove, the etcd pressure.
+* Read-only root filesystems are a common hardening baseline; writing scratch files would force an `emptyDir` or PVC
+  mount on every deployment.
+* TGDs regenerate cheaply from the source component and effective OCM config, so persistence buys nothing.
+* Content-addressed trigger conditions (`sourceDigest`, `observedGeneration`) already make regeneration idempotent.
+
+Persistence options considered and rejected:
+
+* Inline on the CR / ConfigMap-backed storage: both hit Kubernetes object size limits and shift, rather than remove, etcd pressure.
+* `emptyDir` / PVC scratch volume: adds deployment constraints (writable mount) for no durability benefit; a pod restart
+  loses the file anyway since TGDs are regenerated on the next transfer, not rehydrated from disk.
 
 ### Watches
 
@@ -213,7 +218,7 @@ When a Replication CR is deleted:
 1. Finalizer blocks removal; reconciler observes `deletionTimestamp`.
 2. In-flight transfer is canceled via a per-item context keyed by CR UID. Workers honor cancellation at the next safe point.
 3. Bounded drain (default 30s, controller flag) waits for worker acknowledgement.
-4. GC: remove TGD file, unregister event source.
+4. Unregister event source; in-memory TGD reference is released with the worker item.
 5. Finalizer removed, CR deleted.
 
 If the drain times out, the finalizer is force-removed and a warning is logged; the in-flight goroutine is reclaimed on pod restart.
@@ -225,20 +230,15 @@ a stream and is reconciled by the next replication run, which is digest-idempote
 
 * Minimal complexity for users.
 * Resolution service already works.
-* Filesystem negates the limit from etcd.
+* In-memory TGDs sidestep the etcd object size limit without requiring a writable filesystem.
 * Internal plan/execute split enables future CRD separation.
 
 ### Cons
 
 * Long transfers block a worker pool slot. Mitigated by configurable pool size.
-* Filesystem TGD storage lost on pod restart. Regenerated on the next transfer,
-  not on the next reconcile, so a pod restart while in sync leaves no TGD on
-  disk until the source or target drifts. Post-success inspection across
-  restarts requires a PVC.
-* If filesystem isn't available because of read-only disks, this does not work.
+* In-memory TGDs are not inspectable after a pod restart; debugging a failed transfer post-crash requires re-triggering reconciliation to regenerate the TGD.
 * Transfer not independently observable as a K8s resource.
-* A pod crash between TGD write and status update can leave an orphan file;
-  reclaimed on the next reconcile or finalizer run.
+* Pod memory footprint scales with concurrent in-flight TGDs; bounded by the worker pool size.
 
 ## Pros and Cons of the Options
 
@@ -254,7 +254,7 @@ a stream and is reconciled by the next replication run, which is digest-idempote
 #### Con
 
 * Transfer not independently trackable.
-* Debugging needs filesystem access.
+* TGDs are not inspectable outside of an in-flight reconcile; debugging a failed transfer requires re-triggering reconciliation or enabling debug logs to dump the generated TGD.
 
 ### Option 2: Replication + Transfer CRDs
 
