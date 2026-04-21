@@ -257,6 +257,7 @@ fluxdeployerspec
 fluxdeployerstatus
 fluxvaluessource
 foldername
+formatter
 forwardspec
 frewilhelm
 frontend
@@ -469,6 +470,7 @@ newrepository
 newrepositoryspec
 niclas
 nixos
+noop
 npm
 npm's
 npmjs
@@ -592,6 +594,7 @@ repositoryProvider
 repositoryimpl
 repositoryspec
 repositoryurl
+representable
 reproducibility
 requeue
 requeues
@@ -623,6 +626,7 @@ routingslips
 rsa
 rsakeypair
 rsassa
+rss
 runnable
 runtime
 saas
@@ -684,6 +688,7 @@ steffen
 stichting
 storable
 struct
+structs
 subchart
 subcharts
 subfolders
@@ -744,6 +749,7 @@ unmarshaller
 unmarshalling
 unmodifiable
 unregisters
+unrepresentable
 untrusted
 untyped
 updatevendorhash
@@ -768,6 +774,7 @@ variadic
 verifier
 verifiers
 versionable
+versionability
 versionedtypedobjects
 walkthrough
 warroom

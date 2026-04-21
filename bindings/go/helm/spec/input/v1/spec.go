@@ -54,6 +54,7 @@ func (t *Helm) String() string {
 }
 
 const (
-	Version = "v1"
-	Type    = "helm"
+	Version    = "v1"
+	Type       = "Helm"
+	LegacyType = "helm"
 )
