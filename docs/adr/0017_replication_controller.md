@@ -53,13 +53,19 @@ spec:
     name: podinfo-component
     namespace: default
 
-  # Ref of the `Repository` CR.
-  targetRef:
-    name: target-repository
+  # Ref of the `Repository` CRs that the transfer should happen to.
+  targetRefs:
+    - name: target-repository
 
+  # Since we don't want to make the spec replicate transfer config data, we reference it instead from
+  # either a ConfigMap or inlined apiextensionsv1.JSON values.
+  transferConfigRef:
+    name: configmap-for-transferconfig
+
+  # apiextensionsv1.JSON map here, not hardcoded values in the spec of the Replication design.    
   transferConfig:
     recursive: false
-    copyMode: localBlob     # localBlob | allResources
+    copyMode: localBlob     # localBlob | allResources    
 
   ocmConfig:
     - name: my-ocm-config
@@ -67,6 +73,15 @@ spec:
       policy: Propagate
 
   suspend: false
+```
+
+Transfer config ConfigMap:
+
+```yaml
+kind: ConfigMap
+data:
+  recursive: false
+  copyMode: localBlob     # localBlob | allResources
 ```
 
 `copyMode`:
