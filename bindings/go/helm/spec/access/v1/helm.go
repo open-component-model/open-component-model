@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	Type              = "Helm"
 	LegacyType        = "helm"
 	LegacyTypeVersion = "v1"
 )
