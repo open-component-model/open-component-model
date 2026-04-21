@@ -52,7 +52,7 @@ func TestHelmPluginCapabilities(t *testing.T) {
 	require.Len(t, inputCapability.(*v1.CapabilitySpec).SupportedInputTypes, 1, "should have exactly one helm input type")
 
 	helmInputType := inputCapability.(*v1.CapabilitySpec).SupportedInputTypes[0]
-	require.Equal(t, helmv1.Type, helmInputType.Type.Name, "type name should be 'helm'")
+	require.Equal(t, helmv1.Type, helmInputType.Type.Name, "type name should be 'Helm'")
 	require.Equal(t, helmv1.Version, helmInputType.Type.Version, "type version should be 'v1'")
 }
 
