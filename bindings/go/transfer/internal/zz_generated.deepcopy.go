@@ -31,8 +31,14 @@ func (in *FileCleanupSpec) DeepCopyInto(out *FileCleanupSpec) {
 	*out = *in
 	if in.Files != nil {
 		in, out := &in.Files, &out.Files
-		*out = make([]v1alpha1.File, len(*in))
-		copy(*out, *in)
+		*out = make([]*v1alpha1.File, len(*in))
+		for i := range *in {
+			if (*in)[i] != nil {
+				in, out := &(*in)[i], &(*out)[i]
+				*out = new(v1alpha1.File)
+				**out = **in
+			}
+		}
 	}
 	return
 }

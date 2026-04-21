@@ -10,7 +10,7 @@ import (
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	helmv1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"

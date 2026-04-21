@@ -3,15 +3,8 @@ package bar
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
-
-// Formatter converts event data to a display name shown in the progress log.
-// Example: func(t *Transform) string { return t.Name }
-type Formatter[T any] func(T) string
-
-// ErrorFormatter converts event data and error to a string for the error summary.
-// Use this to show context-specific error details (e.g., transformation spec).
-type ErrorFormatter[T any] func(T, error) string
 
 // TreeErrorFormatter formats an error chain as an indented tree.
 // Each ": " separator in the error message creates a new indented level.
@@ -32,17 +25,15 @@ func TreeErrorFormatter(err error) string {
 	base := "    " // 4 spaces base indent
 	for i, part := range parts {
 		indent := strings.Repeat("  ", i)
-		// Handle newlines within a part - indent continuation lines
 		lines := strings.Split(part, "\n")
 		for j, line := range lines {
 			if line == "" {
 				continue
 			}
 			if j == 0 {
-				fmt.Fprintf(&sb, "%s%s%s↳%s %s\n", base, indent, dim, reset, line)
+				fmt.Fprintf(&sb, "%s%s%s↳%s %s\n", base, indent, dim, Reset, line)
 			} else {
-				// Continuation lines get extra indent
-				fmt.Fprintf(&sb, "%s%s  %s%s\n", base, indent, dim, line+reset)
+				fmt.Fprintf(&sb, "%s%s  %s%s\n", base, indent, dim, line+Reset)
 			}
 		}
 	}
@@ -50,8 +41,7 @@ func TreeErrorFormatter(err error) string {
 	return sb.String()
 }
 
-// FramedText wraps text in a Unicode box (┌─┐│└─┘) with an optional title.
-// If title is provided, it's shown above the box with a ▶ icon.
+// FramedText wraps text in a Unicode box with an optional title.
 //
 // Example output:
 //
@@ -78,11 +68,11 @@ func FramedText(title string, content string, baseIndent int) string {
 	// Build the framed box
 	lines := strings.Split(content, "\n")
 
-	// Find max line width
+	// Find max line width (rune count for correct alignment with multi-byte UTF-8)
 	maxWidth := 0
 	for _, line := range lines {
-		if len(line) > maxWidth {
-			maxWidth = len(line)
+		if w := utf8.RuneCountInString(line); w > maxWidth {
+			maxWidth = w
 		}
 	}
 
@@ -91,12 +81,35 @@ func FramedText(title string, content string, baseIndent int) string {
 
 	// Content lines
 	for _, line := range lines {
-		padding := strings.Repeat(" ", maxWidth-len(line))
+		padding := strings.Repeat(" ", maxWidth-utf8.RuneCountInString(line))
 		fmt.Fprintf(&sb, "%s│ %s%s │\n", indent, line, padding)
 	}
 
 	// Bottom border
 	fmt.Fprintf(&sb, "%s└%s┘\n", indent, strings.Repeat("─", maxWidth+2))
+
+	return sb.String()
+}
+
+// SidebarText renders content with a coloured vertical line flush to the left.
+//
+// Example output:
+//
+//	│ Title
+//	│line one
+//	│line two
+func SidebarText(title string, content string, color string) string {
+	var sb strings.Builder
+
+	if title != "" {
+		for _, line := range strings.Split(title, "\n") {
+			fmt.Fprintf(&sb, "%s│ %s%s\n", color, Reset, line)
+		}
+	}
+
+	for _, line := range strings.Split(strings.TrimRight(content, "\n"), "\n") {
+		fmt.Fprintf(&sb, "%s│%s%s\n", color, Reset, line)
+	}
 
 	return sb.String()
 }

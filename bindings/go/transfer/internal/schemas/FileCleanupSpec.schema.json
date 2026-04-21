@@ -8,9 +8,16 @@
   "properties": {
     "files": {
       "type": "array",
-      "description": "Files is a list of file access specifications to clean up.\nEach entry references a file that was buffered during a Get transformation.",
+      "description": "Files is a list of file access specifications to clean up.\nEach entry references a file that was buffered during a Get transformation.\nEntries may be nil when an optional CEL expression (e.g. provFile)\nresolves to null at runtime; nil entries are silently skipped.",
       "items": {
-        "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.blob.filesystem.spec.access.v1alpha1.File"
+        "oneOf": [
+          {
+            "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.blob.filesystem.spec.access.v1alpha1.File"
+          },
+          {
+            "type": "null"
+          }
+        ]
       }
     }
   },

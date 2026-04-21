@@ -8,7 +8,6 @@ enableEmoji = true
 enableGitInfo = false
 enableRobotsTXT = true
 languageCode = "en-US"
-rssLimit = 10
 summarylength = 20
 
 defaultContentLanguage = "en"
@@ -31,7 +30,7 @@ defaultContentVersion = "latest"
   enable = true
 
 [outputs]
-  home = ["HTML", "RSS", "searchIndex"]
+  home = ["HTML", "searchIndex"]
   section = ["HTML", "RSS", "SITEMAP"]
 
 [outputFormats.searchIndex]
@@ -97,3 +96,7 @@ defaultContentVersion = "latest"
     weight = 1
   [versions."legacy"]
     weight = 2
+
+[services]
+  [services.rss]
+    limit = 20

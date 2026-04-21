@@ -2,7 +2,6 @@ package internal
 
 import (
 	"ocm.software/open-component-model/bindings/go/credentials"
-	helmaccess "ocm.software/open-component-model/bindings/go/helm/access"
 	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformation"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
@@ -64,9 +63,9 @@ func NewDefaultBuilder(
 
 	// Helm transformers
 	getHelmChart := &helmtransformer.GetHelmChart{
-		Scheme:                           transformerScheme,
-		ResourceConsumerIdentityProvider: &helmaccess.HelmAccess{},
-		CredentialProvider:               credentialProvider,
+		Scheme:             transformerScheme,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
 	}
 	convertHelmToOCI := &helmtransformer.ConvertHelmChartToOCI{
 		Scheme: transformerScheme,
