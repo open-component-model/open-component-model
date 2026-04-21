@@ -716,16 +716,18 @@ if err := scheme.Convert(raw, obj); err != nil {
 **Registering the same type twice.** `MustRegisterWithAlias` panics if the Type value or Go type is already registered. Use one call with multiple aliases:
 
 ```go
-// Wrong — panics on second call
+// Wrong — panics on second call (same Go type registered twice)
 scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType("config", "v1"))
-scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType("config", "v2"))
+scheme.MustRegisterWithAlias(&Config{}, runtime.NewUnversionedType("config"))
 
-// Correct — one call, multiple aliases
+// Correct — one call, default plus aliases
 scheme.MustRegisterWithAlias(&Config{},
     runtime.NewVersionedType("config", "v1"),
-    runtime.NewVersionedType("config", "v2"),
+    runtime.NewUnversionedType("config"),
 )
 ```
+
+Note: different struct versions (e.g. `v1.Config` and `v2.Config`) are separate Go types and are registered independently.
 
 **DeepCopyTyped returning self.** The Scheme stores prototypes and clones them via `DeepCopyTyped()`. Returning the same pointer causes shared mutable state:
 
