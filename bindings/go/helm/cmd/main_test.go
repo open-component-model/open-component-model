@@ -18,7 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
-	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
@@ -68,7 +68,7 @@ func TestHelmPluginLifecycle(t *testing.T) {
 func TestHelmPluginProcessResource(t *testing.T) {
 	setup := newPluginTestSetup(t)
 
-	chartPath, err := filepath.Abs("../input/testdata/mychart")
+	chartPath, err := filepath.Abs("../testdata/mychart")
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(chartPath, "Chart.yaml"))
 	require.NoError(t, err, "test chart should exist")

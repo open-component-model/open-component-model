@@ -1,4 +1,4 @@
-# ocm-k8s-toolkit
+# chart
 
 ![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.1.0](https://img.shields.io/badge/AppVersion-0.1.0-informational?style=flat-square)
 
@@ -18,7 +18,7 @@ It provides controllers for:
 ## Installation
 
 ```bash
-helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/charts/ocm-k8s-toolkit \
+helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/controller/chart \
   --namespace ocm-system \
   --create-namespace
 ```
@@ -26,7 +26,7 @@ helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/charts/ocm-k8s-t
 ## Upgrading
 
 ```bash
-helm upgrade ocm-k8s-toolkit oci://ghcr.io/open-component-model/charts/ocm-k8s-toolkit \
+helm upgrade ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/controller/chart \
   --namespace ocm-system
 ```
 
@@ -63,12 +63,10 @@ Kubernetes: `>=1.26.0-0`
 | crd.enable | bool | `true` | Install CRDs with the chart |
 | crd.keep | bool | `true` | Keep CRDs when uninstalling |
 | manager.affinity | object | `{}` | Pod affinity rules |
+| manager.cache.deployerDownloadMaxResourceSize | string | `"2Mi"` | Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. "2Mi", "512Ki"). "0" disables the limit. |
 | manager.cache.deployerDownloadSize | int | `1000` | Maximum size of the deployer download object LRU cache |
-| manager.cache.ocmContextSize | int | `100` | Maximum number of active OCM contexts kept alive |
-| manager.cache.ocmSessionSize | int | `100` | Maximum number of active OCM sessions kept alive |
 | manager.concurrency.resource | int | `4` | Number of active resource controller workers |
 | manager.env | list | `[]` | Environment variables for the controller |
-| manager.events.address | string | `""` | Address of the events receiver (optional) |
 | manager.extraArgs | list | `[]` | Extra arguments to pass to the controller |
 | manager.healthProbe.bindAddress | string | `":8081"` | Address the health probe endpoint binds to |
 | manager.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
@@ -94,14 +92,16 @@ Kubernetes: `>=1.26.0-0`
 | manager.readinessProbe.port | int | `8081` | Port for the readiness probe |
 | manager.replicas | int | `1` | Number of controller manager replicas |
 | manager.resolver.workerCount | int | `10` | Number of active resolver workers |
-| manager.resolver.workerQueueLength | int | `100` | Maximum work items in queue for component version resolution |
-| manager.resources | object | `{"limits":{"cpu":"500m","memory":"128Mi"},"requests":{"cpu":"10m","memory":"64Mi"}}` | Resource limits and requests |
+| manager.resolver.workerQueueLength | int | `1000` | Maximum work items in queue for component version resolution |
+| manager.resources | object | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"100m","memory":"256Mi"}}` | Resource limits and requests |
 | manager.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` | Container-level security context |
 | manager.tolerations | list | `[]` | Pod tolerations |
 | metrics.enable | bool | `false` | Enable metrics endpoint with RBAC protection |
 | metrics.port | int | `8443` | Metrics server port |
 | prometheus.enable | bool | `false` | Enable Prometheus ServiceMonitor (requires prometheus-operator) |
 | rbacHelpers.enable | bool | `false` | Install convenience admin/editor/viewer roles for CRDs |
+| webhook.certSecret | string | `""` | Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually) |
+| webhook.enable | bool | `false` | Enable conversion webhook for CRD version conversion |
 
 ## Development
 
@@ -152,7 +152,7 @@ task helm/package APP_VERSION=1.0.0                  # Override app version (ima
 task helm/package VERSION=1.0.0 APP_VERSION=1.0.0   # Override both
 ```
 
-The packaged chart is saved to `dist/ocm-k8s-toolkit-<version>.tgz`.
+The packaged chart is saved to `dist/chart-<version>.tgz`.
 
 ### Other useful tasks
 

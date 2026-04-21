@@ -22,7 +22,6 @@ spec:
             byReference:
               resource:
                 name: kustomize-resource
-          interval: 10m
     - id: gitrepository
       template:
         apiVersion: source.toolkit.fluxcd.io/v1

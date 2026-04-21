@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,88 +23,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 )
-
-func TestIntegration_CompleteFlow(t *testing.T) {
-	ctx := t.Context()
-	logger := logr.Discard()
-
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocm-config",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			".ocmconfig": `{
-				"type": "generic.config.ocm.software/v1",
-				"configurations": []
-			}`,
-		},
-	}
-
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, v1alpha1.AddToScheme(scheme))
-
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(configMap).
-		Build()
-
-	ocmConfigs := []v1alpha1.OCMConfiguration{
-		{
-			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-				Kind: "ConfigMap",
-				Name: "ocm-config",
-			},
-		},
-	}
-
-	cfg, err := configuration.LoadConfigurations(ctx, k8sClient, "default", ocmConfigs)
-	require.NoError(t, err)
-	require.NotNil(t, cfg)
-
-	pm := manager.NewPluginManager(t.Context())
-	t.Cleanup(func() {
-		require.NoError(t, pm.Shutdown(t.Context()))
-	})
-
-	registerOCIPlugin(t, pm, "test", "v1.0.0")
-
-	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
-		PluginManager: pm,
-		Logger:        &logger,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, credGraph)
-
-	// Test new path matcher resolvers (v1alpha1)
-	resolversV1Alpha1, err := resolvers.PathMatcherResolversFromConfig(cfg.Config)
-	require.NoError(t, err)
-	assert.Nil(t, resolversV1Alpha1, "empty config should have no resolvers")
-
-	t.Run("repository creation", func(t *testing.T) {
-		opts := setup.RepositoryOptions{
-			Registry:        pm.ComponentVersionRepositoryRegistry,
-			CredentialGraph: credGraph,
-			Logger:          &logger,
-		}
-
-		// Create a simple OCI repository spec
-		repoSpec := &ociv1.Repository{
-			BaseUrl: "localhost:5000/test",
-		}
-
-		repo, err := setup.NewRepository(ctx, repoSpec, opts)
-		require.NoError(t, err)
-		cv, err := repo.GetComponentVersion(ctx, "test", "v1.0.0")
-		require.NoError(t, err)
-		assert.NotNil(t, cv)
-		assert.Equal(t, "test:v1.0.0", cv.String())
-	})
-}
 
 func TestIntegration_MultipleConfigSources(t *testing.T) {
 	ctx := t.Context()
@@ -139,7 +59,7 @@ func TestIntegration_MultipleConfigSources(t *testing.T) {
 		},
 	}
 
-	// Create ConfigMap with plugin config wrapped in generic config (in JSON format)
+	// Create ConfigMap with resolver config wrapped in generic config (in JSON format)
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "ocm-plugins",
@@ -150,11 +70,14 @@ func TestIntegration_MultipleConfigSources(t *testing.T) {
 				"type": "generic.config.ocm.software/v1",
 				"configurations": [
 					{
-						"type": "plugin.config.ocm.software/v1",
-						"plugins": [
+						"type": "resolvers.config.ocm.software/v1alpha1",
+						"resolvers": [
 							{
-								"name": "helm",
-								"version": "v1.0.0"
+								"repository": {
+									"type": "OCIRegistry",
+									"baseUrl": "ghcr.io"
+								},
+								"componentNamePattern": "ocm.software/*"
 							}
 						]
 					}
@@ -175,13 +98,13 @@ func TestIntegration_MultipleConfigSources(t *testing.T) {
 	// Load both configurations
 	ocmConfigs := []v1alpha1.OCMConfiguration{
 		{
-			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 				Kind: "Secret",
 				Name: "ocm-creds",
 			},
 		},
 		{
-			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 				Kind: "ConfigMap",
 				Name: "ocm-plugins",
 			},
@@ -193,7 +116,7 @@ func TestIntegration_MultipleConfigSources(t *testing.T) {
 	require.NotNil(t, cfg)
 
 	assert.NotNil(t, cfg)
-	assert.Len(t, cfg.Config.Configurations, 2, "should have loaded 2 configurations (credentials + plugin)")
+	assert.Len(t, cfg.Config.Configurations, 2, "should have loaded 2 configurations (credentials + resolvers)")
 }
 
 func TestIntegration_ErrorHandling(t *testing.T) {
@@ -211,7 +134,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 
 		ocmConfigs := []v1alpha1.OCMConfiguration{
 			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 					Kind: "ConfigMap",
 					Name: "missing-config",
 				},
@@ -369,7 +292,7 @@ func TestIntegration_ResolverProvider(t *testing.T) {
 
 	ocmConfigs := []v1alpha1.OCMConfiguration{
 		{
-			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 				Kind: "ConfigMap",
 				Name: "ocm-config-with-resolvers",
 			},

@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,7 +78,7 @@ var _ = Describe("ocm utility", func() {
 				Status: v1alpha1.RepositoryStatus{
 					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "Secret",
 								Name:       Secret,
@@ -105,7 +104,7 @@ var _ = Describe("ocm utility", func() {
 				Status: v1alpha1.RepositoryStatus{
 					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "Secret",
 								Name:       Secret,
@@ -128,7 +127,7 @@ var _ = Describe("ocm utility", func() {
 
 		It("no config inherits only propagate entries from parent with mixed policies", func(ctx SpecContext) {
 			propagateEntry := v1alpha1.OCMConfiguration{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 					APIVersion: corev1.SchemeGroupVersion.String(),
 					Kind:       "Secret",
 					Name:       Secret,
@@ -137,7 +136,7 @@ var _ = Describe("ocm utility", func() {
 				Policy: v1alpha1.ConfigurationPolicyPropagate,
 			}
 			doNotPropagateEntry := v1alpha1.OCMConfiguration{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 					APIVersion: corev1.SchemeGroupVersion.String(),
 					Kind:       "ConfigMap",
 					Name:       ConfigMap,
@@ -169,7 +168,7 @@ var _ = Describe("ocm utility", func() {
 				Status: v1alpha1.RepositoryStatus{
 					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "Secret",
 								Name:       "parent-secret",
@@ -183,7 +182,7 @@ var _ = Describe("ocm utility", func() {
 
 			childConfig := []v1alpha1.OCMConfiguration{
 				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						APIVersion: corev1.SchemeGroupVersion.String(),
 						Kind:       "Secret",
 						Name:       Secret,
@@ -225,7 +224,7 @@ var _ = Describe("ocm utility", func() {
 
 			ocmConfig := []v1alpha1.OCMConfiguration{
 				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						APIVersion: configMap.APIVersion,
 						Kind:       configMap.Kind,
 						Name:       configMap.Name,
@@ -234,7 +233,7 @@ var _ = Describe("ocm utility", func() {
 					Policy: v1alpha1.ConfigurationPolicyPropagate,
 				},
 				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						APIVersion: configMap.APIVersion,
 						Kind:       configMap.Kind,
 						Name:       configMap.Name,
@@ -262,7 +261,7 @@ var _ = Describe("ocm utility", func() {
 				Spec: v1alpha1.RepositorySpec{
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								Kind:      "ConfigMap",
 								Namespace: Namespace,
 								Name:      ConfigMap,
@@ -282,7 +281,7 @@ var _ = Describe("ocm utility", func() {
 				Spec: v1alpha1.RepositorySpec{
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								Kind:      "Secret",
 								Namespace: Namespace,
 								Name:      Secret,
@@ -302,7 +301,7 @@ var _ = Describe("ocm utility", func() {
 				Spec: v1alpha1.RepositorySpec{
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								Kind:      v1alpha1.KindRepository,
 								Namespace: Namespace,
 								Name:      Secret,
@@ -322,7 +321,7 @@ var _ = Describe("ocm utility", func() {
 				Spec: v1alpha1.RepositorySpec{
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								Kind:      "Deployment",
 								Namespace: Namespace,
 								Name:      Secret,
@@ -351,7 +350,7 @@ var _ = Describe("ocm utility", func() {
 
 			ocmConfig := []v1alpha1.OCMConfiguration{
 				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						APIVersion: configMap.APIVersion,
 						Kind:       configMap.Kind,
 						Name:       configMap.Name,
@@ -385,7 +384,7 @@ var _ = Describe("ocm utility", func() {
 					},
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: repo.APIVersion,
 								Kind:       repo.Kind,
 								Name:       repo.Name,
@@ -418,7 +417,7 @@ var _ = Describe("ocm utility", func() {
 
 			ocmConfig := []v1alpha1.OCMConfiguration{
 				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						APIVersion: configMap.APIVersion,
 						Kind:       configMap.Kind,
 						Name:       configMap.Name,
@@ -452,7 +451,7 @@ var _ = Describe("ocm utility", func() {
 					},
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: repo.APIVersion,
 								Kind:       repo.Kind,
 								Name:       repo.Name,
@@ -485,7 +484,7 @@ var _ = Describe("ocm utility", func() {
 
 			ocmConfig := []v1alpha1.OCMConfiguration{
 				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 						APIVersion: configMap.APIVersion,
 						Kind:       configMap.Kind,
 						Name:       configMap.Name,
@@ -519,7 +518,7 @@ var _ = Describe("ocm utility", func() {
 					},
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: repo.APIVersion,
 								Kind:       repo.Kind,
 								Name:       repo.Name,
@@ -620,68 +619,6 @@ var _ = Describe("ocm utility", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(versionLatest.Equal(version1))
-		})
-	})
-
-	Context("is downgradable", func() {
-		var (
-			cv1 *descruntime.Descriptor
-			cv2 *descruntime.Descriptor
-			cv3 *descruntime.Descriptor
-		)
-		BeforeEach(func(ctx SpecContext) {
-			cv1 = &descruntime.Descriptor{
-				Meta: descruntime.Meta{},
-				Component: descruntime.Component{
-					ComponentMeta: descruntime.ComponentMeta{
-						ObjectMeta: descruntime.ObjectMeta{
-							Name:    "ocm.software/test",
-							Version: "2.0.0",
-							Labels: []descruntime.Label{
-								{
-									Name:  v1alpha1.OCMLabelDowngradable,
-									Value: json.RawMessage(`"> 1.0.0"`),
-								},
-							},
-						},
-					},
-				},
-			}
-
-			cv2 = &descruntime.Descriptor{
-				Meta: descruntime.Meta{},
-				Component: descruntime.Component{
-					ComponentMeta: descruntime.ComponentMeta{
-						ObjectMeta: descruntime.ObjectMeta{
-							Name:    "ocm.software/test",
-							Version: "1.1.0",
-						},
-					},
-				},
-			}
-
-			cv3 = &descruntime.Descriptor{
-				Meta: descruntime.Meta{},
-				Component: descruntime.Component{
-					ComponentMeta: descruntime.ComponentMeta{
-						ObjectMeta: descruntime.ObjectMeta{
-							Name:    "ocm.software/test",
-							Version: "0.9.0",
-						},
-					},
-				},
-			}
-		})
-
-		It("true", func(ctx SpecContext) {
-			ok, err := IsDowngradable(ctx, cv1, cv2)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(ok).To(BeTrue())
-		})
-		It("false", func(ctx SpecContext) {
-			ok, err := IsDowngradable(ctx, cv1, cv3)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(ok).To(BeFalse())
 		})
 	})
 })

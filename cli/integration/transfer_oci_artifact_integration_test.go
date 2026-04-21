@@ -65,7 +65,7 @@ configurations:
 - type: credentials.config.ocm.software
   consumers:
   - identity:
-      type: OCIRepository
+      type: OCIRegistry
       hostname: %[1]q
       port: %[2]q
       scheme: http
@@ -75,7 +75,7 @@ configurations:
         username: %[3]q
         password: %[4]q
   - identity:
-      type: OCIRepository
+      type: OCIRegistry
       hostname: %[5]q
       port: %[6]q
       scheme: http
@@ -433,7 +433,7 @@ configurations:
 - type: credentials.config.ocm.software
   consumers:
   - identity:
-      type: OCIRepository
+      type: OCIRegistry
       hostname: %[1]q
       port: %[2]q
       scheme: http
@@ -443,7 +443,7 @@ configurations:
         username: %[3]q
         password: %[4]q
   - identity:
-      type: OCIRepository
+      type: OCIRegistry
       hostname: %[5]q
       port: %[6]q
       scheme: http
@@ -587,7 +587,8 @@ components:
 func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte, *v1.OCIImage) {
 	r := require.New(t)
 	var buf bytes.Buffer
-	w := tar.NewOCILayoutWriter(&buf)
+	w, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	r.NoError(err)
 
 	desc := ociImageSpecV1.Descriptor{}
 	desc.Digest = digest.FromBytes(data)

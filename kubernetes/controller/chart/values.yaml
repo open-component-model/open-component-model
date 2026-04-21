@@ -12,7 +12,7 @@ manager:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
     # -- Controller image tag
-    tag: latest
+    tag: latest@sha256:64a8dd1505c5aa0a8a57ac8c6ab806f74f1b572800f35876d5a84fbdaca9eb7c
     # -- Image pull policy
     pullPolicy: IfNotPresent
   ## Controller concurrency settings
@@ -24,15 +24,13 @@ manager:
     # -- Number of active resolver workers
     workerCount: 10
     # -- Maximum work items in queue for component version resolution
-    workerQueueLength: 100
+    workerQueueLength: 1000
   ## Cache settings
   cache:
-    # -- Maximum number of active OCM contexts kept alive
-    ocmContextSize: 100
-    # -- Maximum number of active OCM sessions kept alive
-    ocmSessionSize: 100
     # -- Maximum size of the deployer download object LRU cache
     deployerDownloadSize: 1000
+    # -- Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. "2Mi", "512Ki"). "0" disables the limit.
+    deployerDownloadMaxResourceSize: "2Mi"
   ## Logging configuration (zap logger)
   logging:
     # -- Zap log level: 'debug', 'info', 'error', 'panic' or integer > 0
@@ -76,10 +74,6 @@ manager:
     secure: false
     # -- Enable HTTP/2 for metrics and webhook servers
     enableHttp2: false
-  ## Events
-  events:
-    # -- Address of the events receiver (optional)
-    address: ""
   # -- Extra arguments to pass to the controller
   extraArgs: []
   # -- Environment variables for the controller
@@ -99,10 +93,10 @@ manager:
   resources:
     limits:
       cpu: 500m
-      memory: 128Mi
+      memory: 512Mi
     requests:
-      cpu: 10m
-      memory: 64Mi
+      cpu: 100m
+      memory: 256Mi
   # -- Pod affinity rules
   affinity: {}
   # -- Node selector for pod scheduling
@@ -125,6 +119,12 @@ metrics:
   enable: false
   # -- Metrics server port
   port: 8443
+## Webhook configuration
+webhook:
+  # -- Enable conversion webhook for CRD version conversion
+  enable: false
+  # -- Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually)
+  certSecret: ""
 ## Cert-manager integration
 certManager:
   # -- Enable cert-manager for TLS certificates

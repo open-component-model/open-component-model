@@ -3,9 +3,24 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
     annotations:
-        controller-gen.kubebuilder.io/version: v0.20.0
+        controller-gen.kubebuilder.io/version: v0.20.1
+        {{- if and .Values.webhook.enable .Values.certManager.enable }}
+        cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "serving-cert" "context" $) }}
+        {{- end }}
     name: components.delivery.ocm.software
 spec:
+    {{- if .Values.webhook.enable }}
+    conversion:
+        strategy: Webhook
+        webhook:
+            clientConfig:
+                service:
+                    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "webhook-service" "context" $) }}
+                    namespace: {{ .Release.Namespace }}
+                    path: /convert
+            conversionReviewVersions:
+                - v1
+    {{- end }}
     group: delivery.ocm.software
     names:
         kind: Component
@@ -55,19 +70,13 @@ spec:
                             downgradePolicy:
                                 default: Deny
                                 description: |-
-                                    DowngradePolicy specifies whether the component may be
-                                    downgraded. The property is an enum with the 3 states: `Enforce`, `Allow`,
-                                    `Deny`, with `Deny` being the default.
-                                    `Deny` means never allow downgrades (thus, never fetch components with a
+                                    DowngradePolicy specifies whether the component may be downgraded.
+                                    `Deny` (default) means never allow downgrades (thus, never fetch components with a
                                     version lower than the version currently deployed).
-                                    `Allow` means that the component will be checked for a label with the
-                                    `ocm.software/ocm-k8s-toolkit/downgradePolicy` which may specify a semver
-                                    constraint down to which version downgrades are allowed.
-                                    `Enforce` means always allow downgrades.
+                                    `Allow` means always allow downgrades.
                                 enum:
                                     - Allow
                                     - Deny
-                                    - Enforce
                                 type: string
                             interval:
                                 description: |-
@@ -172,6 +181,7 @@ spec:
                                             type: object
                                             x-kubernetes-map-type: atomic
                                         signature:
+                                            description: Signature defines the name of the signature to be verified in the component version.
                                             type: string
                                         value:
                                             description: Value defines a PEM/base64 encoded public key value.

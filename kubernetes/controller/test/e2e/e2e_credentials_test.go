@@ -13,8 +13,15 @@ import (
 
 var _ = Describe("Credentials E2E Tests", func() {
 	Context("simple use-cases", func() {
-
 		testdata := filepath.Join(os.Getenv("PROJECT_DIR"), "test/e2e/testdata")
+
+		AfterEach(func() {
+			if !CurrentSpecReport().Failed() {
+				return
+			}
+
+			utils.DumpLogs("kro", "rgd")
+		})
 
 		It("basic-auth", func(ctx SpecContext) {
 			testName := ctx.SpecReport().LeafNodeText
@@ -30,21 +37,6 @@ var _ = Describe("Credentials E2E Tests", func() {
 
 			rgdName := "rgd/" + testName
 			Expect(utils.WaitForResource(ctx, "create", timeout, rgdName)).To(Succeed())
-
-			Expect(utils.WaitForResource(ctx, "condition=ResourceGraphAccepted=true", timeout, rgdName)).To(
-				Succeed(),
-				"The resource graph definition %s was not accepted which means the RGD is invalid", rgdName,
-			)
-			Expect(
-				utils.WaitForResource(ctx, "condition=KindReady=true", timeout, rgdName)).To(
-				Succeed(),
-				"The kind for the resource graph definition %s is not ready, which means KRO wasn't able to install the CRD in the Cluster", rgdName,
-			)
-			Expect(
-				utils.WaitForResource(ctx, "condition=ControllerReady=true", timeout, rgdName)).To(
-				Succeed(),
-				"The controller for the resource graph definition %s is not ready, which means KRO wasn't able to reconcile the CRD", rgdName,
-			)
 			Expect(
 				utils.WaitForResource(ctx, "condition=Ready=true", timeout, rgdName)).To(
 				Succeed(),
@@ -76,21 +68,6 @@ var _ = Describe("Credentials E2E Tests", func() {
 
 			rgdName := "rgd/" + testName
 			Expect(utils.WaitForResource(ctx, "create", timeout, rgdName)).To(Succeed())
-
-			Expect(utils.WaitForResource(ctx, "condition=ResourceGraphAccepted=true", timeout, rgdName)).To(
-				Succeed(),
-				"The resource graph definition %s was not accepted which means the RGD is invalid", rgdName,
-			)
-			Expect(
-				utils.WaitForResource(ctx, "condition=KindReady=true", timeout, rgdName)).To(
-				Succeed(),
-				"The kind for the resource graph definition %s is not ready, which means KRO wasn't able to install the CRD in the Cluster", rgdName,
-			)
-			Expect(
-				utils.WaitForResource(ctx, "condition=ControllerReady=true", timeout, rgdName)).To(
-				Succeed(),
-				"The controller for the resource graph definition %s is not ready, which means KRO wasn't able to reconcile the CRD", rgdName,
-			)
 			Expect(
 				utils.WaitForResource(ctx, "condition=Ready=true", timeout, rgdName)).To(
 				Succeed(),

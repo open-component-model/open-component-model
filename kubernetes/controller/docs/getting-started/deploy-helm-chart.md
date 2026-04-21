@@ -152,17 +152,16 @@ spec:
             # registry: ghcr.io
             # repository: stefanprodan/charts/podinfo
             # reference/tag: 6.7.1
-            registry: resource.access.imageReference.toOCI().registry
-            repository: resource.access.imageReference.toOCI().repository
-            tag: resource.access.imageReference.toOCI().tag
-          interval: 1m
+            registry: resource.access.toOCI().registry
+            repository: resource.access.toOCI().repository
+            tag: resource.access.toOCI().tag
           # ocmConfig is required, if the OCM repository requires credentials to access it.
           # ocmConfig:
     # OCIRepository watches and downloads the resource from the location provided by the Resource status.
     # The Helm chart location (url) refers to the status of the above resource.
     - id: ocirepository
       template:
-        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        apiVersion: source.toolkit.fluxcd.io/v1
         kind: OCIRepository
         metadata:
           name: simple-ocirepository

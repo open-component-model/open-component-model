@@ -11,10 +11,11 @@ on:
         required: false
         default: 'main'
 
+permissions:
+  contents: read
+
 jobs:
   create-release-branch:
-    environment:
-      name: ocm-release
     name: Create Release Branch from ${{ github.event.inputs.source_branch }} to ${{ github.event.inputs.target_branch }}
     runs-on: ubuntu-latest
 
@@ -26,8 +27,7 @@ jobs:
 
       - name: Generate App Token
         id: get_token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
-        continue-on-error: true
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
@@ -39,7 +39,7 @@ jobs:
           TARGET_BRANCH: ${{ github.event.inputs.target_branch }}
           SOURCE_BRANCH: ${{ github.event.inputs.source_branch }}
         with:
-          github-token: ${{ steps.get_token.outputs.token || secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.get_token.outputs.token }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -61,7 +61,10 @@ jobs:
             // Check if target branch exists
             try {
               await github.rest.repos.getBranch({ owner, repo, branch: target });
-              core.info(`Branch '${target}' already exists. Skipping creation.`);
+              core.summary.addHeading('Release Branch Already Exists', 3);
+              core.summary.addRaw(`Branch \`${target}\` already exists. No branch was created.`);
+              await core.summary.write();
+              core.setFailed(`Branch '${target}' already exists. No branch was created.`);
               return;
             } catch (error) {
               if (error.status !== 404) throw error;

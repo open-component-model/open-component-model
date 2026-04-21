@@ -7,14 +7,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"helm.sh/helm/v4/pkg/provenance"
-	"helm.sh/helm/v4/pkg/registry"
-
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"helm.sh/helm/v4/pkg/provenance"
+	"helm.sh/helm/v4/pkg/registry"
+
 	"ocm.software/open-component-model/bindings/go/helm/input"
-	v1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	v1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 
@@ -88,7 +88,7 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 	ctx := t.Context()
 	workDir, err := os.Getwd()
 	require.NoError(t, err, "failed to get current working directory")
-	testDataDir := filepath.Join(workDir, "testdata")
+	testDataDir := filepath.Join(workDir, "../testdata")
 
 	tests := []struct {
 		name      string
@@ -171,7 +171,7 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 
 					// store the provenance data in a temporary file to use with HELM Verification library
 					provFile = filepath.Join(t.TempDir(), "provenance.json")
-					require.NoError(t, os.WriteFile(provFile, provData, 0644))
+					require.NoError(t, os.WriteFile(provFile, provData, 0o644))
 
 					_, err = signatory.Verify(chartData, provData, filepath.Base(tt.path))
 					require.NoError(t, err, "failed to verify provenance file")
@@ -185,7 +185,7 @@ func TestGetV1HelmBlob_BadCharts(t *testing.T) {
 	ctx := t.Context()
 	workDir, err := os.Getwd()
 	require.NoError(t, err, "failed to get current working directory")
-	testDataDir := filepath.Join(workDir, "testdata")
+	testDataDir := filepath.Join(workDir, "../testdata")
 
 	tests := []struct {
 		name       string

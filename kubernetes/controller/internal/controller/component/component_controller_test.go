@@ -2,17 +2,16 @@ package component
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/base64"
 	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/runtime/conditions"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -150,7 +149,12 @@ var _ = Describe("Component Controller", func() {
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
 
 			By("marking the repository as not ready")
-			conditions.MarkFalse(repositoryObj, "Ready", "notReady", "reason")
+			apimeta.SetStatusCondition(&repositoryObj.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.ReadyCondition,
+				Status:  metav1.ConditionFalse,
+				Reason:  "notReady",
+				Message: "reason",
+			})
 			Expect(k8sClient.Status().Update(ctx, repositoryObj)).To(Succeed())
 
 			By("creating a component object")
@@ -198,7 +202,12 @@ var _ = Describe("Component Controller", func() {
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
 
 			By("marking the repository as not ready")
-			conditions.MarkFalse(repositoryObj, "Ready", "notReady", "reason")
+			apimeta.SetStatusCondition(&repositoryObj.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.ReadyCondition,
+				Status:  metav1.ConditionFalse,
+				Reason:  "notReady",
+				Message: "reason",
+			})
 			Expect(k8sClient.Status().Update(ctx, repositoryObj)).To(Succeed())
 
 			By("creating a component object")
@@ -223,7 +232,12 @@ var _ = Describe("Component Controller", func() {
 			test.WaitForNotReadyObject(ctx, k8sClient, component, v1alpha1.GetResourceFailedReason)
 
 			By("marking the repository as ready")
-			conditions.MarkTrue(repositoryObj, "Ready", "ready", "message")
+			apimeta.SetStatusCondition(&repositoryObj.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.ReadyCondition,
+				Status:  metav1.ConditionTrue,
+				Reason:  v1alpha1.SucceededReason,
+				Message: "ready",
+			})
 			Expect(k8sClient.Status().Update(ctx, repositoryObj)).To(Succeed())
 
 			By("checking that the component has been reconciled successfully")
@@ -300,79 +314,6 @@ var _ = Describe("Component Controller", func() {
 			test.DeleteObject(ctx, k8sClient, component)
 		})
 
-		It("grabs lower version if downgrade is allowed", func(ctx SpecContext) {
-			By("creating a component version")
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
-				{
-					Component: descruntime.Component{
-						ComponentMeta: descruntime.ComponentMeta{
-							ObjectMeta: descruntime.ObjectMeta{
-								Name:    componentName,
-								Version: "0.0.3",
-								Labels: []descruntime.Label{
-									{
-										Name:  v1alpha1.OCMLabelDowngradable,
-										Value: json.RawMessage(`"0.0.2"`),
-									},
-								},
-							},
-						},
-						Provider: descruntime.Provider{Name: "ocm.software"},
-					},
-				},
-				{
-					Component: descruntime.Component{
-						ComponentMeta: descruntime.ComponentMeta{
-							ObjectMeta: descruntime.ObjectMeta{
-								Name:    componentName,
-								Version: "0.0.2",
-							},
-						},
-						Provider: descruntime.Provider{Name: "ocm.software"},
-					},
-				},
-			})
-
-			By("mocking an ocm repository")
-			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
-
-			By("creating a component")
-			component := &v1alpha1.Component{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: namespace.GetName(),
-					Name:      ComponentObj,
-				},
-				Spec: v1alpha1.ComponentSpec{
-					RepositoryRef: corev1.LocalObjectReference{
-						Name: repositoryObj.GetName(),
-					},
-					Component:       componentName,
-					DowngradePolicy: v1alpha1.DowngradePolicyAllow,
-					Semver:          "<1.0.0",
-					Interval:        metav1.Duration{Duration: time.Second},
-				},
-				Status: v1alpha1.ComponentStatus{},
-			}
-			Expect(k8sClient.Create(ctx, component)).To(Succeed())
-
-			By("checking that the component has been reconciled successfully")
-			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
-				"Status.Component.Version": "0.0.3",
-			})
-
-			By("decreasing the component version")
-			component.Spec.Semver = "0.0.2"
-			Expect(k8sClient.Update(ctx, component)).To(Succeed())
-
-			By("checking that the decreased version has been discovered successfully")
-			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
-				"Status.Component.Version": "0.0.2",
-			})
-
-			By("delete resources manually")
-			test.DeleteObject(ctx, k8sClient, component)
-		})
-
 		It("does not grab lower version if downgrade is denied", func(ctx SpecContext) {
 			By("creating a component version")
 			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
@@ -382,12 +323,6 @@ var _ = Describe("Component Controller", func() {
 							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: "0.0.3",
-								Labels: []descruntime.Label{
-									{
-										Name:  v1alpha1.OCMLabelDowngradable,
-										Value: json.RawMessage(`"0.0.2"`),
-									},
-								},
 							},
 						},
 						Provider: descruntime.Provider{Name: "ocm.software"},
@@ -443,7 +378,7 @@ var _ = Describe("Component Controller", func() {
 					return err
 				}
 
-				cond := conditions.Get(component, meta.ReadyCondition)
+				cond := apimeta.FindStatusCondition(component.GetConditions(), v1alpha1.ReadyCondition)
 				expectedMessage := "terminal error: component version cannot be downgraded from version 0.0.3 to version 0.0.2"
 				if cond.Message != expectedMessage {
 					return fmt.Errorf("expected ready-condition message to be '%s', but got '%s'", expectedMessage, cond.Message)
@@ -457,7 +392,7 @@ var _ = Describe("Component Controller", func() {
 			test.DeleteObject(ctx, k8sClient, component)
 		})
 
-		It("can force downgrade even if not allowed by the component", func(ctx SpecContext) {
+		It("grabs lower version if downgrade is allowed", func(ctx SpecContext) {
 			By("creating a component version")
 			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
@@ -498,7 +433,7 @@ var _ = Describe("Component Controller", func() {
 						Name: repositoryObj.GetName(),
 					},
 					Component:       componentName,
-					DowngradePolicy: v1alpha1.DowngradePolicyEnforce,
+					DowngradePolicy: v1alpha1.DowngradePolicyAllow,
 					Semver:          "<1.0.0",
 					Interval:        metav1.Duration{Duration: time.Second},
 				},
@@ -633,7 +568,11 @@ var _ = Describe("Component Controller", func() {
 					return err
 				}
 
-				reason := conditions.GetReason(comp, "Ready")
+				readyCond := apimeta.FindStatusCondition(comp.GetConditions(), v1alpha1.ReadyCondition)
+				var reason string
+				if readyCond != nil {
+					reason = readyCond.Reason
+				}
 				if reason != v1alpha1.DeletionFailedReason {
 					return fmt.Errorf(
 						"expected component ready-condition reason to be %s, but it was %s",
@@ -743,7 +682,7 @@ var _ = Describe("Component Controller", func() {
 					Verify: []v1alpha1.Verification{
 						{
 							Signature: signatureName,
-							Value:     pubKey,
+							Value:     base64.StdEncoding.EncodeToString([]byte(pubKey)),
 						},
 					},
 				},
@@ -916,7 +855,7 @@ var _ = Describe("Component Controller", func() {
 						},
 						{
 							Signature: signatureNameValue,
-							Value:     pubKeyValue,
+							Value:     base64.StdEncoding.EncodeToString([]byte(pubKeyValue)),
 						},
 					},
 				},
@@ -984,7 +923,7 @@ var _ = Describe("Component Controller", func() {
 					},
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "Secret",
 								Name:       secrets[0].Name,
@@ -992,7 +931,7 @@ var _ = Describe("Component Controller", func() {
 							},
 						},
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "Secret",
 								Name:       secrets[1].Name,
@@ -1000,14 +939,14 @@ var _ = Describe("Component Controller", func() {
 							Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 						},
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								Kind: "Secret",
 								Name: secrets[2].Name,
 							},
 							Policy: v1alpha1.ConfigurationPolicyPropagate,
 						},
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "ConfigMap",
 								Name:       configs[0].Name,
@@ -1015,7 +954,7 @@ var _ = Describe("Component Controller", func() {
 							},
 						},
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "ConfigMap",
 								Name:       configs[1].Name,
@@ -1023,7 +962,7 @@ var _ = Describe("Component Controller", func() {
 							Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 						},
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								Kind: "ConfigMap",
 								Name: configs[2].Name,
 							},
@@ -1039,7 +978,7 @@ var _ = Describe("Component Controller", func() {
 			repositoryObj.Status = v1alpha1.RepositoryStatus{
 				EffectiveOCMConfig: []v1alpha1.OCMConfiguration{
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[0].Name,
@@ -1048,7 +987,7 @@ var _ = Describe("Component Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[1].Name,
@@ -1057,7 +996,7 @@ var _ = Describe("Component Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[2].Name,
@@ -1066,7 +1005,7 @@ var _ = Describe("Component Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[0].Name,
@@ -1075,7 +1014,7 @@ var _ = Describe("Component Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[1].Name,
@@ -1084,7 +1023,7 @@ var _ = Describe("Component Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 					},
 					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[2].Name,
@@ -1095,13 +1034,23 @@ var _ = Describe("Component Controller", func() {
 				},
 			}
 
-			conditions.MarkTrue(repositoryObj, "Ready", "ready", "message")
+			apimeta.SetStatusCondition(&repositoryObj.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.ReadyCondition,
+				Status:  metav1.ConditionTrue,
+				Reason:  v1alpha1.SucceededReason,
+				Message: "ready",
+			})
 			Expect(k8sClient.Status().Update(ctx, repositoryObj)).To(Succeed())
 		})
 
 		AfterEach(func(ctx SpecContext) {
 			By("make sure the repo is still ready")
-			conditions.MarkTrue(repositoryObj, "Ready", "ready", "message")
+			apimeta.SetStatusCondition(&repositoryObj.Status.Conditions, metav1.Condition{
+				Type:    v1alpha1.ReadyCondition,
+				Status:  metav1.ConditionTrue,
+				Reason:  v1alpha1.SucceededReason,
+				Message: "ready",
+			})
 			Expect(k8sClient.Status().Update(ctx, repositoryObj)).To(Succeed())
 			cleanupTestConfigsAndSecrets(ctx, configs, secrets)
 
@@ -1142,7 +1091,7 @@ var _ = Describe("Component Controller", func() {
 					Semver:    "1.0.0",
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: v1alpha1.GroupVersion.String(),
 								Kind:       v1alpha1.KindRepository,
 								Namespace:  namespace.GetName(),
@@ -1166,7 +1115,7 @@ var _ = Describe("Component Controller", func() {
 			Eventually(komega.Object(component), "15s").Should(
 				HaveField("Status.EffectiveOCMConfig", ConsistOf(
 					v1alpha1.OCMConfiguration{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[0].Name,
@@ -1175,7 +1124,7 @@ var _ = Describe("Component Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 					},
 					v1alpha1.OCMConfiguration{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[2].Name,
@@ -1184,7 +1133,7 @@ var _ = Describe("Component Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 					},
 					v1alpha1.OCMConfiguration{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[0].Name,
@@ -1193,7 +1142,7 @@ var _ = Describe("Component Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 					},
 					v1alpha1.OCMConfiguration{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[2].Name,
@@ -1236,7 +1185,7 @@ var _ = Describe("Component Controller", func() {
 			Eventually(komega.Object(component), "15s").Should(
 				HaveField("Status.EffectiveOCMConfig", ConsistOf(
 					v1alpha1.OCMConfiguration{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[0].Name,
@@ -1245,7 +1194,7 @@ var _ = Describe("Component Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					v1alpha1.OCMConfiguration{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[2].Name,
@@ -1254,7 +1203,7 @@ var _ = Describe("Component Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					v1alpha1.OCMConfiguration{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[0].Name,
@@ -1263,7 +1212,7 @@ var _ = Describe("Component Controller", func() {
 						Policy: v1alpha1.ConfigurationPolicyPropagate,
 					},
 					v1alpha1.OCMConfiguration{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "ConfigMap",
 							Name:       configs[2].Name,
@@ -1293,7 +1242,7 @@ var _ = Describe("Component Controller", func() {
 					Semver:    "1.0.0",
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 								APIVersion: corev1.SchemeGroupVersion.String(),
 								Kind:       "Secret",
 								Name:       secrets[1].Name,
@@ -1317,7 +1266,7 @@ var _ = Describe("Component Controller", func() {
 			Eventually(komega.Object(component), "15s").Should(
 				HaveField("Status.EffectiveOCMConfig", ConsistOf(
 					v1alpha1.OCMConfiguration{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 							APIVersion: corev1.SchemeGroupVersion.String(),
 							Kind:       "Secret",
 							Name:       secrets[1].Name,

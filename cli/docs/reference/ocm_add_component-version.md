@@ -99,8 +99,7 @@ add component-version --repository ./archive --constructor component-constructor
                                                       (must be one of [abort-and-fail replace skip]) (default abort-and-fail)
       --concurrency-limit int                         maximum number of component versions that can be constructed concurrently. (default 4)
   -c, --constructor path                              path to the component constructor file (default component-constructor.yaml)
-      --display-mode enum                             display mode can be used in combination with --recursive
-                                                        static: print the output once the complete component graph is discovered
+      --display-mode enum                             static: print the output once the complete component graph is discovered
                                                         live (experimental): continuously updates the output to represent the current construction state of the component graph
                                                       (must be one of [live static]) (default static)
       --external-component-version-copy-policy enum   policy to apply when a component reference to a component version outside of the constructor or target repository is encountered
@@ -131,6 +130,7 @@ add component-version --repository ./archive --constructor component-constructor
                                            4. The directory of the current executable:
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
+                                           If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Using the option, this configuration file be used instead of the lookup above.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing

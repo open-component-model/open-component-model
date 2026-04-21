@@ -13,12 +13,16 @@ spec:
     replicas: 1
     selector:
         matchLabels:
+            app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
             control-plane: controller-manager
     template:
         metadata:
             annotations:
                 kubectl.kubernetes.io/default-container: manager
             labels:
+                app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+                app.kubernetes.io/instance: {{ .Release.Name }}
                 control-plane: controller-manager
         spec:
             {{- with .Values.manager.tolerations }}
@@ -65,19 +69,12 @@ spec:
                     {{- end }}
                     {{- /* Cache */}}
                     {{- with .Values.manager.cache }}
-                    {{- if .ocmContextSize }}
-                    - --ocm-context-cache-size={{ .ocmContextSize }}
-                    {{- end }}
-                    {{- if .ocmSessionSize }}
-                    - --ocm-session-cache-size={{ .ocmSessionSize }}
-                    {{- end }}
                     {{- if .deployerDownloadSize }}
                     - --deployer-download-cache-size={{ .deployerDownloadSize }}
                     {{- end }}
+                    {{- if hasKey . "deployerDownloadMaxResourceSize" }}
+                    - --deployer-download-max-resource-size={{ .deployerDownloadMaxResourceSize }}
                     {{- end }}
-                    {{- /* Events */}}
-                    {{- if .Values.manager.events.address }}
-                    - --events-addr={{ .Values.manager.events.address }}
                     {{- end }}
                     {{- /* Logging */}}
                     {{- with .Values.manager.logging }}
@@ -110,6 +107,11 @@ spec:
                     - containerPort: 9090
                       name: http
                       protocol: TCP
+                    {{- if .Values.webhook.enable }}
+                    - containerPort: 9443
+                      name: webhook-server
+                      protocol: TCP
+                    {{- end }}
                   readinessProbe:
                     httpGet:
                         path: {{ .Values.manager.readinessProbe.path }}
@@ -131,6 +133,11 @@ spec:
                   volumeMounts:
                     - mountPath: /data
                       name: data
+                    {{- if .Values.webhook.enable }}
+                    - mountPath: /tmp/k8s-webhook-server/serving-certs
+                      name: cert
+                      readOnly: true
+                    {{- end }}
             securityContext:
               {{- if .Values.manager.podSecurityContext }}
               {{- toYaml .Values.manager.podSecurityContext | nindent 14 }}
@@ -142,3 +149,9 @@ spec:
             volumes:
                 - emptyDir: {}
                   name: data
+                {{- if .Values.webhook.enable }}
+                - name: cert
+                  secret:
+                    defaultMode: 420
+                    secretName: {{ .Values.webhook.certSecret | default (include "ocm-k8s-toolkit.resourceName" (dict "suffix" "webhook-server-cert" "context" $)) }}
+                {{- end }}

@@ -215,7 +215,7 @@ func renderTable(cmd *cobra.Command, w table.Writer) error {
 	out := cmd.OutOrStdout()
 
 	if f, ok := out.(*os.File); ok {
-		if width, _, err := term.GetSize(int(f.Fd())); err == nil {
+		if width, _, err := term.GetSize(int(f.Fd())); err == nil { //nolint:gosec // G115 - fd conversion is standard for terminal operations
 			style.Size.WidthMin = width
 		}
 	}
@@ -262,7 +262,7 @@ func isTerminal(w io.Writer) bool {
 	if !ok {
 		return false
 	}
-	return term.IsTerminal(int(f.Fd()))
+	return term.IsTerminal(int(f.Fd())) //nolint:gosec // G115 - fd conversion is standard for terminal operations
 }
 
 var pager = sync.OnceValue(func() string {

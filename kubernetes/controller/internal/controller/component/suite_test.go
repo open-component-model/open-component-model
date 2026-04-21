@@ -11,7 +11,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -25,9 +24,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"ocm.software/open-component-model/bindings/go/credentials"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
@@ -81,7 +81,6 @@ var _ = BeforeSuite(func() {
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
-	DeferCleanup(testEnv.Stop)
 
 	Expect(v1alpha1.AddToScheme(scheme.Scheme)).Should(Succeed())
 	Expect(err).NotTo(HaveOccurred())
@@ -93,8 +92,10 @@ var _ = BeforeSuite(func() {
 
 	komega.SetClient(k8sClient)
 
+	gracefulTimeout := 5 * time.Second
 	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme.Scheme,
+		Scheme:                  scheme.Scheme,
+		GracefulShutdownTimeout: &gracefulTimeout,
 		Metrics: metricserver.Options{
 			BindAddress: "0",
 		},
@@ -102,7 +103,6 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	DeferCleanup(cancel)
 
 	events := make(chan string)
 	recorder = &record.FakeRecorder{
@@ -148,7 +148,10 @@ var _ = BeforeSuite(func() {
 	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
-	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{credentials.AnyConsumerIdentityType}))
+	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
+		&ocicredentials.OCICredentialRepository{},
+		[]ocmruntime.Type{v1.Type},
+	)).To(Succeed())
 
 	const unlimited = 0
 	ttl := time.Minute * 30
@@ -166,7 +169,7 @@ var _ = BeforeSuite(func() {
 	Expect(k8sManager.Add(workerPool)).To(Succeed())
 
 	resolutionLogger := logf.Log.WithName("resolution")
-	resolver := resolution.NewResolver(k8sClient, &resolutionLogger, workerPool, pm)
+	resolver := resolution.NewResolver(&resolutionLogger, workerPool, pm)
 
 	Expect((&Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
@@ -178,8 +181,16 @@ var _ = BeforeSuite(func() {
 		PluginManager: pm,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
 
+	mgrDone := make(chan struct{})
 	go func() {
 		defer GinkgoRecover()
-		Expect(k8sManager.Start(ctx)).To(Succeed())
+		defer close(mgrDone)
+		Expect(k8sManager.Start(ctx)).To(Or(Succeed(), MatchError(ContainSubstring("grace period"))))
 	}()
+
+	DeferCleanup(func() {
+		cancel()
+		<-mgrDone
+		Expect(testEnv.Stop()).To(Succeed())
+	})
 })

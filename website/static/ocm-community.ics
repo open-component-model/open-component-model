@@ -1,0 +1,139 @@
+BEGIN:VCALENDAR
+METHOD:PUBLISH
+PRODID:Microsoft Exchange Server 2010
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:tzone://Microsoft/Utc
+BEGIN:STANDARD
+DTSTART:16010101T000000
+TZOFFSETFROM:+0000
+TZOFFSETTO:+0000
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:16010101T000000
+TZOFFSETFROM:+0000
+TZOFFSETTO:+0000
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+ORGANIZER;CN=Open Component Model:mailto:meetings@lfx.dev
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Open Compo
+ nent Model:mailto:meetings@lfx.dev
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN="Moeller, J
+ akob":mailto:jakob.moeller@sap.com
+DESCRIPTION:📣 OCM Community Call Invitation 📣\n\n📋 Agenda Highligh
+ ts will be shared upfront in our Slack channel #sap-tech-ocm<https://sap-t
+ i.slack.com/archives/C03B338HG3H> 📋\n\n──────────
+ ────────────────────────
+ ────────────────────────
+ ────────────────────────
+ ────────────────\n✨ Why Join? ✨\n\n
+ 🧠 Mutual Learning\nExchange ideas with teams across SAP and learn about
+  their cloud challenges\, successful best practices\, and lessons from fai
+ lures.\n\n🌈 Open for Everyone\nWe're primarily engineers and product en
+ thusiasts\, but our talks welcome people from all backgrounds. No prior kn
+ owledge required!\n\n🎤 Get Involved\nWant to share your cloud experienc
+ es\, projects\, tools\, or best practices? We'd love to have you as a spea
+ ker!\n\n🤝 Get in touch with us\nAnd we will make space for your topic o
+ n our agenda!\n\n───────────────────
+ ────────────────────────
+ ────────────────────────
+ ────────────────────────
+ ───────\n\n📺 Watch Previous Community Calls<https://githu
+ b.tools.sap/open-component-model#ocm-community-calls>\n\n📬 Stay Connect
+ ed\nEmail us on ocm@sap.com<mailto:ocm@sap.com> or post in our Slack chann
+ el #sap-tech-ocm<https://sap-ti.slack.com/archives/C03B338HG3H>\n\n\nWays 
+ to join meeting:\n1. Join from PC\, Mac\, iPad\, or Android\nJoin Meeting<https://eur03.
+ safelinks.protection.outlook.com/?url=https%3A%2F%2Fzoom-lfx.platform.linu
+ xfoundation.org%2Fmeeting%2F97987153840%3Fpassword%3Dfe2c3bf0-6a99-4e75-b6
+ 2d-f1918154254e&data=05%7C02%7Cjakob.moeller%40sap.com%7C8f61768735fd48746
+ 9c608ddb7a59db0%7C42f7676cf455423c82f6dc2d99791af7%7C0%7C0%7C6388686442704
+ 26209%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIs
+ IlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C0%7C%7C%7C&sdata=SLjyB6
+ TJz87JSOY52W3M7VXvm82uw6Wofrrk%2BVoPusE%3D&reserved=0>\n\nIf the button ab
+ ove does not work\, paste this into your browser: https://zoom-lfx.platfor
+ m.linuxfoundation.org/meeting/97987153840?password=fe2c3bf0-6a99-4e75-b62d
+ -f1918154254e<https://eur03.safelinks.protection.outlook.com/?url=https%3A
+ %2F%2Fzoom-lfx.platform.linuxfoundation.org%2Fmeeting%2F97987153840%3Fpass
+ word%3Dfe2c3bf0-6a99-4e75-b62d-f1918154254e&data=05%7C02%7Cjakob.moeller%4
+ 0sap.com%7C8f61768735fd487469c608ddb7a59db0%7C42f7676cf455423c82f6dc2d9979
+ 1af7%7C0%7C0%7C638868644270447241%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGki
+ OnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%
+ 3D%7C0%7C%7C%7C&sdata=Tw6pIE6UgsReqBsZkMzU75TRLdQvdMITw%2BIHwajR66M%3D&res
+ erved=0>\n\n2. Join via audio\n\nOne tap mobile:\n\nUS: +12532158782\,\,97
+ 987153840#\,\,\,\,*944541#<tel:+12532158782\,\,97987153840%23\,\,\,\,*9445
+ 41%23> or +13462487799\,\,97987153840#\,\,\,\,*944541#<tel:+13462487799\,\
+ ,97987153840%23\,\,\,\,*944541%23>\n\nOr dial:\n\nUS: +1 253 215 8782 or +
+ 1 346 248 7799 or +1 669 900 6833 or +1 301 715 8592 or +1 312 626 6799 or
+  +1 646 374 8656 or 877 369 0926 (Toll Free) or 855 880 1246 (Toll Free)\n
+ \nCanada: +1 647 374 4685 or +1 647 558 0588 or +1 778 907 2071 or +1 204 
+ 272 7920 or +1 438 809 7799 or +1 587 328 1099 or 855 703 8985 (Toll Free)
+ \n\nMeeting ID: 97987153840\n\nMeeting Passcode: 944541\n\nInternational n
+ umbers<https://eur03.safelinks.protection.outlook.com/?url=https%3A%2F%2Fz
+ oom.us%2Fu%2FalwnPIaVT&data=05%7C02%7Cjakob.moeller%40sap.com%7C8f61768735
+ fd487469c608ddb7a59db0%7C42f7676cf455423c82f6dc2d99791af7%7C0%7C0%7C638868
+ 644270461225%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuM
+ DAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C0%7C%7C%7C&sdata
+ =vWhHrNR%2BHfYqkVMMZMLCffzHTeMVP5f%2Bg90woUOMb8M%3D&reserved=0>\n
+RRULE:FREQ=MONTHLY;UNTIL=21240702T150000Z;INTERVAL=1;BYDAY=1WE
+UID:040000008200E00074C5B7101A82E008000000000000000000000000000000000000000
+ 0180000007643616C2D55696401000000393739383731353338343000
+SUMMARY:Open Component Model - Community Call
+DTSTART:20250702T150000Z
+DTEND:20250702T160000Z
+CLASS:PUBLIC
+PRIORITY:5
+DTSTAMP:20250630T071641Z
+TRANSP:OPAQUE
+STATUS:TENTATIVE
+SEQUENCE:0
+LOCATION:https://zoom-lfx.platform.linuxfoundation.org/meeting/97987153840?
+ password=fe2c3bf0-6a99-4e75-b62d-f1918154254e
+X-MICROSOFT-CDO-BUSYSTATUS:TENTATIVE
+X-MICROSOFT-CDO-INTENDEDSTATUS:BUSY
+X-MICROSOFT-CDO-ALLDAYEVENT:FALSE
+X-MICROSOFT-CDO-IMPORTANCE:1
+X-MICROSOFT-CDO-INSTTYPE:1
+X-MICROSOFT-DONOTFORWARDMEETING:FALSE
+X-MICROSOFT-DISALLOW-COUNTER:FALSE
+X-MICROSOFT-LOCATIONS:[{"DisplayName":"https://zoom-lfx.platform.linuxfound
+ ation.org/meeting/97987153840?password=fe2c3bf0-6a99-4e75-b62d-f1918154254
+ e"\,"LocationAnnotation":""\,"LocationUri":""\,"LocationStreet":""\,"Locat
+ ionCity":""\,"LocationState":""\,"LocationCountry":""\,"LocationPostalCode
+ ":""\,"LocationFullAddress":""}]
+BEGIN:VALARM
+DESCRIPTION:REMINDER
+TRIGGER;RELATED=START:P
+ACTION:DISPLAY
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+ORGANIZER;CN=Open Component Model:mailto:meetings@lfx.dev
+RECURRENCE-ID:20250702T150000Z
+UID:040000008200E00074C5B7101A82E008000000000000000000000000000000000000000
+ 0180000007643616C2D55696401000000393739383731353338343000
+SUMMARY:Open Component Model - Community Call
+DTSTART:20250709T150000Z
+DTEND:20250709T160000Z
+CLASS:PUBLIC
+PRIORITY:5
+DTSTAMP:20250630T090109Z
+TRANSP:OPAQUE
+STATUS:TENTATIVE
+SEQUENCE:0
+LOCATION:https://zoom-lfx.platform.linuxfoundation.org/meeting/97987153840?
+ password=fe2c3bf0-6a99-4e75-b62d-f1918154254e
+X-MICROSOFT-CDO-BUSYSTATUS:TENTATIVE
+X-MICROSOFT-CDO-INTENDEDSTATUS:BUSY
+X-MICROSOFT-CDO-ALLDAYEVENT:FALSE
+X-MICROSOFT-CDO-IMPORTANCE:1
+X-MICROSOFT-CDO-INSTTYPE:3
+X-MICROSOFT-DONOTFORWARDMEETING:FALSE
+X-MICROSOFT-DISALLOW-COUNTER:FALSE
+BEGIN:VALARM
+DESCRIPTION:REMINDER
+TRIGGER;RELATED=START:P
+ACTION:DISPLAY
+END:VALARM
+END:VEVENT
+END:VCALENDAR

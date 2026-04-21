@@ -40,9 +40,9 @@ type Interface interface {
 	// Returns error if RESTMapping fails for any resource.
 	Project(resources []Resource) (Metadata, error)
 
-	// Apply runs SSA on resources and returns batch-only metadata.
-	// Batch metadata contains only GKs/namespaces from THIS apply (not parent memory).
-	Apply(ctx context.Context, resources []Resource, mode ApplyMode) (*ApplyResult, Metadata, error)
+	// Apply runs SSA on resources. Returns the apply result.
+	// Caller should use Project() output for prune scope, not Apply() output.
+	Apply(ctx context.Context, resources []Resource, mode ApplyMode) (*ApplyResult, error)
 
 	// Prune deletes orphaned resources (those with applyset label but not in KeepUIDs).
 	// Pass Project().PruneScope() to search both current batch locations AND parent memory.
@@ -75,7 +75,7 @@ type PruneOptions struct {
 	// KeepUIDs are UIDs of resources that should NOT be pruned.
 	// Typically from ApplyResult.ObservedUIDs().
 	KeepUIDs sets.Set[types.UID]
-	// Scope defines GKs and namespaces to prune from (required).
+	// Scope defines GKs and namespaces to prune from.
 	// Use Metadata.PruneScope() to get the scope from Project() output.
 	// Pass the superset scope (union of batch + parent) to ensure
 	// prune finds all orphans.
@@ -158,6 +158,12 @@ type Config struct {
 	ParentNamespace string // fallback namespace for namespaced resources without namespace set
 }
 
+// applyEntry pairs a Resource with its resolved RESTMapping for apply.
+type applyEntry struct {
+	resource Resource
+	mapping  *meta.RESTMapping
+}
+
 // New creates an ApplySet for a specific parent (instance).
 // Parent GKNN (name, namespace, kind, group) is used to generate the ApplySet ID per KEP-3659.
 // Namespaces for pruning are derived from resources passed to Apply.
@@ -224,20 +230,13 @@ func (a *ApplySet) Project(resources []Resource) (Metadata, error) {
 	return a.buildMetadata(gks, namespaces), nil
 }
 
-// Apply runs SSA on all resources and returns batch-only metadata.
-// Caller should call Prune separately after Apply succeeds.
-func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMode) (*ApplyResult, Metadata, error) {
+// Apply runs SSA on all resources.
+// Caller should call Prune separately after Apply succeeds, using Project() output for scope.
+func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMode) (*ApplyResult, error) {
 	result := &ApplyResult{}
 
-	// Collect GKs and namespaces for batch metadata
-	desiredGKs := sets.New[schema.GroupKind]()
-	desiredNamespaces := sets.New[string]()
-
 	// Resources with resolved mappings, ready to apply
-	toApply := make([]struct {
-		resource Resource
-		mapping  *meta.RESTMapping
-	}, 0, len(resources))
+	toApply := make([]applyEntry, 0, len(resources))
 
 	for _, r := range resources {
 		// SkipApply resources may have nil Object (unresolved), skip entirely
@@ -249,21 +248,19 @@ func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMo
 
 		mapping, err := a.restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err != nil {
-			return result, Metadata{}, fmt.Errorf("failed to get REST mapping for %v: %w", gvk, err)
-		}
-
-		// Only include GKs for resources actually being applied
-		desiredGKs.Insert(gvk.GroupKind())
-
-		if ns, ok := a.resolvedNamespace(mapping, r.Object); ok && ns != a.parentNamespace {
-			desiredNamespaces.Insert(ns)
+			return nil, fmt.Errorf("failed to get REST mapping for %v: %w", gvk, err)
 		}
 
 		// Membership labels are injected just-in-time inside applyResource.
-		toApply = append(toApply, struct {
-			resource Resource
-			mapping  *meta.RESTMapping
-		}{resource: r, mapping: mapping})
+		toApply = append(toApply, applyEntry{resource: r, mapping: mapping})
+	}
+
+	// Batch conflict detection: LIST per unique (GVK, namespace) instead of
+	// individual GETs per resource. This reduces N API calls to K (K = unique
+	// GVK+namespace combos).
+	conflicts, err := a.detectConflicts(ctx, toApply)
+	if err != nil {
+		return nil, fmt.Errorf("conflict detection failed: %w", err)
 	}
 
 	// Apply resources
@@ -286,6 +283,41 @@ func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMo
 
 	for _, entry := range toApply {
 		eg.Go(func() error {
+			// Check pre-computed conflict map before applying.
+			lookupNamespace := ""
+			if entry.mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+				lookupNamespace = a.resolveNamespace(entry.resource.Object.GetNamespace())
+			}
+			key := conflictKey{
+				gvk:       entry.resource.Object.GroupVersionKind(),
+				namespace: lookupNamespace,
+				name:      entry.resource.Object.GetName(),
+			}
+			if ownerID, found := conflicts[key]; found {
+				item := ApplyResultItem{
+					ID: entry.resource.ID,
+					Error: &ApplySetConflictError{
+						ResourceName:      entry.resource.Object.GetName(),
+						ResourceNamespace: lookupNamespace,
+						ResourceGVK:       entry.resource.Object.GroupVersionKind().String(),
+						CurrentApplySetID: ownerID,
+						DesiredApplySetID: a.applySetID,
+					},
+				}
+				a.log.V(2).Info("applyset conflict detected",
+					"id", entry.resource.ID,
+					"name", entry.resource.Object.GetName(),
+					"namespace", lookupNamespace,
+					"gvk", entry.resource.Object.GroupVersionKind().String(),
+					"existingApplySetID", ownerID,
+					"desiredApplySetID", a.applySetID,
+				)
+				mu.Lock()
+				result.Applied = append(result.Applied, item)
+				mu.Unlock()
+				return nil
+			}
+
 			item := a.applyResource(egCtx, entry.resource, entry.mapping, applyOptions)
 			mu.Lock()
 			result.Applied = append(result.Applied, item)
@@ -295,20 +327,25 @@ func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMo
 	}
 
 	if err := eg.Wait(); err != nil {
-		return result, Metadata{}, err
+		return result, err
 	}
 
-	// Return batch-only metadata. Caller decides whether to union with parent
-	// based on prune outcome.
-	return result, a.buildMetadata(desiredGKs, desiredNamespaces), nil
+	return result, nil
 }
 
 // Prune deletes orphaned resources (those with applyset label but not in KeepUIDs).
 func (a *ApplySet) Prune(ctx context.Context, opts PruneOptions) (*PruneResult, error) {
-	scopeGKs := opts.Scope.GroupKinds
+	var scopeGKs sets.Set[schema.GroupKind]
+	var scopeNamespaces sets.Set[string]
+	if opts.Scope != nil {
+		scopeGKs = opts.Scope.GroupKinds
+		scopeNamespaces = opts.Scope.Namespaces.Clone()
+	}
 
 	// Always include parent namespace in prune scope
-	scopeNamespaces := opts.Scope.Namespaces.Clone()
+	if scopeNamespaces == nil {
+		scopeNamespaces = sets.New[string]()
+	}
 	if a.parentNamespace != "" {
 		scopeNamespaces.Insert(a.parentNamespace)
 	} else {
@@ -342,35 +379,11 @@ func (a *ApplySet) applyResource(
 ) ApplyResultItem {
 	item := ApplyResultItem{ID: r.ID}
 
-	// Inject applyset membership label (required for prune to find managed resources)
+	// Inject applyset membership label (required for prune to find managed resources).
 	labels := r.Object.GetLabels()
 	if labels == nil {
 		labels = make(map[string]string)
 	}
-
-	// Check for ApplySet membership conflict: if the resource already belongs to
-	// a different ApplySet, fail rather than silently overwriting the membership.
-	// This prevents accidental takeover of resources managed by other instances/controllers.
-	if existingID, exists := labels[ApplysetPartOfLabel]; exists && existingID != a.applySetID {
-		item.Error = &ApplySetConflictError{
-			ResourceName:      r.Object.GetName(),
-			ResourceNamespace: r.Object.GetNamespace(),
-			ResourceGVK:       r.Object.GroupVersionKind().String(),
-			CurrentApplySetID: existingID,
-			DesiredApplySetID: a.applySetID,
-		}
-		a.log.V(2).Info("applyset conflict",
-			"id", r.ID,
-			"name", r.Object.GetName(),
-			"namespace", r.Object.GetNamespace(),
-			"gvk", r.Object.GroupVersionKind().String(),
-			"existingApplySetID", existingID,
-			"desiredApplySetID", a.applySetID,
-		)
-		return item
-	}
-
-	// Handle applyset label conflicts/overwrites
 	labels[ApplysetPartOfLabel] = a.applySetID
 	r.Object.SetLabels(labels)
 
@@ -383,12 +396,12 @@ func (a *ApplySet) applyResource(
 	item.Desired = r.Object.DeepCopy()
 
 	// Apply using controller-runtime client with Server-Side Apply
-	patchOptions := []client.PatchOption{
+	applyOptions := []client.ApplyOption{
 		client.ForceOwnership,
 		client.FieldOwner(options.FieldManager),
 	}
 
-	err := a.client.Patch(ctx, r.Object, client.Apply, patchOptions...)
+	err := a.client.Apply(ctx, client.ApplyConfigurationFromUnstructured(r.Object), applyOptions...)
 	if err != nil {
 		item.Error = err
 		a.log.V(2).Info("apply failed",
@@ -415,6 +428,79 @@ func (a *ApplySet) applyResource(
 	)
 
 	return item
+}
+
+// conflictKey identifies a resource for conflict map lookups.
+type conflictKey struct {
+	gvk       schema.GroupVersionKind
+	namespace string
+	name      string
+}
+
+// detectConflicts performs batch LIST calls per unique (GVK, namespace) to find
+// resources already owned by a different ApplySet. This replaces individual GET
+// calls per resource, reducing N GETs to K LISTs (K = unique GVK+namespace combos).
+//
+// Returns a map from conflictKey to the owning ApplySet ID for any conflicts found.
+func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (map[conflictKey]string, error) {
+	// Group entries by unique (GVK, namespace) pairs to minimize LIST calls.
+	type listTask struct {
+		gvk       schema.GroupVersionKind
+		namespace string
+	}
+	tasks := sets.New[listTask]()
+	for _, e := range entries {
+		ns := ""
+		if e.mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+			ns = a.resolveNamespace(e.resource.Object.GetNamespace())
+		}
+		tasks.Insert(listTask{gvk: e.resource.Object.GroupVersionKind(), namespace: ns})
+	}
+
+	conflicts := make(map[conflictKey]string)
+	var mu sync.Mutex
+
+	eg, egCtx := errgroup.WithContext(ctx)
+	for task := range tasks {
+		eg.Go(func() error {
+			list := &unstructured.UnstructuredList{}
+			list.SetGroupVersionKind(task.gvk.GroupVersion().WithKind(task.gvk.Kind + "List"))
+
+			listOpts := []client.ListOption{
+				client.HasLabels{ApplysetPartOfLabel},
+			}
+			if task.namespace != "" {
+				listOpts = append(listOpts, client.InNamespace(task.namespace))
+			}
+
+			if err := a.client.List(egCtx, list, listOpts...); err != nil {
+				if task.namespace != "" {
+					return fmt.Errorf("conflict detection list %v in %s: %w", task.gvk, task.namespace, err)
+				}
+				return fmt.Errorf("conflict detection list %v: %w", task.gvk, err)
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			for i := range list.Items {
+				ownerID := list.Items[i].GetLabels()[ApplysetPartOfLabel]
+				if ownerID != "" && ownerID != a.applySetID {
+					conflicts[conflictKey{
+						gvk:       task.gvk,
+						namespace: list.Items[i].GetNamespace(),
+						name:      list.Items[i].GetName(),
+					}] = ownerID
+				}
+			}
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+
+	return conflicts, nil
 }
 
 func (a *ApplySet) resolvedNamespace(mapping *meta.RESTMapping, obj *unstructured.Unstructured) (string, bool) {
@@ -483,7 +569,7 @@ func (a *ApplySet) prune(
 	for _, task := range tasks {
 		listGroup.Go(func() error {
 			list := &unstructured.UnstructuredList{}
-			list.SetGroupVersionKind(task.gvk)
+			list.SetGroupVersionKind(task.gvk.GroupVersion().WithKind(task.gvk.Kind + "List"))
 
 			listOpts := &client.ListOptions{
 				LabelSelector: labelSelector,

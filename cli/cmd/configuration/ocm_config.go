@@ -38,6 +38,7 @@ By default (without specifying custom locations with this flag), the file will b
 4. The directory of the current executable:
 - $EXE_DIR/ocm/config
 - $EXE_DIR/.ocmconfig
+If multiple configuration files are found, they will be merged in the order they are discovered.
 Using the option, this configuration file be used instead of the lookup above.`)
 }
 
@@ -50,9 +51,9 @@ func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, err
 }
 
 func GetOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
-	path, _ := cmd.Flags().GetString(OCMConfigCommandArgument)
-	if path != "" {
-		return GetConfigFromPath(path)
+	flag := cmd.Flag(OCMConfigCommandArgument)
+	if flag != nil && flag.Changed {
+		return GetConfigFromPath(flag.Value.String())
 	}
 	return GetOCMConfig()
 }
@@ -162,7 +163,7 @@ func GetOCMConfigPaths() ([]string, error) {
 //   - string: The file path if valid; otherwise, an empty string.
 func getFromEnvironment() string {
 	if env := os.Getenv(OCMConfigEnvironmentKey); env != "" {
-		if _, err := os.Stat(env); err == nil {
+		if _, err := os.Stat(filepath.Clean(env)); err == nil {
 			return env
 		}
 	}
@@ -229,7 +230,7 @@ func getFromExecutableDir() string {
 //   - string: The path of the first valid config file found; otherwise, an empty string.
 func checkConfigPaths(base string) string {
 	for _, name := range []string{OCMConfigFileName, NestedOCMConfigFileName} {
-		path := filepath.Join(base, name)
+		path := filepath.Clean(filepath.Join(base, name))
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}

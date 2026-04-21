@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,6 +32,221 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
+
+func newComponentReconciler(fakeClient client.Client, scheme *runtime.Scheme) *Reconciler {
+	return &Reconciler{
+		BaseReconciler: &ocm.BaseReconciler{
+			Client:        fakeClient,
+			Scheme:        scheme,
+			EventRecorder: &record.FakeRecorder{Events: make(chan string, 100)},
+		},
+	}
+}
+
+func TestReconcile_RepositoryNotReady_ReturnsNoRequeue(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	scheme := runtime.NewScheme()
+	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
+	g.Expect(v1alpha1.AddToScheme(scheme)).To(Succeed())
+
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-repo",
+			Namespace: "default",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			Interval: metav1.Duration{Duration: time.Minute},
+		},
+	}
+
+	component := &v1alpha1.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-component",
+			Namespace:  "default",
+			Finalizers: []string{v1alpha1.ComponentFinalizer},
+		},
+		Spec: v1alpha1.ComponentSpec{
+			RepositoryRef: corev1.LocalObjectReference{Name: "test-repo"},
+			Component:     "ocm.software/test",
+			Semver:        "1.0.0",
+			Interval:      metav1.Duration{Duration: time.Minute},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(repo, component).
+		WithStatusSubresource(&v1alpha1.Component{}, &v1alpha1.Repository{}).
+		Build()
+
+	result, err := newComponentReconciler(fakeClient, scheme).Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-component", Namespace: "default"},
+	})
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(result).To(Equal(ctrl.Result{}))
+}
+
+func TestReconcile_RepositoryBeingDeleted_ReturnsNoRequeue(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	scheme := runtime.NewScheme()
+	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
+	g.Expect(v1alpha1.AddToScheme(scheme)).To(Succeed())
+
+	now := metav1.Now()
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "test-repo",
+			Namespace:         "default",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{"prevent-deletion"},
+		},
+		Spec: v1alpha1.RepositorySpec{
+			Interval: metav1.Duration{Duration: time.Minute},
+		},
+	}
+	apimeta.SetStatusCondition(&repo.Status.Conditions, metav1.Condition{
+		Type:    v1alpha1.ReadyCondition,
+		Status:  metav1.ConditionTrue,
+		Reason:  v1alpha1.SucceededReason,
+		Message: "ready",
+	})
+
+	component := &v1alpha1.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-component",
+			Namespace:  "default",
+			Finalizers: []string{v1alpha1.ComponentFinalizer},
+		},
+		Spec: v1alpha1.ComponentSpec{
+			RepositoryRef: corev1.LocalObjectReference{Name: "test-repo"},
+			Component:     "ocm.software/test",
+			Semver:        "1.0.0",
+			Interval:      metav1.Duration{Duration: time.Minute},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(repo, component).
+		WithStatusSubresource(&v1alpha1.Component{}, &v1alpha1.Repository{}).
+		Build()
+
+	result, err := newComponentReconciler(fakeClient, scheme).Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-component", Namespace: "default"},
+	})
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(result).To(Equal(ctrl.Result{}))
+}
+
+func TestReconcile_RepositoryNotFound_ReturnsError(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	scheme := runtime.NewScheme()
+	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
+	g.Expect(v1alpha1.AddToScheme(scheme)).To(Succeed())
+
+	component := &v1alpha1.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-component",
+			Namespace:  "default",
+			Finalizers: []string{v1alpha1.ComponentFinalizer},
+		},
+		Spec: v1alpha1.ComponentSpec{
+			RepositoryRef: corev1.LocalObjectReference{Name: "nonexistent-repo"},
+			Component:     "ocm.software/test",
+			Semver:        "1.0.0",
+			Interval:      metav1.Duration{Duration: time.Minute},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(component).
+		WithStatusSubresource(&v1alpha1.Component{}).
+		Build()
+
+	_, err := newComponentReconciler(fakeClient, scheme).Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-component", Namespace: "default"},
+	})
+
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("failed to get ready repository"))
+}
+
+func TestReconcile_ComponentNotFound_ReturnsNoError(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	scheme := runtime.NewScheme()
+	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
+	g.Expect(v1alpha1.AddToScheme(scheme)).To(Succeed())
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		Build()
+
+	result, err := newComponentReconciler(fakeClient, scheme).Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "nonexistent", Namespace: "default"},
+	})
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(result).To(Equal(ctrl.Result{}))
+}
+
+func TestReconcile_RepositoryNotReady_ComponentMarkedNotReady(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	scheme := runtime.NewScheme()
+	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
+	g.Expect(v1alpha1.AddToScheme(scheme)).To(Succeed())
+
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-repo",
+			Namespace: "default",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			Interval: metav1.Duration{Duration: time.Minute},
+		},
+	}
+
+	component := &v1alpha1.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-component",
+			Namespace:  "default",
+			Finalizers: []string{v1alpha1.ComponentFinalizer},
+		},
+		Spec: v1alpha1.ComponentSpec{
+			RepositoryRef: corev1.LocalObjectReference{Name: "test-repo"},
+			Component:     "ocm.software/test",
+			Semver:        "1.0.0",
+			Interval:      metav1.Duration{Duration: time.Minute},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(repo, component).
+		WithStatusSubresource(&v1alpha1.Component{}, &v1alpha1.Repository{}).
+		Build()
+
+	_, err := newComponentReconciler(fakeClient, scheme).Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-component", Namespace: "default"},
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	updated := &v1alpha1.Component{}
+	g.Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-component", Namespace: "default"}, updated)).To(Succeed())
+	g.Expect(apimeta.IsStatusConditionTrue(updated.GetConditions(), v1alpha1.ReadyCondition)).To(BeFalse())
+}
 
 // TestResolutionInProgress_UnitTest tests that the first reconciliation returns ResolutionInProgress
 // when a component version resolution is started. This test uses a fake client to avoid race conditions
@@ -90,7 +305,12 @@ func TestResolutionInProgress_UnitTest(t *testing.T) {
 		},
 		Status: v1alpha1.RepositoryStatus{},
 	}
-	conditions.MarkTrue(repository, "Ready", "ready", "message")
+	apimeta.SetStatusCondition(&repository.Status.Conditions, metav1.Condition{
+		Type:    v1alpha1.ReadyCondition,
+		Status:  metav1.ConditionTrue,
+		Reason:  v1alpha1.SucceededReason,
+		Message: "ready",
+	})
 
 	component := &v1alpha1.Component{
 		ObjectMeta: metav1.ObjectMeta{
@@ -147,7 +367,7 @@ func TestResolutionInProgress_UnitTest(t *testing.T) {
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(ocmScheme))
 	g.Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
 
-	resolver := resolution.NewResolver(fakeClient, &logger, workerPool, pm)
+	resolver := resolution.NewResolver(&logger, workerPool, pm)
 	eventRecorder := &record.FakeRecorder{
 		Events: make(chan string, 100),
 	}
@@ -175,12 +395,11 @@ func TestResolutionInProgress_UnitTest(t *testing.T) {
 	updatedComponent := &v1alpha1.Component{}
 	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(component), updatedComponent)).To(Succeed())
 
-	reason := conditions.GetReason(updatedComponent, "Ready")
-	g.Expect(reason).To(Equal(v1alpha1.ResolutionInProgress),
+	cond := apimeta.FindStatusCondition(updatedComponent.GetConditions(), v1alpha1.ReadyCondition)
+	g.Expect(cond).ToNot(BeNil())
+	g.Expect(cond.Reason).To(Equal(v1alpha1.ResolutionInProgress),
 		"expected component ready-condition reason to be %s, got %s",
-		v1alpha1.ResolutionInProgress, reason)
-
-	cond := conditions.Get(updatedComponent, "Ready")
+		v1alpha1.ResolutionInProgress, cond.Reason)
 	g.Expect(cond).ToNot(BeNil())
 	g.Expect(cond.Message).To(ContainSubstring("resolution in progress"))
 

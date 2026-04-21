@@ -3,19 +3,24 @@ package resolution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
+	"sort"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/go-logr/logr"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 // CacheBackedRepository provides a cache-backed implementation of repository.ComponentVersionRepository.
@@ -23,10 +28,17 @@ import (
 // routing where different components can be served by different repositories.
 // This is a READ-ONLY cache. Writing operations are delegated directly to the resolved repository.
 type CacheBackedRepository struct {
-	resolver   resolvers.ComponentVersionRepositoryResolver
-	cfg        *configuration.Configuration
-	workerPool *workerpool.WorkerPool
-	logger     *logr.Logger
+	resolver resolvers.ComponentVersionRepositoryResolver
+	cfg      *configuration.Configuration
+	// verifications are used to verify against component version signatures and used as a cache key.
+	verifications []verification.Verification
+	// digest is used to verify the integrity of a referenced component version and is used as part of the cache key.
+	digest *v2.Digest
+	// signingRegistry holds all plugins that implement capabilities to verify signatures and is used during resolution
+	// to verify component versions based on their signatures.
+	signingRegistry *signinghandler.SigningRegistry
+	workerPool      *workerpool.WorkerPool
+	logger          *logr.Logger
 	// requesterFunc is used to get a collection of types.NamespacedNames that want to listen to reconcile events
 	// that the cache handles. Upon an event (resolution complete regardless of outcome) all objects in this
 	// list are notified which will trigger a new reconcile event.
@@ -35,25 +47,6 @@ type CacheBackedRepository struct {
 }
 
 var _ repository.ComponentVersionRepository = (*CacheBackedRepository)(nil)
-
-// newCacheBackedRepository creates a new CacheBackedRepository instance.
-func newCacheBackedRepository(
-	logger *logr.Logger,
-	resolver resolvers.ComponentVersionRepositoryResolver,
-	cfg *configuration.Configuration,
-	wp *workerpool.WorkerPool,
-	requesterFunc func() workerpool.RequesterInfo,
-	baseRepoSpec runtime.Typed,
-) *CacheBackedRepository {
-	return &CacheBackedRepository{
-		logger:        logger,
-		resolver:      resolver,
-		cfg:           cfg,
-		workerPool:    wp,
-		requesterFunc: requesterFunc,
-		baseRepoSpec:  baseRepoSpec,
-	}
-}
 
 // AddComponentVersion adds a component version to the underlying repository.
 func (c *CacheBackedRepository) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
@@ -74,12 +67,13 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 	}
 
 	keyFunc := func() (string, error) {
-		// Build cache key based on configuration hash, repository spec, component, and version.
 		// The baseRepoSpec is not necessarily the repository used to resolve the component.
 		// The actual repository is determined by the providers resolver
 		// configuration (which is represented through the config hash) and
 		// the base repository.
-		return buildCacheKey(configHash, c.baseRepoSpec, component, version)
+		// The verifications and digests are part of the cache-key to ensure that verified or integrity-checked
+		// component versions are cached under another cache-key than non-verified ones.
+		return buildCacheKey(configHash, c.baseRepoSpec, component, version, c.verifications, c.digest)
 	}
 
 	repo, err := c.resolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
@@ -88,19 +82,26 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 	}
 
 	wpOpts := workerpool.ResolveOptions{
-		Component:  component,
-		Version:    version,
-		Repository: repo,
-		KeyFunc:    keyFunc,
-		Requester:  c.requesterFunc(),
+		Component:       component,
+		Version:         version,
+		Verifications:   c.verifications,
+		Digest:          c.digest,
+		SigningRegistry: c.signingRegistry,
+		Repository:      repo,
+		KeyFunc:         keyFunc,
+		Requester:       c.requesterFunc(),
 	}
 
-	result, err := c.workerPool.GetComponentVersion(ctx, wpOpts)
+	desc, err := c.workerPool.GetComponentVersion(ctx, wpOpts)
 	if err != nil {
+		if errors.Is(err, workerpool.ErrNotSafelyDigestible) {
+			return desc, err
+		}
+
 		return nil, err
 	}
 
-	return result, nil
+	return desc, nil
 }
 
 // ListComponentVersions lists all versions of a component.
@@ -166,26 +167,69 @@ func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
 	return checkable.CheckHealth(ctx)
 }
 
-// buildCacheKey generates a cache key from the configuration hash, repository spec, component, and version.
-// It canonicalizes the repository spec using JCS (RFC 8785) before hashing to ensure consistent keys
-// regardless of field ordering in the JSON representation.
-func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string) (string, error) {
+// buildCacheKey generates a cache key from the configuration hash, repository spec, component, version, verifications,
+// and a digest spec.
+// The verifications and digest spec are included in the cache-key to ensure that different cache entries are created
+// for verified and unverified component versions of the same kind.
+// It canonicalizes the repository spec, verifications, and digest spec using JCS (RFC 8785) before hashing to ensure
+// consistent keys regardless of field ordering in the JSON representation.
+func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string, verifications []verification.Verification, digestSpec *v2.Digest) (string, error) {
 	repoJSON, err := json.Marshal(repoSpec)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal repository spec: %w", err)
 	}
 
-	canonicalJSON, err := jsoncanonicalizer.Transform(repoJSON)
+	canonicalRepoJSON, err := jsoncanonicalizer.Transform(repoJSON)
 	if err != nil {
 		return "", fmt.Errorf("failed to canonicalize repository spec: %w", err)
 	}
 
+	// copy verifications to avoid mutating the original slice
+	verificationsCopy := make([]verification.Verification, len(verifications))
+	copy(verificationsCopy, verifications)
+
+	// sort verifications by signature to ensure deterministic cache key
+	sort.Slice(verificationsCopy, func(i, j int) bool {
+		return verificationsCopy[i].Signature < verificationsCopy[j].Signature
+	})
+
+	verificationsJSON, err := json.Marshal(verificationsCopy)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal verifications: %w", err)
+	}
+
+	canonicalVerificationsJSON, err := jsoncanonicalizer.Transform(verificationsJSON)
+	if err != nil {
+		return "", fmt.Errorf("failed to canonicalize verifications: %w", err)
+	}
+
+	var canonicalDigestJSON []byte
+	if digestSpec != nil {
+		digestJSON, err := json.Marshal(digestSpec)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal digest spec: %w", err)
+		}
+
+		canonicalDigestJSON, err = jsoncanonicalizer.Transform(digestJSON)
+		if err != nil {
+			return "", fmt.Errorf("failed to canonicalize digest spec: %w", err)
+		}
+	}
+
+	sep := []byte{0}
 	hasher := fnv.New64a()
 	// can safely ignore because fnv.Write never actually returns an error
 	_, _ = hasher.Write(configHash)
-	_, _ = hasher.Write(canonicalJSON)
+	_, _ = hasher.Write(sep)
+	_, _ = hasher.Write(canonicalRepoJSON)
+	_, _ = hasher.Write(sep)
 	_, _ = hasher.Write([]byte(component))
+	_, _ = hasher.Write(sep)
 	_, _ = hasher.Write([]byte(version))
+	_, _ = hasher.Write(sep)
+	_, _ = hasher.Write(canonicalVerificationsJSON)
+	_, _ = hasher.Write(sep)
+	_, _ = hasher.Write(canonicalDigestJSON)
 
 	return fmt.Sprintf("%016x", hasher.Sum64()), nil
 }

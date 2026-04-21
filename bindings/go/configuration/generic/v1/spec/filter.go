@@ -11,21 +11,35 @@ type FilterOptions struct {
 	ConfigTypes []runtime.Type
 }
 
+// FilterWithRemainder filters the config based on the provided options.
+// It returns two configs: filtered contains entries whose type is in
+// FilterOptions.ConfigTypes; remainder contains all other entries.
+// If no ConfigTypes are specified, all entries are placed in remainder.
+func FilterWithRemainder(config *Config, options *FilterOptions) (*Config, *Config, error) {
+	if config == nil {
+		return nil, nil, fmt.Errorf("config must not be nil")
+	}
+	if options == nil {
+		return nil, nil, fmt.Errorf("options must not be nil")
+	}
+	filtered := &Config{Type: config.Type}
+	remainder := &Config{Type: config.Type}
+	for _, entry := range config.Configurations {
+		if slices.Contains(options.ConfigTypes, entry.GetType()) {
+			filtered.Configurations = append(filtered.Configurations, entry)
+		} else {
+			remainder.Configurations = append(remainder.Configurations, entry)
+		}
+	}
+	return filtered, remainder, nil
+}
+
 // Filter filters the config based on the provided options.
 // Only the FilterOptions.ConfigTypes are copied over.
 // If none are specified, the config will be empty.
 func Filter(config *Config, options *FilterOptions) (*Config, error) {
-	filtered := new(Config)
-	filtered.Type = config.Type
-
-	for _, entry := range config.Configurations {
-		configType := entry.GetType()
-		if slices.Contains(options.ConfigTypes, configType) {
-			filtered.Configurations = append(filtered.Configurations, entry)
-		}
-	}
-
-	return filtered, nil
+	filtered, _, err := FilterWithRemainder(config, options)
+	return filtered, err
 }
 
 // FilterForType filters the configuration for a specific configuration type T

@@ -1,10 +1,18 @@
 name: CLI
 
 on:
-  # Trigger workflow on pushes to main or release branches, and on PRs targeting main as well as release tags
-  # if we are on a PR, limit runtime and only build the cli if it has been modified.
-  # if we are on a push, build the CLI regardless of what has changed to always be up to date
-  # also allow manual triggering for rebuilds or failing jobs or rebuilding the artifact
+  # This workflow serves two roles:
+  #
+  # 1. CI workflow — triggered directly by push/PR events.
+  #    Pushes to main or cli/v* tags build AND publish (OCI image + conformance).
+  #    Pushes to releases/v* branches only build+test (no publish).
+  #    PRs to main only build+test if cli/ files changed.
+  #
+  # 2. Reusable build step — called by cli-release.yml via workflow_call.
+  #    cli-release.yml passes inputs.ref = the RC tag (e.g. cli/v0.4.0-rc.1).
+  #    IMPORTANT: github.ref_name inside this workflow inherits the CALLER's ref
+  #    (the release branch, e.g. releases/v0.4), not inputs.ref. The branch-check
+  #    step uses inputs.ref when set to correctly determine publish eligibility.
   push:
     branches:
       - main
@@ -27,6 +35,10 @@ on:
         description: "The ref to build on (branch or tag). Defaults to the current ref."
         type: string
         required: false
+      build_version:
+        description: "Version to embed in binary (overrides computed version for ldflags only). Leading 'v' is stripped."
+        type: string
+        required: false
     outputs:
       artifact_name:
         description: "The artifact name that was built."
@@ -34,6 +46,12 @@ on:
       artifact_id:
         description: "The artifact id that was built."
         value: ${{ jobs.build.outputs.artifact_id }}
+      image_digest:
+        description: "The digest of the pushed OCI image (sha256:...)."
+        value: ${{ jobs.publish.outputs.image_digest }}
+
+permissions:
+  contents: read
 
 env:
   LOCATION: "cli"                       # Folder containing the CLI source
@@ -55,6 +73,7 @@ jobs:
     outputs:
       artifact_name: ${{ env.ARTIFACT_NAME }}
       artifact_id: ${{ steps.upload-artifacts.outputs.artifact_id }}
+      version: ${{ steps.version.outputs.version }}
       should_push_oci_image: ${{ steps.branch-check.outputs.should_push_oci_image }}  # Used by publish job
     permissions:
       contents: read
@@ -73,7 +92,7 @@ jobs:
           ref: ${{ env.REF }}
 
       - name: Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum  # Cache dependencies by go.sum
@@ -86,7 +105,7 @@ jobs:
 
       # Setup Docker Buildx for multi-arch and advanced image building
       - name: Setup docker/buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       # Compute VERSION from env.REF
       - name: Compute VERSION
@@ -104,38 +123,55 @@ jobs:
       # make sure that the version doesn't contain invalid semver characters
       - name: Generate & Verify CTF
         run: |
-          task cli:generate/ctf VERSION="${VERSION}"
+          BUILD_VERSION="${BUILD_VERSION_OVERRIDE:-$VERSION}"
+          BUILD_VERSION="${BUILD_VERSION#v}"
+          task cli:generate/ctf VERSION="${VERSION}" BUILD_VERSION="${BUILD_VERSION}"
           task cli:verify/ctf
+        env:
+          BUILD_VERSION_OVERRIDE: ${{ inputs.build_version }}
 
       # Attest built binaries with provenance metadata, but only if we're not on a PR
       - name: Attest binaries
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-path: "${{ env.LOCATION }}/tmp/bin/ocm-*"
 
-      # Determine if this branch is eligible for publishing, but only if we're not on a PR
+      # Determine if this build should publish (push OCI image to GHCR).
+      #
+      # Uses inputs.ref when set (workflow_call from cli-release.yml), otherwise
+      # GITHUB_REF_NAME. This distinction matters because workflow_call inherits
+      # the caller's github.ref_name (the release branch), not our inputs.ref.
+      #
+      # Publish eligibility:
+      #   push to main              → GITHUB_REF_NAME = "main"            → yes (default branch)
+      #   push tag cli/v0.4.0       → GITHUB_REF_NAME = "cli/v0.4.0"     → yes (cli/v* match)
+      #   push to releases/v0.4     → GITHUB_REF_NAME = "releases/v0.4"  → no  (build-only)
+      #   workflow_call (release)    → inputs.ref = "cli/v0.4.0-rc.1"     → yes (cli/v* match)
+      #   pull_request              → step skipped entirely               → no
       - name: Determine if this is a push-eligible branch
         if: ${{ github.event_name != 'pull_request' }}
         id: branch-check
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          INPUT_REF: ${{ inputs.ref }}
         with:
           script: |
+            const ref = process.env.INPUT_REF || process.env.GITHUB_REF_NAME;
             core.setOutput(
               "should_push_oci_image",
-              process.env.GITHUB_REF_NAME === context.payload.repository.default_branch ||
-              /^releases\/v0\./.test(process.env.GITHUB_REF_NAME) ||
-              /^cli\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(process.env.GITHUB_REF_NAME)
+              ref === context.payload.repository.default_branch ||
+              /^cli\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(ref)
             )
 
-      # Upload CLI binaries and OCI layout only if branch is eligible for push
+      # Upload CLI binaries and OCI layout as build artifacts
       - name: Upload Artifacts
-        if: ${{ steps.branch-check.outputs.should_push_oci_image }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         id: upload-artifacts
         with:
           if-no-files-found: 'error'
+          retention-days: 1
           name: ${{ env.ARTIFACT_NAME }}
           # Compiled CLI binaries
           # OCI layout files
@@ -144,19 +180,23 @@ jobs:
             ${{ env.LOCATION }}/tmp/oci/*      
 
   publish:
-    name: Push & Attest
+    name: Publish and Attest
     needs: build
     if: ${{ needs.build.outputs.should_push_oci_image == 'true' }}  # Skip unless we should push
     runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.digest.outputs.digest }}
+      image_tag: ${{ steps.set-tag.outputs.tag }}
     permissions:
-      actions: read           # Needed for artifact download
-      packages: write         # Needed for pushing OCI images and provenance layers
-      id-token: write         # Needed for provenance attestation identity
-      attestations: write     # Allows storing provenance attestation
+      actions: read            # Needed for artifact download
+      packages: write          # Needed for pushing OCI images and provenance layers
+      id-token: write          # Needed for provenance attestation identity
+      attestations: write      # Allows storing provenance attestation
+      artifact-metadata: write # Needed for github artifact metadata publishing for oci
     steps:
       # Retrieve artifacts produced by the build job
       - name: Download build artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ env.ARTIFACT_NAME }}
 
@@ -173,10 +213,14 @@ jobs:
 
       # use discovered tag from layout
       - name: Set TAG
-        run: echo "TAG=$(oras repo tags --oci-layout ${LAYOUT} | head -n 1)" >> "$GITHUB_ENV"
+        id: set-tag
+        run: |
+          TAG=$(oras repo tags --oci-layout ${LAYOUT} | head -n 1)
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -191,23 +235,35 @@ jobs:
         id: push-oci
         run: oras cp --from-oci-layout "${LAYOUT}:${TAG}" "${TARGET_REPO}:${TAG}"
 
-      # This is only convenience so when we push to main there is a CLI image that always points to main as well
-      # technically we already have a tagged version called 0.0.0-main but this is more standard
-      - name: Tag Image as branch when default ( :${{ env.REF }} )
-        if: ${{ env.REF == github.event.repository.default_branch }}
-        env:
-          FROM: ${{ env.TAG }}
-          TO: ${{ env.REF }}
-        run: oras tag "${TARGET_REPO}:${FROM}" "${TARGET_REPO}:${TO}"
-
       # Attest pushed OCI image with provenance metadata
       - name: Resolve Pushed Digest for Attestation
         id: digest
         run: echo "digest=$(oras resolve ${TARGET_REPO}:${TAG})" >> "$GITHUB_OUTPUT"
       - name: Attest OCI image
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.digest.outputs.digest }}
           subject-name: ${{ env.TARGET_REPO }}
           push-to-registry: true
+
+  # Run conformance tests against the published image on main branch or release branches/tags
+  conformance:
+    name: Conformance
+    needs: publish
+    uses: ./.github/workflows/conformance.yml
+    with:
+      cli_image: "ghcr.io/${{ github.repository_owner }}/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
+    secrets: inherit
+
+  # Run conformance tests against the built image on PRs to main,
+  # but only if the CLI was modified (as determined by the build job)
+  conformance-pr:
+    name: Conformance (PR)
+    needs: build
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: ./.github/workflows/conformance.yml
+    with:
+      cli_artifact: ${{ needs.build.outputs.artifact_name }}
+      cli_version: ${{ needs.build.outputs.version }}
+    secrets: inherit

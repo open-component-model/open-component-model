@@ -17,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
@@ -25,7 +26,6 @@ import (
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/log"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/render"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
@@ -87,7 +87,10 @@ Use this command to establish provenance of component versions.`,
 # Sign a component version with default algorithms
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
 
-## Example Credential Config
+## Example Credential Config (.ocmconfig) — Plain encoding (default)
+#
+# Credentials (private/public keys) are always resolved via .ocmconfig.
+# The "signature" field must match the --signature flag (default: "default").
 
     type: generic.config.ocm.software/v1
     configurations:
@@ -102,10 +105,58 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
           properties:
             private_key_pem: <PEM>
 
+## Example Credential Config (.ocmconfig) — PEM encoding with certificate chain
+#
+# Required when signatureEncodingPolicy: PEM is set in the signer spec.
+# private_key_pem_file: leaf private key (PKCS#1 or PKCS#8)
+# public_key_pem_file:  PEM file containing [leaf, intermediate] certificates
+#                       Do NOT include the root CA here — it must not be embedded
+#                       in the signature (the verifier rejects self-signed embedded certs).
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: default
+        credentials:
+        - type: Credentials/v1
+          properties:
+            private_key_pem_file: /path/to/leaf.key
+            public_key_pem_file: /path/to/leaf-and-intermediate-chain.pem
+
+## Example Signer Spec File (--signer-spec)
+#
+# A signer spec configures the signing algorithm and encoding policy.
+# It does NOT contain credentials — keys are always resolved via .ocmconfig.
+# If omitted, defaults to RSASSA-PSS with Plain encoding.
+#
+# Supported fields:
+#   type:                    RSASigningConfiguration/v1alpha1
+#   signatureAlgorithm:      RSASSA-PSS (default) | RSASSA-PKCS1-V1_5
+#   signatureEncodingPolicy: Plain (default) | PEM
+#
+# signatureEncodingPolicy controls the *signature output* format:
+#   Plain — signature stored as hex string; verification needs an external public key
+#   PEM   — signature wrapped in a PEM SIGNATURE block with embedded certificate chain
+#           (experimental; credentials must provide certificates, not bare public keys)
+
+    type: RSASigningConfiguration/v1alpha1
+    signatureAlgorithm: RSASSA-PSS
+    signatureEncodingPolicy: Plain
+
+# Example signer spec for PEM encoding (requires certificate chain in credentials):
+
+    type: RSASigningConfiguration/v1alpha1
+    signatureAlgorithm: RSASSA-PSS
+    signatureEncodingPolicy: PEM
+
 # Sign with custom signature name
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
 
-# Use a signer specification file
+# Use a signer specification file to override algorithm defaults
 sign component-version ./repo/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./rsassa-pss.yaml
 
 # Dry-run signing
@@ -121,7 +172,7 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().String(FlagSignature, DefaultSignatureName, "name of the signature to create or update. defaults to \"default\"")
-	cmd.Flags().String(FlagSignerSpec, "", "path to a signer specification file. If empty, defaults to an empty RSASSA-PSS configuration.")
+	cmd.Flags().String(FlagSignerSpec, "", "path to a signer specification file (configures algorithm and encoding, not credentials). If empty, defaults to RSASSA-PSS with Plain encoding.")
 	cmd.Flags().Bool(FlagDryRun, false, "compute signature but do not persist it to the repository")
 	cmd.Flags().String(FlagNormalisationAlgorithm, v4alpha1.Algorithm, "normalisation algorithm to use (default jsonNormalisation/v4alpha1)")
 	cmd.Flags().String(FlagHashAlgorithm, crypto.SHA256.String(), "hash algorithm to use (SHA256, SHA512)")

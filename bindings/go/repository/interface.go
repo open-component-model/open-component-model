@@ -129,12 +129,17 @@ type SourceRepository interface {
 
 // ResourceDigestProcessor defines the interface for processing resource digests.
 type ResourceDigestProcessor interface {
+	// GetResourceDigestProcessorCredentialConsumerIdentity resolves the identity of the given resource to use for credential resolution
+	// for the digest processor. The identity returned MAY be used to resolve credentials for the digest processor.
+	// Note that this is not the same as ResourceConsumerIdentityProvider, because it uses the descriptor resource,
+	// and not the constructor resource.
+	GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error)
 	// ProcessResourceDigest processes, verifies and appends the [*descriptor.Resource.Digest] with information fetched
 	// from the repository.
 	// Under certain circumstances, it can also process the [*descriptor.Resource.Access] of the resource,
 	// e.g. to ensure that the digest is pinned after digest information was appended.
 	// As a result, after processing, the access MUST always reference the content described by the digest and cannot be mutated.
-	ProcessResourceDigest(ctx context.Context, res *descriptor.Resource) (*descriptor.Resource, error)
+	ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error)
 }
 
 // HealthCheckable is an optional interface that can be implemented by a

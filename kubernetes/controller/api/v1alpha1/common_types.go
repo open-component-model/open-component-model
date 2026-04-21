@@ -1,13 +1,32 @@
 package v1alpha1
 
 import (
-	"github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+// NamespacedObjectKindReference contains enough information to locate the typed referenced Kubernetes resource object
+// in any namespace.
+type NamespacedObjectKindReference struct {
+	// API version of the referent, if not specified the Kubernetes preferred version will be used.
+	// +optional
+	APIVersion string `json:"apiVersion,omitempty"`
+
+	// Kind of the referent.
+	// +required
+	Kind string `json:"kind"`
+
+	// Name of the referent.
+	// +required
+	Name string `json:"name"`
+
+	// Namespace of the referent, when not specified it acts as LocalObjectReference.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
 
 type ConfigurationPolicy string
 
@@ -25,7 +44,7 @@ type OCMConfiguration struct {
 	// ocm config data (in the ocm config file format), or other configurable
 	// ocm api objects (Repository, Component, Resource) to
 	// reuse their propagated configuration.
-	meta.NamespacedObjectKindReference `json:",inline"`
+	NamespacedObjectKindReference `json:",inline"`
 	// Policy affects the propagation behavior of the configuration. If set to
 	// ConfigurationPolicyPropagate other ocm api objects can reference this
 	// object to reuse this configuration.
@@ -43,6 +62,7 @@ type ObjectKey struct {
 }
 
 type Verification struct {
+	// Signature defines the name of the signature to be verified in the component version.
 	// +required
 	Signature string `json:"signature,omitempty"`
 	// Public Key Secret Format

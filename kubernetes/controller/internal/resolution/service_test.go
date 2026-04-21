@@ -8,7 +8,6 @@ import (
 	"testing"
 	"testing/synctest"
 
-	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/stretchr/testify/assert"
@@ -26,6 +25,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
@@ -68,17 +68,19 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 			BaseUrl: "localhost:5000/test",
 		}
 
-		opts := &resolution.RepositoryOptions{
-			RepositorySpec: repoSpec,
-			OCMConfigurations: []v1alpha1.OCMConfiguration{
-				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-						Kind: "ConfigMap",
-						Name: "ocm-config",
-					},
+		cfg, err := configuration.LoadConfigurations(ctx, k8sClient, "default", []v1alpha1.OCMConfiguration{
+			{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+					Kind: "ConfigMap",
+					Name: "ocm-config",
 				},
 			},
-			Namespace: "default",
+		})
+		require.NoError(t, err)
+
+		opts := &resolution.RepositoryOptions{
+			RepositorySpec: repoSpec,
+			Configuration:  cfg,
 		}
 
 		repo, err := env.Resolver.NewCacheBackedRepository(ctx, opts)
@@ -137,17 +139,19 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 			BaseUrl: "localhost:5000/test",
 		}
 
-		opts := &resolution.RepositoryOptions{
-			RepositorySpec: repoSpec,
-			OCMConfigurations: []v1alpha1.OCMConfiguration{
-				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-						Kind: "ConfigMap",
-						Name: "ocm-config",
-					},
+		cfg, err := configuration.LoadConfigurations(ctx, k8sClient, "default", []v1alpha1.OCMConfiguration{
+			{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+					Kind: "ConfigMap",
+					Name: "ocm-config",
 				},
 			},
-			Namespace: "default",
+		})
+		require.NoError(t, err)
+
+		opts := &resolution.RepositoryOptions{
+			RepositorySpec: repoSpec,
+			Configuration:  cfg,
 		}
 
 		repo, err := env.Resolver.NewCacheBackedRepository(ctx, opts)
@@ -229,17 +233,19 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 		}
 
 		// First call with config1
-		opts1 := &resolution.RepositoryOptions{
-			RepositorySpec: repoSpec,
-			OCMConfigurations: []v1alpha1.OCMConfiguration{
-				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-						Kind: "ConfigMap",
-						Name: "ocm-config-1",
-					},
+		cfg1, err := configuration.LoadConfigurations(ctx, k8sClient, "default", []v1alpha1.OCMConfiguration{
+			{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+					Kind: "ConfigMap",
+					Name: "ocm-config-1",
 				},
 			},
-			Namespace: "default",
+		})
+		require.NoError(t, err)
+
+		opts1 := &resolution.RepositoryOptions{
+			RepositorySpec: repoSpec,
+			Configuration:  cfg1,
 		}
 
 		repo1, err := env.Resolver.NewCacheBackedRepository(ctx, opts1)
@@ -255,17 +261,19 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result1)
 
-		opts2 := &resolution.RepositoryOptions{
-			RepositorySpec: repoSpec,
-			OCMConfigurations: []v1alpha1.OCMConfiguration{
-				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-						Kind: "ConfigMap",
-						Name: "ocm-config-2",
-					},
+		cfg2, err := configuration.LoadConfigurations(ctx, k8sClient, "default", []v1alpha1.OCMConfiguration{
+			{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+					Kind: "ConfigMap",
+					Name: "ocm-config-2",
 				},
 			},
-			Namespace: "default",
+		})
+		require.NoError(t, err)
+
+		opts2 := &resolution.RepositoryOptions{
+			RepositorySpec: repoSpec,
+			Configuration:  cfg2,
 		}
 
 		repo2, err := env.Resolver.NewCacheBackedRepository(ctx, opts2)
@@ -305,22 +313,25 @@ func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 		BaseUrl: "localhost:5000/test",
 	}
 
-	opts := &resolution.RepositoryOptions{
-		RepositorySpec: repoSpec,
-		OCMConfigurations: []v1alpha1.OCMConfiguration{
-			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-					Kind: "ConfigMap",
-					Name: "missing-config",
-				},
+	_, err := configuration.LoadConfigurations(ctx, k8sClient, "default", []v1alpha1.OCMConfiguration{
+		{
+			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+				Kind: "ConfigMap",
+				Name: "missing-config",
 			},
 		},
-		Namespace: "default",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get ConfigMap default/missing-config")
+
+	// Also verify that passing nil Configuration (no configs) works without error.
+	opts := &resolution.RepositoryOptions{
+		RepositorySpec: repoSpec,
+		Configuration:  nil,
 	}
 
-	_, err := env.Resolver.NewCacheBackedRepository(ctx, opts)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to load OCM configurations")
+	_, err = env.Resolver.NewCacheBackedRepository(ctx, opts)
+	require.NoError(t, err)
 }
 
 func TestResolveComponentVersionDeduplication(t *testing.T) {
@@ -361,17 +372,19 @@ func TestResolveComponentVersionDeduplication(t *testing.T) {
 			BaseUrl: "localhost:5000/test",
 		}
 
-		opts := &resolution.RepositoryOptions{
-			RepositorySpec: repoSpec,
-			OCMConfigurations: []v1alpha1.OCMConfiguration{
-				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-						Kind: "ConfigMap",
-						Name: "ocm-config",
-					},
+		cfg, err := configuration.LoadConfigurations(ctx, k8sClient, "default", []v1alpha1.OCMConfiguration{
+			{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+					Kind: "ConfigMap",
+					Name: "ocm-config",
 				},
 			},
-			Namespace: "default",
+		})
+		require.NoError(t, err)
+
+		opts := &resolution.RepositoryOptions{
+			RepositorySpec: repoSpec,
+			Configuration:  cfg,
 		}
 
 		repo, err := env.Resolver.NewCacheBackedRepository(ctx, opts)
@@ -465,7 +478,7 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger *logr.Lo
 		Client: k8sClient,
 		Cache:  cache,
 	})
-	resolver := resolution.NewResolver(k8sClient, logger, wp, pm)
+	resolver := resolution.NewResolver(logger, wp, pm)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)

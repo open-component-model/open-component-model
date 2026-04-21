@@ -8,28 +8,28 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
-	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
+	"golang.org/x/time/rate"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
-	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
@@ -39,6 +39,8 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
+	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 // Reconciler reconciles a Component object.
@@ -153,6 +155,12 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 					}},
 				}
 			})).
+		WithOptions(controller.Options{
+			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
+				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 5*time.Minute),
+				&workqueue.TypedBucketRateLimiter[reconcile.Request]{Limiter: rate.NewLimiter(10, 100)},
+			),
+		}).
 		Complete(r)
 }
 
@@ -174,9 +182,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	patchHelper := patch.NewSerialPatcher(component, r.Client)
+	old := component.DeepCopy()
 	defer func(ctx context.Context) {
-		err = errors.Join(err, status.UpdateStatus(ctx, patchHelper, component, r.EventRecorder, component.GetRequeueAfter(), err))
+		status.UpdateBeforePatch(component, r.EventRecorder, component.GetRequeueAfter(), err)
+		if !equality.Semantic.DeepEqual(component.Status, old.Status) {
+			err = errors.Join(err, r.GetClient().Status().Patch(ctx, component, client.MergeFrom(old)))
+		}
 	}(ctx)
 
 	if !component.GetDeletionTimestamp().IsZero() {
@@ -209,10 +220,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		// However, as the component is hard-dependant on the repository, we decided to mark it not ready as well.
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetResourceFailedReason, "OCM Repository is not ready")
 
-		if errors.Is(err, util.NotReadyError{}) || errors.Is(err, util.DeletionError{}) {
-			logger.Info(err.Error())
+		var notReadyErr util.NotReadyError
+		var deletionErr util.DeletionError
+		if errors.As(err, &notReadyErr) || errors.As(err, &deletionErr) {
+			logger.Info("repository is not available", "error", err)
 
-			// return no requeue as we watch the object for changes anyway
 			return ctrl.Result{}, nil
 		}
 
@@ -222,9 +234,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	logger.Info("reconciling component")
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), component, repo)
 	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
+		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
+	}
+
+	// Set effective config immediately so the deferred patch persists it
+	// even if a subsequent step fails.
+	if !equality.Semantic.DeepEqual(component.Status.EffectiveOCMConfig, configs) {
+		component.Status.EffectiveOCMConfig = configs
+		return ctrl.Result{}, fmt.Errorf("effective ocm config changed")
 	}
 
 	repoSpec := &runtime.Raw{}
@@ -234,10 +253,25 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
+	verifications, err := verification.GetVerifications(ctx, r.Client, component)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
+	}
+
+	cfg, err := configuration.LoadConfigurations(ctx, r.Client, component.GetNamespace(), configs)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
+	}
+
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:    repoSpec,
-		OCMConfigurations: configs,
-		Namespace:         component.GetNamespace(),
+		RepositorySpec:  repoSpec,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
+		Verifications:   verifications,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: types.NamespacedName{
@@ -261,7 +295,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	desc, err := cacheBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)
-	if errors.Is(err, workerpool.ErrResolutionInProgress) {
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
 		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.ResolutionInProgress, err.Error())
 		logger.Info("component version resolution in progress, waiting for event notification",
@@ -269,11 +304,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			"version", version)
 
 		return ctrl.Result{}, nil
-	}
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, component, nil, v1alpha1.EventSeverityError, err.Error())
+	default:
+		if err != nil {
+			status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
+		}
 	}
 
 	digestSpec, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)), signing.LegacyNormalisationAlgo, crypto.SHA256.String())
@@ -281,12 +320,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to generate digest: %w", err)
-	}
-
-	if err := r.verifyComponentVersion(ctx, component, desc); err != nil {
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to verify component version: %w", err)
 	}
 
 	logger.Info("updating status")
@@ -301,11 +334,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		},
 	}
 
-	component.Status.EffectiveOCMConfig = configs
-
 	status.MarkReady(r.EventRecorder, component, "Applied version %s", version)
 
-	return ctrl.Result{RequeueAfter: component.GetRequeueAfter()}, nil
+	return status.RequeueResult(component, component.GetRequeueAfter()), nil
 }
 
 func (r *Reconciler) reconcileDelete(ctx context.Context, component *v1alpha1.Component) error {
@@ -394,128 +425,9 @@ func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, comp
 	case v1alpha1.DowngradePolicyDeny:
 		return "", reconcile.TerminalError(fmt.Errorf("component version cannot be downgraded from version %s "+
 			"to version %s", currentSemver.Original(), latestSemver.Original()))
-	case v1alpha1.DowngradePolicyEnforce:
-		return latestSemver.Original(), nil
 	case v1alpha1.DowngradePolicyAllow:
-		reconciledcv, err := repo.GetComponentVersion(ctx, component.Spec.Component, currentSemver.Original())
-		if err != nil {
-			return "", reconcile.TerminalError(fmt.Errorf("failed to get reconciled component version to check"+
-				" downgradability: %w", err))
-		}
-
-		latestcv, err := repo.GetComponentVersion(ctx, component.Spec.Component, latestSemver.Original())
-		if err != nil {
-			return "", fmt.Errorf("failed to get component version: %w", err)
-		}
-
-		downgradable, err := ocm.IsDowngradable(ctx, reconciledcv, latestcv)
-		if err != nil {
-			return "", reconcile.TerminalError(fmt.Errorf("failed to check downgradability: %w", err))
-		}
-		if !downgradable {
-			// keep requeueing, a greater component version could be published
-			// semver constraint may even describe older versions and non-existing newer versions, so you have to check
-			// for potential newer versions (current is downgradable to: > 1.0.3, latest is: < 1.1.0, but version 1.0.4
-			// does not exist yet, but will be created)
-			return "", fmt.Errorf("component version cannot be downgraded from version %s "+
-				"to version %s", currentSemver.Original(), latestSemver.Original())
-		}
-
 		return latestSemver.Original(), nil
 	default:
 		return "", reconcile.TerminalError(errors.New("unknown downgrade policy: " + string(component.Spec.DowngradePolicy)))
 	}
-}
-
-// verifyComponentVersion verifies the component version signatures.
-func (r *Reconciler) verifyComponentVersion(ctx context.Context, component *v1alpha1.Component, desc *descruntime.Descriptor) error {
-	logger := log.FromContext(ctx)
-
-	verifications := component.GetVerifications()
-	if len(verifications) == 0 {
-		logger.Info("no verifications configured, skipping signature verification")
-
-		return nil
-	}
-
-	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
-		event.New(r.EventRecorder, component, nil, eventv1.EventSeverityInfo, err.Error())
-	}
-
-	logger.Info("verifying component version signatures", "verifications", len(verifications))
-
-	for _, verify := range verifications {
-		var signature *descruntime.Signature
-		for i := range desc.Signatures {
-			if desc.Signatures[i].Name == verify.Signature {
-				signature = &desc.Signatures[i]
-				break
-			}
-		}
-
-		if signature == nil {
-			return fmt.Errorf("signature %q not found in component version", verify.Signature)
-		}
-
-		if err := signing.VerifyDigestMatchesDescriptor(ctx, desc, *signature, slog.New(logr.ToSlogHandler(logger))); err != nil {
-			return fmt.Errorf("digest verification failed for signature %q: %w", verify.Signature, err)
-		}
-
-		cfg := &signingv1alpha1.Config{
-			SignatureAlgorithm: signingv1alpha1.SignatureAlgorithm(signature.Signature.Algorithm),
-		}
-
-		hdlr, err := r.PluginManager.SigningRegistry.GetPlugin(ctx, cfg)
-		if err != nil {
-			return fmt.Errorf("failed to get signing handler for signature %q: %w", verify.Signature, err)
-		}
-
-		credentials, err := r.createCredentials(ctx, verify, signature.Signature.Algorithm, component.GetNamespace())
-		if err != nil {
-			return fmt.Errorf("failed to create credentials for signature %q: %w", verify.Signature, err)
-		}
-
-		if err := hdlr.Verify(ctx, *signature, cfg, credentials); err != nil {
-			return fmt.Errorf("signature verification failed for signature %q: %w", verify.Signature, err)
-		}
-	}
-
-	return nil
-}
-
-// createCredentials generates a map of credentials required for verifying a component version's signature.
-// It supports retrieving the credentials either from a provided value or from a Kubernetes Secret.
-func (r *Reconciler) createCredentials(ctx context.Context, verify v1alpha1.Verification, algo, namespace string) (map[string]string, error) {
-	credentials := make(map[string]string)
-
-	// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
-	//       reliable currently. This will probably change, when typed credentials are supported.
-	var key string
-	switch signingv1alpha1.SignatureAlgorithm(algo) {
-	case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
-		key = "public_key_pem"
-	default:
-		return nil, fmt.Errorf("unsupported signature algorithm: %q", algo)
-	}
-
-	switch {
-	case verify.Value != "":
-		credentials[key] = verify.Value
-	case verify.SecretRef.Name != "":
-		secret := &corev1.Secret{}
-		if err := r.Get(ctx, types.NamespacedName{Name: verify.SecretRef.Name, Namespace: namespace}, secret); err != nil {
-			return nil, fmt.Errorf("failed to get secret %q for signature %q: %w", verify.SecretRef.Name, verify.Signature, err)
-		}
-
-		data, ok := secret.Data[verify.Signature]
-		if !ok {
-			return nil, fmt.Errorf("secret %q does not contain data for signature %q", verify.SecretRef.Name, verify.Signature)
-		}
-
-		credentials[key] = string(data)
-	default:
-		return nil, fmt.Errorf("no provided value or secret reference for verification of signature %q", verify.Signature)
-	}
-
-	return credentials, nil
 }

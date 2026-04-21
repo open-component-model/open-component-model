@@ -12,7 +12,7 @@ import (
 
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/input"
-	v1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	v1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -33,7 +33,7 @@ func TestInputMethodGetResourceCredentialConsumerIdentity(t *testing.T) {
 				},
 				Path: "/path/to/local/chart",
 			},
-			expectError:    true, // Should return ErrLocalHelmInputDoesNotRequireCredentials
+			expectError:    false, // Local inputs return nil, nil — no credentials needed
 			expectIdentity: false,
 		},
 		{
@@ -97,8 +97,54 @@ func TestInputMethodGetResourceCredentialConsumerIdentity(t *testing.T) {
 	}
 }
 
+func TestInputMethodGetResourceCredentialConsumerIdentityOCI(t *testing.T) {
+	inputMethod := &input.InputMethod{}
+
+	t.Run("returns OCIRegistry type for oci:// scheme", func(t *testing.T) {
+		resource := &constructorruntime.Resource{
+			AccessOrInput: constructorruntime.AccessOrInput{
+				Input: &v1.Helm{
+					Type: runtime.Type{
+						Name: v1.Type,
+					},
+					HelmRepository: "oci://ghcr.io/stefanprodan/charts/podinfo:6.9.1",
+				},
+			},
+		}
+
+		identity, err := inputMethod.GetResourceCredentialConsumerIdentity(t.Context(), resource)
+		require.NoError(t, err)
+		require.NotNil(t, identity)
+
+		assert.Equal(t, "OCIRegistry", identity["type"])
+		assert.Equal(t, "oci", identity["scheme"])
+		assert.Equal(t, "ghcr.io", identity["hostname"])
+	})
+
+	t.Run("returns HelmChartRepository type for https:// scheme", func(t *testing.T) {
+		resource := &constructorruntime.Resource{
+			AccessOrInput: constructorruntime.AccessOrInput{
+				Input: &v1.Helm{
+					Type: runtime.Type{
+						Name: v1.Type,
+					},
+					HelmRepository: "https://charts.example.com/stable",
+				},
+			},
+		}
+
+		identity, err := inputMethod.GetResourceCredentialConsumerIdentity(t.Context(), resource)
+		require.NoError(t, err)
+		require.NotNil(t, identity)
+
+		assert.Equal(t, "HelmChartRepository", identity["type"])
+		assert.Equal(t, "https", identity["scheme"])
+		assert.Equal(t, "charts.example.com", identity["hostname"])
+	})
+}
+
 func TestInputMethodProcessResourceLocalChart(t *testing.T) {
-	testDataDir := filepath.Join("testdata", "mychart")
+	testDataDir := filepath.Join("../testdata", "mychart")
 	helmSpec := v1.Helm{
 		Type: runtime.Type{
 			Name: v1.Type,
@@ -268,7 +314,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 func TestInputMethodProcessResourceBothPathAndRepo(t *testing.T) {
 	ctx := context.Background()
 
-	testDataDir := filepath.Join("testdata", "mychart")
+	testDataDir := filepath.Join("../testdata", "mychart")
 
 	helmSpec := v1.Helm{
 		Type: runtime.Type{

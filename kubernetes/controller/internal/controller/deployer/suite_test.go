@@ -29,11 +29,10 @@ import (
 	"sigs.k8s.io/yaml"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	"ocm.software/open-component-model/bindings/go/credentials"
-	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
@@ -52,12 +51,14 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	k8sClient  client.Client
-	k8sManager ctrl.Manager
-	testEnv    *envtest.Environment
-	recorder   record.EventRecorder
-	ctx        context.Context
-	cancel     context.CancelFunc
+	k8sClient     client.Client
+	k8sManager    ctrl.Manager
+	testEnv       *envtest.Environment
+	recorder      record.EventRecorder
+	ctx           context.Context
+	cancel        context.CancelFunc
+	pm            *manager.PluginManager
+	downloadCache *cache.MemoryDigestObjectCache[string, []*unstructured.Unstructured]
 )
 
 func TestControllers(t *testing.T) {
@@ -105,7 +106,6 @@ var _ = BeforeSuite(func() {
 	cfg, err := testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
-	DeferCleanup(testEnv.Stop)
 
 	Expect(v1alpha1.AddToScheme(scheme.Scheme)).Should(Succeed())
 
@@ -116,8 +116,10 @@ var _ = BeforeSuite(func() {
 
 	komega.SetClient(k8sClient)
 
+	gracefulTimeout := 5 * time.Second
 	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme.Scheme,
+		Scheme:                  scheme.Scheme,
+		GracefulShutdownTimeout: &gracefulTimeout,
 		Metrics: metricserver.Options{
 			BindAddress: "0",
 		},
@@ -125,7 +127,6 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 
 	ctx, cancel = context.WithCancel(context.Background())
-	DeferCleanup(cancel)
 
 	events := make(chan string)
 	recorder = &record.FakeRecorder{
@@ -144,15 +145,18 @@ var _ = BeforeSuite(func() {
 		}
 	}()
 
-	pm := manager.NewPluginManager(ctx)
+	pm = manager.NewPluginManager(ctx)
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(repository.Scheme))
 	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
 	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
-	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{credentials.AnyConsumerIdentityType}))
+	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
+		&ocicredentials.OCICredentialRepository{},
+		[]ocmruntime.Type{v1.Type},
+	)).To(Succeed())
 
-	ociResourceRepoPlugin := ocires.NewResourceRepository(inmemory.New(), inmemory.New(), &filesystemv1alpha1.Config{})
+	ociResourceRepoPlugin := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
 	Expect(pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin)).To(Succeed())
 	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(ociResourceRepoPlugin)).To(Succeed())
 
@@ -171,7 +175,11 @@ var _ = BeforeSuite(func() {
 	Expect(k8sManager.Add(workerPool)).To(Succeed())
 
 	resolutionLogger := logf.Log.WithName("resolution")
-	resolver := resolution.NewResolver(k8sClient, &resolutionLogger, workerPool, pm)
+	resolver := resolution.NewResolver(&resolutionLogger, workerPool, pm)
+
+	downloadCache = cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_test_object_cache", 1_000, func(k string, v []*unstructured.Unstructured) {
+		GinkgoLogr.Info("DownloadCache eviction", "key", k, "value", fmt.Sprintf("%d objects", len(v)))
+	})
 
 	Expect((&Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
@@ -179,15 +187,22 @@ var _ = BeforeSuite(func() {
 			Scheme:        testEnv.Scheme,
 			EventRecorder: recorder,
 		},
-		DownloadCache: cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_test_object_cache", 1_000, func(k string, v []*unstructured.Unstructured) {
-			GinkgoLogr.Info("DownloadCache eviction", "key", k, "value", fmt.Sprintf("%d objects", len(v)))
-		}),
-		Resolver:      resolver,
-		PluginManager: pm,
+		DownloadCache:        downloadCache,
+		Resolver:             resolver,
+		PluginManager:        pm,
+		MaxResourceSizeBytes: 2 * 1024 * 1024,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
 
+	mgrDone := make(chan struct{})
 	go func() {
 		defer GinkgoRecover()
-		Expect(k8sManager.Start(ctx)).To(Succeed())
+		defer close(mgrDone)
+		Expect(k8sManager.Start(ctx)).To(Or(Succeed(), MatchError(ContainSubstring("grace period"))))
 	}()
+
+	DeferCleanup(func() {
+		cancel()
+		<-mgrDone
+		Expect(testEnv.Stop()).To(Succeed())
+	})
 })

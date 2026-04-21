@@ -4,7 +4,7 @@
     'config:recommended',
     'config:best-practices',
     'docker:pinDigests',
-    'group:kubernetes',
+    'group:kubernetesMonorepo',
     'group:goOpenapi',
     'helpers:pinGitHubActionDigests',
     'security:openssf-scorecard',
@@ -29,9 +29,8 @@
   separateMultipleMajor: true,
   packageRules: [
     {
-      // TODO: Revert when the release process is in place
       matchFileNames: ['kubernetes/controller/chart/**'],
-      enabled: false,
+      enabled: true,
     },
     {
       matchUpdateTypes: ['minor','patch'],
@@ -199,6 +198,19 @@
         '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
       ],
       versioningTemplate: 'semver',
+    },
+    // Track pinned pip install commands in GitHub Actions workflows (e.g. pip install foo==1.2.3)
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/.github/workflows/**/*.yml',
+        '/.github/workflows/**/*.yaml',
+      ],
+      matchStrings: [
+        'pip install (?<depName>\\S+)==(?<currentValue>\\S+)',
+      ],
+      datasourceTemplate: 'pypi',
+      versioningTemplate: 'pep440',
     },
   ],
   postUpgradeTasks: {

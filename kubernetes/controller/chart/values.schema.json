@@ -30,13 +30,10 @@
                 "cache": {
                     "type": "object",
                     "properties": {
+                        "deployerDownloadMaxResourceSize": {
+                            "type": "string"
+                        },
                         "deployerDownloadSize": {
-                            "type": "integer"
-                        },
-                        "ocmContextSize": {
-                            "type": "integer"
-                        },
-                        "ocmSessionSize": {
                             "type": "integer"
                         }
                     }
@@ -51,14 +48,6 @@
                 },
                 "env": {
                     "type": "array"
-                },
-                "events": {
-                    "type": "object",
-                    "properties": {
-                        "address": {
-                            "type": "string"
-                        }
-                    }
                 },
                 "extraArgs": {
                     "type": "array"
@@ -256,6 +245,17 @@
         "rbacHelpers": {
             "type": "object",
             "properties": {
+                "enable": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "webhook": {
+            "type": "object",
+            "properties": {
+                "certSecret": {
+                    "type": "string"
+                },
                 "enable": {
                     "type": "boolean"
                 }

@@ -22,7 +22,7 @@ WHAT ARE SUBSYSTEMS?
 
   Common subsystems:
     - ocm-repository:          Where component versions are stored (OCI registries, CTF archives)
-    - ocm-resource-repository: Where resources within components are stored
+    - access:                   How resources within components are accessed and retrieved
     - input:                   How content is sourced (from files, directories, etc.) in component constructors
     - credential-repository:   Where credentials are stored and retrieved
     - signing:                 How component versions are signed and verified
@@ -133,6 +133,7 @@ ocm get types [subsystem [type [field-path]]] [flags]
                                            4. The directory of the current executable:
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
+                                           If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Using the option, this configuration file be used instead of the lookup above.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing

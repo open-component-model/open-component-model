@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  pull_request_target:
+  pull_request:
   push:
     branches:
     - main
@@ -10,13 +10,10 @@ env:
   # Check Only Changed Modules
   # If true, only changed modules will be analyzed.
   # If false, all discovered modules will be analyzed.
-  check_only_changed: ${{ github.event_name == 'pull_request_target' }}
-  REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.ref || github.ref }}
-  REPO: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
+  check_only_changed: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
-  checks: read
 
 jobs:
   discover_modules:
@@ -41,11 +38,8 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
       # Detect .env changes to decide whether to run golangci-lint on all or only changed modules
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
         id: env_changes
         with:
           filters: |
@@ -87,7 +81,7 @@ jobs:
             // Log for debugging
             console.log('📦 Detected modules:', modules);
             console.log('🎯 Generated filters:', filters);
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
         id: changes
         with:
           filters: ${{ steps.discover.outputs.filters }}
@@ -182,12 +176,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
+      # Automatically downgraded to read-only for pull requests from forks
+      # https://github.blog/changelog/2021-04-20-github-actions-control-permissions-for-github_token/#setting-permissions-in-the-workflow
+      # but are kept for runs on main or on pull requests on branches in the repo (renovate).
       checks: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
           sparse-checkout: |
             golangci.yml
             .env
@@ -213,23 +208,24 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
+      # Automatically downgraded to read-only for pull requests from forks
+      # https://github.blog/changelog/2021-04-20-github-actions-control-permissions-for-github_token/#setting-permissions-in-the-workflow
+      # but are kept for runs on main or on pull requests on branches in the repo (renovate).
       checks: write
-    # Run for all modules when .env changed, else only for changed modules)
-    if: ${{ fromJSON(needs.discover_modules.outputs.lint_modules_json)[0] != null }}
+    # Run for all modules when .env changed, else only for changed modules
+    if: ${{ needs.discover_modules.outputs.lint_modules_json != '[]' }}
     strategy:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.lint_modules_json) }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
           sparse-checkout: |
             ${{ matrix.module }}
             golangci.yml
             .env
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -262,18 +258,9 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Generate token
-        id: generate_token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2
-        with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -281,8 +268,8 @@ jobs:
         run: docker network create ${{ env.TESTCONTAINER_DOCKER_NETWORK }}
       - name: Run Tests
         env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
-          GITHUB_USER: ocmbot[ocm]
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_USER: ${{ github.actor }}
         run: task ${{ matrix.module }}:test/integration
 
   run_unit_tests:
@@ -301,13 +288,11 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
           sparse-checkout: |
             ${{ matrix.module }}
             reuse.Taskfile.yml
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -321,6 +306,9 @@ jobs:
     timeout-minutes: 360
     permissions:
       actions: read
+      # Automatically downgraded to read-only for pull requests from forks
+      # https://github.blog/changelog/2021-04-20-github-actions-control-permissions-for-github_token/#setting-permissions-in-the-workflow
+      # but are kept for runs on main or on pull requests on branches in the repo (renovate).
       security-events: write
     if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
     strategy:
@@ -331,22 +319,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
           # we have a self reference here because CodeQL does introspection on the step
           sparse-checkout: |
             .github/workflows/ci.yml
             ${{ matrix.project }}
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@f5c2471be782132e47a6e6f9c725e56730d6e9a3 # v3
+        uses: github/codeql-action/init@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4
         with:
           languages: go
           queries: security-extended
       - name: Autobuild
-        uses: github/codeql-action/autobuild@f5c2471be782132e47a6e6f9c725e56730d6e9a3 # v3
+        uses: github/codeql-action/autobuild@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@f5c2471be782132e47a6e6f9c725e56730d6e9a3 # v3
+        uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4
         with:
           category: "/language:go"
 
@@ -355,18 +341,15 @@ jobs:
     name: "Code Generation"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          repository: ${{ env.REPO }}
-          ref: ${{ env.REF }}
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Go (required by some generators)
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.25.7'
+          go-version-file: ${{ github.workspace }}/bindings/go/generator/go.mod
           cache-dependency-path: |
             ${{ github.workspace }}/bindings/go/generator/go.sum
       - name: Run Code Generation

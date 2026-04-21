@@ -12,9 +12,9 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -27,11 +27,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	"ocm.software/open-component-model/bindings/go/credentials"
-	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
+	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -50,7 +50,14 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
-const creator = "Builtin OCI Repository Plugin"
+const (
+	creator = "Builtin OCI Repository Plugin"
+
+	// defaultMaxResourceSize is a generous upper bound for Kubernetes manifests.
+	// etcd's default --max-request-bytes is 1.5 MiB (https://etcd.io/docs/v3.5/dev-guide/limit/),
+	// so a multi-document manifest written to the cluster will always stay well under 2 MiB.
+	defaultMaxResourceSize = "2Mi"
+)
 
 var (
 	scheme   = runtime.NewScheme()
@@ -75,10 +82,8 @@ func main() {
 		probeAddr                 string
 		secureMetrics             bool
 		enableHTTP2               bool
-		eventsAddr                string
 		deployerDownloadCacheSize int
-		ocmContextCacheSize       int
-		ocmSessionCacheSize       int
+		deployerMaxResourceSize   string
 		resourceConcurrency       int
 		resolverWorkerCount       int
 		resolverWorkerQueueLength int
@@ -94,18 +99,15 @@ func main() {
 		"If set the metrics endpoint is served securely")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.StringVar(&eventsAddr, "events-addr", "", "The address of the events receiver.")
 	flag.IntVar(&deployerDownloadCacheSize, "deployer-download-cache-size", 1_000, //nolint:mnd // no magic number
 		"The maximum size of the deployer download object LRU cache.")
-	flag.IntVar(&ocmContextCacheSize, "ocm-context-cache-size", 100, //nolint:mnd // no magic number
-		"The maximum size of the OCM context cache. This is the number of active OCM contexts that can be kept alive.")
-	flag.IntVar(&ocmSessionCacheSize, "ocm-session-cache-size", 100, //nolint:mnd // no magic number
-		"The maximum size of the OCM context cache. This is the number of active OCM sessions that can be kept alive.")
+	flag.StringVar(&deployerMaxResourceSize, "deployer-download-max-resource-size", defaultMaxResourceSize,
+		"Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. \"2Mi\", \"512Ki\"). \"0\" disables the limit.")
 	flag.IntVar(&resourceConcurrency, "resource-controller-concurrency", 4, //nolint:mnd // no magic number
 		"The resource controller concurrency. This is the number of active resource controller workers that can be kept alive.")
 	flag.IntVar(&resolverWorkerCount, "resolver-worker-count", 10, //nolint:mnd // no magic number
 		"This is the number of active resolver workers.")
-	flag.IntVar(&resolverWorkerQueueLength, "resolver-worker-queue-length", 100, //nolint:mnd // no magic number
+	flag.IntVar(&resolverWorkerQueueLength, "resolver-worker-queue-length", 1000, //nolint:mnd // no magic number
 		"The maximum number of work items in the queue for the workers to pick up component versions to resolve from.")
 
 	opts := zap.Options{
@@ -113,6 +115,17 @@ func main() {
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	maxResourceQuantity, err := apiresource.ParseQuantity(deployerMaxResourceSize)
+	if err != nil {
+		setupLog.Error(err, "invalid flag value", "flag", "deployer-download-max-resource-size", "value", deployerMaxResourceSize)
+		os.Exit(1)
+	}
+	maxResourceSizeBytes := maxResourceQuantity.Value()
+	if maxResourceSizeBytes < 0 {
+		setupLog.Error(nil, "invalid flag value", "flag", "deployer-download-max-resource-size", "value", deployerMaxResourceSize, "reason", "must be >= 0")
+		os.Exit(1)
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -187,12 +200,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{credentials.AnyConsumerIdentityType}); err != nil {
+	if err := pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
+		&ocicredentials.OCICredentialRepository{},
+		[]ocmruntime.Type{v1.Type},
+	); err != nil {
 		setupLog.Error(err, "failed to register internal credential repository plugin")
 		os.Exit(1)
 	}
 
-	ociResourceRepoPlugin := ocires.NewResourceRepository(inmemory.New(), inmemory.New(), &filesystemv1alpha1.Config{}, ocires.WithUserAgent(creator))
+	ociResourceRepoPlugin := ocires.NewResourceRepository(&filesystemv1alpha1.Config{}, ocires.WithUserAgent(creator))
 	if err := pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin); err != nil {
 		setupLog.Error(err, "failed to register internal resource repository plugin")
 		os.Exit(1)
@@ -200,6 +216,11 @@ func main() {
 
 	if err := pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(ociResourceRepoPlugin); err != nil {
 		setupLog.Error(err, "failed to register internal resource repository plugin")
+		os.Exit(1)
+	}
+
+	if err := pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(helmdigest.NewDigestProcessor("")); err != nil {
+		setupLog.Error(err, "failed to register helm digest processor plugin")
 		os.Exit(1)
 	}
 
@@ -227,13 +248,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	var eventsRecorder *events.Recorder
-	if eventsRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, "ocm-k8s-toolkit"); err != nil {
-		setupLog.Error(err, "unable to create event recorder")
-		os.Exit(1)
-	}
+	// TODO: migrate to mgr.GetEventRecorder() once BaseReconciler uses events.EventRecorder
+	eventsRecorder := mgr.GetEventRecorderFor("ocm-k8s-toolkit") //nolint:staticcheck,nolintlint
 
-	resolver := resolution.NewResolver(mgr.GetClient(), &setupLog, workerPool, pm)
+	resolver := resolution.NewResolver(&setupLog, workerPool, pm)
 	if err = (&repository.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
 			Client:        mgr.GetClient(),
@@ -280,10 +298,27 @@ func main() {
 		DownloadCache: cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_download_cache", deployerDownloadCacheSize, func(k string, v []*unstructured.Unstructured) {
 			setupLog.Info("evicting deployment objects from cache", "key", k, "count", len(v))
 		}),
-		Resolver:      resolver,
-		PluginManager: pm,
+		Resolver:             resolver,
+		PluginManager:        pm,
+		MaxResourceSizeBytes: maxResourceSizeBytes,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Deployer")
+		os.Exit(1)
+	}
+	if err = (&v1alpha1.Component{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Component")
+		os.Exit(1)
+	}
+	if err = (&v1alpha1.Deployer{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Deployer")
+		os.Exit(1)
+	}
+	if err = (&v1alpha1.Repository{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Repository")
+		os.Exit(1)
+	}
+	if err = (&v1alpha1.Resource{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Resource")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

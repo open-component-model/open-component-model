@@ -40,6 +40,7 @@ ocm [sub-command] [flags]
                                            4. The directory of the current executable:
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
+                                           If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Using the option, this configuration file be used instead of the lookup above.
   -h, --help                               help for ocm
       --logformat enum                     set the log output format that is used to print individual logs

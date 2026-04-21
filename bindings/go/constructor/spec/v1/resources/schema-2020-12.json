@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Open Component Model Component Constructor Schema",
+  "title": "OCM Component Constructor",
+  "description": "Defines the input format for building OCM component versions. Accepts either a multi-component wrapper or a single inline component definition.",
   "$defs": {
     "meta": {
       "type": "object",
@@ -129,7 +130,10 @@
     },
     "commonSourceProperties": {
       "type": "object",
-      "required": ["name", "version", "type"],
+      "required": [
+        "name",
+        "type"
+      ],
       "properties": {
         "name": {
           "description": "Name of the source",
@@ -393,6 +397,7 @@
     },
     "component": {
       "type": "object",
+      "additionalProperties": false,
       "description": "A component containing sources, resources, and references to other components",
       "required": [
         "name",
@@ -536,6 +541,8 @@
   },
   "oneOf": [
     {
+      "title": "Multi-Component",
+      "description": "A wrapper object with a components list, allowing multiple components to be defined in a single constructor file.",
       "type": "object",
       "required": [
         "components"
@@ -551,6 +558,8 @@
       }
     },
     {
+      "title": "Single Component",
+      "description": "A single component defined directly at the top level with name, version, provider, and its associated resources, sources, and references.",
       "$ref": "#/$defs/component"
     }
   ]

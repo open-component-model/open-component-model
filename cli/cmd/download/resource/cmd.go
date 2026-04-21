@@ -18,11 +18,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci/compref"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 	"ocm.software/open-component-model/cli/internal/transformers"
 )
@@ -191,14 +191,24 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 
 	switch extractionPolicy {
 	case ExtractionPolicyAuto:
-		extractedFS, err := extractFSFromBlob(data)
-		if errors.Is(err, ErrCannotExtractFS) {
-			return shared.SaveBlobToFile(data, finalOutputPath)
-		}
+		// decompress in any case - DecompressedBlob lazily decompresses or returns the original blob based on the media type
+		decompressedOrOriginal, err := compression.Decompress(data)
 		if err != nil {
-			return err
+			return fmt.Errorf("decompressing resource failed: %w", err)
 		}
-		return os.CopyFS(finalOutputPath, extractedFS)
+
+		// try extracting FS
+		extractedFS, err := extractFSFromBlob(decompressedOrOriginal)
+		if err != nil && !errors.Is(err, ErrCannotExtractFS) {
+			return fmt.Errorf("extracting resource as filesystem failed: %w", err)
+		}
+
+		if extractedFS != nil {
+			return os.CopyFS(finalOutputPath, extractedFS)
+		}
+
+		// if we cannot extract a fs, since it's not supported, return the decompressed blob
+		return shared.SaveBlobToFile(decompressedOrOriginal, finalOutputPath)
 	case ExtractionPolicyDisable:
 		fallthrough
 	default:
@@ -209,14 +219,10 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 var ErrCannotExtractFS = errors.New("cannot extract resource as filesystem")
 
 func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, err error) {
-	decompressedOrOriginal, err := compression.Decompress(b)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decompress resource: %w", err)
-	}
-	mediaTypeAware, ok := decompressedOrOriginal.(blob.MediaTypeAware)
+	mediaTypeAware, ok := b.(blob.MediaTypeAware)
 	if !ok {
-		// if were not media type aware, its unsafe to try to extract it, avoid
-		return nil, ErrCannotExtractFS
+		// if were not media type aware, it's unsafe to try to extract it, avoid
+		return nil, fmt.Errorf("blob is not media type aware: %w", ErrCannotExtractFS)
 	}
 
 	mediaType, ok := mediaTypeAware.MediaType()
@@ -228,7 +234,7 @@ func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, err error) {
 	//  For now we just support tar.
 	switch {
 	case isTar(mediaType):
-		data, err := decompressedOrOriginal.ReadCloser()
+		data, err := b.ReadCloser()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read resource: %w", err)
 		}
@@ -236,7 +242,8 @@ func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, err error) {
 			err = errors.Join(err, data.Close())
 		}()
 
-		return tarfs.New(data)
+		f, err := tarfs.New(data)
+		return f, err
 	default:
 		return nil, ErrCannotExtractFS
 	}

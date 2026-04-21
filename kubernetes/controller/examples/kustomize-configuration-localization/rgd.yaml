@@ -24,7 +24,6 @@ spec:
             byReference:
               resource:
                 name: kustomize-resource
-          interval: 10m
     - id: resourceImage
       template:
         apiVersion: delivery.ocm.software/v1alpha1
@@ -39,10 +38,9 @@ spec:
               resource:
                 name: image-resource
           additionalStatusFields:
-            registry: resource.access.imageReference.toOCI().registry
-            repository: resource.access.imageReference.toOCI().repository
-            tag: resource.access.imageReference.toOCI().tag
-          interval: 10m
+            registry: resource.access.toOCI().registry
+            repository: resource.access.toOCI().repository
+            tag: resource.access.toOCI().tag
     - id: gitrepository
       template:
         apiVersion: source.toolkit.fluxcd.io/v1

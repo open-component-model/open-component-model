@@ -41,24 +41,35 @@ vars:
 
 tasks:
   default:
+    desc: "Build the project (default task)"
     cmds: [ task: build ]
 
   # Development
+  # TODO: Rework CRD generation pipeline to eliminate kustomize dependency.
+  # Use a post-processing script (like ESO's hack/helm.generate.sh) to inject
+  # Helm template wrappers (crd.enable, webhook.enable, cert-manager annotations)
+  # into generated CRDs. This would let us drop config/ as a checked-in directory
+  # and remove the helm/sync-manifests kubebuilder plugin step.
   manifests:
+    desc: "Generate CRD manifests, RBAC, and webhook configurations"
     deps: [controller-gen]
     cmd: '"{{.CONTROLLER_GEN}}" rbac:roleName=manager-role crd webhook paths="{{ .TASKFILE_DIR }}/..." output:crd:artifacts:config=config/crd/bases'
 
   generate:
+    desc: "Generate Go deepcopy and runtime.Object implementations"
     deps: [controller-gen]
     cmd: '"{{.CONTROLLER_GEN}}" object paths="{{ .TASKFILE_DIR }}/..."'
 
   fmt:
+    desc: "Format Go source files"
     cmd: 'go fmt "{{ .TASKFILE_DIR }}/..."'
 
   vet:
+    desc: "Run Go vet to check for common issues"
     cmd: 'go vet "{{ .TASKFILE_DIR }}/..."'
 
   test:
+    desc: "Run unit and integration tests with coverage"
     deps: [manifests, generate, envtest]
     env:
       ENVTEST_K8S_VERSION: '{{.ENVTEST_K8S_VERSION}}'
@@ -70,6 +81,7 @@ tasks:
 
 
   test/e2e/setup/local:
+    desc: "Set up a local Kind cluster for E2E tests"
     deps:
       # We depend on a locally built image, so we need to load that into the local machine.
       - task: docker-build
@@ -80,6 +92,7 @@ tasks:
       - 'kind load docker-image {{.CONTROLLER_IMG}}'
 
   test/e2e:
+    desc: "Run end-to-end tests against a running cluster"
     dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
     cmds:
       - task: helm/install
@@ -87,10 +100,12 @@ tasks:
 
   # Build
   build:
+    desc: "Build the controller manager binary"
     deps: [manifests, generate, fmt, vet]
     cmd: 'go build -o bin/manager {{.TASKFILE_DIR}}/cmd/main.go'
 
   run:
+    desc: "Run the controller manager locally"
     deps: [manifests, generate, fmt, vet]
     cmd: 'go run {{.TASKFILE_DIR}}/cmd/main.go'
 
@@ -99,6 +114,7 @@ tasks:
   # We force "linux" OS because all Docker base images are Linux,
   # and derive the arch dynamically from the host Go toolchain.
   docker-build:
+    desc: "Build the Docker image for the host architecture"
     cmd:
       task: docker-build/multi-arch
       vars:
@@ -110,6 +126,7 @@ tasks:
   # In this setup it is used only with a single platform (the local arch),
   # but it still supports --push / --load flags if desired.
   docker-build/multi-arch:
+    desc: "Build a multi-architecture Docker image"
     requires:
       vars: [ PLATFORMS, CONTROLLER_IMG ]
     cmd: |
@@ -133,15 +150,29 @@ tasks:
         args+=(--push)
       fi
 
+      # If OCI_OUTPUT is set, write OCI layout tar to that path
+      if [ -n "{{.OCI_OUTPUT | default ""}}" ]; then
+        mkdir -p "$(dirname '{{.OCI_OUTPUT}}')"
+        args+=(--output "type=oci,dest={{.OCI_OUTPUT}},oci-mediatypes=true")
+      fi
+
       # Run docker (or podman) buildx with the constructed args
       {{.CONTAINER_TOOL}} buildx build "${args[@]}"
 
+  oci/extract:
+    desc: "Extract an OCI layout tar archive into a directory"
+    requires:
+      vars: [TAR_PATH, OUTPUT_DIR]
+    cmds:
+      - mkdir -p "{{.OUTPUT_DIR}}"
+      - tar -xf "{{.TAR_PATH}}" -C "{{.OUTPUT_DIR}}"
+
   build-installer:
+    desc: "Build the Kustomize-based installer manifest"
     deps: [manifests, generate, kustomize]
     cmds:
       - mkdir -p dist
       - '{{.KUSTOMIZE}} build config/default > dist/install.yaml'
-
 
   # Helm chart tasks
   helm/sync-manifests:
@@ -182,13 +213,22 @@ tasks:
           exit 1
         fi
 
+
   helm/package:
     desc: "Package the Helm chart with the specified version"
     deps: [yq]
     cmds:
       - mkdir -p dist
-      - '{{ if .VERSION }}{{.YQ}} -i ".manager.image.tag = \"{{.VERSION}}\"" chart/values.yaml{{end}}'
+      - '{{ if .IMAGE_REPOSITORY }}{{.YQ}} -i ".manager.image.repository = \"{{.IMAGE_REPOSITORY}}\"" chart/values.yaml{{end}}'
+      - '{{ if .VERSION }}{{.YQ}} -i ".manager.image.tag = \"{{.VERSION}}{{ if .IMAGE_DIGEST }}@{{.IMAGE_DIGEST}}{{ end }}\"" chart/values.yaml{{end}}'
       - helm package chart/ --destination dist/ {{if .VERSION}}--version {{.VERSION}}{{end}} {{if .APP_VERSION}}--app-version {{.APP_VERSION}}{{end}}
+
+  helm/push:
+    desc: "Push packaged Helm chart to OCI registry"
+    requires:
+      vars: [VERSION, REGISTRY]
+    cmds:
+      - helm push dist/chart-{{.VERSION}}.tgz oci://{{.REGISTRY}}
 
   helm/template:
     desc: "Render Helm chart templates with test values"
@@ -216,7 +256,11 @@ tasks:
     desc: "Generate Helm chart documentation"
     deps: [helm-docs]
     dir: chart
-    cmd: '"{{.HELM_DOCS}}"'
+    cmds:
+      - '"{{.HELM_DOCS}}"'
+      # Strip SHA digests from README.md for cleaner documentation
+      # The digest is kept in values.yaml for security, but removed from docs for readability
+      - sed -i'' -e 's/@sha256:[a-f0-9]\{64\}//g' README.md
     sources:
       - chart/values.yaml
       - chart/README.md
@@ -225,30 +269,35 @@ tasks:
 
   # Tool installers (all via helper)
   kustomize:
+    desc: "Install kustomize"
     deps:
       - task: go-install-tool
         vars: { TOOL_PATH: '{{.KUSTOMIZE}}', PACKAGE: sigs.k8s.io/kustomize/kustomize/v5, VERSION: '{{.KUSTOMIZE_VERSION}}' }
     generates: [ '{{.KUSTOMIZE}}' ]
 
   controller-gen:
+    desc: "Install controller-gen"
     deps:
       - task: go-install-tool
         vars: { TOOL_PATH: '{{.CONTROLLER_GEN}}', PACKAGE: sigs.k8s.io/controller-tools/cmd/controller-gen, VERSION: '{{.CONTROLLER_TOOLS_VERSION}}' }
     generates: [ '{{.CONTROLLER_GEN}}' ]
 
   envtest:
+    desc: "Install setup-envtest"
     deps:
       - task: go-install-tool
         vars: { TOOL_PATH: '{{.ENVTEST}}', PACKAGE: sigs.k8s.io/controller-runtime/tools/setup-envtest, VERSION: '{{.ENVTEST_VERSION}}' }
     generates: [ '{{.ENVTEST}}' ]
 
   kubebuilder:
+    desc: "Install kubebuilder"
     deps:
       - task: go-install-tool
         vars: { TOOL_PATH: '{{.KUBEBUILDER}}', PACKAGE: sigs.k8s.io/kubebuilder/v4, VERSION: '{{.KUBEBUILDER_VERSION}}' }
     generates: [ '{{.KUBEBUILDER}}' ]
 
   yq:
+    desc: "Install yq"
     deps:
       - task: go-install-tool
         vars: { TOOL_PATH: '{{.YQ}}', PACKAGE: github.com/mikefarah/yq/v4, VERSION: '{{.YQ_VERSION}}' }
@@ -279,6 +328,7 @@ tasks:
       - '{{.TOOL_PATH}}'
 
   helm-docs:
+    desc: "Install helm-docs"
     deps:
       - task: go-install-tool
         vars: { TOOL_PATH: '{{.HELM_DOCS}}', PACKAGE: github.com/norwoodj/helm-docs/cmd/helm-docs, VERSION: '{{.HELM_DOCS_VERSION}}' }
@@ -290,7 +340,7 @@ tasks:
     desc: "Install helm-values-schema-json plugin if not present"
     cmd: |
       if ! helm plugin list | grep -q "schema"; then
-        helm plugin install https://github.com/losisin/helm-values-schema-json
+        helm plugin install https://github.com/losisin/helm-values-schema-json.git --verify=false
       fi
     status:
       - helm plugin list | grep -q "schema"

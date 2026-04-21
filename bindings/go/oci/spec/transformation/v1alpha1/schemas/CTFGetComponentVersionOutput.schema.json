@@ -18,8 +18,9 @@
     "ocm.software.open-component-model.bindings.go.descriptor.v2.Descriptor": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "ocm.software/open-component-model/bindings/go/descriptor/v2/resources/schema-2020-12.json",
+      "title": "OCM Component Descriptor v2",
       "type": "object",
-      "description": "Open Component Model v2 schema",
+      "description": "Describes a versioned set of delivery artifacts (resources, sources, and references) that form an OCM component version.",
       "properties": {
         "component": {
           "$ref": "#/$defs/component",
@@ -500,7 +501,8 @@
           },
           "required": [
             "type"
-          ]
+          ],
+          "additionalProperties": true
         },
         "resourceDefinition": {
           "type": "object",
@@ -618,6 +620,10 @@
             "algorithm": {
               "$ref": "#/$defs/nonEmptyString",
               "description": "Algorithm used for signing"
+            },
+            "issuer": {
+              "$ref": "#/$defs/nonEmptyString",
+              "description": "Optionally identifies the signer of the signature. Values can be an RFC2253 Distinguished Name (DN) string, or a free-form string identifier for the signing authority."
             },
             "mediaType": {
               "$ref": "#/$defs/nonEmptyString",

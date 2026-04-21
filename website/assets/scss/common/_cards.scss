@@ -1,0 +1,488 @@
+/*
+ * OCM Unified Card System
+ * 
+ * A comprehensive card component system that provides consistent styling
+ * across all card-based layouts (landing page and section pages).
+ * 
+ * Features:
+ * - Radial gradient glow effect on hover (follows mouse)
+ * - Three layout variants: action, benefit, vertical
+ * - Shared base properties for consistency
+ * - Responsive behavior
+ * - Dark mode support
+ */
+
+/* Card variables are defined in _variables-custom.scss (:root block) */
+
+/* ============================================
+   Base Card Component
+   ============================================ */
+.ocm-card {
+  display: block;
+  text-decoration: none;
+  border: 1px solid var(--ocm-card-border);
+  border-radius: var(--ocm-card-border-radius);
+  background: var(--ocm-card-bg);
+  transition: all 0.25s ease;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  color: inherit;
+  
+  /* Radial gradient glow effect */
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: var(--ocm-card-border-radius);
+    background: radial-gradient(
+      600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      var(--ocm-card-glow-color),
+      transparent 40%
+    );
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    z-index: 1;
+  }
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--ocm-card-shadow-hover);
+    border-color: var(--lp-c-brand-1);
+    text-decoration: none;
+    
+    &::before {
+      opacity: 1;
+    }
+  }
+  
+  &:active {
+    transform: translateY(0);
+    box-shadow: none;
+  }
+}
+
+/* Dark mode support (Bootstrap theme attribute) */
+[data-bs-theme="dark"] .ocm-card {
+  background: var(--ocm-card-bg-dark);
+  
+  &:hover {
+    background: var(--lp-c-bg-soft);
+  }
+}
+
+/* Landing page: use lighter neutral surfaces in light theme (avoid blue tint) */
+[data-bs-theme="light"] .lp-home .ocm-card {
+  background: var(--lp-c-bg-soft);
+}
+[data-bs-theme="light"] .lp-home .ocm-card:hover {
+  background: var(--lp-c-bg-elv);
+}
+
+/* ============================================
+   Card Grid Container
+   ============================================ */
+.ocm-card-grid {
+  display: grid;
+  gap: 16px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Remove card border for action/benefit variants to avoid perceived icon frame */
+.ocm-card-grid--action .ocm-card,
+.ocm-card--benefit {
+  border-color: transparent;
+}
+.ocm-card-grid--action .ocm-card:hover,
+.ocm-card--benefit:hover {
+  border-color: transparent;
+}
+
+/* ============================================
+   Card Icon (SVG/Image) shared styles
+   ============================================ */
+.ocm-card-icon {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 56px;
+  height: 56px;
+  line-height: 1;
+  flex-shrink: 0;
+  color: var(--ocm-card-icon-color, var(--brand-cyan));
+}
+.ocm-card-icon img,
+.ocm-card-icon svg {
+  width: 56px;
+  height: 56px;
+  display: block;
+}
+.ocm-card-icon svg {
+  /* rely on Tabler's built-in outline attributes; just ensure sizing and color */
+  fill: none;
+  /* unify stroke styling across all icons regardless of inline attributes */
+  stroke: currentColor;
+  stroke-width: var(--ocm-card-icon-stroke-width, 1);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* Explicitly suppress Tabler's guide path to avoid any perceived "frame" */
+.ocm-card-icon svg path[d="M0 0h24v24H0z"] {
+  stroke: none !important;
+  fill: none !important;
+}
+
+/* ============================================
+   Layout Variant: Action Cards
+   (Used for "How OCM Works" section)
+   ============================================ */
+.ocm-card--action {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.ocm-card-grid--action {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.ocm-card--action .ocm-card-content,
+.ocm-card-grid--action .ocm-card .ocm-card-content {
+  padding: 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  z-index: 2;
+}
+
+.ocm-card--action .ocm-card-header,
+.ocm-card-grid--action .ocm-card .ocm-card-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ocm-card--action .ocm-card-emoji,
+.ocm-card-grid--action .ocm-card .ocm-card-emoji {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.ocm-card--action .ocm-card-title,
+.ocm-card-grid--action .ocm-card .ocm-card-title {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--ocm-card-title-color);
+  margin: 0;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.ocm-card--action .ocm-card-desc,
+.ocm-card-grid--action .ocm-card .ocm-card-desc {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ocm-card-desc-color);
+  margin: 0;
+  text-align: left;
+}
+
+/* ============================================
+   Layout Variant: Benefit Cards
+   (Used for "Why Choose OCM" section)
+   ============================================ */
+.ocm-card-grid--benefit {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.ocm-card--benefit .ocm-card-content {
+  padding: 16px 28px 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 2;
+}
+
+.ocm-card--benefit .ocm-card-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ocm-card--benefit .ocm-card-emoji {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.ocm-card--benefit .ocm-card-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--ocm-card-title-color);
+  margin: 0;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.ocm-card--benefit .ocm-card-desc {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ocm-card-desc-color);
+  margin: 0;
+  text-align: left;
+}
+
+/* ============================================
+   Layout Variant: Vertical (Section Pages)
+   ============================================ */
+.ocm-card-grid--vertical {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.6rem;
+  margin: 2rem 0;
+  
+  /* 3 columns at 900px and above */
+  @media (min-width: 900px) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  /* 4 columns at 1400px and above */
+  @media (min-width: 1400px) {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.ocm-card--vertical {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 1.4rem 1.1rem 1.2rem;
+  min-height: 210px;
+  height: 270px;
+  max-height: 350px;
+}
+
+.ocm-card--vertical .ocm-card-icon {
+  font-size: 2.2rem;
+  margin-bottom: 0.8rem;
+  display: block;
+  line-height: 1;
+  position: relative;
+  z-index: 2;
+}
+
+.ocm-card--vertical .ocm-card-title {
+  font-weight: 700;
+  font-size: 1.14rem;
+  color: var(--ocm-card-title-color);
+  margin: 0.4rem 0 0.2rem 0;
+  position: relative;
+  z-index: 2;
+}
+
+.ocm-card--vertical .ocm-card-desc {
+  font-size: 1rem;
+  color: var(--ocm-card-desc-color);
+  margin-top: 0.1rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  position: relative;
+  z-index: 2;
+}
+
+.ocm-card--vertical:hover {
+  transform: translateY(-4px) scale(1.02);
+}
+
+/* ============================================
+   Section Container Styles
+   ============================================ */
+.section-container {
+  margin: 3rem auto 1.5rem;
+  max-width: 1152px;
+}
+
+.section-title {
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--lp-c-text-1);
+  text-align: center;
+  margin: 0;
+  width: 100%;
+}
+
+.section-title.section-title--left {
+  text-align: left;
+  font-weight: 700;
+  font-family: 'Inter var', 'Inter', system-ui, sans-serif;
+  font-size: 20px;
+  line-height: 30px;
+}
+
+@media (min-width: 768px) {
+  .section-title.section-title--left {
+    font-size: 24px;
+    line-height: 36px;
+  }
+}
+
+/* subtle divider between card sections; adjust spacing via margin */
+.section-divider {
+  border: 0;
+  border-top: 1px solid var(--lp-c-divider);
+  height: 0;
+  max-width: 1152px;
+  margin: 40px auto;
+  opacity: 0.6;
+}
+
+/* ============================================
+   Responsive Behavior
+   ============================================ */
+
+/* Large screens - switch to single row layout (1100px+) */
+@media (min-width: 1100px) {
+  .ocm-card-grid--action {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .ocm-card-grid--benefit {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* 5 columns for vertical grids on very wide screens (1900px+) */
+@media (min-width: 1900px) {
+  .ocm-card-grid--vertical {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+/* Small screens (481px - 767px) */
+@media (min-width: 481px) and (max-width: 767px) {
+  .ocm-card-grid--action {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  
+  .ocm-card-grid--benefit {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+  
+  .ocm-card--action .ocm-card-content {
+    padding: 16px;
+  }
+  
+  .ocm-card--action .ocm-card-emoji {
+    font-size: 20px;
+    width: 28px;
+    height: 28px;
+  }
+  
+  .ocm-card--action .ocm-card-title {
+    font-size: 16px;
+  }
+  
+  .ocm-card--action .ocm-card-desc {
+    font-size: 13px;
+  }
+  
+  .ocm-card--vertical {
+    padding: 0.8rem 0.5rem;
+    min-height: 120px;
+    height: 180px;
+  }
+}
+
+/* Mobile screens (up to 480px) */
+@media (max-width: 480px) {
+  .ocm-card-grid--action,
+  .ocm-card-grid--benefit {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  
+  .ocm-card-grid--vertical {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+  
+  .ocm-card--vertical {
+    height: auto;
+    min-height: 110px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ocm-card-icon,
+  .ocm-card-icon img,
+  .ocm-card-icon svg {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* ============================================
+   Person Card (used on Governance page)
+   ============================================ */
+.person-card {
+  display: inline-block;
+  width: 160px;
+
+  .person-card-inner {
+    height: 100%;
+    min-height: 160px;
+    justify-content: center;
+  }
+}
+
+.person-card-avatar {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border: 2px solid var(--ocm-card-border);
+}
+
+.person-card-name {
+  color: var(--ocm-card-title-color);
+  font-size: 0.9rem;
+}
+
+.person-card-role {
+  color: var(--ocm-card-desc-color);
+  font-size: 0.8rem;
+}
+
+.person-card-company {
+  color: var(--ocm-card-desc-color);
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.person-section-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1.5rem;
+  align-items: start;
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
+}

@@ -8,15 +8,16 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
 func BuildGraphDefinition(
@@ -33,11 +34,11 @@ func BuildGraphDefinition(
 
 	disc := &discoverer{
 		recursive:         o.Recursive,
-		discoveredDigests: make(map[string]descriptor.Digest),
+		discoveredDigests: make(map[string]descruntime.Digest),
 	}
 	res := &resolver{
 		repoResolver: repoResolver,
-		expectedDigest: func(id runtime.Identity) *descriptor.Digest {
+		expectedDigest: func(id runtime.Identity) *descruntime.Digest {
 			disc.mu.Lock()
 			defer disc.mu.Unlock()
 			if !disc.recursive {
@@ -51,7 +52,7 @@ func BuildGraphDefinition(
 		},
 	}
 
-	root := fromSpec.String()
+	root := fromSpec.Component + ":" + fromSpec.Version
 
 	dr := dagsync.NewGraphDiscoverer(&dagsync.GraphDiscovererOptions[string, *discoveryValue]{
 		Roots:      []string{root},
@@ -85,11 +86,15 @@ func BuildGraphDefinition(
 func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.DirectedAcyclicGraph[string], toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, copyMode CopyMode, uploadType UploadType) error {
 	for _, v := range d.Vertices {
 		val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
-		ref := val.Ref
+		component := val.Descriptor.Component.Name
+		version := val.Descriptor.Component.Version
 
-		id := identityToTransformationID(ref.Identity())
+		id := identityToTransformationID(runtime.Identity{
+			descruntime.IdentityAttributeName:    component,
+			descruntime.IdentityAttributeVersion: version,
+		})
 
-		v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), val.Descriptor)
+		v2desc, err := descruntime.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), val.Descriptor)
 		if err != nil {
 			return fmt.Errorf("cannot convert to v2: %w", err)
 		}
@@ -108,8 +113,19 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 			}
 
 			if copyMode == CopyModeLocalBlobResources && !descriptorv2.IsLocalBlob(access) {
-				slog.Info("Skipping copy of resource since its access type is not a local blob. Only resources with local blob access are copied when CopyModeLocalBlobResources is set.",
-					"component", ref.Component, "version", ref.Version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
+				logLevel := slog.LevelInfo
+				if uploadType == UploadAsOciArtifact {
+					// check if the user wants to upload as ociArtifact
+					// if sure, make sure they see that copy-resources is missing
+					logLevel = slog.LevelWarn
+				}
+				slog.Log(ctx, logLevel,
+					"Skipping copy of resource since its access type is not a local blob. Only resources with local blob access are copied when CopyModeLocalBlobResources is set.",
+					"component", component,
+					"version", version,
+					"resource", resource.ToIdentity().String(),
+					"accessType", resource.Access.Type.String(),
+					"copyMode", copyMode)
 				continue
 			}
 
@@ -128,7 +144,7 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 						}
 					}
 				}
-				if err := processLocalBlob(resource, acc, id, ref, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact); err != nil {
+				if err := processLocalBlob(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact); err != nil {
 					return fmt.Errorf("failed processing local blob resource: %w", err)
 				}
 			case *ociv1.OCIImage:
@@ -138,14 +154,25 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 						uploadAsOCIArtifact = true
 					}
 				}
-				err := processOCIArtifact(resource, id, ref, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact)
+				err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact)
 				if err != nil {
 					return fmt.Errorf("cannot process OCI artifact resource: %w", err)
+				}
+			case *helmv1.Helm:
+				uploadAsOCIArtifact := false
+				if _, isOCITarget := toSpec.(*oci.Repository); isOCITarget {
+					if uploadType == UploadAsOciArtifact {
+						uploadAsOCIArtifact = true
+					}
+				}
+				err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsOCIArtifact)
+				if err != nil {
+					return fmt.Errorf("cannot process Helm Chart resource: %w", err)
 				}
 			default:
 				// No transformation configured for resource with access types not listed above
 				slog.Info("Unsupported resource access type, skipping resource. Only local blob and OCI artifact resources are supported for transformation.",
-					"component", ref.Component, "version", ref.Version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
+					"component", component, "version", version, "resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 			}
 		}
 
@@ -220,9 +247,14 @@ func fillGraphDefinitionWithPrefetchedComponents(ctx context.Context, d *dag.Dir
 			descriptorSpec = fmt.Sprintf("${environment.%s}", id)
 		}
 
+		addType, err := ChooseAddType(toSpec)
+		if err != nil {
+			return fmt.Errorf("choosing add type for target repository: %w", err)
+		}
+
 		upload := transformv1alpha1.GenericTransformation{
 			TransformationMeta: meta.TransformationMeta{
-				Type: ChooseAddType(toSpec),
+				Type: addType,
 				ID:   id + "Upload",
 			},
 			Spec: &runtime.Unstructured{Data: map[string]any{

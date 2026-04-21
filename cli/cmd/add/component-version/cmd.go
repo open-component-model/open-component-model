@@ -23,6 +23,7 @@ import (
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -35,7 +36,6 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/file"
 	"ocm.software/open-component-model/cli/internal/flags/log"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/render"
 	"ocm.software/open-component-model/cli/internal/render/graph/list"
 	"ocm.software/open-component-model/cli/internal/render/graph/tree"
@@ -207,8 +207,7 @@ add component-version --%[1]s ./archive --%[2]s %[3]s.yaml
 	enum.Var(cmd.Flags(), FlagExternalComponentVersionCopyPolicy, ExternalComponentVersionCopyPolicies(), "policy to apply when a component reference to a component version outside of the constructor or target repository is encountered")
 	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatTree.String()}, "output format of the component descriptors")
-	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `display mode can be used in combination with --recursive
-  static: print the output once the complete component graph is discovered
+	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `static: print the output once the complete component graph is discovered
   live (experimental): continuously updates the output to represent the current construction state of the component graph`)
 
 	return cmd
@@ -314,7 +313,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	}
 
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
-	ref, err := compref.ParseRepository(repositoryRef, compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite))
+	ref, err := compref.ParseRepository(repositoryRef, compref.WithCTFAccessMode(ctfv1.AccessModeCreate+"|"+ctfv1.AccessModeReadWrite))
 	if err != nil {
 		return fmt.Errorf("parsing repository reference %q failed: %w", repositoryRef, err)
 	}
@@ -375,12 +374,12 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 			return nil, fmt.Errorf("getting base logger failed: %w", err)
 		}
 
-		logger.Debug("setting access mode for CTF repository", "path", ctfRepo.FilePath, "ref", repositoryRef)
-
 		var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
 		if _, err := os.Stat(ctfRepo.FilePath); os.IsNotExist(err) {
 			accessMode += "|" + ctfv1.AccessModeCreate
 		}
+
+		logger.Debug("setting access mode for CTF repository", "path", ctfRepo.FilePath, "ref", repositoryRef, "mode", accessMode)
 		ctfRepo.AccessMode = accessMode
 	}
 
@@ -490,7 +489,7 @@ func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *con
 			}
 		}
 	} else {
-		slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", prov.targetRepoSpec, "error", err)
+		slog.DebugContext(ctx, "could not get credential consumer identity for component version repository", "repository", prov.targetRepoSpec, "error", err)
 	}
 
 	return prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)

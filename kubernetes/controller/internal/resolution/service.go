@@ -6,16 +6,17 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/utils/lru"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
+	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 // ErrResolutionInProgress is returned when a component version is being resolved in the background.
@@ -23,9 +24,8 @@ var ErrResolutionInProgress = workerpool.ErrResolutionInProgress
 
 // NewResolver creates a new component version resolver.
 // The returned worker pool must be started separately by adding it to the manager.
-func NewResolver(client client.Reader, logger *logr.Logger, workerPool *workerpool.WorkerPool, pluginManager *manager.PluginManager) *Resolver {
+func NewResolver(logger *logr.Logger, workerPool *workerpool.WorkerPool, pluginManager *manager.PluginManager) *Resolver {
 	resolver := &Resolver{
-		client:        client,
 		logger:        logger,
 		workerPool:    workerPool,
 		pluginManager: pluginManager,
@@ -43,7 +43,6 @@ func (r *Resolver) WorkerPool() *workerpool.WorkerPool {
 // Resolver provides implementation for component version resolution using a worker pool. The async resolution
 // is non-blocking so the controller can return once the resolution is done.
 type Resolver struct {
-	client        client.Reader
 	logger        *logr.Logger
 	workerPool    *workerpool.WorkerPool
 	pluginManager *manager.PluginManager
@@ -51,12 +50,15 @@ type Resolver struct {
 }
 
 // RepositoryOptions contains all the options the resolution service requires to perform a resolve operation.
-// The RepositorySpec, Component, Version, the accumulated configuration, the namespace for the resolved configuration.
 type RepositoryOptions struct {
-	RepositorySpec    runtime.Typed
-	OCMConfigurations []v1alpha1.OCMConfiguration
-	Namespace         string
-	RequesterFunc     func() workerpool.RequesterInfo
+	RepositorySpec runtime.Typed
+	Configuration  *configuration.Configuration
+	RequesterFunc  func() workerpool.RequesterInfo
+	// Verifications are used to verify against component version signatures and used a cache key.
+	Verifications []verification.Verification
+	// Digest is used to verify the integrity of a referenced component version and is used as part of the cache key.
+	Digest          *v2.Digest
+	SigningRegistry *signinghandler.SigningRegistry
 }
 
 // NewCacheBackedRepository creates a new cache-backed repository wrapper.
@@ -64,10 +66,7 @@ type RepositoryOptions struct {
 // 1. Path matcher resolvers from OCM configuration (if configured)
 // 2. The provided RepositorySpec as a fallback
 func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *RepositoryOptions) (*CacheBackedRepository, error) {
-	cfg, err := configuration.LoadConfigurations(ctx, r.client, opts.Namespace, opts.OCMConfigurations)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load OCM configurations: %w", err)
-	}
+	cfg := opts.Configuration
 
 	requesterFunc := opts.RequesterFunc
 	if requesterFunc == nil {
@@ -98,7 +97,17 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 		r.repoCache.Add(cacheKey, provider)
 	}
 
-	return newCacheBackedRepository(r.logger, provider, cfg, r.workerPool, requesterFunc, baseRepoSpec), nil
+	return &CacheBackedRepository{
+		logger:          r.logger,
+		resolver:        provider,
+		cfg:             cfg,
+		workerPool:      r.workerPool,
+		requesterFunc:   requesterFunc,
+		baseRepoSpec:    baseRepoSpec,
+		verifications:   opts.Verifications,
+		digest:          opts.Digest,
+		signingRegistry: opts.SigningRegistry,
+	}, nil
 }
 
 // createResolver creates a resolver based on the configuration.

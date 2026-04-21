@@ -24,22 +24,35 @@ on:
       promotion_tag:
         description: "Tag to be used for promotion later, eg. cli/v0.1.0-rc.1 -> cli/v0.1.0"
         value: ${{ jobs.prepare.outputs.promotion_tag }}
-      changelog_b64:
-        description: "Changelog encoded in base64 for release body"
-        value: ${{ jobs.prepare.outputs.changelog_b64 }}
+      changelog_artifact:
+        description: "Name of the changelog artifact"
+        value: ${{ jobs.prepare.outputs.changelog_artifact }}
+      changelog_range:
+        description: "Git range for changelog generation (empty for first release)"
+        value: ${{ jobs.prepare.outputs.changelog_range }}
+      set_latest:
+        description: "Whether to set :latest tag (true if this version >= highest existing release version)"
+        value: ${{ jobs.prepare.outputs.set_latest }}
+      highest_previous_release_version:
+        description: "Highest existing previous release version for this component (for logging)"
+        value: ${{ jobs.prepare.outputs.highest_previous_release_version }}
+
+permissions:
+  contents: read
 
 jobs:
   prepare:
     name: Tag & Changelog
-    permissions:
-      contents: read
     runs-on: ubuntu-latest
     outputs:
       new_tag: ${{ steps.compute.outputs.new_tag }}
       new_version: ${{ steps.compute.outputs.new_version }}
       base_version: ${{ steps.compute.outputs.base_version }}
       promotion_tag: ${{ steps.compute.outputs.promotion_tag }}
-      changelog_b64: ${{ steps.summarize.outputs.changelog_b64 }}
+      changelog_artifact: changelog-${{ steps.compute.outputs.new_version }}
+      changelog_range: ${{ steps.compute.outputs.changelog_range }}
+      set_latest: ${{ steps.latest.outputs.set_latest }}
+      highest_previous_release_version: ${{ steps.latest.outputs.highest_previous_release_version }}
     steps:
       # Checkout the repository and target branch
       - name: Checkout Repository
@@ -62,12 +75,16 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const script = await import('${{ github.workspace }}/.github/scripts/compute-rc-version.js');
+            const script = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
             await script.default({ core, github, context });
 
       - name: Generate changelog with git-cliff
-        uses: orhun/git-cliff-action@e16f179f0be49ecdfe63753837f20b9531642772 # v4
+        uses: orhun/git-cliff-action@c93ef52f3d0ddcdcc9bd5447d98d458a11cd4f72 # v4
         id: git-cliff
+        env:
+          # Pass changelog range as env var so it can be used in the args block.
+          # Empty when this is the first release (no previous tag exists).
+          CHANGELOG_RANGE: ${{ steps.compute.outputs.changelog_range }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           config: ${{ inputs.component_path }}/cliff.toml
@@ -78,7 +95,7 @@ jobs:
             --tag "${{ steps.compute.outputs.new_tag }}" \
             -o "$RUNNER_TEMP/CHANGELOG.md" \
             --use-branch-tags \
-            --latest
+            ${{ steps.compute.outputs.changelog_range && format('-- "{0}"', steps.compute.outputs.changelog_range) || '--latest' }}
 
       - name: Summarize changelog
         id: summarize
@@ -89,9 +106,41 @@ jobs:
         with:
           script: |
             const fs = require("fs");
-            const log = fs.existsSync(process.env.CHANGELOG_FILE)
-              ? fs.readFileSync(process.env.CHANGELOG_FILE, "utf8").trim()
-              : "No changelog.";
-            const encoded = Buffer.from(log).toString("base64");
-            core.setOutput("changelog_b64", encoded);
+            const tag = process.env.TAG;
+            const today = new Date().toISOString().split("T")[0];
+
+            // Read changelog file if it exists
+            let log = "";
+            if (fs.existsSync(process.env.CHANGELOG_FILE)) {
+              log = fs.readFileSync(process.env.CHANGELOG_FILE, "utf8").trim();
+            }
+
+            // Generate fallback header if changelog is empty
+            // This can happen when --use-branch-tags finds no tags on a new release branch
+            if (!log) {
+              log = `## [${tag}] - ${today}\n\nNo changes since the previous release.`;
+              core.info(`Generated fallback changelog for ${tag}`);
+              fs.writeFileSync(process.env.CHANGELOG_FILE, log);
+            }
+
             await core.summary.addRaw(log).write();
+
+      - name: Upload changelog artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: changelog-${{ steps.compute.outputs.new_version }}
+          path: ${{ runner.temp }}/CHANGELOG.md
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Determine if release should be latest
+        id: latest
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          COMPONENT_PATH: ${{ inputs.component_path }}
+          NEW_RELEASE_VERSION: ${{ steps.compute.outputs.base_version }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
+            await script.determineLatestRelease({ core, github, context });

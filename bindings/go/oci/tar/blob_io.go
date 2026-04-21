@@ -20,7 +20,8 @@ import (
 
 type CopyToOCILayoutOptions struct {
 	oras.CopyGraphOptions
-	Tags []string
+	Tags    []string
+	TempDir string
 }
 
 // CopyToOCILayoutInMemory streams the contents of an OCI graph from the given
@@ -57,7 +58,11 @@ func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyStora
 	}()
 
 	// Create an OCI layout writer over the gzip stream.
-	target := NewOCILayoutWriter(zippedBuf)
+	target, targetErr := NewOCILayoutWriterWithTempFile(zippedBuf, opts.TempDir)
+	if targetErr != nil {
+		err = targetErr
+		return
+	}
 	defer func() {
 		err = errors.Join(err, target.Close())
 	}()

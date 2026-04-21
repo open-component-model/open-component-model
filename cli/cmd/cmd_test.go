@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	ocmctx "ocm.software/open-component-model/cli/internal/context"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -26,11 +25,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	componentversion "ocm.software/open-component-model/cli/cmd/add/component-version"
 	"ocm.software/open-component-model/cli/cmd/internal/test"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
+	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
 
 // setupTestRepositoryWithDescriptorLibrary creates a test repository with the given component versions
@@ -928,6 +929,7 @@ resources:
 		})
 
 		t.Run("expect failure with working-directory if resources are not in working-directory", func(t *testing.T) {
+			r := require.New(t)
 			workingDir := filepath.Join(tmp, "working-dir")
 			r.NoError(os.Mkdir(workingDir, 0o700), "could not create working directory")
 
@@ -941,6 +943,7 @@ resources:
 		})
 
 		t.Run("base construction with working-directory should not fail if resources are in working-directory", func(t *testing.T) {
+			r := require.New(t)
 			constructorYAML = fmt.Sprintf(`
 name: ocm.software/examples-01
 version: 1.0.0
@@ -972,234 +975,236 @@ resources:
 			r.NoError(err, "could not construct component version with working directory")
 		})
 	})
-	// TODO(fabianburth): comment in after we fixed the copying of local blobs resources
-	//  in external component versions
-	//	t.Run("construction with references targeting fallback resolvers", func(t *testing.T) {
-	//		tmp := t.TempDir()
-	//		externalConstructorYAML := fmt.Sprintf(`
-	//name: ocm.software/external
-	//version: 1.0.0
-	//provider:
-	//  name: ocm.software
-	//resources:
-	//- name: my-resource
-	//  type: blob
-	//  input:
-	//    type: utf8/v1
-	//    text: "I come from external!"
-	//`)
-	//		externalConstructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external.yaml")
-	//		r.NoError(os.WriteFile(externalConstructorYAMLFilePath, []byte(externalConstructorYAML), 0o600))
-	//		externalArchiveFilePath := filepath.Join(tmp, "transport-archive-external")
-	//
-	//		_, err := test.OCM(t, test.WithArgs("add", "cv",
-	//			"--constructor", externalConstructorYAMLFilePath,
-	//			"--repository", externalArchiveFilePath,
-	//			"--working-directory", tmp,
-	//		), test.WithErrorOutput(logs))
-	//		r.NoError(err, "could not construct component version with working directory")
-	//
-	//		legacyResolverConfigYAML := fmt.Sprintf(`
-	//type: generic.config.ocm.software/v1
-	//configurations:
-	//- type: ocm.config.ocm.software
-	//  resolvers:
-	//  - repository:
-	//      type: CommonTransportFormat/v1
-	//      filePath: %[1]s
-	//`, externalArchiveFilePath)
-	//
-	//		legacyResolverConfigYAMLFilePath := filepath.Join(tmp, "config-with-legacy-resolver.yaml")
-	//		r.NoError(os.WriteFile(legacyResolverConfigYAMLFilePath, []byte(legacyResolverConfigYAML), 0o600))
-	//
-	//		constructorYAML = fmt.Sprintf(`
-	//components:
-	//- name: ocm.software/a
-	//  version: 1.0.0
-	//  provider:
-	//    name: ocm.software
-	//  resources:
-	//    - name: my-resource
-	//      type: blob
-	//      input:
-	//        type: utf8/v1
-	//        text: "I come from A"
-	//- name: ocm.software/b
-	//  version: 1.0.0
-	//  provider:
-	//    name: ocm.software
-	//  componentReferences:
-	//    - name: b-to-a # internal reference
-	//      version: 1.0.0
-	//      componentName: ocm.software/a
-	//    - name: external
-	//      version: 1.0.0
-	//      componentName: ocm.software/external # from external repository
-	//  resources:
-	//    - name: my-resource
-	//      type: blob
-	//      input:
-	//        type: utf8/v1
-	//        text: "I come from B"
-	//`)
-	//
-	//		// Create a replacement test file to be added to the component version
-	//		constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external-reference.yaml")
-	//		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
-	//
-	//		cmd, err := test.OCM(t, test.WithArgs("add", "cv",
-	//			"--constructor", constructorYAMLFilePath,
-	//			"--repository", archiveFilePath,
-	//			"--working-directory", tmp,
-	//			"--config", legacyResolverConfigYAMLFilePath,
-	//			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
-	//			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
-	//		), test.WithErrorOutput(logs))
-	//
-	//		r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
-	//
-	//		r.NoError(err, "could not construct component version with working directory")
-	//
-	//		fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
-	//		r.NoError(err, "could not create test filesystem")
-	//		archive := ctf.NewFileSystemCTF(fs)
-	//		helperRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
-	//		r.NoError(err, "could not create helper test repository")
-	//
-	//		for _, identity := range []runtime.Identity{{
-	//			descriptor.IdentityAttributeName:    "ocm.software/a",
-	//			descriptor.IdentityAttributeVersion: "1.0.0",
-	//		}, {
-	//			descriptor.IdentityAttributeName:    "ocm.software/b",
-	//			descriptor.IdentityAttributeVersion: "1.0.0",
-	//		}, {
-	//			descriptor.IdentityAttributeName:    "ocm.software/external",
-	//			descriptor.IdentityAttributeVersion: "1.0.0",
-	//		}} {
-	//			t.Run(identity.String(), func(t *testing.T) {
-	//				r := require.New(t)
-	//				_, err := helperRepo.GetComponentVersion(t.Context(),
-	//					identity[descriptor.IdentityAttributeName],
-	//					identity[descriptor.IdentityAttributeVersion],
-	//				)
-	//				r.NoError(err, "could not retrieve component version from test repository")
-	//			})
-	//		}
-	//	})
-	//
-	//	t.Run("construction with references targeting resolvers", func(t *testing.T) {
-	//		tmp := t.TempDir()
-	//		externalConstructorYAML := fmt.Sprintf(`
-	//name: ocm.software/external
-	//version: 1.0.0
-	//provider:
-	//  name: ocm.software
-	//resources:
-	//- name: my-resource
-	//  type: blob
-	//  input:
-	//    type: utf8/v1
-	//    text: "I come from external!"
-	//`)
-	//		externalConstructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external.yaml")
-	//		r.NoError(os.WriteFile(externalConstructorYAMLFilePath, []byte(externalConstructorYAML), 0o600))
-	//		externalArchiveFilePath := filepath.Join(tmp, "transport-archive-external")
-	//
-	//		_, err := test.OCM(t, test.WithArgs("add", "cv",
-	//			"--constructor", externalConstructorYAMLFilePath,
-	//			"--repository", externalArchiveFilePath,
-	//			"--working-directory", tmp,
-	//		), test.WithErrorOutput(logs))
-	//		r.NoError(err, "could not construct component version with working directory")
-	//
-	//		resolverConfigYAML := fmt.Sprintf(`
-	//type: generic.config.ocm.software/v1
-	//configurations:
-	//- type: resolvers.config.ocm.software
-	//  resolvers:
-	//  - repository:
-	//      type: CommonTransportFormat/v1
-	//      filePath: %[1]s
-	//    componentNamePattern: ocm.software/*
-	//`, externalArchiveFilePath)
-	//
-	//		resolverConfigYAMLFilePath := filepath.Join(tmp, "config-with-resolver.yaml")
-	//		r.NoError(os.WriteFile(resolverConfigYAMLFilePath, []byte(resolverConfigYAML), 0o600))
-	//
-	//		constructorYAML = fmt.Sprintf(`
-	//components:
-	//- name: ocm.software/a
-	//  version: 1.0.0
-	//  provider:
-	//    name: ocm.software
-	//  resources:
-	//    - name: my-resource
-	//      type: blob
-	//      input:
-	//        type: utf8/v1
-	//        text: "I come from A"
-	//- name: ocm.software/b
-	//  version: 1.0.0
-	//  provider:
-	//    name: ocm.software
-	//  componentReferences:
-	//    - name: b-to-a # internal reference
-	//      version: 1.0.0
-	//      componentName: ocm.software/a
-	//    - name: external
-	//      version: 1.0.0
-	//      componentName: ocm.software/external # from external repository
-	//  resources:
-	//    - name: my-resource
-	//      type: blob
-	//      input:
-	//        type: utf8/v1
-	//        text: "I come from B"
-	//`)
-	//
-	//		// Create a replacement test file to be added to the component version
-	//		constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external-reference.yaml")
-	//		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
-	//
-	//		cmd, err := test.OCM(t, test.WithArgs("add", "cv",
-	//			"--constructor", constructorYAMLFilePath,
-	//			"--repository", archiveFilePath,
-	//			"--working-directory", tmp,
-	//			"--config", resolverConfigYAMLFilePath,
-	//			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
-	//			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
-	//		), test.WithErrorOutput(logs))
-	//
-	//		r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
-	//
-	//		r.NoError(err, "could not construct component version with working directory")
-	//
-	//		fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
-	//		r.NoError(err, "could not create test filesystem")
-	//		archive := ctf.NewFileSystemCTF(fs)
-	//		helperRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
-	//		r.NoError(err, "could not create helper test repository")
-	//
-	//		for _, identity := range []runtime.Identity{{
-	//			descriptor.IdentityAttributeName:    "ocm.software/a",
-	//			descriptor.IdentityAttributeVersion: "1.0.0",
-	//		}, {
-	//			descriptor.IdentityAttributeName:    "ocm.software/b",
-	//			descriptor.IdentityAttributeVersion: "1.0.0",
-	//		}, {
-	//			descriptor.IdentityAttributeName:    "ocm.software/external",
-	//			descriptor.IdentityAttributeVersion: "1.0.0",
-	//		}} {
-	//			t.Run(identity.String(), func(t *testing.T) {
-	//				r := require.New(t)
-	//				_, err := helperRepo.GetComponentVersion(t.Context(),
-	//					identity[descriptor.IdentityAttributeName],
-	//					identity[descriptor.IdentityAttributeVersion],
-	//				)
-	//				r.NoError(err, "could not retrieve component version from test repository")
-	//			})
-	//		}
-	//	})
+	t.Run("construction with references targeting fallback resolvers", func(t *testing.T) {
+		r := require.New(t)
+		tmp := t.TempDir()
+		externalConstructorYAML := fmt.Sprintf(`
+name: ocm.software/external
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+- name: my-resource
+  type: blob
+  input:
+    type: utf8/v1
+    text: "I come from external!"
+`)
+		externalConstructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external.yaml")
+		r.NoError(os.WriteFile(externalConstructorYAMLFilePath, []byte(externalConstructorYAML), 0o600))
+		externalArchiveFilePath := filepath.Join(tmp, "transport-archive-external")
+
+		_, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", externalConstructorYAMLFilePath,
+			"--repository", externalArchiveFilePath,
+			"--working-directory", tmp,
+		), test.WithErrorOutput(logs))
+		r.NoError(err, "could not construct component version with working directory")
+
+		legacyResolverConfigYAML := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: ocm.config.ocm.software
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      filePath: %[1]s
+      accessMode: readonly
+`, externalArchiveFilePath)
+
+		legacyResolverConfigYAMLFilePath := filepath.Join(tmp, "config-with-legacy-resolver.yaml")
+		r.NoError(os.WriteFile(legacyResolverConfigYAMLFilePath, []byte(legacyResolverConfigYAML), 0o600))
+
+		constructorYAML = fmt.Sprintf(`
+components:
+- name: ocm.software/a
+  version: 1.0.0
+  provider:
+    name: ocm.software
+  resources:
+    - name: my-resource
+      type: blob
+      input:
+        type: utf8/v1
+        text: "I come from A"
+- name: ocm.software/b
+  version: 1.0.0
+  provider:
+    name: ocm.software
+  componentReferences:
+    - name: b-to-a # internal reference
+      version: 1.0.0
+      componentName: ocm.software/a
+    - name: external
+      version: 1.0.0
+      componentName: ocm.software/external # from external repository
+  resources:
+    - name: my-resource
+      type: blob
+      input:
+        type: utf8/v1
+        text: "I come from B"
+`)
+
+		// Create a replacement test file to be added to the component version
+		constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external-reference.yaml")
+		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+		cmd, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorYAMLFilePath,
+			"--repository", archiveFilePath,
+			"--working-directory", tmp,
+			"--config", legacyResolverConfigYAMLFilePath,
+			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
+			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
+		), test.WithErrorOutput(logs))
+
+		r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
+
+		r.NoError(err, "could not construct component version with working directory")
+
+		fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
+		r.NoError(err, "could not create test filesystem")
+		archive := ctf.NewFileSystemCTF(fs)
+		helperRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+		r.NoError(err, "could not create helper test repository")
+
+		for _, identity := range []runtime.Identity{{
+			descriptor.IdentityAttributeName:    "ocm.software/a",
+			descriptor.IdentityAttributeVersion: "1.0.0",
+		}, {
+			descriptor.IdentityAttributeName:    "ocm.software/b",
+			descriptor.IdentityAttributeVersion: "1.0.0",
+		}, {
+			descriptor.IdentityAttributeName:    "ocm.software/external",
+			descriptor.IdentityAttributeVersion: "1.0.0",
+		}} {
+			t.Run(identity.String(), func(t *testing.T) {
+				r := require.New(t)
+				_, err := helperRepo.GetComponentVersion(t.Context(),
+					identity[descriptor.IdentityAttributeName],
+					identity[descriptor.IdentityAttributeVersion],
+				)
+				r.NoError(err, "could not retrieve component version from test repository")
+			})
+		}
+	})
+
+	t.Run("construction with references targeting resolvers", func(t *testing.T) {
+		r := require.New(t)
+		tmp := t.TempDir()
+		externalConstructorYAML := fmt.Sprintf(`
+name: ocm.software/external
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+- name: my-resource
+  type: blob
+  input:
+    type: utf8/v1
+    text: "I come from external!"
+`)
+		externalConstructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external.yaml")
+		r.NoError(os.WriteFile(externalConstructorYAMLFilePath, []byte(externalConstructorYAML), 0o600))
+		externalArchiveFilePath := filepath.Join(tmp, "transport-archive-external")
+
+		_, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", externalConstructorYAMLFilePath,
+			"--repository", externalArchiveFilePath,
+			"--working-directory", tmp,
+		), test.WithErrorOutput(logs))
+		r.NoError(err, "could not construct component version with working directory")
+
+		resolverConfigYAML := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: resolvers.config.ocm.software
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      filePath: %[1]s
+      accessMode: readonly
+    componentNamePattern: ocm.software/*
+    `, externalArchiveFilePath)
+
+		resolverConfigYAMLFilePath := filepath.Join(tmp, "config-with-resolver.yaml")
+		r.NoError(os.WriteFile(resolverConfigYAMLFilePath, []byte(resolverConfigYAML), 0o600))
+
+		constructorYAML = fmt.Sprintf(`
+components:
+- name: ocm.software/a
+  version: 1.0.0
+  provider:
+    name: ocm.software
+  resources:
+    - name: my-resource
+      type: blob
+      input:
+        type: utf8/v1
+        text: "I come from A"
+- name: ocm.software/b
+  version: 1.0.0
+  provider:
+    name: ocm.software
+  componentReferences:
+    - name: b-to-a # internal reference
+      version: 1.0.0
+      componentName: ocm.software/a
+    - name: external
+      version: 1.0.0
+      componentName: ocm.software/external # from external repository
+  resources:
+    - name: my-resource
+      type: blob
+      input:
+        type: utf8/v1
+        text: "I come from B"
+`)
+
+		// Create a replacement test file to be added to the component version
+		constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external-reference.yaml")
+		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+		cmd, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorYAMLFilePath,
+			"--repository", archiveFilePath,
+			"--working-directory", tmp,
+			"--config", resolverConfigYAMLFilePath,
+			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
+			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
+		), test.WithErrorOutput(logs))
+
+		r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
+
+		r.NoError(err, "could not construct component version with working directory")
+
+		fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
+		r.NoError(err, "could not create test filesystem")
+		archive := ctf.NewFileSystemCTF(fs)
+		helperRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+		r.NoError(err, "could not create helper test repository")
+
+		for _, identity := range []runtime.Identity{{
+			descriptor.IdentityAttributeName:    "ocm.software/a",
+			descriptor.IdentityAttributeVersion: "1.0.0",
+		}, {
+			descriptor.IdentityAttributeName:    "ocm.software/b",
+			descriptor.IdentityAttributeVersion: "1.0.0",
+		}, {
+			descriptor.IdentityAttributeName:    "ocm.software/external",
+			descriptor.IdentityAttributeVersion: "1.0.0",
+		}} {
+			t.Run(identity.String(), func(t *testing.T) {
+				r := require.New(t)
+				_, err := helperRepo.GetComponentVersion(t.Context(),
+					identity[descriptor.IdentityAttributeName],
+					identity[descriptor.IdentityAttributeVersion],
+				)
+				r.NoError(err, "could not retrieve component version from test repository")
+			})
+		}
+	})
 }
 
 // Test_Add_Component_Version_Formats tests the different output formats for the add cv command
@@ -1304,9 +1309,11 @@ resources:
 			r := require.New(t)
 			logs := test.NewJSONLogReader()
 			result := new(bytes.Buffer)
-			args := []string{"add", "cv",
+			args := []string{
+				"add", "cv",
 				"--constructor", constructorYAMLFilePath,
-				"--repository", archiveFilePath}
+				"--repository", archiveFilePath,
+			}
 			if tt.outputArg != "" {
 				args = append(args, tt.outputArg)
 			}
@@ -1554,12 +1561,12 @@ resources:
 		r := require.New(t)
 		// Create a dummy docker config file
 		dockerConfigContent := `{
-		"auths": {
-			"localhost": {
-				"auth": "dXNlcm5hbWU6cGFzc3dvcmQ="
-			}
-		}
-	}`
+        "auths": {
+            "localhost": {
+                "auth": "dXNlcm5hbWU6cGFzc3dvcmQ="
+            }
+        }
+    }`
 		dockerConfigPath := filepath.Join(tmp, "docker-config-valid.json")
 		r.NoError(os.WriteFile(dockerConfigPath, []byte(dockerConfigContent), 0o600))
 
@@ -1594,12 +1601,12 @@ configurations:
 		r := require.New(t)
 		// Create a dummy docker config file with unrelated auths
 		dockerConfigContent := `{
-		"auths": {
-			"otherhost": {
-				"auth": "dXNlcm5hbWU6cGFzc3dvcmQ="
-			}
-		}
-	}`
+        "auths": {
+            "otherhost": {
+                "auth": "dXNlcm5hbWU6cGFzc3dvcmQ="
+            }
+        }
+    }`
 		dockerConfigPath := filepath.Join(tmp, "docker-config-missing.json")
 		r.NoError(os.WriteFile(dockerConfigPath, []byte(dockerConfigContent), 0o600))
 
@@ -1817,4 +1824,164 @@ resources:
 	var targetContent bytes.Buffer
 	r.NoError(blob.Copy(&targetContent, targetBlob))
 	r.Equal(testContent, targetContent.String(), "expected local blob content to match original test file content")
+}
+
+// Test_Add_Component_Version_With_Reference_Digest tests adding a component version
+// with a reference that includes a digest for verification.
+func Test_Add_Component_Version_With_Reference_Digest(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	// First, create the referenced component to get its calculated digest
+	referencedConstructorYAML := `
+name: ocm.software/referenced
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+- name: my-resource
+  type: blob
+  input:
+    type: utf8/v1
+    text: "I am a referenced component!"
+`
+	referencedConstructorYAMLFilePath := filepath.Join(tmp, "referenced-constructor.yaml")
+	r.NoError(os.WriteFile(referencedConstructorYAMLFilePath, []byte(referencedConstructorYAML), 0o600))
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+
+	logs := test.NewJSONLogReader()
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", referencedConstructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	), test.WithErrorOutput(logs))
+	r.NoError(err, "could not construct referenced component version")
+
+	// Get the calculated digest from the referenced component
+	fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
+	r.NoError(err, "could not create test filesystem")
+	archive := ctf.NewFileSystemCTF(fs)
+	helperRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	r.NoError(err, "could not create helper test repository")
+
+	referencedDesc, err := helperRepo.GetComponentVersion(t.Context(), "ocm.software/referenced", "1.0.0")
+	r.NoError(err, "could not retrieve referenced component version")
+
+	// Now create a component with a reference that includes the correct digest
+	t.Run("construction with matching reference digest succeeds", func(t *testing.T) {
+		r := require.New(t)
+		// We need to calculate the digest - the referenced component doesn't have it stored.
+		// Create a component referencing it and let it calculate the digest.
+		constructorYAML := fmt.Sprintf(`
+name: ocm.software/referencing-no-digest
+version: 1.0.0
+provider:
+  name: ocm.software
+componentReferences:
+  - name: referenced
+    version: 1.0.0
+    componentName: ocm.software/referenced
+resources:
+- name: my-resource
+  type: blob
+  input:
+    type: utf8/v1
+    text: "I reference another component"
+`)
+		constructorYAMLFilePath := filepath.Join(tmp, "referencing-no-digest-constructor.yaml")
+		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+		logs := test.NewJSONLogReader()
+		_, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorYAMLFilePath,
+			"--repository", archiveFilePath,
+		), test.WithErrorOutput(logs))
+		r.NoError(err, "could not construct component version with reference")
+
+		// Get the digest from the constructed reference
+		fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
+		r.NoError(err, "could not create test filesystem")
+		archive := ctf.NewFileSystemCTF(fs)
+		helperRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+		r.NoError(err, "could not create helper test repository")
+
+		referencingDesc, err := helperRepo.GetComponentVersion(t.Context(), "ocm.software/referencing-no-digest", "1.0.0")
+		r.NoError(err, "could not retrieve referencing component version")
+		r.Len(referencingDesc.Component.References, 1, "expected one reference")
+		calculatedDigest := referencingDesc.Component.References[0].Digest
+		r.NotEmpty(calculatedDigest.Value, "expected digest to be calculated")
+
+		// Now create another component with the digest explicitly specified
+		constructorWithDigestYAML := fmt.Sprintf(`
+name: ocm.software/referencing-with-digest
+version: 1.0.0
+provider:
+  name: ocm.software
+componentReferences:
+  - name: referenced
+    version: 1.0.0
+    componentName: ocm.software/referenced
+    digest:
+      hashAlgorithm: %s
+      normalisationAlgorithm: %s
+      value: %s
+resources:
+- name: my-resource
+  type: blob
+  input:
+    type: utf8/v1
+    text: "I reference another component with explicit digest"
+`, calculatedDigest.HashAlgorithm, calculatedDigest.NormalisationAlgorithm, calculatedDigest.Value)
+		constructorWithDigestYAMLFilePath := filepath.Join(tmp, "referencing-with-digest-constructor.yaml")
+		r.NoError(os.WriteFile(constructorWithDigestYAMLFilePath, []byte(constructorWithDigestYAML), 0o600))
+
+		logs = test.NewJSONLogReader()
+		_, err = test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorWithDigestYAMLFilePath,
+			"--repository", archiveFilePath,
+		), test.WithErrorOutput(logs))
+		r.NoError(err, "could not construct component version with explicit digest")
+
+		// Verify the digest was preserved
+		referencingWithDigestDesc, err := helperRepo.GetComponentVersion(t.Context(), "ocm.software/referencing-with-digest", "1.0.0")
+		r.NoError(err, "could not retrieve component version with explicit digest")
+		r.Len(referencingWithDigestDesc.Component.References, 1, "expected one reference")
+		r.Equal(calculatedDigest.Value, referencingWithDigestDesc.Component.References[0].Digest.Value, "expected digest to match")
+	})
+
+	t.Run("construction with mismatched reference digest fails", func(t *testing.T) {
+		r := require.New(t)
+		constructorYAML := `
+name: ocm.software/referencing-wrong-digest
+version: 1.0.0
+provider:
+  name: ocm.software
+componentReferences:
+  - name: referenced
+    version: 1.0.0
+    componentName: ocm.software/referenced
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: jsonNormalisation/v4alpha1
+      value: wrong-digest-value-that-will-not-match
+resources:
+- name: my-resource
+  type: blob
+  input:
+    type: utf8/v1
+    text: "I reference with wrong digest"
+`
+		constructorYAMLFilePath := filepath.Join(tmp, "referencing-wrong-digest-constructor.yaml")
+		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+		logs := test.NewJSONLogReader()
+		_, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorYAMLFilePath,
+			"--repository", archiveFilePath,
+		), test.WithErrorOutput(logs))
+		r.Error(err, "expected error for mismatched digest")
+		r.Contains(err.Error(), "digest mismatch", "expected digest mismatch error")
+	})
+
+	// Verify referenced component is still accessible
+	_ = referencedDesc
 }

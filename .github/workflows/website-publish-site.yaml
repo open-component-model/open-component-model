@@ -1,0 +1,81 @@
+name: "Website: Publish Site"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'website/**'
+    paths:
+      - 'website/**'
+      - '.github/workflows/website-publish-site.yaml'
+
+permissions:
+  contents: read
+
+env:
+  OUTPUT_DIR: site-docs/
+
+jobs:
+  publish-site:
+    name: Publish Site
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+
+    steps:
+      - name: Get OCMBot installation token
+        id: generate_token
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a #v2
+        with:
+          app_id: ${{ secrets.OCMBOT_APP_ID }}
+          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: 25.5.0
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@75d2e84710de30f6ff7268e08f310b60ef14033f # v3
+        with:
+          hugo-version: '0.160.0'
+          extended: true
+
+      - name: Install deps and Build
+        working-directory: website
+        run: |
+          npm ci
+          npm run build
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: '3.14'
+
+      - name: Generate Schema
+        working-directory: website
+        run: |
+          python3 -m pip install json-schema-for-humans==1.5.1
+          generate-schema-doc --config-file generate-schema.yaml static/schemas/component-descriptor-v2 schema-v2.html
+
+      - name: Copy Schema
+        working-directory: website
+        run: |
+          mkdir -p public/docs/overview/specification
+          cp schema-v2.html schema_doc.css schema_doc.min.js public/docs/overview/specification
+
+      - name: Publish as GitHub Pages
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e #v4
+        with:
+          github_token: ${{ steps.generate_token.outputs.token }}
+          publish_dir: ./website/public
+          commit_message: ${{ github.event.head_commit.message }}
+          user_name: 'GitHub Actions Bot'
+          user_email: '<41898282+github-actions[bot]@users.noreply.github.com>'

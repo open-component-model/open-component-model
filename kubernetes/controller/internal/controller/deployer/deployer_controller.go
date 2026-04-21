@@ -8,41 +8,49 @@ import (
 	"io"
 	"runtime"
 	"slices"
+	"time"
 
-	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
+	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
+	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
+	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 const (
@@ -56,6 +64,8 @@ const (
 	// deployerManager is the label used to identify the deployer as a manager of resources.
 	deployerManager = "deployer.delivery.ocm.software"
 )
+
+var ErrComponentVersionDrift = errors.New("component version drift: resource status has not yet caught up with component")
 
 // Reconciler reconciles a Deployer object.
 type Reconciler struct {
@@ -81,6 +91,10 @@ type Reconciler struct {
 	DownloadCache cache.DigestObjectCache[string, []*unstructured.Unstructured]
 	Resolver      *resolution.Resolver
 	PluginManager *manager.PluginManager
+
+	// MaxResourceSizeBytes is the maximum size in bytes a downloaded resource blob may contain.
+	// 0 disables the limit.
+	MaxResourceSizeBytes int64
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -155,6 +169,12 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 
 				return requests
 			})).
+		WithOptions(controller.Options{
+			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
+				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 5*time.Minute),
+				&workqueue.TypedBucketRateLimiter[reconcile.Request]{Limiter: rate.NewLimiter(10, 100)},
+			),
+		}).
 		Complete(r)
 }
 
@@ -209,7 +229,10 @@ func (r *Reconciler) setupDynamicResourceWatcherWithManager(mgr ctrl.Manager) (*
 
 // Untrack removes the deployer from the tracked objects and stops the resource watch if it is still running.
 // It also removes the finalizer from the deployer if there are no more tracked objects.
-func (r *Reconciler) Untrack(ctx context.Context, deployer *deliveryv1alpha1.Deployer) error {
+// Untrack sends stop events for all active resource watches on the deployer.
+// Returns true if all watches are already stopped, false if stop events were
+// sent and another reconcile is needed to verify completion.
+func (r *Reconciler) Untrack(ctx context.Context, deployer *deliveryv1alpha1.Deployer) (bool, error) {
 	logger := log.FromContext(ctx)
 	var atLeastOneResourceNeededStopWatch bool
 	for _, obj := range r.resourceWatches(deployer) {
@@ -221,26 +244,29 @@ func (r *Reconciler) Untrack(ctx context.Context, deployer *deliveryv1alpha1.Dep
 				Child:  obj,
 			}:
 			case <-ctx.Done():
-				return fmt.Errorf("context canceled while unregistering resource watch for deployer %s: %w", deployer.Name, ctx.Err())
+				return false, fmt.Errorf("context canceled while unregistering resource watch for deployer %s: %w", deployer.Name, ctx.Err())
 			}
 			atLeastOneResourceNeededStopWatch = true
 		}
 	}
 	if atLeastOneResourceNeededStopWatch {
-		return fmt.Errorf("waiting for at least one resource watch to be removed")
+		return false, nil
 	}
 
-	return nil
+	return true, nil
 }
 
-func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1alpha1.Deployer) error {
+// pruneWithApplySet prunes all resources managed by the deployer's ApplySet.
+// Returns true if pruning is complete (nothing left to prune), false if resources
+// are still being pruned and another reconcile is needed.
+func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1alpha1.Deployer) (bool, error) {
 	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
 
 	set := r.createApplySet(deployer, logger)
 
 	metadata, err := set.Project(nil)
 	if err != nil {
-		return fmt.Errorf("failed to project ApplySet: %w", err)
+		return false, fmt.Errorf("failed to project ApplySet: %w", err)
 	}
 
 	logger.Info("pruning ApplySet", "scope", metadata.PruneScope())
@@ -250,21 +276,17 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 		Concurrency: runtime.NumCPU(),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to prune ApplySet: %w", err)
+		return false, fmt.Errorf("failed to prune ApplySet: %w", err)
 	}
 
-	// Log results
 	logger.Info("ApplySet prune operation complete", "pruned", len(result.Pruned))
 
-	// Prune calls delete on every resource found, even if its already being deleted.
-	// If we were to remove this check, the deployer might be deleted while a child is stuck in terminating state.
-	if !result.HasPruned() {
-		logger.Info("pruned resources, doing one more pruning until nothing more to prune")
-		return fmt.Errorf("waiting for all resources to be pruned")
+	if result.HasPruned() {
+		logger.Info("resources still being pruned, waiting for them to be fully removed")
+		return false, nil
 	}
 
-	// nothing more to prune, remove finalizer
-	return nil
+	return true, nil
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, err error) {
@@ -276,9 +298,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	patchHelper := patch.NewSerialPatcher(deployer, r.Client)
+	old := deployer.DeepCopy()
 	defer func(ctx context.Context) {
-		err = errors.Join(err, status.UpdateStatus(ctx, patchHelper, deployer, r.EventRecorder, 0, err))
+		if !equality.Semantic.DeepEqual(deployer.Finalizers, old.Finalizers) {
+			err = errors.Join(err, r.GetClient().Update(ctx, deployer))
+			return
+		}
+		status.UpdateBeforePatch(deployer, r.EventRecorder, 0, err)
+		if !equality.Semantic.DeepEqual(deployer.Status, old.Status) {
+			err = errors.Join(err, r.GetClient().Status().Patch(ctx, deployer, client.MergeFrom(old)))
+		}
 	}(ctx)
 
 	if deployer.Spec.Suspend {
@@ -290,42 +319,49 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return result, err
 	}
 
-	resourceNamespace := deployer.Spec.ResourceRef.Namespace
-	if resourceNamespace == "" {
-		resourceNamespace = deployer.GetNamespace()
+	addedApplySetFinalizer := controllerutil.AddFinalizer(deployer, applySetPruneFinalizer)
+	addedWatchFinalizer := controllerutil.AddFinalizer(deployer, resourceWatchFinalizer)
+	if addedApplySetFinalizer || addedWatchFinalizer {
+		// Finalizers will be persisted by the defer block's Update() call.
+		// Return early to avoid doing work whose status update would be skipped
+		// by the defer's early-return path for finalizer changes.
+		return ctrl.Result{Requeue: true}, nil
 	}
 
-	resource, err := util.GetReadyObject[deliveryv1alpha1.Resource, *deliveryv1alpha1.Resource](ctx, r.Client, client.ObjectKey{
-		Namespace: resourceNamespace,
-		Name:      deployer.Spec.ResourceRef.Name,
-	})
+	return r.reconcileDeployment(ctx, deployer)
+}
+
+// reconcileDeployment orchestrates the main deployment pipeline: resolve the referenced resource,
+// load configuration, download the OCM resource, apply it, and track the deployed objects.
+func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer *deliveryv1alpha1.Deployer) (ctrl.Result, error) {
+	resource, err := r.resolveResource(ctx, deployer)
+	if resource == nil || err != nil {
+		return ctrl.Result{}, err
+	}
+
+	cfg, err := r.resolveConfiguration(ctx, deployer, resource)
 	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, err.Error())
-
-		if errors.Is(err, util.NotReadyError{}) || errors.Is(err, util.DeletionError{}) {
-			logger.Info("stop reconciling as the resource is not available", "error", err.Error())
-
-			// return no requeue as we watch the object for changes anyway
-			return ctrl.Result{}, nil
-		}
-
-		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: %w", err)
-	}
-	if resource.Status.Resource == nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, "resource is empty in status")
-
-		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: %w", err)
+		return ctrl.Result{}, err
 	}
 
-	key := resource.Status.Resource.Digest.Value
+	cacheBackedRepo, err := r.createCacheBackedRepository(ctx, deployer, resource, cfg)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	componentDescriptor, matchedResource, err := r.resolveComponentAndMatchResource(ctx, deployer, resource, cfg)
+	if componentDescriptor == nil {
+		return ctrl.Result{}, err
+	}
+
+	key := buildResourceCacheKey(matchedResource, componentDescriptor, cfg, resource.Spec.Resource.ByReference.Resource.String())
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
-		return r.DownloadResourceWithOCM(ctx, deployer, resource)
+		return r.DownloadResourceWithOCM(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
 	})
-	if errors.Is(err, resolution.ErrResolutionInProgress) {
-		return ctrl.Result{}, nil
-	}
 	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to download resource from OCM or retrieve it from the cache: %w", err)
 	}
 
@@ -343,79 +379,97 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	updateDeployedObjectStatusReferences(objs, deployer)
-	// TODO: move finalizer up because removal is anyhow idempotent
-	controllerutil.AddFinalizer(deployer, applySetPruneFinalizer)
-	controllerutil.AddFinalizer(deployer, resourceWatchFinalizer)
 
-	// TODO: Status propagation of RGD status to deployer
-	//       (see https://github.com/open-component-model/ocm-k8s-toolkit/issues/192)
-	status.MarkReady(r.EventRecorder, deployer, "Applied version %s", resource.Status.Resource.Version)
+	status.MarkReady(r.EventRecorder, deployer, "Applied %s:%s, resource %s",
+		componentDescriptor.Component.Name, componentDescriptor.Component.Version, matchedResource.Name)
 
-	// we requeue the deployer after the requeue time specified in the resource.
-	return ctrl.Result{RequeueAfter: resource.GetRequeueAfter()}, nil
+	return ctrl.Result{}, nil
 }
 
-func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *deliveryv1alpha1.Deployer, logger logr.Logger) (ctrl.Result, error, bool) {
-	if !deployer.GetDeletionTimestamp().IsZero() {
-		var errs []error
-
-		hasPruneSetFinalizer := controllerutil.ContainsFinalizer(deployer, applySetPruneFinalizer)
-
-		if hasPruneSetFinalizer {
-			logger.Info("pruning ApplySet before removing finalizer")
-			if err := r.pruneWithApplySet(ctx, deployer); err != nil {
-				logger.Error(err, "waiting for ApplySet to be pruned before removing finalizer")
-				errs = append(errs, err)
-			} else {
-				logger.Info("successfully pruned ApplySet for deployer")
-				controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
-			}
-		} else if controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
-			logger.Info("untracking resources before removing finalizer")
-			if err := r.Untrack(ctx, deployer); err != nil {
-				logger.Error(err, "waiting for tracked resources to be unregistered before pruning")
-				errs = append(errs, err)
-			} else {
-				logger.Info("successfully unregistered all resource watches for deployer")
-				controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
-			}
-		}
-
-		if len(errs) > 0 {
-			return ctrl.Result{}, fmt.Errorf("failed to cleanup deployer before deletion: %w", errors.Join(errs...)), true
-		}
-
-		logger.Info("successfully cleaned up deployer before deletion")
-		return ctrl.Result{}, nil, true
+// resolveResource fetches the Resource referenced by the Deployer and validates that it is ready.
+// Returns (nil, nil) when the resource is not yet ready or is being deleted (non-retriable).
+func (r *Reconciler) resolveResource(
+	ctx context.Context,
+	deployer *deliveryv1alpha1.Deployer,
+) (*deliveryv1alpha1.Resource, error) {
+	resourceNamespace := deployer.Spec.ResourceRef.Namespace
+	if resourceNamespace == "" {
+		resourceNamespace = deployer.GetNamespace()
 	}
-	return ctrl.Result{}, nil, false
+
+	resource, err := util.GetReadyObject[deliveryv1alpha1.Resource, *deliveryv1alpha1.Resource](ctx, r.Client, client.ObjectKey{
+		Namespace: resourceNamespace,
+		Name:      deployer.Spec.ResourceRef.Name,
+	})
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, err.Error())
+
+		if _, ok := errors.AsType[util.NotReadyError](err); ok {
+			log.FromContext(ctx).Info("resource is not available", "error", err)
+
+			return nil, nil
+		}
+		if _, ok := errors.AsType[util.DeletionError](err); ok {
+			log.FromContext(ctx).Info("resource is not available", "error", err)
+
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("failed to get ready resource: %w", err)
+	}
+
+	if resource.Status.Resource == nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, "resource is empty in status")
+
+		return nil, fmt.Errorf("failed to get ready resource: resource is empty in status")
+	}
+
+	return resource, nil
 }
 
-func (r *Reconciler) DownloadResourceWithOCM(
+// resolveConfiguration loads the effective OCM configuration for the deployer.
+// Sets deployer.Status.EffectiveOCMConfig as a side effect.
+func (r *Reconciler) resolveConfiguration(
 	ctx context.Context,
 	deployer *deliveryv1alpha1.Deployer,
 	resource *deliveryv1alpha1.Resource,
-) (objs []*unstructured.Unstructured, err error) {
+) (*configuration.Configuration, error) {
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
 	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.ConfigureContextFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to get effective config: %w", err)
 	}
 	deployer.Status.EffectiveOCMConfig = configs
 
+	cfg, err := configuration.LoadConfigurations(ctx, r.Client, deployer.GetNamespace(), configs)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return nil, fmt.Errorf("failed to load configurations: %w", err)
+	}
+
+	return cfg, nil
+}
+
+// createCacheBackedRepository creates a cache-backed OCM repository from the resource's repository spec.
+func (r *Reconciler) createCacheBackedRepository(
+	ctx context.Context,
+	deployer *deliveryv1alpha1.Deployer,
+	resource *deliveryv1alpha1.Resource,
+	cfg *configuration.Configuration,
+) (*resolution.CacheBackedRepository, error) {
 	repoSpec := &ocmruntime.Raw{}
-	if err := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()).Decode(
-		bytes.NewReader(resource.Status.Component.RepositorySpec.Raw), repoSpec); err != nil {
+	if err := repoSpec.UnmarshalJSON(resource.Status.Component.RepositorySpec.Raw); err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:    repoSpec,
-		OCMConfigurations: configs,
-		Namespace:         deployer.GetNamespace(),
+		RepositorySpec:  repoSpec,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: k8stypes.NamespacedName{
@@ -431,64 +485,157 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	componentDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
-		resource.Status.Component.Component,
-		resource.Status.Component.Version)
-	if errors.Is(err, resolution.ErrResolutionInProgress) {
-		// resolution is in progress, the controller will be re-triggered via event source when resolution completes
+	return cacheBackedRepo, nil
+}
+
+// resolveComponentAndMatchResource resolves the component descriptor and finds the matching resource within it.
+// Returns (nil, nil, nil) when resolution is in progress (non-retriable).
+func (r *Reconciler) resolveComponentAndMatchResource(
+	ctx context.Context,
+	deployer *deliveryv1alpha1.Deployer,
+	resource *deliveryv1alpha1.Resource,
+	cfg *configuration.Configuration,
+) (*descriptor.Descriptor, *descriptor.Resource, error) {
+	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, cfg)
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
+		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
 
-		return nil, resolution.ErrResolutionInProgress
-	}
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+		return nil, nil, nil
+	case errors.Is(err, ErrComponentVersionDrift):
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ComponentDriftResolutionInProgress, err.Error())
 
-		return nil, fmt.Errorf("failed to get component version: %w", err)
+		return nil, nil, err
+	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+		// Ignore error, but log event
+		event.New(r.EventRecorder, deployer, nil, deliveryv1alpha1.EventSeverityError, err.Error())
+	default:
+		if err != nil {
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
+
+			return nil, nil, fmt.Errorf("failed to get effective component version: %w", err)
+		}
 	}
 
-	resourceIdentity := makeResourceIdentity(resource.Status.Resource)
+	resourceIdentity := resource.Spec.Resource.ByReference.Resource
 	var matchedResource *descriptor.Resource
 	for i, res := range componentDescriptor.Component.Resources {
 		resIdentity := res.ToIdentity()
-		if resourceIdentity.Match(resIdentity, identityFunc()) {
+		if resourceIdentity.Match(resIdentity, ocm.IdentityFuncIgnoreVersion()) {
 			matchedResource = &componentDescriptor.Component.Resources[i]
 			break
 		}
 	}
 
 	if matchedResource == nil {
-		err := fmt.Errorf("resource with identity %v not found in component %s:%s",
+		err = fmt.Errorf("resource with identity %v not found in component %s:%s",
 			resourceIdentity, componentDescriptor.Component.Name, componentDescriptor.Component.Version)
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
-		return nil, err
+		return nil, nil, err
 	}
 
-	cfg, err := configuration.LoadConfigurations(ctx, r.Client, deployer.GetNamespace(), configs)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+	return componentDescriptor, matchedResource, nil
+}
 
-		return nil, fmt.Errorf("failed to load configurations: %w", err)
+// reconcileDeletionTimestamp handles cleanup when a Deployer is being deleted.
+// If the deletion timestamp is set, it removes finalizers in order: first pruning the
+// ApplySet (deleting previously applied resources), then untracking watched resources.
+// Each finalizer is processed one at a time with requeues between them to ensure
+// sequential cleanup. The returned bool indicates whether deletion was in progress.
+func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *deliveryv1alpha1.Deployer, logger logr.Logger) (ctrl.Result, error, bool) {
+	if !deployer.GetDeletionTimestamp().IsZero() {
+		var errs []error
+
+		hasPruneSetFinalizer := controllerutil.ContainsFinalizer(deployer, applySetPruneFinalizer)
+
+		if hasPruneSetFinalizer {
+			logger.Info("pruning ApplySet before removing finalizer")
+			done, err := r.pruneWithApplySet(ctx, deployer)
+			switch {
+			case err != nil:
+				logger.Error(err, "waiting for ApplySet to be pruned before removing finalizer")
+				errs = append(errs, err)
+			case !done:
+				return ctrl.Result{RequeueAfter: time.Second}, nil, true
+			default:
+				logger.Info("successfully pruned ApplySet for deployer")
+				controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
+			}
+		} else if controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
+			logger.Info("untracking resources before removing finalizer")
+			done, err := r.Untrack(ctx, deployer)
+			switch {
+			case err != nil:
+				logger.Error(err, "waiting for tracked resources to be unregistered before pruning")
+				errs = append(errs, err)
+			case !done:
+				return ctrl.Result{RequeueAfter: time.Second}, nil, true
+			default:
+				logger.Info("successfully untracked resources")
+				controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
+			}
+		}
+
+		if len(errs) > 0 {
+			return ctrl.Result{}, fmt.Errorf("failed to cleanup deployer before deletion: %w", errors.Join(errs...)), true
+		}
+
+		// Requeue if there are still finalizers to process. Metadata-only changes
+		// (like finalizer removal) do not trigger the GenerationChangedPredicate,
+		// so an explicit requeue is needed.
+		if controllerutil.ContainsFinalizer(deployer, applySetPruneFinalizer) ||
+			controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
+			return ctrl.Result{Requeue: true}, nil, true
+		}
+
+		logger.Info("successfully cleaned up deployer before deletion")
+		return ctrl.Result{}, nil, true
 	}
+	return ctrl.Result{}, nil, false
+}
 
-	blob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
+func (r *Reconciler) DownloadResourceWithOCM(
+	ctx context.Context,
+	cacheBackedRepo *resolution.CacheBackedRepository,
+	componentDescriptor *descriptor.Descriptor,
+	resource *descriptor.Resource,
+	cfg *configuration.Configuration,
+) (objs []*unstructured.Unstructured, err error) {
+	resourceBlob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, resource, cfg)
 	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
-
 		return nil, fmt.Errorf("failed to download resource: %w", err)
 	}
+
+	limitedReader, err := resourceBlob.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("getting reader for resource blob: %w", err)
+	}
 	defer func() {
-		err = errors.Join(err, blob.Close())
+		err = errors.Join(err, limitedReader.Close())
 	}()
 
-	// Decode YAML manifests
-	if objs, err = decodeObjectsFromManifest(blob); err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.MarshalFailedReason, err.Error())
+	// Enforce resource size limit: opportunistic pre-check using declared size,
+	// then wrap the reader to cap reads at the limit.
+	// This only happens when a maximum resource limit is set (> 0). Otherwise, we will read the whole resource
+	// regardless of its size.
+	if r.MaxResourceSizeBytes > 0 {
+		if sizeAware, ok := resourceBlob.(blob.SizeAware); ok {
+			if size := sizeAware.Size(); size != blob.SizeUnknown && size > r.MaxResourceSizeBytes {
+				err := fmt.Errorf("resource size %s exceeds maximum allowed size of %s",
+					apiresource.NewQuantity(size, apiresource.BinarySI),
+					apiresource.NewQuantity(r.MaxResourceSizeBytes, apiresource.BinarySI),
+				)
 
-		return nil, fmt.Errorf("failed to decode objects: %w", err)
+				return nil, err
+			}
+		}
+
+		limitedReader = &limitedReadCloser{Closer: limitedReader, limited: &io.LimitedReader{R: limitedReader, N: r.MaxResourceSizeBytes}}
 	}
 
-	return objs, nil
+	return decodeObjectsFromManifest(limitedReader)
 }
 
 func decodeObjectsFromManifest(manifest io.ReadCloser) (_ []*unstructured.Unstructured, err error) {
@@ -508,7 +655,7 @@ func decodeObjectsFromManifest(manifest io.ReadCloser) (_ []*unstructured.Unstru
 	}
 
 	if len(objs) == 0 {
-		return nil, fmt.Errorf("no objects found in  manifest")
+		return nil, fmt.Errorf("no objects found in manifest")
 	}
 
 	return objs, nil
@@ -522,7 +669,7 @@ func (r *Reconciler) downloadResourceBlob(
 	componentDescriptor *descriptor.Descriptor,
 	resource *descriptor.Resource,
 	cfg *configuration.Configuration,
-) (io.ReadCloser, error) {
+) (blob.ReadOnlyBlob, error) {
 	typed, err := v2.Scheme.NewObject(resource.Access.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve access type: %w", err)
@@ -538,12 +685,7 @@ func (r *Reconciler) downloadResourceBlob(
 			return nil, fmt.Errorf("failed to get local resource: %w", err)
 		}
 
-		reader, err := blob.ReadCloser()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get reader from local blob: %w", err)
-		}
-
-		return reader, nil
+		return blob, nil
 	}
 
 	// non-local access types use the plugin manager
@@ -557,17 +699,7 @@ func (r *Reconciler) downloadResourceBlob(
 		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
 	}
 
-	blob, err := resourcePlugin.DownloadResource(ctx, resource, creds)
-	if err != nil {
-		return nil, fmt.Errorf("failed to download resource: %w", err)
-	}
-
-	reader, err := blob.ReadCloser()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get reader from blob: %w", err)
-	}
-
-	return reader, nil
+	return resourcePlugin.DownloadResource(ctx, resource, creds)
 }
 
 // resolveResourceCredentials resolves credentials for accessing a resource.
@@ -608,32 +740,28 @@ func resolveResourceCredentials(
 	return creds, nil
 }
 
-// makeResourceIdentity creates a runtime.Identity from a ResourceInfo.
-func makeResourceIdentity(info *deliveryv1alpha1.ResourceInfo) ocmruntime.Identity {
-	identity := ocmruntime.Identity{
-		"name": info.Name,
+// buildResourceCacheKey computes the cache key used to store/retrieve downloaded resource objects.
+// It uses the digest as cache key if possible because a changed digest indicates that the resource changed. If no
+// digest is available, a component version and resource identity plus the config hash, which could contain resolver
+// configuration, should be sufficient.
+func buildResourceCacheKey(
+	matchedResource *descriptor.Resource,
+	componentDescriptor *descriptor.Descriptor,
+	cfg *configuration.Configuration,
+	resourceIdentity string,
+) string {
+	if matchedResource.Digest != nil {
+		return matchedResource.Digest.Value
 	}
 
-	if info.Version != "" {
-		identity["version"] = info.Version
+	var key string
+	if cfg != nil {
+		key = fmt.Sprintf("%x/", cfg.Hash)
 	}
 
-	for k, v := range info.ExtraIdentity {
-		identity[k] = v
-	}
+	key += componentDescriptor.Component.Name + ":" + componentDescriptor.Component.Version + "/" + resourceIdentity
 
-	return identity
-}
-
-// identityFunc is a custom identity matching function that ignores the "version" field if it is not set.
-func identityFunc() ocmruntime.IdentityMatchingChainFn {
-	return func(i, o ocmruntime.Identity) bool {
-		version, ok := i["version"]
-		if !ok || version == "" {
-			delete(o, "version")
-		}
-		return ocmruntime.IdentityEqual(i, o)
-	}
+	return key
 }
 
 func (r *Reconciler) createApplySet(deployer *deliveryv1alpha1.Deployer, logger logr.Logger) *applyset.ApplySet {
@@ -703,7 +831,7 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 	}
 
 	logger.Info("applying ApplySet")
-	applyResult, metadata, err := set.Apply(ctx, resourcesToAdd, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
+	applyResult, err := set.Apply(ctx, resourcesToAdd, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
 	if err != nil {
 		return fmt.Errorf("failed to apply ApplySet: %w", err)
 	}
@@ -800,6 +928,123 @@ func (r *Reconciler) track(ctx context.Context, deployer *deliveryv1alpha1.Deplo
 	}
 
 	return nil
+}
+
+// getEffectiveComponentDescriptor retrieves the effective component descriptor for the resource.
+// The resource status tells us which component version was resolved for the resource. However, making sure the
+// integrity of that component version is still intact is tricky.
+//
+//   - If the resource is from the same component version as the component from the component CR, we need to check for
+//     verifications on the component CR and add them to the cache-backed repository to make sure they are included in
+//     the cache key and used for verification (if any).
+//   - If the resource is from a component version that was resolved through a reference path in the resource
+//     controller, we need to resolve the path again starting from the component specified in the component CR, to make
+//     sure we get the same component version with an intact integrity chain (if a digest was provided to check it).
+//     This operation should be cheap as we expect the component to be in cache already.
+func (r *Reconciler) getEffectiveComponentDescriptor(
+	ctx context.Context,
+	deployer *deliveryv1alpha1.Deployer,
+	resource *deliveryv1alpha1.Resource,
+	cfg *configuration.Configuration,
+) (*descriptor.Descriptor, error) {
+	// We get the (ready) component CR to (1) get any verifications needed to resolve the component version and (2) to
+	// compare the component version used in the component and resource controller.
+	component, err := util.GetReadyObject[deliveryv1alpha1.Component, *deliveryv1alpha1.Component](ctx, r.Client, client.ObjectKey{
+		Namespace: resource.GetNamespace(),
+		Name:      resource.Spec.ComponentRef.Name,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ready component: %w", err)
+	}
+
+	repoSpecComponent := &ocmruntime.Raw{}
+	if err := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown()).Decode(
+		bytes.NewReader(component.Status.Component.RepositorySpec.Raw), repoSpecComponent); err != nil {
+		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
+	}
+
+	// Add verifications from the component to the cache-backed repository to make sure they are included in the
+	// cache key and used for verification (if any).
+	verifications, err := verification.GetVerifications(ctx, r.Client, component)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get verifications: %w", err)
+	}
+
+	requesterFunc := func() workerpool.RequesterInfo {
+		return workerpool.RequesterInfo{
+			NamespacedName: k8stypes.NamespacedName{
+				Namespace: deployer.GetNamespace(),
+				Name:      deployer.GetName(),
+			},
+		}
+	}
+
+	verifiedOpts := resolution.RepositoryOptions{
+		RepositorySpec:  repoSpecComponent,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
+		Verifications:   verifications,
+		RequesterFunc:   requesterFunc,
+	}
+
+	refPathOpts := resolution.RepositoryOptions{
+		RepositorySpec:  repoSpecComponent,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
+		RequesterFunc:   requesterFunc,
+	}
+
+	repoComponent, err := r.Resolver.NewCacheBackedRepository(ctx, &verifiedOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
+	}
+
+	componentDescriptorComponent, err := repoComponent.GetComponentVersion(ctx,
+		component.Status.Component.Component,
+		component.Status.Component.Version)
+	// Only return the error if it is not of type `ErrNotSafelyDigestible`. If it is of that type, we need to check
+	// if there is a reference path to resolve.
+	if err != nil && !errors.Is(err, workerpool.ErrNotSafelyDigestible) {
+		return nil, fmt.Errorf("failed to get component version from cache-backed repository: %w", err)
+	}
+
+	// Early return if the component version from the component and resource status are the same.
+	// Returning the error as well as this could be of type `ErrNotSafelyDigestible`, which is a fallthrough with
+	// an error event. The error will be checked in the calling code.
+	if component.Status.Component.Component == resource.Status.Component.Component &&
+		component.Status.Component.Version == resource.Status.Component.Version {
+		return componentDescriptorComponent, err
+	}
+
+	// If the component CR got an update while the deployer reconciler is already running, it is possible that the
+	// component version in the component and resource CR are different, but the component version from the resource
+	// status is not resolved through a reference path.
+	// In this case we do nothing and wait for the resource.
+	if len(resource.Spec.Resource.ByReference.ReferencePath) == 0 {
+		log.FromContext(ctx).Info("component version from resource status differs from component version from component, but no reference path provided",
+			"resourceComponent", resource.Status.Component.Component,
+			"resourceVersion", resource.Status.Component.Version,
+			"componentComponent", component.Status.Component.Component,
+			"componentVersion", component.Status.Component.Version)
+
+		return nil, ErrComponentVersionDrift
+	}
+
+	resourceDescriptor, _, errReferencePath := ocm.ResolveReferencePath(
+		ctx,
+		r.Resolver,
+		componentDescriptorComponent,
+		resource.Spec.Resource.ByReference.ReferencePath,
+		&refPathOpts,
+	)
+	if errReferencePath != nil && !errors.Is(errReferencePath, workerpool.ErrNotSafelyDigestible) {
+		return nil, fmt.Errorf("failed to resolve resource reference path: %w", errReferencePath)
+	}
+
+	// Join potential errors of type ErrNotSafelyDigestible to be handled by the calling function.
+	err = errors.Join(err, errReferencePath)
+
+	return resourceDescriptor, err
 }
 
 func updateDeployedObjectStatusReferences[T client.Object](objs []T, deployer *deliveryv1alpha1.Deployer) {

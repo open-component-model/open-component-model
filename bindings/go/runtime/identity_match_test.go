@@ -453,6 +453,89 @@ func TestIdentityMatchesURL(t *testing.T) {
 			false,
 		},
 		{
+			"oci scheme matches https scheme",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributeScheme:   "oci",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+			},
+			true,
+		},
+		{
+			"empty scheme matches https",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+			},
+			true,
+		},
+		{
+			"empty scheme matches http",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "http",
+				},
+			},
+			true,
+		},
+		{
+			"empty scheme with default port matches https",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributePort:     "443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+			},
+			true,
+		},
+		{
+			"empty scheme with default port matches http",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "80",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "http",
+				},
+			},
+			true,
+		},
+		{
+			"oci scheme with port 443 matches https without port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributeScheme:   "oci",
+					runtime.IdentityAttributePort:     "443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributeScheme:   "https",
+				},
+			},
+			true,
+		},
+		{
 			"empty identities match",
 			args{
 				a: runtime.Identity{},

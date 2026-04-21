@@ -2,34 +2,24 @@ package input
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
-	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
+	"ocm.software/open-component-model/bindings/go/helm/spec/input"
+	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ErrLocalHelmInputDoesNotRequireCredentials is returned when credential-related operations are attempted
-// on local helm inputs, since those are based on local filesystem and do not require authentication or authorization.
-var ErrLocalHelmInputDoesNotRequireCredentials = errors.New("local helm inputs do not require credentials")
-
 var _ interface {
 	constructor.ResourceInputMethod
 } = (*InputMethod)(nil)
-
-var Scheme = runtime.NewScheme()
-
-func init() {
-	Scheme.MustRegisterWithAlias(&v1.Helm{},
-		runtime.NewVersionedType(v1.Type, v1.Version),
-		runtime.NewUnversionedType(v1.Type),
-	)
-}
 
 // InputMethod implements the ResourceInputMethod and SourceInputMethod interfaces for helm-based inputs.
 // It provides functionality to process local filesystem directories, which have helm chart structure,
@@ -49,29 +39,23 @@ type InputMethod struct {
 const LegacyHelmChartConsumerType = "HelmChartRepository"
 
 func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
-	return Scheme
+	return input.Scheme
 }
 
 // GetResourceCredentialConsumerIdentity returns credentials consumer identity for remote helm repositories
-// or nil for local helm inputs. Remote repositories may require authentication credentials.
-func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+// or [ErrLocalHelmInputDoesNotRequireCredentials] for local helm inputs.
+func (i *InputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	helm := v1.Helm{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &helm); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
 	if helm.HelmRepository == "" {
-		return nil, ErrLocalHelmInputDoesNotRequireCredentials
+		slog.DebugContext(ctx, "no credentials are needed for local helm charts")
+		return nil, nil
 	}
 
-	identity, err = runtime.ParseURLToIdentity(helm.HelmRepository)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing helm repository URL to identity: %w", err)
-	}
-
-	identity.SetType(runtime.NewUnversionedType(LegacyHelmChartConsumerType))
-
-	return identity, nil
+	return helminternal.CredentialConsumerIdentity(helm.HelmRepository)
 }
 
 // ProcessResource processes a helm-based resource input by converting the input specification
@@ -84,6 +68,16 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	helm := v1.Helm{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &helm); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
+	}
+
+	if i.TempFolder == "" {
+		// we cannot delete the temp folder since it will hold the downloaded helm chart blobs
+		// and we do not want to break existing fallback behavior for users who do not set the TempFolder field before
+		temp, err := os.MkdirTemp("", "helm-input-*")
+		if err != nil {
+			return nil, fmt.Errorf("error creating temporary directory for helm input processing: %w", err)
+		}
+		i.TempFolder = temp
 	}
 
 	helmBlob, chart, err := GetV1HelmBlob(ctx, helm, i.TempFolder, WithCredentials(credentials))

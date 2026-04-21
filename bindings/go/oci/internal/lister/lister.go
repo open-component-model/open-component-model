@@ -151,7 +151,7 @@ func (lister *Lister) listUnsorted(ctx context.Context, opts Options) ([]string,
 
 		return tags, nil
 	default:
-		return nil, fmt.Errorf("unsupported lookup policy: %q", opts.LookupPolicy)
+		return nil, fmt.Errorf("unsupported lookup policy: %d", opts.LookupPolicy)
 	}
 }
 
@@ -182,7 +182,7 @@ func (lister *Lister) sort(_ context.Context, opts Options, candidates []string)
 		}
 		return out, nil
 	default:
-		return nil, fmt.Errorf("unsupported sort policy: %q", opts.SortPolicy)
+		return nil, fmt.Errorf("unsupported sort policy: %d", opts.SortPolicy)
 	}
 }
 
