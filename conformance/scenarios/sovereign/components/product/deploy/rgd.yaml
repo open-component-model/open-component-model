@@ -172,9 +172,9 @@ spec:
               resource:
                 name: helm-chart
           additionalStatusFields:
-            registry: resource.access.globalAccess.imageReference.toOCI().registry
-            repository: resource.access.globalAccess.imageReference.toOCI().repository
-            digest: resource.access.globalAccess.imageReference.toOCI().digest
+            registry: resource.access.toOCI().registry
+            repository: resource.access.toOCI().repository
+            digest: resource.access.toOCI().digest
 
     # Resolve container image from postgres component
     - id: postgresImageResource
@@ -196,10 +196,9 @@ spec:
               resource:
                 name: image
           additionalStatusFields:
-            registry: resource.access.globalAccess.imageReference.toOCI().registry
-            repository: resource.access.globalAccess.imageReference.toOCI().repository
-            tag: resource.access.globalAccess.imageReference.toOCI().tag
-            digest: resource.access.globalAccess.imageReference.toOCI().digest
+            registry: resource.access.toOCI().registry
+            repository: resource.access.toOCI().repository
+            digest: resource.access.toOCI().digest
 
     # FluxCD OCIRepository for postgres helm chart
     - id: postgresOciRepository
@@ -241,7 +240,7 @@ spec:
           values:
             image:
               repository: ${postgresImageResource.status.additional.registry}/${postgresImageResource.status.additional.repository}
-              tag: ${postgresImageResource.status.additional.tag}@${postgresImageResource.status.additional.digest}
+              digest: ${postgresImageResource.status.additional.digest}
             postgresql:
               postgresqlDatabase: ${schema.spec.postgres.database.name}
               postgresqlUsername: ${schema.spec.postgres.database.username}
@@ -280,9 +279,9 @@ spec:
               resource:
                 name: helm-chart
           additionalStatusFields:
-            registry: resource.access.globalAccess.imageReference.toOCI().registry
-            repository: resource.access.globalAccess.imageReference.toOCI().repository
-            digest: resource.access.globalAccess.imageReference.toOCI().digest
+            registry: resource.access.toOCI().registry
+            repository: resource.access.toOCI().repository
+            digest: resource.access.toOCI().digest
 
     # Resolve container image from notes component
     - id: notesImageResource
@@ -304,10 +303,9 @@ spec:
               resource:
                 name: image
           additionalStatusFields:
-            registry: resource.access.globalAccess.imageReference.toOCI().registry
-            repository: resource.access.globalAccess.imageReference.toOCI().repository
-            tag: resource.access.globalAccess.imageReference.toOCI().tag
-            digest: resource.access.globalAccess.imageReference.toOCI().digest
+            registry: resource.access.toOCI().registry
+            repository: resource.access.toOCI().repository
+            digest: resource.access.toOCI().digest
 
     # FluxCD OCIRepository for notes helm chart
     - id: notesOciRepository
@@ -350,7 +348,7 @@ spec:
             replicaCount: ${schema.spec.notes.replicas}
             image:
               repository: ${notesImageResource.status.additional.registry}/${notesImageResource.status.additional.repository}
-              tag: ${notesImageResource.status.additional.tag}@${notesImageResource.status.additional.digest}
+              digest: ${notesImageResource.status.additional.digest}
             databaseSecretRef: ${secrets.metadata.name}
             resources:
               requests:
