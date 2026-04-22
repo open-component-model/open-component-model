@@ -320,7 +320,7 @@ jobs:
           # approval takes longer than one day.
           gh release download "${RC_TAG}" \
             --repo "${{ github.repository }}" \
-            --pattern "chart-*.tgz" \
+            --pattern "chart-${RC_VERSION}.tgz" \
             --dir "$work"
 
           tar -xzf "$work/chart-${RC_VERSION}.tgz" -C "$work/rc" --strip-components=1
