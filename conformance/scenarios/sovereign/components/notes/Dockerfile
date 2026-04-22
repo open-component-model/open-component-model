@@ -1,5 +1,7 @@
 # Multi-stage build for sovereign-notes application
-FROM golang:1.26-alpine@sha256:f85330846cde1e57ca9ec309382da3b8e6ae3ab943d2739500e08c86393a21b1 AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26-alpine@sha256:f85330846cde1e57ca9ec309382da3b8e6ae3ab943d2739500e08c86393a21b1 AS builder
+ARG TARGETOS
+ARG TARGETARCH
 
 # Set working directory
 WORKDIR /app
@@ -18,7 +20,7 @@ COPY . .
 # v1.1.0+ builds from cmd/sovereign-notes (migration-based schema evolution).
 ARG VERSION=1.0.0
 RUN CMD_DIR=$(if [ "${VERSION}" = "1.0.0" ]; then echo "sovereign-notes-v1"; else echo "sovereign-notes"; fi) && \
-    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -installsuffix cgo \
     -ldflags="-X main.version=${VERSION}" \
     -o sovereign-notes ./cmd/${CMD_DIR}
 
