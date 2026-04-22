@@ -19,6 +19,8 @@ permissions:
 jobs:
   lint:
     name: Lint
+    # sourcemeta/jsonschema install script uses uname -m (returns aarch64 on Linux ARM64)
+    # but release assets are named arm64, causing a download 404.
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository

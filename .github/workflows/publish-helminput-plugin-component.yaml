@@ -40,7 +40,7 @@ env:
 jobs:
   build:
     name: Build Plugin Component
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     outputs:
       version: ${{ steps.calculate_version.outputs.version }}
       should_push_oci_image: ${{ steps.branch-check.outputs.should_push_oci_image }}
@@ -123,7 +123,7 @@ jobs:
     name: Publish Component
     needs: build
     if: ${{ needs.build.outputs.should_push_oci_image == 'true' }}  # Skip unless we should push
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     concurrency:
       group: helm-plugin-publish-${{ github.ref }}
       cancel-in-progress: false
