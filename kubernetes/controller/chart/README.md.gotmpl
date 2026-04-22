@@ -54,23 +54,34 @@ helm uninstall ocm-k8s-toolkit --namespace ocm-system
 
 Run these tasks from the `kubernetes/controller` directory.
 
-### Regenerating CRDs
+### Regenerating CRDs and manager-role
 
-When API types change, regenerate the CRD templates in the Helm chart:
+When API types or `//+kubebuilder:rbac` markers change, regenerate the Helm
+templates:
 
 ```bash
-task helm/generate-crds
+task helm/generate
 ```
 
-This runs `controller-gen` to produce raw CRDs into `bin/gen/crd` and then invokes
-`hack/helm.generate.sh` to reformat them and inject the chart's Helm template
-wrappers (`crd.enable`, cert-manager CA-injection annotation, conversion webhook
-block) before writing them to `chart/templates/crd/`.
+This runs `controller-gen` to produce raw CRDs into `bin/gen/crd` and a raw
+ClusterRole into `bin/gen/rbac`, then invokes two post-processors:
 
-> **Note:** RBAC templates in `chart/templates/rbac/` are hand-maintained. When
-> `//+kubebuilder:rbac` markers in Go source change, update
-> `chart/templates/rbac/manager-role.yaml` manually. Other templates (e.g.,
-> `manager.yaml`, `_helpers.tpl`) are likewise managed by hand.
+- `hack/helm.generate.sh` reformats the CRDs and injects Helm template wrappers
+  (`crd.enable`, cert-manager CA-injection annotation, conversion webhook block)
+  into `chart/templates/crd/`.
+- `hack/rbac.generate.sh` reformats the ClusterRole and rewrites `metadata.name`
+  to the chart's templated resource name, writing
+  `chart/templates/rbac/manager-role.yaml`.
+
+Individual targets `task helm/generate-crds` and `task helm/generate-rbac` are
+also available.
+
+> **Note:** Only `manager-role.yaml` is regenerated from Go markers. The
+> ClusterRoleBinding, ServiceAccount, leader-election Role/RoleBinding, and
+> per-kind editor/viewer aggregation roles under `chart/templates/rbac/` are
+> hand-maintained because they are not derivable from `//+kubebuilder:rbac`
+> markers. Other templates (`manager.yaml`, `_helpers.tpl`, etc.) are likewise
+> hand-maintained.
 
 ### Validating changes
 
@@ -83,7 +94,7 @@ task helm/validate
 This checks:
 - Chart linting passes
 - Templates render successfully
-- CRDs, schema, and docs are up to date
+- CRDs, manager-role, schema, and docs are up to date
 
 ### Regenerating artifacts after values.yaml changes
 

@@ -40,11 +40,11 @@ tasks:
 
   # Development
   manifests:
-    desc: "Generate raw CRD and webhook configuration YAML into bin/gen/crd (consumed by helm/generate-crds)"
+    desc: "Generate raw CRD, webhook, and RBAC YAML into bin/gen (consumed by helm/generate-crds and helm/generate-rbac)"
     deps: [controller-gen]
     cmds:
-      - mkdir -p bin/gen/crd
-      - '"{{.CONTROLLER_GEN}}" crd webhook paths="{{ .TASKFILE_DIR }}/..." output:crd:artifacts:config=bin/gen/crd'
+      - mkdir -p bin/gen/crd bin/gen/rbac
+      - '"{{.CONTROLLER_GEN}}" rbac:roleName=manager-role crd webhook paths="{{ .TASKFILE_DIR }}/..." output:rbac:artifacts:config=bin/gen/rbac output:crd:artifacts:config=bin/gen/crd'
 
   generate:
     desc: "Generate Go deepcopy and runtime.Object implementations"
@@ -164,6 +164,17 @@ tasks:
     deps: [manifests, yq]
     cmd: 'YQ="{{.YQ}}" {{.TASKFILE_DIR}}/hack/helm.generate.sh {{.TASKFILE_DIR}}/bin/gen/crd {{.TASKFILE_DIR}}/chart'
 
+  helm/generate-rbac:
+    desc: "Generate chart/templates/rbac/manager-role.yaml from controller-gen RBAC output"
+    deps: [manifests, yq]
+    cmd: 'YQ="{{.YQ}}" {{.TASKFILE_DIR}}/hack/rbac.generate.sh {{.TASKFILE_DIR}}/bin/gen/rbac {{.TASKFILE_DIR}}/chart'
+
+  helm/generate:
+    desc: "Regenerate chart CRDs and manager-role from controller-gen output"
+    cmds:
+      - task: helm/generate-crds
+      - task: helm/generate-rbac
+
   helm/schema:
     desc: "Generate JSON schema from chart values.yaml"
     silent: true
@@ -180,7 +191,7 @@ tasks:
     cmd: 'helm lint chart/'
 
   helm/validate:
-    desc: "Validate the Helm chart (lint, template, and verify CRDs/schema/docs are in sync)"
+    desc: "Validate the Helm chart (lint, template, and verify CRDs/RBAC/schema/docs are in sync)"
     silent: true
     cmds:
       - task: helm/lint
@@ -188,10 +199,11 @@ tasks:
       - task: helm/schema
       - task: helm/docs
       - task: helm/generate-crds
+      - task: helm/generate-rbac
       - |
-        if ! git diff --quiet chart/templates/crd chart/values.schema.json chart/README.md; then
-          echo "ERROR: CRDs, schema or docs are out of sync. Run 'task helm/generate-crds' (and helm/schema / helm/docs as needed) and commit the changes."
-          git diff chart/templates/crd chart/values.schema.json chart/README.md
+        if ! git diff --quiet chart/templates/crd chart/templates/rbac/manager-role.yaml chart/values.schema.json chart/README.md; then
+          echo "ERROR: CRDs, manager-role, schema or docs are out of sync. Run 'task helm/generate' (and helm/schema / helm/docs as needed) and commit the changes."
+          git diff chart/templates/crd chart/templates/rbac/manager-role.yaml chart/values.schema.json chart/README.md
           exit 1
         fi
 
