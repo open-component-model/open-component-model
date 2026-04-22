@@ -33,7 +33,7 @@ env:
 jobs:
   update-registry:
     name: Update Plugin Registry
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     concurrency:
       group: plugin-registry-publish
       cancel-in-progress: false  # Queue updates, don't cancel
