@@ -11,7 +11,7 @@ Hugo site using the **Doks** documentation theme (`@thulite/doks-core` v1.9.3) b
 Supporting modules:
 
 | Module | Role |
-|--------|------|
+| ------ | ---- |
 | `@thulite/images` | Image optimization |
 | `@thulite/inline-svg` | SVG inlining |
 | `@thulite/seo` | SEO metadata |
@@ -154,7 +154,7 @@ The foundation — defines the entire color system as CSS custom properties on `
 Key brand colors:
 
 | Variable | Value |
-|----------|-------|
+| -------- | ----- |
 | `--brand-blue-dark` | `#257ddc` |
 | `--brand-blue-mid` | `#1d65b4` |
 | `--brand-cyan` | `#4cc9f0` |
@@ -238,7 +238,7 @@ Content versioning uses Hugo module mounts to serve different content folders fo
 **Version UI components:**
 
 | Component | File | Behavior |
-|-----------|------|----------|
+| --------- | ---- | -------- |
 | Version switcher | `custom-header.html` | Dropdown lists all versions, marks current + default |
 | Legacy badge | `version-warning.html` | "Legacy" indicator in header on legacy version |
 | Warning banner | `version-banner.html` | Full-width banner on non-default pages with link to latest |
@@ -253,7 +253,7 @@ script can update this with `--keepDefault` flag to preserve "latest" as default
 Hugo module imports in `module.toml` pull content and schemas from OCM sub-projects:
 
 | Source Module | Mount Target | Content |
-|--------------|-------------|---------|
+| ------------- | ------------ | ------- |
 | `cli` | `content/docs/reference/ocm-cli` | CLI reference docs (auto-generated) |
 | `bindings/go/constructor` | `static/latest/schemas/bindings/go/constructor` | Constructor JSON schemas |
 | `bindings/go/descriptor/v2` | `static/latest/schemas/bindings/go/descriptor/v2` | Descriptor v2 JSON schemas |
