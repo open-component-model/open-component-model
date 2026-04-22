@@ -88,6 +88,7 @@ For more information about OCM transfer, see the
 
 - [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) — Full schema,
   repository types, and pattern syntax
+- [Canonical Component Repositories]({{< relref "docs/concepts/canonical-components.md" >}}) — Why references are location-free and how resolvers bridge the gap
 - [Component Identity]({{< relref "docs/concepts/component-identity.md" >}}) — Core concepts behind component versions,
   identities, and references
 - [How-To: Transfer Components Across an Air Gap]({{< relref "docs/how-to/air-gap-transfer.md" >}}) — Use OCM Transfer
