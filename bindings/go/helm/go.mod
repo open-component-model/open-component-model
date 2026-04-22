@@ -132,5 +132,5 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-// TODO: remove replace once oci module is published with CredentialSlotResource constant
+// TODO: remove replace once oci module is published with CredentialKeyResource constant
 replace ocm.software/open-component-model/bindings/go/oci => ../oci

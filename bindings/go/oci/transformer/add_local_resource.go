@@ -48,7 +48,7 @@ func (t *AddLocalResource) GetCredentialConsumerIdentities(ctx context.Context, 
 	if identity == nil {
 		return nil, nil
 	}
-	return map[string]runtime.Identity{CredentialSlotRepository: identity}, nil
+	return map[string]runtime.Identity{CredentialKeyRepository: identity}, nil
 }
 
 func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error) {
@@ -109,7 +109,7 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed, cr
 
 	var creds map[string]string
 	if credentials != nil {
-		creds = credentials[CredentialSlotRepository]
+		creds = credentials[CredentialKeyRepository]
 	}
 
 	// Get repository

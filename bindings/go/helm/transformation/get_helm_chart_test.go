@@ -370,7 +370,7 @@ func TestGetHelmChart_CredentialFlow(t *testing.T) {
 
 	scheme := newTestScheme()
 
-	t.Run("GetCredentialConsumerIdentities returns resource slot", func(t *testing.T) {
+	t.Run("GetCredentialConsumerIdentities returns resource credential key", func(t *testing.T) {
 		r := require.New(t)
 		ctx := t.Context()
 

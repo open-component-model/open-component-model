@@ -406,10 +406,10 @@ func TestGetLocalResource_CredentialFlow(t *testing.T) {
 	identities, err := transformer.GetCredentialConsumerIdentities(ctx, spec)
 	require.NoError(t, err)
 	require.NotNil(t, identities)
-	require.Contains(t, identities, CredentialSlotRepository)
+	require.Contains(t, identities, CredentialKeyRepository)
 
 	resolvedCreds := map[string]map[string]string{
-		CredentialSlotRepository: {"username": "repo-user", "password": "repo-pass"},
+		CredentialKeyRepository: {"username": "repo-user", "password": "repo-pass"},
 	}
 
 	result, err := transformer.Transform(ctx, spec, resolvedCreds)

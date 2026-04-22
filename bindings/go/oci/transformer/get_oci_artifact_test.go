@@ -349,10 +349,10 @@ func TestGetOCIArtifact_CredentialFlow(t *testing.T) {
 	identities, err := transformer.GetCredentialConsumerIdentities(ctx, spec)
 	require.NoError(t, err)
 	require.NotNil(t, identities)
-	require.Contains(t, identities, CredentialSlotResource)
+	require.Contains(t, identities, CredentialKeyResource)
 
 	resolvedCreds := map[string]map[string]string{
-		CredentialSlotResource: {"username": "test-user", "password": "test-pass"},
+		CredentialKeyResource: {"username": "test-user", "password": "test-pass"},
 	}
 
 	result, err := transformer.Transform(ctx, spec, resolvedCreds)

@@ -26,6 +26,7 @@ type ConvertHelmChartToOCI struct {
 }
 
 func (t *ConvertHelmChartToOCI) GetCredentialConsumerIdentities(_ context.Context, _ runtime.Typed) (map[string]runtime.Identity, error) {
+	// No credentials needed — this transformer converts local files only.
 	return nil, nil
 }
 
