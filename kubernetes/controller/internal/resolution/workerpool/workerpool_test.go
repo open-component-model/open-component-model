@@ -819,6 +819,40 @@ func TestWorkerPoolEventChannelClosedOnShutdown(t *testing.T) {
 	}
 }
 
+func TestWorkerPool_SubscriberBufferSize(t *testing.T) {
+	logger := logr.Discard()
+	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
+
+	t.Run("custom buffer size", func(t *testing.T) {
+		wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
+			SubscriberBufferSize: 50,
+			Logger:               &logger,
+			Cache:                cache,
+		})
+		ch := wp.Subscribe()
+		require.Equal(t, 50, cap(ch))
+	})
+
+	t.Run("default buffer size when zero", func(t *testing.T) {
+		wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
+			Logger: &logger,
+			Cache:  cache,
+		})
+		ch := wp.Subscribe()
+		require.Equal(t, 10, cap(ch))
+	})
+
+	t.Run("default buffer size when negative", func(t *testing.T) {
+		wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
+			SubscriberBufferSize: -1,
+			Logger:               &logger,
+			Cache:                cache,
+		})
+		ch := wp.Subscribe()
+		require.Equal(t, 10, cap(ch))
+	})
+}
+
 // testEnvironment holds the test infrastructure for workerpool testing.
 type testEnvironment struct {
 	Pool *workerpool.WorkerPool
