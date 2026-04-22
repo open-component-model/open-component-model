@@ -15,6 +15,7 @@ GetOCIArtifact
 GmbH
 KEP
 MiB
+LLM
 OCIAddComponentVersion
 OCIAddLocalResource
 OCIGetComponentVersion
@@ -525,6 +526,7 @@ os
 ospo
 oss
 outputspecification
+overexplain
 overriden
 overwritable
 packageidentifier
@@ -773,6 +775,7 @@ valuemergehandlerdescriptor
 valueset
 valuesfrom
 valuessource
+variadic
 verifier
 verifiers
 versionability
