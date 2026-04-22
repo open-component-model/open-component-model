@@ -11,7 +11,7 @@ organizes content into tutorials, how-to guides, explanations, and reference mat
 
 ## Prerequisites
 
-- **Node.js >= 25.8.0** and **npm >= 11.11.0** (see `engines` in `package.json`)
+- **Node.js** and **npm** (see version requirements in `engines` in `package.json`)
 - Hugo is installed automatically via the `hugo-extended` npm package - you do not need to install it separately
 
 ## Local Development
