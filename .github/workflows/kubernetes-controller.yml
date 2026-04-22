@@ -219,10 +219,13 @@ jobs:
           path: ${{ env.LOCATION }}/dist/chart-*.tgz
 
   E2E:
-    name: E2E Tests
-    runs-on: ubuntu-24.04-arm
+    name: E2E Tests (${{ matrix.arch }})
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 20
     needs: build
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
     permissions:
       contents: read
       actions: read
@@ -256,7 +259,7 @@ jobs:
       - name: Setup ocm
         run: |
           VERSION="$(basename "$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/open-component-model/ocm/releases/latest)")"
-          curl -Ls "https://github.com/open-component-model/ocm/releases/download/${VERSION}/ocm-${VERSION#v}-linux-arm64.tar.gz" | tar xz -C /usr/local/bin ocm
+          curl -Ls "https://github.com/open-component-model/ocm/releases/download/${VERSION}/ocm-${VERSION#v}-linux-${{ matrix.arch }}.tar.gz" | tar xz -C /usr/local/bin ocm
           ocm version
 
       - name: Setup Flux CLI
@@ -287,7 +290,7 @@ jobs:
           IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
         run: |
           mkdir -p tmp/docker
-          skopeo --override-arch arm64 --override-os linux copy \
+          skopeo --override-arch ${{ matrix.arch }} --override-os linux copy \
             oci:tmp/oci-dir:${VERSION} \
             docker-archive:tmp/docker/controller.tar:${IMAGE_NAME}:latest
           echo "CONTROLLER_IMG=${IMAGE_NAME}:${VERSION}" >> "$GITHUB_ENV"

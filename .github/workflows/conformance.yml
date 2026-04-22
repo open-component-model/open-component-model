@@ -64,9 +64,12 @@ env:
 
 jobs:
   conformance:
-    name: Sovereign Scenario
-    runs-on: ubuntu-24.04-arm
+    name: Sovereign Scenario (${{ matrix.arch }})
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -110,7 +113,7 @@ jobs:
         run: |
           mkdir -p tmp/cli-oci-dir
           tar -xf tmp/cli-artifact/oci/cli.tar -C tmp/cli-oci-dir
-          skopeo --override-arch arm64 --override-os linux copy \
+          skopeo --override-arch ${{ matrix.arch }} --override-os linux copy \
             oci:tmp/cli-oci-dir:${CLI_VERSION} \
             docker-archive:tmp/cli-docker.tar:${CLI_IMAGE_NAME}:${CLI_VERSION}
           docker load < tmp/cli-docker.tar
@@ -133,7 +136,7 @@ jobs:
         run: |
           mkdir -p tmp/controller-oci-dir
           tar -xf tmp/controller-artifact/controller.tar -C tmp/controller-oci-dir
-          skopeo --override-arch arm64 --override-os linux copy \
+          skopeo --override-arch ${{ matrix.arch }} --override-os linux copy \
             oci:tmp/controller-oci-dir:${TOOLKIT_VERSION} \
             docker-archive:tmp/controller-docker.tar:${IMAGE_NAME}:${TOOLKIT_VERSION}
           echo "PRELOAD_IMAGES=${{ github.workspace }}/tmp/controller-docker.tar" >> "$GITHUB_ENV"
