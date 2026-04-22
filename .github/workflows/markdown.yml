@@ -15,7 +15,7 @@ permissions:
 jobs:
   markdown-lint:
     name: Lint Markdown (website)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - uses: DavidAnson/markdownlint-cli2-action@07035fd053f7be764496c0f8d8f9f41f98305101 # v22
@@ -28,6 +28,8 @@ jobs:
 
   spellcheck:
     name: Spellcheck
+    # rojopolis/spellcheck-github-actions uses docker://jonasbn/github-action-spellcheck
+    # which is an amd64-only image with no ARM64 manifest.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -39,7 +41,7 @@ jobs:
 
   verify-links:
     name: Verify links (repo)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       checks: write
       contents: read
@@ -58,7 +60,7 @@ jobs:
 
   verify-links-website:
     name: Verify links (website)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     if: github.event_name == 'pull_request'
     permissions:
       checks: write
@@ -165,7 +167,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
