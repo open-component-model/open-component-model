@@ -839,7 +839,7 @@ func TestWorkerPool_SubscriberBufferSize(t *testing.T) {
 			Cache:  cache,
 		})
 		ch := wp.Subscribe()
-		require.Equal(t, 10, cap(ch))
+		require.Equal(t, 100, cap(ch))
 	})
 
 	t.Run("default buffer size when negative", func(t *testing.T) {
@@ -849,7 +849,7 @@ func TestWorkerPool_SubscriberBufferSize(t *testing.T) {
 			Cache:                cache,
 		})
 		ch := wp.Subscribe()
-		require.Equal(t, 10, cap(ch))
+		require.Equal(t, 100, cap(ch))
 	})
 }
 
