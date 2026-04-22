@@ -33,7 +33,7 @@ permissions:
 jobs:
   publish:
     name: Publish Component Version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       actions: read
       packages: write # Required for pushing to GHCR

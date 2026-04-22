@@ -16,27 +16,27 @@ require (
 	golang.org/x/term v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.12
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260417071914-50137d2b3f6f
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260422093231-6611b268e461
 	ocm.software/open-component-model/bindings/go/configuration v0.0.12
 	ocm.software/open-component-model/bindings/go/constructor v0.0.7
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260417071914-50137d2b3f6f
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260417071914-50137d2b3f6f
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260422093231-6611b268e461
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260422093231-6611b268e461
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260417071914-50137d2b3f6f
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260422093231-6611b268e461
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260417071914-50137d2b3f6f
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260422093231-6611b268e461
 	ocm.software/open-component-model/bindings/go/oci v0.0.39
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260417071914-50137d2b3f6f
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260422093231-6611b268e461
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260417071914-50137d2b3f6f
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260417071914-50137d2b3f6f
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260417071914-50137d2b3f6f
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260422093231-6611b268e461
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260422093231-6611b268e461
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260422093231-6611b268e461
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -44,7 +44,7 @@ require (
 	cel.dev/expr v0.25.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
-	github.com/ProtonMail/go-crypto v1.4.0 // indirect
+	github.com/ProtonMail/go-crypto v1.4.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
@@ -126,16 +126,16 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	helm.sh/helm/v4 v4.1.4 // indirect
-	k8s.io/api v0.35.2 // indirect
-	k8s.io/apiextensions-apiserver v0.35.2 // indirect
+	k8s.io/api v0.35.3 // indirect
+	k8s.io/apiextensions-apiserver v0.35.3 // indirect
 	k8s.io/apimachinery v0.35.3 // indirect
-	k8s.io/cli-runtime v0.35.2 // indirect
-	k8s.io/client-go v0.35.2 // indirect
-	k8s.io/component-base v0.35.2 // indirect
+	k8s.io/cli-runtime v0.35.3 // indirect
+	k8s.io/client-go v0.35.3 // indirect
+	k8s.io/component-base v0.35.3 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
-	k8s.io/kubectl v0.35.2 // indirect
-	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
+	k8s.io/kubectl v0.35.3 // indirect
+	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/controller-runtime v0.23.3 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect

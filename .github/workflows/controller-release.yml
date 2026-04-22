@@ -42,7 +42,7 @@ jobs:
   # ---------------------------------------------------------------------------
   tag_rc:
     name: Create and Push RC Tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [prepare]
     if: ${{ github.event.inputs.dry_run == 'false' }}
     permissions:
@@ -108,7 +108,7 @@ jobs:
     name: Create RC Pre-Release
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
     needs: [prepare, tag_rc, build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: write
       actions: read
@@ -183,7 +183,7 @@ jobs:
   verify_attestations:
     name: Verify RC Attestations
     needs: [prepare, build, release_rc]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     environment: release
     permissions:
       contents: read
@@ -215,7 +215,7 @@ jobs:
   promote_and_release_final:
     name: Promote and Release Final
     needs: [prepare, build, verify_attestations]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: write
       packages: write
@@ -288,7 +288,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
         with:
           version: v4.1.3
 

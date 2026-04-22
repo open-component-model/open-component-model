@@ -69,7 +69,7 @@ env:
 jobs:
   build:
     name: Build CLI
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     outputs:
       artifact_name: ${{ env.ARTIFACT_NAME }}
       artifact_id: ${{ steps.upload-artifacts.outputs.artifact_id }}
@@ -183,7 +183,7 @@ jobs:
     name: Publish and Attest
     needs: build
     if: ${{ needs.build.outputs.should_push_oci_image == 'true' }}  # Skip unless we should push
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     outputs:
       image_digest: ${{ steps.digest.outputs.digest }}
       image_tag: ${{ steps.set-tag.outputs.tag }}
