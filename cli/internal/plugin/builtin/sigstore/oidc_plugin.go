@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	OIDCPluginType    = "SigstoreOIDC"
+	OIDCPluginType    = "OIDCProvider"
 	OIDCPluginVersion = "v1alpha1"
 
 	configKeyIssuer    = "issuer"
@@ -19,7 +19,7 @@ const (
 	credentialKeyToken = "token"
 )
 
-// OIDCPluginTypeVersioned is the fully qualified type for the SigstoreOIDC credential plugin.
+// OIDCPluginTypeVersioned is the fully qualified type for the OIDCProvider credential plugin.
 var OIDCPluginTypeVersioned = runtime.NewVersionedType(OIDCPluginType, OIDCPluginVersion)
 
 // OIDCPlugin implements credentials.CredentialPlugin for interactive OIDC
@@ -33,14 +33,14 @@ var OIDCPluginTypeVersioned = runtime.NewVersionedType(OIDCPluginType, OIDCPlugi
 //	    algorithm: sigstore
 //	    signature: mysig
 //	  credentials:
-//	  - type: SigstoreOIDC/v1alpha1
+//	  - type: OIDCProvider/v1alpha1
 //	    issuer: https://oauth2.sigstore.dev/auth
 //	    clientID: sigstore
 type OIDCPlugin struct{}
 
 var _ credentials.CredentialPlugin = (*OIDCPlugin)(nil)
 
-// GetConsumerIdentity maps a SigstoreOIDC credential to a consumer identity.
+// GetConsumerIdentity maps a OIDCProvider credential to a consumer identity.
 func (p *OIDCPlugin) GetConsumerIdentity(_ context.Context, credential runtime.Typed) (runtime.Identity, error) {
 	cfg, err := parseOIDCConfig(credential)
 	if err != nil {

@@ -180,7 +180,7 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 
 ## Example Credential Config (.ocmconfig) — Sigstore OIDC token
 #
-# The SigstoreOIDC plugin checks SIGSTORE_ID_TOKEN env var first (CI/automation),
+# The OIDCProvider plugin checks SIGSTORE_ID_TOKEN env var first (CI/automation),
 # then falls back to an interactive browser-based OIDC flow.
 
     type: generic.config.ocm.software/v1
@@ -191,7 +191,7 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
           type: OIDCIdentityToken/v1alpha1
           name: sigstore
         credentials:
-        - type: SigstoreOIDC/v1alpha1
+        - type: OIDCProvider/v1alpha1
 
 # Sign with Sigstore (requires sigstore signer spec):
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./sigstore-sign.yaml

@@ -16,7 +16,7 @@ func Test_OIDCPlugin_GetConsumerIdentity(t *testing.T) {
 
 	raw := &runtime.Raw{}
 	raw.SetType(OIDCPluginTypeVersioned)
-	raw.Data = []byte(`{"type":"SigstoreOIDC/v1alpha1","issuer":"https://custom.issuer.dev","clientID":"my-client"}`)
+	raw.Data = []byte(`{"type":"OIDCProvider/v1alpha1","issuer":"https://custom.issuer.dev","clientID":"my-client"}`)
 
 	id, err := plugin.GetConsumerIdentity(t.Context(), raw)
 	r.NoError(err)
@@ -36,7 +36,7 @@ func Test_OIDCPlugin_GetConsumerIdentity_Defaults(t *testing.T) {
 
 	raw := &runtime.Raw{}
 	raw.SetType(OIDCPluginTypeVersioned)
-	raw.Data = []byte(`{"type":"SigstoreOIDC/v1alpha1"}`)
+	raw.Data = []byte(`{"type":"OIDCProvider/v1alpha1"}`)
 
 	id, err := plugin.GetConsumerIdentity(t.Context(), raw)
 	r.NoError(err)
