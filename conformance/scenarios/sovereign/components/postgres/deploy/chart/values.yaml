@@ -4,7 +4,7 @@ replicaCount: 1
 image:
   repository: postgres
   pullPolicy: IfNotPresent
-  digest: "sha256:fec25b861513ced51affc068da8b5ecce1345db5f9f261b7924eb10542aa45c8"
+  digest: "sha256:059fa0289cc5a184034e05a1f4f6d6fd79f69dc718b8b04ab60b6b469eed411e"
 
 nameOverride: ""
 fullnameOverride: "postgres"

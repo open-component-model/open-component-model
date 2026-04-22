@@ -14,6 +14,7 @@ GetHelmChart
 GetOCIArtifact
 GmbH
 KEP
+LLM
 OCIAddComponentVersion
 OCIAddLocalResource
 OCIGetComponentVersion
@@ -21,6 +22,7 @@ Preact
 RGD's
 ResourceGraphDefinitions
 Taskfiles
+Testcontainers
 Testcontainers
 TransformationGraphDefinition
 accessTypes
@@ -519,6 +521,7 @@ os
 ospo
 oss
 outputspecification
+overexplain
 overriden
 overwritable
 packageidentifier
@@ -767,6 +770,7 @@ valuemergehandlerdescriptor
 valueset
 valuesfrom
 valuessource
+variadic
 verifier
 verifiers
 versionable
@@ -800,4 +804,3 @@ zot
 zsh
 zshrc
 zulip
-ux

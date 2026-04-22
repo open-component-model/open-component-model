@@ -38,7 +38,7 @@ export function resolveTagCommit(tag, execGit = defaultExecGit) {
 }
 
 /**
- * Create an annotated tag and push it to origin.
+ * Create a GPG-signed tag and push it to origin.
  *
  * @param {object} opts
  * @param {string} opts.tag - Tag name to create.
@@ -48,9 +48,9 @@ export function resolveTagCommit(tag, execGit = defaultExecGit) {
  */
 export function createAndPushTag({ tag, commit, message, execGit = defaultExecGit }) {
   if (commit === "HEAD") {
-    execGit(["tag", "-a", tag, "-m", message]);
+    execGit(["tag", "-s", tag, "-m", message]);
   } else {
-    execGit(["tag", "-a", tag, commit, "-m", message]);
+    execGit(["tag", "-s", tag, commit, "-m", message]);
   }
   execGit(["push", "origin", `refs/tags/${tag}`]);
 }
