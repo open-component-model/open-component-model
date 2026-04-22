@@ -7,5 +7,9 @@ import (
 
 // Register registers the Sigstore signing handler with the signing registry.
 func Register(signingHandlerRegistry *signinghandler.SigningRegistry) error {
-	return signingHandlerRegistry.RegisterInternalComponentSignatureHandler(handler.New())
+	h, err := handler.New()
+	if err != nil {
+		return err
+	}
+	return signingHandlerRegistry.RegisterInternalComponentSignatureHandler(h)
 }
