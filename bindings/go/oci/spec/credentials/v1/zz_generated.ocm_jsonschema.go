@@ -12,7 +12,15 @@ import (
 //go:embed schemas/DockerConfig.schema.json
 var schemaDockerConfig []byte
 
+//go:embed schemas/OCICredentials.schema.json
+var schemaOCICredentials []byte
+
 // JSONSchema returns the JSON Schema for DockerConfig.
 func (DockerConfig) JSONSchema() []byte {
 	return schemaDockerConfig
+}
+
+// JSONSchema returns the JSON Schema for OCICredentials.
+func (OCICredentials) JSONSchema() []byte {
+	return schemaOCICredentials
 }
