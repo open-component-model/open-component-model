@@ -107,7 +107,7 @@ jobs:
 
       # Skopeo is pre-installed on ubuntu-latest but may be missing on ARM runners.
       - name: Ensure skopeo is installed
-        run: command -v skopeo || sudo apt-get update -qq && sudo apt-get install -yqq skopeo
+        run: command -v skopeo || { sudo apt-get update -qq && sudo apt-get install -yqq skopeo; }
 
       # Skopeo can extract by platform (--override-arch) AND convert to docker-archive.
       - name: Load CLI image into Docker daemon

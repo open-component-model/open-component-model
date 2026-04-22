@@ -101,11 +101,11 @@ jobs:
           CI_CHANGED: ${{ steps.ci_changes.outputs.ci }}
         with:
           # Decides which Go modules to build/lint/test.
-          # Four cases, in priority order:
-          #   1. CI workflow changed            - run & lint everything (validate workflow)
-          #   2. .env changed                   - lint everything, build/test only changed
-          #   3. PR (check_only_changed=true)   - run only modules whose files changed
-          #   4. Push to main                   - run everything
+          # Three branches, in priority order:
+          #   1. CI workflow changed          - build, lint & test everything
+          #   2. PR (check_only_changed=true) - build & test only changed modules;
+          #      if .env also changed, lint all modules (version bump)
+          #   3. Push to main                 - everything
           script: |
             const modulesJson = JSON.parse(process.env.MODULES_JSON || '[]');
             const changeJson = JSON.parse(process.env.CHANGE_JSON || '[]');
