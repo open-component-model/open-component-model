@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"maps"
 
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
@@ -85,7 +86,7 @@ func typedToMap(cred runtime.Typed) map[string]string {
 		return nil
 	}
 	if dc, ok := cred.(*v1.DirectCredentials); ok {
-		return dc.Properties
+		return maps.Clone(dc.Properties)
 	}
 
 	// Fallback: JSON round-trip for any typed credential.
@@ -104,7 +105,12 @@ func typedToMap(cred runtime.Typed) map[string]string {
 		if k == "type" {
 			continue // Don't leak the type field into credential properties
 		}
-		if s, ok := v.(string); ok && s != "" {
+		s, ok := v.(string)
+		if !ok {
+			slog.Warn("typedToMap: skipping non-string credential field", "key", k)
+			continue
+		}
+		if s != "" {
 			result[k] = s
 		}
 	}

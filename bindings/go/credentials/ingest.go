@@ -25,7 +25,7 @@ import (
 func ingest(ctx context.Context, g *Graph, config *cfgRuntime.Config, repoTypeScheme *runtime.Scheme) error {
 	validateConsumerIdentityTypes(ctx, g, config)
 
-	consumers, err := processDirectCredentials(g, config)
+	consumers, err := processDirectCredentials(ctx, g, config)
 	if err != nil {
 		return fmt.Errorf("failed to process direct credentials: %w", err)
 	}
@@ -46,12 +46,12 @@ func ingest(ctx context.Context, g *Graph, config *cfgRuntime.Config, repoTypeSc
 // 2. Separates them from credentials requiring plugin-based resolution
 // 3. Stores resolved credentials as runtime.Typed on their identity nodes
 // 4. Returns remaining consumers with plugin-based credentials
-func processDirectCredentials(g *Graph, config *cfgRuntime.Config) ([]cfgRuntime.Consumer, error) {
+func processDirectCredentials(ctx context.Context, g *Graph, config *cfgRuntime.Config) ([]cfgRuntime.Consumer, error) {
 	typedPerIdentity := make(map[string]runtime.Typed)
 	consumers := make([]cfgRuntime.Consumer, 0, len(config.Consumers))
 
 	for _, consumer := range config.Consumers {
-		resolved, remaining, err := extractResolvable(g, consumer.Credentials)
+		resolved, remaining, err := extractResolvable(ctx, g, consumer.Credentials)
 		if err != nil {
 			return nil, fmt.Errorf("extracting consumer credentials failed: %w", err)
 		}
@@ -167,7 +167,7 @@ func processRepositoryConfigurations(g *Graph, config *cfgRuntime.Config, repoTy
 //  1. Credentials resolvable without plugins — either typed credentials known to the CredentialTypeScheme,
 //     or DirectCredentials (Credentials/v1). Returns the first successfully resolved typed credential.
 //  2. Remaining credentials that require plugin-based resolution.
-func extractResolvable(g *Graph, creds []runtime.Typed) (runtime.Typed, []runtime.Typed, error) {
+func extractResolvable(ctx context.Context, g *Graph, creds []runtime.Typed) (runtime.Typed, []runtime.Typed, error) {
 	var resolved runtime.Typed
 	var remaining []runtime.Typed
 
@@ -180,8 +180,17 @@ func extractResolvable(g *Graph, creds []runtime.Typed) (runtime.Typed, []runtim
 		if g.credentialTypeScheme() != nil {
 			if typed, err := g.credentialTypeScheme().NewObject(cred.GetType()); err == nil {
 				if err := g.credentialTypeScheme().Convert(cred, typed); err == nil {
-					resolved = typed
+					if resolved == nil {
+						resolved = typed
+					} else {
+						// Already have a resolved typed credential — pass additional ones
+						// to plugin-based resolution to avoid silent loss.
+						remaining = append(remaining, cred)
+					}
 					continue
+				} else {
+					slog.WarnContext(ctx, "credential type scheme conversion failed",
+						"type", cred.GetType().String(), "error", err)
 				}
 			}
 		}
@@ -272,6 +281,12 @@ func isAccepted(credentialTypeScheme *runtime.Scheme, credType runtime.Type, acc
 	}
 	// Resolve through the scheme: if both types produce the same registered
 	// prototype, they are aliases of each other.
+	// Guard: only attempt alias resolution if the credential type is actually
+	// registered. With WithAllowUnknown, NewObject returns *Raw for any type,
+	// which would cause false-positive matches between unrelated unknown types.
+	if !credentialTypeScheme.IsRegistered(credType) {
+		return false
+	}
 	credObj, err := credentialTypeScheme.NewObject(credType)
 	if err != nil {
 		return false
