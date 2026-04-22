@@ -133,7 +133,7 @@ func NewWorkerPool(opts PoolOptions) *WorkerPool {
 	}
 
 	if opts.SubscriberBufferSize <= 0 {
-		opts.SubscriberBufferSize = 10
+		opts.SubscriberBufferSize = 100
 	}
 
 	return &WorkerPool{
