@@ -20,53 +20,53 @@ reference for the full YAML schema.
 
 ## Input Types
 
-### `dir/v1`
+### `Dir/v1`
 
 Embeds a directory as a tar archive.
 
-| Field            | Type            | Required | Description                                                                                                                                                                                                     |
-|------------------|-----------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `path`           | string          | yes      | Path to the directory (relative to the constructor file).                                                                                                                                                       |
-| `mediaType`      | string          | no       | MediaType of the resource (defaults to application/x-tar). The Dir input always creates a tar. However, it does not add a +tar suffix as this might cause conflicts with MediaType's such as application/x-tar. |
-| `compress`       | boolean         | no       | Compress the tar archive (gzip). If set to true, adds a +gzip suffix to the MediaType.                                                                                                                          |
-| `reproducible`   | boolean         | no       | Normalize file attributes (timestamps, permissions) for reproducible digests. Recommended when signing.                                                                                                         |
-| `preserveDir`    | boolean         | no       | Include the directory itself in the archive.                                                                                                                                                                    |
-| `followSymlinks` | boolean         | no       | Include the content of symbolic links in the archive. Not yet implemented; accepted for compatibility with previous OCM versions.                                                                               |
-| `excludeFiles`   | array of string | no       | Glob patterns for files to exclude.                                                                                                                                                                             |
-| `includeFiles`   | array of string | no       | Glob patterns for files to include.                                                                                                                                                                             |
+| Field | Type | Required | Description |
+| ----- | ---- | -------- | ----------- |
+| `path` | string | yes | Path to the directory (relative to the constructor file). |
+| `mediaType` | string | no | MediaType of the resource (defaults to application/x-tar). The Dir input always creates a tar. However, it does not add a +tar suffix as this might cause conflicts with MediaType's such as application/x-tar. |
+| `compress` | boolean | no | Compress the tar archive (gzip). If set to true, adds a +gzip suffix to the MediaType. |
+| `reproducible` | boolean | no | Normalize file attributes (timestamps, permissions) for reproducible digests. Recommended when signing. |
+| `preserveDir` | boolean | no | Include the directory itself in the archive. |
+| `followSymlinks` | boolean | no | Include the content of symbolic links in the archive. Not yet implemented; accepted for compatibility with previous OCM versions. |
+| `excludeFiles` | array of string | no | Glob patterns for files to exclude. |
+| `includeFiles` | array of string | no | Glob patterns for files to include. |
 
 ```yaml
 resources:
-  - name: deploy-manifests
-    type: blob
-    input:
-      type: dir/v1
-      path: ./deploy
-      compress: true
-      reproducible: true
+- name: deploy-manifests
+  type: blob
+  input:
+    type: Dir/v1
+    path: ./deploy
+    compress: true
+    reproducible: true
 ```
 
-### `file/v1`
+### `File/v1`
 
 Embeds a single file.
 
-| Field       | Type    | Required | Description                                          |
-|-------------|---------|----------|------------------------------------------------------|
-| `path`      | string  | yes      | Path to the file (relative to the constructor file). |
-| `mediaType` | string  | no       | Media type of the file.                              |
-| `compress`  | boolean | no       | Compress the content (gzip).                         |
+| Field | Type | Required | Description |
+| ----- | ---- | -------- | ----------- |
+| `path` | string | yes | Path to the file (relative to the constructor file). |
+| `mediaType` | string | no | Media type of the file. |
+| `compress` | boolean | no | Compress the content (gzip). |
 
 ```yaml
 resources:
-  - name: config
-    type: blob
-    input:
-      type: file/v1
-      path: ./config.yaml
-      mediaType: application/yaml
+- name: config
+  type: blob
+  input:
+    type: File/v1
+    path: ./config.yaml
+    mediaType: application/yaml
 ```
 
-### `helm/v1`
+### `Helm/v1`
 
 Embeds a Helm chart from the local filesystem or a remote repository. Exactly one of `path` or `helmRepository` must be
 specified.
@@ -80,36 +80,36 @@ specified.
 ```yaml
 # Local chart
 resources:
-  - name: my-chart
-    type: helmChart
-    input:
-      type: helm/v1
-      path: ./charts/myapp
-      repository: charts/myapp:1.0.0
+- name: my-chart
+  type: helmChart
+  input:
+    type: Helm/v1
+    path: ./charts/myapp
+    repository: charts/myapp:1.0.0
 ---
 # Remote chart (HTTP)
 resources:
-  - name: ingress-chart
-    type: helmChart
-    input:
-      type: helm/v1
-      helmRepository: https://github.com/kubernetes/ingress-nginx/releases/download/helm-chart-4.14.0/ingress-nginx-4.14.0.tgz
+- name: ingress-chart
+  type: helmChart
+  input:
+    type: Helm/v1
+    helmRepository: https://github.com/kubernetes/ingress-nginx/releases/download/helm-chart-4.14.0/ingress-nginx-4.14.0.tgz
 ---
 # Remote chart (OCI)
 resources:
-  - name: podinfo-chart
-    type: helmChart
-    input:
-      type: helm/v1
-      helmRepository: oci://ghcr.io/stefanprodan/charts/podinfo:6.9.1
-      repository: charts/podinfo:6.9.1
+- name: podinfo-chart
+  type: helmChart
+  input:
+    type: Helm/v1
+    helmRepository: oci://ghcr.io/stefanprodan/charts/podinfo:6.9.1
+    repository: charts/podinfo:6.9.1
 ```
 
 {{< callout type="info" >}}
 The deprecated aliases `helm` and `Helm` are still accepted but `helm/v1` is the preferred form.
 {{< /callout >}}
 
-### `utf8/v1`
+### `UTF8/v1`
 
 Embeds inline text or structured data. Exactly one of `text`, `json`, `formattedJson`, or `yaml` must be specified.
 
@@ -123,13 +123,13 @@ Embeds inline text or structured data. Exactly one of `text`, `json`, `formatted
 
 ```yaml
 resources:
-  - name: config-data
-    type: blob
-    input:
-      type: utf8/v1
-      json:
-        replicas: 3
-        env: production
+- name: config-data
+  type: blob
+  input:
+    type: UTF8/v1
+    json:
+      replicas: 3
+      env: production
 ```
 
 ## Access Types
