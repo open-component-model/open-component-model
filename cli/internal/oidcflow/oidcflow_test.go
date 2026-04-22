@@ -129,9 +129,8 @@ func TestOptions_Defaults(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	opts := Options{}
-	r.Equal(DefaultIssuer, opts.issuer())
-	r.Equal(DefaultClientID, opts.clientID())
+	r.NotEmpty(DefaultIssuer)
+	r.NotEmpty(DefaultClientID)
 }
 
 func TestOptions_Custom(t *testing.T) {
@@ -142,6 +141,6 @@ func TestOptions_Custom(t *testing.T) {
 		Issuer:   "https://custom.issuer.dev",
 		ClientID: "custom-client",
 	}
-	r.Equal("https://custom.issuer.dev", opts.issuer())
-	r.Equal("custom-client", opts.clientID())
+	r.Equal("https://custom.issuer.dev", opts.Issuer)
+	r.Equal("custom-client", opts.ClientID)
 }

@@ -20,7 +20,7 @@ import (
 	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin"
-	"ocm.software/open-component-model/cli/internal/plugin/builtin/sigstore"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin/oidc"
 	"ocm.software/open-component-model/cli/internal/plugin/spec/config/v2alpha1"
 )
 
@@ -113,8 +113,8 @@ func CredentialGraph(cmd *cobra.Command) error {
 		RepositoryPluginProvider: pluginManager.CredentialRepositoryRegistry,
 		CredentialPluginProvider: credentials.GetCredentialPluginFn(
 			func(_ context.Context, typed runtime.Typed) (credentials.CredentialPlugin, error) {
-				if typed.GetType().GetName() == sigstore.OIDCPluginType {
-					return &sigstore.OIDCPlugin{}, nil
+				if typed.GetType().GetName() == oidc.OIDCPluginType {
+					return &oidc.OIDCPlugin{}, nil
 				}
 				return nil, fmt.Errorf("no credential plugin found for type %s", typed.GetType())
 			},
