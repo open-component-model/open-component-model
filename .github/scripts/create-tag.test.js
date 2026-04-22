@@ -103,7 +103,7 @@ function mockCore() {
 {
   const git = mockExecGit({});
   createAndPushTag({ tag: "v1.0.0", commit: "HEAD", message: "release", execGit: git });
-  assert.deepStrictEqual(git.calls[0], ["tag", "-a", "v1.0.0", "-m", "release"]);
+  assert.deepStrictEqual(git.calls[0], ["tag", "-s", "v1.0.0", "-m", "release"]);
   assert.deepStrictEqual(git.calls[1], ["push", "origin", "refs/tags/v1.0.0"]);
 }
 
@@ -111,7 +111,7 @@ function mockCore() {
 {
   const git = mockExecGit({});
   createAndPushTag({ tag: "v1.0.0", commit: "abc123", message: "release", execGit: git });
-  assert.deepStrictEqual(git.calls[0], ["tag", "-a", "v1.0.0", "abc123", "-m", "release"]);
+  assert.deepStrictEqual(git.calls[0], ["tag", "-s", "v1.0.0", "abc123", "-m", "release"]);
   assert.deepStrictEqual(git.calls[1], ["push", "origin", "refs/tags/v1.0.0"]);
 }
 

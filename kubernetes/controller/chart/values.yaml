@@ -26,7 +26,7 @@ manager:
     # -- Maximum work items in queue for component version resolution
     workerQueueLength: 1000
     # -- Buffer size for each subscriber's event channel. Larger values reduce dropped resolution events under load. Monitor resolver_event_channel_drops_total metric.
-    subscriberBufferSize: 10
+    subscriberBufferSize: 100
   ## Cache settings
   cache:
     # -- Maximum size of the deployer download object LRU cache
