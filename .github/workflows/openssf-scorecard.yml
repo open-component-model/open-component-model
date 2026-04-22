@@ -14,6 +14,7 @@ permissions: read-all
 jobs:
   analysis:
     name: Scorecard analysis
+    # ossf/scorecard-action uses docker://ghcr.io/ossf/scorecard-action which is amd64-only.
     runs-on: ubuntu-latest
     # `publish_results: true` only works when run from the default branch. conditional can be removed if disabled.
     if: github.event.repository.default_branch == github.ref_name || github.event_name == 'pull_request'
