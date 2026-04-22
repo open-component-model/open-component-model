@@ -21,6 +21,7 @@ fi
 SRC_DIR="${1}"
 CHART_DIR="${2}"
 TARGET_DIR="${CHART_DIR}/templates/crd"
+# This YQ variable is overwritten in the task file with a pinned version.
 YQ="${YQ:-yq}"
 
 if [[ ! -d "${SRC_DIR}" ]]; then
@@ -35,6 +36,10 @@ shopt -s nullglob
 for src in "${SRC_DIR}"/*.yaml; do
     plural=$("${YQ}" e '.spec.names.plural' "${src}")
     group=$("${YQ}" e '.spec.group' "${src}")
+    if [[ -z "${plural}" || "${plural}" == "null" || -z "${group}" || "${group}" == "null" ]]; then
+        echo "error: could not extract .spec.names.plural/.spec.group from '${src}'" >&2
+        exit 1
+    fi
     out="${TARGET_DIR}/${plural}.${group}.yaml"
 
     {
