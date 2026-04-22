@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -24,8 +23,7 @@ const (
 var OIDCPluginTypeVersioned = runtime.NewVersionedType(OIDCPluginType, OIDCPluginVersion)
 
 // OIDCPlugin implements credentials.CredentialPlugin for interactive OIDC
-// token acquisition. It resolves tokens via the SIGSTORE_ID_TOKEN environment
-// variable or an interactive browser-based OIDC flow.
+// token acquisition via a browser-based OIDC flow.
 //
 // Example .ocmconfig entry:
 //
@@ -56,13 +54,8 @@ func (p *OIDCPlugin) GetConsumerIdentity(_ context.Context, credential runtime.T
 	return id, nil
 }
 
-// Resolve acquires an OIDC identity token. It checks SIGSTORE_ID_TOKEN first,
-// then falls back to an interactive browser-based OIDC flow.
+// Resolve acquires an OIDC identity token via an interactive browser-based OIDC flow.
 func (p *OIDCPlugin) Resolve(ctx context.Context, identity runtime.Identity, _ map[string]string) (map[string]string, error) {
-	if tok := os.Getenv("SIGSTORE_ID_TOKEN"); tok != "" {
-		return map[string]string{credentialKeyToken: tok}, nil
-	}
-
 	issuer := identity[configKeyIssuer]
 	clientID := identity[configKeyClientID]
 
