@@ -194,16 +194,17 @@ tasks:
     desc: "Validate the Helm chart (regenerate, then lint, template, and verify CRDs/RBAC/schema/docs are in sync)"
     silent: true
     cmds:
-      - task: helm/generate-crds
-      - task: helm/generate-rbac
+      - task: helm/generate
       - task: helm/schema
       - task: helm/docs
       - task: helm/lint
       - task: helm/template
       - |
-        if ! git diff --quiet chart/templates/crd chart/templates/rbac/manager-role.yaml chart/values.schema.json chart/README.md; then
-          echo "ERROR: CRDs, manager-role, schema or docs are out of sync. Run 'task helm/generate' (and helm/schema / helm/docs as needed) and commit the changes."
-          git diff chart/templates/crd chart/templates/rbac/manager-role.yaml chart/values.schema.json chart/README.md
+        status=$(git status --porcelain)
+        if [ -n "$status" ]; then
+          echo "ERROR: Working tree is dirty after generation. Commit all generated files before pushing."
+          echo "$status"
+          git diff
           exit 1
         fi
 
