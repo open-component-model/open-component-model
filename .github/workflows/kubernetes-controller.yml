@@ -82,18 +82,9 @@ jobs:
         with:
           version: v4.1.3
 
-      - name: Generate values schema
+      - name: Validate chart (generators + lint + template + drift check)
         working-directory: ${{ env.LOCATION }}
-        run: task helm/schema
-      - name: Generate chart documentation
-        working-directory: ${{ env.LOCATION }}
-        run: task helm/docs
-      - name: Lint chart
-        working-directory: ${{ env.LOCATION }}
-        run: task helm/lint
-      - name: Render chart templates
-        working-directory: ${{ env.LOCATION }}
-        run: task helm/template
+        run: task helm/validate
 
       - name: Verify no uncommitted changes
         run: |
