@@ -65,7 +65,10 @@ Versions
 </code></pre><ul><li>Prefixes: {component-descriptors|none} (default: &ldquo;component-descriptors&rdquo;)</li><li>Repo types: {OCIRepository|CommonTransportFormat} (short: {OCI|oci|CTF|ctf})</li></ul><h2 id=ocm-verification-explained-in-simple-steps>OCM Verification explained in simple steps<a href=#ocm-verification-explained-in-simple-steps class=anchor aria-hidden=true>#</a></h2><ul><li>Resolve OCM repository</li><li>Fetch component version</li><li>Normalise descriptor (algorithm from signature)</li><li>Recompute hash and compare with signature digest</li><li>Verify signature (&ndash;verifier-spec, default RSASSA-PSS verifier)</li></ul><h2 id=behavior>Behavior<a href=#behavior class=anchor aria-hidden=true>#</a></h2><ul><li>&ndash;signature: verify only the named signature</li><li>Without &ndash;signature: verify all signatures</li><li>Fail fast on first invalid signature</li><li>Default verifier: RSASSA-PSS plugin<ul><li>Supports config-less verification</li><li>Uses discovered credentials or PEM certificates when possible</li></ul></li></ul><p>Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>ocm verify component-version {reference} [flags]</code></pre></figure></div><h3 id=examples>Examples<a href=#examples class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code># Verify all component version signatures found in a component version
 verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
 
-## Example Credential Config
+## Example Credential Config (Plain encoding — bare public key)
+#
+# Used when the signature was created with signatureEncodingPolicy: Plain (the default).
+# Supply the matching RSA public key.
 
     type: generic.config.ocm.software/v1
     configurations:
@@ -80,11 +83,31 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
           properties:
             public_key_pem: &lt;PEM&gt;
 
+## Example Credential Config (PEM encoding — certificate chain trust anchor)
+#
+# Used when the signature was created with signatureEncodingPolicy: PEM.
+# The signature already embeds the leaf and intermediate certificates.
+# Supply only the root CA certificate as the trust anchor; it must be self-signed.
+# The verifier isolates the provided root from system roots, so only this CA is trusted.
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: default
+        credentials:
+        - type: Credentials/v1
+          properties:
+            public_key_pem_file: /path/to/root-ca.pem
+
 # Verify a specific signature
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
+verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
 
 # Use a verifier specification file
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./rsassa-pss.yaml</code></pre></figure></div><h3 id=options>Options<a href=#options class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>      --concurrency-limit int   maximum amount of parallel requests to the repository for resolving component versions (default 4)
+verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./rsassa-pss.yaml</code></pre></figure></div><h3 id=options>Options<a href=#options class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>      --concurrency-limit int   maximum amount of parallel requests to the repository for resolving component versions (default 4)
   -h, --help                    help for component-version
       --signature string        name of the signature to verify. If not set, all signatures are verified.
       --verifier-spec string    path to an optional verifier specification file. If empty, defaults to an empty RSASSA-PSS configuration.</code></pre></figure></div><h3 id=options-inherited-from-parent-commands>Options inherited from parent commands<a href=#options-inherited-from-parent-commands class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>      --config string                      supply configuration by a given configuration file.
