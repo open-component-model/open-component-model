@@ -191,15 +191,15 @@ tasks:
     cmd: 'helm lint chart/'
 
   helm/validate:
-    desc: "Validate the Helm chart (lint, template, and verify CRDs/RBAC/schema/docs are in sync)"
+    desc: "Validate the Helm chart (regenerate, then lint, template, and verify CRDs/RBAC/schema/docs are in sync)"
     silent: true
     cmds:
-      - task: helm/lint
-      - task: helm/template
-      - task: helm/schema
-      - task: helm/docs
       - task: helm/generate-crds
       - task: helm/generate-rbac
+      - task: helm/schema
+      - task: helm/docs
+      - task: helm/lint
+      - task: helm/template
       - |
         if ! git diff --quiet chart/templates/crd chart/templates/rbac/manager-role.yaml chart/values.schema.json chart/README.md; then
           echo "ERROR: CRDs, manager-role, schema or docs are out of sync. Run 'task helm/generate' (and helm/schema / helm/docs as needed) and commit the changes."
