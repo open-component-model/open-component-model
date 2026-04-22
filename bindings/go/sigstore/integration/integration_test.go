@@ -102,7 +102,8 @@ func decodeBundle(t *testing.T, sigInfo descruntime.SignatureInfo) *bundleJSON {
 
 func Test_Integration_Keyless_IdentityVerification(t *testing.T) {
 	r := require.New(t)
-	h := handler.New()
+	h, err := handler.New()
+	r.NoError(err)
 	digest := uniqueDigest(t, "identity-verify")
 
 	signCfg := &v1alpha1.SignConfig{
@@ -205,7 +206,8 @@ func Test_Integration_Keyless_IdentityVerification(t *testing.T) {
 // signatures / bundles and cannot be fooled by crafted material.
 func Test_Integration_TamperedBundle(t *testing.T) {
 	r := require.New(t)
-	h := handler.New()
+	h, err := handler.New()
+	r.NoError(err)
 	digest := uniqueDigest(t, "tamper")
 
 	signCfg := &v1alpha1.SignConfig{
@@ -363,7 +365,8 @@ func Test_Integration_TamperedBundle(t *testing.T) {
 // and signed timestamps locally against the trusted root.
 func Test_Integration_OfflineVerification(t *testing.T) {
 	r := require.New(t)
-	h := handler.New()
+	h, err := handler.New()
+	r.NoError(err)
 	digest := uniqueDigest(t, "offline-verify")
 
 	// --- Sign with full stack (needs network to reach Fulcio + Rekor + TSA) ---
