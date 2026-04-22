@@ -43,7 +43,7 @@ permissions:
 jobs:
   prepare:
     name: Tag & Changelog
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     outputs:
       new_tag: ${{ steps.compute.outputs.new_tag }}
       new_version: ${{ steps.compute.outputs.new_version }}
