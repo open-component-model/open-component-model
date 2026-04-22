@@ -1,4 +1,4 @@
-package sigstore
+package oidc
 
 import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"

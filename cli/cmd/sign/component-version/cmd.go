@@ -11,8 +11,6 @@ import (
 	"slices"
 	"strings"
 
-	_ "ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
-
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
@@ -180,8 +178,7 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 
 ## Example Credential Config (.ocmconfig) — Sigstore OIDC token
 #
-# The OIDCProvider plugin checks SIGSTORE_ID_TOKEN env var first (CI/automation),
-# then falls back to an interactive browser-based OIDC flow.
+# The OIDCProvider plugin acquires an OIDC token via an interactive browser flow.
 
     type: generic.config.ocm.software/v1
     configurations:

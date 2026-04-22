@@ -44,24 +44,17 @@ type Options struct {
 	ClientID string
 }
 
-func (o *Options) issuer() string {
-	if o.Issuer != "" {
-		return o.Issuer
-	}
-	return DefaultIssuer
-}
-
-func (o *Options) clientID() string {
-	if o.ClientID != "" {
-		return o.ClientID
-	}
-	return DefaultClientID
-}
-
 // GetIDToken performs an interactive OIDC authorization code flow with PKCE.
 // It opens the user's browser for authentication and waits for the callback.
 func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
-	provider, err := oidc.NewProvider(ctx, opts.issuer())
+	if opts.Issuer == "" {
+		opts.Issuer = DefaultIssuer
+	}
+	if opts.ClientID == "" {
+		opts.ClientID = DefaultClientID
+	}
+
+	provider, err := oidc.NewProvider(ctx, opts.Issuer)
 	if err != nil {
 		return nil, fmt.Errorf("oidc provider discovery: %w", err)
 	}
@@ -100,12 +93,10 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 			errCh <- sErr
 		}
 	}()
-	defer func() {
-		go func() { _ = srv.Shutdown(context.Background()) }()
-	}()
+	defer srv.Shutdown(ctx) //nolint:errcheck // best-effort shutdown
 
 	config := oauth2.Config{
-		ClientID:    opts.clientID(),
+		ClientID:    opts.ClientID,
 		Endpoint:    provider.Endpoint(),
 		Scopes:      []string{oidc.ScopeOpenID, "email"},
 		RedirectURL: redirectURL,
