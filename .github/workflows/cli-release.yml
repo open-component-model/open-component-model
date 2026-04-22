@@ -56,7 +56,7 @@ jobs:
   # --------------------------------------------------------
   tag_rc:
     name: Create and Push RC Tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [prepare]
     if: ${{ github.event.inputs.dry_run == 'false' }}
     permissions:
@@ -131,7 +131,7 @@ jobs:
     name: Create RC Pre-Release
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
     needs: [prepare, tag_rc, build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: write
     steps:
@@ -207,7 +207,7 @@ jobs:
   verify_attestations:
     name: Verify RC Attestations
     needs: [prepare, build, release_rc]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     environment:
       name: release
     permissions:
@@ -250,7 +250,7 @@ jobs:
   promote_final:
     name: Promote to Final Release
     needs: [prepare, build, verify_attestations]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: write
       packages: write
@@ -336,7 +336,7 @@ jobs:
   release_final:
     name: Create Final Release
     needs: [prepare, promote_final]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: write
     steps:

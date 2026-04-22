@@ -17,7 +17,7 @@ jobs:
   generate-cli-reference:
     name: Update website/content_versioned/version-legacy/docs/reference/ocm-cli
     if: github.event.client_payload != '' || github.event.inputs.tag != ''
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     env:
       TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
       REF: main
