@@ -40,11 +40,11 @@ tasks:
 
   # Development
   manifests:
-    desc: "Generate raw CRD, webhook, and RBAC YAML into bin/gen (consumed by helm/generate-crds and helm/generate-rbac)"
+    desc: "Generate raw CRD and RBAC YAML into bin/gen (consumed by helm/generate-crds and helm/generate-rbac)"
     deps: [controller-gen]
     cmds:
       - mkdir -p bin/gen/crd bin/gen/rbac
-      - '"{{.CONTROLLER_GEN}}" rbac:roleName=manager-role crd webhook paths="{{ .TASKFILE_DIR }}/..." output:rbac:artifacts:config=bin/gen/rbac output:crd:artifacts:config=bin/gen/crd'
+      - '"{{.CONTROLLER_GEN}}" rbac:roleName=manager-role crd paths="{{ .TASKFILE_DIR }}/..." output:rbac:artifacts:config=bin/gen/rbac output:crd:artifacts:config=bin/gen/crd'
 
   generate:
     desc: "Generate Go deepcopy and runtime.Object implementations"
