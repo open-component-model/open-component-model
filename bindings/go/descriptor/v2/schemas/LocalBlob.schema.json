@@ -29,6 +29,7 @@
           "const": "LocalBlob/v1"
         },
         {
+          "deprecated": true,
           "const": "localBlob/v1"
         },
         {
