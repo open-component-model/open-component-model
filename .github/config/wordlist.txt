@@ -201,6 +201,7 @@ docker's
 dockerconfig
 dockerconfigjson
 dockermulti
+Doks
 Doks's
 downgradable
 downloadconstraint
@@ -790,7 +791,7 @@ util
 utils
 uwe
 ux
-uxDoks
+ux
 valuemergehandler
 valuemergehandlerdescriptor
 valueset

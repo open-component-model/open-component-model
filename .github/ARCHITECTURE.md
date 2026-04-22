@@ -41,7 +41,7 @@ Triggers: `pull_request` (all) + `push` (main only).
 **Parallel jobs** (all depend on `discover_modules`):
 
 | Job | Matrix source | What it does |
-|-----|--------------|--------------|
+| ----- | -------------- | -------------- |
 | `golangci_lint_verify` | none | Verifies lint config consistency (runs once) |
 | `golangci_lint` | `lint_modules_json` | Runs golangci-lint per module (sparse checkout) |
 | `run_unit_tests` | `unit_test_modules_json` | Runs `task <module>:test` per module (sparse checkout) |
@@ -57,7 +57,7 @@ The `check-completion` job exists because dynamic matrices cannot be used as req
 Triggers: `pull_request_target` (opened, edited, synchronize, reopened).
 
 | Job | What it does |
-|-----|--------------|
+| ----- | -------------- |
 | `conventional-commit-labeler` | Validates PR title matches conventional commit format. Maps type to label and scope to label. |
 | `labeler` | Auto-labels based on file paths (config: `.github/config/labeler.yml`) |
 | `size-labeler` | Labels by diff size: xs <10, s <100, m <500, l <10000, xl >=10000 |
@@ -74,7 +74,7 @@ These serve dual purpose: CI (on PR/push) and release builds (via `workflow_call
 ### cli.yml
 
 | Trigger | REF resolves to | Publishes? |
-|---------|----------------|------------|
+| --------- | ---------------- | ------------ |
 | PR to main | PR branch | No (build only) |
 | Push to main | `main` | Yes |
 | Push `releases/v*` | `releases/v0.4` | No (build-only) |
@@ -128,7 +128,7 @@ Three release tracks, all using the RC-to-final promotion pattern.
 
 Triggered manually via `workflow_dispatch` on a `releases/v*` branch. The operator MUST select the release branch in the GitHub UI "Use workflow from" dropdown. Supports `dry_run` input (default: true). Concurrency: cancel-in-progress per release branch.
 
-```
+```text
 cli-release.yml
   |
   +-- prepare: release-candidate-version.yml (compute RC version, changelog)
@@ -157,15 +157,15 @@ cli-release.yml
 
 **Phase 2 -- Final Release (environment-gated):**
 
-5. `verify_attestations`: Runs in `release` environment. Downloads RC binaries from GitHub release, verifies each via `gh attestation verify`. Verifies OCI image attestation.
-6. `promote_final`: Creates final git tag pointing to same commit as RC. Promotes OCI tags (e.g. `:0.4.3-rc.1` -> `:0.4.3`, optionally `:latest`).
-7. `release_final`: Downloads RC release notes and assets. Rewrites changelog header (RC -> final). Creates GitHub release with `make_latest` flag. No rebuild -- same binaries, same image digest.
+1. `verify_attestations`: Runs in `release` environment. Downloads RC binaries from GitHub release, verifies each via `gh attestation verify`. Verifies OCI image attestation.
+2. `promote_final`: Creates final git tag pointing to same commit as RC. Promotes OCI tags (e.g. `:0.4.3-rc.1` -> `:0.4.3`, optionally `:latest`).
+3. `release_final`: Downloads RC release notes and assets. Rewrites changelog header (RC -> final). Creates GitHub release with `make_latest` flag. No rebuild -- same binaries, same image digest.
 
 ### Controller Release (controller-release.yml)
 
 Same pattern as CLI but with Helm chart specifics. Uses OCMBot token for tagging (required to trigger downstream workflows). Concurrency: never cancel-in-progress (queues instead).
 
-```
+```text
 controller-release.yml
   |
   +-- prepare: release-candidate-version.yml
@@ -210,7 +210,7 @@ Result: Image tags are promoted (same digest), but chart gets a new digest (diff
 Triggered manually via `workflow_dispatch`. Inputs: `path` (e.g. `bindings/go/helm`), `bump` (major/minor/patch/none), `suffix` (e.g. `alpha1`), `dry_run`.
 
 | Job | What it does |
-|-----|--------------|
+| ----- | -------------- |
 | `version` | Validates `go.mod` exists at path. Finds latest tag matching `<path>/v*`. Computes bumped version based on `bump` input. Handles `vN` major version suffix in paths (e.g. `bindings/go/foo/v2` -> tag prefix `bindings/go/foo/v`). Generates changelog from `git log` between latest tag and HEAD (filtered to module path). Always runs (even on dry_run) to show what would happen. |
 | `release` | Creates and pushes annotated tag with changelog as message. Gated by `dry_run == false` + `go-modules` environment (requires manual approval). Uses OCMBot token. |
 | `build` | Conditional: only runs when `new_tag` contains `bindings/go/helm`. Calls `publish-helminput-plugin-component.yaml` which builds plugin binaries, publishes component, and triggers `update-plugin-registry.yaml`. |
@@ -228,7 +228,7 @@ Reusable workflow called by both CLI and Controller releases. Runs `release-vers
 **RC version scenarios** (handled by `computeNextVersions()`):
 
 | Existing tags | Result |
-|--------------|--------|
+| -------------- | -------- |
 | No tags exist | `v0.X.0-rc.1` (from branch prefix) |
 | Stable only (e.g. `v0.1.0`) | Bump patch -> `v0.1.1-rc.1` |
 | RC only (e.g. `v0.1.1-rc.2`) | Increment RC -> `v0.1.1-rc.3` |
@@ -245,7 +245,7 @@ Also determines `set_latest` by comparing against highest previous stable releas
 ## 4. Website Workflows
 
 | Workflow | Trigger | Purpose |
-|----------|---------|---------|
+| ---------- | --------- | --------- |
 | `website-publish-site.yaml` | Push to main (`website/**`), dispatch | Builds Hugo site + JSON schemas, publishes to GitHub Pages via OCMBot |
 | `website-update-cli-docs.yaml` | `repository_dispatch` (`ocm-cli-release`), dispatch | Downloads CLI at tag, generates docs into `version-legacy` folder, creates PR |
 | `website-manual-update-cli-docs.yaml` | Dispatch (version input) | Validates version against ocm/ocm releases, triggers `repository_dispatch` for update workflow |
@@ -258,7 +258,7 @@ Also determines `set_latest` by comparing against highest previous stable releas
 ## 5. Maintenance & Quality Workflows
 
 | Workflow | Trigger | Purpose |
-|----------|---------|---------|
+| ---------- | --------- | --------- |
 | `markdown.yml` | PR (`**/*.md`) | Multiple parallel jobs (see below) |
 | `jsonschema.yml` | Push/PR (`**/schemas/*.schema.json`) | Lints JSON schemas via sourcemeta |
 | `renovate.yml` | Daily schedule, push (main), PR (renovate config) | Dependency updates (see below) |
@@ -273,7 +273,7 @@ Also determines `set_latest` by comparing against highest previous stable releas
 Runs 5 parallel jobs on PRs that touch `**/*.md`:
 
 | Job | What it does |
-|-----|--------------|
+| ----- | -------------- |
 | `markdown-lint` | markdownlint-cli2 on `website/**/*.md` (excludes auto-generated CLI/controller reference docs), uses `website.markdownlint-cli2.yaml` config |
 | `lint` | markdownlint-cli2 on all `**/*.md`, uses `.markdownlint-cli2.yaml` config. Tool version read from `.env`. |
 | `spellcheck` | pyspelling with config `.github/config/spellcheck.yml`, custom dictionary `wordlist.txt` |
@@ -292,14 +292,14 @@ Runs 5 parallel jobs on PRs that touch `**/*.md`:
 ## 6. Component Publishing
 
 | Workflow | Purpose |
-|----------|---------|
+| ---------- | --------- |
 | `publish-ocm-component-version.yml` | Reusable: publishes OCM component via Docker-based OCM CLI. Inputs: constructor artifact, optional build artifact, target repository. |
 | `publish-helminput-plugin-component.yaml` | Builds multi-arch helm input plugin binaries, generates OCM component constructor, publishes component to GHCR via Docker OCM CLI. Triggers `plugin-published` repository_dispatch. |
 | `update-plugin-registry.yaml` | Updates OCM plugin registry. Triggered by `plugin-published` dispatch or manual dispatch. Uses `prepare-registry-constructor.js` to add plugin reference, bump registry version, publish via Docker OCM CLI. |
 
 **Plugin publishing flow:**
 
-```
+```text
 release-go-submodule.yaml (bindings/go/helm tag)
   -> publish-helminput-plugin-component.yaml
        -> build multi-arch binaries
@@ -320,7 +320,7 @@ release-go-submodule.yaml (bindings/go/helm tag)
 All scripts are ES modules with accompanying `.test.js` files.
 
 | Script | Purpose | Called by |
-|--------|---------|----------|
+| -------- | --------- | ---------- |
 | `release-versioning.js` | Computes RC/release versions from existing tags. Determines `set_latest` by comparing against highest previous stable release. Finds changelog range for git-cliff. Exports: `computeNextVersions()`, `parseBranch()`, `findPreviousTag()`, `determineLatestRelease()`, `extractHighestPreviousReleaseVersion()`, `shouldSetLatest()`. | `release-candidate-version.yml`, `website-live-test-install-script.yml` |
 | `compute-version.js` | Converts git refs to semver. Tag matching `<prefix>\d+.\d+...` -> extract version. Non-tag -> `0.0.0-<sanitized-ref>`. Supports `MAX_VERSION_LENGTH` for K8s label truncation. | `cli.yml`, `kubernetes-controller.yml`, `publish-helminput-plugin-component.yaml` |
 | `create-tag.js` | Creates annotated git tags. Idempotent: skips if tag exists at same commit, fails if at different commit. Exports `createRcTag()` and `createNewReleaseTag()`. | `controller-release.yml` |
@@ -333,7 +333,7 @@ All scripts are ES modules with accompanying `.test.js` files.
 ## 8. Configuration (.github/config/)
 
 | File | Tool | Purpose |
-|------|------|---------|
+| ------ | ------ | --------- |
 | `labeler.yml` | actions/labeler | PR auto-labeling rules (file path -> label mapping) |
 | `spellcheck.yml` | pyspelling | Spell-check config for `**/*.md` (custom dictionary: `wordlist.txt`) |
 | `wordlist.txt` | pyspelling | 800+ OCM-specific terms, acronyms, contributor names |
@@ -366,7 +366,7 @@ All scripts are ES modules with accompanying `.test.js` files.
 All artifacts are published to GitHub Container Registry (GHCR).
 
 | Artifact | Registry Path | Example Tags |
-|----------|--------------|-------------|
+| ---------- | -------------- | ------------- |
 | CLI image | `ghcr.io/<owner>/cli` | `0.0.0-main`, `0.4.3-rc.1`, `0.4.3`, `latest` |
 | Controller image | `ghcr.io/<owner>/kubernetes/controller` | `0.0.0-main`, `main`, `0.1.0-rc.1`, `0.1.0`, `latest` |
 | Controller Helm chart | `ghcr.io/<owner>/kubernetes/controller/chart` | `0.0.0-main`, `main`, `0.1.0-rc.1`, `0.1.0` |
@@ -385,7 +385,7 @@ All artifacts are published to GitHub Container Registry (GHCR).
 ## 10. Secrets & Tokens
 
 | Secret | Purpose |
-|--------|---------|
+| -------- | --------- |
 | `OCMBOT_APP_ID` + `OCMBOT_PRIV_KEY` | GitHub App token for OCMBot. Used where `GITHUB_TOKEN` cannot trigger downstream workflows (tags, dispatches). |
 | `SECURITY_TXT_READ` | PAT for fetching `security.txt` from internal SAP repository. |
 | `GITHUB_TOKEN` | Default token. Used for most operations. Auto-downgraded to read-only for fork PRs. |
@@ -395,7 +395,7 @@ All artifacts are published to GitHub Container Registry (GHCR).
 ## 11. Concurrency Controls
 
 | Workflow | Concurrency group | Cancel in-progress? |
-|----------|------------------|-------------------|
+| ---------- | ------------------ | ------------------- |
 | `kubernetes-controller.yml` | `workflow-ref` | Yes for PRs, No for other events |
 | `conformance.yml` | `conformance-workflow-ref` | Yes (always) |
 | `cli-release.yml` | `cli-release-<branch>` | Yes |
@@ -423,6 +423,7 @@ All artifacts are published to GitHub Container Registry (GHCR).
 ### Controller Release
 
 Same as CLI, but use "Controller Release" workflow. Additional considerations:
+
 - Helm chart is re-packaged with final version (chart digest changes, image digest stays the same)
 - E2E tests run as part of the build phase
 
@@ -440,7 +441,7 @@ Same as CLI, but use "Controller Release" workflow. Additional considerations:
 ## 13. Workflow Count by Category
 
 | Category | Count | Workflows |
-|----------|-------|-----------|
+| ---------- | ------- | ----------- |
 | CI | 2 | `ci.yml`, `pull-request.yaml` |
 | Component Build | 3 | `cli.yml`, `kubernetes-controller.yml`, `conformance.yml` |
 | Release | 5 | `cli-release.yml`, `controller-release.yml`, `release-go-submodule.yaml`, `release-candidate-version.yml`, `release-branch.yml` |
