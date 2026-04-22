@@ -41,7 +41,9 @@ jobs:
 
   verify-links:
     name: Verify links (repo)
-    runs-on: ubuntu-24.04-arm
+    # action-linkspector uses Puppeteer, which downloads an x86-only Chrome
+    # binary on ARM runners — run on amd64 until upstream ships ARM support.
+    runs-on: ubuntu-latest
     permissions:
       checks: write
       contents: read
@@ -60,7 +62,8 @@ jobs:
 
   verify-links-website:
     name: Verify links (website)
-    runs-on: ubuntu-24.04-arm
+    # action-linkspector uses Puppeteer (see verify-links comment above).
+    runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     permissions:
       checks: write
