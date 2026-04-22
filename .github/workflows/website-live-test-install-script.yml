@@ -1,0 +1,142 @@
+name: "Website: Live Test Install Script"
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/website-live-test-install-script.yml'
+      - 'website/static/install-cli.sh'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: live-test-install-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    name: Resolve latest stable CLI release
+    outputs:
+      version: ${{ steps.find.outputs.version }}
+      tag: ${{ steps.find.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Find latest stable CLI release
+        id: find
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const { extractHighestPreviousReleaseVersion } = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
+            const tagPrefix = 'cli/v';
+
+            const releases = (await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            })).data;
+
+            const version = extractHighestPreviousReleaseVersion(releases, tagPrefix);
+            if (!version) {
+              core.setFailed('No stable CLI release found');
+              return;
+            }
+
+            core.setOutput('version', version);
+            core.setOutput('tag', `${tagPrefix}${version}`);
+            core.info(`Resolved latest stable CLI release: ${tagPrefix}${version}`);
+
+  install:
+    needs: resolve
+    name: Install + verify (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    env:
+      OCM_VERSION: ${{ needs.resolve.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Run install script
+        env:
+          INSTALL_DIR: ${{ runner.temp }}/ocm-bin
+          INSTALL_LOG: ${{ runner.temp }}/install.log
+        run: |
+          bash website/static/install-cli.sh "${INSTALL_DIR}" 2>&1 | tee "${INSTALL_LOG}"
+          echo "${INSTALL_DIR}" >> "$GITHUB_PATH"
+
+      - name: Verify attestation was checked
+        env:
+          INSTALL_LOG: ${{ runner.temp }}/install.log
+        run: |
+          if ! grep -q "Attestation verification successful" "${INSTALL_LOG}"; then
+            echo "::error::Attestation verification did not run or did not succeed"
+            cat "${INSTALL_LOG}"
+            exit 1
+          fi
+
+      - name: Verify installed binary
+        run: |
+          version_json=$(ocm version 2>/dev/null)
+          actual=$(echo "${version_json}" | jq -r '"\(.major).\(.minor).\(.patch)"')
+          if [[ "${actual}" != "${OCM_VERSION}" ]]; then
+            echo "::error::Version mismatch: expected ${OCM_VERSION}, got ${actual}"
+            exit 1
+          fi
+          echo "Installed version ${actual} matches expected ${OCM_VERSION}"
+          ocm --help > /dev/null
+
+  install-without-auth:
+    needs: resolve
+    name: Install without attestation
+    runs-on: ubuntu-latest
+    env:
+      EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Run install script without gh auth
+        env:
+          INSTALL_DIR: ${{ runner.temp }}/ocm-bin
+          INSTALL_LOG: ${{ runner.temp }}/install.log
+          GH_TOKEN: ""
+          GITHUB_TOKEN: ""
+          GH_CONFIG_DIR: /nonexistent
+        run: |
+          bash website/static/install-cli.sh "${INSTALL_DIR}" 2>&1 | tee "${INSTALL_LOG}"
+          echo "${INSTALL_DIR}" >> "$GITHUB_PATH"
+
+      - name: Verify attestation was skipped
+        env:
+          INSTALL_LOG: ${{ runner.temp }}/install.log
+        run: |
+          if ! grep -q "GitHub CLI is not authenticated. Skipping attestation verification." "${INSTALL_LOG}"; then
+            echo "::error::Expected unauthenticated skip message not found"
+            cat "${INSTALL_LOG}"
+            exit 1
+          fi
+
+      - name: Verify installed binary
+        run: |
+          version_json=$(ocm version 2>/dev/null)
+          actual=$(echo "${version_json}" | jq -r '"\(.major).\(.minor).\(.patch)"')
+          if [[ "${actual}" != "${EXPECTED_VERSION}" ]]; then
+            echo "::error::Version mismatch: expected ${EXPECTED_VERSION}, got ${actual}"
+            exit 1
+          fi
+          echo "Installed version ${actual} matches expected ${EXPECTED_VERSION}"
+          ocm --help > /dev/null

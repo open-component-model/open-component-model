@@ -494,3 +494,9 @@ func extractFileFromTar(tarData []byte, fileName string) ([]byte, error) {
 	// File not found.
 	return nil, fmt.Errorf("file '%s' not found in tar archive", fileName)
 }
+
+func TestScheme_ResolvesUpperCamelCase_Dir(t *testing.T) {
+	obj, err := dir.Scheme.NewObject(runtime.NewVersionedType(v1.Type, v1.Version))
+	require.NoError(t, err, "Scheme must resolve UpperCamelCase type Dir/v1")
+	require.IsType(t, &v1.Dir{}, obj, "expected *v1.Dir from Scheme")
+}

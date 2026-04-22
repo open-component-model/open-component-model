@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/input/utf8"
 	v1 "ocm.software/open-component-model/bindings/go/input/utf8/spec/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestGetV1UTF8Blob(t *testing.T) {
@@ -384,4 +385,10 @@ func TestGetV1UTF8Blob(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestScheme_ResolvesUpperCamelCase_UTF8(t *testing.T) {
+	obj, err := utf8.Scheme.NewObject(runtime.NewVersionedType(v1.Type, v1.Version))
+	require.NoError(t, err, "Scheme must resolve UpperCamelCase type UTF8/v1")
+	require.IsType(t, &v1.UTF8{}, obj, "expected *v1.UTF8 from Scheme")
 }
