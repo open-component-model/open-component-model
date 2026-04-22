@@ -106,7 +106,7 @@ resources:
 ```
 
 {{< callout type="info" >}}
-The deprecated aliases `helm` and `Helm` are still accepted but `helm/v1` is the preferred form.
+The deprecated aliases `helm` and `Helm` are still accepted but `Helm/v1` is the preferred form.
 {{< /callout >}}
 
 ### `UTF8/v1`
