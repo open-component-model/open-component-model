@@ -164,6 +164,9 @@
                 "resolver": {
                     "type": "object",
                     "properties": {
+                        "subscriberBufferSize": {
+                            "type": "integer"
+                        },
                         "workerCount": {
                             "type": "integer"
                         },
