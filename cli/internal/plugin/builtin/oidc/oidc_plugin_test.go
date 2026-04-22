@@ -1,4 +1,4 @@
-package sigstore
+package oidc
 
 import (
 	"testing"

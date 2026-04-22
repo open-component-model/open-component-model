@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	_ "ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
-
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
@@ -155,7 +153,7 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().String(FlagSignature, "", "name of the signature to verify. If not set, all signatures are verified.")
-	cmd.Flags().String(FlagVerifierSpec, "", "path to a verifier specification file. If empty, defaults to RSASSA-PSS. For Sigstore keyless verification, use type SigstoreVerificationConfiguration/v1alpha1 (identity constraints required).")
+	cmd.Flags().String(FlagVerifierSpec, "", "path to a verifier specification file. If empty, defaults to RSASSA-PSS. For Sigstore keyless verification, use type SigstoreVerificationConfiguration/v1alpha1 (set CertificateOIDCIssuer and CertificateIdentity).")
 
 	return cmd
 }
