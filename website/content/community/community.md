@@ -56,6 +56,10 @@ You can bring anything, including:
 - Concepts you would like to work on together
 - Questions you have about the community or upcoming work
 
+### RSS Feed
+
+Stay up to date with the latest OCM blog posts and announcements by subscribing to our [RSS feed](https://ocm.software/blog/index.xml). The feed is available in any RSS reader and provides a convenient way to follow project news without needing to check the website manually.
+
 ## Contributing
 
 We welcome community contributions! Please see the [Contributing Guideline](https://github.com/open-component-model/.github/blob/main/CONTRIBUTING.md) for instructions on how to submit changes. If you are planning on making more elaborate or potentially controversial changes, please discuss them with the maintainers in the [Slack channel](https://kubernetes.slack.com/archives/C05UWBE8R1D) before sending a pull request.

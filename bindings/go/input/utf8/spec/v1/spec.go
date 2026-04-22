@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	Version = "v1"
-	Type    = "utf8"
+	Version    = "v1"
+	Type       = "UTF8"
+	LegacyType = "utf8"
 )
 
 // UTF8 describes an input sourced by a UTF-8 string.

@@ -12,6 +12,7 @@ import (
 
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/input"
+	helminputspec "ocm.software/open-component-model/bindings/go/helm/spec/input"
 	v1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -335,4 +336,16 @@ func TestInputMethodProcessResourceBothPathAndRepo(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only one of path or helmRepository can be specified")
+}
+
+func TestScheme_ResolvesUpperCamelCase_Helm(t *testing.T) {
+	obj, err := helminputspec.Scheme.NewObject(runtime.NewVersionedType(v1.Type, v1.Version))
+	require.NoError(t, err, "Scheme must resolve UpperCamelCase type Helm/v1")
+	require.IsType(t, &v1.Helm{}, obj, "expected *v1.Helm from Scheme")
+}
+
+func TestScheme_ResolvesLegacy_Helm(t *testing.T) {
+	obj, err := helminputspec.Scheme.NewObject(runtime.NewVersionedType(v1.LegacyType, v1.Version))
+	require.NoError(t, err, "Scheme must resolve legacy type helm/v1")
+	require.IsType(t, &v1.Helm{}, obj, "expected *v1.Helm from Scheme for legacy type")
 }

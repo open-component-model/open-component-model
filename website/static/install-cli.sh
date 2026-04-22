@@ -132,25 +132,30 @@ setup_tmp() {
     trap cleanup INT EXIT
 }
 
+# Extract a stable CLI version from a releases JSON file.
+# Returns the version string (e.g. "0.3.0") or empty if none found.
+extract_stable_version() {
+    grep '"tag_name":' "$1" \
+        | grep -E "\"${TAG_PREFIX}v[0-9]+\.[0-9]+\.[0-9]+\"" \
+        | head -1 \
+        | sed -E "s|.*\"${TAG_PREFIX}v([^\"]+)\".*|\1|" \
+        || true # grep returns non-zero when no lines match; prevent set -e from killing the subshell
+}
+
 # Find version from Github metadata
 get_release_version() {
-    if [[ -n "${OCM_VERSION:-}" ]]; then
-        METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${TAG_PREFIX}v${OCM_VERSION}"
-    else
+    if [[ -z "${OCM_VERSION:-}" ]]; then
         # Use the list endpoint so we can filter by TAG_PREFIX; /releases/latest may
         # point to a non-CLI release (e.g. a website or docs tag published more recently).
-        METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases"
+        METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100"
+        info "Downloading metadata ${METADATA_URL}"
+        download "${TMP_METADATA}" "${METADATA_URL}"
+
+        OCM_VERSION=$(extract_stable_version "${TMP_METADATA}")
     fi
 
-    info "Downloading metadata ${METADATA_URL}"
-    download "${TMP_METADATA}" "${METADATA_URL}"
-
-    # tag_name has the format "cli/v0.1.0" – strip the prefix and leading "v".
-    # When OCM_VERSION is unset the response is a JSON array; grep the first
-    # tag_name that starts with TAG_PREFIX to avoid picking a non-CLI release.
-    VERSION_OCM=$(grep '"tag_name":' "${TMP_METADATA}" | grep "\"${TAG_PREFIX}v" | head -1 | sed -E "s|.*\"${TAG_PREFIX}v([^\"]+)\".*|\1|")
-    if [[ -n "${VERSION_OCM}" ]]; then
-        info "Using ${VERSION_OCM} as release"
+    if [[ -n "${OCM_VERSION}" ]]; then
+        info "Using ${OCM_VERSION} as release"
     else
         fatal "Unable to determine release version"
     fi
@@ -176,7 +181,7 @@ download() {
 # Download binary from Github URL
 # Assets follow the naming scheme: ocm-{OS}-{ARCH} (no version, no archive)
 download_binary() {
-    BIN_URL="https://github.com/${GITHUB_REPO}/releases/download/${TAG_PREFIX}v${VERSION_OCM}/ocm-${OS}-${ARCH}"
+    BIN_URL="https://github.com/${GITHUB_REPO}/releases/download/${TAG_PREFIX}v${OCM_VERSION}/ocm-${OS}-${ARCH}"
     info "Downloading binary ${BIN_URL}"
     download "${TMP_BIN}" "${BIN_URL}"
 }
@@ -194,6 +199,14 @@ verify_binary() {
     if ! command -v gh &> /dev/null; then
         warn "GitHub CLI (gh) not found. Skipping attestation verification."
         warn "To verify the binary, install gh: https://cli.github.com/"
+        warn "Or set OCM_SKIP_VERIFY=true to suppress this warning."
+        return 0
+    fi
+
+    # Check if gh CLI is authenticated to github.com
+    if ! gh auth status --hostname github.com &> /dev/null; then
+        warn "GitHub CLI is not authenticated. Skipping attestation verification."
+        warn "To verify the binary, run: gh auth login"
         warn "Or set OCM_SKIP_VERIFY=true to suppress this warning."
         return 0
     fi
@@ -230,5 +243,5 @@ setup_binary() {
     ensure_bin_dir
     setup_binary
     ensure_path
-    info "OCM CLI v${VERSION_OCM} installed successfully"
+    info "OCM CLI v${OCM_VERSION} installed successfully"
 }

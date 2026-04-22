@@ -186,13 +186,13 @@ deduplication
 deepcopy
 deepdive
 defs
-deps
 deliveryspec
 dependabot
 deployable
 deployer
 deployers
 deployscript
+deps
 descriptor's
 deserializable
 deserialization
@@ -203,8 +203,8 @@ dev
 devops
 diataxis
 digesters
-dirs
 directorytree
+dirs
 dirtree
 dl
 dn
@@ -257,6 +257,7 @@ fluxdeployerspec
 fluxdeployerstatus
 fluxvaluessource
 foldername
+formatter
 forwardspec
 frewilhelm
 frontend
@@ -469,6 +470,7 @@ newrepository
 newrepositoryspec
 niclas
 nixos
+noop
 npm
 npm's
 npmjs
@@ -526,8 +528,8 @@ packageidentifier
 packagename
 packagespec
 packageversion
-parameterization
 parallelize
+parameterization
 patchstrategicmerge
 patchstrategicmergesource
 patchstrategicmergetarget
@@ -592,6 +594,7 @@ repositoryProvider
 repositoryimpl
 repositoryspec
 repositoryurl
+representable
 reproducibility
 requeue
 requeues
@@ -623,6 +626,7 @@ routingslips
 rsa
 rsakeypair
 rsassa
+rss
 runnable
 runtime
 saas
@@ -684,14 +688,15 @@ steffen
 stichting
 storable
 struct
+structs
 subchart
 subcharts
 subfolders
 subheadline
 subpath
 subpaths
-subprocesses
 subprocess
+subprocesses
 subresource
 subsitution
 subst
@@ -713,7 +718,6 @@ templaters
 templating
 terraform
 testdata
-Testcontainers
 tgz
 Thulite
 timeframes
@@ -746,6 +750,7 @@ unmarshaller
 unmarshalling
 unmodifiable
 unregisters
+unrepresentable
 untrusted
 untyped
 updatevendorhash
