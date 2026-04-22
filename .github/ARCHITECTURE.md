@@ -5,7 +5,8 @@ Reference document for the OCM monorepo's GitHub Actions workflows, scripts, and
 
 ## Key Architectural Principles
 
-- **Dynamic module discovery**: `ci.yml` discovers Go modules via `task go_modules`, then filters by changed files on PRs (all modules on push to main).
+- **Dynamic module discovery**: `ci.yml` discovers Go modules via `task go_modules`, then filters by changed files on PRs (all modules on push to main or when the CI workflow itself changed).
+- **ARM runners**: Most CI jobs run on `ubuntu-24.04-arm` for performance. Exception: `analyze-go` (CodeQL) stays on `ubuntu-latest` (no ARM64 binary). E2E and conformance jobs use a matrix strategy (`matrix.arch: [arm64]`) with dynamic runner selection.
 - **Sparse checkouts**: Most workflows check out only the paths they need for efficiency.
 - **RC-to-final promotion**: Releases go through Release Candidate, environment gate (manual approval), then final promotion. No rebuild for the final release -- same binaries, same image digests.
 - **Reusable build workflows**: `cli.yml` and `kubernetes-controller.yml` serve dual roles as both CI (PR/push) and release build steps via `workflow_call`.
@@ -30,10 +31,12 @@ Triggers: `pull_request` (all) + `push` (main only).
 1. Discovers modules via `task go_modules`
 2. Generates `dorny/paths-filter` config per module
 3. Integration modules (path contains `/integration`) are linked to parent module paths
-4. PR: filters to changed modules only (`check_only_changed = true`)
-5. Push to main: ALL modules included
-6. If `.env` changed: lint ALL modules regardless of other changes
-7. Testability filtering: checks each module's Taskfile for `test` and `test/integration` tasks via `task -d <module> -aj`
+4. Detects `.env` changes (lint version bump) and `ci.yml` changes (full rebuild trigger)
+5. **Module filtering** — three branches in priority order:
+   - CI workflow (`ci.yml`) changed → build, lint, and test ALL modules
+   - PR (`check_only_changed = true`) → build and test only changed modules; if `.env` also changed, lint all modules
+   - Push to main → ALL modules
+6. Testability filtering: checks each module's Taskfile for `test` and `test/integration` tasks via `task -d <module> -aj`
 
 **Parallel jobs** (all depend on `discover_modules`):
 
@@ -43,9 +46,9 @@ Triggers: `pull_request` (all) + `push` (main only).
 | `golangci_lint` | `lint_modules_json` | Runs golangci-lint per module (sparse checkout) |
 | `run_unit_tests` | `unit_test_modules_json` | Runs `task <module>:test` per module (sparse checkout) |
 | `run_integration_tests` | `integration_test_modules_json` | Runs `task <module>:test/integration` with Docker network |
-| `analyze-go` | `modules_json` | CodeQL security analysis per module |
+| `analyze-go` | `modules_json` | CodeQL security analysis per module (runs on `ubuntu-latest` — CodeQL has no ARM64 binary) |
 | `generate` | none | Runs `task generate`, fails if working tree is dirty |
-| `check-completion` | none | Aggregation gate -- runs only on `failure()`, fails if any dependency failed |
+| `check-completion` | none | Aggregation gate — runs only on `failure()`, fails if any dependency failed |
 
 The `check-completion` job exists because dynamic matrices cannot be used as required status checks in GitHub branch protection. It fires only when a dependency fails or is cancelled.
 
@@ -95,7 +98,7 @@ Similar to `cli.yml` but adds Helm chart specifics and E2E testing:
 
 - **`verify-chart`**: Runs before build (not gated by `workflow_call`). Generates values schema (`task helm/schema`), docs (`task helm/docs`), lints chart (`task helm/lint`), renders templates (`task helm/template`), verifies no uncommitted changes.
 - **`build`**: Sparse checkout of `kubernetes/controller/` + scripts. Compute version via `compute-version.js` (`TAG_PREFIX=kubernetes/controller/v`). Build multi-arch Docker image to OCI layout. Package Helm chart WITHOUT image digest (for PR conformance testing). Upload OCI layout and chart as separate artifacts.
-- **`E2E`**: End-to-end tests on kind cluster. Uses skopeo to extract `linux/amd64` image from multi-arch OCI layout into docker-archive format. Loads into kind, runs `task kubernetes/controller:test/e2e`. On failure, dumps controller pods, logs, events, and Helm release info.
+- **`E2E`**: End-to-end tests on kind cluster. Uses architecture matrix (`matrix.arch: [arm64]`) with dynamic runner selection. Skopeo extracts the matching platform image from multi-arch OCI layout into docker-archive format. Loads into kind, runs `task kubernetes/controller:test/e2e`. On failure, dumps controller pods, logs, events, and Helm release info.
 - **`conformance`**: Runs against build artifacts (chart + image, before publish).
 - **`publish`**: Pushes image via ORAS, packages Helm chart WITH image digest, pushes chart to GHCR, attests both image and chart. Registry paths: `ghcr.io/<owner>/kubernetes/controller:<version>` (image), `ghcr.io/<owner>/kubernetes/controller/chart:<version>` (chart). On push to main, also tags image and chart with floating `main` tag. Uploads chart artifact for downstream use.
 - **`conformance-published`**: Runs conformance against published chart OCI reference.
@@ -104,12 +107,12 @@ Similar to `cli.yml` but adds Helm chart specifics and E2E testing:
 
 ### conformance.yml
 
-Reusable workflow (+ direct push/PR triggers for `conformance/` changes). Runs the sovereign cloud scenario on a kind cluster with Flux. Timeout: 30 minutes.
+Reusable workflow (+ direct push/PR triggers for `conformance/` changes). Runs the sovereign cloud scenario on a kind cluster with Flux. Timeout: 30 minutes. Uses architecture matrix (`matrix.arch: [arm64]`) with dynamic runner selection (`ubuntu-24.04-arm` for arm64, `ubuntu-latest` otherwise).
 
 Two input modes:
 
 1. **Direct image reference** (main/release): `cli_image` and/or `toolkit_image` inputs point to published OCI refs. Used when testing against published artifacts.
-2. **Artifact mode** (PRs): `cli_artifact`/`toolkit_image_artifact`/`toolkit_chart_artifact` inputs reference workflow artifacts. Images are extracted from OCI layout via skopeo (`--override-arch amd64 --override-os linux`) into docker-archive format, then loaded into Docker daemon or kind cluster.
+2. **Artifact mode** (PRs): `cli_artifact`/`toolkit_image_artifact`/`toolkit_chart_artifact` inputs reference workflow artifacts. Images are extracted from OCI layout via skopeo (`--override-arch ${{ matrix.arch }} --override-os linux`) into docker-archive format, then loaded into Docker daemon or kind cluster.
 
 Environment variables (`CLI_IMAGE`, `TOOLKIT_IMAGE`) set by artifact steps take precedence over input parameters. If neither CLI nor toolkit image is provided via `workflow_call`, the workflow fails with an error.
 
