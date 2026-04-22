@@ -78,7 +78,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Helm
-        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           version: v4.1.3
 
@@ -143,7 +143,7 @@ jobs:
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Install Helm
-        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           version: v4.1.3
 
@@ -224,6 +224,7 @@ jobs:
     timeout-minutes: 20
     needs: build
     strategy:
+      fail-fast: false
       matrix:
         arch: [amd64, arm64]
     permissions:
@@ -239,6 +240,7 @@ jobs:
             ${{ env.LOCATION }}
             Taskfile.yml
             .env
+            website/static/install.sh
           persist-credentials: false
 
       - name: Setup Go
@@ -257,16 +259,13 @@ jobs:
         uses: docker/setup-docker-action@1a6edb0ba9ac496f6850236981f15d8f9a82254d # v5
 
       - name: Setup ocm
-        run: |
-          VERSION="$(basename "$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/open-component-model/ocm/releases/latest)")"
-          curl -Ls "https://github.com/open-component-model/ocm/releases/download/${VERSION}/ocm-${VERSION#v}-linux-${{ matrix.arch }}.tar.gz" | tar xz -C /usr/local/bin ocm
-          ocm version
+        run: bash website/static/install.sh
 
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@871be9b40d53627786d3a3835a3ddba1e3234bd2 # v2.8.3
 
       - name: Install Helm
-        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           version: v4.1.3
 
@@ -280,9 +279,12 @@ jobs:
         working-directory: ${{ env.LOCATION }}
         run: task oci/extract TAR_PATH=tmp/oci/controller.tar OUTPUT_DIR=tmp/oci-dir
 
+      - name: Ensure skopeo is installed
+        run: command -v skopeo || sudo apt-get update -qq && sudo apt-get install -yqq skopeo
+
       - name: Extract image for E2E testing
         # Skopeo can extract by platform (--override-arch) AND convert to docker-archive.
-        # Skopeo is pre-installed on GitHub-hosted runners.
+        # Skopeo is pre-installed on ubuntu-latest but may be missing on ARM runners.
         # Set tag to "latest" to match the controller's Helm chart default for E2E testing
         working-directory: ${{ env.LOCATION }}
         env:
@@ -371,7 +373,7 @@ jobs:
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
 
       - name: Install Helm
-        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           version: v4.1.3
 
