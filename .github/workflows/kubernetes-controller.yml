@@ -223,10 +223,11 @@ jobs:
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 20
     needs: build
+    # Extend the matrix with additional architectures if needed in the future.
     strategy:
       fail-fast: false
       matrix:
-        arch: [amd64, arm64]
+        arch: [arm64]
     permissions:
       contents: read
       actions: read

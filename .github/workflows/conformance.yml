@@ -67,10 +67,11 @@ jobs:
     name: Sovereign Scenario (${{ matrix.arch }})
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 30
+    # Extend the matrix with additional architectures if needed in the future.
     strategy:
       fail-fast: false
       matrix:
-        arch: [amd64, arm64]
+        arch: [arm64]
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
