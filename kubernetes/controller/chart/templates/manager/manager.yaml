@@ -10,7 +10,7 @@ metadata:
     name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "controller-manager" "context" $) }}
     namespace: {{ .Release.Namespace }}
 spec:
-    replicas: 1
+    replicas: {{ .Values.manager.replicas }}
     selector:
         matchLabels:
             app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
@@ -33,6 +33,9 @@ spec:
             {{- end }}
             {{- with .Values.manager.nodeSelector }}
             nodeSelector: {{ toYaml . | nindent 16 }}
+            {{- end }}
+            {{- with .Values.manager.imagePullSecrets }}
+            imagePullSecrets: {{ toYaml . | nindent 16 }}
             {{- end }}
             containers:
                 - args:
@@ -99,6 +102,9 @@ spec:
                     - /manager
                   image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag }}"
                   imagePullPolicy: {{ .Values.manager.image.pullPolicy }}
+                  {{- with .Values.manager.env }}
+                  env: {{ toYaml . | nindent 20 }}
+                  {{- end }}
                   livenessProbe:
                     httpGet:
                         path: {{ .Values.manager.livenessProbe.path }}
