@@ -6,7 +6,7 @@ toc: true
 hasMermaid: true
 ---
 
-In OCM, a component reference carries only a component name and version — never a repository URL. This is a deliberate design choice that enables location-independent software delivery. This page explains the reasoning behind that decision, the concept of canonical repositories, and how resolvers provide the missing link between component references and their storage locations.
+In OCM, a component reference carries only a component name and version, never a repository URL. This is a deliberate design choice that enables location-independent software delivery. This page explains the reasoning behind that decision, the concept of canonical repositories, and how resolvers provide the missing link between component references and their storage locations.
 
 ## Component References Are Location-Free
 
@@ -20,17 +20,17 @@ A [component reference]({{< relref "docs/concepts/component-identity.md" >}}) in
 
 Notably absent: any indication of **where** the referenced component is stored. There is no repository URL, no registry address, no storage path.
 
-This is intentional. If references included repository locations, every mirror, transfer, or relocation would require rewriting component descriptors — and that would invalidate signatures. By keeping references location-free, OCM ensures that:
+This is intentional. If references included repository locations, every mirror, transfer, or relocation would require rewriting component descriptors, which would invalidate signatures. By keeping references location-free, OCM ensures that:
 
 - **Signatures survive transport.** A component version signed in a development registry can be verified in a production registry without any descriptor changes.
 - **The same component graph works everywhere.** Whether components live in a public cloud registry, a private harbor instance, or a CTF archive on a USB drive, the references between them remain identical.
-- **Mirroring is metadata-preserving.** Transferring a component graph to a new registry doesn't require patching internal references — the descriptors are copied as-is.
+- **Mirroring is metadata-preserving.** Transferring a component graph to a new registry doesn't require patching internal references. The descriptors are copied as-is.
 
 This design is what makes OCM's [transfer model]({{< relref "docs/concepts/transfer-concept.md" >}}) possible: artifacts can move across registry boundaries, air gaps, and organizational boundaries without losing integrity or provenance.
 
 ## What Are Canonical Repositories?
 
-A **canonical repository** is a repository that contains all components of a component graph — the root component and every component it references, directly or transitively.
+A **canonical repository** is a repository that contains all components of a component graph: the root component and every component it references, directly or transitively.
 
 ```mermaid
 flowchart TB
@@ -43,7 +43,7 @@ flowchart TB
     end
 ```
 
-When all components live in the same repository, recursive operations like `ocm get cv --recursive` work without any additional configuration — the CLI looks up referenced components in the same repository where it found the root.
+When all components live in the same repository, recursive operations like `ocm get cv --recursive` work without any additional configuration. The CLI looks up referenced components in the same repository where it found the root.
 
 OCM does **not** enforce canonical repositories. Components can be spread across any number of registries and repository paths:
 
@@ -65,11 +65,11 @@ flowchart TB
 In practice, components are often distributed across registries because:
 
 - Different teams own different components and publish to separate registry namespaces.
-- Components have different access control requirements — some public, others private.
+- Components have different access control requirements, with some being public and others private.
 - Organizations consume third-party components from external registries.
 - Components follow different release cadences and lifecycle stages.
 
-Both patterns — canonical and distributed — are fully supported. The difference is operational: canonical repositories are simpler to work with, while distributed layouts offer more flexibility at the cost of requiring resolver configuration.
+Both patterns (canonical and distributed) are fully supported. The difference is operational: canonical repositories are simpler to work with, while distributed layouts offer more flexibility at the cost of requiring resolver configuration.
 
 ## How Resolvers Bridge the Gap
 
@@ -102,7 +102,7 @@ For the full resolver configuration schema and pattern syntax, see the [Resolver
 
 ## Resolver Propagation in Recursive Discovery
 
-When the CLI resolves a component graph recursively, it doesn't just resolve the root component's direct references — it follows the entire tree. During this traversal, **resolvers propagate from parent to child**.
+When the CLI resolves a component graph recursively, it doesn't just resolve the root component's direct references but follows the entire tree. During this traversal, **resolvers propagate from parent to child**.
 
 This means that within a single resolution tree, all referenced components are fetched using the same resolver context that was established at the root. The CLI creates a consistent "canonical context" for the entire operation:
 
@@ -119,24 +119,24 @@ Each child component inherits its parent's resolver for fetching, and its parent
 
 If a component is referenced by multiple parents that specify **different** resolvers, the CLI raises an error rather than silently picking one. This prevents ambiguous resolution where the same component could come from different sources depending on which path through the graph is traversed first.
 
-For example, if `app-a` resolves `shared-lib` from Registry A, and `app-b` resolves `shared-lib` from Registry B, and both are part of the same resolution tree, the CLI will report a conflict. This is by design — it forces the operator to provide an explicit, unambiguous resolver configuration.
+For example, if `app-a` resolves `shared-lib` from Registry A, and `app-b` resolves `shared-lib` from Registry B, and both are part of the same resolution tree, the CLI will report a conflict. This is by design: it forces the operator to provide an explicit, unambiguous resolver configuration.
 
 ## Summary
 
 | Concept | Purpose |
 | --- | --- |
-| **Location-free references** | Component references carry only name, version, and digest — no repository. This preserves signatures and enables transport. |
+| **Location-free references** | Component references carry only name, version, and digest, not a repository. This preserves signatures and enables transport. |
 | **Canonical repositories** | A repository containing all components in a graph. Simplifies operations but is not required. |
 | **Resolvers** | Runtime mapping from component name patterns to repositories. Required when components are distributed across registries. |
 | **Resolver propagation** | Children inherit their parent's resolver during recursive operations, creating a consistent resolution context. Conflicts are detected and reported. |
 
 ## Next Steps
 
-- [Working with Resolvers]({{< relref "docs/tutorials/configure-resolvers.md" >}}) — Hands-on tutorial for configuring resolvers
-- [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — How location-free references enable transport across boundaries
+- [Working with Resolvers]({{< relref "docs/tutorials/configure-resolvers.md" >}}): Hands-on tutorial for configuring resolvers
+- [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}): How location-free references enable transport across boundaries
 
 ## Related Documentation
 
-- [Component Identity]({{< relref "docs/concepts/component-identity.md" >}}) — How OCM identifies components, versions, and artifacts
-- [Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) — The resolver concept and configuration overview
-- [Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}) — Full schema, repository types, and pattern syntax
+- [Component Identity]({{< relref "docs/concepts/component-identity.md" >}}): How OCM identifies components, versions, and artifacts
+- [Resolvers]({{< relref "docs/concepts/resolvers.md" >}}): The resolver concept and configuration overview
+- [Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}): Full schema, repository types, and pattern syntax
