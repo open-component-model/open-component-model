@@ -78,14 +78,8 @@ type Resolver struct {
 	ComponentNamePattern string `json:"componentNamePattern,omitempty"`
 
 	// VersionConstraint specifies an optional semver constraint for matching component versions.
-	// When set, the resolver only matches if the component version satisfies the constraint.
-	// When empty or omitted, the resolver matches any version (backward compatible).
-	// Uses the Masterminds/semver constraint syntax.
-	// Examples:
-	//   - ">=1.0.0 <2.0.0" (matches versions from 1.0.0 up to but not including 2.0.0)
-	//   - "^1.2.0" (matches >=1.2.0, <2.0.0)
-	//   - "~1.2.0" (matches >=1.2.0, <1.3.0)
-	//   - ">=2.0.0" (matches any version 2.0.0 or higher)
+	// It limits the usage of the repository to resolve only components with versions
+	// that satisfy the given constraint (e.g. ">=1.0.0 <2.0.0", "^1.2.0", "~1.2.0").
 	VersionConstraint string `json:"versionConstraint,omitempty"`
 }
 
