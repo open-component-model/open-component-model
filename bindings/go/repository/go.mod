@@ -2,8 +2,6 @@ module ocm.software/open-component-model/bindings/go/repository
 
 go 1.26.1
 
-replace ocm.software/open-component-model/bindings/go/configuration => ../configuration
-
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
