@@ -4,6 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
+    {{- if .Values.crd.keep }}
+    helm.sh/resource-policy: keep
+    {{- end }}
     {{- if and .Values.webhook.enable .Values.certManager.enable }}
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "serving-cert" "context" $) }}
     {{- end }}

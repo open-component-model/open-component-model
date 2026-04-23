@@ -46,6 +46,9 @@ for src in "${SRC_DIR}"/*.yaml; do
         echo "{{- if .Values.crd.enable }}"
         sed -e '1{/^---$/d;}' \
             -e '/^    controller-gen\.kubebuilder\.io\/version:/a\
+    {{- if .Values.crd.keep }}\
+    helm.sh/resource-policy: keep\
+    {{- end }}\
     {{- if and .Values.webhook.enable .Values.certManager.enable }}\
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "serving-cert" "context" $) }}\
     {{- end }}' \
