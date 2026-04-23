@@ -226,17 +226,6 @@
                 }
             }
         },
-        "metrics": {
-            "type": "object",
-            "properties": {
-                "enable": {
-                    "type": "boolean"
-                },
-                "port": {
-                    "type": "integer"
-                }
-            }
-        },
         "prometheus": {
             "type": "object",
             "properties": {
