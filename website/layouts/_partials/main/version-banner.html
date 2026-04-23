@@ -21,8 +21,12 @@
       This version tracks the latest commit and may be unstable.
       For the current release, see the
       <a class="version-warning-link" href="{{ $defaultLink }}">latest version{{ with $defaultName }} ({{ . }}){{ end }}</a>.
+    {{- else if eq $currentVer "legacy" -}}
+      You are viewing documentation for the <strong>legacy</strong> OCM version.
+      For up-to-date documentation, see the
+      <a class="version-warning-link" href="{{ $defaultLink }}">latest version{{ with $defaultName }} ({{ . }}){{ end }}</a>.
     {{- else -}}
-      You are viewing documentation for an older OCM version, <strong>{{ $currentVer }}</strong>.
+      You are not viewing the current OCM documentation (<strong>{{ $currentVer }}</strong>).
       For up-to-date documentation, see the
       <a class="version-warning-link" href="{{ $defaultLink }}">latest version{{ with $defaultName }} ({{ . }}){{ end }}</a>.
     {{- end -}}

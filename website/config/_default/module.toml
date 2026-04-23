@@ -100,8 +100,9 @@
 ## per-version mounts of content folders
 ## per-version imports of reference docs using module imports
 ### legacy: no import (uses embedded reference docs in content folder)
-### dev: uses latest
-### x.y.z uses version x.y.z of ref docs module
+### main: tracks HEAD via sibling-path mounts (monorepo-local, no module import)
+### latest: uses module imports pinned to 'latest' tag of each ref docs module
+### x.y.z: uses version x.y.z of ref docs module
 
 # Shared blog content (single source of truth across all site versions)
 [[mounts]]
