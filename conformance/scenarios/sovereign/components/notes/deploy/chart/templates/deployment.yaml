@@ -33,7 +33,7 @@ spec:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}@{{ .Values.image.digest }}"
+          image: "{{ .Values.image.repository }}@{{ required "image.digest must be set (populated by OCM localization)" .Values.image.digest }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
