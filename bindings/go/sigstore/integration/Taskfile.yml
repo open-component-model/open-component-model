@@ -12,7 +12,10 @@ tasks:
   scaffolding:setup:
     desc: "Create kind cluster and deploy sigstore scaffolding (~5 min, skips if already running)"
     status:
-      - kubectl -n fulcio-system get ksvc fulcio -ojsonpath='{.status.url}' 2>/dev/null
+      - kubectl -n fulcio-system get ksvc fulcio -ojsonpath='{.status.url}' 2>/dev/null | grep -q .
+      - kubectl -n rekor-system get ksvc rekor -ojsonpath='{.status.url}' 2>/dev/null | grep -q .
+      - kubectl -n tsa-system get ksvc tsa -ojsonpath='{.status.url}' 2>/dev/null | grep -q .
+      - kubectl -n default get ksvc gettoken -ojsonpath='{.status.url}' 2>/dev/null | grep -q .
     cmds:
       - |
         curl -fLo /tmp/setup-kind.sh \

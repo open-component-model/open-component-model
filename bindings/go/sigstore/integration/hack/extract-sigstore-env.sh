@@ -7,6 +7,14 @@ set -euo pipefail
 # Prerequisites: kubectl, cosign, curl must be on PATH.
 # The current kubectl context must point to the scaffolding cluster.
 
+require_nonempty() {
+  local name="$1" val="$2"
+  if [[ -z "$val" ]]; then
+    echo "extract-sigstore-env: $name is empty (scaffolding cluster not ready?)" >&2
+    exit 1
+  fi
+}
+
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -15,6 +23,10 @@ FULCIO_URL=$(kubectl -n fulcio-system get ksvc fulcio -ojsonpath='{.status.url}'
 REKOR_URL=$(kubectl -n rekor-system get ksvc rekor -ojsonpath='{.status.url}')
 TSA_URL=$(kubectl -n tsa-system get ksvc tsa -ojsonpath='{.status.url}')
 CTLOG_URL=$(kubectl -n ctlog-system get ksvc ctlog -ojsonpath='{.status.url}')
+require_nonempty FULCIO_URL "$FULCIO_URL"
+require_nonempty REKOR_URL  "$REKOR_URL"
+require_nonempty TSA_URL    "$TSA_URL"
+require_nonempty CTLOG_URL  "$CTLOG_URL"
 
 # Extract public keys and certificates from cluster secrets
 kubectl -n fulcio-system get secret fulcio-pub-key -ojsonpath='{.data.cert}' | base64 -d > "$TMPDIR/fulcio-root.pem"
@@ -49,17 +61,22 @@ cp "$TMPDIR/trusted_root.json" "$OUTDIR/"
 cp "$TMPDIR/signing_config.json" "$OUTDIR/"
 
 # Fetch OIDC token
-ISSUER_URL=$(kubectl get ksvc gettoken -ojsonpath='{.status.url}')
-OIDC_TOKEN=$(curl -s "$ISSUER_URL")
+ISSUER_URL=$(kubectl -n default get ksvc gettoken -ojsonpath='{.status.url}')
+require_nonempty ISSUER_URL "$ISSUER_URL"
+OIDC_TOKEN=$(curl -sSf "$ISSUER_URL")
+require_nonempty OIDC_TOKEN "$OIDC_TOKEN"
 
-# Output env vars (sourceable)
-cat <<EOF
-export SIGSTORE_FULCIO_URL="${FULCIO_URL}"
-export SIGSTORE_REKOR_URL="${REKOR_URL}"
-export SIGSTORE_TSA_URL="${TSA_URL}"
-export SIGSTORE_OIDC_TOKEN="${OIDC_TOKEN}"
-export SIGSTORE_TRUSTED_ROOT="${OUTDIR}/trusted_root.json"
-export SIGSTORE_SIGNING_CONFIG="${OUTDIR}/signing_config.json"
-export SIGSTORE_OIDC_ISSUER="https://kubernetes.default.svc.cluster.local"
-export SIGSTORE_OIDC_IDENTITY="https://kubernetes.io/namespaces/default/serviceaccounts/default"
-EOF
+# Output env vars (sourceable) — use printf %q to safely escape values
+emit_export() {
+  local name="$1" val="$2"
+  printf 'export %s=%q\n' "$name" "$val"
+}
+
+emit_export SIGSTORE_FULCIO_URL    "$FULCIO_URL"
+emit_export SIGSTORE_REKOR_URL     "$REKOR_URL"
+emit_export SIGSTORE_TSA_URL       "$TSA_URL"
+emit_export SIGSTORE_OIDC_TOKEN    "$OIDC_TOKEN"
+emit_export SIGSTORE_TRUSTED_ROOT  "$OUTDIR/trusted_root.json"
+emit_export SIGSTORE_SIGNING_CONFIG "$OUTDIR/signing_config.json"
+emit_export SIGSTORE_OIDC_ISSUER   "https://kubernetes.default.svc.cluster.local"
+emit_export SIGSTORE_OIDC_IDENTITY "https://kubernetes.io/namespaces/default/serviceaccounts/default"

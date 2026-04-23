@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	"log"
 	"os"
 	"testing"
 
@@ -64,8 +64,7 @@ func TestMain(m *testing.M) {
 func requireEnv(key string) string {
 	v := os.Getenv(key)
 	if v == "" {
-		fmt.Fprintf(os.Stderr, "required env var %s is not set\n", key)
-		os.Exit(1)
+		log.Fatalf("required env var %s is not set", key)
 	}
 	return v
 }
@@ -272,11 +271,10 @@ func Test_Integration_TamperedBundle(t *testing.T) {
 		r.NotNil(b.MessageSignature, "bundle must have message signature")
 		sigBytes, err := base64.StdEncoding.DecodeString(b.MessageSignature.Signature)
 		r.NoError(err)
+		r.NotEmpty(sigBytes, "baseline signature must be non-empty")
 		sigBytes[len(sigBytes)-1] ^= 0xFF // flip all bits in last byte
 
 		tampered := mutateBundle(t, r, func(m map[string]any) {
-			vm := m["verificationMaterial"].(map[string]any)
-			_ = vm // not needed; mutate messageSignature directly
 			ms := m["messageSignature"].(map[string]any)
 			ms["signature"] = base64.StdEncoding.EncodeToString(sigBytes)
 		})
