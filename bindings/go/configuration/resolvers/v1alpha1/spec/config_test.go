@@ -53,13 +53,13 @@ func TestLookup_BackwardCompatibility_NoVersionConstraint(t *testing.T) {
 	assert.NotNil(t, cfg.Resolvers[0].Repository)
 }
 
-func TestLookup_WithVersionConstraint(t *testing.T) {
+func TestLookup_WithVersionConstraint_SpaceSeparated(t *testing.T) {
 	generic := makeGenericConfig(t, `{
 		"type": "resolvers.config.ocm.software/v1alpha1",
 		"resolvers": [
 			{
 				"componentNamePattern": "my-org/*",
-				"versionConstraint": ">=1.0.0, <2.0.0",
+				"versionConstraint": ">=1.0.0 <2.0.0",
 				"repository": {
 					"type": "OCIRepository/v1",
 					"baseUrl": "ghcr.io",
@@ -84,10 +84,35 @@ func TestLookup_WithVersionConstraint(t *testing.T) {
 	require.Len(t, cfg.Resolvers, 2)
 
 	assert.Equal(t, "my-org/*", cfg.Resolvers[0].ComponentNamePattern)
-	assert.Equal(t, ">=1.0.0, <2.0.0", cfg.Resolvers[0].VersionConstraint)
+	assert.Equal(t, ">=1.0.0 <2.0.0", cfg.Resolvers[0].VersionConstraint)
 
 	assert.Equal(t, "my-org/*", cfg.Resolvers[1].ComponentNamePattern)
 	assert.Equal(t, ">=2.0.0", cfg.Resolvers[1].VersionConstraint)
+}
+
+func TestLookup_WithVersionConstraint_CommaSeparated(t *testing.T) {
+	// Comma-separated constraints are also valid Masterminds/semver syntax.
+	generic := makeGenericConfig(t, `{
+		"type": "resolvers.config.ocm.software/v1alpha1",
+		"resolvers": [
+			{
+				"componentNamePattern": "my-org/*",
+				"versionConstraint": ">=1.0.0, <2.0.0",
+				"repository": {
+					"type": "OCIRepository/v1",
+					"baseUrl": "ghcr.io",
+					"subPath": "my-org/legacy"
+				}
+			}
+		]
+	}`)
+
+	cfg, err := resolverspec.Lookup(generic)
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	require.Len(t, cfg.Resolvers, 1)
+
+	assert.Equal(t, ">=1.0.0, <2.0.0", cfg.Resolvers[0].VersionConstraint)
 }
 
 func TestLookup_UnversionedType_BackwardCompatibility(t *testing.T) {

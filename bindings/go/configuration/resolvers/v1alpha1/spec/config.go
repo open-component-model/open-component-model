@@ -82,7 +82,7 @@ type Resolver struct {
 	// When empty or omitted, the resolver matches any version (backward compatible).
 	// Uses the Masterminds/semver constraint syntax.
 	// Examples:
-	//   - ">=1.0.0, <2.0.0" (matches versions from 1.0.0 up to but not including 2.0.0)
+	//   - ">=1.0.0 <2.0.0" (matches versions from 1.0.0 up to but not including 2.0.0)
 	//   - "^1.2.0" (matches >=1.2.0, <2.0.0)
 	//   - "~1.2.0" (matches >=1.2.0, <1.3.0)
 	//   - ">=2.0.0" (matches any version 2.0.0 or higher)
