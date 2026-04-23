@@ -48,6 +48,7 @@ func ingest(ctx context.Context, g *Graph, config *cfgRuntime.Config, repoTypeSc
 // 4. Returns remaining consumers with plugin-based credentials
 func processDirectCredentials(ctx context.Context, g *Graph, config *cfgRuntime.Config) ([]cfgRuntime.Consumer, error) {
 	typedPerIdentity := make(map[string]runtime.Typed)
+	directPerIdentity := make(map[string]*v1.DirectCredentials)
 	consumers := make([]cfgRuntime.Consumer, 0, len(config.Consumers))
 
 	for _, consumer := range config.Consumers {
@@ -60,17 +61,19 @@ func processDirectCredentials(ctx context.Context, g *Graph, config *cfgRuntime.
 		if resolved != nil {
 			for _, identity := range consumer.Identities {
 				node := identity.String()
-				if existing, ok := typedPerIdentity[node]; ok {
-					// If both are DirectCredentials, merge properties.
-					// Otherwise last write wins (typed credentials replace generic ones).
-					existingDC, okE := existing.(*v1.DirectCredentials)
-					resolvedDC, okR := resolved.(*v1.DirectCredentials)
-					if okE && okR {
-						maps.Copy(existingDC.Properties, resolvedDC.Properties)
+
+				if resolvedDC, ok := resolved.(*v1.DirectCredentials); ok {
+					// Accumulate DirectCredentials separately; they serve as fallback only.
+					if existing, ok := directPerIdentity[node]; ok {
+						maps.Copy(existing.Properties, resolvedDC.Properties)
 					} else {
-						typedPerIdentity[node] = resolved
+						clone := *resolvedDC
+						clone.Properties = make(map[string]string, len(resolvedDC.Properties))
+						maps.Copy(clone.Properties, resolvedDC.Properties)
+						directPerIdentity[node] = &clone
 					}
 				} else {
+					// Concrete typed credential — last typed credential wins.
 					typedPerIdentity[node] = resolved
 				}
 
@@ -82,6 +85,14 @@ func processDirectCredentials(ctx context.Context, g *Graph, config *cfgRuntime.
 
 		if len(consumer.Credentials) > 0 {
 			consumers = append(consumers, consumer)
+		}
+	}
+
+	// Typed credentials take priority; use DirectCredentials only for identities
+	// that have no concrete typed credential.
+	for node, dc := range directPerIdentity {
+		if _, hasTyped := typedPerIdentity[node]; !hasTyped {
+			typedPerIdentity[node] = dc
 		}
 	}
 
@@ -169,6 +180,7 @@ func processRepositoryConfigurations(g *Graph, config *cfgRuntime.Config, repoTy
 //  2. Remaining credentials that require plugin-based resolution.
 func extractResolvable(ctx context.Context, g *Graph, creds []runtime.Typed) (runtime.Typed, []runtime.Typed, error) {
 	var resolved runtime.Typed
+	var mergedDirect *v1.DirectCredentials
 	var remaining []runtime.Typed
 
 	for _, cred := range creds {
@@ -196,19 +208,25 @@ func extractResolvable(ctx context.Context, g *Graph, creds []runtime.Typed) (ru
 		}
 
 		// Try DirectCredentials (Credentials/v1 and its aliases).
+		// Accumulate into mergedDirect; they are only used as a fallback
+		// when no concrete typed credential was resolved.
 		var direct v1.DirectCredentials
 		if err := scheme.Convert(cred, &direct); err == nil {
-			if resolved == nil {
-				resolved = &direct
-			} else if existingDC, ok := resolved.(*v1.DirectCredentials); ok {
-				// Merge multiple DirectCredentials into one.
-				maps.Copy(existingDC.Properties, direct.Properties)
+			if mergedDirect == nil {
+				mergedDirect = &direct
+			} else {
+				maps.Copy(mergedDirect.Properties, direct.Properties)
 			}
 			continue
 		}
 
 		// Unknown type — pass to plugin-based resolution.
 		remaining = append(remaining, cred)
+	}
+
+	// Typed credentials take priority; use merged DirectCredentials only as fallback.
+	if resolved == nil && mergedDirect != nil {
+		resolved = mergedDirect
 	}
 
 	return resolved, remaining, nil
