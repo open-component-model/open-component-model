@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/gobwas/glob"
 	slogcontext "github.com/veqryn/slog-context"
 
@@ -49,22 +50,62 @@ func (r *SpecProvider) GetRepositorySpec(ctx context.Context, componentIdentity 
 		slog.Int("resolvers", len(r.resolvers)),
 	)
 
+	version := componentIdentity[descruntime.IdentityAttributeVersion]
+
 	for index, resolver := range r.resolvers {
 		logger.Log(ctx, slog.LevelDebug, "checking resolver",
 			slog.Int("index", index),
 			slog.String("pattern", resolver.ComponentNamePattern),
+			slog.String("versionConstraint", resolver.VersionConstraint),
 		)
 		g, err := glob.Compile(resolver.ComponentNamePattern)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compile glob pattern %q in resolver index %d: %w", resolver.ComponentNamePattern, index, err)
 		}
-		if ok := g.Match(componentName); ok {
-			logger.Log(ctx, slog.LevelDebug, "matched resolver",
-				slog.String("Repository", resolver.Repository.Name),
-				slog.String("pattern", resolver.ComponentNamePattern),
-			)
-			return resolver.Repository, nil
+		if !g.Match(componentName) {
+			continue
 		}
+
+		if resolver.VersionConstraint != "" {
+			if version == "" {
+				logger.Log(ctx, slog.LevelDebug, "skipping resolver with version constraint because no version was provided",
+					slog.Int("index", index),
+					slog.String("versionConstraint", resolver.VersionConstraint),
+				)
+				continue
+			}
+
+			constraint, err := semver.NewConstraint(resolver.VersionConstraint)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse version constraint %q in resolver index %d: %w", resolver.VersionConstraint, index, err)
+			}
+
+			ver, err := semver.NewVersion(version)
+			if err != nil {
+				logger.Log(ctx, slog.LevelDebug, "skipping resolver because version is not valid semver",
+					slog.Int("index", index),
+					slog.String("version", version),
+					slog.String("error", err.Error()),
+				)
+				continue
+			}
+
+			if !constraint.Check(ver) {
+				logger.Log(ctx, slog.LevelDebug, "version does not satisfy constraint",
+					slog.Int("index", index),
+					slog.String("version", version),
+					slog.String("versionConstraint", resolver.VersionConstraint),
+				)
+				continue
+			}
+		}
+
+		logger.Log(ctx, slog.LevelDebug, "matched resolver",
+			slog.String("Repository", resolver.Repository.Name),
+			slog.String("pattern", resolver.ComponentNamePattern),
+			slog.String("versionConstraint", resolver.VersionConstraint),
+		)
+		return resolver.Repository, nil
 	}
 
 	logger.

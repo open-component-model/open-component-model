@@ -1,3 +1,5 @@
+github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
+github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 h1:uX1JmpONuD549D73r6cgnxyUu18Zb7yHAy5AYU0Pm4Q=
 github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467/go.mod h1:uzvlm1mxhHkdfqitSA92i7Se+S9ksOn3a3qmv/kyOCw=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
@@ -43,8 +45,6 @@ gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 ocm.software/open-component-model/bindings/go/blob v0.0.12 h1:5YOFDxERzF6w+rPWYuvnb5iVf3xgWJo9wLkzIPe+FmU=
 ocm.software/open-component-model/bindings/go/blob v0.0.12/go.mod h1:YswKfR/kxhdHHK7bN98S2O73ZZlPLsHfHO2Bjsr6Zww=
-ocm.software/open-component-model/bindings/go/configuration v0.0.12 h1:SXrHUR70gsW+qZI5zbCtem6Rh5DvSFA19GDEd8CNtis=
-ocm.software/open-component-model/bindings/go/configuration v0.0.12/go.mod h1:0sMurs1+cI/ohkuNSipDPPRb5ycSSTHDZoFG92aDtlE=
 ocm.software/open-component-model/bindings/go/credentials v0.0.9 h1:sYKfVKs+CrVL2EuKYNevCjXq1cdF0DsLnWyEjamjDdY=
 ocm.software/open-component-model/bindings/go/credentials v0.0.9/go.mod h1:JFQDqqZv17uJLQSZOKa9siuLTK4zMA3Bzk4amU9ZALU=
 ocm.software/open-component-model/bindings/go/dag v0.0.6 h1:To76QJAmFD88C101oB/HgYvtomp8mm0270ewDLcVncw=

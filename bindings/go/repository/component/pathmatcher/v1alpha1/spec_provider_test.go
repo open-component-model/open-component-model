@@ -20,6 +20,7 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 	cases := []struct {
 		name      string
 		component string
+		version   string
 		repos     []*resolverspec.Resolver
 		want      *runtime.Raw
 		err       assert.ErrorAssertionFunc
@@ -155,6 +156,243 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			want: rawRepo1,
 			err:  assert.NoError,
 		},
+		// version constraint tests
+		{
+			name:      "no constraint matches any version",
+			component: "my-org/comp",
+			version:   "1.0.0",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "my-org/*",
+				},
+			},
+			want: rawRepo1,
+			err:  assert.NoError,
+		},
+		{
+			name:      "no constraint matches empty version",
+			component: "my-org/comp",
+			version:   "",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "my-org/*",
+				},
+			},
+			want: rawRepo1,
+			err:  assert.NoError,
+		},
+		{
+			name:      "version constraint matches",
+			component: "my-org/comp",
+			version:   "1.5.0",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "my-org/*",
+					VersionConstraint:    ">=1.0.0, <2.0.0",
+				},
+			},
+			want: rawRepo1,
+			err:  assert.NoError,
+		},
+		{
+			name:      "version constraint does not match",
+			component: "my-org/comp",
+			version:   "2.0.0",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "my-org/*",
+					VersionConstraint:    ">=1.0.0, <2.0.0",
+				},
+			},
+			want: nil,
+			err: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Error(t, err, "expected error when no resolver matches")
+			},
+		},
+		{
+			name:      "version constraint with empty version skips resolver",
+			component: "my-org/comp",
+			version:   "",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "my-org/*",
+					VersionConstraint:    ">=1.0.0",
+				},
+			},
+			want: nil,
+			err: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Error(t, err, "expected error when version is empty and constraint is set")
+			},
+		},
+		{
+			name:      "version routing: v1 to repo1, v2 to repo2",
+			component: "my-org/comp",
+			version:   "1.5.0",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "my-org/*",
+					VersionConstraint:    ">=1.0.0, <2.0.0",
+				},
+				{
+					Repository:           rawRepo2,
+					ComponentNamePattern: "my-org/*",
+					VersionConstraint:    ">=2.0.0",
+				},
+			},
+			want: rawRepo1,
+			err:  assert.NoError,
+		},
+		{
+			name:      "version routing: v2 to repo2",
+			component: "my-org/comp",
+			version:   "2.0.0",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "my-org/*",
+					VersionConstraint:    ">=1.0.0, <2.0.0",
+				},
+				{
+					Repository:           rawRepo2,
+					ComponentNamePattern: "my-org/*",
+					VersionConstraint:    ">=2.0.0",
+				},
+			},
+			want: rawRepo2,
+			err:  assert.NoError,
+		},
+		{
+			name:      "caret constraint matches",
+			component: "any",
+			version:   "1.9.0",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "*",
+					VersionConstraint:    "^1.2.0",
+				},
+			},
+			want: rawRepo1,
+			err:  assert.NoError,
+		},
+		{
+			name:      "tilde constraint matches",
+			component: "any",
+			version:   "1.2.5",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "*",
+					VersionConstraint:    "~1.2.0",
+				},
+			},
+			want: rawRepo1,
+			err:  assert.NoError,
+		},
+		{
+			name:      "tilde constraint does not match minor bump",
+			component: "any",
+			version:   "1.3.0",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "*",
+					VersionConstraint:    "~1.2.0",
+				},
+			},
+			want: nil,
+			err: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Error(t, err, "expected error when tilde constraint does not match")
+			},
+		},
+		{
+			name:      "invalid constraint returns error",
+			component: "any",
+			version:   "1.0.0",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "*",
+					VersionConstraint:    "not-valid",
+				},
+			},
+			want: nil,
+			err: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Error(t, err, "expected error for invalid constraint")
+			},
+		},
+		{
+			name:      "name does not match even if constraint would",
+			component: "my-org/comp",
+			version:   "1.5.0",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "other/*",
+					VersionConstraint:    ">=1.0.0",
+				},
+			},
+			want: nil,
+			err: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Error(t, err, "expected error when name does not match")
+			},
+		},
+		{
+			name:      "v-prefixed version works",
+			component: "any",
+			version:   "v1.5.0",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "*",
+					VersionConstraint:    ">=1.0.0",
+				},
+			},
+			want: rawRepo1,
+			err:  assert.NoError,
+		},
+		{
+			name:      "non-semver version skips constrained resolver, matches unconstrained",
+			component: "my-org/comp",
+			version:   "latest",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "my-org/*",
+					VersionConstraint:    ">=1.0.0",
+				},
+				{
+					Repository:           rawRepo2,
+					ComponentNamePattern: "my-org/*",
+				},
+			},
+			want: rawRepo2,
+			err:  assert.NoError,
+		},
+		{
+			name:      "empty version skips constrained resolver, matches unconstrained fallback",
+			component: "my-org/comp",
+			version:   "",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "my-org/*",
+					VersionConstraint:    ">=1.0.0",
+				},
+				{
+					Repository:           rawRepo2,
+					ComponentNamePattern: "my-org/*",
+				},
+			},
+			want: rawRepo2,
+			err:  assert.NoError,
+		},
 	}
 
 	for _, tc := range cases {
@@ -163,6 +401,9 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 
 			identity := runtime.Identity{
 				descruntime.IdentityAttributeName: tc.component,
+			}
+			if tc.version != "" {
+				identity[descruntime.IdentityAttributeVersion] = tc.version
 			}
 
 			repo, err := res.GetRepositorySpec(ctx, identity)
