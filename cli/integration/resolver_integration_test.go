@@ -157,4 +157,19 @@ components:
 	strOutput := output.String()
 	r.Contains(strOutput, "ocm.software/resolver-test/component-a", "output should contain resource from component-a")
 	r.Contains(strOutput, "ocm.software/resolver-test/component-b", "output should contain resource from component-b")
+
+	// Verify component-b is NOT reachable from registry-a without the resolver.
+	// This proves the recursive get above only succeeded because the resolver correctly routed to registry-b.
+	noResolverOutput := new(bytes.Buffer)
+	noResolverCMD := cmd.New()
+	noResolverCMD.SetOut(noResolverOutput)
+	noResolverCMD.SetErr(noResolverOutput)
+	noResolverCMD.SetArgs([]string{
+		"get", "component-version",
+		fmt.Sprintf("http://%s//%s:%s", registryA.RegistryAddress, componentB, version),
+		"--config", cfgPathB,
+		"--output", "json",
+	})
+	r.Error(noResolverCMD.ExecuteContext(t.Context()),
+		"component-b should not be found in registry-a without resolver config, proving routing is required")
 }

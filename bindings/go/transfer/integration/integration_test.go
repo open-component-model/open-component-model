@@ -925,14 +925,21 @@ func Test_Integration_TransferOCIImageResource_CopyModeAllResources(t *testing.T
 	r.Equal(descriptorv2.LocalBlobAccessType, gotAccess.GetType().Name,
 		"OCI image resource should be stored as localBlob in target after CopyModeAllResources transfer")
 
+	// Verify GlobalAccess is not set — transfer should produce a pure local blob without global access.
+	accessScheme := runtime.NewScheme(runtime.WithAllowUnknown())
+	descriptorv2.MustAddToScheme(accessScheme)
+	var typedLocalBlob descriptorv2.LocalBlob
+	r.NoError(accessScheme.Convert(gotAccess, &typedLocalBlob), "should convert access to LocalBlob")
+	r.Nil(typedLocalBlob.GlobalAccess, "localBlob should not have globalAccess after transfer")
+
 	// Verify the blob is actually present and readable in the target repository.
 	resourceIdentity := gotDesc.Component.Resources[0].ToIdentity()
 	localBlob, _, err := targetRepo.GetLocalResource(ctx, componentName, componentVersion, resourceIdentity)
 	r.NoError(err, "local blob should be retrievable from target repository")
 	reader, err := localBlob.ReadCloser()
 	r.NoError(err, "local blob should be readable")
+	defer func() { r.NoError(reader.Close()) }()
 	content, err := io.ReadAll(reader)
 	r.NoError(err)
-	r.NoError(reader.Close())
 	r.NotEmpty(content, "local blob content should not be empty")
 }
