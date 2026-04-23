@@ -9,6 +9,11 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/website-publish-site.yaml'
+      # Paths that are relevant for tracking changes on `main` version
+      - 'cli/docs/reference/**'
+      - 'bindings/go/constructor/spec/v1/resources/**'
+      - 'bindings/go/descriptor/v2/resources/**'
+      - 'kubernetes/controller/config/crd/bases/**'
 
 permissions:
   contents: read

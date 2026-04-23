@@ -92,10 +92,12 @@ defaultContentVersion = "latest"
   resampleFilter = "Lanczos"
 
 [versions]
-  [versions."latest"]
+  [versions."main"]
     weight = 1
-  [versions."legacy"]
+  [versions."latest"]
     weight = 2
+  [versions."legacy"]
+    weight = 3
 
 [services]
   [services.rss]

@@ -116,7 +116,39 @@
 [mounts.sites.matrix]
   versions = ["legacy"]
 
-# dev
+# main (tracks HEAD of monorepo via import paths that are relevant for the website content)
+[[mounts]]
+  files = ["**", "!blog/**"]
+  source = "content"
+  target = "content"
+  [mounts.sites.matrix]
+    versions = ["main"]
+
+[[mounts]]
+  source = "../cli/docs/reference"
+  target = "content/docs/reference/ocm-cli"
+  [mounts.sites.matrix]
+    versions = ["main"]
+
+[[mounts]]
+  source = "../bindings/go/constructor/spec/v1/resources"
+  target = "static/main/schemas/bindings/go/constructor"
+  [mounts.sites.matrix]
+    versions = ["main"]
+
+[[mounts]]
+  source = "../bindings/go/descriptor/v2/resources"
+  target = "static/main/schemas/bindings/go/descriptor/v2"
+  [mounts.sites.matrix]
+    versions = ["main"]
+
+[[mounts]]
+  source = "../kubernetes/controller/config/crd/bases"
+  target = "static/main/schemas/kubernetes/controller"
+  [mounts.sites.matrix]
+    versions = ["main"]
+
+# latest (tracks latest released module tags — unchanged)
 [[mounts]]
   files = ["**", "!blog/**"]
   source = "content"

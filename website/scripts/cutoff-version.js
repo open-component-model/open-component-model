@@ -61,8 +61,9 @@ const SPECIAL_VERSIONS = new Set(['latest', 'main', 'legacy']);
  * Rebuild the versions object with correct weights.
  *
  * Rules:
- * - "latest" (or "main") always gets weight 1
- * - SemVer versions are sorted descending (newest first), weights 2, 3, ...
+ * - "main" (if present) always gets weight 1
+ * - "latest" (if present) comes after "main"
+ * - SemVer versions are sorted descending (newest first), placed after main/latest
  * - "legacy" (if present) always gets the highest weight (last)
  *
  * @param {Object} existingVersions - current versions from hugo.toml
@@ -76,18 +77,16 @@ function assignVersionWeights(existingVersions, newVersion) {
         throw new Error(`Version '${newVersion}' already exists in hugo.toml`);
     }
 
-    let defaultKey = null;  // "latest" or "main"
+    let hasMain = false;
+    let hasLatest = false;
     let hasLegacy = false;
     const semverKeys = [];
 
     for (const key of Object.keys(versions)) {
-        if (key === 'latest' || key === 'main') {
-            defaultKey = key;
-        } else if (key === 'legacy') {
-            hasLegacy = true;
-        } else {
-            semverKeys.push(key);
-        }
+        if (key === 'main') hasMain = true;
+        else if (key === 'latest') hasLatest = true;
+        else if (key === 'legacy') hasLegacy = true;
+        else semverKeys.push(key);
     }
 
     semverKeys.push(newVersion);
@@ -96,17 +95,14 @@ function assignVersionWeights(existingVersions, newVersion) {
     const result = {};
     let weight = 1;
 
-    if (defaultKey) {
-        result[defaultKey] = { weight: weight++ };
-    }
+    if (hasMain) result.main = { weight: weight++ };
+    if (hasLatest) result.latest = { weight: weight++ };
 
     for (const sv of semverKeys) {
         result[sv] = { weight: weight++ };
     }
 
-    if (hasLegacy) {
-        result['legacy'] = { weight: weight };
-    }
+    if (hasLegacy) result.legacy = { weight: weight };
 
     return result;
 }
@@ -250,6 +246,28 @@ function buildModuleBlocks(version) {
     return { mount, imports };
 }
 
+// Rewrite the "latest" content mount to point at the just-cut snapshot.
+// `main` keeps mounting live content/; `latest` shifts to freeze on the release.
+// Returns true if a mount was changed, false otherwise.
+function pinLatestContentMount(parsed, version) {
+    if (!parsed?.mounts) return false;
+    const newSource = `content_versioned/version-${version}`;
+    let changed = false;
+    for (const m of parsed.mounts) {
+        const versions = m?.sites?.matrix?.versions;
+        const isLatestContentMount =
+            Array.isArray(versions) &&
+            versions.length === 1 &&
+            versions[0] === 'latest' &&
+            m.target === 'content';
+        if (isLatestContentMount && m.source !== newSource) {
+            m.source = newSource;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 // Update module.toml
 async function updateModuleToml(version) {
     const { parse, stringify } = await loadToml();
@@ -274,6 +292,10 @@ async function updateModuleToml(version) {
     parsed.imports = parsed.imports || [];
     for (const imp of imports) {
         parsed.imports.push(imp);
+    }
+
+    if (pinLatestContentMount(parsed, version)) {
+        console.log(`module.toml: pinned 'latest' content mount to content_versioned/version-${version}.`);
     }
 
     await fsp.writeFile(MODULE_TOML, MODULE_HEADER + stringify(parsed), 'utf-8');
@@ -301,4 +323,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { parseArguments, hasMountForVersion, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights };
+module.exports = { parseArguments, hasMountForVersion, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, pinLatestContentMount };
