@@ -1,7 +1,6 @@
 package integration_test
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -15,7 +14,6 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 
-	"ocm.software/open-component-model/bindings/go/sigstore/integration/internal"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 )
@@ -26,36 +24,50 @@ const (
 	credTrustedRootJSONFile = "trusted_root_json_file"
 )
 
-// stack is the shared sigstore infrastructure used by all tests.
-// It is started once in TestMain and destroyed after all tests complete.
+// sigstoreEnv holds the environment configuration for the sigstore integration
+// tests. All values are read from environment variables in TestMain, which are
+// expected to be set by the scaffolding setup (either via CI or locally via
+// hack/extract-sigstore-env.sh).
+type sigstoreEnv struct {
+	FulcioURL        string
+	RekorURL         string
+	TSAURL           string
+	OIDCToken        string
+	TrustedRootPath  string
+	SigningConfigPath string
+	OIDCIssuer       string
+	OIDCIdentity     string
+}
+
+// stack is the shared sigstore environment used by all tests.
 //
 // All tests share the same Rekor transparency log. Each test creates its own
 // unique digest (via uniqueDigest), so entries from different tests do not
 // interfere. Do not run sub-tests in parallel against the same signed value
 // without ensuring digest uniqueness.
-//
-// The OIDC token stored in stack.OIDCToken is also shared. Dex tokens have a
-// short TTL (~5–10 min). For the current suite this is fine; see
-// internal.StartSigstoreStack for guidance if the suite grows.
-var stack *internal.SigstoreStack
+var stack *sigstoreEnv
 
 func TestMain(m *testing.M) {
-	ctx := context.Background()
+	stack = &sigstoreEnv{
+		FulcioURL:        requireEnv("SIGSTORE_FULCIO_URL"),
+		RekorURL:         requireEnv("SIGSTORE_REKOR_URL"),
+		TSAURL:           requireEnv("SIGSTORE_TSA_URL"),
+		OIDCToken:        requireEnv("SIGSTORE_OIDC_TOKEN"),
+		TrustedRootPath:  requireEnv("SIGSTORE_TRUSTED_ROOT"),
+		SigningConfigPath: requireEnv("SIGSTORE_SIGNING_CONFIG"),
+		OIDCIssuer:       requireEnv("SIGSTORE_OIDC_ISSUER"),
+		OIDCIdentity:     requireEnv("SIGSTORE_OIDC_IDENTITY"),
+	}
+	os.Exit(m.Run())
+}
 
-	var err error
-	stack, err = internal.StartSigstoreStack(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to start sigstore stack: %v\n", err)
+func requireEnv(key string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		fmt.Fprintf(os.Stderr, "required env var %s is not set\n", key)
 		os.Exit(1)
 	}
-
-	code := m.Run()
-
-	if err := stack.Destroy(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to destroy sigstore stack: %v\n", err)
-	}
-
-	os.Exit(code)
+	return v
 }
 
 // ---------------------------------------------------------------------------

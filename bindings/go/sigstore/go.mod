@@ -1,4 +1,4 @@
-module ocm.software/open-component-model/bindings/go/sigstore/integration
+module ocm.software/open-component-model/bindings/go/sigstore
 
 go 1.26.1
 
@@ -6,7 +6,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260402061016-e120070fd921
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-00010101000000-000000000000
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260402061016-e120070fd921
 )
 
 require (
@@ -19,9 +19,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260401155312-e2b46f9fb25c // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260402061016-e120070fd921 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
-
-// TODO: remove replace once bindings/go/sigstore is published (PR #2344).
-replace ocm.software/open-component-model/bindings/go/sigstore => ../

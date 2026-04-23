@@ -5,11 +5,44 @@ includes:
 
 vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
+  SCAFFOLDING_VERSION: 'v0.7.31'
+  SIGSTORE_ENV_FILE: 'tmp/sigstore-env.sh'
 
 tasks:
-  test/integration:
-    desc: "Run sigstore testcontainer-based integration tests (requires Docker)"
+  scaffolding:setup:
+    desc: "Create kind cluster and deploy sigstore scaffolding (~5 min, skips if already running)"
+    status:
+      - kubectl -n fulcio-system get ksvc fulcio -ojsonpath='{.status.url}' 2>/dev/null
     cmds:
-      - task: reuse:run-go-test
-        vars:
-          GO_TEST_FLAGS: '-count=1 -run "{{ .INTEGRATION_TEST_IDENTIFIER }}" -timeout 180s'
+      - |
+        curl -fLo /tmp/setup-kind.sh \
+          "https://github.com/sigstore/scaffolding/releases/download/{{.SCAFFOLDING_VERSION}}/setup-kind.sh"
+        chmod u+x /tmp/setup-kind.sh
+        /tmp/setup-kind.sh
+      - |
+        curl -fLo /tmp/setup-scaffolding-from-release.sh \
+          "https://github.com/sigstore/scaffolding/releases/download/{{.SCAFFOLDING_VERSION}}/setup-scaffolding-from-release.sh"
+        chmod u+x /tmp/setup-scaffolding-from-release.sh
+        /tmp/setup-scaffolding-from-release.sh --release-version {{.SCAFFOLDING_VERSION}}
+
+  scaffolding:env:
+    desc: "Extract sigstore env vars from running cluster into tmp/sigstore-env.sh"
+    deps: [scaffolding:setup]
+    cmds:
+      - mkdir -p tmp
+      - bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
+
+  test/integration:
+    desc: "Run sigstore integration tests against scaffolding cluster"
+    deps: [scaffolding:env]
+    cmds:
+      - |
+        set -e
+        . {{.SIGSTORE_ENV_FILE}}
+        go test -count=1 -run "{{.INTEGRATION_TEST_IDENTIFIER}}" -timeout 180s ./...
+
+  scaffolding:teardown:
+    desc: "Delete kind cluster and clean up"
+    cmds:
+      - kind delete cluster 2>/dev/null || true
+      - rm -f {{.SIGSTORE_ENV_FILE}}
