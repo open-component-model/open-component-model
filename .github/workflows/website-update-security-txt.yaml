@@ -20,6 +20,9 @@ jobs:
     steps:
     - name: Checkout repo
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      with:
+        sparse-checkout: website/static/.well-known/security.txt
+        sparse-checkout-cone-mode: false
 
     - name: Bump Expires date by one year
       run: |
