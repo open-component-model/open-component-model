@@ -2,9 +2,9 @@ name: "Website: Update security.txt"
 
 on:
   schedule:
-    # Run on November 1st — gives the team ~2 months before the current
-    # April expiry to review and merge the renewal PR.
-    - cron: '0 9 1 11 *'
+    # Run on December 1st — gives the team ~30 days before the Dec 31
+    # expiry to review and merge the renewal PR.
+    - cron: '0 9 1 12 *'
   workflow_dispatch:
 
 permissions:

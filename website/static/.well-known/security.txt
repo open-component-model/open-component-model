@@ -2,4 +2,4 @@ Contact: https://github.com/open-component-model/open-component-model/security/a
 Contact: mailto:open-component-model-tsc@lists.neonephos.org
 Policy: https://github.com/open-component-model/open-component-model/blob/main/SECURITY.md
 Preferred-Languages: en
-Expires: 2027-04-24T00:00:00.000Z
+Expires: 2027-12-31T00:00:00.000Z
