@@ -191,6 +191,65 @@ warning.
 
 {{< /steps >}}
 
+## Migrating Version-Split Repositories
+
+The fallback resolver had a **probe-and-retry** behaviour: it tried all matching repositories in priority order until
+one
+succeeded. This allowed the same component to have versions spread across multiple repositories without additional
+configuration.
+
+The glob-based resolver uses **first-match** semantics — it does not probe or retry. If the same component has versions
+in different repositories, use the `versionConstraint` field to route each version range to the correct repository.
+
+**Example:** `my-component` has older versions in `old-registry.example/legacy` and newer versions in
+`new-registry.example/current`:
+
+{{< tabs >}}
+{{< tab "Fallback (before)" >}}
+
+```yaml
+- type: ocm.config.ocm.software
+  resolvers:
+    - repository:
+        type: OCIRepository/v1
+        baseUrl: new-registry.example
+        subPath: current
+      prefix: my-org.example
+      priority: 10
+    - repository:
+        type: OCIRepository/v1
+        baseUrl: old-registry.example
+        subPath: legacy
+      prefix: my-org.example
+      priority: 1
+```
+
+{{< /tab >}}
+{{< tab "Glob-based (after)" >}}
+
+```yaml
+- type: resolvers.config.ocm.software/v1alpha1
+  resolvers:
+    - repository:
+        type: OCIRepository/v1
+        baseUrl: new-registry.example
+        subPath: current
+      componentNamePattern: "my-org.example/*"
+      versionConstraint: ">=2.0.0"
+    - repository:
+        type: OCIRepository/v1
+        baseUrl: old-registry.example
+        subPath: legacy
+      componentNamePattern: "my-org.example/*"
+      versionConstraint: "<2.0.0"
+```
+
+{{< /tab >}}
+{{< /tabs >}}
+
+For the full version constraint syntax, see
+[Version Constraints]({{< relref "docs/reference/resolver-configuration.md#version-constraints" >}}).
+
 ## Key Differences
 
 |                      | Fallback (`ocm.config.ocm.software`)                              | Glob-based (`resolvers.config.ocm.software/v1alpha1`)                                  |
