@@ -77,7 +77,6 @@ const STALE_ITEMS_QUERY = `
                 id
                 title
                 number
-                repository { owner { login } name }
               }
             }
             sprint: fieldValueByName(name: "Sprint") {
@@ -89,6 +88,14 @@ const STALE_ITEMS_QUERY = `
           }
         }
       }
+    }
+  }
+`;
+
+const ADD_COMMENT_MUTATION = `
+  mutation($body: String!, $subjectId: ID!) {
+    addComment(input: { body: $body, subjectId: $subjectId }) {
+      commentEdge { node { id } }
     }
   }
 `;
@@ -223,7 +230,6 @@ export default async function updateExpiredSprints({ github, core, context, proj
     const number = item.content?.number ?? "?";
     const title = item.content?.title ?? "unknown";
     const oldSprint = item.sprint?.title ?? "none";
-    const repo = item.content?.repository;
 
     core.info(`Updating #${number} – ${title}`);
     core.info(`  Sprint: ${oldSprint} → ${currentSprint.title}`);
@@ -237,15 +243,9 @@ export default async function updateExpiredSprints({ github, core, context, proj
       });
 
       // Leave a comment on the issue so the change is visible in the timeline
-      if (repo && number !== "?") {
+      if (item.content?.id) {
         try {
-          await github.graphql(`
-            mutation($body: String!, $subjectId: ID!) {
-              addComment(input: { body: $body, subjectId: $subjectId }) {
-                commentEdge { node { id } }
-              }
-            }
-          `, {
+          await github.graphql(ADD_COMMENT_MUTATION, {
             subjectId: item.content.id,
             body: `Sprint hygiene: automatically moved from **${oldSprint}** to **${currentSprint.title}** because this issue was still in "Needs Refinement" after the sprint ended.`,
           });
