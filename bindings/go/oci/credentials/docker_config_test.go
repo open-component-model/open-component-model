@@ -161,6 +161,70 @@ func TestCredentialFunc(t *testing.T) {
 	}
 }
 
+func TestCredentialFromMap(t *testing.T) {
+	tests := []struct {
+		name        string
+		credentials map[string]string
+		expected    auth.Credential
+	}{
+		{
+			name:        "empty credentials",
+			credentials: map[string]string{},
+			expected:    auth.Credential{},
+		},
+		{
+			name: "camelCase keys (canonical)",
+			credentials: map[string]string{
+				CredentialKeyUsername:     "user",
+				CredentialKeyPassword:     "pass",
+				CredentialKeyAccessToken:  "atoken",
+				CredentialKeyRefreshToken: "rtoken",
+			},
+			expected: auth.Credential{
+				Username:     "user",
+				Password:     "pass",
+				AccessToken:  "atoken",
+				RefreshToken: "rtoken",
+			},
+		},
+		{
+			name: "legacy snake_case keys",
+			credentials: map[string]string{
+				"username":                      "user",
+				"password":                      "pass",
+				LegacyCredentialKeyAccessToken:  "atoken",
+				LegacyCredentialKeyRefreshToken: "rtoken",
+			},
+			expected: auth.Credential{
+				Username:     "user",
+				Password:     "pass",
+				AccessToken:  "atoken",
+				RefreshToken: "rtoken",
+			},
+		},
+		{
+			name: "camelCase takes precedence over snake_case",
+			credentials: map[string]string{
+				CredentialKeyAccessToken:        "camel",
+				LegacyCredentialKeyAccessToken:  "snake",
+				CredentialKeyRefreshToken:       "camel-refresh",
+				LegacyCredentialKeyRefreshToken: "snake-refresh",
+			},
+			expected: auth.Credential{
+				AccessToken:  "camel",
+				RefreshToken: "camel-refresh",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := CredentialFromMap(tt.credentials)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestResolveV1DockerConfigCredentials(t *testing.T) {
 	tests := []struct {
 		name         string

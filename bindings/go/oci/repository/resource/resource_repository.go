@@ -251,7 +251,7 @@ func createRepository(
 			Header: map[string][]string{
 				"User-Agent": {userAgent},
 			},
-			Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
+			Credential: auth.StaticCredential(url.Host, ocicredentials.CredentialFromMap(credentials)),
 		}))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create URL resolver: %w", err)
@@ -268,26 +268,4 @@ func createRepository(
 
 	repo, err := oci.NewRepository(options...)
 	return repo, err
-}
-
-func clientCredentials(credentials map[string]string) auth.Credential {
-	cred := auth.Credential{}
-	if username, ok := credentials[ocicredentials.CredentialKeyUsername]; ok {
-		cred.Username = username
-	}
-	if password, ok := credentials[ocicredentials.CredentialKeyPassword]; ok {
-		cred.Password = password
-	}
-	// Support the canonical camelCase key first, fall back to legacy snake_case for backward compatibility.
-	if refreshToken, ok := credentials[ocicredentials.CredentialKeyRefreshToken]; ok {
-		cred.RefreshToken = refreshToken
-	} else if refreshToken, ok := credentials[ocicredentials.LegacyCredentialKeyRefreshToken]; ok {
-		cred.RefreshToken = refreshToken
-	}
-	if accessToken, ok := credentials[ocicredentials.CredentialKeyAccessToken]; ok {
-		cred.AccessToken = accessToken
-	} else if accessToken, ok := credentials[ocicredentials.LegacyCredentialKeyAccessToken]; ok {
-		cred.AccessToken = accessToken
-	}
-	return cred
 }
