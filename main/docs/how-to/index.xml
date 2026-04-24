@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>How-to Guides on Open Component Model</title><link>https://ocm.software/main/docs/how-to/</link><description>Recent content in How-to Guides on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/main/docs/how-to/index.xml" rel="self" type="application/rss+xml"/><item><title>Transfer Components across an Air Gap</title><link>https://ocm.software/main/docs/how-to/transfer-components-across-an-air-gap/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/transfer-components-across-an-air-gap/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Transfer a signed component version from a source registry into an air-gapped target registry using a CTF archive as the transport medium. An air-gapped environment is a network that is physically isolated from untrusted networks such as the public internet.&lt;/p&gt;</description></item><item><title>Configure Credentials for OCM Controllers</title><link>https://ocm.software/main/docs/how-to/configure-credentials-for-ocm-controllers/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/configure-credentials-for-ocm-controllers/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Configure credentials to allow OCM Controllers to access OCM components stored in private OCI registries.&lt;/p&gt;
+&lt;h2 id="you-will-end-up-with"&gt;You will end up with&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;A Kubernetes secret containing registry credentials&lt;/li&gt;
+&lt;li&gt;OCM Controller resources configured to use these credentials&lt;/li&gt;
+&lt;li&gt;Verified access to private OCM repositories&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~5 minutes&lt;/p&gt;</description></item><item><title>Configure Credentials for Multiple Registries</title><link>https://ocm.software/main/docs/how-to/configure-credentials-for-multiple-registries/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/configure-credentials-for-multiple-registries/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Configure OCM to authenticate against multiple OCI registries — pinning explicit credentials for specific registries while using Docker config as a catch-all fallback.&lt;/p&gt;</description></item><item><title>Generate Signing Keys</title><link>https://ocm.software/main/docs/how-to/generate-signing-keys/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/generate-signing-keys/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Generate an RSA key pair that can be used to sign and verify OCM component versions.&lt;/p&gt;
+&lt;h2 id="youll-end-up-with"&gt;You&amp;rsquo;ll end up with&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;A private key file for signing component versions&lt;/li&gt;
+&lt;li&gt;A public key file for sharing with consumers who need to verify signatures&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~2 minutes&lt;/p&gt;</description></item><item><title>Configure Credentials for Signing</title><link>https://ocm.software/main/docs/how-to/configure-credentials-for-signing/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/configure-credentials-for-signing/</guid><description>&lt;p&gt;Set up credential configuration so OCM can find your signing keys when signing or verifying component versions.&lt;/p&gt;
+&lt;h2 id="youll-end-up-with"&gt;You&amp;rsquo;ll end up with&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;A configured &lt;code&gt;.ocmconfig&lt;/code&gt; file that OCM uses to locate your signing keys&lt;/li&gt;
+&lt;li&gt;Ability to sign and verify component versions without specifying key paths manually&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~3 minutes&lt;/p&gt;</description></item><item><title>Sign Component Versions</title><link>https://ocm.software/main/docs/how-to/sign-component-versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/sign-component-versions/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Sign a component version to certify its authenticity and enable downstream verification.&lt;/p&gt;
+&lt;h2 id="youll-end-up-with"&gt;You&amp;rsquo;ll end up with&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;A component version with a cryptographic signature attached&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~3 minutes&lt;/p&gt;</description></item><item><title>Verify Component Versions</title><link>https://ocm.software/main/docs/how-to/verify-component-versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/verify-component-versions/</guid><description>&lt;h2 id="youll-end-up-with"&gt;You&amp;rsquo;ll end up with&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;Confidence that a component version is authentic and hasn&amp;rsquo;t been tampered with&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~3 minutes&lt;/p&gt;</description></item><item><title>Download Resources from Component Versions</title><link>https://ocm.software/main/docs/how-to/download-resources-from-component-versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/download-resources-from-component-versions/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Download resources from a component version using the OCM CLI.
+Learn how to fetch specific resources, optionally transform them to their native format,
+and save them to your local filesystem.&lt;/p&gt;</description></item><item><title>Migrate Legacy Credentials</title><link>https://ocm.software/main/docs/how-to/migrate-legacy-credentials/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/migrate-legacy-credentials/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Migrate an existing legacy OCM &lt;code&gt;.ocmconfig&lt;/code&gt; file so it works with the new OCM.&lt;/p&gt;
+&lt;div class="callout callout-caution d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"&gt;&lt;div class="callout-content"&gt;&lt;div class="callout-body"&gt;&lt;p&gt;&lt;code&gt;HashiCorpVault/v1&lt;/code&gt;, &lt;code&gt;GardenerConfig/v1&lt;/code&gt;, and &lt;code&gt;NPMConfig/v1&lt;/code&gt; are not yet available in the new OCM. If you rely on these, stay on legacy OCM for now.&lt;/p&gt;</description></item><item><title>Migrate from Fallback to Deterministic Repository Resolvers</title><link>https://ocm.software/main/docs/how-to/migrate-from-fallback-to-deterministic-repository-resolvers/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/migrate-from-fallback-to-deterministic-repository-resolvers/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Replace the deprecated &lt;code&gt;ocm.config.ocm.software&lt;/code&gt; fallback resolver configuration with the new &lt;code&gt;resolvers.config.ocm.software/v1alpha1&lt;/code&gt; glob-based
+resolvers.&lt;/p&gt;
+&lt;div class="callout callout-caution d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"&gt;&lt;div class="callout-content"&gt;&lt;div class="callout-body"&gt;&lt;p&gt;The fallback resolver (&lt;code&gt;ocm.config.ocm.software&lt;/code&gt;) is deprecated. It uses priority-based ordering with prefix matching and probes multiple
+repositories until one succeeds. The glob-based resolver (&lt;code&gt;resolvers.config.ocm.software/v1alpha1&lt;/code&gt;) replaces it with first-match glob-based matching
+against component names, which is simpler and more efficient.&lt;/p&gt;</description></item><item><title>Resolving Components across Multiple Registries</title><link>https://ocm.software/main/docs/how-to/resolving-components-across-multiple-registries/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/resolving-components-across-multiple-registries/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Configure an &lt;code&gt;.ocmconfig&lt;/code&gt; file with resolver entries so the OCM CLI can recursively resolve component references stored
+in different OCI registries.&lt;/p&gt;</description></item><item><title>Transfer Helm Charts with OCM</title><link>https://ocm.software/main/docs/how-to/transfer-helm-charts-with-ocm/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/transfer-helm-charts-with-ocm/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Transfer a component version that contains a Helm chart resource sourced from a &lt;strong&gt;Helm repository&lt;/strong&gt; (type &lt;code&gt;helmChart&lt;/code&gt; with &lt;code&gt;helm/v1&lt;/code&gt; access)
+to an OCI registry. This guide does not cover charts that are already stored as OCI artifacts.&lt;/p&gt;</description></item><item><title>How to use the OCM CLI container image</title><link>https://ocm.software/main/docs/how-to/how-to-use-the-ocm-cli-container-image/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/how-to-use-the-ocm-cli-container-image/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;This How-To will show you how to use the OCM CLI container image to create and get a component version.&lt;/p&gt;</description></item><item><title>Deploy Manifests with Deployer</title><link>https://ocm.software/main/docs/how-to/deploy-manifests-with-deployer/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/deploy-manifests-with-deployer/</guid><description>&lt;p&gt;This guide shows how to deploy raw Kubernetes manifests from an OCM component version using the OCM Controllers&amp;rsquo; built-in Deployer. This approach requires only the OCM Controllers—no kro or Flux needed.&lt;/p&gt;</description></item><item><title>Model Software Products</title><link>https://ocm.software/main/docs/how-to/model-software-products/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/model-software-products/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Most products consist of multiple independently versioned services.
+This guide uses OCM component references to pin those services into a single 
+
+
+
+
+
+
+&lt;a href="https://ocm.software/docs/overview/benefits-of-ocm/#create-a-software-bill-of-delivery" target="_blank" rel="noopener"&gt;Software Bill of Delivery&lt;/a&gt; — a versioned, auditable record of what a release contains.&lt;/p&gt;</description></item><item><title>Configure Custom RBAC for Deployers</title><link>https://ocm.software/main/docs/how-to/configure-custom-rbac-for-deployers/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/configure-custom-rbac-for-deployers/</guid><description>&lt;p&gt;The OCM K8s Toolkit controller, ships with the minimum RBAC permissions needed to manage its own custom resources
+(&lt;code&gt;Repository&lt;/code&gt;, &lt;code&gt;Component&lt;/code&gt;, &lt;code&gt;Resource&lt;/code&gt;, &lt;code&gt;Deployer&lt;/code&gt;). It does &lt;strong&gt;not&lt;/strong&gt; include permissions for third-party resources
+that your deployers may create or manage.&lt;/p&gt;</description></item></channel></rss>

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Reference on Open Component Model</title><link>https://ocm.software/main/docs/reference/</link><description>Recent content in Reference on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/main/docs/reference/index.xml" rel="self" type="application/rss+xml"/><item><title>Component Constructor</title><link>https://ocm.software/main/docs/reference/component-constructor/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/component-constructor/</guid><description>&lt;p&gt;The &lt;strong&gt;OCM Component Constructor&lt;/strong&gt; defines the input format for building component versions.
+It describes how resources and sources are provided &amp;ndash; either via access specifications
+(referencing existing artifacts) or via input specifications (providing content directly).&lt;/p&gt;</description></item><item><title>Component Descriptor</title><link>https://ocm.software/main/docs/reference/component-descriptor/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/component-descriptor/</guid><description>&lt;p&gt;The &lt;strong&gt;OCM Component Descriptor&lt;/strong&gt; is the central data structure of the Open Component Model.
+It describes a component version with its resources, sources, references, labels, and signatures.&lt;/p&gt;</description></item><item><title>Credential Consumer Identities</title><link>https://ocm.software/main/docs/reference/credential-consumer-identities/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/credential-consumer-identities/</guid><description>&lt;p&gt;This page is the technical reference for credential consumer identities — the key-value maps OCM uses to look up credentials for a given operation. For a high-level introduction, see 
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/main/docs/concepts/credential-system/"&gt;Credential System&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>Input and Access Types</title><link>https://ocm.software/main/docs/reference/input-and-access-types/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/input-and-access-types/</guid><description>&lt;h2 id="overview"&gt;Overview&lt;/h2&gt;
+&lt;p&gt;Resources in a component version are added using either an &lt;strong&gt;input type&lt;/strong&gt; or an &lt;strong&gt;access type&lt;/strong&gt;.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Input type&lt;/strong&gt; — embeds content &lt;em&gt;by value&lt;/em&gt;. The content is stored alongside the component descriptor in the target
+repository.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Access type&lt;/strong&gt; — stores an access specification pointing to the content. In the constructor, this typically
+references an external location (e.g. an OCI registry) rather than embedding the content.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;A resource must have exactly one of &lt;code&gt;input&lt;/code&gt; or &lt;code&gt;access&lt;/code&gt;. See the
+
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/main/docs/reference/component-constructor/"&gt;Component Constructor&lt;/a&gt;
+reference for the full YAML schema.&lt;/p&gt;</description></item><item><title>Resolver Configuration</title><link>https://ocm.software/main/docs/reference/resolver-configuration/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/resolver-configuration/</guid><description>&lt;p&gt;This page is the technical reference for OCM resolver configuration. For a high-level introduction, see
+
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/main/docs/concepts/resolvers/"&gt;OCM Resolvers&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 id="configuration-file"&gt;Configuration File&lt;/h2&gt;
+&lt;p&gt;Resolvers are configured in the OCM configuration file. By default, the CLI searches for configuration in
+&lt;code&gt;$HOME/.ocmconfig&lt;/code&gt;. You can also specify a configuration file explicitly with the &lt;code&gt;--config&lt;/code&gt; flag.&lt;/p&gt;</description></item><item><title>Resource Repositories</title><link>https://ocm.software/main/docs/reference/resource-repositories/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/resource-repositories/</guid><description>&lt;p&gt;This page is the technical reference for built-in resource repositories. For an introduction to what resource
+repositories are and why they exist, see
+
+
+
+
+
+
+ 
+ 
+
+
+&lt;a href="https://ocm.software/main/docs/concepts/resource-repositories/"&gt;Concept: Resource Repositories&lt;/a&gt;.&lt;/p&gt;</description></item></channel></rss>
