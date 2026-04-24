@@ -1,7 +1,8 @@
 {{- $currentVer := .Site.Version.Name -}}
 {{- $isDefault := .Site.Version.IsDefault -}}
 
-{{/* Show warning banner on all non-default versions */}}
+{{/* Show a warning banner on all non-default versions. The wording differs
+     for "main" (development, tracks HEAD) vs everything else (older releases). */}}
 {{- if not $isDefault -}}
   {{/* Find the default version's home page to build link */}}
   {{- $defaultLink := "/" -}}
@@ -15,8 +16,19 @@
     {{- end -}}
   {{- end -}}
   <div class="version-warning-banner" role="alert">
-    You are viewing documentation for an older OCM version, <strong>{{ $currentVer }}</strong>.
-    For up-to-date documentation, see the
-    <a class="version-warning-link" href="{{ $defaultLink }}">latest version{{ with $defaultName }} ({{ . }}){{ end }}</a>.
+    {{- if eq $currentVer "main" -}}
+      You are viewing development documentation for the <strong>main</strong> branch.
+      This version tracks the latest commit and may be unstable.
+      For the current release, see the
+      <a class="version-warning-link" href="{{ $defaultLink }}">latest version{{ with $defaultName }} ({{ . }}){{ end }}</a>.
+    {{- else if eq $currentVer "legacy" -}}
+      You are viewing documentation for the <strong>legacy</strong> OCM version.
+      For up-to-date documentation, see the
+      <a class="version-warning-link" href="{{ $defaultLink }}">latest version{{ with $defaultName }} ({{ . }}){{ end }}</a>.
+    {{- else -}}
+      You are not viewing the current OCM documentation (<strong>{{ $currentVer }}</strong>).
+      For up-to-date documentation, see the
+      <a class="version-warning-link" href="{{ $defaultLink }}">latest version{{ with $defaultName }} ({{ . }}){{ end }}</a>.
+    {{- end -}}
   </div>
 {{- end -}}

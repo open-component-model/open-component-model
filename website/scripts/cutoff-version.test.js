@@ -4,7 +4,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseArguments, hasMountForVersion, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights } = require('./cutoff-version');
+const { parseArguments, hasMountForVersion, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, pinLatestContentMount } = require('./cutoff-version');
 
 // Test parseArguments
 test('parseArguments: valid version', () => {
@@ -268,6 +268,51 @@ test('assignVersionWeights: works with "main" as default key', () => {
     });
 });
 
+test('assignVersionWeights: main and latest coexist (main first)', () => {
+    const existing = {
+        main: { weight: 1 },
+        latest: { weight: 2 },
+        legacy: { weight: 3 }
+    };
+    const result = assignVersionWeights(existing, '1.0.0');
+    assert.deepEqual(result, {
+        main: { weight: 1 },
+        latest: { weight: 2 },
+        '1.0.0': { weight: 3 },
+        legacy: { weight: 4 }
+    });
+});
+
+test('assignVersionWeights: main and latest coexist without legacy', () => {
+    const existing = {
+        main: { weight: 1 },
+        latest: { weight: 2 }
+    };
+    const result = assignVersionWeights(existing, '2.0.0');
+    assert.deepEqual(result, {
+        main: { weight: 1 },
+        latest: { weight: 2 },
+        '2.0.0': { weight: 3 }
+    });
+});
+
+test('assignVersionWeights: main and latest coexist with existing semvers', () => {
+    const existing = {
+        main: { weight: 1 },
+        latest: { weight: 2 },
+        '0.21.0': { weight: 3 },
+        legacy: { weight: 4 }
+    };
+    const result = assignVersionWeights(existing, '0.22.0');
+    assert.deepEqual(result, {
+        main: { weight: 1 },
+        latest: { weight: 2 },
+        '0.22.0': { weight: 3 },
+        '0.21.0': { weight: 4 },
+        legacy: { weight: 5 }
+    });
+});
+
 test('assignVersionWeights: empty existing versions', () => {
     const result = assignVersionWeights({}, '1.0.0');
     assert.deepEqual(result, {
@@ -280,4 +325,91 @@ test('assignVersionWeights: null existing versions', () => {
     assert.deepEqual(result, {
         '1.0.0': { weight: 1 }
     });
+});
+
+// Test pinLatestContentMount
+test('pinLatestContentMount: rewrites live content mount to snapshot', () => {
+    const parsed = {
+        mounts: [
+            { source: 'content', target: 'content', sites: { matrix: { versions: ['latest'] } } },
+        ],
+    };
+    const changed = pinLatestContentMount(parsed, '1.0.0');
+    assert.equal(changed, true);
+    assert.equal(parsed.mounts[0].source, 'content_versioned/version-1.0.0');
+});
+
+test('pinLatestContentMount: leaves main content mount alone', () => {
+    const parsed = {
+        mounts: [
+            { source: 'content', target: 'content', sites: { matrix: { versions: ['main'] } } },
+            { source: 'content', target: 'content', sites: { matrix: { versions: ['latest'] } } },
+        ],
+    };
+    pinLatestContentMount(parsed, '2.0.0');
+    assert.equal(parsed.mounts[0].source, 'content');
+    assert.equal(parsed.mounts[1].source, 'content_versioned/version-2.0.0');
+});
+
+test('pinLatestContentMount: does not touch non-content targets on latest', () => {
+    const parsed = {
+        mounts: [
+            { source: 'something/else', target: 'static/latest/schemas/foo',
+              sites: { matrix: { versions: ['latest'] } } },
+        ],
+    };
+    const changed = pinLatestContentMount(parsed, '1.0.0');
+    assert.equal(changed, false);
+    assert.equal(parsed.mounts[0].source, 'something/else');
+});
+
+test('pinLatestContentMount: updates existing snapshot mount to newer version', () => {
+    const parsed = {
+        mounts: [
+            { source: 'content_versioned/version-1.0.0', target: 'content',
+              sites: { matrix: { versions: ['latest'] } } },
+        ],
+    };
+    const changed = pinLatestContentMount(parsed, '2.0.0');
+    assert.equal(changed, true);
+    assert.equal(parsed.mounts[0].source, 'content_versioned/version-2.0.0');
+});
+
+test('pinLatestContentMount: no-op when latest already pinned to that version', () => {
+    const parsed = {
+        mounts: [
+            { source: 'content_versioned/version-1.0.0', target: 'content',
+              sites: { matrix: { versions: ['latest'] } } },
+        ],
+    };
+    const changed = pinLatestContentMount(parsed, '1.0.0');
+    assert.equal(changed, false);
+});
+
+test('pinLatestContentMount: no-op when no latest mount present', () => {
+    const parsed = {
+        mounts: [
+            { source: 'content', target: 'content', sites: { matrix: { versions: ['main'] } } },
+        ],
+    };
+    const changed = pinLatestContentMount(parsed, '1.0.0');
+    assert.equal(changed, false);
+});
+
+test('pinLatestContentMount: skips mounts that target multiple versions', () => {
+    const parsed = {
+        mounts: [
+            { source: 'content', target: 'content',
+              sites: { matrix: { versions: ['latest', 'main'] } } },
+        ],
+    };
+    const changed = pinLatestContentMount(parsed, '1.0.0');
+    assert.equal(changed, false);
+    assert.equal(parsed.mounts[0].source, 'content');
+});
+
+test('pinLatestContentMount: handles null/empty mounts', () => {
+    assert.equal(pinLatestContentMount(null, '1.0.0'), false);
+    assert.equal(pinLatestContentMount({}, '1.0.0'), false);
+    assert.equal(pinLatestContentMount({ mounts: [] }, '1.0.0'), false);
 });
