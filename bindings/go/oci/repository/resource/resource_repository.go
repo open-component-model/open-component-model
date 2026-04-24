@@ -11,6 +11,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -271,16 +272,21 @@ func createRepository(
 
 func clientCredentials(credentials map[string]string) auth.Credential {
 	cred := auth.Credential{}
-	if username, ok := credentials["username"]; ok {
+	if username, ok := credentials[ocicredentials.CredentialKeyUsername]; ok {
 		cred.Username = username
 	}
-	if password, ok := credentials["password"]; ok {
+	if password, ok := credentials[ocicredentials.CredentialKeyPassword]; ok {
 		cred.Password = password
 	}
-	if refreshToken, ok := credentials["refresh_token"]; ok {
+	// Support the canonical camelCase key first, fall back to legacy snake_case for backward compatibility.
+	if refreshToken, ok := credentials[ocicredentials.CredentialKeyRefreshToken]; ok {
+		cred.RefreshToken = refreshToken
+	} else if refreshToken, ok := credentials[ocicredentials.LegacyCredentialKeyRefreshToken]; ok {
 		cred.RefreshToken = refreshToken
 	}
-	if accessToken, ok := credentials["access_token"]; ok {
+	if accessToken, ok := credentials[ocicredentials.CredentialKeyAccessToken]; ok {
+		cred.AccessToken = accessToken
+	} else if accessToken, ok := credentials[ocicredentials.LegacyCredentialKeyAccessToken]; ok {
 		cred.AccessToken = accessToken
 	}
 	return cred

@@ -28,6 +28,13 @@ const (
 	CredentialKeyAccessToken = "accessToken"
 	// CredentialKeyRefreshToken is the key for storing refresh token credentials
 	CredentialKeyRefreshToken = "refreshToken"
+
+	// LegacyCredentialKeyAccessToken is the legacy snake_case key for access tokens.
+	// Deprecated: Use CredentialKeyAccessToken instead.
+	LegacyCredentialKeyAccessToken = "access_token"
+	// LegacyCredentialKeyRefreshToken is the legacy snake_case key for refresh tokens.
+	// Deprecated: Use CredentialKeyRefreshToken instead.
+	LegacyCredentialKeyRefreshToken = "refresh_token"
 )
 
 // CredentialFunc creates a function that returns credentials based on host and port matching.
@@ -62,10 +69,15 @@ func CredentialFunc(identity runtime.Identity, credentials map[string]string) au
 	if v, ok := credentials[CredentialKeyPassword]; ok {
 		credential.Password = v
 	}
+	// Support the canonical camelCase key first, fall back to legacy snake_case for backward compatibility.
 	if v, ok := credentials[CredentialKeyAccessToken]; ok {
+		credential.AccessToken = v
+	} else if v, ok := credentials[LegacyCredentialKeyAccessToken]; ok {
 		credential.AccessToken = v
 	}
 	if v, ok := credentials[CredentialKeyRefreshToken]; ok {
+		credential.RefreshToken = v
+	} else if v, ok := credentials[LegacyCredentialKeyRefreshToken]; ok {
 		credential.RefreshToken = v
 	}
 	registeredHostname, hostInIdentity := identity[runtime.IdentityAttributeHostname]

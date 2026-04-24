@@ -19,6 +19,7 @@ func TestCredentialFunc(t *testing.T) {
 		hostport    string
 		wantErr     bool
 		wantEmpty   bool
+		wantCred    *auth.Credential // if set, assert exact credential match
 	}{
 		{
 			name: "matching host and port",
@@ -89,6 +90,38 @@ func TestCredentialFunc(t *testing.T) {
 			wantErr:   false,
 			wantEmpty: false,
 		},
+		{
+			name: "legacy snake_case token keys",
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "example.com",
+			},
+			credentials: map[string]string{
+				LegacyCredentialKeyAccessToken:  "snake-access",
+				LegacyCredentialKeyRefreshToken: "snake-refresh",
+			},
+			hostport: "example.com",
+			wantCred: &auth.Credential{
+				AccessToken:  "snake-access",
+				RefreshToken: "snake-refresh",
+			},
+		},
+		{
+			name: "camelCase takes precedence over snake_case",
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "example.com",
+			},
+			credentials: map[string]string{
+				CredentialKeyAccessToken:  "camel-access",
+				LegacyCredentialKeyAccessToken:           "snake-access",
+				CredentialKeyRefreshToken: "camel-refresh",
+				LegacyCredentialKeyRefreshToken:          "snake-refresh",
+			},
+			hostport: "example.com",
+			wantCred: &auth.Credential{
+				AccessToken:  "camel-access",
+				RefreshToken: "camel-refresh",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -104,6 +137,11 @@ func TestCredentialFunc(t *testing.T) {
 			require.NoError(t, err)
 			if tt.wantEmpty {
 				assert.Equal(t, auth.EmptyCredential, cred)
+				return
+			}
+
+			if tt.wantCred != nil {
+				assert.Equal(t, *tt.wantCred, cred)
 				return
 			}
 
