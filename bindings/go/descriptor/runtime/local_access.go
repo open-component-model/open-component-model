@@ -6,7 +6,8 @@ import (
 
 // LocalBlobAccessType is the access type of blob local to a component.
 const (
-	LocalBlobAccessType        = "localBlob"
+	LocalBlobAccessType        = "LocalBlob"
+	LegacyLocalBlobAccessType  = "localBlob"
 	LocalBlobAccessTypeVersion = "v1"
 )
 
@@ -25,6 +26,8 @@ func GetLocalBlobAccessType() runtime.Type {
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type LocalBlob struct {
+	// +ocm:jsonschema-gen:enum=LocalBlob/v1
+	// +ocm:jsonschema-gen:enum:deprecated=localBlob/v1,LocalBlob,localBlob
 	Type runtime.Type `json:"type"`
 	// LocalReference is the repository local identity of the blob.
 	// it is used by the repository implementation to get access
