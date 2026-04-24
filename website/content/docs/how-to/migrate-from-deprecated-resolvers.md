@@ -252,7 +252,7 @@ In this example, `componentNamePattern: "my-org.example/*"` points to the new re
 The same applies to **listing component versions**: the fallback resolver accumulates versions from all matching repositories, while the glob-based
 resolver only queries the first match.
 
-If either case applies, consolidate all versions of the affected components into a single repository before migrating your resolver config. Version-based matching is being tracked as a future feature in [ocm-project#941](https://github.com/open-component-model/ocm-project/issues/941).
+If either case applies, consolidate all versions of the affected components into a single repository before migrating your resolver config, or use the `versionConstraint` field to route specific versions to different repositories. See [Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) for details.
 
 ## Next Steps
 

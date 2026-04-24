@@ -31,6 +31,7 @@ configurations:
           baseUrl: ghcr.io
           subPath: my-org/components
         componentNamePattern: "example.com/services/*"
+        versionConstraint: ">=1.0.0 <2.0.0"
 ```
 
 ## Config Schema
@@ -45,10 +46,11 @@ the [OCM specification](https://github.com/open-component-model/open-component-m
 
 ### Resolver Entry Schema
 
-| Field                  | Type   | Required | Description                                                                                 |
-|------------------------|--------|----------|---------------------------------------------------------------------------------------------|
-| `repository`           | object | Yes      | An OCM repository specification (must include a `type` field).                              |
-| `componentNamePattern` | string | No       | Glob pattern for matching component names. If omitted, the resolver matches all components. |
+| Field                  | Type   | Required | Description                                                                                       |
+|------------------------|--------|----------|---------------------------------------------------------------------------------------------------|
+| `repository`           | object | Yes      | An OCM repository specification (must include a `type` field).                                    |
+| `componentNamePattern` | string | No       | Glob pattern for matching component names. If omitted, the resolver matches all components.       |
+| `versionConstraint`    | string | No       | Semver constraint for matching component versions. If omitted, the resolver matches all versions.  |
 
 ## Repository Types
 
@@ -111,6 +113,26 @@ Only components matching the pattern will be routed to that repository.
 
 {{<callout context="note">}}
 For more information on the supported glob syntax, see the [glob package documentation](https://github.com/gobwas/glob).
+{{</callout>}}
+
+## Version Constraints
+
+Each resolver entry can include a `versionConstraint` field that uses **semver constraints** to filter for certain component versions.
+Only components with versions satisfying the constraint will be routed to that repository.
+
+**Supported constraint syntax:**
+
+| Constraint             | Matches                                                          |
+|------------------------|------------------------------------------------------------------|
+| `>=1.0.0 <2.0.0`      | Versions from 1.0.0 (inclusive) up to but not including 2.0.0    |
+| `^1.2.0`              | Compatible with 1.2.0 (>=1.2.0 <2.0.0)                          |
+| `~1.2.0`              | Approximately 1.2.0 (>=1.2.0 <1.3.0)                            |
+| `1.2.3`               | Exactly version 1.2.3                                            |
+
+Multiple space-separated constraints are combined with AND logic (e.g., `>=1.0.0 <2.0.0` means both must be satisfied).
+
+{{<callout context="note">}}
+For more information on the supported semver constraint syntax, see the [Masterminds/semver documentation](https://github.com/Masterminds/semver#checking-version-constraints).
 {{</callout>}}
 
 ## Resolver Evaluation Order
