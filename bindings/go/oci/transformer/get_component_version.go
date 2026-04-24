@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	ocmcreds "ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -40,7 +41,7 @@ func (t *GetComponentVersion) GetCredentialConsumerIdentities(ctx context.Contex
 	if identity == nil {
 		return nil, nil
 	}
-	return map[string]runtime.Identity{CredentialKeyRepository: identity}, nil
+	return map[string]runtime.Identity{ocmcreds.CredentialKeyRepository: identity}, nil
 }
 
 func (t *GetComponentVersion) Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error) {
@@ -66,7 +67,7 @@ func (t *GetComponentVersion) Transform(ctx context.Context, step runtime.Typed,
 
 	var creds map[string]string
 	if credentials != nil {
-		creds = credentials[CredentialKeyRepository]
+		creds = credentials[ocmcreds.CredentialKeyRepository]
 	}
 
 	repo, err := t.RepoProvider.GetComponentVersionRepository(ctx, repoSpec, creds)

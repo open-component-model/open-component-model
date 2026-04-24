@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	ocmcreds "ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -349,10 +350,10 @@ func TestGetOCIArtifact_CredentialFlow(t *testing.T) {
 	identities, err := transformer.GetCredentialConsumerIdentities(ctx, spec)
 	require.NoError(t, err)
 	require.NotNil(t, identities)
-	require.Contains(t, identities, CredentialKeyResource)
+	require.Contains(t, identities, ocmcreds.CredentialKeyResource)
 
 	resolvedCreds := map[string]map[string]string{
-		CredentialKeyResource: {"username": "test-user", "password": "test-pass"},
+		ocmcreds.CredentialKeyResource: {"username": "test-user", "password": "test-pass"},
 	}
 
 	result, err := transformer.Transform(ctx, spec, resolvedCreds)

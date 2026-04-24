@@ -6,6 +6,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
+	ocmcreds "ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -48,7 +49,7 @@ func (t *AddLocalResource) GetCredentialConsumerIdentities(ctx context.Context, 
 	if identity == nil {
 		return nil, nil
 	}
-	return map[string]runtime.Identity{CredentialKeyRepository: identity}, nil
+	return map[string]runtime.Identity{ocmcreds.CredentialKeyRepository: identity}, nil
 }
 
 func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error) {
@@ -109,7 +110,7 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed, cr
 
 	var creds map[string]string
 	if credentials != nil {
-		creds = credentials[CredentialKeyRepository]
+		creds = credentials[ocmcreds.CredentialKeyRepository]
 	}
 
 	// Get repository

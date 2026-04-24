@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	ocmcreds "ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -36,7 +37,7 @@ func (t *GetOCIArtifact) GetCredentialConsumerIdentities(ctx context.Context, st
 	if identity == nil {
 		return nil, nil
 	}
-	return map[string]runtime.Identity{CredentialKeyResource: identity}, nil
+	return map[string]runtime.Identity{ocmcreds.CredentialKeyResource: identity}, nil
 }
 
 func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error) {
@@ -67,7 +68,7 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed, cred
 
 	var creds map[string]string
 	if credentials != nil {
-		creds = credentials[CredentialKeyResource]
+		creds = credentials[ocmcreds.CredentialKeyResource]
 	}
 
 	blobContent, err := t.Repository.DownloadResource(ctx, targetResource, creds)

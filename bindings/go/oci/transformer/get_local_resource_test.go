@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	ocmcreds "ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfspec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -406,10 +407,10 @@ func TestGetLocalResource_CredentialFlow(t *testing.T) {
 	identities, err := transformer.GetCredentialConsumerIdentities(ctx, spec)
 	require.NoError(t, err)
 	require.NotNil(t, identities)
-	require.Contains(t, identities, CredentialKeyRepository)
+	require.Contains(t, identities, ocmcreds.CredentialKeyRepository)
 
 	resolvedCreds := map[string]map[string]string{
-		CredentialKeyRepository: {"username": "repo-user", "password": "repo-pass"},
+		ocmcreds.CredentialKeyRepository: {"username": "repo-user", "password": "repo-pass"},
 	}
 
 	result, err := transformer.Transform(ctx, spec, resolvedCreds)
