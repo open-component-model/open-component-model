@@ -71,7 +71,7 @@ components:
         type: helmChart
         version: 1.0.0
         access:
-          type: ociArtifact
+          type: OCIImage/v1
           imageReference: "ghcr.io/stefanprodan/charts/podinfo:6.11.1@sha256:a9b2804ec61795a7457b2303bf9efbc5fba51f856c3945f3bb0af68bf3b35afd"
 ```
 

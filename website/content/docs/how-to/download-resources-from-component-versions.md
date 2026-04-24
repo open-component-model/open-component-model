@@ -79,7 +79,7 @@ We're interested in the `chart` resource, which is a Helm chart stored as OCI ar
     resources:
       - access:
           imageReference: ghcr.io/stefanprodan/podinfo:6.8.0
-          type: ociArtifact
+          type: OCIImage/v1
         digest:
           hashAlgorithm: SHA-256
           normalisationAlgorithm: ociArtifactDigest/v1
@@ -90,7 +90,7 @@ We're interested in the `chart` resource, which is a Helm chart stored as OCI ar
         version: 6.8.0
       - access:
           imageReference: ghcr.io/stefanprodan/charts/podinfo:6.8.0
-          type: ociArtifact
+          type: OCIImage/v1
         digest:
           hashAlgorithm: SHA-256
           normalisationAlgorithm: ociArtifactDigest/v1
@@ -228,7 +228,7 @@ The output shows the component version descriptor. We're interested in the `mylo
         version: 1.0.0
       - access:
           imageReference: ghcr.io/stefanprodan/podinfo:6.11.1@sha256:8fa56908408de98f24aed2a162b1bb42c0b98df7abfcc5a76a14a8be510457c5
-          type: ociArtifact
+          type: OCIImage/v1
         digest:
           hashAlgorithm: SHA-256
           normalisationAlgorithm: genericBlobDigest/v1
