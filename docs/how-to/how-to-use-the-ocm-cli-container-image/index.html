@@ -78,7 +78,7 @@ next step.</p><div class=expressive-code><figure class="frame is-terminal not-co
 </span></span></span><span class=line><span class=cl><span class=s>     type: ociImage
 </span></span></span><span class=line><span class=cl><span class=s>     version: 1.0.0
 </span></span></span><span class=line><span class=cl><span class=s>     access:
-</span></span></span><span class=line><span class=cl><span class=s>       type: ociArtifact
+</span></span></span><span class=line><span class=cl><span class=s>       type: OCIImage/v1
 </span></span></span><span class=line><span class=cl><span class=s>       imageReference: ghcr.io/stefanprodan/podinfo:6.7.1
 </span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div></li><li><h3 id=configure-credentials-in-an-ocm-config>Configure credentials in an OCM config<a href=#configure-credentials-in-an-ocm-config class=anchor aria-hidden=true>#</a></h3><p>We want to create the component version in a repository that requires authentication. In the following example, we
 will use GitHub Container Registry (GHCR) as the repository and use a Personal Access Token (PAT) for authentication.</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>cat &gt; .ocmconfig <span class=s>&lt;&lt; EOF
@@ -122,7 +122,7 @@ repository.</p><div class=expressive-code><figure class="frame is-terminal not-c
 </span></span><span class=line><span class=cl>    resources:
 </span></span><span class=line><span class=cl>    - access:
 </span></span><span class=line><span class=cl>        imageReference: ghcr.io/stefanprodan/podinfo:6.7.1@sha256:862ca45e61b32392f7941a1bdfdbe5ff8b6899070135f1bdca1c287d0057fc94
-</span></span><span class=line><span class=cl>        type: ociArtifact
+</span></span><span class=line><span class=cl>        type: OCIImage/v1
 </span></span><span class=line><span class=cl>      digest:
 </span></span><span class=line><span class=cl>        hashAlgorithm: SHA-256
 </span></span><span class=line><span class=cl>        normalisationAlgorithm: genericBlobDigest/v1
