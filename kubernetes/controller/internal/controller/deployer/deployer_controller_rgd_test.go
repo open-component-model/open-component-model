@@ -244,7 +244,7 @@ spec:
 						Name:    resourceName,
 						Type:    "plainText",
 						Version: resourceVersion,
-						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
+						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"LocalBlob/v1"}`)},
 						Digest: &v2.Digest{
 							HashAlgorithm:          "SHA-256",
 							NormalisationAlgorithm: "genericBlobDigest/v1",
@@ -331,7 +331,7 @@ spec:
 						Name:    resourceName,
 						Type:    "plainText",
 						Version: resourceVersion,
-						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
+						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"LocalBlob/v1"}`)},
 						Digest: &v2.Digest{
 							HashAlgorithm:          "SHA-256",
 							NormalisationAlgorithm: "genericBlobDigest/v1",
@@ -466,7 +466,7 @@ spec:
 						Name:    resourceName,
 						Type:    "plainText",
 						Version: resourceVersion,
-						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
+						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"LocalBlob/v1"}`)},
 						Digest: &v2.Digest{
 							HashAlgorithm:          "SHA-256",
 							NormalisationAlgorithm: "genericBlobDigest/v1",
@@ -606,7 +606,7 @@ spec:
 						Name:    resourceName,
 						Type:    "plainText",
 						Version: resourceVersion,
-						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
+						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"LocalBlob/v1"}`)},
 						Digest: &v2.Digest{
 							HashAlgorithm:          "SHA-256",
 							NormalisationAlgorithm: "genericBlobDigest/v1",
