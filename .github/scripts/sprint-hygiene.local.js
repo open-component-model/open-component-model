@@ -5,9 +5,10 @@
  * Local runner for sprint-hygiene.js.
  *
  * Usage:
- *   node sprint-hygiene.local.js [--apply] [--project <number>] [--org <name>]
+ *   node sprint-hygiene.local.js [--apply] [--limit <n>] [--project <number>] [--org <name>]
  *
  * Runs in dry-run mode by default. Pass --apply to actually update sprints.
+ * Use --limit to cap how many items are updated (useful for testing).
  * Requires GH_TOKEN (or GITHUB_TOKEN) with `read:project` and `project` scopes.
  */
 
@@ -33,10 +34,14 @@ if (!token) {
 
 const org = option("org", "open-component-model");
 const projectNumber = Number(option("project", "10"));
+const limit = option("limit", undefined) ? Number(option("limit")) : undefined;
 const dryRun = !flag("apply"); // dry-run by default, --apply to mutate
 
 if (dryRun) {
   console.log("Running in DRY-RUN mode (pass --apply to make changes)\n");
+}
+if (limit !== undefined) {
+  console.log(`Limiting updates to ${limit} item(s)\n`);
 }
 
 const graphqlWithAuth = graphql.defaults({
@@ -56,4 +61,4 @@ const core = {
 
 const context = { repo: { owner: org } };
 
-await updateExpiredSprints({ github, core, context, projectNumber, dryRun });
+await updateExpiredSprints({ github, core, context, projectNumber, dryRun, limit });

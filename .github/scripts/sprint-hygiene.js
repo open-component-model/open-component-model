@@ -74,9 +74,10 @@ const STALE_ITEMS_QUERY = `
             id
             content {
               ... on Issue {
+                id
                 title
                 number
-                url
+                repository { owner { login } name }
               }
             }
             sprint: fieldValueByName(name: "Sprint") {
@@ -114,8 +115,9 @@ const UPDATE_SPRINT_MUTATION = `
  * @param {import('@actions/github-script').AsyncFunctionArguments["context"]} args.context
  * @param {number} args.projectNumber - GitHub Projects (v2) project number
  * @param {boolean} [args.dryRun] - If true, log what would be updated without making changes
+ * @param {number} [args.limit] - Maximum number of items to update (undefined = all)
  */
-export default async function updateExpiredSprints({ github, core, context, projectNumber, dryRun = false }) {
+export default async function updateExpiredSprints({ github, core, context, projectNumber, dryRun = false, limit }) {
   const org = context.repo.owner;
 
   if (!projectNumber) {
@@ -200,9 +202,11 @@ export default async function updateExpiredSprints({ github, core, context, proj
     return;
   }
 
+  const itemsToProcess = limit !== undefined ? staleItems.slice(0, limit) : staleItems;
+
   if (dryRun) {
     core.info("\n--- DRY RUN — no changes will be made ---");
-    for (const item of staleItems) {
+    for (const item of itemsToProcess) {
       const number = item.content?.number ?? "?";
       const title = item.content?.title ?? "unknown";
       const oldSprint = item.sprint?.title ?? "none";
@@ -211,14 +215,15 @@ export default async function updateExpiredSprints({ github, core, context, proj
     return;
   }
 
-  // 4. Update each stale item to the current sprint
+  // 4. Update each stale item to the current sprint and leave a comment
   let updated = 0;
   let failed = 0;
 
-  for (const item of staleItems) {
+  for (const item of itemsToProcess) {
     const number = item.content?.number ?? "?";
     const title = item.content?.title ?? "unknown";
     const oldSprint = item.sprint?.title ?? "none";
+    const repo = item.content?.repository;
 
     core.info(`Updating #${number} – ${title}`);
     core.info(`  Sprint: ${oldSprint} → ${currentSprint.title}`);
@@ -230,6 +235,25 @@ export default async function updateExpiredSprints({ github, core, context, proj
         fieldId: sprintField.id,
         iterationId: currentSprint.id,
       });
+
+      // Leave a comment on the issue so the change is visible in the timeline
+      if (repo && number !== "?") {
+        try {
+          await github.graphql(`
+            mutation($body: String!, $subjectId: ID!) {
+              addComment(input: { body: $body, subjectId: $subjectId }) {
+                commentEdge { node { id } }
+              }
+            }
+          `, {
+            subjectId: item.content.id,
+            body: `Sprint hygiene: automatically moved from **${oldSprint}** to **${currentSprint.title}** because this issue was still in "Needs Refinement" after the sprint ended.`,
+          });
+        } catch (commentErr) {
+          core.warning(`  Comment failed: ${commentErr.message}`);
+        }
+      }
+
       core.info("  Done");
       updated++;
     } catch (err) {
@@ -238,7 +262,7 @@ export default async function updateExpiredSprints({ github, core, context, proj
     }
   }
 
-  core.info(`\nSummary: ${updated} updated, ${failed} failed out of ${staleItems.length} total`);
+  core.info(`\nSummary: ${updated} updated, ${failed} failed out of ${itemsToProcess.length} total`);
 
   if (failed > 0) {
     core.setFailed(`${failed} item(s) failed to update`);
