@@ -1,0 +1,32 @@
+name: Sprint Hygiene
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # Every night at 3 AM UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update-expired-sprints:
+    name: Move "Needs Refinement" issues with expired sprints to current sprint
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          sparse-checkout: .github/scripts
+
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          github-token: ${{ steps.get_token.outputs.token }}
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/sprint-hygiene.js');
+            await script.default({ github, core, context, projectNumber: 10 });
