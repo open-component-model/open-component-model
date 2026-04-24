@@ -179,7 +179,7 @@ of duplicates. Manual changes are resolved by bumping the Replication spec or wa
 
 ### Worker Pool
 
-Dedicated transfer worker pool, separate from resolution. Non-blocking submission backed by a bounded queue. If full
+Dedicated transfer worker pool, separate from resolution. Non-blocking submission backed by a bounded queue. If full, 
 a retry error is emitted. On completion, emits an event to retrigger the reconciler. Burst reconciles for an in-flight
 key return `ErrTransferInProgress` without re-submitting.
 
