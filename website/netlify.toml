@@ -8,7 +8,7 @@
   # rebuild when paths mounted by the "main" site version change.
   # CRDs are generated from api/v1alpha1 at build time, so the trigger
   # follows the source of truth rather than the generated output.
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ../cli/docs/reference ../bindings/go/constructor/spec/v1/resources ../bindings/go/descriptor/v2/resources ../kubernetes/controller/api/v1alpha1"
+  ignore = "git diff --quiet origin/main HEAD -- . ../cli/docs/reference ../bindings/go/constructor/spec/v1/resources ../bindings/go/descriptor/v2/resources ../kubernetes/controller/api/v1alpha1"
 
 [context.deploy-preview]
   command = "(cd ../kubernetes/controller && mkdir -p bin/gen/crd && go run sigs.k8s.io/controller-tools/cmd/controller-gen@$CONTROLLER_TOOLS_VERSION crd paths=./... output:crd:artifacts:config=bin/gen/crd) && npm ci && npm run build -- --baseURL=$DEPLOY_PRIME_URL --buildDrafts --buildFuture"
