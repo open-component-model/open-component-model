@@ -43,7 +43,7 @@ const limitArg = option("limit", undefined);
 let limit;
 if (limitArg !== undefined) {
   limit = parseInt(limitArg, 10);
-  if (Number.isNaN(limit) || limit <= 0) {
+  if (!(limit > 0)) {
     console.error(`Error: --limit must be a positive integer, got "${limitArg}"`);
     process.exit(1);
   }
