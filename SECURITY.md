@@ -81,10 +81,10 @@ anonymous.
 
 ## Security Documentation
 
-For details on OCM's security design principles, threat model, and mitigations, see:
+For details on OCM's security design principles, threat model, and mitigations, refer to:
 
-- [Secure Design](https://github.com/open-component-model/open-component-model/blob/main/docs/security/secure-design.md)
-- [Security Assurance Case](https://github.com/open-component-model/open-component-model/blob/main/docs/security/assurance-case.md)
+- Secure Design (in `docs/security/secure-design.md`)
+- Security Assurance Case (in `docs/security/assurance-case.md`)
 
 ## Past Security Advisories
 
