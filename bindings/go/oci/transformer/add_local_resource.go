@@ -11,6 +11,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
+	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -39,6 +40,7 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	var component, version string
 	var resource *v2.Resource
 	var output any
+	var globalAccessPolicy ocirepospecv1.GlobalAccessPolicy
 
 	switch tr := transformation.(type) {
 	case *v1alpha1.OCIAddLocalResource:
@@ -47,6 +49,7 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		version = tr.Spec.Version
 		resource = tr.Spec.Resource
 		contentSpec = tr.Spec.File
+		globalAccessPolicy = tr.Spec.GlobalAccessPolicy
 		if tr.Output == nil {
 			tr.Output = &v1alpha1.OCIAddLocalResourceOutput{}
 		}
@@ -93,6 +96,24 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	repo, err := t.RepoProvider.GetComponentVersionRepository(ctx, repoSpec, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting component version repository: %w", err)
+	}
+
+	// Apply global access policy from transformer spec.
+	// Always set explicitly (including Never) to avoid leaking state from prior transforms
+	// on the same cached repository instance.
+	if _, ok := transformation.(*v1alpha1.OCIAddLocalResource); ok {
+		if ociRepo, ok := repo.(*oci.Repository); ok {
+			switch globalAccessPolicy {
+			case ocirepospecv1.GlobalAccessPolicyNever:
+				ociRepo.SetGlobalAccessPolicy(oci.GlobalAccessPolicyNever)
+			case ocirepospecv1.GlobalAccessPolicyAuto:
+				ociRepo.SetGlobalAccessPolicy(oci.GlobalAccessPolicyAuto)
+			default:
+				return nil, fmt.Errorf("unsupported globalAccessPolicy %q", globalAccessPolicy)
+			}
+		} else if globalAccessPolicy != ocirepospecv1.GlobalAccessPolicyNever {
+			return nil, fmt.Errorf("globalAccessPolicy is only supported for OCI repositories, got %T", repo)
+		}
 	}
 
 	// Convert v2.Resource to runtime.Resource

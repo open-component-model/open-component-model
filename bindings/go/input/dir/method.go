@@ -27,6 +27,8 @@ func init() {
 	Scheme.MustRegisterWithAlias(&v1.Dir{},
 		runtime.NewVersionedType(v1.Type, v1.Version),
 		runtime.NewUnversionedType(v1.Type),
+		runtime.NewVersionedType(v1.LegacyType, v1.Version),
+		runtime.NewUnversionedType(v1.LegacyType),
 	)
 }
 

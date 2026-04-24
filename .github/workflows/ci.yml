@@ -18,17 +18,16 @@ permissions:
 jobs:
   discover_modules:
     name: "Discover Go Modules"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       pull-requests: read
     outputs:
-      # modules_json = changed modules only (filtered by paths)
+      # modules_json = all modules on push or when CI workflow changed, else changed modules only
       modules_json: ${{ steps.filtered.outputs.modules_json }}
-      # lint_modules_json = all modules when .env changed, else changed modules
+      # lint_modules_json = all modules when .env changed (lint version bump), else same as modules_json
       lint_modules_json: ${{ steps.filtered.outputs.lint_modules_json }}
       integration_test_modules_json: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
       unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
-      env_changed: ${{ steps.env_changes.outputs.env }}
     env:
       DIR: ${{ github.workspace }}
     steps:
@@ -38,13 +37,20 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      # Detect .env changes to decide whether to run golangci-lint on all or only changed modules
+      # Detect .env changes so lint runs on all modules when the golangci-lint version changes
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
         id: env_changes
         with:
           filters: |
             env:
               - '.env'
+      # Detect CI workflow changes to rebuild/test all modules
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+        id: ci_changes
+        with:
+          filters: |
+            ci:
+              - '.github/workflows/ci.yml'
       - name: Discover Go Modules
         id: discover
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
@@ -92,25 +98,37 @@ jobs:
           MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
           CHANGE_JSON: ${{ steps.changes.outputs.changes }}
           ENV_CHANGED: ${{ steps.env_changes.outputs.env }}
+          CI_CHANGED: ${{ steps.ci_changes.outputs.ci }}
         with:
+          # Decides which Go modules to build/lint/test.
+          # Three branches, in priority order:
+          #   1. CI workflow changed          - build, lint & test everything
+          #   2. PR (check_only_changed=true) - build & test only changed modules;
+          #      if .env also changed, lint all modules (version bump)
+          #   3. Push to main                 - everything
           script: |
             const modulesJson = JSON.parse(process.env.MODULES_JSON || '[]');
             const changeJson = JSON.parse(process.env.CHANGE_JSON || '[]');
             const envChanged = process.env.ENV_CHANGED === 'true';
-            const lintModulesFromEnv = envChanged ? modulesJson : null;
-            
-            if (process.env.check_only_changed === "true") {
+            const ciChanged = process.env.CI_CHANGED === 'true';
+
+            if (ciChanged) {
+              console.log("CI workflow changed, running all modules.");
+              core.setOutput("modules_json", JSON.stringify(modulesJson));
+              core.setOutput('lint_modules_json', JSON.stringify(modulesJson));
+            } else if (process.env.check_only_changed === "true") {
               console.log(`Filtering modules based on changes: ${JSON.stringify(changeJson)}`);
               const filteredModules = modulesJson.filter(module => {
                 return changeJson.some(change => change.includes(module));
               });
               console.log(`Filtered modules: ${JSON.stringify(filteredModules)}`);
               core.setOutput("modules_json", JSON.stringify(filteredModules));
-              core.setOutput('lint_modules_json', JSON.stringify(lintModulesFromEnv ?? filteredModules));
+              // .env holds the golangci-lint version; lint all modules when it changes
+              core.setOutput('lint_modules_json', JSON.stringify(envChanged ? modulesJson : filteredModules));
             } else {
               console.log("check_only_changed is false, no filtering applied.");
               core.setOutput("modules_json", JSON.stringify(modulesJson));
-              core.setOutput('lint_modules_json', JSON.stringify(lintModulesFromEnv ?? modulesJson));
+              core.setOutput('lint_modules_json', JSON.stringify(modulesJson));
             }
       - name: Filter based on Testability
         id: filtered_test
@@ -118,10 +136,12 @@ jobs:
         env:
           MODULES_JSON: ${{ steps.filtered.outputs.modules_json }}
         with:
+          # Probes each module's Taskfile to see if it has "test" and/or
+          # "test/integration" targets, then splits them into two lists.
           script: |
             const { execSync } = require('child_process');
             const modules = JSON.parse(process.env.MODULES_JSON || '[]');
-            
+
             const unitTestModules = [];
             const integrationTestModules = [];
 
@@ -153,27 +173,44 @@ jobs:
           script: |
             const modules = JSON.parse(`${{ steps.discover.outputs.modules_json || '[]' }}`);
             const filtered = JSON.parse(`${{ steps.filtered.outputs.modules_json || '[]' }}`);
-            const envChanged = `${{ steps.env_changes.outputs.env || 'false' }}` === 'true';
+            const lintModules = JSON.parse(`${{ steps.filtered.outputs.lint_modules_json || '[]' }}`);
+            const envChanged = `${{ steps.env_changes.outputs.env }}` === 'true';
+            const ciChanged = `${{ steps.ci_changes.outputs.ci }}` === 'true';
+            const checkOnlyChanged = `${{ env.check_only_changed }}` === 'true';
             const unitTests = JSON.parse(`${{ steps.filtered_test.outputs.unit_test_modules_json || '[]' }}`);
             const integrationTests = JSON.parse(`${{ steps.filtered_test.outputs.integration_test_modules_json || '[]' }}`);
-            
+
             function toMarkdownList(items) {
               return items.length ? items.map(item => `- \`${item}\``).join('\n') : '_None_';
             }
-            
+
+            // Must mirror the logic in "Filter JSONs Based on Changes" above.
+            const buildScope = ciChanged
+              ? 'all modules (CI workflow changed)'
+              : checkOnlyChanged
+                ? 'changed modules only'
+                : 'all modules (push)';
+
+            const lintScope = (ciChanged || envChanged)
+              ? `all modules (${ciChanged ? 'CI workflow' : '.env'} changed)`
+              : checkOnlyChanged
+                ? 'changed modules only'
+                : 'all modules (push)';
+
             let summary = `### 🧩 Go Module Discovery Summary\n\n`;
-            
+
             summary += `**🔍 Discovered Modules (${modules.length}):**\n${toMarkdownList(modules)}\n\n`;
             summary += `**🎯 Filtered Modules (${filtered.length}):**\n${toMarkdownList(filtered)}\n\n`;
-            summary += `**🧹 Lint Scope:** ${envChanged ? 'all modules (env changed)' : 'changed modules only'}\n\n`;
+            summary += `**🔨 Build/Test Scope:** ${buildScope}\n\n`;
+            summary += `**🧹 Lint Scope:** ${lintScope}\n\n`;
             summary += `**🧪 Unit Test Modules (${unitTests.length}):**\n${toMarkdownList(unitTests)}\n\n`;
             summary += `**🧬 Integration Test Modules (${integrationTests.length}):**\n${toMarkdownList(integrationTests)}\n`;
-            
+
             core.summary.addRaw(summary).write();
 
   golangci_lint_verify:
     name: "golangci-lint-verify"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       # Automatically downgraded to read-only for pull requests from forks
@@ -205,7 +242,7 @@ jobs:
     needs:
      - discover_modules
      - golangci_lint_verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       # Automatically downgraded to read-only for pull requests from forks
@@ -245,7 +282,7 @@ jobs:
   run_integration_tests:
     name: "Integration Tests"
     needs: discover_modules
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     if: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
@@ -275,7 +312,7 @@ jobs:
   run_unit_tests:
     name: "Unit Tests"
     needs: discover_modules
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     if: ${{ fromJSON(needs.discover_modules.outputs.unit_test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
@@ -302,6 +339,7 @@ jobs:
   analyze-go:
     name: "Analyze Go Modules"
     needs: discover_modules
+    # CodeQL bundles (codeql-action, codeql-cli-binaries) ship linux64 only - no ARM64 binary.
     runs-on: ubuntu-latest
     timeout-minutes: 360
     permissions:
@@ -337,7 +375,7 @@ jobs:
           category: "/language:go"
 
   generate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     name: "Code Generation"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -370,7 +408,7 @@ jobs:
   # see https://github.com/orgs/community/discussions/60792 for details on why this is needed
   check-completion:
     name: "Completion"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs:
       - discover_modules
       - generate

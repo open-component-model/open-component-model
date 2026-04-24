@@ -164,6 +164,9 @@
                 "resolver": {
                     "type": "object",
                     "properties": {
+                        "subscriberBufferSize": {
+                            "type": "integer"
+                        },
                         "workerCount": {
                             "type": "integer"
                         },
@@ -220,17 +223,6 @@
                 },
                 "tolerations": {
                     "type": "array"
-                }
-            }
-        },
-        "metrics": {
-            "type": "object",
-            "properties": {
-                "enable": {
-                    "type": "boolean"
-                },
-                "port": {
-                    "type": "integer"
                 }
             }
         },

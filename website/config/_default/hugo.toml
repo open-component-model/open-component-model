@@ -30,7 +30,7 @@ defaultContentVersion = "latest"
   enable = true
 
 [outputs]
-  home = ["HTML", "RSS", "searchIndex"]
+  home = ["HTML", "searchIndex"]
   section = ["HTML", "RSS", "SITEMAP"]
 
 [outputFormats.searchIndex]
@@ -92,10 +92,12 @@ defaultContentVersion = "latest"
   resampleFilter = "Lanczos"
 
 [versions]
-  [versions."latest"]
+  [versions."main"]
     weight = 1
-  [versions."legacy"]
+  [versions."latest"]
     weight = 2
+  [versions."legacy"]
+    weight = 3
 
 [services]
   [services.rss]

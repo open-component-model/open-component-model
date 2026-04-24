@@ -24,7 +24,7 @@ This command constructs a TransformationGraphDefinition consisting of:
 
 We support OCI and CTF as well as Helm repositories as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
-The graph is built accordingly based on the provided references. 
+The graph is built accordingly based on the provided references.
 By default, only the component version itself is transferred, but with --copy-resources, all resources are also copied and transformed if necessary.
 
 The graph is validated, and then executed unless --dry-run is set.

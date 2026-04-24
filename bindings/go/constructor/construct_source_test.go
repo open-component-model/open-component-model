@@ -156,13 +156,13 @@ func TestConstructWithSourceInputMethod(t *testing.T) {
 
 func TestConstructWithSourceAccess(t *testing.T) {
 	constructor := setupTestComponentWithSource(t, `
-      - name: test-source
-        version: v1.0.0
-        type: git
-        access:
-          type: localBlob
-          mediaType: application/octet-stream
-          localReference: test-ref
+       - name: test-source
+         version: v1.0.0
+         type: git
+         access:
+           type: LocalBlob
+           mediaType: application/octet-stream
+           localReference: test-ref
 `)
 
 	// Create a mock target repository
