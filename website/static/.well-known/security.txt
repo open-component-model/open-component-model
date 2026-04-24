@@ -1,2 +1,5 @@
-Contact: https://www.sap.com/report-a-vulnerability
-Expires: 2026-01-30T18:29:00.000Z
+Contact: https://github.com/open-component-model/open-component-model/security/advisories/new
+Contact: mailto:open-component-model-tsc@lists.neonephos.org
+Policy: https://github.com/open-component-model/open-component-model/blob/main/SECURITY.md
+Preferred-Languages: en
+Expires: 2027-04-24T00:00:00.000Z
