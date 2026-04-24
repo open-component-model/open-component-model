@@ -1,7 +1,9 @@
 package transformation_test
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,7 +15,9 @@ import (
 	"helm.sh/helm/v4/pkg/chart"
 	"helm.sh/helm/v4/pkg/chart/loader"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access"
@@ -340,13 +344,22 @@ func TestGetHelmChart_Transform(t *testing.T) {
 	})
 }
 
-// mockIdentityProvider returns a fixed identity for any resource.
-type mockIdentityProvider struct {
+// mockResourceRepository is a test double that satisfies repository.ResourceRepository
+// but only implements GetResourceCredentialConsumerIdentity with real logic.
+type mockResourceRepository struct {
 	identity runtime.Identity
 }
 
-func (m *mockIdentityProvider) GetResourceCredentialConsumerIdentity(_ context.Context, _ *descriptor.Resource) (runtime.Identity, error) {
+func (m *mockResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Context, _ *descriptor.Resource) (runtime.Identity, error) {
 	return m.identity, nil
+}
+
+func (m *mockResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ map[string]string) (*descriptor.Resource, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockResourceRepository) DownloadResource(_ context.Context, _ *descriptor.Resource, _ map[string]string) (blob.ReadOnlyBlob, error) {
+	return nil, fmt.Errorf("not implemented")
 }
 
 // newAuthChartRepoServer starts an httptest server that requires Basic Auth and serves files from dir.
@@ -378,7 +391,7 @@ func TestGetHelmChart_CredentialFlow(t *testing.T) {
 
 		transform := &transformation.GetHelmChart{
 			Scheme:                           scheme,
-			ResourceConsumerIdentityProvider: &mockIdentityProvider{identity: identity},
+			ResourceRepository: &mockResourceRepository{identity: identity},
 		}
 
 		helmAccessData, err := json.Marshal(map[string]string{
@@ -418,8 +431,8 @@ func TestGetHelmChart_CredentialFlow(t *testing.T) {
 		ctx := t.Context()
 
 		transform := &transformation.GetHelmChart{
-			Scheme:                           scheme,
-			ResourceConsumerIdentityProvider: &mockIdentityProvider{identity: runtime.Identity{"type": "test"}},
+			Scheme:             scheme,
+			ResourceRepository: &mockResourceRepository{identity: runtime.Identity{"type": "test"}},
 		}
 
 		spec := &v1alpha1.GetHelmChart{
@@ -480,15 +493,14 @@ func TestGetHelmChart_CredentialFlow(t *testing.T) {
 
 		srv := newAuthChartRepoServer(t, "../testdata/provenance", "helm-user", "helm-pass")
 
-		identity := runtime.Identity{"type": "helmChartRepository", "hostname": "localhost"}
-
 		transform := &transformation.GetHelmChart{
-			Scheme:                           scheme,
-			ResourceConsumerIdentityProvider: &mockIdentityProvider{identity: identity},
+			Scheme:             scheme,
+			ResourceRepository: helmresource.NewResourceRepository(nil),
 		}
 
 		helmAccessData, err := json.Marshal(map[string]string{
-			"helmRepository": fmt.Sprintf("%s/mychart-0.1.0.tgz", srv.URL),
+			"helmRepository": srv.URL,
+			"helmChart":      "mychart-0.1.0.tgz",
 		})
 		r.NoError(err)
 
@@ -539,8 +551,8 @@ func TestGetHelmChart_CredentialFlow(t *testing.T) {
 		srv := newAuthChartRepoServer(t, "../testdata/provenance", "helm-user", "helm-pass")
 
 		transform := &transformation.GetHelmChart{
-			Scheme:                           scheme,
-			ResourceConsumerIdentityProvider: &stubIdentityProvider{},
+			Scheme:             scheme,
+			ResourceRepository: helmresource.NewResourceRepository(nil),
 		}
 
 		helmAccessData, err := json.Marshal(map[string]string{

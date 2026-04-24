@@ -113,7 +113,7 @@ func TestFileCleanup_Transform(t *testing.T) {
 				},
 			}
 
-			result, err := transformer.Transform(ctx, spec)
+			result, err := transformer.Transform(ctx, spec, nil)
 			require.NoError(t, err)
 			require.NotNil(t, result)
 
