@@ -1,10 +1,15 @@
 {{- $currentVer := .Site.Version.Name -}}
 {{- $isDefault := .Site.Version.IsDefault -}}
 
-{{/* Droplet badge: show "Legacy" for the legacy version */}}
+{{/* Droplet badge: "Legacy" for the legacy version, "Dev" for main. */}}
 {{ if eq $currentVer "legacy" }}
 <div class="version-droplet" role="status" aria-live="polite"
     data-tooltip="You are viewing documentation for our legacy version of OCM. For the latest features and updates, please check out our current documentation.">
     <span class="text">Legacy</span>
+</div>
+{{ else if eq $currentVer "main" }}
+<div class="version-droplet" role="status" aria-live="polite"
+    data-tooltip="You are viewing development documentation that tracks the main branch. Content here may change at any time and may not reflect released behavior.">
+    <span class="text">Dev</span>
 </div>
 {{ end }}
