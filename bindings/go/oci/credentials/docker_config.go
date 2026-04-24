@@ -30,9 +30,11 @@ const (
 	CredentialKeyRefreshToken = "refreshToken"
 
 	// LegacyCredentialKeyAccessToken is the legacy snake_case key for access tokens.
+	//
 	// Deprecated: Use CredentialKeyAccessToken instead.
 	LegacyCredentialKeyAccessToken = "access_token"
 	// LegacyCredentialKeyRefreshToken is the legacy snake_case key for refresh tokens.
+	//
 	// Deprecated: Use CredentialKeyRefreshToken instead.
 	LegacyCredentialKeyRefreshToken = "refresh_token"
 )
