@@ -18,7 +18,6 @@
  * @returns {{id: string, title: string, startDate: string, duration: number} | null}
  */
 export function findCurrentSprint(iterations, today) {
-  // Find the most recently started iteration that started on or before today.
   const started = iterations
     .filter((i) => i.startDate <= today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
@@ -27,7 +26,6 @@ export function findCurrentSprint(iterations, today) {
     return started[started.length - 1];
   }
 
-  // Nothing started yet — pick the nearest upcoming sprint.
   const upcoming = iterations
     .filter((i) => i.startDate > today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
@@ -35,7 +33,7 @@ export function findCurrentSprint(iterations, today) {
   return upcoming.length > 0 ? upcoming[0] : null;
 }
 
-// -- GraphQL fragments ----------------------------------------------------
+// -- GraphQL queries ------------------------------------------------------
 
 const PROJECT_CONFIG_QUERY = `
   query($org: String!, $number: Int!) {
@@ -77,6 +75,7 @@ const STALE_ITEMS_QUERY = `
                 id
                 title
                 number
+                url
               }
             }
             sprint: fieldValueByName(name: "Sprint") {
@@ -113,6 +112,109 @@ const UPDATE_SPRINT_MUTATION = `
   }
 `;
 
+// -- API helpers ----------------------------------------------------------
+
+/**
+ * Fetch project configuration and resolve the fields we need.
+ *
+ * @returns {{ projectId, sprintField, statusName }} resolved config
+ */
+async function fetchProjectConfig(github, core, { org, projectNumber }) {
+  core.info("Fetching project configuration...");
+  const data = await github.graphql(PROJECT_CONFIG_QUERY, {
+    org,
+    number: projectNumber,
+  });
+
+  const project = data.organization.projectV2;
+  const fields = project.fields.nodes;
+
+  const statusField = fields.find((f) => f.name === "Status");
+  const sprintField = fields.find((f) => f.name === "Sprint");
+
+  if (!statusField || !sprintField) {
+    throw new Error("Could not find Status or Sprint fields on the project");
+  }
+
+  const needsRefinementOption = statusField.options.find((o) =>
+    o.name.includes("Needs Refinement"),
+  );
+  if (!needsRefinementOption) {
+    throw new Error('Could not find a status option containing "Needs Refinement"');
+  }
+
+  core.info(`Project ID:   ${project.id}`);
+  core.info(`Sprint field: ${sprintField.id}`);
+  core.info(`Status match: ${needsRefinementOption.name}`);
+
+  return {
+    projectId: project.id,
+    sprintField,
+    statusName: needsRefinementOption.name,
+  };
+}
+
+/**
+ * Fetch all stale items matching the server-side filter (paginated).
+ */
+async function fetchStaleItems(github, core, { projectId, statusName }) {
+  const filter = `sprint:<@current status:"${statusName}"`;
+  core.info(`Filter: ${filter}`);
+
+  const items = [];
+  let cursor = null;
+
+  do {
+    const page = await github.graphql(STALE_ITEMS_QUERY, {
+      projectId,
+      cursor,
+      filter,
+    });
+
+    const { nodes, pageInfo, totalCount } = page.node.items;
+    if (items.length === 0) {
+      core.info(`Matched items (server-side): ${totalCount}`);
+    }
+    items.push(...nodes);
+
+    cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null;
+  } while (cursor);
+
+  return items;
+}
+
+/**
+ * Update a single item's sprint and leave a comment on the issue.
+ */
+async function updateItem(github, core, { item, projectId, sprintField, currentSprint }) {
+  const number = item.content?.number ?? "?";
+  const title = item.content?.title ?? "unknown";
+  const oldSprint = item.sprint?.title ?? "none";
+
+  core.info(`Updating #${number} – ${title}`);
+  core.info(`  Sprint: ${oldSprint} → ${currentSprint.title}`);
+
+  await github.graphql(UPDATE_SPRINT_MUTATION, {
+    projectId,
+    itemId: item.id,
+    fieldId: sprintField.id,
+    iterationId: currentSprint.id,
+  });
+
+  if (item.content?.id) {
+    try {
+      await github.graphql(ADD_COMMENT_MUTATION, {
+        subjectId: item.content.id,
+        body: `Sprint hygiene: automatically moved from **${oldSprint}** to **${currentSprint.title}** because this issue was still in "Needs Refinement" after the sprint ended.`,
+      });
+    } catch (commentErr) {
+      core.warning(`  Comment failed: ${commentErr.message}`);
+    }
+  }
+
+  core.info("  Done");
+}
+
 // -- Main entry point -----------------------------------------------------
 
 /**
@@ -125,50 +227,17 @@ const UPDATE_SPRINT_MUTATION = `
  * @param {number} [args.limit] - Maximum number of items to update (undefined = all)
  */
 export default async function updateExpiredSprints({ github, core, context, projectNumber, dryRun = false, limit }) {
-  const org = context.repo.owner;
-
   if (!projectNumber) {
     core.setFailed("projectNumber is required");
     return;
   }
 
-  // 1. Fetch project configuration
-  core.info("Fetching project configuration...");
-  const configData = await github.graphql(PROJECT_CONFIG_QUERY, {
-    org,
-    number: projectNumber,
-  });
-
-  const project = configData.organization.projectV2;
-  const projectId = project.id;
-  const fields = project.fields.nodes;
-
-  const statusField = fields.find((f) => f.name === "Status");
-  const sprintField = fields.find((f) => f.name === "Sprint");
-
-  if (!statusField || !sprintField) {
-    core.setFailed("Could not find Status or Sprint fields on the project");
-    return;
-  }
-
-  const needsRefinementOption = statusField.options.find((o) =>
-    o.name.includes("Needs Refinement"),
+  const { projectId, sprintField, statusName } = await fetchProjectConfig(
+    github, core, { org: context.repo.owner, projectNumber },
   );
-  if (!needsRefinementOption) {
-    core.setFailed('Could not find a status option containing "Needs Refinement"');
-    return;
-  }
 
-  core.info(`Project ID:   ${projectId}`);
-  core.info(`Sprint field: ${sprintField.id}`);
-  core.info(`Status match: ${needsRefinementOption.name}`);
-
-  // 2. Determine the current sprint
   const today = new Date().toISOString().split("T")[0];
-  const currentSprint = findCurrentSprint(
-    sprintField.configuration.iterations,
-    today,
-  );
+  const currentSprint = findCurrentSprint(sprintField.configuration.iterations, today);
 
   if (!currentSprint) {
     core.setFailed("Could not determine current sprint");
@@ -176,33 +245,9 @@ export default async function updateExpiredSprints({ github, core, context, proj
   }
   core.info(`Current sprint: ${currentSprint.title} (${currentSprint.id})`);
 
-  // 3. Fetch stale items using server-side filter
-  //    The `query` parameter on projectV2.items supports the same filter syntax
-  //    as the Projects UI, so we let GitHub do the heavy lifting.
-  const itemsFilter = `sprint:<@current status:"${needsRefinementOption.name}"`;
-  core.info(`Filter: ${itemsFilter}`);
-  const staleItems = [];
-  let cursor = null;
+  const staleItems = await fetchStaleItems(github, core, { projectId, statusName });
 
-  do {
-    const page = await github.graphql(STALE_ITEMS_QUERY, {
-      projectId,
-      cursor,
-      filter: itemsFilter,
-    });
-
-    const { nodes, pageInfo, totalCount } = page.node.items;
-    if (staleItems.length === 0) {
-      core.info(`Matched items (server-side): ${totalCount}`);
-    }
-    staleItems.push(...nodes);
-
-    cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null;
-  } while (cursor);
-
-  core.info(
-    `Found ${staleItems.length} issue(s) in "Needs Refinement" with expired sprints`,
-  );
+  core.info(`Found ${staleItems.length} issue(s) in "Needs Refinement" with expired sprints`);
 
   if (staleItems.length === 0) {
     core.info("Nothing to update.");
@@ -222,49 +267,34 @@ export default async function updateExpiredSprints({ github, core, context, proj
     return;
   }
 
-  // 4. Update each stale item to the current sprint and leave a comment
-  let updated = 0;
-  let failed = 0;
+  const updatedItems = [];
+  const failedItems = [];
 
   for (const item of itemsToProcess) {
-    const number = item.content?.number ?? "?";
-    const title = item.content?.title ?? "unknown";
-    const oldSprint = item.sprint?.title ?? "none";
-
-    core.info(`Updating #${number} – ${title}`);
-    core.info(`  Sprint: ${oldSprint} → ${currentSprint.title}`);
-
     try {
-      await github.graphql(UPDATE_SPRINT_MUTATION, {
-        projectId,
-        itemId: item.id,
-        fieldId: sprintField.id,
-        iterationId: currentSprint.id,
-      });
-
-      // Leave a comment on the issue so the change is visible in the timeline
-      if (item.content?.id) {
-        try {
-          await github.graphql(ADD_COMMENT_MUTATION, {
-            subjectId: item.content.id,
-            body: `Sprint hygiene: automatically moved from **${oldSprint}** to **${currentSprint.title}** because this issue was still in "Needs Refinement" after the sprint ended.`,
-          });
-        } catch (commentErr) {
-          core.warning(`  Comment failed: ${commentErr.message}`);
-        }
-      }
-
-      core.info("  Done");
-      updated++;
+      await updateItem(github, core, { item, projectId, sprintField, currentSprint });
+      updatedItems.push(item);
     } catch (err) {
-      core.warning(`  Failed: ${err.message}`);
-      failed++;
+      const number = item.content?.number ?? "?";
+      core.warning(`  #${number} failed: ${err.message}`);
+      failedItems.push(item);
     }
   }
 
-  core.info(`\nSummary: ${updated} updated, ${failed} failed out of ${itemsToProcess.length} total`);
+  core.info(`\nSummary: ${updatedItems.length} updated, ${failedItems.length} failed out of ${itemsToProcess.length} total`);
 
-  if (failed > 0) {
-    core.setFailed(`${failed} item(s) failed to update`);
+  if (updatedItems.length > 0) {
+    core.info("\nUpdated issues:");
+    for (const item of updatedItems) {
+      core.info(`  - ${item.content?.url ?? `#${item.content?.number}`}`);
+    }
+  }
+
+  if (failedItems.length > 0) {
+    core.info("\nFailed issues:");
+    for (const item of failedItems) {
+      core.info(`  - ${item.content?.url ?? `#${item.content?.number}`}`);
+    }
+    core.setFailed(`${failedItems.length} item(s) failed to update`);
   }
 }
