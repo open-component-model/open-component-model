@@ -7,7 +7,7 @@ toc: true
 
 ## Goal
 
-Transfer a component version that contains a Helm chart resource sourced from a **Helm repository** (type `helmChart` with `helm/v1` access)
+Transfer a component version that contains a Helm chart resource sourced from a **Helm repository** (type `helmChart` with `Helm/v1` access)
 to an OCI registry. This guide does not cover charts that are already stored as OCI artifacts.
 
 ## You'll end up with
@@ -27,7 +27,7 @@ to an OCI registry. This guide does not cover charts that are already stored as 
 {{< steps >}}
 
 {{<callout context="note" title="Helm charts stored as ociImage" icon="outline/info-circle">}}
-If your existing component version contains a Helm chart stored as an `ociImage` resource rather than a `helmChart` with `helm/v1` access, you need to
+If your existing component version contains a Helm chart stored as an `ociImage` resource rather than a `helmChart` with `Helm/v1` access, you need to
 create a new component version using the `helmChart` type as shown below. This guide only covers the transfer of Helm charts sourced from Helm
 repositories.
 {{< /callout >}}
@@ -36,7 +36,7 @@ repositories.
 
 ### Create a component version with a Helm chart resource
 
-If you already have a component version containing a Helm chart with `helm/v1` access, skip to the next step.
+If you already have a component version containing a Helm chart with `Helm/v1` access, skip to the next step.
 
 Create a `constructor.yaml` that references a chart from a Helm repository:
 
@@ -51,7 +51,7 @@ components:
         version: 1.0.0
         type: helmChart
         access:
-          type: helm/v1
+          type: Helm/v1
           helmRepository: https://charts.example.com
           helmChart: my-chart-1.0.0.tgz
 ```
@@ -67,7 +67,7 @@ ocm add cv --repository ctf::<path/to/archive> \
 {{< /step >}}
 
 {{<callout context="caution" title="Why --skip-reference-digest-processing?" icon="outline/alert-triangle">}}
-The `--skip-reference-digest-processing` flag is required because the `helm/v1` access type currently cannot be fully resolved during `add cv`.
+The `--skip-reference-digest-processing` flag is required because the `Helm/v1` access type currently cannot be fully resolved during `add cv`.
 The chart is not downloaded at this stage, so digest calculation is not possible. The digests are computed later during transfer when the chart is
 actually fetched.
 Full Helm support is being tracked as a future feature in [ocm-project#911](https://github.com/open-component-model/ocm-project/issues/911).
@@ -116,7 +116,7 @@ resources:
   - name: my-chart
     type: helmChart
     access:
-      type: ociArtifact/v1
+      type: OCIImage/v1
       imageReference: ghcr.io/my-org/charts/my-chart:1.0.0
 ```
 

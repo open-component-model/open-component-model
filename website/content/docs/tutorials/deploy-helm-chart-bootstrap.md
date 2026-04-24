@@ -182,19 +182,19 @@ components:
         type: helmChart
         version: "1.0.0"
         access:
-          type: ociArtifact
+          type: OCIImage/v1
           imageReference: "ghcr.io/stefanprodan/charts/podinfo:6.11.1@sha256:a9b2804ec61795a7457b2303bf9efbc5fba51f856c3945f3bb0af68bf3b35afd"
       - name: image-resource
         type: ociArtifact
         version: "1.0.0"
         access:
-          type: ociRegistry
+          type: OCIImage/v1
           imageReference: "ghcr.io/stefanprodan/podinfo:6.11.1@sha256:8fa56908408de98f24aed2a162b1bb42c0b98df7abfcc5a76a14a8be510457c5"
       - name: resource-graph-definition
         type: blob
         version: "1.0.0"
         input:
-          type: file
+          type: File/v1
           path: ./resourceGraphDefinition.yaml
 ```
 
