@@ -31,11 +31,11 @@ const (
 
 	// LegacyCredentialKeyAccessToken is the legacy snake_case key for access tokens.
 	//
-	// Deprecated: Use CredentialKeyAccessToken instead.
+	// Deprecated: Use CredentialKeyAccessToken instead. The removal of this key is tracked here: https://github.com/open-component-model/ocm-project/issues/1037
 	LegacyCredentialKeyAccessToken = "access_token"
 	// LegacyCredentialKeyRefreshToken is the legacy snake_case key for refresh tokens.
 	//
-	// Deprecated: Use CredentialKeyRefreshToken instead.
+	// Deprecated: Use CredentialKeyRefreshToken instead. The removal of this key is tracked here: https://github.com/open-component-model/ocm-project/issues/1037
 	LegacyCredentialKeyRefreshToken = "refresh_token"
 )
 
