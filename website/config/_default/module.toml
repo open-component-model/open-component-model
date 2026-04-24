@@ -117,7 +117,8 @@
 [mounts.sites.matrix]
   versions = ["legacy"]
 
-# main (tracks HEAD of monorepo via import paths that are relevant for the website content)
+# main (tracks HEAD of monorepo via sibling-path mounts; CRDs are regenerated
+# from kubernetes/controller/api/v1alpha1 into bin/gen/crd at build time)
 [[mounts]]
   files = ["**", "!blog/**"]
   source = "content"
@@ -144,7 +145,7 @@
     versions = ["main"]
 
 [[mounts]]
-  source = "../kubernetes/controller/config/crd/bases"
+  source = "../kubernetes/controller/bin/gen/crd"
   target = "static/main/schemas/kubernetes/controller"
   [mounts.sites.matrix]
     versions = ["main"]
