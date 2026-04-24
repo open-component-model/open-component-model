@@ -18,6 +18,7 @@
  * @returns {{id: string, title: string, startDate: string, duration: number} | null}
  */
 export function findCurrentSprint(iterations, today) {
+  // Find the most recently started iteration that started on or before today.
   const started = iterations
     .filter((i) => i.startDate <= today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
@@ -26,6 +27,7 @@ export function findCurrentSprint(iterations, today) {
     return started[started.length - 1];
   }
 
+  // Nothing started yet — pick the nearest upcoming sprint.
   const upcoming = iterations
     .filter((i) => i.startDate > today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
@@ -115,9 +117,32 @@ const UPDATE_SPRINT_MUTATION = `
 // -- API helpers ----------------------------------------------------------
 
 /**
+ * Resolve the "Needs Refinement" status option from the project's Status field.
+ * Throws if no match is found or if the name contains characters that would
+ * break the Projects v2 query filter syntax.
+ */
+function resolveNeedsRefinementStatus(statusField) {
+  const matches = statusField.options.filter((o) =>
+    o.name.includes("Needs Refinement"),
+  );
+
+  if (matches.length === 0) {
+    throw new Error('Could not find a status option containing "Needs Refinement"');
+  }
+
+  const statusName = matches[0].name;
+
+  if (statusName.includes('"')) {
+    throw new Error(`Status name contains a double quote which is unsupported in the filter: ${statusName}`);
+  }
+
+  return statusName;
+}
+
+/**
  * Fetch project configuration and resolve the fields we need.
  *
- * @returns {{ projectId, sprintField, statusName }} resolved config
+ * @returns {{ projectId: string, sprintField: object, statusName: string }}
  */
 async function fetchProjectConfig(github, core, { org, projectNumber }) {
   core.info("Fetching project configuration...");
@@ -136,22 +161,13 @@ async function fetchProjectConfig(github, core, { org, projectNumber }) {
     throw new Error("Could not find Status or Sprint fields on the project");
   }
 
-  const needsRefinementOption = statusField.options.find((o) =>
-    o.name.includes("Needs Refinement"),
-  );
-  if (!needsRefinementOption) {
-    throw new Error('Could not find a status option containing "Needs Refinement"');
-  }
+  const statusName = resolveNeedsRefinementStatus(statusField);
 
   core.info(`Project ID:   ${project.id}`);
   core.info(`Sprint field: ${sprintField.id}`);
-  core.info(`Status match: ${needsRefinementOption.name}`);
+  core.info(`Status match: ${statusName}`);
 
-  return {
-    projectId: project.id,
-    sprintField,
-    statusName: needsRefinementOption.name,
-  };
+  return { projectId: project.id, sprintField, statusName };
 }
 
 /**

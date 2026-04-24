@@ -23,7 +23,10 @@ function flag(name) {
 
 function option(name, fallback) {
   const idx = args.indexOf(`--${name}`);
-  return idx !== -1 && args[idx + 1] ? args[idx + 1] : fallback;
+  if (idx === -1 || !args[idx + 1] || args[idx + 1].startsWith("--")) {
+    return fallback;
+  }
+  return args[idx + 1];
 }
 
 const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
@@ -34,8 +37,17 @@ if (!token) {
 
 const org = option("org", "open-component-model");
 const projectNumber = Number(option("project", "10"));
-const limit = option("limit", undefined) ? Number(option("limit")) : undefined;
 const dryRun = !flag("apply"); // dry-run by default, --apply to mutate
+
+const limitArg = option("limit", undefined);
+let limit;
+if (limitArg !== undefined) {
+  limit = parseInt(limitArg, 10);
+  if (Number.isNaN(limit) || limit <= 0) {
+    console.error(`Error: --limit must be a positive integer, got "${limitArg}"`);
+    process.exit(1);
+  }
+}
 
 if (dryRun) {
   console.log("Running in DRY-RUN mode (pass --apply to make changes)\n");
