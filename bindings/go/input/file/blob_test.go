@@ -421,3 +421,9 @@ func TestGetV1FileBlob_Compression(t *testing.T) {
 	r.NoError(err)
 	r.Equal(repetitiveData, decompressedData)
 }
+
+func TestScheme_ResolvesUpperCamelCase_File(t *testing.T) {
+	obj, err := file.Scheme.NewObject(runtime.NewVersionedType(v1.Type, v1.Version))
+	require.NoError(t, err, "Scheme must resolve UpperCamelCase type File/v1")
+	require.IsType(t, &v1.File{}, obj, "expected *v1.File from Scheme")
+}

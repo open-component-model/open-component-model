@@ -91,13 +91,12 @@ Kubernetes: `>=1.26.0-0`
 | manager.readinessProbe.periodSeconds | int | `10` | Period between readiness probes |
 | manager.readinessProbe.port | int | `8081` | Port for the readiness probe |
 | manager.replicas | int | `1` | Number of controller manager replicas |
+| manager.resolver.subscriberBufferSize | int | `100` | Buffer size for each subscriber's event channel. Larger values reduce dropped resolution events under load. Monitor resolver_event_channel_drops_total metric. |
 | manager.resolver.workerCount | int | `10` | Number of active resolver workers |
 | manager.resolver.workerQueueLength | int | `1000` | Maximum work items in queue for component version resolution |
 | manager.resources | object | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"100m","memory":"256Mi"}}` | Resource limits and requests |
 | manager.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` | Container-level security context |
 | manager.tolerations | list | `[]` | Pod tolerations |
-| metrics.enable | bool | `false` | Enable metrics endpoint with RBAC protection |
-| metrics.port | int | `8443` | Metrics server port |
 | prometheus.enable | bool | `false` | Enable Prometheus ServiceMonitor (requires prometheus-operator) |
 | rbacHelpers.enable | bool | `false` | Install convenience admin/editor/viewer roles for CRDs |
 | webhook.certSecret | string | `""` | Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually) |
@@ -107,19 +106,34 @@ Kubernetes: `>=1.26.0-0`
 
 Run these tasks from the `kubernetes/controller` directory.
 
-### Regenerating CRDs and RBAC
+### Regenerating CRDs and manager-role
 
-When API types or RBAC markers change, regenerate the Helm chart manifests:
+When API types or `//+kubebuilder:rbac` markers change, regenerate the Helm
+templates:
 
 ```bash
-task helm/sync-manifests
+task helm/generate
 ```
 
-This runs `kubebuilder edit --plugins=helm/v2-alpha` which:
-1. Runs `controller-gen` to generate CRDs and RBAC from Go source markers
-2. Converts kustomize manifests to Helm-templated manifests in `chart/templates/`
+This runs `controller-gen` to produce raw CRDs into `bin/gen/crd` and a raw
+ClusterRole into `bin/gen/rbac`, then invokes two post-processors:
 
-> **Note:** Only CRDs and RBAC manifests are regenerated automatically. Other templates (e.g., `manager.yaml`, `_helpers.tpl`) are managed manually.
+- `hack/helm.generate.sh` reformats the CRDs and injects Helm template wrappers
+  (`crd.enable`, cert-manager CA-injection annotation, conversion webhook block)
+  into `chart/templates/crd/`.
+- `hack/rbac.generate.sh` reformats the ClusterRole and rewrites `metadata.name`
+  to the chart's templated resource name, writing
+  `chart/templates/rbac/manager-role.yaml`.
+
+Individual targets `task helm/generate-crds` and `task helm/generate-rbac` are
+also available.
+
+> **Note:** Only `manager-role.yaml` is regenerated from Go markers. The
+> ClusterRoleBinding, ServiceAccount, leader-election Role/RoleBinding, and
+> per-kind editor/viewer aggregation roles under `chart/templates/rbac/` are
+> hand-maintained because they are not derivable from `//+kubebuilder:rbac`
+> markers. Other templates (`manager.yaml`, `_helpers.tpl`, etc.) are likewise
+> hand-maintained.
 
 ### Validating changes
 
@@ -132,7 +146,7 @@ task helm/validate
 This checks:
 - Chart linting passes
 - Templates render successfully
-- CRDs, RBAC, schema, and docs are up to date
+- CRDs, manager-role, schema, and docs are up to date
 
 ### Regenerating artifacts after values.yaml changes
 

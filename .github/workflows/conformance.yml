@@ -64,9 +64,14 @@ env:
 
 jobs:
   conformance:
-    name: Sovereign Scenario
-    runs-on: ubuntu-latest
+    name: Sovereign Scenario (${{ matrix.arch }})
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 30
+    # Extend the matrix with additional architectures if needed in the future.
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64]
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -84,7 +89,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
       - name: Install Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
         with:
           version: v4.1.3
       - name: Setup Flux CLI
@@ -101,6 +106,10 @@ jobs:
           name: ${{ inputs.cli_artifact }}
           path: tmp/cli-artifact
 
+      # Skopeo is pre-installed on ubuntu-latest but may be missing on ARM runners.
+      - name: Ensure skopeo is installed
+        run: command -v skopeo || { sudo apt-get update -qq && sudo apt-get install -yqq skopeo; }
+
       # Skopeo can extract by platform (--override-arch) AND convert to docker-archive.
       - name: Load CLI image into Docker daemon
         if: ${{ inputs.cli_artifact != '' }}
@@ -110,7 +119,7 @@ jobs:
         run: |
           mkdir -p tmp/cli-oci-dir
           tar -xf tmp/cli-artifact/oci/cli.tar -C tmp/cli-oci-dir
-          skopeo --override-arch amd64 --override-os linux copy \
+          skopeo --override-arch ${{ matrix.arch }} --override-os linux copy \
             oci:tmp/cli-oci-dir:${CLI_VERSION} \
             docker-archive:tmp/cli-docker.tar:${CLI_IMAGE_NAME}:${CLI_VERSION}
           docker load < tmp/cli-docker.tar
@@ -133,7 +142,7 @@ jobs:
         run: |
           mkdir -p tmp/controller-oci-dir
           tar -xf tmp/controller-artifact/controller.tar -C tmp/controller-oci-dir
-          skopeo --override-arch amd64 --override-os linux copy \
+          skopeo --override-arch ${{ matrix.arch }} --override-os linux copy \
             oci:tmp/controller-oci-dir:${TOOLKIT_VERSION} \
             docker-archive:tmp/controller-docker.tar:${IMAGE_NAME}:${TOOLKIT_VERSION}
           echo "PRELOAD_IMAGES=${{ github.workspace }}/tmp/controller-docker.tar" >> "$GITHUB_ENV"

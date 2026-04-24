@@ -61,7 +61,7 @@ The v2 CLI implements the full **Pack, Sign, Transport, Deploy** workflow:
 
 {{< card-grid >}}
 {{< link-card title="Pack" href="/docs/getting-started/create-component-versions/" description="Bundle software artifacts into component versions." >}}
-{{< link-card title="Sign" href="/docs/tutorials/sign-and-verify-components/" description="Establish provenance with RSA-based PKI signatures." >}}
+{{< link-card title="Sign" href="/docs/tutorials/signing/" description="Establish provenance with RSA-based PKI signatures." >}}
 {{< link-card title="Transport" href="/docs/concepts/transfer-and-transport/" description="Move components between registries or across air gaps." >}}
 {{< link-card title="Deploy" href="/docs/getting-started/deploy-helm-charts/" description="Deploy applications using OCM controllers." >}}
 {{< /card-grid >}}
@@ -274,7 +274,7 @@ Ready to try OCM v2? Pick your path:
 {{< step >}}
 **Sign and Verify**
 
-[Establish provenance with RSA signatures](/docs/tutorials/sign-and-verify-components/)
+[Establish provenance with RSA signatures](/docs/tutorials/signing/)
 {{< /step >}}
 {{< step >}}
 **Transfer across an Air Gap**

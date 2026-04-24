@@ -48,7 +48,7 @@ components:
      type: ociImage
      version: 1.0.0
      access:
-       type: ociArtifact
+       type: OCIImage/v1
        imageReference: ghcr.io/stefanprodan/podinfo:6.7.1
 EOF
 ```
@@ -150,7 +150,7 @@ docker run --rm \
     resources:
     - access:
         imageReference: ghcr.io/stefanprodan/podinfo:6.7.1@sha256:862ca45e61b32392f7941a1bdfdbe5ff8b6899070135f1bdca1c287d0057fc94
-        type: ociArtifact
+        type: OCIImage/v1
       digest:
         hashAlgorithm: SHA-256
         normalisationAlgorithm: genericBlobDigest/v1

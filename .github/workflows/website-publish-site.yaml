@@ -9,6 +9,12 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/website-publish-site.yaml'
+      # Paths that are relevant for tracking changes on `main` version.
+      # CRDs are generated from api/v1alpha1 at build time via controller-gen.
+      - 'cli/docs/reference/**'
+      - 'bindings/go/constructor/spec/v1/resources/**'
+      - 'bindings/go/descriptor/v2/resources/**'
+      - 'kubernetes/controller/api/v1alpha1/**'
 
 permissions:
   contents: read
@@ -19,6 +25,7 @@ env:
 jobs:
   publish-site:
     name: Publish Site
+    # peaceiris/actions-hugo v3 produces wrong filename casing for Hugo >= v0.103.0 on ARM64.
     runs-on: ubuntu-latest
 
     permissions:
@@ -38,7 +45,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 25.5.0
 
@@ -47,6 +54,21 @@ jobs:
         with:
           hugo-version: '0.160.0'
           extended: true
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: kubernetes/controller/go.mod
+          cache-dependency-path: kubernetes/controller/go.sum
+
+      - name: Generate controller CRDs for `main` site version
+        working-directory: kubernetes/controller
+        env:
+          CONTROLLER_TOOLS_VERSION: v0.20.1
+        run: |
+          mkdir -p bin/gen/crd
+          go run "sigs.k8s.io/controller-tools/cmd/controller-gen@${CONTROLLER_TOOLS_VERSION}" \
+            crd paths="./..." output:crd:artifacts:config=bin/gen/crd
 
       - name: Install deps and Build
         working-directory: website

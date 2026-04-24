@@ -63,7 +63,7 @@ concurrency:
 jobs:
   verify-chart:
     name: Verify Chart
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -78,22 +78,13 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
         with:
           version: v4.1.3
 
-      - name: Generate values schema
+      - name: Validate chart (generators + lint + template + drift check)
         working-directory: ${{ env.LOCATION }}
-        run: task helm/schema
-      - name: Generate chart documentation
-        working-directory: ${{ env.LOCATION }}
-        run: task helm/docs
-      - name: Lint chart
-        working-directory: ${{ env.LOCATION }}
-        run: task helm/lint
-      - name: Render chart templates
-        working-directory: ${{ env.LOCATION }}
-        run: task helm/template
+        run: task helm/validate
 
       - name: Verify no uncommitted changes
         run: |
@@ -106,7 +97,7 @@ jobs:
 
   build:
     name: Build Controller
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     needs: verify-chart
     outputs:
@@ -143,7 +134,7 @@ jobs:
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Install Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
         with:
           version: v4.1.3
 
@@ -219,10 +210,15 @@ jobs:
           path: ${{ env.LOCATION }}/dist/chart-*.tgz
 
   E2E:
-    name: E2E Tests
-    runs-on: ubuntu-latest
+    name: E2E Tests (${{ matrix.arch }})
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 20
     needs: build
+    # Extend the matrix with additional architectures if needed in the future.
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64]
     permissions:
       contents: read
       actions: read
@@ -236,6 +232,7 @@ jobs:
             ${{ env.LOCATION }}
             Taskfile.yml
             .env
+            website/static/install.sh
           persist-credentials: false
 
       - name: Setup Go
@@ -254,13 +251,13 @@ jobs:
         uses: docker/setup-docker-action@1a6edb0ba9ac496f6850236981f15d8f9a82254d # v5
 
       - name: Setup ocm
-        uses: open-component-model/ocm-setup-action@655f3525fd283ca7d22e6b2ceec42324331df401 # v1.0.0
+        run: bash website/static/install.sh
 
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@871be9b40d53627786d3a3835a3ddba1e3234bd2 # v2.8.3
 
       - name: Install Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
         with:
           version: v4.1.3
 
@@ -274,9 +271,12 @@ jobs:
         working-directory: ${{ env.LOCATION }}
         run: task oci/extract TAR_PATH=tmp/oci/controller.tar OUTPUT_DIR=tmp/oci-dir
 
-      - name: Extract linux/amd64 image for E2E testing
+      - name: Ensure skopeo is installed
+        run: command -v skopeo || { sudo apt-get update -qq && sudo apt-get install -yqq skopeo; }
+
+      - name: Extract image for E2E testing
         # Skopeo can extract by platform (--override-arch) AND convert to docker-archive.
-        # Skopeo is pre-installed on ubuntu-latest runners.
+        # Skopeo is pre-installed on ubuntu-latest but may be missing on ARM runners.
         # Set tag to "latest" to match the controller's Helm chart default for E2E testing
         working-directory: ${{ env.LOCATION }}
         env:
@@ -284,16 +284,16 @@ jobs:
           IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
         run: |
           mkdir -p tmp/docker
-          skopeo --override-arch amd64 --override-os linux copy \
+          skopeo --override-arch ${{ matrix.arch }} --override-os linux copy \
             oci:tmp/oci-dir:${VERSION} \
-            docker-archive:tmp/docker/controller-amd64.tar:${IMAGE_NAME}:latest
+            docker-archive:tmp/docker/controller.tar:${IMAGE_NAME}:latest
           echo "CONTROLLER_IMG=${IMAGE_NAME}:${VERSION}" >> "$GITHUB_ENV"
 
       - name: Run E2E tests
         run: |
           set -a && source ${{ env.LOCATION }}/.env && set +a
           bash ${{ env.LOCATION }}/test/e2e/hacks/setup.sh
-          kind load image-archive "${{ env.LOCATION }}/tmp/docker/controller-amd64.tar"
+          kind load image-archive "${{ env.LOCATION }}/tmp/docker/controller.tar"
           task ${{ env.LOCATION }}:test/e2e
 
       - name: Debug cluster state
@@ -328,7 +328,7 @@ jobs:
 
   publish:
     name: Publish and Attest Image & Chart
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [build, E2E, conformance]
     if: ${{ needs.build.outputs.should_publish == 'true' }}
     outputs:
@@ -365,7 +365,7 @@ jobs:
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
 
       - name: Install Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
         with:
           version: v4.1.3
 

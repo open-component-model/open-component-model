@@ -19,8 +19,8 @@ func init() {
 func MustAddToScheme(scheme *runtime.Scheme) {
 	helm := &v1.Helm{}
 	scheme.MustRegisterWithAlias(helm,
-		runtime.NewVersionedType("Helm", v1.Version),
-		runtime.NewUnversionedType("Helm"),
+		runtime.NewVersionedType(v1.Type, v1.Version),
+		runtime.NewUnversionedType(v1.Type),
 		runtime.NewVersionedType(v1.LegacyType, v1.LegacyTypeVersion),
 		runtime.NewUnversionedType(v1.LegacyType),
 	)

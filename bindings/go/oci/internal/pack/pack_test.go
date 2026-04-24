@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"errors"
-	"fmt"
 	"io"
 	"testing"
 
@@ -22,8 +21,8 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	resourceblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	. "ocm.software/open-component-model/bindings/go/oci/internal/pack"
+	"ocm.software/open-component-model/bindings/go/oci/internal/policy"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -298,7 +297,7 @@ func TestResourceBlob(t *testing.T) {
 			},
 		},
 		{
-			name: "success with enforced global access",
+			name: "success with never global access policy",
 			blob: &testBlob{
 				content:   content,
 				mediaType: "application/vnd.test",
@@ -312,35 +311,40 @@ func TestResourceBlob(t *testing.T) {
 				},
 			},
 			opts: Options{
-				AccessScheme:        runtime.NewScheme(),
-				BaseReference:       "test-ref",
-				EnforceGlobalAccess: true,
+				AccessScheme:       runtime.NewScheme(),
+				BaseReference:      "test-ref",
+				GlobalAccessPolicy: policy.GlobalAccessPolicyNever,
 			},
 			checkGlobalAccess: func(t *testing.T, resource *descriptor.Resource) {
 				access, ok := resource.Access.(*v2.LocalBlob)
 				require.True(t, ok, "access should be of type LocalBlob")
-				require.NotNil(t, access.GlobalAccess, "global access should be set")
-
-				// Convert the global access to the correct type
-				scheme := runtime.NewScheme()
-				v2.MustAddToScheme(scheme)
-				oci.MustAddToScheme(scheme)
-
-				globalAccess, err := scheme.NewObject(access.GlobalAccess.GetType())
-				require.NoError(t, err)
-				require.NoError(t, scheme.Convert(access.GlobalAccess, globalAccess))
-
-				switch typed := globalAccess.(type) {
-				case *accessv1.OCIImageLayer:
-					assert.Equal(t, fmt.Sprintf("test-ref@%s", digest.String()), typed.Reference)
-					assert.Equal(t, "application/vnd.test", typed.MediaType)
-					assert.Equal(t, digest, typed.Digest)
-					assert.Equal(t, int64(len(content)), typed.Size)
-				case *accessv1.OCIImage:
-					assert.Equal(t, fmt.Sprintf("test-ref@%s", digest.String()), typed.ImageReference)
-				default:
-					t.Fatalf("unexpected global access type: %T", globalAccess)
-				}
+				assert.Nil(t, access.GlobalAccess, "global access should not be set with Never policy")
+			},
+		},
+		{
+			name: "success with auto global access policy on local store",
+			blob: &testBlob{
+				content:   content,
+				mediaType: "application/vnd.test",
+				digest:    digest,
+			},
+			resource: &descriptor.Resource{
+				Access: &v2.LocalBlob{
+					Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					LocalReference: digest.String(),
+					MediaType:      "application/vnd.test",
+				},
+			},
+			opts: Options{
+				AccessScheme:       runtime.NewScheme(),
+				BaseReference:      "test-ref",
+				GlobalAccessPolicy: policy.GlobalAccessPolicyAuto,
+			},
+			checkGlobalAccess: func(t *testing.T, resource *descriptor.Resource) {
+				access, ok := resource.Access.(*v2.LocalBlob)
+				require.True(t, ok, "access should be of type LocalBlob")
+				// Auto on local (non-remote) store should not set global access
+				assert.Nil(t, access.GlobalAccess, "global access should not be set for auto policy on local store")
 			},
 		},
 		{
@@ -773,11 +777,12 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 	ociLayout := buf.Bytes()
 
 	tests := []struct {
-		name          string
-		blob          *testBlob
-		resource      *descriptor.Resource
-		opts          Options
-		expectedError string
+		name              string
+		blob              *testBlob
+		resource          *descriptor.Resource
+		opts              Options
+		expectedError     string
+		checkGlobalAccess func(t *testing.T, resource *descriptor.Resource)
 	}{
 		{
 			name: "success with valid input",
@@ -828,6 +833,10 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, fromStore.MediaType)
 			content.Equal(fromStore, desc)
+
+			if tt.checkGlobalAccess != nil {
+				tt.checkGlobalAccess(t, tt.resource)
+			}
 		})
 	}
 }

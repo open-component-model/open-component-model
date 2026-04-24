@@ -17,7 +17,7 @@ permissions:
 jobs:
   create-release-branch:
     name: Create Release Branch from ${{ github.event.inputs.source_branch }} to ${{ github.event.inputs.target_branch }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout repository
