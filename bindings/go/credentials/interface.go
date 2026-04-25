@@ -22,5 +22,8 @@ type Resolver interface {
 	//
 	// Deprecated: Migrate to ResolveTyped instead for typed credential support
 	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
-	ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error)
+	// ResolveTyped resolves credentials for the given identity and returns them as a runtime.Typed.
+	// The identity parameter accepts any runtime.Typed — typically a runtime.Identity map or a typed
+	// identity struct that implements runtime.IdentityProvider.
+	ResolveTyped(ctx context.Context, identity runtime.Typed) (runtime.Typed, error)
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
-	"reflect"
 
 	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
@@ -233,11 +232,11 @@ func extractResolvable(ctx context.Context, g *Graph, creds []runtime.Typed) (ru
 }
 
 // validateConsumerIdentityTypes checks that all consumer identity types in the config
-// are registered in the ConsumerIdentityTypeScheme and that credential types are
+// are registered in the IdentityTypeRegistry and that credential types are
 // compatible with the identity type. Unknown types produce warnings — they are not
 // rejected because plugins loaded later may introduce new types.
 func validateConsumerIdentityTypes(ctx context.Context, g *Graph, config *cfgRuntime.Config) {
-	if g.consumerIdentityTypeScheme() == nil {
+	if g.identityTypeRegistry == nil {
 		return
 	}
 	for _, consumer := range config.Consumers {
@@ -249,8 +248,7 @@ func validateConsumerIdentityTypes(ctx context.Context, g *Graph, config *cfgRun
 				continue
 			}
 
-			identityObj, err := g.consumerIdentityTypeScheme().NewObject(identityType)
-			if err != nil {
+			if !g.identityTypeRegistry.Scheme().IsRegistered(identityType) {
 				slog.WarnContext(ctx, "consumer identity type not registered in scheme",
 					"type", identityType.String(),
 					"identity", identity.String(),
@@ -258,13 +256,12 @@ func validateConsumerIdentityTypes(ctx context.Context, g *Graph, config *cfgRun
 				continue
 			}
 
-			// If the identity type declares accepted credential types, validate
-			// This does not fail on purpose - credentials should still be passed as the user configured them
-			acceptor, ok := identityObj.(CredentialAcceptor)
-			if !ok {
+			// Check accepted credential types from the registry.
+			// This does not fail on purpose - credentials should still be passed as the user configured them.
+			accepted, hasAccepted := g.identityTypeRegistry.AcceptedCredentialTypes(identityType)
+			if !hasAccepted {
 				continue
 			}
-			accepted := acceptor.AcceptedCredentialTypes()
 
 			for _, cred := range consumer.Credentials {
 				credType := cred.GetType()
@@ -297,24 +294,9 @@ func isAccepted(credentialTypeScheme *runtime.Scheme, credType runtime.Type, acc
 	if credentialTypeScheme == nil {
 		return false
 	}
-	// Resolve through the scheme: if both types produce the same registered
-	// prototype, they are aliases of each other.
-	// Guard: only attempt alias resolution if the credential type is actually
-	// registered. With WithAllowUnknown, NewObject returns *Raw for any type,
-	// which would cause false-positive matches between unrelated unknown types.
-	if !credentialTypeScheme.IsRegistered(credType) {
-		return false
-	}
-	credObj, err := credentialTypeScheme.NewObject(credType)
-	if err != nil {
-		return false
-	}
+	resolved := credentialTypeScheme.ResolveType(credType)
 	for _, a := range accepted {
-		aObj, err := credentialTypeScheme.NewObject(a)
-		if err != nil {
-			continue
-		}
-		if reflect.TypeOf(credObj) == reflect.TypeOf(aObj) {
+		if credentialTypeScheme.ResolveType(a).Equal(resolved) {
 			return true
 		}
 	}

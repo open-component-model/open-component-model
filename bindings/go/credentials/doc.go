@@ -11,7 +11,7 @@
 //
 //   - Direct credential resolution through the graph
 //   - Typed credential resolution via [Graph.ResolveTyped]
-//   - Identity → credential type validation via [CredentialAcceptor]
+//   - Identity → credential type validation via [IdentityTypeRegistry]
 //   - Plugin-based credential resolution for extensibility
 //   - Support for repository-specific credential handling
 //   - Thread-safe operations with synchronized DAG implementation
@@ -59,13 +59,13 @@
 // configured in [Options]:
 //
 //   - [Options.CredentialTypeSchemeProvider] — provides a scheme for typed credential objects
-//   - [Options.IdentityTypeSchemeProvider] — provides a scheme for typed identity objects
+//   - [Options.IdentityTypeRegistry] — provides identity types and their accepted credential types
 //
-// During ingestion, when an identity type implements [CredentialAcceptor], the graph validates
-// that configured credential types are compatible. Incompatible pairs produce warnings, not
-// errors — credentials are still stored and ingestion continues. This is deliberate: during
-// migration, not all types may be registered, and plugins loaded after ingestion may introduce
-// types unknown at ingestion time.
+// During ingestion, when an identity type has accepted credential types registered in the
+// [IdentityTypeRegistry], the graph validates that configured credential types are compatible.
+// Incompatible pairs produce warnings, not errors — credentials are still stored and ingestion
+// continues. This is deliberate: during migration, not all types may be registered, and plugins
+// loaded after ingestion may introduce types unknown at ingestion time.
 //
 // To resolve typed credentials, use [Graph.ResolveTyped]:
 //
@@ -255,7 +255,9 @@
 // to ensure safe concurrent access.
 //
 // The entrypoints to the graph are [Graph.ResolveTyped] (preferred) and [Graph.Resolve] (deprecated).
-// Both expect a [runtime.Identity] and return the resolved credentials or an error.
+// [Graph.ResolveTyped] accepts any [runtime.Typed] (typically a [runtime.Identity] map or a typed
+// identity struct implementing [runtime.IdentityProvider]). [Graph.Resolve] accepts [runtime.Identity].
+// Both return the resolved credentials or an error.
 //
 // Error Handling:
 //   - [ErrNotFound]: Returned when no credentials could be found for the given identity

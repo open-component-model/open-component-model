@@ -34,13 +34,17 @@ func (s *StaticCredentialsResolver) Resolve(_ context.Context, identity runtime.
 	return maps.Clone(creds), nil
 }
 
-func (s *StaticCredentialsResolver) ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
-	creds, err := s.Resolve(ctx, identity)
+func (s *StaticCredentialsResolver) ResolveTyped(_ context.Context, identity runtime.Typed) (runtime.Typed, error) {
+	id, err := toIdentity(identity)
 	if err != nil {
 		return nil, err
 	}
+	creds, ok := s.staticCredentialsStore[id.String()]
+	if !ok {
+		return nil, ErrNotFound
+	}
 	return &v1.DirectCredentials{
 		Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
-		Properties: creds,
+		Properties: maps.Clone(creds),
 	}, nil
 }

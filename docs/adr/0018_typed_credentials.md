@@ -51,12 +51,21 @@ separate credential types are defined per access mode rather than one type with 
 
 ### Identity → Credential Type Validation
 
-Typed identity structs declare which credential types they accept:
+The `IdentityTypeRegistry` stores which credential types each identity type accepts. This mapping is declarative — it
+is provided at registration time, not implemented as an interface on the identity struct. This keeps identity structs
+free of credential-type imports and aligns builtin bindings with the same registration model used by external plugins
+(which declare `AcceptedCredentialTypes` in their capability JSON).
 
 ```go
-type CredentialAcceptor interface {
-AcceptedCredentialTypes() []runtime.Type
-}
+// Registration — each binding declares the mapping at startup
+identityTypeRegistry.RegisterWithAcceptedCredentials(
+    &HelmChartRepositoryIdentity{},
+    []runtime.Type{VersionedType, Type},                    // identity types (default + aliases)
+    []runtime.Type{helmcredsv1.HelmHTTPCredentialsVersionedType}, // accepted credential types
+)
+
+// Query — the graph validates during ingestion
+accepted, ok := identityTypeRegistry.AcceptedCredentialTypes(identityType)
 ```
 
 The graph validates during ingestion that configured credential types are compatible with the identity type.
@@ -68,9 +77,13 @@ credentials of the wrong type at resolution time with clear errors.
 ### Resolver Evolution
 
 The existing `Resolver` interface gains a `ResolveTyped` method that returns `runtime.Typed` instead of
-`map[string]string`. The graph stores credentials as `runtime.Typed` internally and resolves typed credentials from
-config when a `CredentialTypeSchemeProvider` is configured. `DirectCredentials/v1` serves as the fallback for old
-configurations.
+`map[string]string`. `ResolveTyped` accepts `runtime.Typed` as its identity parameter — not `runtime.Identity`. This
+means consumers can pass typed identity structs directly without calling `.ToIdentity()` first. The graph internally
+converts to `runtime.Identity` when it needs map-based matching (via `runtime.IdentityProvider`), but this is an
+implementation detail that will be removed when `runtime.Identity` is eventually retired.
+
+The graph stores credentials as `runtime.Typed` internally and resolves typed credentials from config when a
+`CredentialTypeSchemeProvider` is configured. `DirectCredentials/v1` serves as the fallback for old configurations.
 
 Adding a method to an interface breaks implementors (all in our codebase), not consumers. Each binding migrates from
 `Resolve` to `ResolveTyped` independently, with no changes to function signatures, context wiring, or intermediate
@@ -86,14 +99,14 @@ interface (`TypedResolver[T any]`) was also tested; it does not work because the
 ```go
 // Pseudocode — updated Resolver interface
 type Resolver interface {
-    Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)  // existing
-    ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) // new
+    Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)  // deprecated
+    ResolveTyped(ctx context.Context, identity runtime.Typed) (runtime.Typed, error)    // new
 }
 
 // Pseudocode — consumer usage
-identity := HelmChartRepositoryIdentity{Host: "charts.example.com", Path: "/stable"}
-typed, err := resolver.ResolveTyped(ctx, identity.Identity())
-creds := typed.(*HelmHTTPCredentials) // type-safe access
+identity := &HelmChartRepositoryIdentity{Host: "charts.example.com", Path: "/stable"}
+typed, err := resolver.ResolveTyped(ctx, identity)  // pass typed identity directly
+creds := typed.(*HelmHTTPCredentials)                // type-safe access
 fmt.Println(creds.CertFile, creds.KeyFile)
 ```
 
@@ -105,8 +118,8 @@ sequenceDiagram
     participant S as CredentialType<br/>Registry
 
     C->>I: construct typed identity
-    I-->>C: .Identity() → map[string]string
-    C->>G: ResolveTyped(identity)
+    C->>G: ResolveTyped(typedIdentity)
+    G->>G: convert to Identity via IdentityProvider
     G->>G: match identity in DAG
     G->>G: resolve raw credential from config
     G->>S: convert to runtime.Typed
@@ -117,88 +130,80 @@ sequenceDiagram
 
 ### Typed Identity Structs
 
-Typed identity structs implement `IdentityProvider` to produce `runtime.Identity` maps for graph lookup. They provide
-structured construction and validation while remaining compatible with the graph's existing matching system.
+Typed identity structs implement `runtime.IdentityProvider` to produce `runtime.Identity` maps for graph lookup. They
+provide structured construction and validation while remaining compatible with the graph's existing matching system.
+`runtime.Identity` itself implements `IdentityProvider` trivially (returns itself), so existing code that passes
+`runtime.Identity` to `ResolveTyped` continues to work without changes.
+
+```go
+// runtime package
+type IdentityProvider interface {
+    ToIdentity() Identity
+}
+
+// Identity implements IdentityProvider — returns itself
+func (i Identity) ToIdentity() Identity { return i }
+```
 
 ### Type Registries and Graph Independence
 
-The credential graph must remain independent of binding-specific types. It receives two optional type scheme providers
-via its configuration:
+The credential graph must remain independent of binding-specific types. It receives two registries via its
+configuration:
 
-- **`CredentialTypeSchemeProvider`** — provides a scheme that can create typed credential objects (e.g.,
+- **`CredentialTypeSchemeProvider`** — provides a `runtime.Scheme` that can create typed credential objects (e.g.,
   `HelmHTTPCredentials/v1`)
-- **`IdentityTypeSchemeProvider`** — provides a scheme that can create typed identity objects for validation (e.g.,
-  `HelmChartRepository/v1`)
+- **`IdentityTypeRegistry`** — wraps a `runtime.Scheme` for identity type deserialization and stores the mapping of
+  identity types to their accepted credential types. This replaces the earlier `IdentityTypeSchemeProvider` concept.
 
-The `PluginManager` owns two type registries — one for credential types, one for identity types. Both builtin bindings
-and external plugins register their types into these registries. The graph never knows or cares where a type came
-from — it reads from the registries through the scheme provider interfaces.
+The `PluginManager` owns these registries. Both builtin bindings and external plugins register their types into them.
+The graph never knows or cares where a type came from — it reads from the registries through their interfaces.
 
-#### Registration: Provider Pattern
+#### Registration
 
-Builtin bindings implement the `CredentialTypeProvider` and `IdentityTypeProvider` interfaces, which supply the
-prototype struct and type names for registration:
-
-```go
-// Implemented by binding credential/identity structs
-type CredentialTypeProvider interface {
-    CredentialTypePrototype() runtime.Typed
-    CredentialTypes() []runtime.Type
-}
-
-type IdentityTypeProvider interface {
-    IdentityTypePrototype() runtime.Typed
-    IdentityTypes() []runtime.Type
-}
-```
-
-Each binding's `Register` function receives the registries and registers its providers — following the same
+Each binding's `Register` function receives the registries and registers its types — following the same
 self-registration pattern used by all other plugin types (OCI, signing, etc.):
 
 ```go
 // Pseudocode — builtin Helm registration
-func Register(credentialTypeRegistry, identityTypeRegistry, ...) {
-    credentialTypeRegistry.RegisterProvider(&HelmHTTPCredentials{})
-    identityTypeRegistry.RegisterProvider(&HelmChartRepositoryIdentity{})
+func Register(credentialTypeScheme *runtime.Scheme, identityTypeRegistry *credentials.IdentityTypeRegistry) {
+    credentialTypeScheme.MustRegisterWithAlias(&HelmHTTPCredentials{}, HelmHTTPCredentialsVersionedType, HelmHTTPCredentialsType)
+
+    identityTypeRegistry.RegisterWithAcceptedCredentials(
+        &HelmChartRepositoryIdentity{},
+        []runtime.Type{HelmChartRepositoryVersionedType, HelmChartRepositoryType},
+        []runtime.Type{HelmHTTPCredentialsVersionedType},
+    )
 }
 ```
 
 External plugins (separate binaries) declare their types in their JSON capability spec via
 `SupportedConsumerIdentityTypes` with `AcceptedCredentialTypes`. The `PluginManager` registers these into the
-registries as `runtime.Raw` during plugin discovery — no manual CLI aggregation needed.
+registries during plugin discovery — no manual CLI aggregation needed.
 
-#### Read: Scheme Provider Interfaces
+#### Graph Consumption
 
-The graph reads from the registries through scheme provider interfaces:
+The graph reads from the registries through their interfaces:
 
-```go
-type CredentialTypeSchemeProvider interface {
-    Scheme() *runtime.Scheme
-}
+- `CredentialTypeSchemeProvider.Scheme()` — returns the `runtime.Scheme` for credential type deserialization
+- `IdentityTypeRegistry.Scheme()` — returns the `runtime.Scheme` for identity type validation
+- `IdentityTypeRegistry.AcceptedCredentialTypes(identityType)` — returns the accepted credential types for validation
 
-type IdentityTypeSchemeProvider interface {
-    Scheme() *runtime.Scheme
-}
-```
-
-The registries implement these interfaces. The graph calls `Scheme()` to access the underlying `runtime.Scheme` for
-deserialization and validation. This separation means the graph depends only on the interfaces, never on the registry
-implementations or binding packages.
+This separation means the graph depends only on the registry interfaces, never on the binding packages.
 
 ```mermaid
 flowchart LR
     subgraph PluginManager
-        CTR["CredentialType<br/>Registry"]
+        CTR["CredentialType<br/>SchemeProvider"]
         ITR["IdentityType<br/>Registry"]
     end
 
-    Bindings["Bindings<br/>(Helm, OCI, ...)"] -->|RegisterProvider| CTR
-    Bindings -->|RegisterProvider| ITR
+    Bindings["Bindings<br/>(Helm, OCI, ...)"] -->|Register| CTR
+    Bindings -->|RegisterWithAcceptedCredentials| ITR
     Plugins["Plugin Discovery"] -->|RegisterFromPlugin<br/>from capability specs| CTR
     Plugins -->|RegisterFromPlugin<br/>from capability specs| ITR
 
-    CTR -->|CredentialTypeSchemeProvider| Graph["Credential Graph"]
-    ITR -->|IdentityTypeSchemeProvider| Graph
+    CTR -->|Scheme()| Graph["Credential Graph"]
+    ITR -->|Scheme() + AcceptedCredentialTypes()| Graph
 ```
 
 The schemes serve a fundamentally different purpose than the credential plugins. The `CredentialPlugin` interface
@@ -225,7 +230,7 @@ This means:
   `RegisterFromPlugin` — consumers use `scheme.Convert` to get typed structs
 - Built-ins register first (at startup), plugins register after (at discovery) — duplicate registrations error out
   via `runtime.Scheme.TypeAlreadyRegisteredError`; there is no silent override or precedence
-- Both scheme providers are optional (nil-safe) — the graph degrades to `DirectCredentials` behavior when no provider
+- Both registries are optional (nil-safe) — the graph degrades to `DirectCredentials` behavior when no registry
   is configured
 
 ### Backward Compatibility
@@ -249,10 +254,10 @@ signature** to `credentials runtime.Typed`, with `scheme.Convert(typed, *runtime
 way — only the Go API shape changes.
 
 **At discovery time:** The plugin manager runs each plugin binary with `capabilities` and reads the capability JSON.
-Each `SupportedConsumerIdentityType` in the capability spec includes an `AcceptedCredentialTypes` field — the JSON
-equivalent of the Go `CredentialAcceptor` interface. This allows plugins written in any language to declare the
-identity → credential type mapping. The plugin manager registers these types into the credential type and identity
-type registries via `RegisterFromPlugin` — no manual aggregation is needed.
+Each `SupportedConsumerIdentityType` in the capability spec includes an `AcceptedCredentialTypes` field. This allows
+plugins written in any language to declare the identity → credential type mapping. The plugin manager registers these
+types into the `IdentityTypeRegistry` (with accepted credential types) and the credential type scheme during plugin
+discovery — no manual aggregation is needed.
 
 **At the plugin boundary (post Phase 3):** The graph hands the resolved `runtime.Typed` directly to the plugin
 contract; the plugin transport marshals it to canonical JSON via the scheme and the plugin-side handler unmarshals
@@ -272,11 +277,11 @@ module boundaries. Without `go.work`, modules resolve from the proxy — so chan
 
 ### Phase 1: Foundation
 
-Add `ResolveTyped` to `Resolver`, credential type and identity type registries to the plugin manager,
-`CredentialTypeProvider`/`IdentityTypeProvider` interfaces for binding registration,
-`CredentialTypeSchemeProvider`/`IdentityTypeSchemeProvider` interfaces for graph consumption, and
-`IdentityProvider`/`CredentialAcceptor` interfaces to runtime. No downstream breakage — all existing code
-continues to work.
+Add `ResolveTyped(ctx, runtime.Typed)` to `Resolver`, `IdentityTypeRegistry` (with accepted credential types mapping)
+and `CredentialTypeSchemeProvider` for graph consumption, `runtime.IdentityProvider` interface so typed identity structs
+can produce `runtime.Identity` maps for graph matching, and `runtime.Scheme.ResolveType` for alias resolution.
+The graph internally works with `runtime.Typed` throughout — `runtime.Identity` is only accepted at the deprecated
+`Resolve` signature boundary. No downstream breakage — all existing code continues to work.
 
 ### Phase 2: Binding migration (parallelizable)
 
@@ -314,3 +319,25 @@ Deprecate `Resolve` method. Remove internal map conversion helpers and legacy cr
 The typed credential system makes invalid credential configurations unrepresentable through Go's type system. Each
 binding owns its credential and identity types. The graph validates and stores typed credentials natively. The gradual
 migration path ensures no development blocking while transitioning the multi-module monorepo.
+
+## Changelog
+
+### 2026-04-25 — Phase 1 implementation refinements
+
+- **`ResolveTyped` accepts `runtime.Typed`**, not `runtime.Identity`. The graph internally works with `runtime.Typed`
+  throughout. `runtime.Identity` is only accepted at the deprecated `Resolve` method boundary. Typed identity structs
+  can be passed directly to `ResolveTyped` without calling `.ToIdentity()`.
+- **`runtime.IdentityProvider` interface** added to runtime. Typed identity structs implement it to produce
+  `runtime.Identity` maps for graph matching. `runtime.Identity` implements it trivially (returns itself).
+- **`runtime.Identity.GetType()` no longer panics** on missing type — returns empty `Type` instead, aligning with
+  the `runtime.Typed` interface contract.
+- **`runtime.Scheme.ResolveType`** added — resolves alias types to their canonical default type. Used by `isAccepted`
+  for identity → credential type validation, replacing the previous `reflect.TypeOf` + `NewObject` comparison.
+- **`CredentialAcceptor` interface replaced by `IdentityTypeRegistry`**. The accepted credential types mapping is now
+  declarative (stored at registration time via `RegisterWithAcceptedCredentials`) rather than behavioral (implemented
+  as an interface on identity structs). This removes the cross-package import coupling between identity and credential
+  type packages and aligns builtin bindings with the same registration model used by external plugins.
+- **`IdentityTypeSchemeProvider` replaced by `IdentityTypeRegistry`**. The registry wraps a `runtime.Scheme` and adds
+  the accepted credential types mapping. The graph receives it via `Options.IdentityTypeRegistry`.
+- **`toIdentity` bridge function** added as private migration scaffolding in the credentials package. It exists because
+  `CredentialPlugin` and `RepositoryPlugin` interfaces still accept `runtime.Identity` (Phase 3 removes this).

@@ -22,8 +22,9 @@ type Options struct {
 	RepositoryPluginProvider
 	CredentialPluginProvider
 	CredentialRepositoryTypeScheme *runtime.Scheme
-	// IdentityTypeSchemeProvider provides access to known consumer identity types (e.g. OCIRegistry/v1).
-	IdentityTypeSchemeProvider TypeSchemeProvider
+	// IdentityTypeRegistry provides access to known consumer identity types (e.g. OCIRegistry/v1)
+	// and their accepted credential types for validation during ingestion.
+	IdentityTypeRegistry *IdentityTypeRegistry
 	// CredentialTypeSchemeProvider provides access to known credential types (e.g. HelmHTTPCredentials/v1).
 	CredentialTypeSchemeProvider TypeSchemeProvider
 }
@@ -35,7 +36,7 @@ func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (*Gra
 		syncedDag:                    newSyncedDag(),
 		credentialPluginProvider:     opts.CredentialPluginProvider,
 		repositoryPluginProvider:     opts.RepositoryPluginProvider,
-		identityTypeSchemeProvider:   opts.IdentityTypeSchemeProvider,
+		identityTypeRegistry:        opts.IdentityTypeRegistry,
 		credentialTypeSchemeProvider: opts.CredentialTypeSchemeProvider,
 	}
 
@@ -57,8 +58,8 @@ type Graph struct {
 
 	repositoryPluginProvider     RepositoryPluginProvider // injection for resolving custom repository types
 	credentialPluginProvider     CredentialPluginProvider // injection for resolving custom credential types
-	identityTypeSchemeProvider   TypeSchemeProvider       // validates consumer identity types from config
-	credentialTypeSchemeProvider TypeSchemeProvider       // validates credential types from config
+	identityTypeRegistry        *IdentityTypeRegistry    // validates consumer identity types and accepted credentials
+	credentialTypeSchemeProvider TypeSchemeProvider        // validates credential types from config
 }
 
 // credentialTypeScheme returns the underlying scheme from the credential type
@@ -73,10 +74,10 @@ func (g *Graph) credentialTypeScheme() *runtime.Scheme {
 // consumerIdentityTypeScheme returns the underlying scheme from the consumer
 // identity type registry, or nil if no registry is configured.
 func (g *Graph) consumerIdentityTypeScheme() *runtime.Scheme {
-	if g.identityTypeSchemeProvider == nil {
+	if g.identityTypeRegistry == nil {
 		return nil
 	}
-	return g.identityTypeSchemeProvider.Scheme()
+	return g.identityTypeRegistry.Scheme()
 }
 
 // Compile-time interface check.
@@ -92,14 +93,19 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[str
 	return typedToMap(typed), nil
 }
 
-// ResolveTyped returns the stored runtime.Typed credential directly.
+// ResolveTyped resolves credentials for the given identity and returns them as a runtime.Typed.
+// The identity parameter accepts any runtime.Typed — typically a runtime.Identity map or a typed
+// identity struct that implements runtime.IdentityProvider.
 // The returned type depends on what was configured — currently *DirectCredentials for
 // inline Credentials/v1 configs, but will be the actual typed credential (e.g. *HelmCredentials)
 // when configs specify typed credential types.
-func (g *Graph) ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
-	if _, err := identity.ParseType(); err != nil {
-		err = errors.Join(ErrUnknown, err)
-		return nil, fmt.Errorf("to be resolved from the credential graph, a consumer identity type is required: %w", err)
+func (g *Graph) ResolveTyped(ctx context.Context, identity runtime.Typed) (runtime.Typed, error) {
+	if identity == nil {
+		return nil, fmt.Errorf("to be resolved from the credential graph, a valid identity is required: %w", ErrUnknown)
+	}
+
+	if identity.GetType().IsEmpty() {
+		return nil, fmt.Errorf("to be resolved from the credential graph, a consumer identity type is required: %w", ErrUnknown)
 	}
 
 	// Attempt direct resolution via the DAG.
@@ -114,11 +120,11 @@ func (g *Graph) ResolveTyped(ctx context.Context, identity runtime.Identity) (ru
 	if err != nil {
 		if errors.Is(err, ErrNoDirectCredentials) || errors.Is(err, ErrNoIndirectCredentials) {
 			err = errors.Join(ErrNotFound, err)
-			return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
+			return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity, err)
 		}
 
 		err = errors.Join(ErrUnknown, err)
-		return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
+		return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity, err)
 	}
 
 	return creds, nil

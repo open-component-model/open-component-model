@@ -38,12 +38,12 @@ func (g *syncedDag) getVertex(id string) (v *dag.Vertex[string], ok bool) {
 	return v, ok
 }
 
-func (g *syncedDag) getIdentity(id string) (runtime.Identity, bool) {
+func (g *syncedDag) getIdentity(id string) (runtime.Typed, bool) {
 	v, ok := g.getVertex(id)
 	if !ok {
 		return nil, false
 	}
-	identity, ok := v.Attributes[attributeIdentity].(runtime.Identity)
+	identity, ok := v.Attributes[attributeIdentity].(runtime.Typed)
 	return identity, ok
 }
 
@@ -72,20 +72,29 @@ func (g *syncedDag) addEdge(from, to string, attributes ...map[string]any) error
 	return g.dag.AddEdge(from, to, attributes...)
 }
 
-// matchAnyNode attempts to locate the graph vertex corresponding to the provided node ID.
+// matchAnyNode attempts to locate the graph vertex corresponding to the provided identity.
+// The identity parameter accepts any runtime.Typed that can be converted to a runtime.Identity
+// via toIdentity.
 // If an exact match is not found, it falls back to a wildcard search by comparing identities
 // using the Identity.Match method.
 // This wildcard search is the reason there can be undiscovered cycles at runtime.
-func (g *syncedDag) matchAnyNode(identity runtime.Identity) (*dag.Vertex[string], error) {
+func (g *syncedDag) matchAnyNode(identity runtime.Typed) (*dag.Vertex[string], error) {
+	id, err := toIdentity(identity)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert to identity for matching: %w", err)
+	}
 	g.dagMu.RLock()
 	defer g.dagMu.RUnlock()
-	node := identity.String()
+	node := id.String()
 	if vertex, ok := g.dag.Vertices[node]; ok {
 		return vertex, nil
 	}
 	for _, vertex := range g.dag.Vertices {
-		existing := vertex.Attributes[attributeIdentity].(runtime.Identity)
-		if identity.Match(existing) {
+		existing, err := toIdentity(vertex.Attributes[attributeIdentity].(runtime.Typed))
+		if err != nil {
+			continue
+		}
+		if id.Match(existing) {
 			return vertex, nil
 		}
 	}
@@ -93,12 +102,18 @@ func (g *syncedDag) matchAnyNode(identity runtime.Identity) (*dag.Vertex[string]
 }
 
 // addIdentity ensures that a given identity is represented as a vertex in the graph.
+// The identity parameter accepts any runtime.Typed that can be converted to a runtime.Identity
+// via toIdentity.
 // It also establishes edges between the new node and any existing nodes that match with each other.
-func (g *syncedDag) addIdentity(identity runtime.Identity) error {
+func (g *syncedDag) addIdentity(identity runtime.Typed) error {
+	id, err := toIdentity(identity)
+	if err != nil {
+		return fmt.Errorf("failed to convert to identity: %w", err)
+	}
 	g.dagMu.Lock()
 	defer g.dagMu.Unlock()
 
-	node := identity.String()
+	node := id.String()
 	if g.dag.Contains(node) {
 		return nil
 	}
@@ -111,15 +126,18 @@ func (g *syncedDag) addIdentity(identity runtime.Identity) error {
 		if vertex.ID == node {
 			continue
 		}
-		existing := vertex.Attributes[attributeIdentity].(runtime.Identity)
-		if identity.Match(existing) {
+		existing, err := toIdentity(vertex.Attributes[attributeIdentity].(runtime.Typed))
+		if err != nil {
+			continue
+		}
+		if id.Match(existing) {
 			if err := g.dag.AddEdge(vertex.ID, node, map[string]any{
 				"kind": "cyclic-only",
 			}); err != nil {
 				return err
 			}
 		}
-		if existing.Match(identity) {
+		if existing.Match(id) {
 			if err := g.dag.AddEdge(node, vertex.ID, map[string]any{
 				"kind": "cyclic-only",
 			}); err != nil {

@@ -30,12 +30,23 @@ const (
 	IdentityAttributePort = "port"
 )
 
+// IdentityProvider is an interface that typed identity structs can implement to
+// produce a runtime.Identity map for graph lookup and matching. This allows the
+// credential graph to accept runtime.Typed identity objects and convert them to
+// the map representation needed for DAG operations.
+type IdentityProvider interface {
+	ToIdentity() Identity
+}
+
 // Identity is a map that represents a set of attributes that uniquely identity
 // arbitrary resources. It is used in various places in Open Component Model to uniquely
 // identity objects such as resources or components.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 type Identity map[string]string
+
+// ToIdentity implements IdentityProvider. It returns the identity itself.
+func (i Identity) ToIdentity() Identity { return i }
 
 func (i Identity) DeepCopyTyped() Typed {
 	return i.DeepCopy()
@@ -99,13 +110,12 @@ func ParseIdentity(s string) (Identity, error) {
 	return identity, nil
 }
 
-// GetType extracts the type or panics if failing.
-// It should only be used if the type is known to be present and valid.
-// For more information, check ParseType.
+// GetType extracts the type from the identity. Returns an empty Type if the
+// type attribute is missing or invalid. Use ParseType for detailed error information.
 func (i Identity) GetType() Type {
 	typ, err := i.ParseType()
 	if err != nil {
-		panic(err)
+		return Type{}
 	}
 	return typ
 }

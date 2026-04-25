@@ -13,7 +13,7 @@ import (
 
 // resolveFromGraph resolves credentials for a given identity by traversing the graph.
 // Returns a runtime.Typed credential stored on the matching node.
-func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
+func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Typed) (runtime.Typed, error) {
 	// Check for cancellation to exit early
 	select {
 	case <-ctx.Done():
@@ -32,31 +32,41 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 		return creds, nil
 	}
 
-	// Non–leaf node: recursively resolve each child and merge the results.
-	node := identity.String()
+	id, err := toIdentity(identity)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert identity for caching: %w", err)
+	}
+	node := id.String()
 
+	// Non–leaf node: recursively resolve each child and merge the results.
 	result := make(map[string]string)
-	for id := range vertex.Edges {
-		childID, ok := g.getIdentity(id)
+	for edgeID := range vertex.Edges {
+		childTyped, ok := g.getIdentity(edgeID)
 		if !ok {
-			return nil, fmt.Errorf("no credentials for node %q available: child node %q not found", vertex.ID, id)
+			return nil, fmt.Errorf("no credentials for node %q available: child node %q not found", vertex.ID, edgeID)
 		}
-		childCredentials, err := g.resolveFromGraph(ctx, childID)
+		childCredentials, err := g.resolveFromGraph(ctx, childTyped)
 		if err != nil {
 			return nil, err
 		}
-		plugin, err := g.credentialPluginProvider.GetCredentialPlugin(ctx, childID)
+		plugin, err := g.credentialPluginProvider.GetCredentialPlugin(ctx, childTyped)
 		if err != nil {
-			return nil, fmt.Errorf("could not get credential plugin for node %q: %w", childID, err)
+			return nil, fmt.Errorf("could not get credential plugin for node %q: %w", edgeID, err)
 		}
 
 		// Extract map from child credentials for plugin resolution.
 		childMap := typedToMap(childCredentials)
 
+		// Plugin interfaces still use runtime.Identity — convert for the call.
+		childID, err := toIdentity(childTyped)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert child identity %q: %w", edgeID, err)
+		}
+
 		// Let the plugin resolve the child's credentials.
 		credentials, err := plugin.Resolve(ctx, childID, childMap)
 		if err != nil {
-			return nil, fmt.Errorf("no credentials for node %q resolved from plugin: %w", childID, err)
+			return nil, fmt.Errorf("no credentials for node %q resolved from plugin: %w", edgeID, err)
 		}
 
 		// Merge the resolved credentials into the result
