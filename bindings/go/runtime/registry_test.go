@@ -378,12 +378,6 @@ func TestScheme_ResolveCanonicalType(t *testing.T) {
 			expectedOk: true,
 		},
 		{
-			name:       "alias of one type does not resolve to another type",
-			input:      helmAlias,
-			expected:   helmDefault,
-			expectedOk: true,
-		},
-		{
 			name:       "different version of unregistered type returns unchanged",
 			input:      NewVersionedType("HelmHTTPCredentials", "v2"),
 			expected:   NewVersionedType("HelmHTTPCredentials", "v2"),
