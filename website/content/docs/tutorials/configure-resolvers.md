@@ -113,7 +113,7 @@ components:
         version: "1.0.0"
         type: plainText
         input:
-          type: utf8
+          type: UTF8/v1
           text: "backend service configuration"
 ```
 
@@ -152,7 +152,7 @@ components:
         version: "1.0.0"
         type: plainText
         input:
-          type: utf8
+          type: UTF8/v1
           text: "frontend service configuration"
 ```
 
@@ -199,7 +199,7 @@ components:
         version: "1.0.0"
         type: plainText
         input:
-          type: utf8
+          type: UTF8/v1
           text: "app deployment configuration"
 ```
 

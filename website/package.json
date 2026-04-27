@@ -52,7 +52,7 @@
     "shx": "0.4.0",
     "smol-toml": "1.6.1",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.58.2"
+    "typescript-eslint": "8.59.0"
   },
   "overrides": {
     "semver": "^7.5.4",
@@ -66,5 +66,5 @@
     "node": ">=25.8.0",
     "npm": ">=11.11.0"
   },
-  "packageManager": "npm@11.12.1"
+  "packageManager": "npm@11.13.0"
 }

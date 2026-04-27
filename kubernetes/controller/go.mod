@@ -4,7 +4,7 @@ go 1.26.1
 
 // Replace digest lib to master to gather access to BLAKE3.
 // xref: https://github.com/opencontainers/go-digest/pull/66
-replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20260318163012-137fd2bb009d
+replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20260423074420-acc66fb5367c
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
@@ -26,23 +26,23 @@ require (
 
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
-	github.com/docker/cli v29.3.0+incompatible
+	github.com/docker/cli v29.3.1+incompatible
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	golang.org/x/time v0.15.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.12
 	ocm.software/open-component-model/bindings/go/configuration v0.0.12
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260423115607-7e918419c9d9
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260423115607-7e918419c9d9
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260423205942-5236fa6f4d3f
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260423205942-5236fa6f4d3f
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260423115607-7e918419c9d9
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260423205942-5236fa6f4d3f
 	ocm.software/open-component-model/bindings/go/oci v0.0.40
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260423115607-7e918419c9d9
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260423205942-5236fa6f4d3f
 	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260423115607-7e918419c9d9
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260423205942-5236fa6f4d3f
 	sigs.k8s.io/release-utils v0.12.3
 )
 
@@ -140,7 +140,7 @@ require (
 	golang.org/x/mod v0.34.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/tools v0.43.0 // indirect

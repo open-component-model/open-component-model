@@ -262,14 +262,14 @@ func TestConstructWithMockInputMethod(t *testing.T) {
 
 func TestConstructWithResourceAccess(t *testing.T) {
 	constructor := setupTestComponent(t, `
-      - name: test-resource
-        version: v1.0.0
-        relation: external
-        type: blob
-        access:
-          type: localBlob
-          mediaType: application/octet-stream
-          localReference: test-ref
+       - name: test-resource
+         version: v1.0.0
+         relation: external
+         type: blob
+         access:
+           type: LocalBlob
+           mediaType: application/octet-stream
+           localReference: test-ref
 `)
 
 	// Create a mock target repository

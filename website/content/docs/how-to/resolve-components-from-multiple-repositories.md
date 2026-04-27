@@ -13,8 +13,10 @@ in different OCI registries.
 ## Prerequisites
 
 - [OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) installed
-- [Components]({{< relref "docs/getting-started/create-component-version.md" >}}) already pushed to separate OCI registries
-- An OCM configuration file (see [.ocmconfig documentation](https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_configfile.md))
+- [Components]({{< relref "docs/getting-started/create-component-version.md" >}}) already pushed to separate OCI
+  registries
+- An OCM configuration file (
+  see [.ocmconfig documentation](https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_configfile.md))
 
 ## Steps
 
@@ -116,14 +118,19 @@ my-org.example/component-b         │ 1.0.0   │
 {{< /steps >}}
 
 {{< callout context="tip" >}}
-If you are migrating from the deprecated `ocm.config.ocm.software` fallback resolvers, see [Migrate from Deprecated Resolvers]({{< relref "migrate-from-deprecated-resolvers.md" >}}) for a step-by-step guide.
+If you are migrating from the deprecated `ocm.config.ocm.software` fallback resolvers,
+see [Migrate from Deprecated Resolvers]({{< relref "migrate-from-deprecated-resolvers.md" >}}) for a step-by-step guide.
 {{< /callout >}}
 
 ## Tips
 
 - **If multiple components share a registry path**, use a glob pattern (e.g. `example.com/services/*`) instead of
   listing each component individually. See
-  [Component Name Patterns]({{< relref "docs/reference/resolver-configuration.md#component-name-patterns" >}}) for the full syntax.
+  [Component Name Patterns]({{< relref "docs/reference/resolver-configuration.md#component-name-patterns" >}}) for the
+  full syntax.
+- **If different versions of the same component live in different registries**, use the `versionConstraint` field to
+  route specific version ranges to the right repository. See
+  [Version Constraints]({{< relref "docs/reference/resolver-configuration.md#version-constraints" >}}) for details.
 - **If you need to transfer components to another registry**, use `ocm transfer cv --recursive --copy-resources` with
   the same config file. See
   [OCM Transfer]({{< relref "docs/concepts/resolvers.md#ocm-transfer" >}}) for details.
@@ -132,13 +139,16 @@ If you are migrating from the deprecated `ocm.config.ocm.software` fallback reso
 
 ## Next Steps
 
-- [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}) — Configure registry credentials
+- [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}) — Configure
+  registry credentials
 - [Tutorial: Working with Resolvers]({{< relref "docs/tutorials/configure-resolvers.md" >}}) — Hands-on tutorial for
   building and pushing components with resolvers
 
 ## Related Documentation
 
-- [How-To: Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migrate-from-deprecated-resolvers.md" >}}) — Replace deprecated fallback
+- [How-To: Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migrate-from-deprecated-resolvers.md" >}}) —
+  Replace deprecated fallback
   resolvers with glob-based resolvers
 - [Concept: Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) — High-level introduction to resolvers
-- [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) — Full configuration schema, repository types, and pattern syntax
+- [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) — Full configuration
+  schema, repository types, and pattern syntax
