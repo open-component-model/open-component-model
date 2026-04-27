@@ -103,8 +103,11 @@ All commits must meet two requirements:
 
 ```bash
 git add <files>
-git commit -s -m "Brief description of your changes"
+git commit -s -S -m "Brief description of your changes"
 ```
+
+The `-s` flag adds the DCO sign-off line; the `-S` flag creates the cryptographic signature. If you have not set up
+commit signing yet, follow the [GitHub signing guide](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits) first.
 {{< /step >}}
 
 {{< step >}}
@@ -164,7 +167,7 @@ To help your pull request move through review smoothly, keep these points in min
 
 As artificial intelligence evolves, AI-generated code is becoming valuable for many software projects, including
 open-source initiatives. While we recognize the potential benefits of incorporating AI-generated content into our
-open-source projects there are certain requirements that need to be reflected and adhered to when making contributions.
+open-source projects, there are certain requirements that need to be reflected and adhered to when making contributions.
 
 When using AI-generated code contributions in OSS Projects, their usage needs to align with Open-Source Software values
 and legal requirements. We have established these essential guidelines to help contributors navigate the complexities of

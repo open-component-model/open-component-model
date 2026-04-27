@@ -81,7 +81,7 @@ In addition to the [general prerequisites](../../CONTRIBUTING.md#prerequisites),
 - **[Kind](https://kind.sigs.k8s.io/)** — required for E2E tests
 - **[kro](https://kro.run)** — required for E2E tests
 
-All other tools (controller-gen, kustomize, envtest, helm-docs, yq) are installed automatically by the Taskfile into
+All other tools (controller-gen, envtest, helm-docs, yq) are installed automatically by the Taskfile into
 `kubernetes/controller/bin/`. Their versions are pinned in `kubernetes/controller/.env`.
 
 ## Building
