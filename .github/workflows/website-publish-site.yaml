@@ -9,6 +9,12 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/website-publish-site.yaml'
+      # Paths that are relevant for tracking changes on `main` version.
+      # CRDs are generated from api/v1alpha1 at build time via controller-gen.
+      - 'cli/docs/reference/**'
+      - 'bindings/go/constructor/spec/v1/resources/**'
+      - 'bindings/go/descriptor/v2/resources/**'
+      - 'kubernetes/controller/api/v1alpha1/**'
 
 permissions:
   contents: read
@@ -48,6 +54,21 @@ jobs:
         with:
           hugo-version: '0.160.0'
           extended: true
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: kubernetes/controller/go.mod
+          cache-dependency-path: kubernetes/controller/go.sum
+
+      - name: Generate controller CRDs for `main` site version
+        working-directory: kubernetes/controller
+        env:
+          CONTROLLER_TOOLS_VERSION: v0.20.1
+        run: |
+          mkdir -p bin/gen/crd
+          go run "sigs.k8s.io/controller-tools/cmd/controller-gen@${CONTROLLER_TOOLS_VERSION}" \
+            crd paths="./..." output:crd:artifacts:config=bin/gen/crd
 
       - name: Install deps and Build
         working-directory: website
