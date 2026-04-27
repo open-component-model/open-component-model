@@ -132,8 +132,8 @@ function resolveNeedsRefinementStatus(statusField) {
 
   const statusName = matches[0].name;
 
-  if (statusName.includes('"')) {
-    throw new Error(`Status name contains a double quote which is unsupported in the filter: ${statusName}`);
+  if (/["\\/]/.test(statusName)) {
+    throw new Error(`Status name contains characters unsupported in the filter (", \\, /): ${statusName}`);
   }
 
   return statusName;
@@ -173,7 +173,7 @@ async function fetchProjectConfig(github, core, { org, projectNumber }) {
 /**
  * Fetch all stale items matching the server-side filter (paginated).
  */
-async function fetchStaleItems(github, core, { projectId, statusName }) {
+async function fetchStaleItems(github, core, { projectId, statusName, limit }) {
   const filter = `sprint:<@current status:"${statusName}"`;
   core.info(`Filter: ${filter}`);
 
@@ -192,6 +192,11 @@ async function fetchStaleItems(github, core, { projectId, statusName }) {
       core.info(`Matched items (server-side): ${totalCount}`);
     }
     items.push(...nodes);
+
+    if (limit !== undefined && items.length >= limit) {
+      items.length = limit;
+      break;
+    }
 
     cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null;
   } while (cursor);
@@ -261,16 +266,14 @@ export default async function updateExpiredSprints({ github, core, context, proj
   }
   core.info(`Current sprint: ${currentSprint.title} (${currentSprint.id})`);
 
-  const staleItems = await fetchStaleItems(github, core, { projectId, statusName });
+  const itemsToProcess = await fetchStaleItems(github, core, { projectId, statusName, limit });
 
-  core.info(`Found ${staleItems.length} issue(s) in "Needs Refinement" with expired sprints`);
+  core.info(`Found ${itemsToProcess.length} issue(s) in "Needs Refinement" with expired sprints`);
 
-  if (staleItems.length === 0) {
+  if (itemsToProcess.length === 0) {
     core.info("Nothing to update.");
     return;
   }
-
-  const itemsToProcess = limit !== undefined ? staleItems.slice(0, limit) : staleItems;
 
   if (dryRun) {
     core.info("\n--- DRY RUN — no changes will be made ---");
