@@ -13,9 +13,9 @@ import (
 func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 	ctx := t.Context()
 
-	rawRepo1 := &runtime.Raw{}
-	rawRepo2 := &runtime.Raw{}
-	rawRepo3 := &runtime.Raw{}
+	rawRepo1 := &runtime.Raw{Type: runtime.Type{Name: "repo1"}}
+	rawRepo2 := &runtime.Raw{Type: runtime.Type{Name: "repo2"}}
+	rawRepo3 := &runtime.Raw{Type: runtime.Type{Name: "repo3"}}
 
 	cases := []struct {
 		name      string
@@ -80,7 +80,7 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 					ComponentNamePattern: "test-component",
 				},
 			},
-			want: rawRepo3,
+			want: rawRepo1,
 			err:  assert.NoError,
 		},
 		{
