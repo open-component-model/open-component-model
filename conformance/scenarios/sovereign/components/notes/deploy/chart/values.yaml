@@ -3,6 +3,7 @@ replicaCount: 2
 
 image:
   repository: localhost:5001/acme.org/sovereign/notes
+  # Populated at deploy time by the RGD via ${notesImageResource.status.additional.oci.digest}.
   digest: ""
   pullPolicy: IfNotPresent
 
