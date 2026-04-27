@@ -9,7 +9,7 @@ For the general contribution process (fork-and-pull workflow, commit requirement
 ## Prerequisites
 
 - **Go 1.26+**
-- **[Task](https://taskfile.dev/)** - our build runner (replaces Make)
+- **[Task](https://taskfile.dev/)** - runs all build, test, and lint commands
 - **Docker** - required for integration tests and container builds
 
 ## Project Structure
