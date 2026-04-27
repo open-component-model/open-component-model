@@ -212,7 +212,11 @@ func extractResolvable(ctx context.Context, g *Graph, creds []runtime.Typed) (ru
 		var direct v1.DirectCredentials
 		if err := scheme.Convert(cred, &direct); err == nil {
 			if mergedDirect == nil {
-				mergedDirect = &direct
+				mergedDirect = &v1.DirectCredentials{
+					Type:       direct.Type,
+					Properties: make(map[string]string, len(direct.Properties)),
+				}
+				maps.Copy(mergedDirect.Properties, direct.Properties)
 			} else {
 				maps.Copy(mergedDirect.Properties, direct.Properties)
 			}

@@ -2,14 +2,58 @@ package credentials
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+// logRecord captures a single slog record for test assertions.
+type logRecord struct {
+	Level   slog.Level
+	Message string
+	Attrs   map[string]string
+}
+
+// capturingHandler is a slog.Handler that captures log records for test assertions.
+type capturingHandler struct {
+	records *[]logRecord
+}
+
+func (h *capturingHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+
+func (h *capturingHandler) Handle(_ context.Context, r slog.Record) error {
+	rec := logRecord{
+		Level:   r.Level,
+		Message: r.Message,
+		Attrs:   make(map[string]string),
+	}
+	r.Attrs(func(a slog.Attr) bool {
+		rec.Attrs[a.Key] = a.Value.String()
+		return true
+	})
+	*h.records = append(*h.records, rec)
+	return nil
+}
+
+func (h *capturingHandler) WithAttrs(_ []slog.Attr) slog.Handler  { return h }
+func (h *capturingHandler) WithGroup(_ string) slog.Handler        { return h }
+
+// withCaptureLogs installs a capturing slog handler for the duration of fn,
+// then restores the previous default logger.
+func withCaptureLogs(fn func()) []logRecord {
+	var records []logRecord
+	prev := slog.Default()
+	slog.SetDefault(slog.New(&capturingHandler{records: &records}))
+	defer slog.SetDefault(prev)
+	fn()
+	return records
+}
 
 func Test_isAccepted_ExactMatch(t *testing.T) {
 	credType := runtime.NewVersionedType("HelmHTTPCredentials", "v1")
@@ -107,6 +151,31 @@ func Test_extractResolvable_DirectCredentialsMerge(t *testing.T) {
 	assert.Equal(t, "secret", dc.Properties["password"])
 }
 
+func Test_extractResolvable_DirectCredentials_NilProperties_NoPanic(t *testing.T) {
+	g := &Graph{}
+
+	// First DirectCredentials entry has no properties (nil map).
+	dc1 := &runtime.Raw{
+		Type: runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+		Data: []byte(`{"type":"Credentials/v1"}`),
+	}
+	// Second DirectCredentials entry has properties — would panic on maps.Copy
+	// if the accumulator's Properties map is nil.
+	dc2 := &runtime.Raw{
+		Type: runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+		Data: []byte(`{"type":"Credentials/v1","properties":{"username":"admin"}}`),
+	}
+
+	resolved, remaining, err := extractResolvable(context.Background(), g, []runtime.Typed{dc1, dc2})
+	require.NoError(t, err)
+	assert.Empty(t, remaining)
+
+	require.NotNil(t, resolved)
+	dc, ok := resolved.(*v1.DirectCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "admin", dc.Properties["username"])
+}
+
 // staticSchemeProvider is a test helper implementing TypeSchemeProvider.
 type staticSchemeProvider struct {
 	scheme *runtime.Scheme
@@ -114,4 +183,154 @@ type staticSchemeProvider struct {
 
 func (s *staticSchemeProvider) Scheme() *runtime.Scheme {
 	return s.scheme
+}
+
+func Test_validateConsumerIdentityTypes_UnparseableType(t *testing.T) {
+	registry := NewIdentityTypeRegistry()
+	g := &Graph{
+		syncedDag:            newSyncedDag(),
+		identityTypeRegistry: registry,
+	}
+
+	// Identity without a type set — ParseType will fail.
+	identity := runtime.Identity{}
+	config := &cfgRuntime.Config{
+		Consumers: []cfgRuntime.Consumer{
+			{Identities: []runtime.Identity{identity}},
+		},
+	}
+
+	records := withCaptureLogs(func() {
+		validateConsumerIdentityTypes(context.Background(), g, config)
+	})
+
+	require.Len(t, records, 1)
+	assert.Equal(t, slog.LevelWarn, records[0].Level)
+	assert.Equal(t, "consumer identity has unparseable type", records[0].Message)
+}
+
+func Test_validateConsumerIdentityTypes_UnregisteredType(t *testing.T) {
+	registry := NewIdentityTypeRegistry()
+	g := &Graph{
+		syncedDag:            newSyncedDag(),
+		identityTypeRegistry: registry,
+	}
+
+	identity := runtime.Identity{"type": "UnknownIdentity/v1"}
+	config := &cfgRuntime.Config{
+		Consumers: []cfgRuntime.Consumer{
+			{Identities: []runtime.Identity{identity}},
+		},
+	}
+
+	records := withCaptureLogs(func() {
+		validateConsumerIdentityTypes(context.Background(), g, config)
+	})
+
+	require.Len(t, records, 1)
+	assert.Equal(t, slog.LevelWarn, records[0].Level)
+	assert.Equal(t, "consumer identity type not registered in scheme", records[0].Message)
+	assert.Equal(t, "UnknownIdentity/v1", records[0].Attrs["type"])
+}
+
+func Test_validateConsumerIdentityTypes_CredentialNotAccepted(t *testing.T) {
+	identityType := runtime.NewVersionedType("TestIdentity", "v1")
+	acceptedCredType := runtime.NewVersionedType("AcceptedCred", "v1")
+	wrongCredType := runtime.NewVersionedType("WrongCred", "v1")
+
+	registry := NewIdentityTypeRegistry()
+	require.NoError(t, registry.RegisterWithAcceptedCredentials(
+		&runtime.Raw{},
+		[]runtime.Type{identityType},
+		[]runtime.Type{acceptedCredType},
+	))
+
+	g := &Graph{
+		syncedDag:            newSyncedDag(),
+		identityTypeRegistry: registry,
+	}
+
+	identity := runtime.Identity{"type": identityType.String()}
+	config := &cfgRuntime.Config{
+		Consumers: []cfgRuntime.Consumer{
+			{
+				Identities:  []runtime.Identity{identity},
+				Credentials: []runtime.Typed{&runtime.Raw{Type: wrongCredType}},
+			},
+		},
+	}
+
+	records := withCaptureLogs(func() {
+		validateConsumerIdentityTypes(context.Background(), g, config)
+	})
+
+	// Filter to warnings only (isAccepted may emit debug-level logs too).
+	var warnings []logRecord
+	for _, r := range records {
+		if r.Level == slog.LevelWarn {
+			warnings = append(warnings, r)
+		}
+	}
+
+	require.Len(t, warnings, 1)
+	assert.Equal(t, "credential type not accepted by identity type", warnings[0].Message)
+	assert.Equal(t, "WrongCred/v1", warnings[0].Attrs["credentialType"])
+	assert.Equal(t, "TestIdentity/v1", warnings[0].Attrs["identityType"])
+}
+
+func Test_validateConsumerIdentityTypes_AcceptedCredential_NoWarning(t *testing.T) {
+	identityType := runtime.NewVersionedType("TestIdentity", "v1")
+	acceptedCredType := runtime.NewVersionedType("AcceptedCred", "v1")
+
+	registry := NewIdentityTypeRegistry()
+	require.NoError(t, registry.RegisterWithAcceptedCredentials(
+		&runtime.Raw{},
+		[]runtime.Type{identityType},
+		[]runtime.Type{acceptedCredType},
+	))
+
+	g := &Graph{
+		syncedDag:            newSyncedDag(),
+		identityTypeRegistry: registry,
+	}
+
+	identity := runtime.Identity{"type": identityType.String()}
+	config := &cfgRuntime.Config{
+		Consumers: []cfgRuntime.Consumer{
+			{
+				Identities:  []runtime.Identity{identity},
+				Credentials: []runtime.Typed{&runtime.Raw{Type: acceptedCredType}},
+			},
+		},
+	}
+
+	records := withCaptureLogs(func() {
+		validateConsumerIdentityTypes(context.Background(), g, config)
+	})
+
+	// No warnings should be emitted for accepted credential types.
+	var warnings []logRecord
+	for _, r := range records {
+		if r.Level == slog.LevelWarn {
+			warnings = append(warnings, r)
+		}
+	}
+	assert.Empty(t, warnings)
+}
+
+func Test_validateConsumerIdentityTypes_NilRegistry_Noop(t *testing.T) {
+	g := &Graph{
+		syncedDag: newSyncedDag(),
+	}
+	config := &cfgRuntime.Config{
+		Consumers: []cfgRuntime.Consumer{
+			{Identities: []runtime.Identity{runtime.Identity{"type": "Anything/v1"}}},
+		},
+	}
+
+	records := withCaptureLogs(func() {
+		validateConsumerIdentityTypes(context.Background(), g, config)
+	})
+
+	assert.Empty(t, records)
 }
