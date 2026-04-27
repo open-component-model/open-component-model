@@ -5,8 +5,110 @@ the [central contributing guide](https://ocm.software/community/contributing/).
 
 ## Overview
 
-The CLI is a thin command layer on top of the Go bindings in `bindings/go/`. It provides user-facing commands for
-working with OCM component versions, repositories, and plugins.
+The CLI is a thin [Cobra](https://github.com/spf13/cobra) command layer on top of the Go bindings in `bindings/go/`.
+It provides user-facing commands for working with OCM component versions, repositories, and plugins. The architecture
+has three layers:
+
+- **Command layer** (`cli/cmd/`) — Cobra commands that parse flags, validate input, and call into the bindings.
+- **Context layer** (`cli/internal/context/`) — A shared context that wires together configuration, the plugin manager,
+  and credential resolution before any command runs.
+- **Binding layer** (`bindings/go/`) — All OCM business logic. Commands import binding modules directly.
+
+## Command Structure
+
+Each command lives in its own package under `cli/cmd/`. The package exports a single `New()` function that returns a
+`*cobra.Command`. The entry point is `cli/main.go`, which calls into the root command defined in `cli/cmd/cmd.go`.
+
+```
+cli/
+├── main.go              # Entry point
+├── cmd/
+│   ├── cmd.go           # Root command, registers top-level commands
+│   ├── get/             # Parent command grouping subcommands
+│   ├── version/         # Simple leaf command
+│   ├── setup/hooks/     # PersistentPreRunE bootstrap
+│   └── ...
+```
+
+There are two kinds of commands:
+
+- **Parent commands** (e.g., `get`) group subcommands. Their `RunE` returns `cmd.Help()` and they register children via
+  `cmd.AddCommand()`. See `cli/cmd/get/cmd.go` for a minimal example.
+- **Leaf commands** contain the actual logic. See `cli/cmd/version/version.go` for a simple single-command example.
+
+## Bootstrap and Context
+
+Before any command runs, the root command's `PersistentPreRunE` hook (`cli/cmd/setup/hooks/pre_run.go`) bootstraps the
+shared context. Because it is `Persistent`, Cobra propagates it to every subcommand. The bootstrap sequence is:
+
+1. **Logging** — Configure `slog` from `--log-level` / `--log-format` flags.
+2. **OCM config** — Load and merge configuration from standard search paths (`$OCM_CONFIG`, `~/.config/ocm/config`,
+   etc.). See `cli/cmd/configuration/ocm_config.go` for the full search order.
+3. **Filesystem config** — Set up temporary folder and working directory paths.
+4. **Plugin manager** — Initialize the plugin system: register builtin plugins, discover external plugins from the
+   plugin directory.
+5. **Credential graph** — Build the credential resolution graph from configuration.
+6. **Context registration** — Store the assembled context in `cmd.Context()`.
+
+After bootstrap, any command retrieves the context via:
+
+```go
+ocmctx := context.FromContext(cmd.Context())
+ocmctx.PluginManager()      // Plugin system
+ocmctx.Configuration()      // OCM config
+ocmctx.CredentialGraph()    // Credential resolution
+ocmctx.FilesystemConfig()   // Filesystem paths
+ocmctx.SubsystemRegistry()  // Type introspection
+```
+
+The context struct and its accessors live in `cli/internal/context/context.go`.
+
+> **Note:** The `add component-version` command overrides `PersistentPreRunE` to inject working-directory resolution
+> from the component constructor path before calling the shared bootstrap. This is the only command that customizes
+> the bootstrap — all others inherit the root hook directly.
+
+## Plugin System
+
+The plugin manager (`bindings/go/plugin/manager/`) is the central integration point for OCM extensibility. For a
+conceptual overview of how plugins work, see the
+[Plugin System](https://ocm.software/docs/concepts/plugin-system/) page on the project website.
+
+From a contributor's perspective, the key points are:
+
+- The manager organizes plugins into typed registries — one for each capability. For the current list of registries,
+  see the `PluginManager` struct in `bindings/go/plugin/manager/manager.go`.
+- **Builtin plugins** are compiled into the CLI and registered at startup in `cli/internal/plugin/builtin/builtin.go`.
+- **External plugins** are discovered from the plugin directory (default `~/.config/ocm/plugins`, overridable with
+  `--plugin-directory` or via OCM config).
+- Commands interact with plugins through the manager's registries, never directly with plugin implementations. This
+  allows the same command code to work with both builtin and external plugins transparently.
+
+## How to Add a New Command
+
+1. **Create a directory** — Add `cli/cmd/<name>/` with a `cmd.go` file.
+
+2. **Implement `New()`** — Return a `*cobra.Command` with your flags and `RunE` handler. For a leaf command (no
+   subcommands), see `cli/cmd/version/version.go`. For a parent command that groups subcommands, see
+   `cli/cmd/get/cmd.go`.
+
+3. **Register the command** — Import your package in `cli/cmd/cmd.go` and add it via `cmd.AddCommand()`.
+
+4. **Generate docs** — If you add or modify commands, regenerate the CLI reference docs:
+   ```bash
+   task cli:generate/docs
+   ```
+
+## Coding Patterns
+
+The project's [coding patterns guide](../docs/coding-patterns.md) covers conventions used across the codebase. The
+CLI-specific section covers:
+
+- **Command construction** — `New()` pattern, parent/child wiring.
+- **Dependency injection** — Context-based access to plugins, config, and credentials.
+- **Custom flag types** — Enum and file flags with validation at set-time.
+- **Output formatting** — Pluggable renderer system (JSON, YAML, NDJSON, Tree, Table) with static and live modes.
+
+The general sections on constructors, error handling, concurrency, and the runtime type system apply equally to CLI code.
 
 ## Building
 
@@ -19,93 +121,40 @@ task cli:build
 
 # Install to /usr/local/bin (interactive, asks for confirmation)
 task cli:install
-
-# Build for all supported platforms (linux/darwin/windows, amd64/arm64)
-task cli:build/multiarch
 ```
 
-The build embeds version information via `-ldflags`. The version defaults to a timestamp and short commit hash
-(`0.0.0-YYYYMMDDHHMMSS-<commit>`) unless `VERSION` is set explicitly.
+The build embeds version information via `-ldflags`. The version defaults to a timestamp and short commit hash unless
+`VERSION` is set explicitly.
 
-## Running Tests
-
-The CLI uses the same test framework as the Go bindings: Go's `testing` package with
-[testify](https://github.com/stretchr/testify).
-
-### Unit Tests
+## Testing
 
 ```bash
+# Unit tests (skips functions with "Integration" in the name)
 task cli:test
-```
 
-Unit tests skip any function whose name contains `Integration`.
-
-### Integration Tests
-
-Integration tests require Docker and exercise end-to-end workflows (transfer, plugin registry, downloads):
-
-```bash
+# Integration tests (requires Docker)
 task cli/integration:test/integration
 ```
 
-Integration test functions must include `Integration` in their name to be picked up by the Taskfile filter.
+Integration tests exercise end-to-end workflows (transfer, signing, plugin registry) against real OCI registries spun
+up via [testcontainers](https://golang.testcontainers.org/). They live in `cli/integration/`.
 
-## Testing Conventions
-
-Same conventions as the Go bindings:
-
-- Table-driven tests with `t.Run()`.
-- Use `r := require.New(t)` for assertions.
-- Use `t.Context()` for context.
-- Integration tests include `Integration` in the function name.
-
-## CLI Documentation Generation
-
-The CLI can generate its own reference documentation from command definitions:
-
-```bash
-# Generate Markdown docs (default)
-task cli:generate/docs
-
-# Generate Hugo-compatible docs (used by the website)
-task cli:generate/docs CLI_DOCUMENTATION_MODE=hugo CLI_DOCUMENTATION_DIRECTORY=cli/docs/reference
-```
-
-If you add or modify CLI commands, run the documentation generator and include the updated docs in your PR.
+For testing conventions (table-driven tests, `require.New(t)`, `t.Context()`, naming), see the testing section in the
+[coding patterns guide](../docs/coding-patterns.md).
 
 ## Relationship to Go Bindings
 
-The CLI imports most modules from `bindings/go/`. When working on CLI features, you will often need to modify a binding
-module first. The repository uses a Go workspace (`go.work`) so that local changes in a binding module are immediately
-visible to the CLI without publishing a release. See the
-[Go bindings contributing guide](../bindings/go/CONTRIBUTING.md#go-workspace) for how to set it up.
-
-Before submitting a PR, run `task test` from the repository root. This runs tests across all modules using the
-workspace, so you will see if a binding change breaks the CLI or vice versa.
-
-Note that `go.work` is gitignored and not used in CI. CI tests each module in isolation using the versions pinned in
-its `go.mod`. If your CLI change depends on a modified binding API, the binding change must be landed and released
-first. Then create a follow-up PR for the CLI that updates `go.mod` to the new binding version and adapts to the API
-change. The CLI PR cannot be merged before the binding release because CI would still resolve the old version and fail.
-
-If you add a new dependency on a binding module, update `cli/go.mod`:
+The CLI imports binding modules from `bindings/go/` directly in its `go.mod`. During local development, you can
+**optionally** set up a [Go workspace](https://go.dev/doc/tutorial/workspaces) so that changes in a binding module are
+immediately visible to the CLI without publishing a release:
 
 ```bash
-cd cli
-go get ocm.software/open-component-model/bindings/go/<module>
-go mod tidy
+task init/go.work
 ```
 
-## Component Construction
+Without `go.work`, each module resolves dependencies from the versions pinned in its `go.mod`. CI always tests without
+`go.work`, so each module is tested in isolation.
 
-The CLI is also packaged as an OCM component version for distribution. This is handled by:
-
-```bash
-# Build multi-arch binaries and OCI image, generate component constructor, create CTF
-task cli:generate/ctf
-
-# Verify the resulting CTF
-task cli:verify/ctf
-```
-
-You generally do not need to run these locally unless you are working on the release or packaging pipeline.
+If your CLI change depends on a modified binding API, the binding change must be landed and released first. Then create a
+follow-up PR for the CLI that updates `go.mod` to the new binding version. See the
+[Go bindings contributing guide](../bindings/go/CONTRIBUTING.md#cross-module-changes) for the full workflow.
