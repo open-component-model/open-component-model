@@ -256,7 +256,7 @@
 //
 // The entrypoints to the graph are [Graph.ResolveTyped] (preferred) and [Graph.Resolve] (deprecated).
 // [Graph.ResolveTyped] accepts any [runtime.Typed] (typically a [runtime.Identity] map or a typed
-// identity struct implementing [runtime.IdentityProvider]). [Graph.Resolve] accepts [runtime.Identity].
+// identity). [Graph.Resolve] accepts [runtime.Identity].
 // Both return the resolved credentials or an error.
 //
 // Error Handling:

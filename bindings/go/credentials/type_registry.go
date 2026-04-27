@@ -74,7 +74,7 @@ func (r *IdentityTypeRegistry) RegisterWithAcceptedCredentials(
 // returns the same result as querying with the versioned default.
 // Returns nil, false if the identity type has no declared accepted credential types.
 func (r *IdentityTypeRegistry) AcceptedCredentialTypes(identityType runtime.Type) ([]runtime.Type, bool) {
-	resolved := r.scheme.ResolveType(identityType)
+	resolved := r.scheme.ResolveCanonicalType(identityType)
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()

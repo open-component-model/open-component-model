@@ -35,11 +35,7 @@ func (s *StaticCredentialsResolver) Resolve(_ context.Context, identity runtime.
 }
 
 func (s *StaticCredentialsResolver) ResolveTyped(_ context.Context, identity runtime.Typed) (runtime.Typed, error) {
-	id, err := toIdentity(identity)
-	if err != nil {
-		return nil, err
-	}
-	creds, ok := s.staticCredentialsStore[id.String()]
+	creds, ok := s.staticCredentialsStore[nodeID(identity)]
 	if !ok {
 		return nil, ErrNotFound
 	}

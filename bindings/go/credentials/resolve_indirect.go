@@ -19,12 +19,9 @@ var ErrNoIndirectCredentials = errors.New("no indirect credentials found in grap
 // resolveFromRepository is invoked when the DAG does not yield direct credentials.
 // The method ensures that successful resolutions are cached for subsequent calls.
 func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Typed) (runtime.Typed, error) {
-	id, err := toIdentity(identity)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert identity for repository resolution: %w", err)
-	}
+	node := nodeID(identity)
 
-	if credentials, cached := g.getCredentials(id.String()); cached {
+	if credentials, cached := g.getCredentials(node); cached {
 		return credentials, nil
 	}
 
@@ -33,7 +30,15 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Type
 		// in case of an error, we try to resolve the credentials using the AnyConsumerIdentityType
 		// this is a fallback resolution mechanism intended for plugins that do not mind which
 		// consumer identity type is used.
-		fallbackID := id.DeepCopy()
+		//
+		// Deprecated: toIdentity is migration scaffolding — GetRepositoryPlugin still accepts
+		// runtime.Typed, but the fallback needs to construct a new Identity with AnyConsumerIdentityType.
+		// Phase 3 will remove this when plugin interfaces migrate to runtime.Typed.
+		fallbackID, idErr := toIdentity(identity)
+		if idErr != nil {
+			return nil, errors.Join(err, idErr, ErrNoIndirectCredentials)
+		}
+		fallbackID = fallbackID.DeepCopy()
 		fallbackID.SetType(AnyConsumerIdentityType)
 		var anyErr error
 		plugin, anyErr = g.repositoryPluginProvider.GetRepositoryPlugin(ctx, fallbackID)
@@ -56,6 +61,10 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Type
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// Deprecated: toIdentity is migration scaffolding — RepositoryPlugin.Resolve still accepts
+	// runtime.Identity. Phase 3 will remove this when plugin interfaces migrate to runtime.Typed.
+	pluginIdentity, _ := toIdentity(identity)
+
 	resolve := func(plugin RepositoryPlugin, cfg runtime.Typed) {
 		defer wg.Done()
 
@@ -70,15 +79,15 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Type
 				credentials = typedToMap(typed)
 			}
 		}
-		slog.DebugContext(ctx, "Resolving credentials via repository", "identity", id, "config", cfg)
-		credentials, err := plugin.Resolve(ctx, cfg, id, credentials)
+		slog.DebugContext(ctx, "Resolving credentials via repository", "identity", identity, "config", cfg)
+		credentials, err := plugin.Resolve(ctx, cfg, pluginIdentity, credentials)
 
 		mu.Lock()
 		defer mu.Unlock()
 
 		switch {
 		case err != nil:
-			slog.DebugContext(ctx, "repository plugin failed to resolve credentials", slog.Any("identity", id), slog.Any("config", cfg.GetType()), slog.Any("error", err))
+			slog.DebugContext(ctx, "repository plugin failed to resolve credentials", slog.Any("identity", identity), slog.Any("config", cfg.GetType()), slog.Any("error", err))
 			errs = append(errs, err)
 		case resolved == nil:
 			resolved = credentials
@@ -101,12 +110,12 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Type
 	if resolved == nil {
 		if len(errs) > 0 {
 			// If we have errors and no resolved credentials, we have to assume that the credential lookup failed due errors in the plugins.
-			return nil, errors.Join(ErrUnknown, fmt.Errorf("an error occurred in one or multiple repositories while trying to resolve credentials for identity ... %q: %w", id.String(), errors.Join(errs...)))
+			return nil, errors.Join(ErrUnknown, fmt.Errorf("an error occurred in one or multiple repositories while trying to resolve credentials for identity ... %q: %w", node, errors.Join(errs...)))
 		}
 
 		// If we get here, then all repository plugins failed to resolve credentials.
 		// This is not an error, but rather a signal that the identity could not be resolved indirectly.
-		return nil, errors.Join(ErrNoIndirectCredentials, fmt.Errorf("no repository plugin could resolve credentials for identity %q", id.String()))
+		return nil, errors.Join(ErrNoIndirectCredentials, fmt.Errorf("no repository plugin could resolve credentials for identity %q", node))
 	}
 
 	// Wrap and cache the resolved credentials.
@@ -114,7 +123,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Type
 		Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
 		Properties: resolved,
 	}
-	g.setCredentials(id.String(), typed)
+	g.setCredentials(node, typed)
 
 	return typed, nil
 }

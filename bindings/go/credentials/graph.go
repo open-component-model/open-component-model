@@ -94,8 +94,7 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[str
 }
 
 // ResolveTyped resolves credentials for the given identity and returns them as a runtime.Typed.
-// The identity parameter accepts any runtime.Typed — typically a runtime.Identity map or a typed
-// identity struct that implements runtime.IdentityProvider.
+// The identity parameter accepts any runtime.Typed — typically a runtime.Identity map.
 // The returned type depends on what was configured — currently *DirectCredentials for
 // inline Credentials/v1 configs, but will be the actual typed credential (e.g. *HelmCredentials)
 // when configs specify typed credential types.
@@ -104,7 +103,7 @@ func (g *Graph) ResolveTyped(ctx context.Context, identity runtime.Typed) (runti
 		return nil, fmt.Errorf("to be resolved from the credential graph, a valid identity is required: %w", ErrUnknown)
 	}
 
-	if identity.GetType().IsEmpty() {
+	if !hasType(identity) {
 		return nil, fmt.Errorf("to be resolved from the credential graph, a consumer identity type is required: %w", ErrUnknown)
 	}
 
@@ -128,4 +127,15 @@ func (g *Graph) ResolveTyped(ctx context.Context, identity runtime.Typed) (runti
 	}
 
 	return creds, nil
+}
+
+// hasType checks whether a runtime.Typed identity has a non-empty type set.
+// For runtime.Identity it uses ParseType (since GetType panics on missing type).
+// For other Typed implementations it uses GetType.
+func hasType(typed runtime.Typed) bool {
+	if id, ok := typed.(runtime.Identity); ok {
+		_, err := id.ParseType()
+		return err == nil
+	}
+	return !typed.GetType().IsEmpty()
 }

@@ -294,9 +294,9 @@ func isAccepted(credentialTypeScheme *runtime.Scheme, credType runtime.Type, acc
 	if credentialTypeScheme == nil {
 		return false
 	}
-	resolved := credentialTypeScheme.ResolveType(credType)
+	resolved := credentialTypeScheme.ResolveCanonicalType(credType)
 	for _, a := range accepted {
-		if credentialTypeScheme.ResolveType(a).Equal(resolved) {
+		if credentialTypeScheme.ResolveCanonicalType(a).Equal(resolved) {
 			return true
 		}
 	}

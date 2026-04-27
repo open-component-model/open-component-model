@@ -32,11 +32,7 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Typed) (r
 		return creds, nil
 	}
 
-	id, err := toIdentity(identity)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert identity for caching: %w", err)
-	}
-	node := id.String()
+	node := nodeID(identity)
 
 	// Non–leaf node: recursively resolve each child and merge the results.
 	result := make(map[string]string)
