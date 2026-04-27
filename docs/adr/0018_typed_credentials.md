@@ -78,9 +78,8 @@ credentials of the wrong type at resolution time with clear errors.
 
 The existing `Resolver` interface gains a `ResolveTyped` method that returns `runtime.Typed` instead of
 `map[string]string`. `ResolveTyped` accepts `runtime.Typed` as its identity parameter — not `runtime.Identity`. This
-means consumers can pass typed identity structs directly without calling `.ToIdentity()` first. The graph internally
-converts to `runtime.Identity` when it needs map-based matching (via `runtime.IdentityProvider`), but this is an
-implementation detail that will be removed when `runtime.Identity` is eventually retired.
+means consumers can pass typed identity structs directly. The only remaining uses of `runtime.Identity` are at the
+plugin interface boundary (`CredentialPlugin`, `RepositoryPlugin`) which Phase 3 will migrate to `runtime.Typed`.
 
 The graph stores credentials as `runtime.Typed` internally and resolves typed credentials from config when a
 `CredentialTypeSchemeProvider` is configured. `DirectCredentials/v1` serves as the fallback for old configurations.
@@ -103,10 +102,10 @@ type Resolver interface {
     ResolveTyped(ctx context.Context, identity runtime.Typed) (runtime.Typed, error)    // new
 }
 
-// Pseudocode — consumer usage
-identity := &HelmChartRepositoryIdentity{Host: "charts.example.com", Path: "/stable"}
-typed, err := resolver.ResolveTyped(ctx, identity)  // pass typed identity directly
-creds := typed.(*HelmHTTPCredentials)                // type-safe access
+// Pseudocode — consumer usage (Phase 2+)
+identity := &HelmChartRepositoryIdentity{Hostname: "charts.example.com", Path: "/stable"}
+typed, err := resolver.ResolveTyped(ctx, identity)
+creds := typed.(*HelmHTTPCredentials) // type-safe access
 fmt.Println(creds.CertFile, creds.KeyFile)
 ```
 
@@ -119,7 +118,6 @@ sequenceDiagram
 
     C->>I: construct typed identity
     C->>G: ResolveTyped(typedIdentity)
-    G->>G: convert to Identity via IdentityProvider
     G->>G: match identity in DAG
     G->>G: resolve raw credential from config
     G->>S: convert to runtime.Typed
@@ -130,20 +128,19 @@ sequenceDiagram
 
 ### Typed Identity Structs
 
-Typed identity structs implement `runtime.IdentityProvider` to produce `runtime.Identity` maps for graph lookup. They
-provide structured construction and validation while remaining compatible with the graph's existing matching system.
-`runtime.Identity` itself implements `IdentityProvider` trivially (returns itself), so existing code that passes
-`runtime.Identity` to `ResolveTyped` continues to work without changes.
+Typed identity structs are `runtime.Typed` objects that represent consumer identities with structured fields instead of
+untyped maps. Consumers pass them directly to `ResolveTyped` — the graph handles matching internally.
 
 ```go
-// runtime package
-type IdentityProvider interface {
-    ToIdentity() Identity
-}
-
-// Identity implements IdentityProvider — returns itself
-func (i Identity) ToIdentity() Identity { return i }
+// Consumer usage — pass typed identity directly
+identity := &HelmChartRepositoryIdentity{Hostname: "charts.example.com"}
+typed, err := resolver.ResolveTyped(ctx, identity)
 ```
+
+The graph internally works with `runtime.Typed` for identities throughout. The only place where `runtime.Identity` is
+still used is at the boundary to `CredentialPlugin` and `RepositoryPlugin` interfaces, which still accept
+`runtime.Identity` in their signatures. This conversion is migration scaffolding that Phase 3 removes when those
+plugin interfaces migrate to `runtime.Typed`.
 
 ### Type Registries and Graph Independence
 
@@ -278,8 +275,7 @@ module boundaries. Without `go.work`, modules resolve from the proxy — so chan
 ### Phase 1: Foundation
 
 Add `ResolveTyped(ctx, runtime.Typed)` to `Resolver`, `IdentityTypeRegistry` (with accepted credential types mapping)
-and `CredentialTypeSchemeProvider` for graph consumption, `runtime.IdentityProvider` interface so typed identity structs
-can produce `runtime.Identity` maps for graph matching, and `runtime.Scheme.ResolveType` for alias resolution.
+and `CredentialTypeSchemeProvider` for graph consumption, and `runtime.Scheme.ResolveCanonicalType` for alias resolution.
 The graph internally works with `runtime.Typed` throughout — `runtime.Identity` is only accepted at the deprecated
 `Resolve` signature boundary. No downstream breakage — all existing code continues to work.
 
@@ -326,12 +322,8 @@ migration path ensures no development blocking while transitioning the multi-mod
 
 - **`ResolveTyped` accepts `runtime.Typed`**, not `runtime.Identity`. The graph internally works with `runtime.Typed`
   throughout. `runtime.Identity` is only accepted at the deprecated `Resolve` method boundary. Typed identity structs
-  can be passed directly to `ResolveTyped` without calling `.ToIdentity()`.
-- **`runtime.IdentityProvider` interface** added to runtime. Typed identity structs implement it to produce
-  `runtime.Identity` maps for graph matching. `runtime.Identity` implements it trivially (returns itself).
-- **`runtime.Identity.GetType()` no longer panics** on missing type — returns empty `Type` instead, aligning with
-  the `runtime.Typed` interface contract.
-- **`runtime.Scheme.ResolveType`** added — resolves alias types to their canonical default type. Used by `isAccepted`
+  can be passed directly to `ResolveTyped`.
+- **`runtime.Scheme.ResolveCanonicalType`** added — resolves alias types to their canonical default type. Used by `isAccepted`
   for identity → credential type validation, replacing the previous `reflect.TypeOf` + `NewObject` comparison.
 - **`CredentialAcceptor` interface replaced by `IdentityTypeRegistry`**. The accepted credential types mapping is now
   declarative (stored at registration time via `RegisterWithAcceptedCredentials`) rather than behavioral (implemented
