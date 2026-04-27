@@ -157,4 +157,4 @@ Without `go.work`, each module resolves dependencies from the versions pinned in
 
 If your CLI change depends on a modified binding API, the binding change must be landed and released first. Then create a
 follow-up PR for the CLI that updates `go.mod` to the new binding version. See the
-[Go bindings contributing guide](../bindings/go/CONTRIBUTING.md#cross-module-changes) for the full workflow.
+[Go bindings contributing guide](../bindings/go/CONTRIBUTING.md#breaking-api-changes) for the full workflow.
