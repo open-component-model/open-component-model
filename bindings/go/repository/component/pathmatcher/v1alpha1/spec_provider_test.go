@@ -397,7 +397,11 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			res := pathmatcher.NewSpecProvider(ctx, tc.repos)
+			res, err := pathmatcher.NewSpecProvider(ctx, tc.repos)
+			if err != nil {
+				tc.err(t, err, "error creating spec provider")
+				return
+			}
 
 			identity := runtime.Identity{
 				descruntime.IdentityAttributeName: tc.component,

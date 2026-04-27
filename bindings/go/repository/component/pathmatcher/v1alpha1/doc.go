@@ -9,7 +9,7 @@
 //
 // Example usage:
 //
-//	provider := NewSpecProvider(ctx, resolvers)
+//	provider, err := NewSpecProvider(ctx, resolvers)
 //	repoSpec, err := provider.GetRepositorySpec(ctx, identity)
 //
 // This package is useful when you need to route component version requests to

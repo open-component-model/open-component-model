@@ -14,6 +14,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+func mustNewSpecProvider(t *testing.T, ctx context.Context, resolvers []*resolverspec.Resolver) *pathmatcher.SpecProvider {
+	t.Helper()
+	sp, err := pathmatcher.NewSpecProvider(ctx, resolvers)
+	if err != nil {
+		t.Fatalf("NewSpecProvider: %v", err)
+	}
+	return sp
+}
+
 // mockRepoProvider implements repository.ComponentVersionRepositoryProvider for testing
 type mockRepoProvider struct {
 	callCount int
@@ -64,7 +73,7 @@ func TestPathMatcherProvider_Caching(t *testing.T) {
 	provider := &pathMatcherResolver{
 		repoProvider: mockProvider,
 		graph:        nil,
-		specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
+		specProvider: mustNewSpecProvider(t, ctx, resolvers),
 		repoCache:    make(map[string]repository.ComponentVersionRepository),
 	}
 
@@ -122,7 +131,7 @@ func TestPathMatcherProvider_GetRepositoryForSpecification_Valid(t *testing.T) {
 	provider := &pathMatcherResolver{
 		repoProvider: mockProvider,
 		graph:        nil,
-		specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
+		specProvider: mustNewSpecProvider(t, ctx, resolvers),
 		repoCache:    make(map[string]repository.ComponentVersionRepository),
 	}
 
@@ -157,7 +166,7 @@ func TestPathMatcherProvider_GetRepositoryForSpecification_Caching(t *testing.T)
 	provider := &pathMatcherResolver{
 		repoProvider: mockProvider,
 		graph:        nil,
-		specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
+		specProvider: mustNewSpecProvider(t, ctx, resolvers),
 		repoCache:    make(map[string]repository.ComponentVersionRepository),
 	}
 
@@ -274,7 +283,7 @@ func TestGetRepositorySpecificationForComponent(t *testing.T) {
 		provider := &pathMatcherResolver{
 			repoProvider: mockProvider,
 			graph:        nil,
-			specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
+			specProvider: mustNewSpecProvider(t, ctx, resolvers),
 			repoCache:    make(map[string]repository.ComponentVersionRepository),
 		}
 
@@ -352,7 +361,7 @@ func TestGetRepositorySpecificationForComponent_VersionConstraint(t *testing.T) 
 	provider := &pathMatcherResolver{
 		repoProvider: mockProvider,
 		graph:        nil,
-		specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
+		specProvider: mustNewSpecProvider(t, ctx, resolvers),
 		repoCache:    make(map[string]repository.ComponentVersionRepository),
 	}
 
