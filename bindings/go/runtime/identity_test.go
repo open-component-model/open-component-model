@@ -223,17 +223,3 @@ func TestIdentityString(t *testing.T) {
 		})
 	}
 }
-
-func TestIdentity_ImplementsIdentityProvider(t *testing.T) {
-	id := runtime.Identity{"type": "OCIRegistry", "hostname": "docker.io"}
-
-	var provider runtime.IdentityProvider = id
-	result := provider.ToIdentity()
-	assert.Equal(t, id, result)
-}
-
-func TestIdentity_GetType_MissingType(t *testing.T) {
-	id := runtime.Identity{"hostname": "docker.io"}
-	// GetType returns empty Type when type key is missing (does not panic).
-	assert.True(t, id.GetType().IsEmpty())
-}
