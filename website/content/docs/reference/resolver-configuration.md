@@ -151,18 +151,6 @@ The `versionConstraint` field is optional. Resolver entries that omit it continu
 any component version (or no version at all). Existing configurations that do not use `versionConstraint` require no
 changes.
 
-## Validation
-
-Both `componentNamePattern` and `versionConstraint` are validated when the configuration is loaded. If a resolver entry
-contains an invalid glob pattern or an unparseable semver constraint, the configuration will fail to load with an error
-describing the offending entry.
-
-## Backward Compatibility
-
-The `versionConstraint` field is optional. Resolver entries that omit it continue to work exactly as before — they match
-any component version (or no version at all). Existing configurations that do not use `versionConstraint` require no
-changes.
-
 ## Resolver Evaluation Order
 
 Resolvers are evaluated **in the order they are defined**.
