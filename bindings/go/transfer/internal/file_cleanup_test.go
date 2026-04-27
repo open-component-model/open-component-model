@@ -113,7 +113,7 @@ func TestFileCleanup_Transform(t *testing.T) {
 				},
 			}
 
-			result, err := transformer.Transform(ctx, spec, nil)
+			result, err := transformer.Transform(ctx, spec)
 			require.NoError(t, err)
 			require.NotNil(t, result)
 
@@ -136,7 +136,7 @@ func TestFileCleanup_Transform_NilSpec(t *testing.T) {
 		Spec: nil,
 	}
 
-	result, err := transformer.Transform(ctx, spec, nil)
+	result, err := transformer.Transform(ctx, spec)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "spec is required")
@@ -165,7 +165,7 @@ func TestFileCleanup_Transform_VerifiesFilesRemoved(t *testing.T) {
 		},
 	}
 
-	result, err := transformer.Transform(ctx, spec, nil)
+	result, err := transformer.Transform(ctx, spec)
 	require.NoError(t, err)
 
 	transformed := result.(*FileCleanupTransformation)

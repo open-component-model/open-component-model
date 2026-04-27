@@ -11,7 +11,7 @@ type MockCustomSchema struct {
 	Scheme *runtime.Scheme
 }
 
-func (t *MockCustomSchema) Transform(ctx context.Context, step runtime.Typed, _ map[string]map[string]string) (runtime.Typed, error) {
+func (t *MockCustomSchema) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
 	transformation := &MockCustomSchemaObjectTransformer{}
 	if err := t.Scheme.Convert(step, transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to mock add object transformation: %w", err)

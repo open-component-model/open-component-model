@@ -31,7 +31,7 @@ func (m *mockFailingIdentityTransformer) Transform(_ context.Context, _ runtime.
 
 type mockFailingTransformer struct{}
 
-func (m *mockFailingTransformer) Transform(_ context.Context, _ runtime.Typed, _ map[string]map[string]string) (runtime.Typed, error) {
+func (m *mockFailingTransformer) Transform(_ context.Context, _ runtime.Typed) (runtime.Typed, error) {
 	return nil, fmt.Errorf("transformer failed")
 }
 
@@ -48,7 +48,7 @@ func (m *mockCredentialTransformer) GetCredentialConsumerIdentities(_ context.Co
 func (m *mockCredentialTransformer) Transform(ctx context.Context, step runtime.Typed, creds map[string]map[string]string) (runtime.Typed, error) {
 	m.gotCreds = creds
 	mock := &testutils.MockGetObject{Scheme: m.scheme}
-	return mock.Transform(ctx, step, creds)
+	return mock.Transform(ctx, step)
 }
 
 type mockCredentialResolver struct {
@@ -67,7 +67,7 @@ func (m *mockCredentialResolver) Resolve(_ context.Context, identity runtime.Ide
 	return nil, credentials.ErrNotFound
 }
 
-func newTestRuntime(t *testing.T, transformer Transformer, events chan ProgressEvent) *Runtime {
+func newTestRuntime(t *testing.T, transformer any, events chan ProgressEvent) *Runtime {
 	t.Helper()
 
 	scheme := runtime.NewScheme()
@@ -80,7 +80,7 @@ func newTestRuntime(t *testing.T, transformer Transformer, events chan ProgressE
 	return &Runtime{
 		EvaluatedExpressionCache: map[string]any{},
 		EvaluatedTransformations: map[string]any{},
-		Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: transformer},
+		Transformers:             map[runtime.Type]any{testutils.MockGetObjectV1alpha1: transformer},
 		Events:                   events,
 	}
 }
@@ -160,7 +160,7 @@ func TestProcessTransformationCredentialResolution(t *testing.T) {
 		rt := &Runtime{
 			EvaluatedExpressionCache: map[string]any{},
 			EvaluatedTransformations: map[string]any{},
-			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			Transformers:             map[runtime.Type]any{testutils.MockGetObjectV1alpha1: mock},
 			CredentialProvider:       resolver,
 		}
 		require.NoError(t, rt.ProcessValue(t.Context(), transformation))
@@ -186,7 +186,7 @@ func TestProcessTransformationCredentialResolution(t *testing.T) {
 		rt := &Runtime{
 			EvaluatedExpressionCache: map[string]any{},
 			EvaluatedTransformations: map[string]any{},
-			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			Transformers:             map[runtime.Type]any{testutils.MockGetObjectV1alpha1: mock},
 			CredentialProvider:       resolver,
 		}
 		require.NoError(t, rt.ProcessValue(t.Context(), transformation))
@@ -204,7 +204,7 @@ func TestProcessTransformationCredentialResolution(t *testing.T) {
 		rt := &Runtime{
 			EvaluatedExpressionCache: map[string]any{},
 			EvaluatedTransformations: map[string]any{},
-			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			Transformers:             map[runtime.Type]any{testutils.MockGetObjectV1alpha1: mock},
 			CredentialProvider:       &mockCredentialResolver{},
 		}
 		require.NoError(t, rt.ProcessValue(t.Context(), transformation))
@@ -220,7 +220,7 @@ func TestProcessTransformationCredentialResolution(t *testing.T) {
 		rt := &Runtime{
 			EvaluatedExpressionCache: map[string]any{},
 			EvaluatedTransformations: map[string]any{},
-			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			Transformers:             map[runtime.Type]any{testutils.MockGetObjectV1alpha1: mock},
 			CredentialProvider:       nil,
 		}
 		require.NoError(t, rt.ProcessValue(t.Context(), transformation))
@@ -239,7 +239,7 @@ func TestProcessTransformationCredentialResolution(t *testing.T) {
 		rt := &Runtime{
 			EvaluatedExpressionCache: map[string]any{},
 			EvaluatedTransformations: map[string]any{},
-			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			Transformers:             map[runtime.Type]any{testutils.MockGetObjectV1alpha1: mock},
 			CredentialProvider:       resolver,
 		}
 		require.NoError(t, rt.ProcessValue(t.Context(), transformation))
@@ -267,7 +267,7 @@ func TestProcessTransformationCredentialResolution(t *testing.T) {
 		rt := &Runtime{
 			EvaluatedExpressionCache: map[string]any{},
 			EvaluatedTransformations: map[string]any{},
-			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			Transformers:             map[runtime.Type]any{testutils.MockGetObjectV1alpha1: mock},
 			CredentialProvider:       resolver,
 		}
 		r.NoError(rt.ProcessValue(t.Context(), transformation))
@@ -293,7 +293,7 @@ func TestProcessTransformationCredentialResolution(t *testing.T) {
 		rt := &Runtime{
 			EvaluatedExpressionCache: map[string]any{},
 			EvaluatedTransformations: map[string]any{},
-			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			Transformers:             map[runtime.Type]any{testutils.MockGetObjectV1alpha1: mock},
 			CredentialProvider:       resolver,
 		}
 		r.NoError(rt.ProcessValue(t.Context(), transformation))
@@ -314,7 +314,7 @@ func TestProcessTransformationCredentialResolution(t *testing.T) {
 		rt := &Runtime{
 			EvaluatedExpressionCache: map[string]any{},
 			EvaluatedTransformations: map[string]any{},
-			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			Transformers:             map[runtime.Type]any{testutils.MockGetObjectV1alpha1: mock},
 			CredentialProvider:       resolver,
 		}
 		err := rt.ProcessValue(t.Context(), transformation)
@@ -329,7 +329,7 @@ func TestProcessTransformationCredentialResolution(t *testing.T) {
 		rt := &Runtime{
 			EvaluatedExpressionCache: map[string]any{},
 			EvaluatedTransformations: map[string]any{},
-			Transformers:             map[runtime.Type]Transformer{testutils.MockGetObjectV1alpha1: mock},
+			Transformers:             map[runtime.Type]any{testutils.MockGetObjectV1alpha1: mock},
 			CredentialProvider:       &mockCredentialResolver{},
 		}
 		err := rt.ProcessValue(t.Context(), transformation)

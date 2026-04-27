@@ -19,13 +19,13 @@ import (
 
 type Builder struct {
 	scheme             *runtime.Scheme
-	transformers       map[runtime.Type]graphRuntime.Transformer
+	transformers       map[runtime.Type]any
 	credentialProvider credentials.Resolver
 	events             chan graphRuntime.ProgressEvent
 }
 
 func NewBuilder(scheme *runtime.Scheme) *Builder {
-	return &Builder{scheme: scheme, transformers: map[runtime.Type]graphRuntime.Transformer{}}
+	return &Builder{scheme: scheme, transformers: map[runtime.Type]any{}}
 }
 
 func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition) (*Graph, error) {
@@ -92,10 +92,10 @@ func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition
 func (b *Builder) WithTransformer(typed interface {
 	runtime.Typed
 	runtime.JSONSchemaIntrospectable
-}, transformer graphRuntime.Transformer,
+}, transformer any,
 ) *Builder {
 	if b.transformers == nil {
-		b.transformers = map[runtime.Type]graphRuntime.Transformer{}
+		b.transformers = map[runtime.Type]any{}
 	}
 	runtimeType, err := b.scheme.TypeForPrototype(typed)
 	if err != nil {
@@ -117,7 +117,7 @@ func (b *Builder) WithCredentialProvider(provider credentials.Resolver) *Builder
 type Graph struct {
 	env                *cel.Env
 	checked            *dag.DirectedAcyclicGraph[string]
-	transformers       map[runtime.Type]graphRuntime.Transformer
+	transformers       map[runtime.Type]any
 	credentialProvider credentials.Resolver
 	events             chan graphRuntime.ProgressEvent
 }

@@ -86,7 +86,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			},
 		}
 
-		result, err := transform.Transform(ctx, spec, nil)
+		result, err := transform.Transform(ctx, spec)
 		r.NoError(err)
 		r.NotNil(result)
 
@@ -162,7 +162,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			},
 		}
 
-		result, err := transform.Transform(ctx, spec, nil)
+		result, err := transform.Transform(ctx, spec)
 		r.NoError(err)
 		r.NotNil(result)
 
@@ -233,7 +233,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			},
 		}
 
-		result, err := transform.Transform(ctx, spec, nil)
+		result, err := transform.Transform(ctx, spec)
 		r.NoError(err)
 		r.NotNil(result)
 
@@ -267,7 +267,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			Spec: nil,
 		}
 
-		result, err := transform.Transform(ctx, spec, nil)
+		result, err := transform.Transform(ctx, spec)
 		r.Error(err)
 		r.Nil(result)
 		assert.Contains(t, err.Error(), "spec is required")

@@ -18,29 +18,16 @@ import (
 
 // Transformer is the core interface for transformation graph nodes.
 type Transformer interface {
-	// Transform executes the transformation with pre-resolved credentials.
-	// nil credentials means none were requested or no resolver is configured.
-	Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error)
+	Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error)
 }
 
-// CredentialConsumer is an optional interface. Transformers that need credentials
+// TransformerWithCredentials is an optional interface. Transformers that need credentials
 // implement this to declare their identities. The graph resolves them before calling Transform.
 // Transformers that don't need credentials simply don't implement this interface.
-type CredentialConsumer interface {
+type TransformerWithCredentials interface {
+	Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error)
 	GetCredentialConsumerIdentities(ctx context.Context, step runtime.Typed) (map[string]runtime.Identity, error)
 }
-
-// --- PROPOSAL (follow-up): Also remove credentials from Transform signature ---
-//
-// type Transformer interface {
-// 	Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error)
-// }
-//
-// The graph would inject resolved credentials into ctx via credentials.WithCredentials.
-// Transformers that need creds pull them with credentials.FromContext(ctx).
-// See credentials/keys.go for the proposed context helpers.
-//
-// --- END PROPOSAL ---
 
 // State represents the state of a transformation node.
 type State int
@@ -79,7 +66,7 @@ type Runtime struct {
 	EvaluatedExpressionCache map[string]any
 	EvaluatedTransformations map[string]any
 
-	Transformers       map[runtime.Type]Transformer
+	Transformers       map[runtime.Type]any
 	CredentialProvider credentials.Resolver
 	Events             chan<- ProgressEvent
 }
@@ -154,32 +141,40 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 
 	step := transformation.AsRaw()
 
-	// Only resolve credentials for transformers that opt in via CredentialConsumer.
-	var creds map[string]map[string]string
-	if cc, ok := transformer.(CredentialConsumer); ok {
-		identities, err := cc.GetCredentialConsumerIdentities(ctx, step)
-		if err != nil {
-			return fmt.Errorf("failed to get credential consumer identities for transformation %q: %w", transformation.ID, err)
+	var transformed runtime.Typed
+	if twc, ok := transformer.(TransformerWithCredentials); ok {
+		identities, identityErr := twc.GetCredentialConsumerIdentities(ctx, step)
+		if identityErr != nil {
+			return fmt.Errorf("failed to get credential consumer identities for transformation %q: %w", transformation.ID, identityErr)
 		}
 
-		// Resolve named credential keys declared by the transformer.
-		// ErrNotFound yields a nil entry (credential is optional); all other errors abort the transformation.
+		var creds map[string]map[string]string
 		if len(identities) > 0 && b.CredentialProvider != nil {
 			creds = make(map[string]map[string]string, len(identities))
 			for name, identity := range identities {
-				resolved, err := b.CredentialProvider.Resolve(ctx, identity)
-				if err != nil && !errors.Is(err, credentials.ErrNotFound) {
-					return fmt.Errorf("failed to resolve credentials %q for transformation %q: %w", name, transformation.ID, err)
+				resolved, resolveErr := b.CredentialProvider.Resolve(ctx, identity)
+				if resolveErr != nil && !errors.Is(resolveErr, credentials.ErrNotFound) {
+					return fmt.Errorf("failed to resolve credentials %q for transformation %q: %w", name, transformation.ID, resolveErr)
 				}
 				creds[name] = resolved
 			}
 		}
+
+		var transformErr error
+		transformed, transformErr = twc.Transform(ctx, step, creds)
+		if transformErr != nil {
+			return fmt.Errorf("failed to execute transformation %q: %w", transformation.ID, transformErr)
+		}
+	} else if t, ok := transformer.(Transformer); ok {
+		var transformErr error
+		transformed, transformErr = t.Transform(ctx, step)
+		if transformErr != nil {
+			return fmt.Errorf("failed to execute transformation %q: %w", transformation.ID, transformErr)
+		}
+	} else {
+		return fmt.Errorf("transformer for type %s implements neither Transformer nor TransformerWithCredentials", runtimeType)
 	}
 
-	transformed, err := transformer.Transform(ctx, step, creds)
-	if err != nil {
-		return fmt.Errorf("failed to transform transformation %q: %w", transformation.ID, err)
-	}
 	updated, err := v1alpha1.GenericTransformationFromTyped(transformed)
 	if err != nil {
 		return fmt.Errorf("failed to convert updated transformation %q to generic transformation: %w", transformation.ID, err)
