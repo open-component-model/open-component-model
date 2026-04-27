@@ -79,7 +79,7 @@ jobs:
             await script.default({ core, github, context });
 
       - name: Generate changelog with git-cliff
-        uses: orhun/git-cliff-action@c93ef52f3d0ddcdcc9bd5447d98d458a11cd4f72 # v4
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4
         id: git-cliff
         env:
           # Pass changelog range as env var so it can be used in the args block.
