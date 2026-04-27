@@ -11,6 +11,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -250,7 +251,7 @@ func createRepository(
 			Header: map[string][]string{
 				"User-Agent": {userAgent},
 			},
-			Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
+			Credential: auth.StaticCredential(url.Host, ocicredentials.CredentialFromMap(credentials)),
 		}))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create URL resolver: %w", err)
@@ -267,21 +268,4 @@ func createRepository(
 
 	repo, err := oci.NewRepository(options...)
 	return repo, err
-}
-
-func clientCredentials(credentials map[string]string) auth.Credential {
-	cred := auth.Credential{}
-	if username, ok := credentials["username"]; ok {
-		cred.Username = username
-	}
-	if password, ok := credentials["password"]; ok {
-		cred.Password = password
-	}
-	if refreshToken, ok := credentials["refresh_token"]; ok {
-		cred.RefreshToken = refreshToken
-	}
-	if accessToken, ok := credentials["access_token"]; ok {
-		cred.AccessToken = accessToken
-	}
-	return cred
 }

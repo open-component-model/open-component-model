@@ -19,7 +19,8 @@ For more information about the OCM configuration file,
 see [.ocmconfig documentation](https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_configfile.md).
 {{</callout>}}
 
-The resolver configuration uses the type `resolvers.config.ocm.software/v1alpha1` inside a generic OCM configuration type:
+The resolver configuration uses the type `resolvers.config.ocm.software/v1alpha1` inside a generic OCM configuration
+type:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -31,6 +32,7 @@ configurations:
           baseUrl: ghcr.io
           subPath: my-org/components
         componentNamePattern: "example.com/services/*"
+        versionConstraint: ">=1.0.0 <2.0.0"
 ```
 
 ## Config Schema
@@ -45,10 +47,11 @@ the [OCM specification](https://github.com/open-component-model/open-component-m
 
 ### Resolver Entry Schema
 
-| Field                  | Type   | Required | Description                                                                                 |
-|------------------------|--------|----------|---------------------------------------------------------------------------------------------|
-| `repository`           | object | Yes      | An OCM repository specification (must include a `type` field).                              |
-| `componentNamePattern` | string | No       | Glob pattern for matching component names. If omitted, the resolver matches all components. |
+| Field                  | Type   | Required | Description                                                                                       |
+|------------------------|--------|----------|---------------------------------------------------------------------------------------------------|
+| `repository`           | object | Yes      | An OCM repository specification (must include a `type` field).                                    |
+| `componentNamePattern` | string | No       | Glob pattern for matching component names. If omitted, the resolver matches all components.       |
+| `versionConstraint`    | string | No       | Semver constraint for matching component versions. If omitted, the resolver matches all versions. |
 
 ## Repository Types
 
@@ -90,7 +93,8 @@ repository:
 
 ## Component Name Patterns
 
-Each resolver entry can include a `componentNamePattern` field that uses **glob patterns** to filter for certain component names.
+Each resolver entry can include a `componentNamePattern` field that uses **glob patterns** to filter for certain
+component names.
 Only components matching the pattern will be routed to that repository.
 
 **Supported glob patterns:**
@@ -113,16 +117,40 @@ Only components matching the pattern will be routed to that repository.
 For more information on the supported glob syntax, see the [glob package documentation](https://github.com/gobwas/glob).
 {{</callout>}}
 
+## Version Constraints
+
+Each resolver entry can include a `versionConstraint` field that uses **semver constraints** to filter for certain
+component versions.
+Only components with versions satisfying the constraint will be routed to that repository.
+
+**Supported constraint syntax:**
+
+| Constraint       | Matches                                                       |
+|------------------|---------------------------------------------------------------|
+| `>=1.0.0 <2.0.0` | Versions from 1.0.0 (inclusive) up to but not including 2.0.0 |
+| `^1.2.0`         | Compatible with 1.2.0 (>=1.2.0 <2.0.0)                        |
+| `~1.2.0`         | Approximately 1.2.0 (>=1.2.0 <1.3.0)                          |
+| `1.2.3`          | Exactly version 1.2.3                                         |
+
+Multiple space-separated constraints are combined with AND logic (e.g., `>=1.0.0 <2.0.0` means both must be satisfied).
+
+{{<callout context="note">}}
+For more information on the supported semver constraint syntax, see
+the [Masterminds/semver documentation](https://github.com/Masterminds/semver#checking-version-constraints).
+{{</callout>}}
+
 ## Resolver Evaluation Order
 
-Resolvers are evaluated **in the order they are defined**. 
+Resolvers are evaluated **in the order they are defined**.
 The first matching resolver wins. Place more specific patterns before broader ones.
 
 ## Related Documentation
 
 - [OCM Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) — High-level introduction to resolvers
-- [Working with Resolvers Tutorial]({{< relref "docs/tutorials/configure-resolvers.md" >}}) — Hands-on walkthrough for setting up resolvers
-- [How to Resolve Components Across Multiple Registries]({{< relref "docs/how-to/resolve-components-from-multiple-repositories.md" >}}) — Recipe for
-  multi-registry resolution
-- [Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migrate-from-deprecated-resolvers.md" >}}) — Replace deprecated fallback
+- [Working with Resolvers Tutorial]({{< relref "docs/tutorials/configure-resolvers.md" >}}) — Hands-on walkthrough for
+  setting up resolvers
+- [How to Resolve Components Across Multiple Registries]
+- ({{< relref "docs/how-to/resolve-components-from-multiple-repositories.md" >}}) — Recipe for multi-registry resolution
+- [Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migrate-from-deprecated-resolvers.md" >}}) — Replace
+  deprecated fallback
   resolvers with glob-based resolvers
