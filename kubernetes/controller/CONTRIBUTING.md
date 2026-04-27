@@ -5,28 +5,84 @@ contribution process, see the [central contributing guide](https://ocm.software/
 
 ## Overview
 
-The controller reconciles OCM component versions into Kubernetes clusters, enabling GitOps-style deployment of OCM
-resources. For background on the architecture and design, see the
-[Kubernetes Controllers](https://ocm.software/docs/concepts/kubernetes-controllers/) and
-[Kubernetes Deployer](https://ocm.software/docs/concepts/kubernetes-deployer/) concept pages on the project website.
+The controller reconciles OCM component versions into Kubernetes clusters. For the full architecture, reconciliation
+chain, and concept overview, see the
+[Kubernetes Controllers](https://ocm.software/docs/concepts/kubernetes-controllers/) page on the project website.
+
+From a contributor's perspective, the controller consists of four reconcilers that form a pipeline — each custom resource
+depends on the previous one becoming `Ready`:
+
+- **Repository** validates that an OCM repository is reachable at the configured interval.
+- **Component** resolves a component version using semver constraints and optionally verifies its signature.
+- **Resource** resolves a specific resource from the component and publishes access metadata in its status. This
+  metadata is what downstream consumers (like the Deployer) use to locate and fetch the resource content.
+- **Deployer** downloads resource content and applies it to the cluster (the resource must contain valid Kubernetes
+  manifests). It uses the [ApplySet](internal/controller/applyset/) implementation for server-side apply and pruning.
 
 The codebase uses [controller-runtime](https://github.com/kubernetes-sigs/controller-runtime) and is deployed via a
-Helm chart. The development workflow is significantly different from the Go bindings and CLI - it uses Ginkgo for
-testing, envtest for simulating a Kubernetes API server, and has its own code generation pipeline for CRDs and RBAC.
+Helm chart.
+
+## Where Code Lives
+
+```
+kubernetes/controller/
+├── cmd/main.go                          # Manager bootstrap, plugin registration
+├── api/v1alpha1/                        # CRD type definitions (kubebuilder markers)
+├── internal/
+│   ├── controller/                      # Reconcilers (one per CRD above)
+│   ├── ocm/                             # Base reconciler, shared OCM utilities
+│   └── resolution/                      # Component resolution worker pool + cache
+├── chart/                               # Helm chart
+└── hack/                                # Generation scripts (CRD/RBAC)
+```
+
+All reconcilers embed a shared base reconciler from `internal/ocm/reconciler.go` that provides `ctrl.Client`,
+`runtime.Scheme`, and `record.EventRecorder`.
+
+## How OCM is Integrated
+
+The controller uses the same OCM [plugin system](https://ocm.software/docs/concepts/plugin-system/) as the CLI. At
+startup, `cmd/main.go` registers plugins for OCI component repositories, RSA signing, OCI credentials, resource
+fetching, digest processing, and blob transformation. These plugins handle all communication with OCM repositories.
+
+Component descriptor resolution runs through a worker pool with an in-memory LRU cache
+(`internal/resolution/workerpool/`). The worker pool is added as a controller-runtime `Runnable` so the manager handles
+its lifecycle.
+
+## CRD and Code Generation
+
+CRDs and RBAC rules are generated from [kubebuilder markers](https://book.kubebuilder.io/reference/markers) in the Go
+source files under `api/v1alpha1/`. The generation pipeline has three steps:
+
+1. **`task manifests`** — Runs `controller-gen` to produce raw CRD YAML into `bin/gen/crd/` and raw RBAC into
+   `bin/gen/rbac/`.
+2. **`task generate`** — Generates Go deepcopy and `runtime.Object` implementations from type definitions.
+3. **`task helm/generate`** — Wraps the raw CRDs and RBAC from step 1 into Helm chart templates (adding conditionals,
+   cert-manager annotations, etc.) via scripts in `hack/`. The output goes into `chart/templates/crd/` and
+   `chart/templates/rbac/`.
+
+To validate that everything is in sync:
+
+```bash
+task kubernetes/controller:helm/validate
+```
+
+This regenerates all artifacts, lints the chart, renders templates, and checks that the working tree is clean. CI
+enforces this — if you modify `api/v1alpha1/` types or RBAC markers and forget to regenerate, CI will fail.
 
 ## Prerequisites
 
 In addition to the [general prerequisites](../../CONTRIBUTING.md#prerequisites), controller development requires:
 
-- **Docker** - for building container images and running Kind clusters
-- **Helm** - for chart linting, templating, and local installs
-- **kubectl** - for interacting with test clusters
-- **[FluxCD CLI](https://fluxcd.io/flux/installation/)** - required for E2E tests (installs Flux into the test cluster)
-- **[Kind](https://kind.sigs.k8s.io/)** - required for E2E tests
+- **Docker** — for building container images and running Kind clusters
+- **Helm** — for chart linting, templating, and local installs
+- **kubectl** — for interacting with test clusters
+- **[FluxCD CLI](https://fluxcd.io/flux/installation/)** — required for E2E tests
+- **[Kind](https://kind.sigs.k8s.io/)** — required for E2E tests
+- **[kro](https://kro.run)** — required for E2E tests
 
-All other tools (controller-gen, kustomize, envtest, kubebuilder, helm-docs, yq) are installed automatically by the
-Taskfile into `kubernetes/controller/bin/`. You do not need to install them manually. Their versions are pinned in
-`kubernetes/controller/.env` and managed by Renovate.
+All other tools (controller-gen, kustomize, envtest, helm-docs, yq) are installed automatically by the Taskfile into
+`kubernetes/controller/bin/`. Their versions are pinned in `kubernetes/controller/.env`.
 
 ## Building
 
@@ -41,23 +97,16 @@ task kubernetes/controller:docker-build
 task kubernetes/controller:run
 ```
 
-## Running Tests
+## Testing
 
 ### Unit Tests (envtest)
 
 Unit tests run against a local Kubernetes API server provided by
-[envtest](https://book.kubebuilder.io/reference/envtest). The Taskfile handles downloading the correct envtest binaries
-automatically.
+[envtest](https://book.kubebuilder.io/reference/envtest). The Taskfile handles downloading the correct envtest binaries.
 
 ```bash
 task kubernetes/controller:test
 ```
-
-This command:
-
-1. Generates CRD manifests and Go code (if needed).
-2. Downloads envtest binaries for the configured Kubernetes version.
-3. Runs all tests except those in `test/e2e/`.
 
 ### End-to-End Tests (Kind)
 
@@ -71,135 +120,46 @@ task kubernetes/controller:test/e2e/setup/local
 task kubernetes/controller:test/e2e
 ```
 
-The E2E setup creates a Kind cluster, installs FluxCD and [kro](https://kro.run), loads the locally built controller
-image, installs the Helm chart, and then runs the Ginkgo test suite against it. For a step-by-step guide on setting up
-this environment, see the [controller environment setup](https://ocm.software/docs/getting-started/set-up-controller-environments/)
-on the project website. For deploying workloads, see the
-[Helm chart deployment tutorial](https://ocm.software/docs/getting-started/deploy-helm-charts/) and the
-[manifest deployment guide](https://ocm.software/docs/how-to/deploy-manifests-with-deployer/).
+The E2E setup creates a Kind cluster, installs FluxCD and kro, loads the locally built controller
+image, and installs the Helm chart.
 
-## Test Framework
+### Test Framework
 
-The controller uses [Ginkgo v2](https://onsi.github.io/ginkgo/) (BDD-style) with
-[Gomega](https://onsi.github.io/gomega/) matchers. This is different from the Go bindings and CLI, which use testify.
+The controller uses [Ginkgo v2](https://onsi.github.io/ginkgo/) with [Gomega](https://onsi.github.io/gomega/) matchers.
+This is different from the Go bindings and CLI, which use testify. Each controller package has a `suite_test.go` that
+bootstraps the envtest environment — see any of the `internal/controller/*/suite_test.go` files for the pattern.
 
-### Structure
+Use `-ginkgo.focus` to run specific specs (not `-run`, which only matches the top-level test function).
 
-Each controller package has a `suite_test.go` that bootstraps the envtest environment:
-
-```go
-func TestControllers(t *testing.T) {
-    RegisterFailHandler(Fail)
-    RunSpecs(t, "Controller Suite")
-}
-
-var _ = BeforeSuite(func() {
-    // Sets up envtest, registers CRDs, starts the controller manager
-})
-```
-
-Tests are written as Ginkgo `Describe`/`It` blocks:
-
-```go
-var _ = Describe("Repository Controller", func() {
-    It("should reconcile a repository", func() {
-        // test body using Gomega expectations
-        Expect(k8sClient.Create(ctx, repo)).To(Succeed())
-        Eventually(func(g Gomega) {
-            g.Expect(k8sClient.Get(ctx, key, repo)).To(Succeed())
-            g.Expect(repo.Status.Conditions).To(ContainElement(...))
-        }).Should(Succeed())
-    })
-})
-```
-
-### Running Specific Tests
-
-```bash
-# Focus on a specific Describe/It block by regex
-cd kubernetes/controller
-go test ./internal/controller/deployer/ -ginkgo.focus "should reconcile"
-
-# Run a specific suite
-go test ./internal/controller/repository/ -v
-```
-
-Note: Use `-ginkgo.focus` for Ginkgo specs, not `-run` (which only matches the top-level `TestControllers` function).
-
-## CRD and RBAC Generation
-
-CRDs, RBAC rules, and webhook configurations are generated from
-[kubebuilder markers](https://book.kubebuilder.io/reference/markers) in Go source files (e.g.,
-`+kubebuilder:object:root=true`, `+kubebuilder:rbac:...`). The `controller-gen` tool reads these markers and produces
-the manifests:
-
-```bash
-# Generate CRD manifests, RBAC, and webhook configs into config/
-task kubernetes/controller:manifests
-
-# Generate Go deepcopy and runtime.Object implementations
-task kubernetes/controller:generate
-```
-
-Generated output lands in `config/crd/bases/` and `config/rbac/`. These must stay in sync with the Helm chart
-templates - see the Helm section below.
+For controller-specific testing patterns (reconciler structure, condition handling, resource references), see the
+controller idioms section in the [coding patterns guide](../../docs/coding-patterns.md).
 
 ## Helm Chart
 
-The controller is deployed via a Helm chart in `kubernetes/controller/chart/`.
-
-### Common Tasks
+The chart lives in `chart/` and is the primary deployment mechanism.
 
 ```bash
 # Lint the chart
 task kubernetes/controller:helm/lint
 
-# Render templates locally (uses chart/test-values.yaml)
+# Render templates locally
 task kubernetes/controller:helm/template
 
-# Generate the values JSON schema from values.yaml
+# Generate values JSON schema and chart docs
 task kubernetes/controller:helm/schema
-
-# Generate chart documentation (README.md)
 task kubernetes/controller:helm/docs
 
-# Full validation (sync manifests, schema, docs, lint, and check for drift)
-task kubernetes/controller:helm/validate
-
-# Install into current cluster
+# Install into / uninstall from current cluster
 task kubernetes/controller:helm/install
-
-# Uninstall
 task kubernetes/controller:helm/uninstall
 ```
-
-### Keeping CRDs and Helm Chart in Sync
-
-The Helm chart templates in `chart/templates/crd/` and `chart/templates/rbac/` are generated from the kustomize output
-in `config/`. The sync process uses [kubebuilder's](https://book.kubebuilder.io/) Helm plugin
-(`kubebuilder edit --plugins=helm/v2-alpha`) to produce the final chart templates. After modifying any CRD or RBAC
-marker, you must sync them:
-
-```bash
-task kubernetes/controller:helm/sync-manifests
-```
-
-The `helm/validate` task checks for drift and will fail if the chart is out of sync. CI enforces this.
 
 ## Development Workflow Summary
 
 A typical change to the controller follows this flow:
 
 1. Modify API types in `api/v1alpha1/` or controller logic in `internal/controller/`.
-2. Run `task kubernetes/controller:generate` if you changed types.
-3. Run `task kubernetes/controller:manifests` if you changed CRD/RBAC markers.
-4. Run `task kubernetes/controller:helm/sync-manifests` if CRDs or RBAC changed.
-5. Run `task kubernetes/controller:test` to verify unit tests pass.
-6. Run `task kubernetes/controller:helm/validate` to ensure the chart is consistent.
-7. Set up a local Kind cluster with `task kubernetes/controller:test/e2e/setup/local` and run E2E tests with
+2. Run `task kubernetes/controller:test` to verify unit tests pass (this also regenerates code and manifests).
+3. Run `task kubernetes/controller:helm/validate` to ensure CRDs, RBAC, and the chart are consistent.
+4. Set up a local Kind cluster with `task kubernetes/controller:test/e2e/setup/local` and run E2E tests with
    `task kubernetes/controller:test/e2e`.
-8. For manual testing, use `task kubernetes/controller:helm/install` to deploy the controller into a cluster and
-   verify your changes against real workloads.
-9. For end-to-end validation across the full stack (CLI, controller, kro, FluxCD), run the conformance scenario
-   from `conformance/scenarios/sovereign/` with `task run`. This exercises air-gap transfer, signing, and
-   deployment in a Kind cluster.
