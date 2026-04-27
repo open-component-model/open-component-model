@@ -45,7 +45,7 @@ shared context. Because it is `Persistent`, Cobra propagates it to every subcomm
 2. **OCM config** — Load and merge configuration from standard search paths (`$OCM_CONFIG`, `~/.config/ocm/config`,
    etc.). See `cli/cmd/configuration/ocm_config.go` for the full search order.
 3. **Filesystem config** — Set up temporary folder and working directory paths.
-4. **Plugin manager** — Initialize the plugin system: register builtin plugins, discover external plugins from the
+4. **Plugin manager** — Initialize the plugin system: register built-in plugins, discover external plugins from the
    plugin directory.
 5. **Credential graph** — Build the credential resolution graph from configuration.
 6. **Context registration** — Store the assembled context in `cmd.Context()`.
@@ -77,11 +77,11 @@ From a contributor's perspective, the key points are:
 
 - The manager organizes plugins into typed registries — one for each capability. For the current list of registries,
   see the `PluginManager` struct in `bindings/go/plugin/manager/manager.go`.
-- **Builtin plugins** are compiled into the CLI and registered at startup in `cli/internal/plugin/builtin/builtin.go`.
+- **Built-in plugins** are compiled into the CLI and registered at startup in `cli/internal/plugin/builtin/builtin.go`.
 - **External plugins** are discovered from the plugin directory (default `~/.config/ocm/plugins`, overridable with
   `--plugin-directory` or via OCM config).
 - Commands interact with plugins through the manager's registries, never directly with plugin implementations. This
-  allows the same command code to work with both builtin and external plugins transparently.
+  allows the same command code to work with both built-in and external plugins transparently.
 
 ## How to Add a New Command
 
