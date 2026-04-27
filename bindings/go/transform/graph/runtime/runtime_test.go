@@ -31,10 +31,6 @@ func (m *mockFailingIdentityTransformer) Transform(_ context.Context, _ runtime.
 
 type mockFailingTransformer struct{}
 
-func (m *mockFailingTransformer) GetCredentialConsumerIdentities(_ context.Context, _ runtime.Typed) (map[string]runtime.Identity, error) {
-	return nil, nil
-}
-
 func (m *mockFailingTransformer) Transform(_ context.Context, _ runtime.Typed, _ map[string]map[string]string) (runtime.Typed, error) {
 	return nil, fmt.Errorf("transformer failed")
 }

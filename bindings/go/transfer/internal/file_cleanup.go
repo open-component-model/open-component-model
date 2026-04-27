@@ -64,10 +64,6 @@ type FileCleanup struct {
 	Scheme *runtime.Scheme
 }
 
-func (t *FileCleanup) GetCredentialConsumerIdentities(_ context.Context, _ runtime.Typed) (map[string]runtime.Identity, error) {
-	return nil, nil
-}
-
 func (t *FileCleanup) Transform(ctx context.Context, step runtime.Typed, _ map[string]map[string]string) (runtime.Typed, error) {
 	var transformation FileCleanupTransformation
 	if err := t.Scheme.Convert(step, &transformation); err != nil {

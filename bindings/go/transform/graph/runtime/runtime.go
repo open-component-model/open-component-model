@@ -16,15 +16,31 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
+// Transformer is the core interface for transformation graph nodes.
 type Transformer interface {
-	// GetCredentialConsumerIdentities returns named credential identities this transformer needs.
-	// Returns nil when no credentials are needed.
-	GetCredentialConsumerIdentities(ctx context.Context, step runtime.Typed) (map[string]runtime.Identity, error)
-
 	// Transform executes the transformation with pre-resolved credentials.
 	// nil credentials means none were requested or no resolver is configured.
 	Transform(ctx context.Context, step runtime.Typed, credentials map[string]map[string]string) (runtime.Typed, error)
 }
+
+// CredentialConsumer is an optional interface. Transformers that need credentials
+// implement this to declare their identities. The graph resolves them before calling Transform.
+// Transformers that don't need credentials simply don't implement this interface.
+type CredentialConsumer interface {
+	GetCredentialConsumerIdentities(ctx context.Context, step runtime.Typed) (map[string]runtime.Identity, error)
+}
+
+// --- PROPOSAL (follow-up): Also remove credentials from Transform signature ---
+//
+// type Transformer interface {
+// 	Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error)
+// }
+//
+// The graph would inject resolved credentials into ctx via credentials.WithCredentials.
+// Transformers that need creds pull them with credentials.FromContext(ctx).
+// See credentials/keys.go for the proposed context helpers.
+//
+// --- END PROPOSAL ---
 
 // State represents the state of a transformation node.
 type State int
@@ -138,22 +154,25 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 
 	step := transformation.AsRaw()
 
-	identities, err := transformer.GetCredentialConsumerIdentities(ctx, step)
-	if err != nil {
-		return fmt.Errorf("failed to get credential consumer identities for transformation %q: %w", transformation.ID, err)
-	}
-
-	// Resolve named credential keys declared by the transformer.
-	// ErrNotFound yields a nil entry (credential is optional); all other errors abort the transformation.
+	// Only resolve credentials for transformers that opt in via CredentialConsumer.
 	var creds map[string]map[string]string
-	if len(identities) > 0 && b.CredentialProvider != nil {
-		creds = make(map[string]map[string]string, len(identities))
-		for name, identity := range identities {
-			resolved, err := b.CredentialProvider.Resolve(ctx, identity)
-			if err != nil && !errors.Is(err, credentials.ErrNotFound) {
-				return fmt.Errorf("failed to resolve credentials %q for transformation %q: %w", name, transformation.ID, err)
+	if cc, ok := transformer.(CredentialConsumer); ok {
+		identities, err := cc.GetCredentialConsumerIdentities(ctx, step)
+		if err != nil {
+			return fmt.Errorf("failed to get credential consumer identities for transformation %q: %w", transformation.ID, err)
+		}
+
+		// Resolve named credential keys declared by the transformer.
+		// ErrNotFound yields a nil entry (credential is optional); all other errors abort the transformation.
+		if len(identities) > 0 && b.CredentialProvider != nil {
+			creds = make(map[string]map[string]string, len(identities))
+			for name, identity := range identities {
+				resolved, err := b.CredentialProvider.Resolve(ctx, identity)
+				if err != nil && !errors.Is(err, credentials.ErrNotFound) {
+					return fmt.Errorf("failed to resolve credentials %q for transformation %q: %w", name, transformation.ID, err)
+				}
+				creds[name] = resolved
 			}
-			creds[name] = resolved
 		}
 	}
 
