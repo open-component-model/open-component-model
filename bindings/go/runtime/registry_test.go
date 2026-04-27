@@ -318,35 +318,76 @@ func TestRegistry_NewObject_Based_On_Alias(t *testing.T) {
 }
 
 func TestScheme_ResolveCanonicalType(t *testing.T) {
-	def := NewVersionedType("HelmHTTPCredentials", "v1")
-	alias := NewUnversionedType("HelmHTTPCredentials")
-	unregistered := NewVersionedType("Unknown", "v1")
+	helmDefault := NewVersionedType("HelmHTTPCredentials", "v1")
+	helmAlias := NewUnversionedType("HelmHTTPCredentials")
+	helmAlpha := NewVersionedType("HelmHTTPCredentials", "v1alpha1")
+
+	ociDefault := NewVersionedType("OCICredentials", "v1")
+	ociAlias := NewUnversionedType("OCICredentials")
 
 	scheme := NewScheme()
-	scheme.MustRegisterWithAlias(&TestType{}, def, alias)
+	scheme.MustRegisterWithAlias(&TestType{}, helmDefault, helmAlias, helmAlpha)
+	scheme.MustRegisterWithAlias(&Raw{}, ociDefault, ociAlias)
 
-	t.Run("default type resolves to itself", func(t *testing.T) {
-		resolved := scheme.ResolveCanonicalType(def)
-		assert.Equal(t, def, resolved)
-	})
+	tests := []struct {
+		name     string
+		input    Type
+		expected Type
+	}{
+		{
+			name:     "default type resolves to itself",
+			input:    helmDefault,
+			expected: helmDefault,
+		},
+		{
+			name:     "unversioned alias resolves to default",
+			input:    helmAlias,
+			expected: helmDefault,
+		},
+		{
+			name:     "versioned alias resolves to default",
+			input:    helmAlpha,
+			expected: helmDefault,
+		},
+		{
+			name:     "unregistered type returns unchanged",
+			input:    NewVersionedType("Unknown", "v1"),
+			expected: NewVersionedType("Unknown", "v1"),
+		},
+		{
+			name:     "empty type returns empty",
+			input:    Type{},
+			expected: Type{},
+		},
+		{
+			name:     "second registered type resolves to itself",
+			input:    ociDefault,
+			expected: ociDefault,
+		},
+		{
+			name:     "second type alias resolves to its own default",
+			input:    ociAlias,
+			expected: ociDefault,
+		},
+		{
+			name:     "alias of one type does not resolve to another type",
+			input:    helmAlias,
+			expected: helmDefault, // not ociDefault
+		},
+		{
+			name:     "different version of unregistered type returns unchanged",
+			input:    NewVersionedType("HelmHTTPCredentials", "v2"),
+			expected: NewVersionedType("HelmHTTPCredentials", "v2"),
+		},
+	}
 
-	t.Run("alias resolves to default type", func(t *testing.T) {
-		resolved := scheme.ResolveCanonicalType(alias)
-		assert.Equal(t, def, resolved)
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resolved := scheme.ResolveCanonicalType(tc.input)
+			assert.Equal(t, tc.expected, resolved)
+		})
+	}
 
-	t.Run("unregistered type returns unchanged", func(t *testing.T) {
-		resolved := scheme.ResolveCanonicalType(unregistered)
-		assert.Equal(t, unregistered, resolved)
-	})
-
-	t.Run("two aliases of the same type resolve to the same default", func(t *testing.T) {
-		alias2 := NewVersionedType("HelmHTTPCredentials", "v1alpha1")
-		scheme2 := NewScheme()
-		scheme2.MustRegisterWithAlias(&TestType{}, def, alias, alias2)
-
-		assert.Equal(t, scheme2.ResolveCanonicalType(alias), scheme2.ResolveCanonicalType(alias2))
-	})
 }
 
 func TestRegistry_RegisterScheme(t *testing.T) {
