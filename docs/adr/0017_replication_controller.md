@@ -58,9 +58,20 @@ spec:
     name: target-repository
     namespace: default
 
-  transferOptions:
-    recursive: false
-    copyMode: localBlob     # localBlob | allResources
+  # Define a transfer config either by referencing a ConfigMap containing a transfer config or via
+  # inlined values.
+  # Follows the pattern from https://github.com/open-component-model/ocm-project/issues/869.
+  transferConfig:
+    name: transfer-config-map
+    namespace: default
+    # OR, name pending... 
+    inlined:
+      type: generic.config.ocm.software/v1
+      configurations:
+        - type: GlobalTransferOptions/v1alpha1 # Current not existing configuration type.
+          spec:
+            recursive: false
+            copyMode: localBlob
 
   # References resolved in the Replication CR's namespace.
   ocmConfig:
@@ -71,8 +82,23 @@ spec:
   suspend: false
 ```
 
-`transferOptions` is an inline form and is of `apiextensionsv1.JSON` type, trading
-CRD-level schema validation for forward compatibility.
+An example ConfigMap containing transfer configuration:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: transfer-config-map
+  namespace: default
+data:
+  transferConfig: |
+    type: generic.config.ocm.software/v1
+    configurations:
+      - type: GlobalTransferOptions/v1alpha1 # Current not existing configuration type.
+        spec:
+          recursive: false
+          copyMode: localBlob
+```
 
 `copyMode`:
 
