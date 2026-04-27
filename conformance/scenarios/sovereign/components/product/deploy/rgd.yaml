@@ -172,9 +172,7 @@ spec:
               resource:
                 name: helm-chart
           additionalStatusFields:
-            registry: resource.access.toOCI().registry
-            repository: resource.access.toOCI().repository
-            digest: resource.access.toOCI().digest
+            oci: resource.access.toOCI()
 
     # Resolve container image from postgres component
     - id: postgresImageResource
@@ -196,9 +194,7 @@ spec:
               resource:
                 name: image
           additionalStatusFields:
-            registry: resource.access.toOCI().registry
-            repository: resource.access.toOCI().repository
-            digest: resource.access.toOCI().digest
+            oci: resource.access.toOCI()
 
     # FluxCD OCIRepository for postgres helm chart
     - id: postgresOciRepository
@@ -216,9 +212,9 @@ spec:
           layerSelector:
             mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
             operation: copy
-          url: oci://${postgresChartResource.status.additional.registry}/${postgresChartResource.status.additional.repository}
+          url: oci://${postgresChartResource.status.additional.oci.registry}/${postgresChartResource.status.additional.oci.repository}
           ref:
-            digest: ${postgresChartResource.status.additional.digest}
+            digest: ${postgresChartResource.status.additional.oci.digest}
 
     # FluxCD HelmRelease for postgres
     - id: postgresHelmRelease
@@ -239,8 +235,8 @@ spec:
             name: ${postgresOciRepository.metadata.name}
           values:
             image:
-              repository: ${postgresImageResource.status.additional.registry}/${postgresImageResource.status.additional.repository}
-              digest: ${postgresImageResource.status.additional.digest}
+              repository: ${postgresImageResource.status.additional.oci.registry}/${postgresImageResource.status.additional.oci.repository}
+              digest: ${postgresImageResource.status.additional.oci.digest}
             postgresql:
               postgresqlDatabase: ${schema.spec.postgres.database.name}
               postgresqlUsername: ${schema.spec.postgres.database.username}
@@ -279,9 +275,7 @@ spec:
               resource:
                 name: helm-chart
           additionalStatusFields:
-            registry: resource.access.toOCI().registry
-            repository: resource.access.toOCI().repository
-            digest: resource.access.toOCI().digest
+            oci: resource.access.toOCI()
 
     # Resolve container image from notes component
     - id: notesImageResource
@@ -303,9 +297,7 @@ spec:
               resource:
                 name: image
           additionalStatusFields:
-            registry: resource.access.toOCI().registry
-            repository: resource.access.toOCI().repository
-            digest: resource.access.toOCI().digest
+            oci: resource.access.toOCI()
 
     # FluxCD OCIRepository for notes helm chart
     - id: notesOciRepository
@@ -323,9 +315,9 @@ spec:
           layerSelector:
             mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
             operation: copy
-          url: oci://${notesChartResource.status.additional.registry}/${notesChartResource.status.additional.repository}
+          url: oci://${notesChartResource.status.additional.oci.registry}/${notesChartResource.status.additional.oci.repository}
           ref:
-            digest: ${notesChartResource.status.additional.digest}
+            digest: ${notesChartResource.status.additional.oci.digest}
 
     # FluxCD HelmRelease for notes
     - id: notesHelmRelease
@@ -347,8 +339,8 @@ spec:
           values:
             replicaCount: ${schema.spec.notes.replicas}
             image:
-              repository: ${notesImageResource.status.additional.registry}/${notesImageResource.status.additional.repository}
-              digest: ${notesImageResource.status.additional.digest}
+              repository: ${notesImageResource.status.additional.oci.registry}/${notesImageResource.status.additional.oci.repository}
+              digest: ${notesImageResource.status.additional.oci.digest}
             databaseSecretRef: ${secrets.metadata.name}
             resources:
               requests:
