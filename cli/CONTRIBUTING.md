@@ -63,7 +63,8 @@ ocmctx.SubsystemRegistry()  // Type introspection
 
 The context struct and its accessors live in `cli/internal/context/context.go`.
 
-> **Note:** The `add component-version` command overrides `PersistentPreRunE` to inject working-directory resolution
+> [!NOTE]
+> The `add component-version` command overrides `PersistentPreRunE` to inject working-directory resolution
 > from the component constructor path before calling the shared bootstrap. This is the only command that customizes
 > the bootstrap — all others inherit the root hook directly.
 

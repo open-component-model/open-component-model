@@ -37,7 +37,8 @@ changes in one module are immediately visible to all other modules in the worksp
 catches breakage in dependent modules early. If your change touches a module that others import, their tests will run
 against your local version automatically.
 
-> **Note:** `go.work` is gitignored and not used in CI. CI tests each module in isolation using the versions pinned in
+> [!NOTE]
+> `go.work` is gitignored and not used in CI. CI tests each module in isolation using the versions pinned in
 > its `go.mod`. This means `go.work` can mask version mismatches — your code works locally because all modules resolve
 > against your working tree, but CI may fail because it resolves the last released version. Be aware of this difference
 > when debugging CI failures.
