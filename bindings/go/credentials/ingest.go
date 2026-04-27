@@ -291,14 +291,24 @@ func isAccepted(credentialTypeScheme *runtime.Scheme, credType runtime.Type, acc
 			return true
 		}
 	}
+
 	if credentialTypeScheme == nil {
 		return false
 	}
-	resolved := credentialTypeScheme.ResolveCanonicalType(credType)
+	resolved, ok := credentialTypeScheme.ResolveCanonicalType(credType)
+	if !ok {
+		slog.Debug("credential type is not registered in credential type scheme",
+			"credentialType", credType.String(),
+		)
+		return false
+	}
+
 	for _, a := range accepted {
-		if credentialTypeScheme.ResolveCanonicalType(a).Equal(resolved) {
+		if canonical, o := credentialTypeScheme.ResolveCanonicalType(a); o && canonical.Equal(resolved) {
 			return true
 		}
 	}
+
+	slog.Debug("credential type is not accepted by identity type")
 	return false
 }

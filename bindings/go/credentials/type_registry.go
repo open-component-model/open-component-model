@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"log/slog"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -74,10 +75,14 @@ func (r *IdentityTypeRegistry) RegisterWithAcceptedCredentials(
 // returns the same result as querying with the versioned default.
 // Returns nil, false if the identity type has no declared accepted credential types.
 func (r *IdentityTypeRegistry) AcceptedCredentialTypes(identityType runtime.Type) ([]runtime.Type, bool) {
-	resolved := r.scheme.ResolveCanonicalType(identityType)
-
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
+	resolved, ok := r.scheme.ResolveCanonicalType(identityType)
+	if !ok {
+		slog.Debug("IdentityTypeRegistry: IdentityType %s not accepted", "identityType", identityType)
+		return nil, false
+	}
 
 	accepted, ok := r.acceptedCreds[resolved]
 	return accepted, ok
