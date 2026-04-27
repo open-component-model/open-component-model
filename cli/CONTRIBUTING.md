@@ -19,7 +19,7 @@ has three layers:
 Each command lives in its own package under `cli/cmd/`. The package exports a single `New()` function that returns a
 `*cobra.Command`. The entry point is `cli/main.go`, which calls into the root command defined in `cli/cmd/cmd.go`.
 
-```
+```text
 cli/
 ├── main.go              # Entry point
 ├── cmd/

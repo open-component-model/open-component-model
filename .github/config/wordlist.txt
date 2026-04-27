@@ -578,6 +578,7 @@ readonly
 rearchitecture
 reconciledversion
 reconciler
+reconcilers
 refcount
 referencesconfig
 referrs
