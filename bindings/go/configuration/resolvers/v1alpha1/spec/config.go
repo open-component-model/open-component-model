@@ -76,6 +76,11 @@ type Resolver struct {
 	//   - "*.software/*/test" (matches test components in any software namespace)
 	//   - "ocm.software/core/[tc]est" (matches "test" or "cest" in core namespace)
 	ComponentNamePattern string `json:"componentNamePattern,omitempty"`
+
+	// VersionConstraint specifies an optional semver constraint for matching component versions.
+	// It limits the usage of the repository to resolve only components with versions
+	// that satisfy the given constraint (e.g. ">=1.0.0 <2.0.0", "^1.2.0", "~1.2.0").
+	VersionConstraint string `json:"versionConstraint,omitempty"`
 }
 
 // Lookup creates a new Config from a central V1 config.
