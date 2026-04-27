@@ -65,13 +65,14 @@ Versions
 a <code>frontend</code> component. These referenced components don&rsquo;t have to live in the same repository as the app — and in
 practice, they often don&rsquo;t. Teams publish components independently, to different registries or repository paths.</p><p>This creates a problem: when you ask the CLI to recursively resolve a component graph, it needs to know <strong>where</strong> to
 find each referenced component. The repository you pass on the command line only tells the CLI where to find the
-<strong>root</strong> component. For everything else, the CLI needs a mapping from component names to repositories.</p><p>That&rsquo;s what resolvers provide.</p><h2 id=what-are-resolvers>What Are Resolvers?<a href=#what-are-resolvers class=anchor aria-hidden=true>#</a></h2><p>A resolver maps a <strong>component name pattern</strong> (glob) to an
-<strong><a href=https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/01-model.md#component-repositories target=_blank rel=noopener>OCM repository</a></strong>.
+<strong>root</strong> component. For everything else, the CLI needs a mapping from component names to repositories.</p><p>That&rsquo;s what resolvers provide.</p><h2 id=what-are-resolvers>What Are Resolvers?<a href=#what-are-resolvers class=anchor aria-hidden=true>#</a></h2><p>A resolver maps a <strong>component name pattern</strong> (glob) to an</p><ul><li></li></ul><p>*
+<a href=https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/01-model.md#component-repositories target=_blank rel=noopener>OCM repository</a>
+**.
 When the CLI encounters a component reference during recursive operations, it walks the list of configured resolvers,
 finds the first pattern that matches the referenced component name, and queries the associated repository.</p><pre class=mermaid>
   flowchart TD
     Start[&#34;CLI encounters a component reference&#34;] --&gt; Resolvers[&#34;Walk resolver list (in order)&#34;]
-    Resolvers --&gt; Match{&#34;Component name matched the next resolver&#39;s pattern?&#34;}
+    Resolvers --&gt; Match{&#34;Component name matches pattern\nand version satisfies constraint (if set)?&#34;}
     Match -- Yes --&gt; Query[&#34;Query the resolver&#39;s configured repository&#34;]
     Match -- No --&gt; More{&#34;More resolvers in the list?&#34;}
     More -- Yes --&gt; Resolvers
@@ -80,17 +81,26 @@ finds the first pattern that matches the referenced component name, and queries 
     Found -- Yes --&gt; Done[&#34;Use this component version&#34;]
     Found -- No --&gt; Fail
 </pre><h2 id=configuration>Configuration<a href=#configuration class=anchor aria-hidden=true>#</a></h2><p>Resolvers are configured in the OCM configuration file (by default <code>$HOME/.ocmconfig</code>). Each resolver entry maps a
-component name pattern to a repository. Resolvers are evaluated in order — the first matching entry wins.</p><p>The repository field supports different repository types, including OCI registries and file-based CTF archives.
-Component name patterns use common glob syntax (e.g., <code>*</code> for single-level, <code>**</code> for multi-level matching).</p><div class="callout callout-tip d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><div class=callout-content><div class=callout-body><p>For the full configuration schema, supported repository types, and pattern syntax details, see the
+component name pattern and an optional version constraint to a repository. Resolvers are evaluated in order — the first
+matching entry wins.</p><p>The repository field supports different repository types, including OCI registries and file-based CTF archives.
+Component name patterns use common glob syntax (e.g., <code>*</code> for single-level, <code>**</code> for multi-level matching).
+Resolver entries can also include an optional version constraint to restrict matching to specific semver ranges.</p><div class="callout callout-tip d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><div class=callout-content><div class=callout-body><p>For the full configuration schema, supported repository types, and pattern syntax details, see the
 <a href=/docs/reference/resolver-configuration/>Resolver Configuration Reference</a>.</p></div></div></div><h2 id=recursive-resolution>Recursive Resolution<a href=#recursive-resolution class=anchor aria-hidden=true>#</a></h2><p>When a component version has references to other component versions (via <code>componentReferences</code>), the CLI can follow
 these references recursively using the <code>--recursive</code> flag. The CLI uses resolvers to locate each referenced component
 in its respective repository — without them, recursive resolution across multiple repositories is not possible.</p><h2 id=ocm-transfer>OCM Transfer<a href=#ocm-transfer class=anchor aria-hidden=true>#</a></h2><p>Resolvers play an important role in transferring component versions across registries. When transferring a component
 graph with <code>--recursive</code>, the CLI uses resolvers to locate each referenced component so it can copy the entire graph
 to the target repository. Combined with <code>--copy-resources</code>, this enables full transfers of component graphs —
 including all referenced resources — across registry boundaries or even air-gapped environments.</p><p>For more information about OCM transfer, see the
-<a href=/docs/concepts/transfer-and-transport/>Transfer and Transport</a> concept.</p><h2 id=next-steps>Next Steps<a href=#next-steps class=anchor aria-hidden=true>#</a></h2><ul><li><a href=/docs/tutorials/working-with-resolvers/>Tutorial: Working with Resolvers</a> — Hands-on walkthrough for setting up resolvers</li><li><a href=/docs/how-to/resolving-components-across-multiple-registries/>How-To: Resolve Components Across Multiple Registries</a> — Recipe for
-multi-registry resolution</li><li><a href=/docs/how-to/migrate-from-fallback-to-deterministic-repository-resolvers/>How-To: Migrate from Deprecated Resolvers</a> — Replace deprecated fallback
-resolvers with glob-based resolvers</li></ul><h2 id=related-documentation>Related Documentation<a href=#related-documentation class=anchor aria-hidden=true>#</a></h2><ul><li><a href=/docs/reference/resolver-configuration/>Reference: Resolver Configuration</a> — Full schema, repository types, and pattern syntax</li><li><a href=/docs/concepts/component-identity/>Component Identity</a> — Core concepts behind component versions, identities, and references</li><li><a href=/docs/how-to/transfer-components-across-an-air-gap/>How-To: Transfer Components Across an Air Gap</a> — Use OCM Transfer to move components between air-gapped environments</li><li><a href=/docs/tutorials/understand-credential-resolution/>Tutorial: Understand Credential Resolution</a> — Configure credentials for OCI registries</li></ul><div class="page-footer-meta d-flex flex-column flex-md-row justify-content-between"></div><div class="page-nav d-flex flex-column flex-sm-row"><div class="card w-100"><div class="card-body d-flex"><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-left" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<a href=/docs/concepts/transfer-and-transport/>Transfer and Transport</a> concept.</p><h2 id=next-steps>Next Steps<a href=#next-steps class=anchor aria-hidden=true>#</a></h2><ul><li><a href=/docs/tutorials/working-with-resolvers/>Tutorial: Working with Resolvers</a> — Hands-on walkthrough for
+setting up resolvers</li><li>[How-To: Resolve Components Across Multiple Registries]
+(/docs/how-to/resolving-components-across-multiple-registries/) — Recipe for
+multi-registry resolution</li><li><a href=/docs/how-to/migrate-from-fallback-to-deterministic-repository-resolvers/>How-To: Migrate from Deprecated Resolvers</a> —
+Replace deprecated fallback
+resolvers with glob-based resolvers</li></ul><h2 id=related-documentation>Related Documentation<a href=#related-documentation class=anchor aria-hidden=true>#</a></h2><ul><li><a href=/docs/reference/resolver-configuration/>Reference: Resolver Configuration</a> — Full schema,
+repository types, and pattern syntax</li><li><a href=/docs/concepts/component-identity/>Component Identity</a> — Core concepts behind component versions,
+identities, and references</li><li><a href=/docs/how-to/transfer-components-across-an-air-gap/>How-To: Transfer Components Across an Air Gap</a> — Use OCM Transfer
+to move components between air-gapped environments</li><li><a href=/docs/tutorials/understand-credential-resolution/>Tutorial: Understand Credential Resolution</a> — Configure
+credentials for OCI registries</li></ul><div class="page-footer-meta d-flex flex-column flex-md-row justify-content-between"></div><div class="page-nav d-flex flex-column flex-sm-row"><div class="card w-100"><div class="card-body d-flex"><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-left" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
 						<path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
 						<path d="M5 12l14 0"></path>
 						<path d="M5 12l6 6"></path>
