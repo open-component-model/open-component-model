@@ -317,6 +317,38 @@ func TestRegistry_NewObject_Based_On_Alias(t *testing.T) {
 	r.Equal(obj.GetType(), alias)
 }
 
+func TestScheme_ResolveCanonicalType(t *testing.T) {
+	def := NewVersionedType("HelmHTTPCredentials", "v1")
+	alias := NewUnversionedType("HelmHTTPCredentials")
+	unregistered := NewVersionedType("Unknown", "v1")
+
+	scheme := NewScheme()
+	scheme.MustRegisterWithAlias(&TestType{}, def, alias)
+
+	t.Run("default type resolves to itself", func(t *testing.T) {
+		resolved := scheme.ResolveCanonicalType(def)
+		assert.Equal(t, def, resolved)
+	})
+
+	t.Run("alias resolves to default type", func(t *testing.T) {
+		resolved := scheme.ResolveCanonicalType(alias)
+		assert.Equal(t, def, resolved)
+	})
+
+	t.Run("unregistered type returns unchanged", func(t *testing.T) {
+		resolved := scheme.ResolveCanonicalType(unregistered)
+		assert.Equal(t, unregistered, resolved)
+	})
+
+	t.Run("two aliases of the same type resolve to the same default", func(t *testing.T) {
+		alias2 := NewVersionedType("HelmHTTPCredentials", "v1alpha1")
+		scheme2 := NewScheme()
+		scheme2.MustRegisterWithAlias(&TestType{}, def, alias, alias2)
+
+		assert.Equal(t, scheme2.ResolveCanonicalType(alias), scheme2.ResolveCanonicalType(alias2))
+	})
+}
+
 func TestRegistry_RegisterScheme(t *testing.T) {
 	// Create source scheme with some types
 	sourceScheme := NewScheme()

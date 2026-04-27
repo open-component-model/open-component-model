@@ -274,6 +274,23 @@ func (r *Scheme) IsRegistered(typ Type) bool {
 	return exists
 }
 
+// ResolveCanonicalType returns the canonical (default) type for the given type.
+// If typ is a default type, it is returned as-is.
+// If typ is an alias, the default type it aliases is returned.
+// If typ is not registered, it is returned unchanged.
+func (r *Scheme) ResolveCanonicalType(typ Type) Type {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if _, exists := r.defaults.GetLeft(typ); exists {
+		return typ
+	}
+	if def, ok := r.aliases[typ]; ok {
+		return def
+	}
+	return typ
+}
+
 func (r *Scheme) MustRegisterWithAlias(prototype Typed, types ...Type) {
 	if err := r.RegisterWithAlias(prototype, types...); err != nil {
 		panic(err)
