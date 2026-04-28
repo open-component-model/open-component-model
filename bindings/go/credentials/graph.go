@@ -31,7 +31,7 @@ type Options struct {
 
 // ToGraph creates a new credential graph from the provided configuration and options.
 // It initializes the graph structure and ingests the configuration into the graph.
-func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (Resolver, error) {
+func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (*Graph, error) {
 	g := &Graph{
 		syncedDag:                    newSyncedDag(),
 		credentialPluginProvider:     opts.CredentialPluginProvider,
@@ -56,9 +56,9 @@ type Graph struct {
 
 	*syncedDag // The underlying DAG structure for managing dependencies
 
-	repositoryPluginProvider     RepositoryPluginProvider // injection for resolving custom repository types
-	credentialPluginProvider     CredentialPluginProvider // injection for resolving custom credential types
-	identityTypeRegistry         *IdentityTypeRegistry    // validates consumer identity types and accepted credentials
+	repositoryPluginProvider     RepositoryPluginProvider     // injection for resolving custom repository types
+	credentialPluginProvider     CredentialPluginProvider     // injection for resolving custom credential types
+	identityTypeRegistry         *IdentityTypeRegistry        // validates consumer identity types and accepted credentials
 	credentialTypeSchemeProvider CredentialTypeSchemeProvider // validates credential types from config
 }
 
