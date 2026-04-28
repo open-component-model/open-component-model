@@ -2,9 +2,9 @@ name: "Website: Update security.txt"
 
 on:
   schedule:
-    # Run on December 1st — gives the team ~30 days before the Dec 31
-    # expiry to review and merge the renewal PR.
-    - cron: '0 9 1 12 *'
+    # Run every weekday in December at 09:00 UTC. The create-pull-request
+    # action is idempotent so repeated runs simply update the same PR branch.
+    - cron: '0 9 * 12 1-5'
   workflow_dispatch:
 
 permissions:
@@ -26,12 +26,20 @@ jobs:
 
     - name: Bump Expires date by one year
       run: |
+        set -euo pipefail
         FILE=website/static/.well-known/security.txt
-        # Extract current Expires value (e.g. 2027-04-24T00:00:00.000Z)
-        CURRENT=$(grep '^Expires:' "$FILE" | sed 's/Expires: //')
-        # Advance by exactly one year using the date tool
+        CURRENT=$(sed -n 's/^Expires:[[:space:]]*//p' "$FILE")
+        if [[ -z "${CURRENT}" ]]; then
+          echo "::error::Missing Expires field in ${FILE}"
+          exit 1
+        fi
         NEW=$(date -u -d "$CURRENT + 1 year" '+%Y-%m-%dT%H:%M:%S.000Z' 2>/dev/null \
-              || date -u -j -v+1y -f '%Y-%m-%dT%H:%M:%S.000Z' "$CURRENT" '+%Y-%m-%dT%H:%M:%S.000Z')
+              || date -u -j -v+1y -f '%Y-%m-%dT%H:%M:%S.000Z' "$CURRENT" '+%Y-%m-%dT%H:%M:%S.000Z') \
+              || { echo "::error::Could not parse Expires value: ${CURRENT}"; exit 1; }
+        if [[ -z "${NEW}" ]]; then
+          echo "::error::Computed Expires is empty"
+          exit 1
+        fi
         sed -i "s|^Expires:.*|Expires: $NEW|" "$FILE"
         echo "Updated Expires: $CURRENT → $NEW"
 

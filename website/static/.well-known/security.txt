@@ -1,5 +1,6 @@
 Contact: https://github.com/open-component-model/open-component-model/security/advisories/new
 Contact: mailto:open-component-model-tsc@lists.neonephos.org
+Canonical: https://ocm.software/.well-known/security.txt
 Policy: https://github.com/open-component-model/open-component-model/blob/main/SECURITY.md
 Preferred-Languages: en
 Expires: 2027-12-31T00:00:00.000Z

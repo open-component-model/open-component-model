@@ -88,5 +88,5 @@ For details on OCM's security design principles, threat model, and mitigations, 
 
 ## Past Security Advisories
 
-None yet. See [Published Security Advisories](https://github.com/open-component-model/open-component-model/security/advisories?state=published)
-once advisories are available.
+All published advisories are listed at
+[Published Security Advisories](https://github.com/open-component-model/open-component-model/security/advisories?state=published).
