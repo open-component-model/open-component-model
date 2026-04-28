@@ -90,7 +90,10 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 	}
 	go func() {
 		if sErr := srv.Serve(listener); sErr != nil && !errors.Is(sErr, http.ErrServerClosed) {
-			errCh <- sErr
+			select {
+			case errCh <- sErr:
+			default:
+			}
 		}
 	}()
 	defer srv.Shutdown(ctx) //nolint:errcheck // best-effort shutdown
@@ -335,7 +338,7 @@ func openBrowser(ctx context.Context, rawURL string, errCh chan<- error) error {
 	case "linux":
 		cmd = exec.CommandContext(ctx, "xdg-open", rawURL)
 	case "windows":
-		cmd = exec.CommandContext(ctx, "rundll32", "url.dll,FileProtocolHandler", rawURL)
+		cmd = exec.CommandContext(ctx, "cmd", "/c", "start", "", rawURL)
 	default:
 		return fmt.Errorf("unsupported platform %s", runtime.GOOS)
 	}
