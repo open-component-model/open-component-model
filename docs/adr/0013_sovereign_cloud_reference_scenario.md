@@ -354,9 +354,7 @@ Key patterns used in the RGD:
 - **`additionalStatusFields`** with CEL expressions to extract OCI coordinates:
   ```yaml
   additionalStatusFields:
-    registry: resource.access.globalAccess.imageReference.toOCI().registry
-    repository: resource.access.globalAccess.imageReference.toOCI().repository
-    digest: resource.access.globalAccess.imageReference.toOCI().digest
+    oci: resource.access.toOCI()
   ```
 
 - **`readyWhen`** conditions using CEL to gate resource ordering:
