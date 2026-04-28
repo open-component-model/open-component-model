@@ -24,12 +24,12 @@ require (
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260423205942-5236fa6f4d3f
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260423205942-5236fa6f4d3f
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260423205942-5236fa6f4d3f
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260423205942-5236fa6f4d3f
-	ocm.software/open-component-model/bindings/go/oci v0.0.39
+	ocm.software/open-component-model/bindings/go/oci v0.0.40
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260423205942-5236fa6f4d3f
