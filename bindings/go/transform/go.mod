@@ -9,7 +9,7 @@ require (
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260423205942-5236fa6f4d3f
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/runtime v0.0.7
+	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -28,5 +28,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/configuration v0.0.12 // indirect
+	ocm.software/open-component-model/bindings/go/configuration v0.0.13 // indirect
 )

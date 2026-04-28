@@ -363,8 +363,8 @@ k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 h1:kBawHLSnx/mYHmRnNUf9d4CpjREbe
 k8s.io/utils v0.0.0-20260319190234-28399d86e0b5/go.mod h1:xDxuJ0whA3d0I4mf/C4ppKHxXynQ+fxnkmQH0vTHnuk=
 ocm.software/open-component-model/bindings/go/blob v0.0.12 h1:5YOFDxERzF6w+rPWYuvnb5iVf3xgWJo9wLkzIPe+FmU=
 ocm.software/open-component-model/bindings/go/blob v0.0.12/go.mod h1:YswKfR/kxhdHHK7bN98S2O73ZZlPLsHfHO2Bjsr6Zww=
-ocm.software/open-component-model/bindings/go/configuration v0.0.12 h1:SXrHUR70gsW+qZI5zbCtem6Rh5DvSFA19GDEd8CNtis=
-ocm.software/open-component-model/bindings/go/configuration v0.0.12/go.mod h1:0sMurs1+cI/ohkuNSipDPPRb5ycSSTHDZoFG92aDtlE=
+ocm.software/open-component-model/bindings/go/configuration v0.0.13 h1:fARaCEkyBvuZ8/3nUDMb0LZF3YuohBbJXCTkOqqUmkw=
+ocm.software/open-component-model/bindings/go/configuration v0.0.13/go.mod h1:B8rEZoPPL4bAYhsi5I4IZJ8EJSOwMupd95Lw/N0TBRA=
 ocm.software/open-component-model/bindings/go/constructor v0.0.7 h1:w1VB//QLrbC6r+lB8FHqcu4dK43wQD0MgULTsxFc0hA=
 ocm.software/open-component-model/bindings/go/constructor v0.0.7/go.mod h1:Aont6PV4Tm4ZU6ESOZdnnhJ+YV7LBeKM98+PSaMX+wA=
 ocm.software/open-component-model/bindings/go/credentials v0.0.9 h1:sYKfVKs+CrVL2EuKYNevCjXq1cdF0DsLnWyEjamjDdY=
@@ -385,8 +385,8 @@ ocm.software/open-component-model/bindings/go/plugin v0.0.14 h1:PJg5pYB26ji9xKhK
 ocm.software/open-component-model/bindings/go/plugin v0.0.14/go.mod h1:nXAFNN9qb4RpVbkjK55RVgWwGBgQZpfIIQw9kNrXlNE=
 ocm.software/open-component-model/bindings/go/repository v0.0.8 h1:TUwsQSOkPMvKAU3ciK7Tr2UgewDag640X+OD97zI2oE=
 ocm.software/open-component-model/bindings/go/repository v0.0.8/go.mod h1:2TCCOD2lV/druBsW3/YBRnk8uOqUJCPefk1s7MyULb8=
-ocm.software/open-component-model/bindings/go/runtime v0.0.7 h1:/4RDxVVubr6IC+ZKNAseDl4CoTwweIx0LYmCiNgkQYU=
-ocm.software/open-component-model/bindings/go/runtime v0.0.7/go.mod h1:hbas6Al4VECYKFk51SLIi8zdzhFgZ2WvFpPljatbJHo=
+ocm.software/open-component-model/bindings/go/runtime v0.0.8 h1:NIN8smq0Fs64N10UCSx7RrysIB/u8ukVF/GeT76uQRE=
+ocm.software/open-component-model/bindings/go/runtime v0.0.8/go.mod h1:sRm+ybi9yjJGAgMSUHr0xdaSobsmeU8DWGP4Xonaso8=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
 oras.land/oras-go/v2 v2.6.0/go.mod h1:magiQDfG6H1O9APp+rOsvCPcW1GD2MM7vgnKY0Y+u1o=
 sigs.k8s.io/controller-runtime v0.23.3 h1:VjB/vhoPoA9l1kEKZHBMnQF33tdCLQKJtydy4iqwZ80=

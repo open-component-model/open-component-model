@@ -11,14 +11,14 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/registry v0.41.0
 	golang.org/x/crypto v0.49.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.12
-	ocm.software/open-component-model/bindings/go/configuration v0.0.12
+	ocm.software/open-component-model/bindings/go/configuration v0.0.13
 	ocm.software/open-component-model/bindings/go/credentials v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260423205942-5236fa6f4d3f
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
 	ocm.software/open-component-model/bindings/go/oci v0.0.40
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
-	ocm.software/open-component-model/bindings/go/runtime v0.0.7
+	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	oras.land/oras-go/v2 v2.6.0
 )
 
