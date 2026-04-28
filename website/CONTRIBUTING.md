@@ -254,29 +254,25 @@ Documentation lives in different repositories depending on what it documents.
 ```text
 What are you documenting?
 
-CLI command/flag in old CLI (open-component-model/ocm)?
-  -> ocm repo (content_versioned/version-legacy/docs/reference/)
-  -> Auto-imported to website
-CLI command/flag in new CLI (open-component-model/open-component-model/cli)?
-  -> mono-repo (docs/reference/)
-  -> Auto-imported to website
+CLI command/flag in the legacy CLI (open-component-model/ocm)?
+  -> website/content_versioned/version-legacy/docs/reference/
+CLI command/flag in the current CLI?
+  -> cli/docs/reference/ (Hugo mounts this into the website automatically)
 
-Go library function/type from (open-component-model/ocm)?
-  -> Respective source repo documentation, available as go package documentation
-Go library function/type from (open-component-model/open-component-model/bindings/go)?
-  -> Respective source repo documentation, available as go package documentation
+Go library function/type?
+  -> Source repo documentation, available as Go package documentation
 
 Kubernetes controller / CRD / Helm Chart?
-  -> `open-component-model/kubernetes/controller` has CRD definitions and controller Helm Charts
+  -> kubernetes/controller/ has CRD definitions and controller Helm Charts
 
 A new way to start using OCM?
-  -> ocm-website (getting-started/)
+  -> website/content/docs/getting-started/
 User workflow spanning multiple tools step-by-step?
-  -> ocm-website (tutorials/)
+  -> website/content/docs/tutorials/
 A specific process or enablement of a concrete goal?
-  -> ocm-website (how-to/)
+  -> website/content/docs/how-to/
 Conceptual explanation of OCM?
-  -> ocm-website (concepts/)
+  -> website/content/docs/concepts/
 ```
 
 ### Marking Version-Specific Content
