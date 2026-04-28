@@ -327,8 +327,8 @@ golang.org/x/oauth2 v0.36.0/go.mod h1:YDBUJMTkDnJS+A4BP4eZBjCqtokkg1hODuPjwiGPO7
 golang.org/x/sync v0.20.0 h1:e0PTpb7pjO8GAtTs2dQ6jYa5BWYlMuX047Dco/pItO4=
 golang.org/x/sync v0.20.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
 golang.org/x/sys v0.0.0-20210616094352-59db8d763f22/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.42.0 h1:omrd2nAlyT5ESRdCLYdm3+fMfNFE/+Rf4bDIQImRJeo=
-golang.org/x/sys v0.42.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+golang.org/x/sys v0.43.0 h1:Rlag2XtaFTxp19wS8MXlJwTvoh8ArU6ezoyFsMyCTNI=
+golang.org/x/sys v0.43.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 golang.org/x/term v0.41.0 h1:QCgPso/Q3RTJx2Th4bDLqML4W6iJiaXFq2/ftQF13YU=
 golang.org/x/term v0.41.0/go.mod h1:3pfBgksrReYfZ5lvYM0kSO0LIkAl4Yl2bXOkKP7Ec2A=
 golang.org/x/text v0.35.0 h1:JOVx6vVDFokkpaq1AEptVzLTpDe9KGpj5tR4/X+ybL8=
@@ -407,8 +407,8 @@ ocm.software/open-component-model/bindings/go/input/file v0.0.3 h1:fOs+mpqEIwCtR
 ocm.software/open-component-model/bindings/go/input/file v0.0.3/go.mod h1:ugJx+Togjama3t2u30sfAyrd3/Td+IqcdDdHpoSwy/4=
 ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260423205942-5236fa6f4d3f h1:lta7fk38tPKKcLnoCAsoLTorf14K3uWgvfzZAw2UdIY=
 ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260423205942-5236fa6f4d3f/go.mod h1:UcCLmUc+0pYkbJHzwz+bNYVlyRKyPSr7dgL3csRKjsg=
-ocm.software/open-component-model/bindings/go/oci v0.0.39 h1:kDpneFeFRtzyHpUARM2yZN8NdHbabj6ymx6GnAahL8c=
-ocm.software/open-component-model/bindings/go/oci v0.0.39/go.mod h1:6Hl1wqCwXJP4xoNu6o9Ypq4emDEiyymWCgqpr6juhvU=
+ocm.software/open-component-model/bindings/go/oci v0.0.40 h1:N1iMdJ9WHVM8rOXqxpB6q7GBvhat9HarTEz99VcRGqI=
+ocm.software/open-component-model/bindings/go/oci v0.0.40/go.mod h1:JvlaV+Cswx33bdWr01kSsF5FPZcEGGCQixRu0L1NCMU=
 ocm.software/open-component-model/bindings/go/plugin v0.0.14 h1:PJg5pYB26ji9xKhKjSmdhajw6XBs97wNhmoo0TdkS1o=
 ocm.software/open-component-model/bindings/go/plugin v0.0.14/go.mod h1:nXAFNN9qb4RpVbkjK55RVgWwGBgQZpfIIQw9kNrXlNE=
 ocm.software/open-component-model/bindings/go/repository v0.0.8 h1:TUwsQSOkPMvKAU3ciK7Tr2UgewDag640X+OD97zI2oE=
