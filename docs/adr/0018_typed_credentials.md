@@ -53,7 +53,7 @@ separate credential types are defined per access mode rather than one type with 
 
 The `IdentityTypeRegistry` stores which credential types each identity type accepts. This mapping is declarative — it
 is provided at registration time, not implemented as an interface on the identity struct. This keeps identity structs
-free of credential-type imports and aligns builtin bindings with the same registration model used by external plugins
+free of credential-type imports and aligns built-in bindings with the same registration model used by external plugins
 (which declare `AcceptedCredentialTypes` in their capability JSON).
 
 ```go
@@ -152,7 +152,7 @@ configuration:
 - **`IdentityTypeRegistry`** — wraps a `runtime.Scheme` for identity type deserialization and stores the mapping of
   identity types to their accepted credential types. This replaces the earlier `IdentityTypeSchemeProvider` concept.
 
-The `PluginManager` owns these registries. Both builtin bindings and external plugins register their types into them.
+The `PluginManager` owns these registries. Both built-in bindings and external plugins register their types into them.
 The graph never knows or cares where a type came from — it reads from the registries through their interfaces.
 
 #### Registration
@@ -328,7 +328,7 @@ migration path ensures no development blocking while transitioning the multi-mod
 - **`CredentialAcceptor` interface replaced by `IdentityTypeRegistry`**. The accepted credential types mapping is now
   declarative (stored at registration time via `RegisterWithAcceptedCredentials`) rather than behavioral (implemented
   as an interface on identity structs). This removes the cross-package import coupling between identity and credential
-  type packages and aligns builtin bindings with the same registration model used by external plugins.
+  type packages and aligns built-in bindings with the same registration model used by external plugins.
 - **`IdentityTypeSchemeProvider` replaced by `IdentityTypeRegistry`**. The registry wraps a `runtime.Scheme` and adds
   the accepted credential types mapping. The graph receives it via `Options.IdentityTypeRegistry`.
 - **`toIdentity` bridge function** added as private migration scaffolding in the credentials package. It exists because
