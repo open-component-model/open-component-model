@@ -188,9 +188,13 @@ func extractResolvable(ctx context.Context, g *Graph, creds []runtime.Typed) (ru
 		}
 
 		// Try the credential type scheme first (e.g. HelmCredentials/v1, OCICredentials/v1).
-		if g.credentialTypeScheme() != nil {
-			if typed, err := g.credentialTypeScheme().NewObject(cred.GetType()); err == nil {
-				if err := g.credentialTypeScheme().Convert(cred, typed); err == nil {
+		// Only attempt deserialization for types explicitly registered in the scheme.
+		// Schemes configured with WithAllowUnknown would otherwise round-trip any type
+		// as *runtime.Raw, making unregistered credentials look "resolved" and preventing
+		// plugin edge creation.
+		if credScheme := g.credentialTypeScheme(); credScheme != nil && credScheme.IsRegistered(cred.GetType()) {
+			if typed, err := credScheme.NewObject(cred.GetType()); err == nil {
+				if err := credScheme.Convert(cred, typed); err == nil {
 					if resolved == nil {
 						resolved = typed
 					} else {
