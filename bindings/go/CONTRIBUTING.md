@@ -23,37 +23,37 @@ task bindings/go/oci:test
 
 ## Go Workspace
 
-This repository uses a [Go workspace](https://go.dev/doc/tutorial/workspaces) to manage cross-module dependencies. If
-you have not set it up yet, run from the repository root:
+If you are making cross-cutting changes that span multiple modules, you can optionally set up a
+[Go workspace](https://go.dev/doc/tutorial/workspaces) so that local changes in one module are immediately visible to
+all others:
 
 ```bash
 task init/go.work
 ```
 
-This creates a `go.work` file that links all modules, enabling IDE navigation and cross-module refactoring. Local
-changes in one module are immediately visible to all other modules in the workspace.
-
-**Always run `task test` from the repository root** before submitting a PR. This runs tests across all modules and
-catches breakage in dependent modules early. If your change touches a module that others import, their tests will run
-against your local version automatically.
+This creates a `go.work` file that links all modules, enabling IDE navigation and cross-module refactoring.
 
 > [!NOTE]
-> `go.work` is gitignored and not used in CI. CI tests each module in isolation using the versions pinned in
-> its `go.mod`. This means `go.work` can mask version mismatches - your code works locally because all modules resolve
+> `go.work` is gitignored and not used in CI. CI tests each module in isolation using the versions pinned in its
+> `go.mod`. This means `go.work` can mask version mismatches - your code works locally because all modules resolve
 > against your working tree, but CI may fail because it resolves the last released version. Be aware of this difference
 > when debugging CI failures.
 
-### Breaking API Changes
+**Always run `task test` from the repository root** before submitting a PR. This runs tests across all modules and
+catches breakage in dependent modules early.
 
-If you change a public API in a module (e.g., `runtime`) and `task test` shows failures in dependent modules (e.g.,
-`oci`, `cli`), those dependent modules will need follow-up PRs after your change is released:
+## Breaking API Changes
+
+If you change a public API in a module (e.g., `runtime`), other modules that depend on it (e.g., `oci`, `cli`) will
+need follow-up PRs after your change is released. If you have `go.work` active, `task test` and `task test/integration`
+will show these failures locally. Without `go.work`, you will only see failures in CI after the dependent modules try
+to update to your new version.
 
 1. Create a PR that changes the API in the affected module. Mark it as a breaking change by adding `!` to the PR title
    (e.g., `feat!: rename Foo to Bar`) so CI applies the `!BREAKING-CHANGE!` label.
-2. After the PR is merged, [release the module](#releasing-a-module) so a new tag is available.
+2. After the PR is merged, [release the module](#releasing-a-module) so a new tag is available (only if a tag already
+exists for that submodule).
 3. Create follow-up PRs for each dependent module that update `go.mod` to the new version and adapt to the API change.
-
-You cannot update the dependent modules first because their CI would still resolve the old released version and fail.
 
 ## Testing
 
@@ -138,14 +138,7 @@ If this returns no results, the module has not been released yet and is consumed
 
 Releases are created through the
 [Release Go Submodule](../../.github/workflows/release-go-submodule.yaml) workflow, which is triggered manually via
-`workflow_dispatch` in the GitHub Actions UI. It accepts the following inputs:
-
-| Input | Description | Default |
-|-------|-------------|---------|
-| `path` | Relative path to the module (e.g., `bindings/go/oci`) | required |
-| `bump` | Version bump mode (`major`, `minor`, `patch`, `none`) | `patch` |
-| `suffix` | Optional pre-release suffix (e.g., `alpha1` produces `v0.0.1-alpha1`) | - |
-| `dry_run` | Preview the tag and changelog without pushing | `true` |
+`workflow_dispatch` in the GitHub Actions UI.
 
 The workflow computes the next version from the latest existing tag for that module, generates a changelog from commits
 touching the module's path, and creates an annotated Git tag. For the `helm` module specifically, the workflow also
