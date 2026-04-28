@@ -118,8 +118,41 @@ func TestLocalBlob_UnmarshalJSON_Minimal(t *testing.T) {
 	assert.Empty(t, blob.ReferenceName)
 }
 
+func TestLocalBlob_UnmarshalJSON_UnversionedUpperCamelCase(t *testing.T) {
+	jsonData := `{
+		"type": "LocalBlob",
+		"localReference": "sha256:abc123",
+		"mediaType": "application/octet-stream"
+	}`
+
+	var blob descriptorv2.LocalBlob
+	err := json.Unmarshal([]byte(jsonData), &blob)
+
+	require.NoError(t, err)
+	assert.Equal(t, descriptorv2.LocalBlobAccessType, blob.Type.Name)
+	assert.Empty(t, blob.Type.Version)
+	assert.Equal(t, "sha256:abc123", blob.LocalReference)
+	assert.Equal(t, "application/octet-stream", blob.MediaType)
+}
+
+func TestLocalBlob_UnmarshalJSON_UnversionedLegacy(t *testing.T) {
+	jsonData := `{
+		"type": "localBlob",
+		"localReference": "sha256:abc123",
+		"mediaType": "application/octet-stream"
+	}`
+
+	var blob descriptorv2.LocalBlob
+	err := json.Unmarshal([]byte(jsonData), &blob)
+
+	require.NoError(t, err)
+	assert.Equal(t, descriptorv2.LegacyLocalBlobAccessType, blob.Type.Name)
+	assert.Empty(t, blob.Type.Version)
+	assert.Equal(t, "sha256:abc123", blob.LocalReference)
+	assert.Equal(t, "application/octet-stream", blob.MediaType)
+}
+
 func TestLocalBlob_Constants(t *testing.T) {
-	// Test access type constants
 	assert.Equal(t, "LocalBlob", descriptorv2.LocalBlobAccessType)
 	assert.Equal(t, "localBlob", descriptorv2.LegacyLocalBlobAccessType)
 	assert.Equal(t, "v1", descriptorv2.LocalBlobAccessTypeVersion)
