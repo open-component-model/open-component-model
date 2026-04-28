@@ -14,6 +14,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+func mustNewSpecProvider(t *testing.T, ctx context.Context, resolvers []*resolverspec.Resolver) *pathmatcher.SpecProvider {
+	t.Helper()
+	sp, err := pathmatcher.NewSpecProvider(ctx, resolvers)
+	if err != nil {
+		t.Fatalf("NewSpecProvider: %v", err)
+	}
+	return sp
+}
+
 // mockRepoProvider implements repository.ComponentVersionRepositoryProvider for testing
 type mockRepoProvider struct {
 	callCount int
@@ -64,7 +73,7 @@ func TestPathMatcherProvider_Caching(t *testing.T) {
 	provider := &pathMatcherResolver{
 		repoProvider: mockProvider,
 		graph:        nil,
-		specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
+		specProvider: mustNewSpecProvider(t, ctx, resolvers),
 		repoCache:    make(map[string]repository.ComponentVersionRepository),
 	}
 
@@ -122,7 +131,7 @@ func TestPathMatcherProvider_GetRepositoryForSpecification_Valid(t *testing.T) {
 	provider := &pathMatcherResolver{
 		repoProvider: mockProvider,
 		graph:        nil,
-		specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
+		specProvider: mustNewSpecProvider(t, ctx, resolvers),
 		repoCache:    make(map[string]repository.ComponentVersionRepository),
 	}
 
@@ -157,7 +166,7 @@ func TestPathMatcherProvider_GetRepositoryForSpecification_Caching(t *testing.T)
 	provider := &pathMatcherResolver{
 		repoProvider: mockProvider,
 		graph:        nil,
-		specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
+		specProvider: mustNewSpecProvider(t, ctx, resolvers),
 		repoCache:    make(map[string]repository.ComponentVersionRepository),
 	}
 
@@ -274,7 +283,7 @@ func TestGetRepositorySpecificationForComponent(t *testing.T) {
 		provider := &pathMatcherResolver{
 			repoProvider: mockProvider,
 			graph:        nil,
-			specProvider: pathmatcher.NewSpecProvider(ctx, resolvers),
+			specProvider: mustNewSpecProvider(t, ctx, resolvers),
 			repoCache:    make(map[string]repository.ComponentVersionRepository),
 		}
 
@@ -317,6 +326,97 @@ func TestGetRepositorySpecificationForComponent(t *testing.T) {
 
 		runTests(t, resolver)
 	})
+}
+
+// TestGetRepositorySpecificationForComponent_VersionConstraint tests version-based routing
+// with two resolvers sharing the same component name pattern but different version constraints.
+func TestGetRepositorySpecificationForComponent_VersionConstraint(t *testing.T) {
+	ctx := context.Background()
+
+	repoSpecLegacy := &runtime.Raw{
+		Type: runtime.NewUnversionedType("test-repo"),
+		Data: []byte(`{"type":"test-repo","name":"legacy-registry"}`),
+	}
+
+	repoSpecCurrent := &runtime.Raw{
+		Type: runtime.NewUnversionedType("test-repo"),
+		Data: []byte(`{"type":"test-repo","name":"current-registry"}`),
+	}
+
+	resolvers := []*resolverspec.Resolver{
+		{
+			Repository:           repoSpecLegacy,
+			ComponentNamePattern: "my-org/*",
+			VersionConstraint:    ">=1.0.0, <2.0.0",
+		},
+		{
+			Repository:           repoSpecCurrent,
+			ComponentNamePattern: "my-org/*",
+			VersionConstraint:    ">=2.0.0",
+		},
+	}
+
+	mockProvider := &mockRepoProvider{}
+
+	provider := &pathMatcherResolver{
+		repoProvider: mockProvider,
+		graph:        nil,
+		specProvider: mustNewSpecProvider(t, ctx, resolvers),
+		repoCache:    make(map[string]repository.ComponentVersionRepository),
+	}
+
+	tests := []struct {
+		name      string
+		component string
+		version   string
+		wantSpec  runtime.Typed
+		wantErr   bool
+	}{
+		{
+			name:      "v1 routes to legacy registry",
+			component: "my-org/my-component",
+			version:   "1.5.0",
+			wantSpec:  repoSpecLegacy,
+			wantErr:   false,
+		},
+		{
+			name:      "v2 routes to current registry",
+			component: "my-org/my-component",
+			version:   "2.0.0",
+			wantSpec:  repoSpecCurrent,
+			wantErr:   false,
+		},
+		{
+			name:      "v0 matches no resolver",
+			component: "my-org/my-component",
+			version:   "0.9.0",
+			wantSpec:  nil,
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec, err := provider.GetRepositorySpecificationForComponent(ctx, tt.component, tt.version)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetRepositorySpecificationForComponent() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil {
+				return
+			}
+
+			wantRaw := tt.wantSpec.(*runtime.Raw)
+			gotRaw, ok := spec.(*runtime.Raw)
+			if !ok {
+				t.Errorf("GetRepositorySpecificationForComponent() returned type %T, want *runtime.Raw", spec)
+				return
+			}
+			if string(gotRaw.Data) != string(wantRaw.Data) {
+				t.Errorf("GetRepositorySpecificationForComponent() = %s, want %s", string(gotRaw.Data), string(wantRaw.Data))
+			}
+		})
+	}
 }
 
 // fallbackMockRepoProvider implements repository.ComponentVersionRepositoryProvider for fallback resolver testing
