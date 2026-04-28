@@ -337,11 +337,28 @@ configurations:
    - type: attributes.config.ocm.software
      attributes:  # map of attribute settings
        compat: true
+# Scripts configuration example
 #  - type: scripts.ocm.config.ocm.software
 #    scripts:
 #      &#34;default&#34;:
 #         script:
-#           process: true</code></pre></figure></div><h3 id=see-also>See Also<a href=#see-also class=anchor aria-hidden=true>#</a></h3><div class="page-footer-meta d-flex flex-column flex-md-row justify-content-between"></div><div class="page-nav d-flex flex-column flex-sm-row"><div class="card w-100"><div class="card-body d-flex"><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-left" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+#           process: true
+# wget credential configuration example
+#  - type: credentials.config.ocm.software
+#    consumers:
+#      - identity:
+#          type: wget
+#          hostname: example.com
+#          # scheme: https   (optional)
+#          # port: 443       (optional)
+#          # pathprefix: /api (optional)
+#        credentials:
+#          - type: Credentials
+#            properties:
+#              username: myuser
+#              password: mypassword
+#              # or identityToken: bearer‑token
+#              # or certificate, privateKey, certificateAuthority for mTLS</code></pre></figure></div><h3 id=see-also>See Also<a href=#see-also class=anchor aria-hidden=true>#</a></h3><div class="page-footer-meta d-flex flex-column flex-md-row justify-content-between"></div><div class="page-nav d-flex flex-column flex-sm-row"><div class="card w-100"><div class="card-body d-flex"><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-left" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
 						<path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
 						<path d="M5 12l14 0"></path>
 						<path d="M5 12l6 6"></path>
