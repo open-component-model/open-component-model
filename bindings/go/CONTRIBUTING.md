@@ -48,9 +48,9 @@ against your local version automatically.
 If you change a public API in a module (e.g., `runtime`) and `task test` shows failures in dependent modules (e.g.,
 `oci`, `cli`), those dependent modules will need follow-up PRs after your change is released:
 
-1. Land the PR that changes the API in the source module. Mark it as a breaking change by adding `!` to the PR title
-   (e.g., `feat!: rename Foo to Bar`) so CI applies the `!BREAKING_CHANGE!` label.
-2. Release the source module so a new tag is available.
+1. Create a PR that changes the API in the affected module. Mark it as a breaking change by adding `!` to the PR title
+   (e.g., `feat!: rename Foo to Bar`) so CI applies the `!BREAKING-CHANGE!` label.
+2. After the PR is merged, [release the module](#releasing-a-module) so a new tag is available.
 3. Create follow-up PRs for each dependent module that update `go.mod` to the new version and adapt to the API change.
 
 You cannot update the dependent modules first because their CI would still resolve the old released version and fail.
