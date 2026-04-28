@@ -91,3 +91,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+// TODO: remove replace once transform is published
+replace ocm.software/open-component-model/bindings/go/transform => ../transform
