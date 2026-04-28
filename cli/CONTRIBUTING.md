@@ -86,18 +86,19 @@ From a contributor's perspective, the key points are:
 
 ## How to Add a New Command
 
-1. **Create a directory** — Add `cli/cmd/<name>/` with a `cmd.go` file.
+Each command lives in its own package and exports a `New()` function returning a `*cobra.Command`. See
+`cli/cmd/version/version.go` for a leaf command and `cli/cmd/get/cmd.go` for a parent command. Register your command in
+`cli/cmd/cmd.go` via `cmd.AddCommand()`. For general Cobra patterns, see the
+[Cobra documentation](https://github.com/spf13/cobra).
 
-2. **Implement `New()`** — Return a `*cobra.Command` with your flags and `RunE` handler. For a leaf command (no
-   subcommands), see `cli/cmd/version/version.go`. For a parent command that groups subcommands, see
-   `cli/cmd/get/cmd.go`.
+New commands automatically inherit the [bootstrap context](#bootstrap-and-context) through `PersistentPreRunE`, so
+plugins, configuration, and credentials are available via `context.FromContext(cmd.Context())` without additional setup.
 
-3. **Register the command** — Import your package in `cli/cmd/cmd.go` and add it via `cmd.AddCommand()`.
+After adding or modifying commands, regenerate the CLI reference docs:
 
-4. **Generate docs** — If you add or modify commands, regenerate the CLI reference docs:
-   ```bash
-   task cli:generate/docs
-   ```
+```bash
+task cli:generate/docs
+```
 
 ## Coding Patterns
 
