@@ -39,7 +39,7 @@ against your local version automatically.
 
 > [!NOTE]
 > `go.work` is gitignored and not used in CI. CI tests each module in isolation using the versions pinned in
-> its `go.mod`. This means `go.work` can mask version mismatches — your code works locally because all modules resolve
+> its `go.mod`. This means `go.work` can mask version mismatches - your code works locally because all modules resolve
 > against your working tree, but CI may fail because it resolves the last released version. Be aware of this difference
 > when debugging CI failures.
 

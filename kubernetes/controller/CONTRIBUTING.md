@@ -9,7 +9,7 @@ The controller reconciles OCM component versions into Kubernetes clusters. For t
 chain, and concept overview, see the
 [Kubernetes Controllers](https://ocm.software/docs/concepts/kubernetes-controllers/) page on the project website.
 
-From a contributor's perspective, the controller consists of four reconcilers that form a pipeline — each custom resource
+From a contributor's perspective, the controller consists of four reconcilers that form a pipeline - each custom resource
 depends on the previous one becoming `Ready`:
 
 - **Repository** validates that an OCM repository is reachable at the configured interval.
@@ -54,10 +54,10 @@ its lifecycle.
 CRDs and RBAC rules are generated from [kubebuilder markers](https://book.kubebuilder.io/reference/markers) in the Go
 source files under `api/v1alpha1/`. The generation pipeline has three steps:
 
-1. **`task manifests`** — Runs `controller-gen` to produce raw CRD YAML into `bin/gen/crd/` and raw RBAC into
+1. **`task manifests`** - Runs `controller-gen` to produce raw CRD YAML into `bin/gen/crd/` and raw RBAC into
    `bin/gen/rbac/`.
-2. **`task generate`** — Generates Go deepcopy and `runtime.Object` implementations from type definitions.
-3. **`task helm/generate`** — Wraps the raw CRDs and RBAC from step 1 into Helm chart templates (adding conditionals,
+2. **`task generate`** - Generates Go deepcopy and `runtime.Object` implementations from type definitions.
+3. **`task helm/generate`** - Wraps the raw CRDs and RBAC from step 1 into Helm chart templates (adding conditionals,
    cert-manager annotations, etc.) via scripts in `hack/`. The output goes into `chart/templates/crd/` and
    `chart/templates/rbac/`.
 
@@ -68,18 +68,18 @@ task kubernetes/controller:helm/validate
 ```
 
 This regenerates all artifacts, lints the chart, renders templates, and checks that the working tree is clean. CI
-enforces this — if you modify `api/v1alpha1/` types or RBAC markers and forget to regenerate, CI will fail.
+enforces this - if you modify `api/v1alpha1/` types or RBAC markers and forget to regenerate, CI will fail.
 
 ## Prerequisites
 
 In addition to the [general prerequisites](../../CONTRIBUTING.md#prerequisites), controller development requires:
 
-- **Docker** — for building container images and running Kind clusters
-- **Helm** — for chart linting, templating, and local installs
-- **kubectl** — for interacting with test clusters
-- **[FluxCD CLI](https://fluxcd.io/flux/installation/)** — required for E2E tests
-- **[Kind](https://kind.sigs.k8s.io/)** — required for E2E tests
-- **[kro](https://kro.run)** — required for E2E tests
+- **Docker** - for building container images and running Kind clusters
+- **Helm** - for chart linting, templating, and local installs
+- **kubectl** - for interacting with test clusters
+- **[FluxCD CLI](https://fluxcd.io/flux/installation/)** - required for E2E tests
+- **[Kind](https://kind.sigs.k8s.io/)** - required for E2E tests
+- **[kro](https://kro.run)** - required for E2E tests
 
 All other tools (controller-gen, envtest, helm-docs, yq) are installed automatically by the Taskfile into
 `kubernetes/controller/bin/`. Their versions are pinned in `kubernetes/controller/.env`.
@@ -127,7 +127,7 @@ image, and installs the Helm chart.
 
 The controller uses [Ginkgo v2](https://onsi.github.io/ginkgo/) with [Gomega](https://onsi.github.io/gomega/) matchers.
 This is different from the Go bindings and CLI, which use testify. Each controller package has a `suite_test.go` that
-bootstraps the envtest environment — see any of the `internal/controller/*/suite_test.go` files for the pattern.
+bootstraps the envtest environment - see any of the `internal/controller/*/suite_test.go` files for the pattern.
 
 Use `-ginkgo.focus` to run specific specs (not `-run`, which only matches the top-level test function).
 
