@@ -370,6 +370,8 @@ ocm.software/open-component-model/bindings/go/runtime v0.0.7 h1:/4RDxVVubr6IC+ZK
 ocm.software/open-component-model/bindings/go/runtime v0.0.7/go.mod h1:hbas6Al4VECYKFk51SLIi8zdzhFgZ2WvFpPljatbJHo=
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20260423205942-5236fa6f4d3f h1:B1BBw6F2b85hZgf/h6AKOZ1mVgNKP9vbdCgt6rK7vGQ=
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20260423205942-5236fa6f4d3f/go.mod h1:CbNNjoBUsbzX8TxLFdZocWwFBbMkEOLJecLpZXEdyPQ=
+ocm.software/open-component-model/bindings/go/transform v0.0.0-20260423205942-5236fa6f4d3f h1:xCZ0SZfYqKXyAIFxf3kGVmVwljBxHt/5N/sZQPKMwI0=
+ocm.software/open-component-model/bindings/go/transform v0.0.0-20260423205942-5236fa6f4d3f/go.mod h1:GTB80K4ahv3jc+dSJ50R2f5mL9+NU1Jw+LOR9MhMAKc=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
 oras.land/oras-go/v2 v2.6.0/go.mod h1:magiQDfG6H1O9APp+rOsvCPcW1GD2MM7vgnKY0Y+u1o=
 sigs.k8s.io/controller-runtime v0.23.3 h1:VjB/vhoPoA9l1kEKZHBMnQF33tdCLQKJtydy4iqwZ80=
