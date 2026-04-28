@@ -26,12 +26,12 @@ type Options struct {
 	// and their accepted credential types for validation during ingestion.
 	IdentityTypeRegistry *IdentityTypeRegistry
 	// CredentialTypeSchemeProvider provides access to known credential types (e.g. HelmHTTPCredentials/v1).
-	CredentialTypeSchemeProvider TypeSchemeProvider
+	CredentialTypeSchemeProvider CredentialTypeSchemeProvider
 }
 
 // ToGraph creates a new credential graph from the provided configuration and options.
 // It initializes the graph structure and ingests the configuration into the graph.
-func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (*Graph, error) {
+func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (Resolver, error) {
 	g := &Graph{
 		syncedDag:                    newSyncedDag(),
 		credentialPluginProvider:     opts.CredentialPluginProvider,
@@ -59,7 +59,7 @@ type Graph struct {
 	repositoryPluginProvider     RepositoryPluginProvider // injection for resolving custom repository types
 	credentialPluginProvider     CredentialPluginProvider // injection for resolving custom credential types
 	identityTypeRegistry         *IdentityTypeRegistry    // validates consumer identity types and accepted credentials
-	credentialTypeSchemeProvider TypeSchemeProvider       // validates credential types from config
+	credentialTypeSchemeProvider CredentialTypeSchemeProvider // validates credential types from config
 }
 
 // credentialTypeScheme returns the underlying scheme from the credential type
@@ -68,7 +68,7 @@ func (g *Graph) credentialTypeScheme() *runtime.Scheme {
 	if g.credentialTypeSchemeProvider == nil {
 		return nil
 	}
-	return g.credentialTypeSchemeProvider.Scheme()
+	return g.credentialTypeSchemeProvider.GetCredentialTypeScheme()
 }
 
 // Compile-time interface check.

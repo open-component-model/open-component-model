@@ -63,7 +63,13 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Type
 
 	// Deprecated: toIdentity is migration scaffolding — RepositoryPlugin.Resolve still accepts
 	// runtime.Identity. Phase 3 will remove this when plugin interfaces migrate to runtime.Typed.
-	pluginIdentity, _ := toIdentity(identity)
+	pluginIdentity, err := toIdentity(identity)
+	if err != nil {
+		return nil, errors.Join(
+			ErrUnknown,
+			fmt.Errorf("failed to convert typed identity for repository resolution: %w", err),
+		)
+	}
 
 	resolve := func(plugin RepositoryPlugin, cfg runtime.Typed) {
 		defer wg.Done()

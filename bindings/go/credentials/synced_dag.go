@@ -74,6 +74,11 @@ func (g *syncedDag) addEdge(from, to string, attributes ...map[string]any) error
 
 // nodeID returns a stable string identifier for a runtime.Typed identity.
 // Used as the DAG vertex key and cache key throughout the graph.
+//
+// Typed identity structs MUST implement fmt.Stringer to produce stable, deterministic
+// node IDs. The fallback fmt.Sprintf("%v", typed) is not guaranteed to be stable
+// (e.g. pointer addresses for pointer fields). runtime.Identity satisfies this
+// via sorted key=value pairs.
 func nodeID(typed runtime.Typed) string {
 	if s, ok := typed.(fmt.Stringer); ok {
 		return s.String()
@@ -84,13 +89,20 @@ func nodeID(typed runtime.Typed) string {
 // typedMatch checks whether identity a matches identity b.
 // Currently delegates to runtime.Identity.Match when both sides are Identity maps.
 // Returns false for non-Identity types until matching is generalized.
+//
+// This will only work with runtime.Identity/map identities.
+// A panic will be thrown if runtime.Typed is something else.
+// See the tracking issue https://github.com/open-component-model/ocm-project/issues/1041
 func typedMatch(a, b runtime.Typed) bool {
 	idA, okA := a.(runtime.Identity)
-	idB, okB := b.(runtime.Identity)
-	if okA && okB {
-		return idA.Match(idB)
+	if !okA {
+		panic("a must be of type runtime.Identity")
 	}
-	return false
+	idB, okB := b.(runtime.Identity)
+	if !okB {
+		panic("b must be of type runtime.Identity")
+	}
+	return idA.Match(idB)
 }
 
 // matchAnyNode attempts to locate the graph vertex corresponding to the provided identity.

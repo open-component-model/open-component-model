@@ -510,6 +510,33 @@ func TestResolveTypedCredentials(t *testing.T) {
 	}
 }
 
+// TestResolveDelegatesToResolveTyped verifies that Resolve correctly delegates to ResolveTyped
+// when passing a runtime.Identity (which implements runtime.Typed). This ensures no panic occurs
+// from the type assertion path inside ResolveTyped when called via the legacy Resolve method.
+func TestResolveDelegatesToResolveTyped(t *testing.T) {
+	graph, err := GetGraph(t, testYAML)
+	require.NoError(t, err)
+
+	identity := runtime.Identity{
+		"type":     "OCIRegistry",
+		"hostname": "docker.io",
+	}
+
+	// Resolve (legacy) delegates to ResolveTyped internally.
+	// Both must return equivalent results without panicking.
+	creds, err := graph.Resolve(t.Context(), identity)
+	require.NoError(t, err)
+	require.Equal(t, "foo", creds["username"])
+	require.Equal(t, "bar", creds["password"])
+
+	typed, err := graph.ResolveTyped(t.Context(), identity)
+	require.NoError(t, err)
+	direct, ok := typed.(*v1.DirectCredentials)
+	require.True(t, ok, "expected *v1.DirectCredentials, got %T", typed)
+	require.Equal(t, "foo", direct.Properties["username"])
+	require.Equal(t, "bar", direct.Properties["password"])
+}
+
 func TestGraphRendering(t *testing.T) {
 	for _, tc := range []struct {
 		name        string

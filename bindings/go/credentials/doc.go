@@ -55,7 +55,7 @@
 //
 // The graph supports typed credentials and identity → credential compatibility validation.
 // Each binding can define typed credential structs and register them with a [runtime.Scheme].
-// The graph receives these type registries through [TypeSchemeProvider] interfaces
+// The graph receives these type registries through dedicated interfaces
 // configured in [Options]:
 //
 //   - [Options.CredentialTypeSchemeProvider] — provides a scheme for typed credential objects
@@ -237,7 +237,7 @@
 //	    CredentialPluginProvider:       myCredPluginProvider,       // optional: needed for custom credential types (e.g. Vault)
 //	    RepositoryPluginProvider:       myRepoPluginProvider,       // optional: needed for repository fallbacks
 //	    CredentialTypeSchemeProvider:   myCredTypeSchemeProvider,   // optional: enables typed credential deserialization
-//	    IdentityTypeSchemeProvider:     myIdentityTypeSchemeProvider, // optional: enables identity ↔ credential validation
+//	    IdentityTypeRegistry:          myIdentityTypeRegistry,      // optional: enables identity ↔ credential validation
 //	}
 //	graph, err := ToGraph(ctx, config, opts)
 //	if err != nil {

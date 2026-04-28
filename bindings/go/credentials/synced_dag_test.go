@@ -61,17 +61,19 @@ func Test_typedMatch_IdentityNoMatch(t *testing.T) {
 	assert.False(t, typedMatch(a, b))
 }
 
-func Test_typedMatch_NonIdentity_ReturnsFalse(t *testing.T) {
+func Test_typedMatch_NonIdentity_Panics(t *testing.T) {
 	a := &runtime.Raw{Type: runtime.NewVersionedType("Foo", "v1")}
 	b := &runtime.Raw{Type: runtime.NewVersionedType("Foo", "v1")}
-	assert.False(t, typedMatch(a, b))
+	assert.PanicsWithValue(t, "a must be of type runtime.Identity", func() { typedMatch(a, b) })
 }
 
-func Test_typedMatch_MixedTypes_ReturnsFalse(t *testing.T) {
-	a := runtime.Identity{"type": "OCIRegistry", "hostname": "docker.io"}
-	b := &runtime.Raw{Type: runtime.NewVersionedType("OCIRegistry", "v1")}
-	assert.False(t, typedMatch(a, b))
-	assert.False(t, typedMatch(b, a))
+func Test_typedMatch_MixedTypes_Panics(t *testing.T) {
+	id := runtime.Identity{"type": "OCIRegistry", "hostname": "docker.io"}
+	raw := &runtime.Raw{Type: runtime.NewVersionedType("OCIRegistry", "v1")}
+	// a is non-Identity → panics on a
+	assert.PanicsWithValue(t, "a must be of type runtime.Identity", func() { typedMatch(raw, id) })
+	// a is Identity but b is non-Identity → panics on b
+	assert.PanicsWithValue(t, "b must be of type runtime.Identity", func() { typedMatch(id, raw) })
 }
 
 func Test_matchAnyNode_ExactMatch(t *testing.T) {

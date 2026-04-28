@@ -7,11 +7,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// TypeSchemeProvider provides read access to a runtime.Scheme of known types.
+// CredentialTypeSchemeProvider provides read access to a runtime.Scheme of known credential types.
 // The credential graph uses this during ingestion to deserialize typed credentials
 // and resolve type aliases.
-type TypeSchemeProvider interface {
-	Scheme() *runtime.Scheme
+type CredentialTypeSchemeProvider interface {
+	GetCredentialTypeScheme() *runtime.Scheme
 }
 
 // IdentityTypeRegistry stores consumer identity types and their accepted credential types.
@@ -36,9 +36,8 @@ func NewIdentityTypeRegistry(opts ...runtime.SchemeOption) *IdentityTypeRegistry
 	}
 }
 
-// Scheme returns the underlying runtime.Scheme for identity type deserialization.
-// This satisfies TypeSchemeProvider.
-func (r *IdentityTypeRegistry) Scheme() *runtime.Scheme {
+// GetIdentityTypeScheme returns the underlying runtime.Scheme for identity type deserialization.
+func (r *IdentityTypeRegistry) GetIdentityTypeScheme() *runtime.Scheme {
 	return r.scheme
 }
 

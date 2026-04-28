@@ -15,7 +15,7 @@ func TestIdentityTypeRegistry_Register(t *testing.T) {
 
 	err := registry.Register(&runtime.Raw{}, typ)
 	require.NoError(t, err)
-	assert.True(t, registry.Scheme().IsRegistered(typ))
+	assert.True(t, registry.GetIdentityTypeScheme().IsRegistered(typ))
 }
 
 func TestIdentityTypeRegistry_RegisterWithAcceptedCredentials(t *testing.T) {
@@ -32,8 +32,8 @@ func TestIdentityTypeRegistry_RegisterWithAcceptedCredentials(t *testing.T) {
 	require.NoError(t, err)
 
 	// Both default and alias are registered in the scheme.
-	assert.True(t, registry.Scheme().IsRegistered(identityType))
-	assert.True(t, registry.Scheme().IsRegistered(identityAlias))
+	assert.True(t, registry.GetIdentityTypeScheme().IsRegistered(identityType))
+	assert.True(t, registry.GetIdentityTypeScheme().IsRegistered(identityAlias))
 
 	// Accepted credential types are queryable by default type.
 	accepted, ok := registry.AcceptedCredentialTypes(identityType)
@@ -81,19 +81,16 @@ func TestIdentityTypeRegistry_RegisterWithoutAcceptedCredentials(t *testing.T) {
 	require.NoError(t, err)
 
 	// Type is registered in scheme.
-	assert.True(t, registry.Scheme().IsRegistered(typ))
+	assert.True(t, registry.GetIdentityTypeScheme().IsRegistered(typ))
 
 	// No accepted credential types stored.
 	_, ok := registry.AcceptedCredentialTypes(typ)
 	assert.False(t, ok)
 }
 
-func TestIdentityTypeRegistry_Scheme_SatisfiesTypeSchemeProvider(t *testing.T) {
+func TestIdentityTypeRegistry_GetIdentityTypeScheme(t *testing.T) {
 	registry := NewIdentityTypeRegistry()
-
-	// IdentityTypeRegistry implements TypeSchemeProvider.
-	var provider TypeSchemeProvider = registry
-	assert.NotNil(t, provider.Scheme())
+	assert.NotNil(t, registry.GetIdentityTypeScheme())
 }
 
 func TestIdentityTypeRegistry_DuplicateRegistration(t *testing.T) {

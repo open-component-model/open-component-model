@@ -176,12 +176,12 @@ func Test_extractResolvable_DirectCredentials_NilProperties_NoPanic(t *testing.T
 	assert.Equal(t, "admin", dc.Properties["username"])
 }
 
-// staticSchemeProvider is a test helper implementing TypeSchemeProvider.
+// staticSchemeProvider is a test helper implementing CredentialTypeSchemeProvider.
 type staticSchemeProvider struct {
 	scheme *runtime.Scheme
 }
 
-func (s *staticSchemeProvider) Scheme() *runtime.Scheme {
+func (s *staticSchemeProvider) GetCredentialTypeScheme() *runtime.Scheme {
 	return s.scheme
 }
 
