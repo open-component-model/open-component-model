@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"testing"
 	"time"
@@ -33,7 +34,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
-	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ociaccessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	credidentity "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -919,34 +919,27 @@ func Test_Integration_TransferOCIImageResource_CopyModeAllResources(t *testing.T
 	r.Len(gotDesc.Component.Resources, 1)
 	r.Equal("external-image", gotDesc.Component.Resources[0].Name)
 
-	// Verify the resource was stored as a localBlob with a globalAccess pointing to the target registry.
+	// Verify the resource was stored as a localBlob in the target registry.
 	gotAccess := gotDesc.Component.Resources[0].Access
 	r.NotNil(gotAccess, "resource access should not be nil")
 	r.Equal(descriptorv2.LocalBlobAccessType, gotAccess.GetType().Name,
 		"OCI image resource should be stored as localBlob in target after CopyModeAllResources transfer")
 
-	// Convert access to LocalBlob and extract GlobalAccess.
+	// Verify GlobalAccess is not set — transfer should produce a pure local blob without global access.
 	accessScheme := runtime.NewScheme(runtime.WithAllowUnknown())
 	descriptorv2.MustAddToScheme(accessScheme)
-	ociaccess.MustAddToScheme(accessScheme)
-	var localBlob descriptorv2.LocalBlob
-	r.NoError(accessScheme.Convert(gotAccess, &localBlob), "should convert access to LocalBlob")
-	r.NotNil(localBlob.GlobalAccess, "localBlob should have a globalAccess pointing to the target registry")
+	var typedLocalBlob descriptorv2.LocalBlob
+	r.NoError(accessScheme.Convert(gotAccess, &typedLocalBlob), "should convert access to LocalBlob")
+	r.Nil(typedLocalBlob.GlobalAccess, "localBlob should not have globalAccess after transfer")
 
-	// Convert GlobalAccess to OCIImage and verify it references the target registry.
-	var globalOCIAccess ociaccessv1.OCIImage
-	r.NoError(accessScheme.Convert(localBlob.GlobalAccess, &globalOCIAccess), "should convert globalAccess to OCIImage")
-	r.Contains(globalOCIAccess.ImageReference, targetAddr,
-		"globalAccess imageReference should point to the target registry")
-
-	// Verify the image is actually resolvable in the target registry.
-	globalRepo, err := remote.NewRepository(globalOCIAccess.ImageReference)
+	// Verify the blob is actually present and readable in the target repository.
+	resourceIdentity := gotDesc.Component.Resources[0].ToIdentity()
+	localBlob, _, err := targetRepo.GetLocalResource(ctx, componentName, componentVersion, resourceIdentity)
+	r.NoError(err, "local blob should be retrievable from target repository")
+	reader, err := localBlob.ReadCloser()
+	r.NoError(err, "local blob should be readable")
+	defer func() { r.NoError(reader.Close()) }()
+	content, err := io.ReadAll(reader)
 	r.NoError(err)
-	globalRepo.PlainHTTP = true
-	globalRepo.Client = &auth.Client{
-		Client:     retry.DefaultClient,
-		Credential: auth.StaticCredential(targetAddr, auth.Credential{Username: targetUser, Password: targetPwd}),
-	}
-	_, _, err = globalRepo.FetchReference(ctx, globalOCIAccess.ImageReference)
-	r.NoError(err, "globalAccess imageReference should be resolvable in the target registry")
+	r.NotEmpty(content, "local blob content should not be empty")
 }
