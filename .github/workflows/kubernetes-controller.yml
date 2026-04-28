@@ -248,13 +248,13 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up docker
-        uses: docker/setup-docker-action@1a6edb0ba9ac496f6850236981f15d8f9a82254d # v5
+        uses: docker/setup-docker-action@b2189fbf2a6592b51fee7cdd93ee2bfaeba733db # v5
 
       - name: Setup ocm
         run: bash website/static/install.sh
 
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@871be9b40d53627786d3a3835a3ddba1e3234bd2 # v2.8.3
+        uses: fluxcd/flux2/action@3cf3cb546fc549fa7e8a9ec6d3254accc027b46e # v2.8.4
 
       - name: Install Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
