@@ -9,10 +9,10 @@ The CLI is a thin [Cobra](https://github.com/spf13/cobra) command layer on top o
 It provides user-facing commands for working with OCM component versions, repositories, and plugins. The architecture
 has three layers:
 
-- **Command layer** (`cli/cmd/`) — Cobra commands that parse flags, validate input, and call into the bindings.
-- **Context layer** (`cli/internal/context/`) — A shared context that wires together configuration, the plugin manager,
+- **Command layer** (`cli/cmd/`) - Cobra commands that parse flags, validate input, and call into the bindings.
+- **Context layer** (`cli/internal/context/`) - A shared context that wires together configuration, the plugin manager,
   and credential resolution before any command runs.
-- **Binding layer** (`bindings/go/`) — All OCM business logic. Commands import binding modules directly.
+- **Binding layer** (`bindings/go/`) - All OCM business logic. Commands import binding modules directly.
 
 ## Command Structure
 
@@ -41,14 +41,14 @@ There are two kinds of commands:
 Before any command runs, the root command's `PersistentPreRunE` hook (`cli/cmd/setup/hooks/pre_run.go`) bootstraps the
 shared context. Because it is `Persistent`, Cobra propagates it to every subcommand. The bootstrap sequence is:
 
-1. **Logging** — Configure `slog` from `--log-level` / `--log-format` flags.
-2. **OCM config** — Load and merge configuration from standard search paths (`$OCM_CONFIG`, `~/.config/ocm/config`,
+1. **Logging** - Configure `slog` from `--log-level` / `--log-format` flags.
+2. **OCM config** - Load and merge configuration from standard search paths (`$OCM_CONFIG`, `~/.config/ocm/config`,
    etc.). See `cli/cmd/configuration/ocm_config.go` for the full search order.
-3. **Filesystem config** — Set up temporary folder and working directory paths.
-4. **Plugin manager** — Initialize the plugin system: register built-in plugins, discover external plugins from the
+3. **Filesystem config** - Set up temporary folder and working directory paths.
+4. **Plugin manager** - Initialize the plugin system: register built-in plugins, discover external plugins from the
    plugin directory.
-5. **Credential graph** — Build the credential resolution graph from configuration.
-6. **Context registration** — Store the assembled context in `cmd.Context()`.
+5. **Credential graph** - Build the credential resolution graph from configuration.
+6. **Context registration** - Store the assembled context in `cmd.Context()`.
 
 After bootstrap, any command retrieves the context via:
 
@@ -66,7 +66,7 @@ The context struct and its accessors live in `cli/internal/context/context.go`.
 > [!NOTE]
 > The `add component-version` command overrides `PersistentPreRunE` to inject working-directory resolution
 > from the component constructor path before calling the shared bootstrap. This is the only command that customizes
-> the bootstrap — all others inherit the root hook directly.
+> the bootstrap - all others inherit the root hook directly.
 
 ## Plugin System
 
@@ -76,7 +76,7 @@ conceptual overview of how plugins work, see the
 
 From a contributor's perspective, the key points are:
 
-- The manager organizes plugins into typed registries — one for each capability. For the current list of registries,
+- The manager organizes plugins into typed registries - one for each capability. For the current list of registries,
   see the `PluginManager` struct in `bindings/go/plugin/manager/manager.go`.
 - **Built-in plugins** are compiled into the CLI and registered at startup in `cli/internal/plugin/builtin/builtin.go`.
 - **External plugins** are discovered from the plugin directory (default `~/.config/ocm/plugins`, overridable with
@@ -105,10 +105,10 @@ task cli:generate/docs
 The project's [coding patterns guide](../docs/coding-patterns.md) covers conventions used across the codebase. The
 CLI-specific section covers:
 
-- **Command construction** — `New()` pattern, parent/child wiring.
-- **Dependency injection** — Context-based access to plugins, config, and credentials.
-- **Custom flag types** — Enum and file flags with validation at set-time.
-- **Output formatting** — Pluggable renderer system (JSON, YAML, NDJSON, Tree, Table) with static and live modes.
+- **Command construction** - `New()` pattern, parent/child wiring.
+- **Dependency injection** - Context-based access to the plugin manager, config, and credentials at the command layer.
+- **Custom flag types** - Enum and file flags with validation at set-time.
+- **Output formatting** - Pluggable renderer system (JSON, YAML, NDJSON, Tree, Table) with static and live modes.
 
 The general sections on constructors, error handling, concurrency, and the runtime type system apply equally to CLI code.
 
