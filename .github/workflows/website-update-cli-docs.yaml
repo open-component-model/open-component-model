@@ -55,7 +55,7 @@ jobs:
         with:
           base: main
           token: ${{ steps.generate_token.outputs.token }}
-          title: "Update CLI docs for version-legacy"
+          title: "chore(docs): update CLI docs for version-legacy"
           commit-message: "[github-actions] automated change"
           add-paths: |
             website/config/
