@@ -215,8 +215,9 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 
 // AddLocalResource adds a local resource to the repository.
 //
-// When the packed resource is an OCI-compliant manifest (image manifest or
-// index) the method also pushes an ownership referrer manifest
+// When [Repository.ownershipReferrerPolicy] is [OwnershipReferrerPolicyEnabled]
+// and the packed resource is an OCI-compliant manifest (image manifest or
+// index), the method also pushes an ownership referrer manifest
 // (artifactType "application/vnd.ocm.software.ownership.v1+json") whose subject points
 // at the packed resource and whose annotations carry the owning component
 // name, version, and resource identity per
