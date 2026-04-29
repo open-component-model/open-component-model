@@ -3,6 +3,7 @@ package credentials
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 
 	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
@@ -21,7 +22,9 @@ import (
 // - Direct credentials are stored on their respective identity nodes inside the vertex
 // - Repository configurations are stored in the Graph for later use
 func ingest(ctx context.Context, g *Graph, config *cfgRuntime.Config, repoTypeScheme *runtime.Scheme) error {
-	consumers, err := processDirectCredentials(g, config)
+	validateConsumerIdentityTypes(ctx, g, config)
+
+	consumers, err := processDirectCredentials(ctx, g, config)
 	if err != nil {
 		return fmt.Errorf("failed to process direct credentials: %w", err)
 	}
@@ -38,34 +41,39 @@ func ingest(ctx context.Context, g *Graph, config *cfgRuntime.Config, repoTypeSc
 }
 
 // processDirectCredentials handles the first phase of credential processing:
-// 1. Extracts direct credentials from each consumer
-// 2. Separates direct credentials from those requiring plugin-based resolution
-// 3. Merges direct credentials for each identity
-// 4. Adds identity nodes to the graph
-// 5. Stores direct credentials on their respective identity nodes
-// 6. Returns the remaining consumers with plugin-based credentials that couldnt be processed yet
-//
-// The function returns
-//   - left-over consumers: Contains only consumers that still have plugin-based credentials to process, all direct
-//     credentials are already stored in the graph.
-func processDirectCredentials(g *Graph, config *cfgRuntime.Config) ([]cfgRuntime.Consumer, error) {
-	directPerIdentity := make(map[string]map[string]string)
+// 1. Extracts credentials resolvable without plugins (DirectCredentials or typed credentials known to the scheme)
+// 2. Separates them from credentials requiring plugin-based resolution
+// 3. Stores resolved credentials as runtime.Typed on their identity nodes
+// 4. Returns remaining consumers with plugin-based credentials
+func processDirectCredentials(ctx context.Context, g *Graph, config *cfgRuntime.Config) ([]cfgRuntime.Consumer, error) {
+	typedPerIdentity := make(map[string]runtime.Typed)
+	directPerIdentity := make(map[string]*v1.DirectCredentials)
 	consumers := make([]cfgRuntime.Consumer, 0, len(config.Consumers))
 
 	for _, consumer := range config.Consumers {
-		direct, remaining, err := extractDirect(consumer.Credentials)
+		resolved, remaining, err := extractResolvable(ctx, g, consumer.Credentials)
 		if err != nil {
 			return nil, fmt.Errorf("extracting consumer credentials failed: %w", err)
 		}
 		consumer.Credentials = remaining
 
-		if len(direct) > 0 {
+		if resolved != nil {
 			for _, identity := range consumer.Identities {
 				node := identity.String()
-				if existing, ok := (directPerIdentity)[node]; ok {
-					maps.Copy(existing, direct)
+
+				if resolvedDC, ok := resolved.(*v1.DirectCredentials); ok {
+					// Accumulate DirectCredentials separately; they serve as fallback only.
+					if existing, ok := directPerIdentity[node]; ok {
+						maps.Copy(existing.Properties, resolvedDC.Properties)
+					} else {
+						clone := *resolvedDC
+						clone.Properties = make(map[string]string, len(resolvedDC.Properties))
+						maps.Copy(clone.Properties, resolvedDC.Properties)
+						directPerIdentity[node] = &clone
+					}
 				} else {
-					(directPerIdentity)[node] = direct
+					// Concrete typed credential — last typed credential wins.
+					typedPerIdentity[node] = resolved
 				}
 
 				if err := g.addIdentity(identity); err != nil {
@@ -79,8 +87,16 @@ func processDirectCredentials(g *Graph, config *cfgRuntime.Config) ([]cfgRuntime
 		}
 	}
 
-	for node, credentials := range directPerIdentity {
-		g.setCredentials(node, credentials)
+	// Typed credentials take priority; use DirectCredentials only for identities
+	// that have no concrete typed credential.
+	for node, dc := range directPerIdentity {
+		if _, hasTyped := typedPerIdentity[node]; !hasTyped {
+			typedPerIdentity[node] = dc
+		}
+	}
+
+	for node, typed := range typedPerIdentity {
+		g.setCredentials(node, typed)
 	}
 
 	return consumers, nil
@@ -157,26 +173,150 @@ func processRepositoryConfigurations(g *Graph, config *cfgRuntime.Config, repoTy
 	return nil
 }
 
-// extractDirect extracts and separates a slice of raw credentials into two groups:
-// 1. Direct credentials of type CredentialsTypeV1 (which are decoded into a merged map).
-// 2. All remaining credentials that require plugin-based resolution.
-// Returns the merged direct credentials and the slice of remaining credentials.
-func extractDirect(creds []runtime.Typed) (map[string]string, []runtime.Typed, error) {
-	direct := map[string]string{}
+// extractResolvable separates credentials into two groups:
+//  1. Credentials resolvable without plugins — either typed credentials known to the CredentialTypeScheme,
+//     or DirectCredentials (Credentials/v1). Returns the first successfully resolved typed credential.
+//  2. Remaining credentials that require plugin-based resolution.
+func extractResolvable(ctx context.Context, g *Graph, creds []runtime.Typed) (runtime.Typed, []runtime.Typed, error) {
+	var resolved runtime.Typed
+	var mergedDirect *v1.DirectCredentials
 	var remaining []runtime.Typed
 
-	// Iterate over each credential.
 	for _, cred := range creds {
 		if cred.GetType().IsEmpty() {
 			return nil, nil, fmt.Errorf("credential type is empty")
 		}
 
-		typed := v1.DirectCredentials{}
-		if err := scheme.Convert(cred, &typed); err != nil {
-			remaining = append(remaining, cred)
+		// Try the credential type scheme first (e.g. HelmCredentials/v1, OCICredentials/v1).
+		// Only attempt deserialization for types explicitly registered in the scheme.
+		// Schemes configured with WithAllowUnknown would otherwise round-trip any type
+		// as *runtime.Raw, making unregistered credentials look "resolved" and preventing
+		// plugin edge creation.
+		if credScheme := g.credentialTypeScheme(); credScheme != nil && credScheme.IsRegistered(cred.GetType()) {
+			if typed, err := credScheme.NewObject(cred.GetType()); err == nil {
+				if err := credScheme.Convert(cred, typed); err == nil {
+					if resolved == nil {
+						resolved = typed
+					} else {
+						// Already have a resolved typed credential — pass additional ones
+						// to plugin-based resolution to avoid silent loss.
+						remaining = append(remaining, cred)
+					}
+					continue
+				} else {
+					slog.WarnContext(ctx, "credential type scheme conversion failed",
+						"type", cred.GetType().String(), "error", err)
+				}
+			}
 		}
 
-		maps.Copy(direct, typed.Properties)
+		// Try DirectCredentials (Credentials/v1 and its aliases).
+		// Accumulate into mergedDirect; they are only used as a fallback
+		// when no concrete typed credential was resolved.
+		var direct v1.DirectCredentials
+		if err := scheme.Convert(cred, &direct); err == nil {
+			if mergedDirect == nil {
+				mergedDirect = &v1.DirectCredentials{
+					Type:       direct.Type,
+					Properties: make(map[string]string, len(direct.Properties)),
+				}
+				maps.Copy(mergedDirect.Properties, direct.Properties)
+			} else {
+				maps.Copy(mergedDirect.Properties, direct.Properties)
+			}
+			continue
+		}
+
+		// Unknown type — pass to plugin-based resolution.
+		remaining = append(remaining, cred)
 	}
-	return direct, remaining, nil
+
+	// Typed credentials take priority; use merged DirectCredentials only as fallback.
+	if resolved == nil && mergedDirect != nil {
+		resolved = mergedDirect
+	}
+
+	return resolved, remaining, nil
+}
+
+// validateConsumerIdentityTypes checks that all consumer identity types in the config
+// are registered in the IdentityTypeRegistry and that credential types are
+// compatible with the identity type. Unknown types produce warnings — they are not
+// rejected because plugins loaded later may introduce new types.
+func validateConsumerIdentityTypes(ctx context.Context, g *Graph, config *cfgRuntime.Config) {
+	if g.identityTypeRegistry == nil {
+		return
+	}
+	for _, consumer := range config.Consumers {
+		for _, identity := range consumer.Identities {
+			identityType, err := identity.ParseType()
+			if err != nil {
+				slog.WarnContext(ctx, "consumer identity has unparseable type",
+					"identity", identity.String(), "error", err)
+				continue
+			}
+
+			if !g.identityTypeRegistry.GetIdentityTypeScheme().IsRegistered(identityType) {
+				slog.WarnContext(ctx, "consumer identity type not registered in scheme",
+					"type", identityType.String(),
+					"identity", identity.String(),
+				)
+				continue
+			}
+
+			// Check accepted credential types from the registry.
+			// This does not fail on purpose - credentials should still be passed as the user configured them.
+			accepted, hasAccepted := g.identityTypeRegistry.AcceptedCredentialTypes(identityType)
+			if !hasAccepted {
+				continue
+			}
+
+			for _, cred := range consumer.Credentials {
+				credType := cred.GetType()
+				if credType.IsEmpty() || scheme.IsRegistered(credType) {
+					// DirectCredentials/Credentials are always accepted
+					continue
+				}
+				if !isAccepted(g.credentialTypeScheme(), credType, accepted) {
+					slog.WarnContext(ctx, "credential type not accepted by identity type",
+						"credentialType", credType.String(),
+						"identityType", identityType.String(),
+						"acceptedTypes", accepted,
+					)
+				}
+			}
+		}
+	}
+}
+
+// isAccepted checks whether a credential type is in the list of accepted types.
+// It first tries exact matching, then falls back to alias resolution through the
+// scheme — so that e.g. "HelmHTTPCredentials" (unversioned alias) matches
+// "HelmHTTPCredentials/v1" (default type) and vice versa.
+func isAccepted(credentialTypeScheme *runtime.Scheme, credType runtime.Type, accepted []runtime.Type) bool {
+	for _, a := range accepted {
+		if a.Equal(credType) {
+			return true
+		}
+	}
+
+	if credentialTypeScheme == nil {
+		return false
+	}
+	resolved, ok := credentialTypeScheme.ResolveCanonicalType(credType)
+	if !ok {
+		slog.Debug("credential type is not registered in credential type scheme",
+			"credentialType", credType.String(),
+		)
+		return false
+	}
+
+	for _, a := range accepted {
+		if canonical, o := credentialTypeScheme.ResolveCanonicalType(a); o && canonical.Equal(resolved) {
+			return true
+		}
+	}
+
+	slog.Debug("credential type is not accepted by identity type")
+	return false
 }

@@ -23,6 +23,7 @@ type RepositoryPlugin interface {
 	// Resolve attempts to resolve credentials for a given repository configuration
 	// and consumer identity. The provided credentials map may contain pre-resolved
 	// credentials from the credential graph.
+	// TODO(matthiasbruns): Migrate to runtime.Typed https://github.com/open-component-model/ocm-project/issues/980
 	Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
 }
 
@@ -38,6 +39,7 @@ type CredentialPlugin interface {
 	// Resolve attempts to resolve credentials for a given consumer identity.
 	// The provided credentials map may contain pre-resolved credentials from
 	// the credential graph.
+	// TODO(matthiasbruns): Migrate to runtime.Typed https://github.com/open-component-model/ocm-project/issues/980
 	Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
 }
 

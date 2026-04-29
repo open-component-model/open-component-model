@@ -105,10 +105,6 @@ resources:
     repository: charts/podinfo:6.9.1
 ```
 
-{{< callout type="info" >}}
-The deprecated aliases `helm` and `Helm` are still accepted but `Helm/v1` is the preferred form.
-{{< /callout >}}
-
 ### `UTF8/v1`
 
 Embeds inline text or structured data. Exactly one of `text`, `json`, `formattedJson`, or `yaml` must be specified.
@@ -154,10 +150,10 @@ resources:
       imageReference: ghcr.io/acme/myapp:1.0.0
 ```
 
-### `localBlob/v1`
+### `LocalBlob/v1`
 
-References content stored alongside the component descriptor in the same repository. Typically created automatically
-when using input types.
+References content stored alongside the component descriptor in the same repository. Legacy alias: `localBlob`.
+Typically created automatically when using input types.
 
 | Field            | Type   | Required | Description                                                      |
 |------------------|--------|----------|------------------------------------------------------------------|
@@ -172,7 +168,7 @@ resources:
     type: blob
     relation: local
     access:
-      type: localBlob/v1
+      type: LocalBlob/v1
       localReference: sha256:57563cb4a3e5c06a22c95aaa445...
       mediaType: application/octet-stream
 ```
