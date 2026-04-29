@@ -5,12 +5,16 @@ import (
 )
 
 const (
+	// OCICredentialsType is the type name for OCI registry credentials.
 	OCICredentialsType = "OCICredentials"
 
-	// Credential property keys for OCI registry authentication.
-	CredentialKeyUsername     = "username"
-	CredentialKeyPassword     = "password"
-	CredentialKeyAccessToken  = "accessToken"
+	// CredentialKeyUsername is the key for basic auth username.
+	CredentialKeyUsername = "username"
+	// CredentialKeyPassword is the key for basic auth password.
+	CredentialKeyPassword = "password"
+	// CredentialKeyAccessToken is the key for OAuth2/bearer access tokens.
+	CredentialKeyAccessToken = "accessToken"
+	// CredentialKeyRefreshToken is the key for OAuth2 refresh tokens.
 	CredentialKeyRefreshToken = "refreshToken"
 )
 

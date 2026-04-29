@@ -3,6 +3,7 @@ package transformer
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -69,8 +70,8 @@ func (m *mockCredentialResolver) Resolve(ctx context.Context, id runtime.Identit
 	return map[string]string{"username": "test-user"}, nil
 }
 
-func (m *mockCredentialResolver) ResolveTyped(_ context.Context, _ runtime.Typed) (runtime.Typed, error) {
-	return runtime.Identity{"username": "test-user"}, nil
+func (m *mockCredentialResolver) ResolveTyped(ctx context.Context, identity runtime.Typed) (runtime.Typed, error) {
+	return nil, fmt.Errorf("not implemented")
 }
 
 func TestAddOCIArtifact_Transform(t *testing.T) {
