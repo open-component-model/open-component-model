@@ -5,12 +5,31 @@
 // local HTTP server, and exchanges the authorization code for an ID token.
 // This is the same flow used by Sigstore for keyless signing, implemented
 // without depending on github.com/sigstore/sigstore.
+//
+// # Security Model
+//
+// The flow uses PKCE S256 (RFC 7636) as the sole authorization code protection.
+// This is appropriate because: (1) the OCM CLI is a public OAuth client that
+// cannot hold a client secret, (2) the loopback redirect URI (127.0.0.1) limits
+// code interception to same-machine processes which PKCE fully mitigates per
+// RFC 8252 §7.1, (3) the acquired ID token is used immediately for a single
+// signing operation and not persisted, removing the need for
+// DPoP (Demonstrating Proof of Possession) or PAR (Pushed Authorization Requests (RFC 9126)).
+//
+// The flow does not send prompt=consent or prompt=login; the provider's default
+// session behavior applies, giving users seamless re-authentication for repeated
+// signing operations.
+//
+// RFC 9207 issuer identification is validated when the provider includes the iss
+// parameter in the callback. Providers that omit it (including the public Sigstore
+// instance) are accepted without iss verification.
 package oidcflow
 
 import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -86,7 +105,8 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 
 	srv := &http.Server{
 		ReadHeaderTimeout: 2 * time.Second,
-		Handler:           callbackHandler(state, codeCh, errCh),
+		BaseContext:       func(_ net.Listener) context.Context { return ctx },
+		Handler:           callbackHandler(state, opts.Issuer, codeCh, errCh),
 	}
 	go func() {
 		if sErr := srv.Serve(listener); sErr != nil && !errors.Is(sErr, http.ErrServerClosed) {
@@ -142,12 +162,16 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 	return &Token{RawToken: rawIDToken}, nil
 }
 
-func callbackHandler(expectedState string, codeCh chan<- string, errCh chan<- error) http.Handler {
+func callbackHandler(expectedState, expectedIssuer string, codeCh chan<- string, errCh chan<- error) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB limit
-		if r.FormValue("state") != expectedState {
-			// Non-blocking: discard if channel already has an error (e.g. browser retry).
+		// Constant-time comparison prevents timing side-channel recovery of the state value.
+		if subtle.ConstantTimeCompare([]byte(r.FormValue("state")), []byte(expectedState)) != 1 {
 			select {
 			case errCh <- errors.New("invalid state parameter in callback"):
 			default:
@@ -155,7 +179,15 @@ func callbackHandler(expectedState string, codeCh chan<- string, errCh chan<- er
 			http.Error(w, "invalid state", http.StatusBadRequest)
 			return
 		}
-		// Reject IdP error callbacks (e.g. access_denied, server_error).
+		// RFC 9207: validate iss when present; permissive when absent.
+		if iss := r.FormValue("iss"); iss != "" && iss != expectedIssuer {
+			select {
+			case errCh <- fmt.Errorf("issuer mismatch in callback: got %q, expected %q", iss, expectedIssuer):
+			default:
+			}
+			http.Error(w, "issuer mismatch", http.StatusBadRequest)
+			return
+		}
 		if idpErr := r.FormValue("error"); idpErr != "" {
 			desc := r.FormValue("error_description")
 			select {
@@ -174,7 +206,6 @@ func callbackHandler(expectedState string, codeCh chan<- string, errCh chan<- er
 			http.Error(w, "missing authorization code", http.StatusBadRequest)
 			return
 		}
-		// Non-blocking: discard duplicate callbacks (browser retry, prefetch, etc.).
 		select {
 		case codeCh <- code:
 			fmt.Fprint(w, successHTML)
