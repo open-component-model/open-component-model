@@ -19,12 +19,24 @@ import (
 
 // Credential key constants re-exported from the typed credential package for backward compatibility.
 const (
-	CredentialKeyUsername            = credentialsv1.CredentialKeyUsername
-	CredentialKeyPassword            = credentialsv1.CredentialKeyPassword
-	CredentialKeyAccessToken         = credentialsv1.CredentialKeyAccessToken
-	CredentialKeyRefreshToken        = credentialsv1.CredentialKeyRefreshToken
-	LegacyCredentialKeyAccessToken   = credentialsv1.LegacyCredentialKeyAccessToken
-	LegacyCredentialKeyRefreshToken  = credentialsv1.LegacyCredentialKeyRefreshToken
+	// CredentialKeyUsername is the key for basic auth username.
+	CredentialKeyUsername = credentialsv1.CredentialKeyUsername
+	// CredentialKeyPassword is the key for basic auth password.
+	CredentialKeyPassword = credentialsv1.CredentialKeyPassword
+	// CredentialKeyAccessToken is the key for OAuth2/bearer access tokens.
+	CredentialKeyAccessToken = credentialsv1.CredentialKeyAccessToken
+	// CredentialKeyRefreshToken is the key for OAuth2 refresh tokens.
+	CredentialKeyRefreshToken = credentialsv1.CredentialKeyRefreshToken
+	// LegacyCredentialKeyAccessToken is the legacy snake_case key for access tokens.
+	//
+	// Deprecated: Use CredentialKeyAccessToken instead.
+	//nolint:staticcheck // will be removed in the future
+	LegacyCredentialKeyAccessToken = credentialsv1.LegacyCredentialKeyAccessToken
+	// LegacyCredentialKeyRefreshToken is the legacy snake_case key for refresh tokens.
+	//
+	// Deprecated: Use CredentialKeyRefreshToken instead.
+	//nolint:staticcheck // will be removed in the future
+	LegacyCredentialKeyRefreshToken = credentialsv1.LegacyCredentialKeyRefreshToken
 )
 
 // CredentialFromMap converts a credential map to an auth.Credential.
