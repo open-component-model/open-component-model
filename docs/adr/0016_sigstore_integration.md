@@ -81,6 +81,41 @@ The `cosign` binary will be downloaded on-demand and cached in the user's home d
 The version of `cosign` will be pinned and managed by Renovate. The user will interact with the feature through the standard `ocm sign` and `ocm verify` commands,
 with `sigstore` as the algorithm name.
 
+## OIDC Authentication Model
+
+When the `.ocmconfig` does not contain a pre-provisioned OIDC token, the CLI performs an interactive
+OIDC Authorization Code flow with PKCE (RFC 7636, S256) to acquire an identity token from the configured
+issuer. This flow is implemented in `cli/internal/oidcflow` without depending on `github.com/sigstore/sigstore`.
+
+### Why PKCE Only
+
+The OCM CLI is a **public OAuth client** — it cannot hold a client secret. The protection mechanisms considered:
+
+| Mechanism | Applicability | Decision |
+|-----------|--------------|----------|
+| PKCE S256 (RFC 7636) | Prevents authorization code interception | **Implemented** |
+| Client authentication (client_secret) | Not applicable — public client cannot hold secrets | N/A |
+| DPoP (RFC 9449) | Proof-of-possession for tokens | Not needed — token is used once immediately, never stored |
+| PAR (RFC 9126) | Pushed Authorization Requests | Not needed — no confidential request parameters beyond PKCE |
+| JARM | JWT-secured authorization response | Not needed — code exchange over TLS is sufficient |
+
+PKCE S256 is the RFC-recommended protection for native public clients (RFC 8252 §7.1, OAuth 2.1 draft §4.1.2).
+The loopback redirect URI (`http://127.0.0.1:<random-port>`) limits code interception to same-machine processes,
+which PKCE fully mitigates.
+
+### Enterprise Provider Compatibility
+
+The implementation supports arbitrary OIDC providers via the `issuer` and `clientID` fields in `.ocmconfig`.
+Enterprise deployments (Keycloak, Azure AD, Okta, etc.) are supported with the following considerations:
+
+- **RFC 9207 (Issuer Identification):** The callback validates the `iss` parameter when present (permissive mode).
+  Providers that omit `iss` are accepted without issuer verification. This protects against mix-up attacks
+  in multi-provider enterprise environments.
+- **PKCE S256 required:** The provider must advertise `S256` in `code_challenge_methods_supported`.
+  The flow fails with a clear error if PKCE S256 is not supported.
+- **Session behavior:** The flow does not send `prompt=consent` or `prompt=login`, allowing the provider's
+  default session policy to apply. Enterprise providers typically control this server-side.
+
 ## Conclusion
 
 Option A provides a pragmatic and robust solution for integrating Sigstore signing into OCM. It minimizes dependencies,
