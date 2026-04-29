@@ -42,6 +42,7 @@ func TestOCIRegistryIdentity_SchemeConvert(t *testing.T) {
 	restored := &OCIRegistryIdentity{}
 	require.NoError(t, scheme.Convert(raw, restored))
 
+	assert.Equal(t, original.Type, restored.Type)
 	assert.Equal(t, original.Hostname, restored.Hostname)
 	assert.Equal(t, original.Scheme, restored.Scheme)
 	assert.Equal(t, original.Port, restored.Port)

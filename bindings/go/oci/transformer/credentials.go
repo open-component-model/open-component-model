@@ -32,7 +32,11 @@ func resolveCredentialsMap(ctx context.Context, resolver credentials.Resolver, i
 			ocicredsv1.CredentialKeyRefreshToken: c.RefreshToken,
 		}, nil
 	case *credconfigv1.DirectCredentials:
-		return c.Properties, nil
+		result := make(map[string]string, len(c.Properties))
+		for k, v := range c.Properties {
+			result[k] = v
+		}
+		return result, nil
 	default:
 		return nil, fmt.Errorf("unsupported credential type %T", typed)
 	}

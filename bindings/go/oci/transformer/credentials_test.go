@@ -39,10 +39,10 @@ func TestResolveCredentialsMap_OCICredentials(t *testing.T) {
 
 	creds, err := resolveCredentialsMap(t.Context(), resolver, runtime.Identity{"type": "OCIRegistry"})
 	require.NoError(t, err)
-	assert.Equal(t, "user", creds["username"])
-	assert.Equal(t, "pass", creds["password"])
-	assert.Equal(t, "tok", creds["accessToken"])
-	assert.Equal(t, "ref", creds["refreshToken"])
+	assert.Equal(t, "user", creds[ocicredsv1.CredentialKeyUsername])
+	assert.Equal(t, "pass", creds[ocicredsv1.CredentialKeyPassword])
+	assert.Equal(t, "tok", creds[ocicredsv1.CredentialKeyAccessToken])
+	assert.Equal(t, "ref", creds[ocicredsv1.CredentialKeyRefreshToken])
 }
 
 func TestResolveCredentialsMap_DirectCredentials(t *testing.T) {

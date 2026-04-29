@@ -105,7 +105,13 @@ func TestMustRegisterCredentialType(t *testing.T) {
 	scheme := runtime.NewScheme()
 	MustRegisterCredentialType(scheme)
 
+	// Should resolve versioned type
 	obj, err := scheme.NewObject(runtime.NewVersionedType(OCICredentialsType, Version))
+	require.NoError(t, err)
+	assert.IsType(t, &OCICredentials{}, obj)
+
+	// Should resolve unversioned alias
+	obj, err = scheme.NewObject(runtime.NewUnversionedType(OCICredentialsType))
 	require.NoError(t, err)
 	assert.IsType(t, &OCICredentials{}, obj)
 }
