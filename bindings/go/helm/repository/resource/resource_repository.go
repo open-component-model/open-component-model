@@ -13,6 +13,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
 	helmdownload "ocm.software/open-component-model/bindings/go/helm/internal/download"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -100,7 +101,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	slog.DebugContext(ctx, "Created temporary download directory", "dir", downloadDir)
 
 	opts := []helmdownload.Option{
-		helmdownload.WithCredentials(credentials),
+		helmdownload.WithCredentials(helmcredsv1.FromDirectCredentials(credentials)),
 		helmdownload.WithAlwaysDownloadProv(true),
 	}
 

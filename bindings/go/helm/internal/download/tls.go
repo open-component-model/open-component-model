@@ -6,12 +6,13 @@ import (
 	"os"
 
 	"helm.sh/helm/v4/pkg/getter"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 )
 
 type tlsOptions struct {
 	CaCertFile  string
 	CaCert      string
-	Credentials map[string]string
+	Credentials *helmcredsv1.HelmHTTPCredentials
 }
 
 type tlOptionsFn func(opt *tlsOptions) *tlsOptions
@@ -30,7 +31,7 @@ func withCACert(caCert string) tlOptionsFn {
 	}
 }
 
-func withCredentials(credentials map[string]string) tlOptionsFn {
+func withCredentials(credentials *helmcredsv1.HelmHTTPCredentials) tlOptionsFn {
 	return func(opt *tlsOptions) *tlsOptions {
 		opt.Credentials = credentials
 		return opt
@@ -51,12 +52,7 @@ func constructTLSOptions(targetDir string, opts ...tlOptionsFn) (_ getter.Option
 	var (
 		caFile                        *os.File
 		caFilePath, certFile, keyFile string
-		credentials                   = opt.Credentials
 	)
-
-	if credentials == nil {
-		credentials = make(map[string]string)
-	}
 
 	if opt.CaCertFile != "" {
 		caFilePath = opt.CaCertFile
@@ -77,17 +73,18 @@ func constructTLSOptions(targetDir string, opts ...tlOptionsFn) (_ getter.Option
 	}
 
 	// set up certFile and keyFile if they are provided in the credentials
-	if v, ok := credentials[CredentialCertFile]; ok {
-		certFile = v
-		if _, err := os.Stat(certFile); err != nil {
-			return nil, fmt.Errorf("certFile %q does not exist", certFile)
+	if opt.Credentials != nil {
+		if opt.Credentials.CertFile != "" {
+			certFile = opt.Credentials.CertFile
+			if _, err := os.Stat(certFile); err != nil {
+				return nil, fmt.Errorf("certFile %q does not exist", certFile)
+			}
 		}
-	}
-
-	if v, ok := credentials[CredentialKeyFile]; ok {
-		keyFile = v
-		if _, err := os.Stat(keyFile); err != nil {
-			return nil, fmt.Errorf("keyFile %q does not exist", keyFile)
+		if opt.Credentials.KeyFile != "" {
+			keyFile = opt.Credentials.KeyFile
+			if _, err := os.Stat(keyFile); err != nil {
+				return nil, fmt.Errorf("keyFile %q does not exist", keyFile)
+			}
 		}
 	}
 

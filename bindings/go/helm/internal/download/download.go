@@ -16,7 +16,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/helm/internal"
-	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 )
 
@@ -38,7 +38,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 	}
 
 	if opt.Credentials == nil {
-		opt.Credentials = make(map[string]string)
+		opt.Credentials = &helmcredsv1.HelmHTTPCredentials{}
 	}
 
 	chartDir, err := os.MkdirTemp(targetDir, "helmRemoteChart*")
@@ -69,8 +69,8 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		verify = downloader.VerifyLater
 	}
 
-	if v, ok := opt.Credentials[CredentialKeyring]; ok {
-		keyring = v
+	if opt.Credentials.Keyring != "" {
+		keyring = opt.Credentials.Keyring
 		// We set verifyIfPossible to allow the download to run verify if keyring is defined. Without the keyring
 		// verification would not be possible at all.
 		// https://github.com/open-component-model/ocm/blob/be847549af3d2947a2c8bc2b38d51a20c2a8a9ba/api/tech/helm/downloader.go#L128
@@ -111,14 +111,8 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		Keyring:          keyring,
 	}
 
-	username := opt.Credentials[ocicredentials.CredentialKeyUsername]
-	password := opt.Credentials[ocicredentials.CredentialKeyPassword]
-
-	if password == "" {
-		if token := opt.Credentials[ocicredentials.CredentialKeyAccessToken]; token != "" {
-			password = token
-		}
-	}
+	username := opt.Credentials.Username
+	password := opt.Credentials.Password
 
 	if username != "" && password != "" {
 		dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))

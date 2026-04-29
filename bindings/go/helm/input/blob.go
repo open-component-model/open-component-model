@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	dlinternal "ocm.software/open-component-model/bindings/go/helm/internal/download"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/helm/internal/oci"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 )
@@ -163,7 +164,7 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 // and creates a ReadOnlyChart from it.
 func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBase string, credentials map[string]string) (result *ReadOnlyChart, err error) {
 	opts := []dlinternal.Option{
-		dlinternal.WithCredentials(credentials),
+		dlinternal.WithCredentials(helmcredsv1.FromDirectCredentials(credentials)),
 		//nolint:staticcheck // downward compatibility for helm input
 		dlinternal.WithVersion(helmSpec.Version),
 		//nolint:staticcheck // downward compatibility for helm input
