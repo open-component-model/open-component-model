@@ -779,7 +779,7 @@ func resolveCredentials(ctx context.Context, provider credentials.Resolver, cons
 		return nil, nil
 	}
 
-	creds, err := provider.Resolve(ctx, consumerIdentity)
+	creds, err := provider.Resolve(ctx, consumerIdentity) //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
 	if errors.Is(err, credentials.ErrNotFound) {
 		logger.DebugContext(ctx, "no credentials found for consumer identity, proceeding without credentials")
 		return nil, nil
