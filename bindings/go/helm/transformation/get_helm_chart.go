@@ -125,7 +125,7 @@ func (t *GetHelmChart) resolveCredentials(ctx context.Context, targetResource *d
 	if consumerId == nil {
 		return nil, nil
 	}
-	creds, err := t.CredentialProvider.Resolve(ctx, consumerId)
+	creds, err := t.CredentialProvider.Resolve(ctx, consumerId) //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
 	if err != nil && !errors.Is(err, credentials.ErrNotFound) {
 		return nil, fmt.Errorf("failed resolving credentials: %w", err)
 	}

@@ -480,7 +480,7 @@ func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *con
 	identity, err := prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, prov.targetRepoSpec)
 	if err == nil {
 		if prov.graph != nil {
-			if creds, err = prov.graph.Resolve(ctx, identity); err != nil {
+			if creds, err = prov.graph.Resolve(ctx, identity); err != nil { //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
 				if errors.Is(err, credentials.ErrNotFound) {
 					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", prov.targetRepoSpec, err.Error()))
 				} else {
