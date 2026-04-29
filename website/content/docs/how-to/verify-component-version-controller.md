@@ -148,7 +148,7 @@ data:
 EOF
 ```
 
-{{< callout type="info" >}}
+{{< callout title="Note" icon="outline/info-circle" >}}
 The key in the Secret's `data` field must match the signature name used during signing.
 If you signed with `--signature prod`, use `prod` as the key name.
 {{< /callout >}}
