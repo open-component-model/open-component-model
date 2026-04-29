@@ -28,8 +28,8 @@ func loadSigstoreStack(t *testing.T) sigstoreStack {
 		OIDCIssuer:   os.Getenv("SIGSTORE_OIDC_ISSUER"),
 		OIDCIdentity: os.Getenv("SIGSTORE_OIDC_IDENTITY"),
 	}
-	if stack.OIDCToken == "" || stack.SigningConfig == "" || stack.TrustedRoot == "" {
-		t.Skip("sigstore scaffolding env vars not set (SIGSTORE_OIDC_TOKEN, SIGSTORE_SIGNING_CONFIG, SIGSTORE_TRUSTED_ROOT)")
+	if stack.OIDCToken == "" || stack.SigningConfig == "" || stack.TrustedRoot == "" || stack.OIDCIssuer == "" || stack.OIDCIdentity == "" {
+		t.Skip("sigstore scaffolding env vars not set (SIGSTORE_OIDC_TOKEN, SIGSTORE_SIGNING_CONFIG, SIGSTORE_TRUSTED_ROOT, SIGSTORE_OIDC_ISSUER, SIGSTORE_OIDC_IDENTITY)")
 	}
 	return stack
 }

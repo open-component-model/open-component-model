@@ -115,6 +115,9 @@ func CredentialGraph(cmd *cobra.Command) error {
 			// TODO(jakobmoellerdev): replace with a CredentialPluginRegistry on the plugin manager
 			// (same pattern as SigningRegistry) once the registry infrastructure exists.
 			func(_ context.Context, typed runtime.Typed) (credentials.CredentialPlugin, error) {
+				if typed == nil {
+					return nil, fmt.Errorf("no credential plugin found: missing type metadata")
+				}
 				if typed.GetType().GetName() == oidc.OIDCPluginType {
 					return &oidc.OIDCPlugin{}, nil
 				}
