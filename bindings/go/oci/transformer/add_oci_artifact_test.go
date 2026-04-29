@@ -3,7 +3,6 @@ package transformer
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,6 +13,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
+	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -70,8 +70,11 @@ func (m *mockCredentialResolver) Resolve(ctx context.Context, id runtime.Identit
 	return map[string]string{"username": "test-user"}, nil
 }
 
-func (m *mockCredentialResolver) ResolveTyped(ctx context.Context, identity runtime.Typed) (runtime.Typed, error) {
-	return nil, fmt.Errorf("not implemented")
+func (m *mockCredentialResolver) ResolveTyped(_ context.Context, _ runtime.Typed) (runtime.Typed, error) {
+	return &credentialsv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credentialsv1.CredentialsType, credentialsv1.Version),
+		Properties: map[string]string{"username": "test-user"},
+	}, nil
 }
 
 func TestAddOCIArtifact_Transform(t *testing.T) {

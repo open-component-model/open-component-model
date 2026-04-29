@@ -63,6 +63,16 @@ func CredentialFromMap(credentials map[string]string) auth.Credential {
 	return cred
 }
 
+// CredentialFromOCICredentials converts typed OCICredentials to an auth.Credential.
+func CredentialFromOCICredentials(creds *credentialsv1.OCICredentials) auth.Credential {
+	return auth.Credential{
+		Username:     creds.Username,
+		Password:     creds.Password,
+		AccessToken:  creds.AccessToken,
+		RefreshToken: creds.RefreshToken,
+	}
+}
+
 // CredentialFunc creates a function that returns credentials based on host and port matching.
 // It takes an identity map and a credentials map as input and returns a function that can be
 // used with the ORAS client for authentication.

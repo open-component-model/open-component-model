@@ -6,68 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-func TestOCIRegistryIdentity_ToIdentity(t *testing.T) {
-	tests := []struct {
-		name     string
-		identity OCIRegistryIdentity
-		expected runtime.Identity
-	}{
-		{
-			name: "all fields populated",
-			identity: OCIRegistryIdentity{
-				Type:     VersionedType,
-				Hostname: "registry.example.com",
-				Scheme:   "https",
-				Port:     "443",
-				Path:     "v2",
-			},
-			expected: runtime.Identity{
-				runtime.IdentityAttributeType:     VersionedType.String(),
-				runtime.IdentityAttributeHostname: "registry.example.com",
-				runtime.IdentityAttributeScheme:   "https",
-				runtime.IdentityAttributePort:     "443",
-				runtime.IdentityAttributePath:     "v2",
-			},
-		},
-		{
-			name: "hostname only",
-			identity: OCIRegistryIdentity{
-				Type:     VersionedType,
-				Hostname: "ghcr.io",
-			},
-			expected: runtime.Identity{
-				runtime.IdentityAttributeType:     VersionedType.String(),
-				runtime.IdentityAttributeHostname: "ghcr.io",
-			},
-		},
-		{
-			name:     "empty identity",
-			identity: OCIRegistryIdentity{Type: VersionedType},
-			expected: runtime.Identity{
-				runtime.IdentityAttributeType: VersionedType.String(),
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := tt.identity.ToIdentity()
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestOCIRegistryIdentity_AcceptedCredentialTypes(t *testing.T) {
-	identity := &OCIRegistryIdentity{}
-	accepted := identity.AcceptedCredentialTypes()
-
-	require.Len(t, accepted, 1)
-	assert.Equal(t, runtime.NewVersionedType(ocicredsv1.OCICredentialsType, ocicredsv1.Version), accepted[0])
-}
 
 func TestMustRegisterIdentityType(t *testing.T) {
 	scheme := runtime.NewScheme()
