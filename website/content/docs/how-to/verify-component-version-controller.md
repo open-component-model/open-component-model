@@ -221,18 +221,13 @@ If verification fails, the component will not become ready and an error conditio
 
 ## How verification protects component references
 
-When a component version contains references to other component versions, those references can
-include digests. If present, the controller uses them to verify the integrity of referenced
-components automatically:
+Component references can carry digests. When the controller resolves a reference that includes a
+digest, it computes a fresh digest of the referenced component and compares it against the
+recorded value. If they do not match, reconciliation fails.
 
-1. The controller verifies the **signature** on the parent component version
-2. When resolving a referenced component, if the reference includes a **digest**, the controller
-   computes a fresh digest and compares it against the recorded value
-3. If the digests do not match, reconciliation fails
-
-Reference digests are computed and added automatically when constructing a component version with
-`ocm add cv`. The `ocm sign cv` command checks that the component version is safely digestible
-and warns if any reference or resource digests are missing.
+Reference digests are computed and added automatically by `ocm add cv`. The `ocm sign cv`
+command checks that the component version is safely digestible and warns if any reference or
+resource digests are missing.
 
 ## Troubleshooting
 
