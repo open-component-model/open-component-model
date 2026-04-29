@@ -132,7 +132,7 @@ component:
       version: 1.0.0
       relation: local
       access:                          # NOT included in signature
-        type: localBlob
+        type: LocalBlob/v1
         localReference: sha256:70a257...
         mediaType: text/plain; charset=utf-8
       digest:                          # Included in signature
@@ -243,20 +243,20 @@ Example of a PEM-encoded signature value:
 
 ```yaml
 signature:
-      algorithm: RSASSA-PSS
-      mediaType: application/x-pem-file
-      value: |
-        -----BEGIN SIGNATURE-----
-        Signature Algorithm: RSASSA-PSS
-        
-        <base64-encoded signature bytes>
-        -----END SIGNATURE-----
-        -----BEGIN CERTIFICATE-----
-        <leaf certificate>
-        -----END CERTIFICATE-----
-        -----BEGIN CERTIFICATE-----
-        <intermediate CA, if applicable>
-        -----END CERTIFICATE-----
+  algorithm: RSASSA-PSS
+  mediaType: application/x-pem-file
+  value: |
+    -----BEGIN SIGNATURE-----
+    Signature Algorithm: RSASSA-PSS
+    
+    <base64-encoded signature bytes>
+    -----END SIGNATURE-----
+    -----BEGIN CERTIFICATE-----
+    <leaf certificate>
+    -----END CERTIFICATE-----
+    -----BEGIN CERTIFICATE-----
+    <intermediate CA, if applicable>
+    -----END CERTIFICATE-----
 ```
 
 {{< callout context="note" title="PEM encoding is in early access" icon="outline/info-circle" >}}
