@@ -13,8 +13,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	dlinternal "ocm.software/open-component-model/bindings/go/helm/internal/download"
-	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/helm/internal/oci"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 )
 

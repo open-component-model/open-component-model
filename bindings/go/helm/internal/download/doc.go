@@ -18,12 +18,11 @@
 //
 // # Authentication
 //
-// Credentials can be supplied via [WithCredentials] using a map of key-value pairs.
-// Username/password authentication is supported through the standard OCI credential keys:
+// Credentials can be supplied via [WithCredentials] using typed [helmcredsv1.HelmHTTPCredentials]:
 //
-//	creds := map[string]string{
-//	    "username": "user",
-//	    "password": "pass",
+//	creds := &helmcredsv1.HelmHTTPCredentials{
+//	    Username: "user",
+//	    Password: "pass",
 //	}
 //	chartData, err := download.NewReadOnlyChartFromRemote(ctx, chartURL, download.WithCredentials(creds))
 //

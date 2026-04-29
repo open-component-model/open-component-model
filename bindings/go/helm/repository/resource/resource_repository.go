@@ -13,9 +13,9 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
 	helmdownload "ocm.software/open-component-model/bindings/go/helm/internal/download"
-	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )

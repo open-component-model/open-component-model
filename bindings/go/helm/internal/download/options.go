@@ -4,17 +4,21 @@ import (
 	"time"
 
 	"helm.sh/helm/v4/pkg/getter"
+
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 )
 
 const (
 	// CredentialCertFile is the key for storing the location of a client certificate.
+	//
 	// Deprecated: Use helmcredsv1.CredentialKeyCertFile instead.
 	CredentialCertFile = helmcredsv1.CredentialKeyCertFile
 	// CredentialKeyFile is the key for storing the location of a client private key.
+	//
 	// Deprecated: Use helmcredsv1.CredentialKeyKeyFile instead.
 	CredentialKeyFile = helmcredsv1.CredentialKeyKeyFile
 	// CredentialKeyring is the key for storing the keyring name to use.
+	//
 	// Deprecated: Use helmcredsv1.CredentialKeyKeyring instead.
 	CredentialKeyring = helmcredsv1.CredentialKeyKeyring
 
