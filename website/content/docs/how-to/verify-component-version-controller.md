@@ -1,6 +1,7 @@
 ---
 title: "Verify Component Versions in the Controller"
 description: "Configure the OCM controller to verify component version signatures on reconciliation."
+icon: "🔍"
 weight: 36
 toc: true
 ---
@@ -60,7 +61,8 @@ github.com/acme.org/helloworld     │ 1.0.0   │ acme.org
 
 ### Prepare the public key
 
-Base64-encode your public key for use in Kubernetes resources:
+Base64-encode your public key for use in the Component resource's `value` field. The controller
+expects the PEM file content encoded as a base64 string:
 
 ```bash
 cat /tmp/keys/public-key.pem | base64 | tr -d '\n'
@@ -148,7 +150,7 @@ data:
 EOF
 ```
 
-{{< callout title="Note" icon="outline/info-circle" >}}
+{{< callout context="note" title="Note" icon="outline/info-circle" >}}
 The key in the Secret's `data` field must match the signature name used during signing.
 If you signed with `--signature prod`, use `prod` as the key name.
 {{< /callout >}}
