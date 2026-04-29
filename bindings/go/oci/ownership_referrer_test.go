@@ -79,6 +79,44 @@ func TestPushOwnershipReferrer(t *testing.T) {
 			r.Len(m.Layers, 1)
 			assert.Equal(t, ociImageSpecV1.MediaTypeEmptyJSON, m.Layers[0].MediaType)
 		})
+
+		t.Run("omits org.opencontainers.image.created so the manifest is content-addressed", func(t *testing.T) {
+			_, hasCreated := m.Annotations[ociImageSpecV1.AnnotationCreated]
+			assert.Falsef(t, hasCreated,
+				"ownership referrer must not carry %s; its presence would make the manifest digest non-deterministic across re-runs",
+				ociImageSpecV1.AnnotationCreated)
+		})
+	})
+
+	t.Run("repeated pushes with identical inputs are idempotent", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+		store := memory.New()
+
+		subject := ociImageSpecV1.Descriptor{
+			MediaType: ociImageSpecV1.MediaTypeImageManifest,
+			Digest:    digest.FromBytes([]byte("subject")),
+			Size:      7,
+		}
+		resource := &descriptor.Resource{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta:    descriptor.ObjectMeta{Name: "my-resource", Version: "1.0.0"},
+				ExtraIdentity: map[string]string{"architecture": "amd64", "os": "linux"},
+			},
+		}
+
+		// Three back-to-back pushes simulate re-runs of `ocm add cv` against the
+		// same target. Without org.opencontainers.image.created the manifest is
+		// fully deterministic, so all attempts must yield the same digest and
+		// only one referrer must be visible.
+		r.NoError(pushOwnershipReferrer(ctx, store, subject, resource, "ocm.software/c", "1.0.0"))
+		r.NoError(pushOwnershipReferrer(ctx, store, subject, resource, "ocm.software/c", "1.0.0"))
+		r.NoError(pushOwnershipReferrer(ctx, store, subject, resource, "ocm.software/c", "1.0.0"))
+
+		predecessors, err := store.Predecessors(ctx, subject)
+		r.NoError(err)
+		assert.Lenf(t, predecessors, 1,
+			"identical pushes must collapse to a single referrer; got %d distinct manifest digests", len(predecessors))
 	})
 
 	t.Run("non-manifest subject is skipped silently", func(t *testing.T) {

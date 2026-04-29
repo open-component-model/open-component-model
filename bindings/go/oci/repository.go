@@ -469,7 +469,6 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, compon
 	if err != nil {
 		return fmt.Errorf("failed to pack resource blob: %w", err)
 	}
-
 	if resource, ok := artifact.(*descriptor.Resource); ok && repo.ownershipReferrerPolicy == OwnershipReferrerPolicyEnabled {
 		if err := pushOwnershipReferrer(ctx, store, desc, resource, component, version); err != nil {
 			return fmt.Errorf("failed to push ownership referrer: %w", err)

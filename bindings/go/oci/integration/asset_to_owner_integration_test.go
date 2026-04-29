@@ -114,11 +114,7 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 	t.Run("verify ownership referrer", func(t *testing.T) {
 		r := require.New(t)
 		r.NotEmpty(resourceDigest, "step 1 must have set resourceDigest")
-
-		// Resolve the component-version repo store (a *remote.Repository
-		// under the hood). It implements both content.ReadOnlyGraphStorage
-		// and registry.ReferrerLister, which is what registry.Referrers
-		// needs to negotiate Referrers API vs tag fallback transparently.
+		
 		compRef := resolver.ComponentVersionReference(ctx, componentName, componentVersion)
 		store, err := resolver.StoreForReference(ctx, compRef)
 		r.NoError(err)
@@ -150,5 +146,50 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 			assert.Equal(t, resourceName, payload.Identity["name"])
 			assert.Equal(t, componentVersion, payload.Identity["version"])
 		})
+	})
+
+	t.Run("re-uploading the same resource leaves a single referrer", func(t *testing.T) {
+		r := require.New(t)
+		r.NotEmpty(resourceDigest, "step 1 must have set resourceDigest")
+
+		// Re-run AddLocalResource three times with the same inputs. Because
+		// pushOwnershipReferrer omits org.opencontainers.image.created, every
+		// attempt produces an identical manifest digest, and the registry
+		// returns the existing manifest rather than indexing additional
+		// referrers. End-to-end proof of `ocm add cv` idempotency at the
+		// referrer layer.
+		data, _ := createSingleLayerOCIImage(t, []byte("ownership-payload"))
+		res := &descriptor.Resource{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: resourceName, Version: componentVersion},
+			},
+			Type:     "ociArtifact",
+			Relation: descriptor.LocalRelation,
+			Access: &v2.LocalBlob{
+				Type: ocmruntime.Type{
+					Name:    v2.LocalBlobAccessType,
+					Version: v2.LocalBlobAccessTypeVersion,
+				},
+				MediaType:      layout.MediaTypeOCIImageLayoutTarGzipV1,
+				LocalReference: digest.FromBytes(data).String(),
+			},
+		}
+		for i := 0; i < 3; i++ {
+			_, err := repo.AddLocalResource(ctx, componentName, componentVersion, res, inmemory.New(bytes.NewReader(data)))
+			r.NoErrorf(err, "re-upload attempt %d must not fail", i+1)
+		}
+
+		compRef := resolver.ComponentVersionReference(ctx, componentName, componentVersion)
+		store, err := resolver.StoreForReference(ctx, compRef)
+		r.NoError(err)
+		graphStore, ok := store.(content.ReadOnlyGraphStorage)
+		r.Truef(ok, "store %T must implement content.ReadOnlyGraphStorage for referrers discovery", store)
+		subject, err := store.Resolve(ctx, resourceDigest.String())
+		r.NoError(err)
+
+		referrers, err := orasregistry.Referrers(ctx, graphStore, subject, oci.OwnershipArtifactType)
+		r.NoError(err)
+		assert.Lenf(t, referrers, 1,
+			"identical re-uploads must converge on a single referrer; got %d distinct manifests", len(referrers))
 	})
 }

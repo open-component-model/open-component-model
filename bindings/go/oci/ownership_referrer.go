@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/errdef"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
@@ -22,23 +25,15 @@ import (
 // (GET /v2/<name>/referrers/<digest>?artifactType=...).
 const OwnershipArtifactType = "application/vnd.ocm.software.ownership.v1+json"
 
-// pushOwnershipReferrer pushes an OCI referrer manifest linking the subject
-// resource to the owning component version, per
-// docs/adr/0015_ownership_annotations.md.
+// pushOwnershipReferrer pushes an OCI referrer manifest linking subject to
+// the owning component version, per docs/adr/0015_ownership_annotations.md.
 //
-// The referrer is a minimal OCI 1.1 manifest with empty config and layer,
-// an artifactType of OwnershipArtifactType, and annotations carrying the
-// component name, version, and the resource identity.
-//
-// Ownership referrers are only pushed for resources; sources are intentionally
-// not covered by this feature (ADR 0015 asset-to-owner scenario scopes
-// ownership discovery to consumed OCI assets, which are resources).
-//
-// The call is a no-op when the subject is not an OCI-compliant manifest
-// (e.g. a raw blob layer), since the OCI subject field requires a manifest
-// target. Registries that support the OCI Distribution v1.1 Referrers API
-// index the manifest via its subject field; ORAS falls back to the referrers
-// tag schema for older registries.
+// The manifest is built by hand rather than via [oras.PackManifest] because
+// PackManifest unconditionally stamps org.opencontainers.image.created (caller
+// value or time.Now()), which would make the digest non-deterministic.
+// Omitting that annotation is spec-legal — created is optional in the OCI
+// image-spec — so identical inputs produce identical bytes and re-running
+// `ocm add cv` is a no-op at the registry instead of a new referrer per run.
 func pushOwnershipReferrer(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, resource *descriptor.Resource, component, version string) error {
 	if !introspection.IsOCICompliantManifest(subject) {
 		return nil
@@ -50,17 +45,42 @@ func pushOwnershipReferrer(ctx context.Context, store spec.Store, subject ociIma
 		return fmt.Errorf("failed to build ownership artifact annotation: %w", err)
 	}
 
-	opts := oras.PackManifestOptions{
-		Subject: &subject,
-		ManifestAnnotations: map[string]string{
+	// Both the config and the single layer point at the standard empty-JSON
+	// blob ({}). One Push covers both fields.
+	emptyDesc := ociImageSpecV1.DescriptorEmptyJSON
+	manifest := ociImageSpecV1.Manifest{
+		Versioned:    specs.Versioned{SchemaVersion: 2},
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: OwnershipArtifactType,
+		Config:       emptyDesc,
+		Layers:       []ociImageSpecV1.Descriptor{emptyDesc},
+		Subject:      &subject,
+		Annotations: map[string]string{
 			annotations.OwnershipComponentName:    component,
 			annotations.OwnershipComponentVersion: version,
 			annotations.ArtifactAnnotationKey:     artifactValue,
 		},
 	}
+	body, err := json.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ownership referrer manifest: %w", err)
+	}
 
-	if _, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1, OwnershipArtifactType, opts); err != nil {
-		return fmt.Errorf("failed to pack ownership referrer manifest: %w", err)
+	// Push the empty config/layer blob. errdef.ErrAlreadyExists is the normal
+	// signal that the content is already present — expected on re-runs and
+	// across referrers that share the same empty blob.
+	if err := store.Push(ctx, emptyDesc, bytes.NewReader(emptyDesc.Data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		return fmt.Errorf("failed to push empty config/layer blob for ownership referrer: %w", err)
+	}
+
+	manifestDesc := ociImageSpecV1.Descriptor{
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: OwnershipArtifactType,
+		Digest:       digest.FromBytes(body),
+		Size:         int64(len(body)),
+	}
+	if err := store.Push(ctx, manifestDesc, bytes.NewReader(body)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		return fmt.Errorf("failed to push ownership referrer manifest: %w", err)
 	}
 
 	return nil
