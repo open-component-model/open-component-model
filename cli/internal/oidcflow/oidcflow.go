@@ -369,7 +369,7 @@ func openBrowser(ctx context.Context, rawURL string, errCh chan<- error) error {
 	case "linux":
 		cmd = exec.CommandContext(ctx, "xdg-open", rawURL)
 	case "windows":
-		cmd = exec.CommandContext(ctx, "cmd", "/c", "start", "", rawURL)
+		cmd = exec.CommandContext(ctx, "cmd", "/c", "start", "", "\""+rawURL+"\"")
 	default:
 		return fmt.Errorf("unsupported platform %s", runtime.GOOS)
 	}
