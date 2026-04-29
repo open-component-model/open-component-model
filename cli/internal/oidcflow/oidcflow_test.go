@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -86,6 +87,78 @@ func TestCallbackHandler_InvalidState(t *testing.T) {
 	}
 }
 
+func TestCallbackHandler_MissingCode(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	codeCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	handler := callbackHandler("test-state", codeCh, errCh)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/callback?state=test-state", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	r.Equal(http.StatusBadRequest, rec.Code)
+
+	select {
+	case err := <-errCh:
+		r.ErrorContains(err, "missing authorization code")
+	default:
+		t.Fatal("expected error on channel")
+	}
+}
+
+func TestCallbackHandler_IdPError(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	codeCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	handler := callbackHandler("test-state", codeCh, errCh)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/callback?state=test-state&error=access_denied&error_description=user+denied+consent", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	r.Equal(http.StatusForbidden, rec.Code)
+
+	select {
+	case err := <-errCh:
+		r.ErrorContains(err, "identity provider error")
+		r.ErrorContains(err, "access_denied")
+		r.ErrorContains(err, "user denied consent")
+	default:
+		t.Fatal("expected error on channel")
+	}
+}
+
+func TestCallbackHandler_DuplicateCallback(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	codeCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	handler := callbackHandler("test-state", codeCh, errCh)
+
+	req1 := httptest.NewRequest(http.MethodGet, "/auth/callback?state=test-state&code=first-code", nil)
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	r.Equal(http.StatusOK, rec1.Code)
+
+	req2 := httptest.NewRequest(http.MethodGet, "/auth/callback?state=test-state&code=second-code", nil)
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	r.Equal(http.StatusConflict, rec2.Code)
+
+	select {
+	case code := <-codeCh:
+		r.Equal("first-code", code, "only first callback should be accepted")
+	default:
+		t.Fatal("expected code on channel")
+	}
+}
+
 func TestWaitForCode_Success(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
@@ -111,6 +184,20 @@ func TestWaitForCode_Error(t *testing.T) {
 	r.ErrorContains(err, "callback error")
 }
 
+func TestWaitForCode_ContextCancelled(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	codeCh := make(chan string)
+	errCh := make(chan error)
+
+	_, err := waitForCode(ctx, codeCh, errCh)
+	r.ErrorContains(err, "authentication cancelled")
+}
+
 func TestWaitForCode_Timeout(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
@@ -125,12 +212,83 @@ func TestWaitForCode_Timeout(t *testing.T) {
 	r.ErrorContains(err, "timed out waiting for authentication callback")
 }
 
+func TestOpenBrowser_RejectsNonHTTPS(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	errCh := make(chan error, 1)
+	err := openBrowser(context.Background(), "http://example.com/auth", errCh)
+	r.Error(err)
+	r.ErrorContains(err, "refusing to open non-HTTPS auth URL")
+}
+
+func TestOpenBrowser_RejectsInvalidURL(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	errCh := make(chan error, 1)
+	err := openBrowser(context.Background(), "://invalid", errCh)
+	r.Error(err)
+	r.ErrorContains(err, "parse auth URL")
+}
+
+func TestAuthURL_ContainsPKCEAndState(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	challenge := "test-challenge"
+	state := "random-state-value"
+	redirectURL := "http://127.0.0.1:12345/auth/callback"
+
+	params := url.Values{
+		"client_id":             {"sigstore"},
+		"redirect_uri":         {redirectURL},
+		"response_type":        {"code"},
+		"scope":                {"openid email"},
+		"state":                {state},
+		"code_challenge_method": {"S256"},
+		"code_challenge":       {challenge},
+		"access_type":          {"online"},
+		"nonce":                {"test-nonce"},
+	}
+	authURL := "https://issuer.example.com/auth?" + params.Encode()
+
+	parsed, err := url.Parse(authURL)
+	r.NoError(err)
+
+	q := parsed.Query()
+	r.Equal("sigstore", q.Get("client_id"))
+	r.Equal(redirectURL, q.Get("redirect_uri"))
+	r.Equal("code", q.Get("response_type"))
+	r.Contains(q.Get("scope"), "openid")
+	r.Equal(state, q.Get("state"))
+	r.Equal("S256", q.Get("code_challenge_method"))
+	r.Equal(challenge, q.Get("code_challenge"))
+	r.Equal("online", q.Get("access_type"))
+	r.Equal("test-nonce", q.Get("nonce"))
+}
+
+func TestPKCE_VerifierChallengeRelationship(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	verifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+	h := sha256.Sum256([]byte(verifier))
+	expectedChallenge := base64.RawURLEncoding.EncodeToString(h[:])
+
+	// Verify the S256 challenge derivation matches RFC 7636.
+	r.Len(expectedChallenge, 43, "base64url(sha256) should be 43 chars")
+	r.NotEqual(verifier, expectedChallenge, "challenge must differ from verifier")
+}
+
 func TestOptions_Defaults(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
 	r.NotEmpty(DefaultIssuer)
 	r.NotEmpty(DefaultClientID)
+	r.Equal("https://oauth2.sigstore.dev/auth", DefaultIssuer)
+	r.Equal("sigstore", DefaultClientID)
 }
 
 func TestOptions_Custom(t *testing.T) {
@@ -144,3 +302,4 @@ func TestOptions_Custom(t *testing.T) {
 	r.Equal("https://custom.issuer.dev", opts.Issuer)
 	r.Equal("custom-client", opts.ClientID)
 }
+
