@@ -5,6 +5,7 @@ includes:
 
 vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
+  SIGSTORE_ENV_FILE: '../../bindings/go/sigstore/integration/tmp/sigstore-env.sh'
 
 tasks:
   test/integration:
@@ -12,3 +13,16 @@ tasks:
       - task: reuse:run-go-test
         vars:
           GO_TEST_FLAGS: '-run "{{ .INTEGRATION_TEST_IDENTIFIER }}"'
+
+  test/integration-sigstore-cli:
+    desc: "Run CLI sigstore integration tests (requires scaffolding cluster from bindings/go/sigstore/integration)"
+    preconditions:
+      - sh: '[ -f {{.SIGSTORE_ENV_FILE}} ]'
+        msg: |
+          Sigstore env file not found. Start the scaffolding cluster first:
+            cd ../../bindings/go/sigstore/integration && task scaffolding:setup && task scaffolding:bridge && task scaffolding:env
+    cmds:
+      - |
+        set -e
+        . {{.SIGSTORE_ENV_FILE}}
+        GOWORK=off go test -count=1 -run "Integration_Sigstore" -timeout 180s ./...
