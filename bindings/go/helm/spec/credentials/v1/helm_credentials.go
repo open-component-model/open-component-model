@@ -5,10 +5,11 @@ import (
 )
 
 const (
+	//nolint:gosec // G101: This is a type name, not a credential.
 	HelmHTTPCredentialsType = "HelmHTTPCredentials"
 	Version                 = "v1"
 
-	// Credential property keys for HTTP-based Helm repositories.
+	// CredentialKeyUsername is the key for the username in HTTP-based Helm repository credentials.
 	CredentialKeyUsername = "username"
 	CredentialKeyPassword = "password"
 	CredentialKeyCertFile = "certFile"

@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"helm.sh/helm/v4/pkg/getter"
+
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 )
 
@@ -77,13 +78,19 @@ func constructTLSOptions(targetDir string, opts ...tlOptionsFn) (_ getter.Option
 		if opt.Credentials.CertFile != "" {
 			certFile = opt.Credentials.CertFile
 			if _, err := os.Stat(certFile); err != nil {
-				return nil, fmt.Errorf("certFile %q does not exist", certFile)
+				if os.IsNotExist(err) {
+					return nil, fmt.Errorf("certFile %q does not exist", certFile)
+				}
+				return nil, fmt.Errorf("certFile %q is not accessible: %w", certFile, err)
 			}
 		}
 		if opt.Credentials.KeyFile != "" {
 			keyFile = opt.Credentials.KeyFile
 			if _, err := os.Stat(keyFile); err != nil {
-				return nil, fmt.Errorf("keyFile %q does not exist", keyFile)
+				if os.IsNotExist(err) {
+					return nil, fmt.Errorf("keyFile %q does not exist", keyFile)
+				}
+				return nil, fmt.Errorf("keyFile %q is not accessible: %w", keyFile, err)
 			}
 		}
 	}

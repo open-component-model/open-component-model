@@ -16,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/internal/download"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
@@ -126,10 +127,10 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 		if pw, ok := credentials[ocicredentials.CredentialKeyPassword]; ok {
 			entry.Password = pw
 		}
-		if certFile, ok := credentials[download.CredentialCertFile]; ok {
+		if certFile, ok := credentials[helmcredsv1.CredentialKeyCertFile]; ok {
 			entry.CertFile = certFile
 		}
-		if keyFile, ok := credentials[download.CredentialKeyFile]; ok {
+		if keyFile, ok := credentials[helmcredsv1.CredentialKeyKeyFile]; ok {
 			entry.KeyFile = keyFile
 		}
 	}

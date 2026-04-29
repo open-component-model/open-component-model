@@ -1,7 +1,6 @@
 package v1
 
 import (
-	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -31,30 +30,4 @@ type HelmChartRepositoryIdentity struct {
 	Scheme   string       `json:"scheme,omitempty"`
 	Port     string       `json:"port,omitempty"`
 	Path     string       `json:"path,omitempty"`
-}
-
-// AcceptedCredentialTypes declares which credential types are valid for HTTP Helm repositories.
-func (h *HelmChartRepositoryIdentity) AcceptedCredentialTypes() []runtime.Type {
-	return []runtime.Type{
-		runtime.NewVersionedType(helmcredsv1.HelmHTTPCredentialsType, helmcredsv1.Version),
-	}
-}
-
-// ToIdentity converts the typed identity struct into a runtime.Identity map for graph lookup.
-func (h *HelmChartRepositoryIdentity) ToIdentity() runtime.Identity {
-	id := runtime.Identity{}
-	id.SetType(VersionedType)
-	if h.Hostname != "" {
-		id[runtime.IdentityAttributeHostname] = h.Hostname
-	}
-	if h.Scheme != "" {
-		id[runtime.IdentityAttributeScheme] = h.Scheme
-	}
-	if h.Port != "" {
-		id[runtime.IdentityAttributePort] = h.Port
-	}
-	if h.Path != "" {
-		id[runtime.IdentityAttributePath] = h.Path
-	}
-	return id
 }
