@@ -299,7 +299,7 @@ component:
   - access:
       localReference: sha256:70a2577d7b649574cbbba99a2f2ebdf27904a4abf80c9729923ee67ea8d2d9d8
       mediaType: text/plain; charset=utf-8
-      type: localBlob/v1
+      type: LocalBlob/v1
     digest:
       hashAlgorithm: SHA-256
       normalisationAlgorithm: genericBlobDigest/v1
@@ -399,7 +399,7 @@ component:
   - access:
       localReference: sha256:70a2577d7b649574cbbba99a2f2ebdf27904a4abf80c9729923ee67ea8d2d9d8
       mediaType: text/plain; charset=utf-8
-      type: localBlob/v1
+      type: LocalBlob/v1
     name: mylocalfile
     relation: local
     type: blob
