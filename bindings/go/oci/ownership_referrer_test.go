@@ -67,7 +67,9 @@ func TestPushOwnershipReferrer(t *testing.T) {
 		t.Run("annotations carry component identity and full artifact identity with kind", func(t *testing.T) {
 			assert.Equal(t, "ocm.software/my-component", m.Annotations[annotations.OwnershipComponentName])
 			assert.Equal(t, "1.0.0", m.Annotations[annotations.OwnershipComponentVersion])
-			assert.JSONEq(t,
+			// Byte-equal (not JSONEq) so a regression that breaks JCS-canonical
+			// key ordering on the extraIdentity-laden ToIdentity() output is caught.
+			assert.Equal(t,
 				`{"identity":{"architecture":"amd64","name":"my-resource","os":"linux","version":"1.0.0"},"kind":"resource"}`,
 				m.Annotations[annotations.ArtifactAnnotationKey],
 			)
@@ -143,11 +145,44 @@ func TestPushOwnershipReferrer(t *testing.T) {
 }
 
 func TestMarshalArtifactAnnotation(t *testing.T) {
-	identity := runtime.Identity{"version": "1.0.0", "name": "x", "architecture": "amd64"}
-	out, err := marshalArtifactAnnotation(identity, annotations.ArtifactKindResource)
-	require.NoError(t, err)
-	assert.Equal(t,
-		`{"identity":{"architecture":"amd64","name":"x","version":"1.0.0"},"kind":"resource"}`,
-		out,
-	)
+	t.Run("name and version only", func(t *testing.T) {
+		out, err := marshalArtifactAnnotation(
+			runtime.Identity{"name": "x", "version": "1.0.0"},
+			annotations.ArtifactKindResource,
+		)
+		require.NoError(t, err)
+		assert.Equal(t,
+			`{"identity":{"name":"x","version":"1.0.0"},"kind":"resource"}`,
+			out,
+		)
+	})
+
+	t.Run("includes extraIdentity keys in canonical key order", func(t *testing.T) {
+		// architecture and os are extraIdentity values that ToIdentity() merges
+		// into the base name/version. Output must order keys alphabetically so
+		// the manifest digest stays stable across runs.
+		out, err := marshalArtifactAnnotation(
+			runtime.Identity{"version": "1.0.0", "os": "linux", "name": "my-resource", "architecture": "amd64"},
+			annotations.ArtifactKindResource,
+		)
+		require.NoError(t, err)
+		assert.Equal(t,
+			`{"identity":{"architecture":"amd64","name":"my-resource","os":"linux","version":"1.0.0"},"kind":"resource"}`,
+			out,
+		)
+	})
+
+	t.Run("output is byte-stable regardless of map literal order", func(t *testing.T) {
+		a, err := marshalArtifactAnnotation(
+			runtime.Identity{"name": "x", "version": "1", "architecture": "amd64", "os": "linux"},
+			annotations.ArtifactKindResource,
+		)
+		require.NoError(t, err)
+		b, err := marshalArtifactAnnotation(
+			runtime.Identity{"os": "linux", "architecture": "amd64", "version": "1", "name": "x"},
+			annotations.ArtifactKindResource,
+		)
+		require.NoError(t, err)
+		assert.Equal(t, a, b)
+	})
 }
