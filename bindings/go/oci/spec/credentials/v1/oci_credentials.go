@@ -37,6 +37,7 @@ const (
 // +ocm:jsonschema-gen=true
 type OCICredentials struct {
 	// +ocm:jsonschema-gen:enum=OCICredentials/v1
+	// +ocm:jsonschema-gen:enum:deprecated=OCICredentials
 	Type         runtime.Type `json:"type"`
 	Username     string       `json:"username,omitempty"`
 	Password     string       `json:"password,omitempty"`
