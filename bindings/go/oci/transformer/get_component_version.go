@@ -2,7 +2,6 @@ package transformer
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -42,8 +41,7 @@ func (t *GetComponentVersion) Transform(ctx context.Context, step runtime.Typed)
 	var creds map[string]string
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec); err == nil {
-			//nolint:staticcheck // SA1019: Phase 4 will migrate to ResolveTyped
-			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
+			if creds, err = resolveCredentialsMap(ctx, t.CredentialProvider, consumerId); err != nil {
 				return nil, fmt.Errorf("failed resolving credentials: %w", err)
 			}
 		}
