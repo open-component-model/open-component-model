@@ -44,6 +44,36 @@ func TestFromDirectCredentials(t *testing.T) {
 			},
 		},
 		{
+			name: "legacy snake_case keys",
+			properties: map[string]string{
+				"username":      "myuser",
+				"password":      "mypass",
+				"access_token":  "legacy_token",
+				"refresh_token": "legacy_refresh",
+			},
+			expected: &OCICredentials{
+				Type:         runtime.NewVersionedType(OCICredentialsType, Version),
+				Username:     "myuser",
+				Password:     "mypass",
+				AccessToken:  "legacy_token",
+				RefreshToken: "legacy_refresh",
+			},
+		},
+		{
+			name: "camelCase takes precedence over snake_case",
+			properties: map[string]string{
+				"accessToken":   "camel",
+				"access_token":  "snake",
+				"refreshToken":  "camel_refresh",
+				"refresh_token": "snake_refresh",
+			},
+			expected: &OCICredentials{
+				Type:         runtime.NewVersionedType(OCICredentialsType, Version),
+				AccessToken:  "camel",
+				RefreshToken: "camel_refresh",
+			},
+		},
+		{
 			name:       "empty properties",
 			properties: map[string]string{},
 			expected: &OCICredentials{

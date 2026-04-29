@@ -16,6 +16,15 @@ const (
 	CredentialKeyAccessToken = "accessToken"
 	// CredentialKeyRefreshToken is the key for OAuth2 refresh tokens.
 	CredentialKeyRefreshToken = "refreshToken"
+
+	// LegacyCredentialKeyAccessToken is the legacy snake_case key for access tokens.
+	//
+	// Deprecated: Use CredentialKeyAccessToken instead.
+	LegacyCredentialKeyAccessToken = "access_token"
+	// LegacyCredentialKeyRefreshToken is the legacy snake_case key for refresh tokens.
+	//
+	// Deprecated: Use CredentialKeyRefreshToken instead.
+	LegacyCredentialKeyRefreshToken = "refresh_token"
 )
 
 // OCICredentials represents typed credentials for OCI registry authentication.
@@ -44,12 +53,21 @@ func MustRegisterCredentialType(scheme *runtime.Scheme) {
 
 // FromDirectCredentials converts a DirectCredentials properties map into typed OCICredentials.
 // This supports old .ocmconfig files that use Credentials/v1 with OCI registry properties.
+// It handles both canonical camelCase keys and legacy snake_case keys, with camelCase
+// taking precedence.
 func FromDirectCredentials(properties map[string]string) *OCICredentials {
 	return &OCICredentials{
 		Type:         runtime.NewVersionedType(OCICredentialsType, Version),
 		Username:     properties[CredentialKeyUsername],
 		Password:     properties[CredentialKeyPassword],
-		AccessToken:  properties[CredentialKeyAccessToken],
-		RefreshToken: properties[CredentialKeyRefreshToken],
+		AccessToken:  stringWithFallback(properties, CredentialKeyAccessToken, LegacyCredentialKeyAccessToken),
+		RefreshToken: stringWithFallback(properties, CredentialKeyRefreshToken, LegacyCredentialKeyRefreshToken),
 	}
+}
+
+func stringWithFallback(m map[string]string, key, fallback string) string {
+	if v, ok := m[key]; ok {
+		return v
+	}
+	return m[fallback]
 }

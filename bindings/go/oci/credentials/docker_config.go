@@ -17,26 +17,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// CredentialKey constants define the standard keys used in credential maps.
-// These keys are used to store and retrieve different types of credentials.
+// Credential key constants re-exported from the typed credential package for backward compatibility.
 const (
-	// CredentialKeyUsername is the key for storing username credentials
-	CredentialKeyUsername = "username"
-	// CredentialKeyPassword is the key for storing password credentials
-	CredentialKeyPassword = "password"
-	// CredentialKeyAccessToken is the key for storing access token credentials
-	CredentialKeyAccessToken = "accessToken"
-	// CredentialKeyRefreshToken is the key for storing refresh token credentials
-	CredentialKeyRefreshToken = "refreshToken"
-
-	// LegacyCredentialKeyAccessToken is the legacy snake_case key for access tokens.
-	//
-	// Deprecated: Use CredentialKeyAccessToken instead. The removal of this key is tracked here: https://github.com/open-component-model/ocm-project/issues/1037
-	LegacyCredentialKeyAccessToken = "access_token"
-	// LegacyCredentialKeyRefreshToken is the legacy snake_case key for refresh tokens.
-	//
-	// Deprecated: Use CredentialKeyRefreshToken instead. The removal of this key is tracked here: https://github.com/open-component-model/ocm-project/issues/1037
-	LegacyCredentialKeyRefreshToken = "refresh_token"
+	CredentialKeyUsername            = credentialsv1.CredentialKeyUsername
+	CredentialKeyPassword            = credentialsv1.CredentialKeyPassword
+	CredentialKeyAccessToken         = credentialsv1.CredentialKeyAccessToken
+	CredentialKeyRefreshToken        = credentialsv1.CredentialKeyRefreshToken
+	LegacyCredentialKeyAccessToken   = credentialsv1.LegacyCredentialKeyAccessToken
+	LegacyCredentialKeyRefreshToken  = credentialsv1.LegacyCredentialKeyRefreshToken
 )
 
 // CredentialFromMap converts a credential map to an auth.Credential.
@@ -61,16 +49,6 @@ func CredentialFromMap(credentials map[string]string) auth.Credential {
 		cred.RefreshToken = v
 	}
 	return cred
-}
-
-// CredentialFromOCICredentials converts typed OCICredentials to an auth.Credential.
-func CredentialFromOCICredentials(creds *credentialsv1.OCICredentials) auth.Credential {
-	return auth.Credential{
-		Username:     creds.Username,
-		Password:     creds.Password,
-		AccessToken:  creds.AccessToken,
-		RefreshToken: creds.RefreshToken,
-	}
 }
 
 // CredentialFunc creates a function that returns credentials based on host and port matching.
