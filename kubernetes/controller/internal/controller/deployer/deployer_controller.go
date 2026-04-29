@@ -732,7 +732,7 @@ func resolveResourceCredentials(
 		return nil, fmt.Errorf("failed to create credential graph: %w", err)
 	}
 
-	creds, err := credGraph.Resolve(ctx, id)
+	creds, err := credGraph.Resolve(ctx, id) //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
 	}
