@@ -48,6 +48,7 @@ type OCICredentials struct {
 func MustRegisterCredentialType(scheme *runtime.Scheme) {
 	scheme.MustRegisterWithAlias(&OCICredentials{},
 		runtime.NewVersionedType(OCICredentialsType, Version),
+		runtime.NewUnversionedType(OCICredentialsType),
 	)
 }
 
