@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -24,11 +25,22 @@ func NewStaticCredentialsResolver(credMap map[string]map[string]string) *StaticC
 	}
 }
 
-func (s *StaticCredentialsResolver) Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
+func (s *StaticCredentialsResolver) Resolve(_ context.Context, identity runtime.Identity) (map[string]string, error) {
 	creds, ok := s.staticCredentialsStore[identity.String()]
 	if !ok {
 		return nil, ErrNotFound
 	}
 
 	return maps.Clone(creds), nil
+}
+
+func (s *StaticCredentialsResolver) ResolveTyped(_ context.Context, identity runtime.Typed) (runtime.Typed, error) {
+	creds, ok := s.staticCredentialsStore[nodeID(identity)]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return &v1.DirectCredentials{
+		Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+		Properties: maps.Clone(creds),
+	}, nil
 }

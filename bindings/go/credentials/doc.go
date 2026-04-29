@@ -2,20 +2,22 @@
 // for the Open Component Model (OCM). It implements a graph-based approach to
 // credential resolution, supporting both direct and plugin-based credential handling.
 //
-// The package's core functionality revolves around the Graph type, which represents
+// The package's core functionality revolves around the [Graph] type, which represents
 // a directed acyclic graph (DAG) of credential relationships. This graph can be
 // constructed from a configuration and used to resolve credentials for various
 // identities.
 //
 // Key Features:
 //
-// - Direct credential resolution through the graph
-// - Plugin-based credential resolution for extensibility
-// - Support for repository-specific credential handling
-// - Thread-safe operations with synchronized DAG implementation
-// - Flexible identity-based credential lookup with wildcard support
-// - Caching of resolved credentials for improved performance
-// - Concurrent resolution of repository credentials
+//   - Direct credential resolution through the graph
+//   - Typed credential resolution via [Graph.ResolveTyped]
+//   - Identity → credential type validation via [IdentityTypeRegistry]
+//   - Plugin-based credential resolution for extensibility
+//   - Support for repository-specific credential handling
+//   - Thread-safe operations with synchronized DAG implementation
+//   - Flexible identity-based credential lookup with wildcard support
+//   - Caching of resolved credentials for improved performance
+//   - Concurrent resolution of repository credentials
 //
 // # Core Concept
 //
@@ -23,8 +25,10 @@
 //
 //   - Consumer Identities: These are unique identifiers that require / consume credentials. They are always
 //     represented as [runtime.Identity].
-//   - Credentials: These are always key value pairs in the form of map[string]string,
-//     they can also be considered the "provider" counter-part to the consumer
+//   - Credentials: These are [runtime.Typed] objects stored natively in the graph. Each binding defines
+//     typed Go structs for its credentials (e.g., HelmHTTPCredentials, OCICredentials). Legacy
+//     [ocm.software/open-component-model/bindings/go/credentials/spec/config/v1.DirectCredentials]
+//     (map[string]string properties) remains the universal fallback.
 //   - A Directed Acyclic Graph (DAG): This is a graph structure where each node represents a consumer identity
 //     and its associated credentials. The edges between nodes represent the dependencies between
 //     different consumer identities and their credentials.
@@ -46,6 +50,43 @@
 //
 // This is ingested into the graph via [ToGraph]. Note that a graph configuration may need to be converted from
 // its serialization format to the internal runtime representation.
+//
+// # Typed Credentials and Identity Validation
+//
+// The graph supports typed credentials and identity → credential compatibility validation.
+// Each binding can define typed credential structs and register them with a [runtime.Scheme].
+// The graph receives these type registries through dedicated interfaces
+// configured in [Options]:
+//
+//   - [Options.CredentialTypeSchemeProvider] — provides a scheme for typed credential objects
+//   - [Options.IdentityTypeRegistry] — provides identity types and their accepted credential types
+//
+// During ingestion, when an identity type has accepted credential types registered in the
+// [IdentityTypeRegistry], the graph validates that configured credential types are compatible.
+// Incompatible pairs produce warnings, not errors — credentials are still stored and ingestion
+// continues. This is deliberate: during migration, not all types may be registered, and plugins
+// loaded after ingestion may introduce types unknown at ingestion time.
+//
+// To resolve typed credentials, use [Graph.ResolveTyped]:
+//
+//	typed, err := graph.ResolveTyped(ctx, identity)
+//	if err != nil {
+//	    // handle error
+//	}
+//	switch creds := typed.(type) {
+//	case *MyTypedCredentials:
+//	    fmt.Println(creds.Username)
+//	case *v1.DirectCredentials:
+//	    // legacy fallback — use FromDirectCredentials helper to lift into typed struct
+//	    creds, err := MyFromDirectCredentials(creds)
+//	}
+//
+// The deprecated [Graph.Resolve] method still works and internally delegates to [Graph.ResolveTyped],
+// converting the result back to map[string]string for backward compatibility.
+//
+// Both scheme providers are optional (nil-safe) — the graph degrades to
+// [ocm.software/open-component-model/bindings/go/credentials/spec/config/v1.DirectCredentials]
+// behavior when no provider is configured.
 //
 // # Multi-Identity and Credential Mappings
 //
@@ -189,26 +230,38 @@
 //
 // # Usage
 //
+// Basic usage with typed credential resolution:
+//
 //	config := &Config{...} // alternatively parse from yaml via serialization
 //	opts := Options{
-//	    GetCredentialPluginFn: myCredPluginResolver, // optional but needed if repository fallbacks are wanted
-//	    GetRepositoryPluginFn: myRepoPluginResolver, // optional but needed if type support other than DirectCredentials are needed
+//	    CredentialPluginProvider:       myCredPluginProvider,       // optional: needed for custom credential types (e.g. Vault)
+//	    RepositoryPluginProvider:       myRepoPluginProvider,       // optional: needed for repository fallbacks
+//	    CredentialTypeSchemeProvider:   myCredTypeSchemeProvider,   // optional: enables typed credential deserialization
+//	    IdentityTypeRegistry:          myIdentityTypeRegistry,      // optional: enables identity ↔ credential validation
 //	}
 //	graph, err := ToGraph(ctx, config, opts)
 //	if err != nil {
 //	    // handle error
 //	}
+//
+//	// Typed resolution (preferred)
+//	typed, err := graph.ResolveTyped(ctx, identity)
+//
+//	// Legacy resolution (deprecated, returns map[string]string)
 //	creds, err := graph.Resolve(ctx, identity)
 //
 // The package is designed to be thread-safe and can be used concurrently from
 // multiple goroutines. The DAG used in this package includes synchronization primitives
 // to ensure safe concurrent access.
 //
-// The only Entrypoint to the graph is the [Graph.Resolve] method. This expects any identity and returns either an
-// error or the successfully resolved credentials.
+// The entrypoints to the graph are [Graph.ResolveTyped] (preferred) and [Graph.Resolve] (deprecated).
+// [Graph.ResolveTyped] accepts any [runtime.Typed] (typically a [runtime.Identity] map or a typed
+// identity). [Graph.Resolve] accepts [runtime.Identity].
+// Both return the resolved credentials or an error.
 //
 // Error Handling:
-//   - [ErrNoDirectCredentials]: Returned when no direct credentials are found in the graph
+//   - [ErrNotFound]: Returned when no credentials could be found for the given identity
+//   - [ErrUnknown]: Wraps unexpected failures during credential resolution
 //   - Various resolution errors are returned with detailed context
 package credentials
 
