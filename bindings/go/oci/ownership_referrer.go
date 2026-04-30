@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/opencontainers/go-digest"
@@ -36,6 +37,7 @@ const OwnershipArtifactType = "application/vnd.ocm.software.ownership.v1+json"
 // `ocm add cv` is a no-op at the registry instead of a new referrer per run.
 func pushOwnershipReferrer(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, resource *descriptor.Resource, component, version string) error {
 	if !introspection.IsOCICompliantManifest(subject) {
+		slog.DebugContext(ctx, "skipping ownership referrer: subject is not an OCI manifest", "mediaType", subject.MediaType, "digest", subject.Digest.String())
 		return nil
 	}
 
