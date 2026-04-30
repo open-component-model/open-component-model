@@ -8,13 +8,13 @@ import (
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/cli/internal/plugin/builtin/oidc"
 	ocicredentialplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/credentials/oci"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/dir"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/file"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/helm"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/utf8"
 	ociplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/oci"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin/oidc"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/rsa"
 )
 
