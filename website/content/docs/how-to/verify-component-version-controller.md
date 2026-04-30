@@ -12,7 +12,7 @@ Configure the OCM Kubernetes controller to automatically verify component versio
 
 ## You'll end up with
 
-- A Component resource that ensures signature verification
+- A `Component` resource that ensures signature verification
 
 **Estimated time:** ~5 minutes
 
@@ -61,7 +61,7 @@ github.com/acme.org/helloworld     │ 1.0.0   │ acme.org
 
 ### Prepare the public key
 
-Base64-encode your public key for use in the Component resource's `value` field. The controller
+Base64-encode your public key for use in the `Component` resource's `value` field. The controller
 expects the PEM file content encoded as a base64 string:
 
 ```bash
@@ -74,9 +74,9 @@ Save the output - you will need it in the next step.
 
 {{< step >}}
 
-### Create the Repository resource
+### Create the `Repository` resource
 
-Create and apply a Repository that points to your OCI registry:
+Create and apply a `Repository` that points to your OCI registry:
 
 ```bash
 cat <<EOF > repository.yaml
@@ -100,15 +100,15 @@ kubectl apply -f repository.yaml
 
 {{< step >}}
 
-### Create the Component resource with verification
+### Create the `Component` resource with verification
 
-Create and apply a Component that references the repository and configures signature verification.
+Create and apply a `Component` that references the repository and configures signature verification.
 Choose one of the following approaches:
 
 {{< tabs "verification-method" >}}
 {{< tab "Inline Value" >}}
 
-Embed the base64-encoded public key directly in the Component resource:
+Embed the base64-encoded public key directly in the `Component` resource:
 
 ```bash
 cat <<EOF > component.yaml
@@ -137,7 +137,7 @@ kubectl apply -f component.yaml
 {{< /tab >}}
 {{< tab "Kubernetes Secret" >}}
 
-Store the public key in a Kubernetes Secret and reference it from the Component resource:
+Store the public key in a Kubernetes Secret and reference it from the `Component` resource:
 
 ```bash
 cat <<EOF > signing-secret.yaml
@@ -185,9 +185,9 @@ kubectl apply -f signing-secret.yaml -f component.yaml
 
 {{< step >}}
 
-### Verify the component is ready
+### Verify the `Component` is ready
 
-Check that the Component resource reconciles successfully with verification:
+Check that the `Component` resource reconciles successfully with verification:
 
 ```bash
 kubectl get component helloworld-component -o wide
@@ -216,7 +216,20 @@ kubectl logs -n ocm-k8s-toolkit-system deploy/ocm-k8s-toolkit-controller-manager
 ```
 </details>
 
-If verification fails, the component will not become ready and an error condition will be set.
+If verification fails, the `Component` will not become ready and an error condition will be set.
+
+<details>
+<summary>Check for failure</summary>
+
+```bash
+kubectl get component helloworld-component -o wide
+```
+
+```text
+NAME                   READY                                                                                                        AGE
+helloworld-component   signature verification failed for signature default: missing public key, required for plain RSA signatures   7s
+```
+</details>
 
 {{< /step >}}
 {{< /steps >}}
@@ -233,7 +246,7 @@ resource digests are missing.
 
 ## Troubleshooting
 
-When verification fails, the Component resource's Ready condition is set to `False` with the
+When verification fails, the `Component` resource's Ready condition is set to `False` with the
 error message. Check it with:
 
 ```bash
@@ -256,10 +269,10 @@ ocm get cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0 -o yam
 ### Symptom: "signature ... not found in component"
 
 **Cause:** The component version does not contain a signature with the name specified in the
-`verify` section of the Component resource spec.
+`verify` section of the `Component` resource spec.
 
 **Fix:** Check which signatures exist on the component version and ensure the `signature` field
-in the `verify` section of your Component resource matches:
+in the `verify` section of your `Component` resource matches:
 
 ```bash
 ocm get cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0 -o yaml | grep -A 5 "signatures:"
@@ -283,7 +296,7 @@ parent component version with correct reference digests, re-sign it, and then pu
 
 ### Symptom: "not safely digestible" event
 
-The component becomes Ready, but a Kubernetes event with severity error is emitted containing
+The `Component` becomes Ready, but a Kubernetes event with severity error is emitted containing
 "not safely digestible".
 
 **Cause:** The component version does not satisfy OCM's digest consistency rules:
@@ -301,7 +314,7 @@ The `ocm sign cv` command warns when a component version is not safely digestibl
 ### Symptom: "secret not found" or "failed to get secret"
 
 **Cause:** The Secret referenced in `secretRef` does not exist in the same namespace as the
-Component resource.
+`Component` resource.
 
 **Fix:** Ensure the Secret is created in the same namespace:
 
