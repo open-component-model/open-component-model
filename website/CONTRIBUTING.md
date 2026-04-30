@@ -1,20 +1,65 @@
-# Contributing to OCM Documentation
+# Contributing to the OCM Website
 
-This guide helps contributors create and place new documentation content according to the [Diataxis framework](https://diataxis.fr/).
-These guidelines apply to **all new content** and do not reorganize existing documentation.
+This guide covers development on the OCM project website in `website/`. For the general contribution process, see the
+[central contributing guide](https://ocm.software/community/contributing/).
 
-_NOTE: You may notice some inconsistencies with our current structure. You are encouraged to contribute improvements to this guide and
-to the existing documentation to make it conform to this guideline._
+## Overview
 
-## Table of Contents
+The website is built with [Hugo](https://gohugo.io/) using the [Thulite/Doks](https://getdoks.org/) theme and hosted
+at [ocm.software](https://ocm.software). Documentation follows the [Diataxis framework](https://diataxis.fr/), which
+organizes content into tutorials, how-to guides, explanations, and reference material.
 
-- [Diataxis Overview](#diataxis-overview)
-- [OCM Section Mapping](#ocm-section-mapping)
-- [Content Templates](#content-templates)
-- [Content Decision Flowchart](#content-decision-flowchart)
-- [Repository Placement Guide](#repository-placement-guide)
-- [Writing Checklists](#writing-checklists)
-- [Examples](#examples)
+## Prerequisites
+
+- **Node.js** and **npm** (see version requirements in `engines` in `package.json`)
+- Hugo is installed automatically via the `hugo-extended` npm package - you do not need to install it separately
+
+## Local Development
+
+```bash
+# Install dependencies (includes Hugo)
+cd website
+npm install
+
+# Start the development server
+npm run dev
+
+# Start with draft content visible
+npm run dev:drafts
+
+# Build the site
+npm run build
+```
+
+The dev server runs at `http://localhost:1313` with live reload.
+
+## Linting
+
+Markdown linting is run from the repository root using the shared tooling:
+
+```bash
+# Lint all Markdown files across the repo (from the repository root)
+task tools:markdownlint
+
+# Lint with auto-fix
+task tools:markdownlint -- --fix
+```
+
+The website also has ESLint configured for JavaScript:
+
+```bash
+cd website
+npm run lint:scripts
+
+# Lint and auto-fix
+npm run lint:scripts:fix
+```
+
+## Content Authoring Guide
+
+The rest of this document covers how to create and place documentation content. All new content should follow the
+[Diataxis framework](https://diataxis.fr/). You may notice some inconsistencies with the current structure - improvements
+are welcome.
 
 ---
 
@@ -81,19 +126,20 @@ Guide newcomers through complete learning experiences.
 
 #### Other Tutorials (`tutorials/`)
 
-Goal-oriented directions for specific tasks.
+In-depth tutorials that explore advanced topics and real-world scenarios.
 
 **Characteristics:**
 
-- Assume reader knows OCM basics (completed Getting Started), reference as needed
-- Use conditional structure: "If you want X, do Y"
-- One focused task per guide
-- Link to Reference for parameter details
+- Assume reader completed Getting Started tutorials
+- Guide through complex, multi-step workflows (e.g., signing, credential resolution, bootstrap deployments)
+- Show how different OCM features work together
+- Every step produces a visible, verifiable result
+- Link to Concepts for "why" questions and Reference for parameter details
 
 **Example titles:**
 
-- "(How to) Configure Private Registry Authentication"
-- "(How to) Transfer Components Between Registries"
+- "Credential Resolution in OCM"
+- "Deploy Helm Charts with Bootstrap Setup"
 
 ### Reference (`reference/`)
 
@@ -110,6 +156,22 @@ Factual, authoritative technical descriptions.
 - CLI command reference (imported via Hugo module)
 - Configuration schema documentation
 - CRD field specifications
+
+### How-to Guides (`content/docs/how-to/`)
+
+Task-oriented directions for accomplishing specific goals.
+
+**Characteristics:**
+
+- Assume reader has completed Getting Started and understands OCM basics
+- Focus on one task per guide
+- Use conditional structure where appropriate ("If you want X, do Y")
+- Link to Reference for parameter details
+
+**Example titles:**
+
+- "How to Configure Private Registry Authentication"
+- "How to Transfer Components Between Registries"
 
 ---
 
@@ -128,6 +190,10 @@ To help you get started with writing documentation, we provide templates for eac
   - Demonstrates goal-oriented structure
   - Shows troubleshooting format with symptom-cause-fix
   - Includes examples for `{{< tabs >}}` and `{{< card-grid >}}` shortcodes
+
+- **[Concept Template](./content_templates/template-concept.md)**
+  - Explanation-oriented template for design decisions and rationale
+  - Focuses on "why" rather than "how"
 
 These templates include inline comments and examples to guide you through creating high-quality documentation that follows Diataxis principles.
 
@@ -178,39 +244,35 @@ Documentation lives in different repositories depending on what it documents.
 
 ### Source Repositories
 
-| Repository                                  | Status         | Components                              | Components                          |
-|---------------------------------------------|----------------|-----------------------------------------|-------------------------------------|
-| `open-component-model/ocm`                  | Current stable | CLI tool, Go library (v0.x)             | CLI tool, Go library (v0.x)         |
-| `open-component-model/open-component-model` | Next-gen       | CLI, Go library, Kubernetes controllers | New library, Kubernetes controllers |
+| Repository                                  | Status     | Components                              |
+|---------------------------------------------|------------|-----------------------------------------|
+| `open-component-model/open-component-model` | Active     | CLI, Go library, Kubernetes controllers |
+| `open-component-model/ocm`                  | Legacy     | CLI tool, Go library (v0.x)             |
 
 ### Feature-Based Decision Tree
 
 ```text
 What are you documenting?
 
-CLI command/flag in old CLI (open-component-model/ocm)?
-  -> ocm repo (content_versioned/version-legacy/docs/reference/)
-  -> Auto-imported to website
-CLI command/flag in new CLI (open-component-model/open-component-model/cli)?
-  -> mono-repo (docs/reference/)
-  -> Auto-imported to website
+CLI command/flag in the legacy CLI (open-component-model/ocm)?
+  -> website/content_versioned/version-legacy/docs/reference/
+CLI command/flag in the current CLI?
+  -> cli/docs/reference/ (Hugo mounts this into the website automatically)
 
-Go library function/type from (open-component-model/ocm)?
-  -> Respective source repo documentation, available as go package documentation
-Go library function/type from (open-component-model/open-component-model/bindings/go)?
-  -> Respective source repo documentation, available as go package documentation
+Go library function/type?
+  -> Source repo documentation, available as Go package documentation
 
 Kubernetes controller / CRD / Helm Chart?
-  -> `open-component-model/kubernetes/controller` has CRD definitions and controller Helm Charts
+  -> kubernetes/controller/ has CRD definitions and controller Helm Charts
 
 A new way to start using OCM?
-  -> ocm-website (getting-started/)
+  -> website/content/docs/getting-started/
 User workflow spanning multiple tools step-by-step?
-  -> ocm-website (tutorials/)
+  -> website/content/docs/tutorials/
 A specific process or enablement of a concrete goal?
-  -> ocm-website (how-to/)
+  -> website/content/docs/how-to/
 Conceptual explanation of OCM?
-  -> ocm-website (concepts/)
+  -> website/content/docs/concepts/
 ```
 
 ### Marking Version-Specific Content
@@ -284,7 +346,11 @@ Use the [How-to Template](./content_templates/template-how-to.md) as a starting 
 
 **Good:** "Create Your First Component Version"
 
-### How-to Guide Example (tutorials/)
+### Tutorial Example (tutorials/)
+
+**Good:** "Deploy Helm Charts with Bootstrap Setup"
+
+### How-to Guide Example (how-to/)
 
 **Good:** "How to Configure Private Registry Authentication"
 
@@ -301,5 +367,5 @@ Use the [How-to Template](./content_templates/template-how-to.md) as a starting 
 ## Additional Resources
 
 - [Diataxis Framework](https://diataxis.fr/) - The documentation framework these guidelines follow
-- [OCM Specification](https://ocm.software/spec/) - Authoritative OCM definitions
+- [OCM Specification](https://github.com/open-component-model/ocm-spec) - Authoritative OCM definitions
 - [Hugo Documentation](https://gohugo.io/documentation/) - Site generator documentation
