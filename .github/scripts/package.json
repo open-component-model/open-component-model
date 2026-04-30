@@ -5,6 +5,6 @@
   },
   "devDependencies": {
     "@actions/github-script": "github:actions/github-script",
-    "@octokit/graphql": "^9.0.3"
+    "@octokit/graphql": "9.0.3"
   }
 }
