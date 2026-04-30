@@ -43,7 +43,7 @@ func (t *AddComponentVersion) Transform(ctx context.Context, step runtime.Typed)
 	var creds map[string]string
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec); err == nil {
-			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
+			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) { //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
 				return nil, fmt.Errorf("failed resolving credentials: %w", err)
 			}
 		}

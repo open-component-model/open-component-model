@@ -165,6 +165,18 @@ func (m *mockCredentialProvider) Resolve(ctx context.Context, identity runtime.I
 	return m.credentials[identity.GetType().String()], nil
 }
 
+func (m *mockCredentialProvider) ResolveTyped(ctx context.Context, identity runtime.Typed) (runtime.Typed, error) {
+	id, ok := identity.(runtime.Identity)
+	if !ok {
+		return nil, fmt.Errorf("unsupported identity type")
+	}
+	creds, err := m.Resolve(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return runtime.Identity(creds), nil
+}
+
 // setupTestComponent creates a basic component constructor for testing
 func setupTestComponent(t *testing.T, resourceYAML string) *constructorruntime.ComponentConstructor {
 	yamlData := fmt.Sprintf(`

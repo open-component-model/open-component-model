@@ -466,7 +466,7 @@ func verifySignatures(ctx context.Context, desc *descriptor.Descriptor, verifica
 		}
 
 		if err := signing.VerifyDigestMatchesDescriptor(ctx, desc, *descSig, slog.New(logr.ToSlogHandler(logger))); err != nil {
-			return nil, fmt.Errorf("digest v failed for signature %q: %w", descSig.Name, err)
+			return nil, fmt.Errorf("digest verification failed for signature %q: %w", descSig.Name, err)
 		}
 
 		// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
@@ -480,7 +480,7 @@ func verifySignatures(ctx context.Context, desc *descriptor.Descriptor, verifica
 		}
 
 		if err := signingHandler.Verify(ctx, *descSig, &signingv1alpha1.Config{}, credentials); err != nil {
-			return nil, fmt.Errorf("signature v failed for signature %s: %w", v.Signature, err)
+			return nil, fmt.Errorf("signature verification failed for signature %s: %w", v.Signature, err)
 		}
 	}
 
