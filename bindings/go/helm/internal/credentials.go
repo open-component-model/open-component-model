@@ -3,8 +3,8 @@ package internal
 import (
 	"fmt"
 
-	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
-	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
+	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/identity/v1"
+	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -25,7 +25,7 @@ func CredentialConsumerIdentity(helmRepository string) (runtime.Identity, error)
 	if scheme, ok := identity[runtime.IdentityAttributeScheme]; ok && scheme == "oci" {
 		identity.SetType(ocicredentialsspecv1.Type)
 	} else {
-		identity.SetType(runtime.NewUnversionedType(helmaccess.LegacyHelmChartConsumerType))
+		identity.SetType(helmidentityv1.Type)
 	}
 
 	return identity, nil
