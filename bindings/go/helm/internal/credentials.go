@@ -3,7 +3,7 @@ package internal
 import (
 	"fmt"
 
-	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/identity/v1"
+	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/identity/v1"
 	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
