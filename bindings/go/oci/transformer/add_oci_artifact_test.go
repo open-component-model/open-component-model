@@ -3,6 +3,7 @@ package transformer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -67,7 +68,7 @@ func (m *mockResourceRepositoryForAddOCI) GetResourceCredentialConsumerIdentity(
 type mockCredentialResolver struct{}
 
 func (m *mockCredentialResolver) Resolve(_ context.Context, _ runtime.Identity) (map[string]string, error) {
-	return map[string]string{"username": "test-user"}, nil
+	return nil, errors.New("unexpected legacy Resolve call")
 }
 
 func (m *mockCredentialResolver) ResolveTyped(_ context.Context, _ runtime.Typed) (runtime.Typed, error) {

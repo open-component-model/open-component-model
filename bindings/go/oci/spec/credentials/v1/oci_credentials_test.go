@@ -134,6 +134,7 @@ func TestOCICredentials_SchemeConvert(t *testing.T) {
 	restored := &OCICredentials{}
 	require.NoError(t, scheme.Convert(raw, restored))
 
+	assert.Equal(t, original.Type, restored.Type)
 	assert.Equal(t, original.Username, restored.Username)
 	assert.Equal(t, original.Password, restored.Password)
 	assert.Equal(t, original.AccessToken, restored.AccessToken)

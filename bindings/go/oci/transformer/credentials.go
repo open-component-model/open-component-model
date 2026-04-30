@@ -25,12 +25,20 @@ func resolveCredentialsMap(ctx context.Context, resolver credentials.Resolver, i
 
 	switch c := typed.(type) {
 	case *ocicredsv1.OCICredentials:
-		return map[string]string{
-			ocicredsv1.CredentialKeyUsername:     c.Username,
-			ocicredsv1.CredentialKeyPassword:     c.Password,
-			ocicredsv1.CredentialKeyAccessToken:  c.AccessToken,
-			ocicredsv1.CredentialKeyRefreshToken: c.RefreshToken,
-		}, nil
+		result := map[string]string{}
+		if c.Username != "" {
+			result[ocicredsv1.CredentialKeyUsername] = c.Username
+		}
+		if c.Password != "" {
+			result[ocicredsv1.CredentialKeyPassword] = c.Password
+		}
+		if c.AccessToken != "" {
+			result[ocicredsv1.CredentialKeyAccessToken] = c.AccessToken
+		}
+		if c.RefreshToken != "" {
+			result[ocicredsv1.CredentialKeyRefreshToken] = c.RefreshToken
+		}
+		return result, nil
 	case *credconfigv1.DirectCredentials:
 		result := make(map[string]string, len(c.Properties))
 		for k, v := range c.Properties {

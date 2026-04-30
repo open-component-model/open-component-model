@@ -45,6 +45,24 @@ func TestResolveCredentialsMap_OCICredentials(t *testing.T) {
 	assert.Equal(t, "ref", creds[ocicredsv1.CredentialKeyRefreshToken])
 }
 
+func TestResolveCredentialsMap_OCICredentials_SkipsEmptyFields(t *testing.T) {
+	resolver := &stubResolver{
+		typed: &ocicredsv1.OCICredentials{
+			Username: "user",
+		},
+	}
+
+	creds, err := resolveCredentialsMap(t.Context(), resolver, runtime.Identity{"type": "OCIRegistry"})
+	require.NoError(t, err)
+	assert.Equal(t, "user", creds[ocicredsv1.CredentialKeyUsername])
+	_, hasPassword := creds[ocicredsv1.CredentialKeyPassword]
+	assert.False(t, hasPassword, "empty password should not be in map")
+	_, hasAccessToken := creds[ocicredsv1.CredentialKeyAccessToken]
+	assert.False(t, hasAccessToken, "empty accessToken should not be in map")
+	_, hasRefreshToken := creds[ocicredsv1.CredentialKeyRefreshToken]
+	assert.False(t, hasRefreshToken, "empty refreshToken should not be in map")
+}
+
 func TestResolveCredentialsMap_DirectCredentials(t *testing.T) {
 	resolver := &stubResolver{
 		typed: &credconfigv1.DirectCredentials{
