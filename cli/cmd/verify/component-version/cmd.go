@@ -256,7 +256,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 
 			var creds map[string]string
 			if consumerID, err := handler.GetVerifyingCredentialConsumerIdentity(egctx, signature, verifierSpec); err == nil {
-				if creds, err = credentialGraph.Resolve(egctx, consumerID); err != nil {
+				if creds, err = credentialGraph.Resolve(egctx, consumerID); err != nil { //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
 					if errors.Is(err, credentials.ErrNotFound) {
 						logger.DebugContext(egctx, "could not resolve credentials for verification", "error", err.Error())
 					} else {

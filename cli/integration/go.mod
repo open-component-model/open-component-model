@@ -14,7 +14,7 @@ require (
 	helm.sh/helm/v4 v4.1.4
 	ocm.software/open-component-model/bindings/go/blob v0.0.12
 	ocm.software/open-component-model/bindings/go/configuration v0.0.13
-	ocm.software/open-component-model/bindings/go/credentials v0.0.9
+	ocm.software/open-component-model/bindings/go/credentials v0.0.10
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260429073711-304fed31a996
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260429073711-304fed31a996
