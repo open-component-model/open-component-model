@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
@@ -38,13 +39,12 @@ func resolveCredentialsMap(ctx context.Context, resolver credentials.Resolver, i
 		if c.RefreshToken != "" {
 			result[ocicredsv1.CredentialKeyRefreshToken] = c.RefreshToken
 		}
-		return result, nil
-	case *credconfigv1.DirectCredentials:
-		result := make(map[string]string, len(c.Properties))
-		for k, v := range c.Properties {
-			result[k] = v
+		if len(result) == 0 {
+			return nil, nil
 		}
 		return result, nil
+	case *credconfigv1.DirectCredentials:
+		return maps.Clone(c.Properties), nil
 	default:
 		return nil, fmt.Errorf("unsupported credential type %T", typed)
 	}
