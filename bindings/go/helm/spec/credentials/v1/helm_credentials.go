@@ -26,6 +26,7 @@ const (
 // +ocm:jsonschema-gen=true
 type HelmHTTPCredentials struct {
 	// +ocm:jsonschema-gen:enum=HelmHTTPCredentials/v1
+	// +ocm:jsonschema-gen:enum:deprecated=HelmHTTPCredentials
 	Type     runtime.Type `json:"type"`
 	Username string       `json:"username,omitempty"`
 	Password string       `json:"password,omitempty"`
@@ -38,6 +39,7 @@ type HelmHTTPCredentials struct {
 func MustRegisterCredentialType(scheme *runtime.Scheme) {
 	scheme.MustRegisterWithAlias(&HelmHTTPCredentials{},
 		runtime.NewVersionedType(HelmHTTPCredentialsType, Version),
+		runtime.NewUnversionedType(HelmHTTPCredentialsType),
 	)
 }
 
