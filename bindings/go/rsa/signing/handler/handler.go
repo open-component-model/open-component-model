@@ -25,6 +25,7 @@ import (
 	rsasignature "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/pem"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/rfc2253"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	identityv1 "ocm.software/open-component-model/bindings/go/rsa/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -404,6 +405,6 @@ func verifyIssuerForLeafCert(signed descruntime.Signature, leaf *x509.Certificat
 // baseIdentity builds a credential consumer identity for RSA handlers.
 func baseIdentity(algorithm v1alpha1.SignatureAlgorithm) runtime.Identity {
 	id := runtime.Identity{IdentityAttributeAlgorithm: string(algorithm)}
-	id.SetType(rsacredentials.IdentityTypeRSA)
+	id.SetType(identityv1.V1Alpha1Type)
 	return id
 }

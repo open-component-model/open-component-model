@@ -7,10 +7,13 @@ import (
 	"os"
 
 	rsapem "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/pem"
-	"ocm.software/open-component-model/bindings/go/runtime"
+	identityv1 "ocm.software/open-component-model/bindings/go/rsa/spec/identity/v1"
 )
 
-var IdentityTypeRSA = runtime.NewVersionedType("RSA", "v1alpha1")
+// IdentityTypeRSA is the consumer identity type for RSA signing.
+//
+// Deprecated: Use identityv1.VersionedType or identityv1.V1Alpha1Type instead.
+var IdentityTypeRSA = identityv1.V1Alpha1Type
 
 // Credential keys.
 //
