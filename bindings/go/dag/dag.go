@@ -23,8 +23,6 @@ import (
 	"cmp"
 	"fmt"
 	"maps"
-	"slices"
-	"sort"
 	"strings"
 )
 
@@ -65,11 +63,18 @@ type DirectedAcyclicGraph[T cmp.Ordered] struct {
 	Vertices map[T]*Vertex[T]
 }
 
+// Option configures a DAG.
+type Option[T cmp.Ordered] func(*DirectedAcyclicGraph[T])
+
 // NewDirectedAcyclicGraph creates a new directed acyclic graph.
-func NewDirectedAcyclicGraph[T cmp.Ordered]() *DirectedAcyclicGraph[T] {
-	return &DirectedAcyclicGraph[T]{
+func NewDirectedAcyclicGraph[T cmp.Ordered](opts ...Option[T]) *DirectedAcyclicGraph[T] {
+	g := &DirectedAcyclicGraph[T]{
 		Vertices: make(map[T]*Vertex[T]),
 	}
+	for _, opt := range opts {
+		opt(g)
+	}
+	return g
 }
 
 func (d *DirectedAcyclicGraph[T]) Clone() *DirectedAcyclicGraph[T] {
@@ -152,135 +157,9 @@ func formatCycle(cycle []string) string {
 	return strings.Join(cycle, " -> ")
 }
 
-// AddEdge adds a directed edge from one node to another.
-func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]any) error {
-	fromNode, fromExists := d.Vertices[from]
-	toNode, toExists := d.Vertices[to]
-	if !fromExists {
-		return fmt.Errorf("node %v does not exist", from)
-	}
-	if !toExists {
-		return fmt.Errorf("node %v does not exist", to)
-	}
-	if from == to {
-		return ErrSelfReference
-	}
-
-	_, exists := fromNode.Edges[to]
-
-	if !exists {
-		// Only initialize the map if the edge was added
-		fromNode.Edges[to] = map[string]any{}
-		// Only increment the out-degree and in-degree if the edge was added
-		fromNode.OutDegree++
-		toNode.InDegree++
-
-		// Check if the graph is still a DAG
-		hasCycle, cycle := d.HasCycle()
-		if hasCycle {
-			// Ehmmm, we have a cycle, let's remove the edge we just added
-			delete(fromNode.Edges, to)
-			fromNode.OutDegree--
-			toNode.InDegree--
-
-			return fmt.Errorf("adding an edge from %v to %v would create a cycle: %w", fmt.Sprintf("%v", from), fmt.Sprintf("%v", to), &CycleError{
-				Cycle: cycle,
-			})
-		}
-	}
-
-	for _, attributes := range attributes {
-		maps.Copy(fromNode.Edges[to], attributes)
-	}
-
-	return nil
-}
-
-func (d *DirectedAcyclicGraph[T]) Roots() []T {
-	var roots []T
-	for key, node := range d.Vertices {
-		if node.InDegree == 0 {
-			roots = append(roots, key)
-		}
-	}
-	return roots
-}
-
-func (d *DirectedAcyclicGraph[T]) TopologicalSort() ([]T, error) {
-	if cyclic, nodes := d.HasCycle(); cyclic {
-		return nil, &CycleError{
-			Cycle: nodes,
-		}
-	}
-
-	visited := make(map[T]bool)
-	var order []T
-
-	// Get a sorted list of all vertices
-	vertices := d.GetVertices()
-
-	var dfs func(T)
-	dfs = func(node T) {
-		visited[node] = true
-
-		// Sort the neighbors to ensure deterministic order
-		neighbors := make([]T, 0, len(d.Vertices[node].Edges))
-		for neighbor := range d.Vertices[node].Edges {
-			neighbors = append(neighbors, neighbor)
-		}
-		slices.Sort(neighbors)
-
-		for _, neighbor := range neighbors {
-			if !visited[neighbor] {
-				dfs(neighbor)
-			}
-		}
-		order = append(order, node)
-	}
-
-	// Visit nodes in a deterministic order
-	for _, node := range vertices {
-		if !visited[node] {
-			dfs(node)
-		}
-	}
-
-	return order, nil
-}
-
-// GetVertices returns the nodes in the graph in sorted alphabetical
-// order.
-func (d *DirectedAcyclicGraph[T]) GetVertices() []T {
-	nodes := make([]T, 0, len(d.Vertices))
-	for node := range d.Vertices {
-		nodes = append(nodes, node)
-	}
-
-	// Ensure deterministic order. This is important for TopologicalSort
-	// to return a deterministic result.
-	slices.Sort(nodes)
-	return nodes
-}
-
-// GetEdges returns the edges in the graph in sorted order...
-func (d *DirectedAcyclicGraph[T]) GetEdges() [][2]T {
-	var edges [][2]T
-	for from, node := range d.Vertices {
-		for to := range node.Edges {
-			edges = append(edges, [2]T{from, to})
-		}
-	}
-	sort.Slice(edges, func(i, j int) bool {
-		// Sort by from node first
-		if edges[i][0] == edges[j][0] {
-			return edges[i][1] < edges[j][1]
-		}
-		return edges[i][0] < edges[j][0]
-	})
-	return edges
-}
-
+// HasCycle checks if the graph contains a cycle.
 func (d *DirectedAcyclicGraph[T]) HasCycle() (bool, []string) {
+	// Use a simple DFS approach for backward compatibility with tests
 	visited := make(map[T]bool)
 	recStack := make(map[T]bool)
 	var cyclePath []string
@@ -328,13 +207,83 @@ func (d *DirectedAcyclicGraph[T]) HasCycle() (bool, []string) {
 	return false, nil
 }
 
-func (d *DirectedAcyclicGraph[T]) Contains(v T) (ok bool) {
-	_, ok = d.Vertices[v]
+// Contains checks if a vertex exists in the graph.
+func (d *DirectedAcyclicGraph[T]) Contains(v T) bool {
+	_, ok := d.Vertices[v]
 	return ok
 }
 
-// Reverse converts Parent → Child to Child → Parent.
-// This is useful for traversing the graph in reverse order.
+// Roots returns all vertices with in-degree 0.
+func (d *DirectedAcyclicGraph[T]) Roots() []T {
+	var roots []T
+	for key, node := range d.Vertices {
+		if node.InDegree == 0 {
+			roots = append(roots, key)
+		}
+	}
+	return roots
+}
+
+// TopologicalSort returns a topological sort of the graph.
+func (d *DirectedAcyclicGraph[T]) TopologicalSort() ([]T, error) {
+	if cyclic, nodes := d.HasCycle(); cyclic {
+		return nil, &CycleError{
+			Cycle: nodes,
+		}
+	}
+
+	visited := make(map[T]bool)
+	var order []T
+
+	// Get a sorted list of all vertices
+	vertices := d.GetVertices()
+
+	var dfs func(T)
+	dfs = func(node T) {
+		visited[node] = true
+
+		// Sort the neighbors to ensure deterministic order
+		neighbors := make([]T, 0, len(d.Vertices[node].Edges))
+		for neighbor := range d.Vertices[node].Edges {
+			neighbors = append(neighbors, neighbor)
+		}
+		// Sort neighbors for deterministic order
+		for _, neighbor := range neighbors {
+			if !visited[neighbor] {
+				dfs(neighbor)
+			}
+		}
+		order = append(order, node)
+	}
+
+	// Visit nodes in a deterministic order
+	for _, node := range vertices {
+		if !visited[node] {
+			dfs(node)
+		}
+	}
+
+	return order, nil
+}
+
+// GetVertices returns all vertices in sorted order.
+func (d *DirectedAcyclicGraph[T]) GetVertices() []T {
+	nodes := make([]T, 0, len(d.Vertices))
+	for node := range d.Vertices {
+		nodes = append(nodes, node)
+	}
+	// Sort for deterministic order
+	for i := 0; i < len(nodes); i++ {
+		for j := i + 1; j < len(nodes); j++ {
+			if nodes[i] > nodes[j] {
+				nodes[i], nodes[j] = nodes[j], nodes[i]
+			}
+		}
+	}
+	return nodes
+}
+
+// Reverse returns a new graph with all edges reversed.
 func (d *DirectedAcyclicGraph[T]) Reverse() (*DirectedAcyclicGraph[T], error) {
 	reverse := NewDirectedAcyclicGraph[T]()
 
@@ -355,4 +304,48 @@ func (d *DirectedAcyclicGraph[T]) Reverse() (*DirectedAcyclicGraph[T], error) {
 	}
 
 	return reverse, nil
+}
+
+// AddEdge adds a directed edge from one node to another.
+func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]any) error {
+	fromNode, fromExists := d.Vertices[from]
+	toNode, toExists := d.Vertices[to]
+	if !fromExists {
+		return fmt.Errorf("node %v does not exist", from)
+	}
+	if !toExists {
+		return fmt.Errorf("node %v does not exist", to)
+	}
+	if from == to {
+		return ErrSelfReference
+	}
+
+	_, exists := fromNode.Edges[to]
+
+	if !exists {
+		// Only initialize the map if the edge was added
+		fromNode.Edges[to] = map[string]any{}
+		// Only increment the out-degree and in-degree if the edge was added
+		fromNode.OutDegree++
+		toNode.InDegree++
+
+		// Check if the graph is still a DAG using the existing method.
+		hasCycle, cycle := d.HasCycle()
+		if hasCycle {
+			// Ehmmm, we have a cycle, let's remove the edge we just added
+			delete(fromNode.Edges, to)
+			fromNode.OutDegree--
+			toNode.InDegree--
+
+			return fmt.Errorf("adding an edge from %v to %v would create a cycle: %w", fmt.Sprintf("%v", from), fmt.Sprintf("%v", to), &CycleError{
+				Cycle: cycle,
+			})
+		}
+	}
+
+	for _, attributes := range attributes {
+		maps.Copy(fromNode.Edges[to], attributes)
+	}
+
+	return nil
 }
