@@ -116,6 +116,7 @@ func BuildGraphDefinition(
 		"roots", dagRoots, "recursive", recursive)
 
 	dr := dagsync.NewGraphDiscoverer(&dagsync.GraphDiscovererOptions[string, *discoveryValue]{
+		DAGOptions: []dag.Option[string]{}, // Add any DAG options here if needed
 		Roots:      dagRoots,
 		Resolver:   res,
 		Discoverer: disc,

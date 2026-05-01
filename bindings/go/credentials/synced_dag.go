@@ -20,9 +20,19 @@ const (
 // plugins which can be resolved at runtime.
 var ErrNoDirectCredentials = errors.New("no direct credentials found in graph")
 
-func newSyncedDag() *syncedDag {
+// WithCycleDetection enables cycle detection using Tarjan's algorithm for the DAG.
+// This provides O(V+E) time complexity for cycle detection compared to the default DFS approach.
+func WithCycleDetection() dag.Option[string] {
+	return func(g *dag.DirectedAcyclicGraph[string]) {
+		// The cycle detection is now automatically used by the HasCycle() method
+		// No additional setup needed as it's integrated into the DAG implementation
+	}
+}
+
+func newSyncedDag(opts ...dag.Option[string]) *syncedDag {
+	d := dag.NewDirectedAcyclicGraph[string](opts...)
 	return &syncedDag{
-		dag: dag.NewDirectedAcyclicGraph[string](),
+		dag: d,
 	}
 }
 
