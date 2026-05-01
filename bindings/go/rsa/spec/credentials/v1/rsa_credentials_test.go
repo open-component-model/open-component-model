@@ -11,29 +11,29 @@ import (
 
 func TestFromDirectCredentials(t *testing.T) {
 	props := map[string]string{
-		"public_key_pem":       "-----BEGIN PUBLIC KEY-----\nMIIB...",
-		"public_key_pem_file":  "/path/to/public.pem",
-		"private_key_pem":      "-----BEGIN RSA PRIVATE KEY-----\nMIIE...",
-		"private_key_pem_file": "/path/to/private.pem",
+		CredentialKeyPublicKeyPEM:      "test-public-key",
+		CredentialKeyPublicKeyPEMFile:  "/path/to/public.pem",
+		CredentialKeyPrivateKeyPEM:     "test-private-key",
+		CredentialKeyPrivateKeyPEMFile: "/path/to/private.pem",
 	}
 
 	creds := FromDirectCredentials(props)
 
-	assert.Equal(t, "-----BEGIN PUBLIC KEY-----\nMIIB...", creds.PublicKeyPEM)
+	assert.Equal(t, "test-public-key", creds.PublicKeyPEM)
 	assert.Equal(t, "/path/to/public.pem", creds.PublicKeyPEMFile)
-	assert.Equal(t, "-----BEGIN RSA PRIVATE KEY-----\nMIIE...", creds.PrivateKeyPEM)
+	assert.Equal(t, "test-private-key", creds.PrivateKeyPEM)
 	assert.Equal(t, "/path/to/private.pem", creds.PrivateKeyPEMFile)
 	assert.Equal(t, runtime.NewVersionedType(RSACredentialsType, Version), creds.Type)
 }
 
 func TestFromDirectCredentials_PartialFields(t *testing.T) {
 	props := map[string]string{
-		"private_key_pem": "-----BEGIN RSA PRIVATE KEY-----\nMIIE...",
+		CredentialKeyPrivateKeyPEM: "test-private-key",
 	}
 
 	creds := FromDirectCredentials(props)
 
-	assert.Equal(t, "-----BEGIN RSA PRIVATE KEY-----\nMIIE...", creds.PrivateKeyPEM)
+	assert.Equal(t, "test-private-key", creds.PrivateKeyPEM)
 	assert.Empty(t, creds.PublicKeyPEM)
 	assert.Empty(t, creds.PublicKeyPEMFile)
 	assert.Empty(t, creds.PrivateKeyPEMFile)
@@ -65,9 +65,9 @@ func TestRSACredentials_SchemeConvert(t *testing.T) {
 
 	original := &RSACredentials{
 		Type:              runtime.NewVersionedType(RSACredentialsType, Version),
-		PublicKeyPEM:      "-----BEGIN PUBLIC KEY-----\nMIIB...",
+		PublicKeyPEM:      "test-public-key",
 		PublicKeyPEMFile:  "/path/to/public.pem",
-		PrivateKeyPEM:     "-----BEGIN RSA PRIVATE KEY-----\nMIIE...",
+		PrivateKeyPEM:     "test-private-key",
 		PrivateKeyPEMFile: "/path/to/private.pem",
 	}
 
