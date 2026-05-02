@@ -1,0 +1,238 @@
+package handler
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"os/exec"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/Masterminds/semver/v3"
+)
+
+const defaultOperationTimeout = 3 * time.Minute
+
+// CosignMinimumVersion is the minimum cosign version required on PATH.
+// v3.0.4 introduced --use-signing-config which this handler depends on.
+const CosignMinimumVersion = "v3.0.4"
+
+// Executor abstracts cosign CLI invocations for testability.
+type Executor interface {
+	Run(ctx context.Context, args []string, env []string) error
+	Ensure(ctx context.Context) error
+}
+
+// DefaultExecutor invokes the cosign binary via os/exec.
+type DefaultExecutor struct {
+	mu         sync.Mutex
+	binaryPath string
+	resolved   bool
+}
+
+// NewDefaultExecutor returns an executor that shells out to the cosign binary.
+func NewDefaultExecutor() *DefaultExecutor {
+	return &DefaultExecutor{binaryPath: "cosign"}
+}
+
+// Ensure resolves the cosign binary eagerly for fail-fast behavior at startup.
+func (e *DefaultExecutor) Ensure(ctx context.Context) error {
+	return e.ensureCosignAvailable(ctx)
+}
+
+func (e *DefaultExecutor) ensureCosignAvailable(ctx context.Context) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.resolved {
+		return nil
+	}
+	path, err := exec.LookPath(e.binaryPath)
+	if err == nil {
+		if verr := e.checkVersion(path); verr != nil {
+			return verr
+		}
+		e.binaryPath = path
+		e.resolved = true
+		return nil
+	}
+	path, dlErr := ensureOrDownloadCosign(ctx)
+	if dlErr != nil {
+		return fmt.Errorf(
+			"cosign binary not found on PATH and auto-download failed: %w "+
+				"(install cosign from https://github.com/sigstore/cosign?tab=readme-ov-file#installation "+
+				"and ensure it is on PATH, or fix the download error)", dlErr)
+	}
+	e.binaryPath = path
+	e.resolved = true
+	return nil
+}
+
+// Run executes the cosign binary with the given arguments and environment.
+func (e *DefaultExecutor) Run(ctx context.Context, args []string, env []string) error {
+	if err := e.ensureCosignAvailable(ctx); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, defaultOperationTimeout)
+	defer cancel()
+
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, e.binaryPath, args...) //nolint:gosec // G204: args are constructed from trusted config, not user input
+	cmd.Stdout = nil
+	cmd.Stderr = &stderr
+	cmd.Env = env
+
+	if err := cmd.Run(); err != nil {
+		const maxStderr = 4096
+		msg := strings.TrimSpace(stderr.String())
+		if len(msg) > maxStderr {
+			msg = msg[:maxStderr]
+		}
+		msg = scrubStderr(msg)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("cosign %s timed out: %w\nstderr: %s", args[0], err, msg)
+		}
+		return fmt.Errorf("cosign %s failed: %w\nstderr: %s", args[0], err, msg)
+	}
+	return nil
+}
+
+func writeTemp(dir, pattern string, data []byte) (path string, err error) {
+	f, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return "", fmt.Errorf("create temp file %q: %w", pattern, err)
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close temp file %q: %w", pattern, cerr)
+		}
+		if err != nil {
+			_ = os.Remove(f.Name())
+		}
+	}()
+	if _, err = f.Write(data); err != nil {
+		return "", fmt.Errorf("write temp file %q: %w", pattern, err)
+	}
+	return f.Name(), nil
+}
+
+// cosignPassthroughEnvKeys is an allowlist of environment variables forwarded to the cosign
+// subprocess. Only system paths, proxy settings, and TLS trust anchors are included.
+// Sigstore-specific env vars (SIGSTORE_*, TUF_*, COSIGN_*) are deliberately excluded:
+// all signing configuration flows through OCM config types mapped to cosign CLI flags.
+var cosignPassthroughEnvKeys = map[string]bool{
+	"PATH":               true,
+	"HOME":               true,
+	"TMPDIR":             true,
+	"TMP":                true,
+	"TEMP":               true,
+	"USERPROFILE":        true,
+	"HTTP_PROXY":         true,
+	"HTTPS_PROXY":        true,
+	"NO_PROXY":           true,
+	"http_proxy":         true,
+	"https_proxy":        true,
+	"no_proxy":           true,
+	"SSL_CERT_FILE":      true,
+	"SSL_CERT_DIR":       true,
+	"REQUESTS_CA_BUNDLE": true,
+}
+
+// cosignEnv builds the environment slice for the cosign subprocess from the
+// current process environment, filtered through cosignPassthroughEnvKeys.
+func cosignEnv() []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		key, _, _ := strings.Cut(kv, "=")
+		if cosignPassthroughEnvKeys[key] {
+			env = append(env, kv)
+		}
+	}
+	return env
+}
+
+var stderrScrubbers = []struct {
+	pattern     *regexp.Regexp
+	replacement string
+}{
+	{regexp.MustCompile(`(?i)bearer\s+\S+`), "bearer [REDACTED]"},
+	{regexp.MustCompile(`SIGSTORE_ID_TOKEN=\S+`), "SIGSTORE_ID_TOKEN=[REDACTED]"},
+	// Matches key=value where value may be quoted (single or double) or unquoted.
+	{regexp.MustCompile(`(?i)(token|secret|password|key)="[^"]*"`), "${1}=[REDACTED]"},
+	{regexp.MustCompile(`(?i)(token|secret|password|key)='[^']*'`), "${1}=[REDACTED]"},
+	{regexp.MustCompile(`(?i)(token|secret|password|key)=\S+`), "${1}=[REDACTED]"},
+	// Bare JWT tokens (header.payload.signature) — common in cosign error messages.
+	{regexp.MustCompile(`eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`), "[REDACTED-JWT]"},
+}
+
+func scrubStderr(s string) string {
+	for _, sc := range stderrScrubbers {
+		s = sc.pattern.ReplaceAllString(s, sc.replacement)
+	}
+	return s
+}
+
+func (e *DefaultExecutor) checkVersion(binaryPath string) error {
+	detected, err := detectCosignVersion(binaryPath)
+	if err != nil {
+		slog.Warn("could not determine cosign version on PATH; if signing fails, "+
+			"verify cosign is >= "+CosignMinimumVersion+" or remove it from PATH to trigger auto-download",
+			"path", binaryPath, "error", err)
+		return nil
+	}
+	detectedVer, err := semver.NewVersion(detected)
+	if err != nil {
+		slog.Warn("could not parse cosign version; if signing fails, "+
+			"verify cosign is >= "+CosignMinimumVersion+" or remove it from PATH to trigger auto-download",
+			"detected", detected, "error", err)
+		return nil
+	}
+	minimumVer, err := semver.NewVersion(CosignMinimumVersion)
+	if err != nil {
+		return fmt.Errorf("parse minimum version constant: %w", err)
+	}
+	if detectedVer.LessThan(minimumVer) {
+		return fmt.Errorf(
+			"cosign on PATH (%s) is version %s, minimum required is %s "+
+				"(--use-signing-config flag not available in older versions)",
+			binaryPath, detected, CosignMinimumVersion)
+	}
+	pinnedVer, _ := semver.NewVersion(CosignVersion)
+	if pinnedVer != nil && detectedVer.LessThan(pinnedVer) {
+		slog.Warn("cosign on PATH is older than the tested/pinned version; consider upgrading",
+			"path", binaryPath, "path_version", detected, "pinned_version", CosignVersion)
+	}
+	return nil
+}
+
+func detectCosignVersion(binaryPath string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var stdout bytes.Buffer
+	cmd := exec.CommandContext(ctx, binaryPath, "version")
+	cmd.Stdout = &stdout
+	cmd.Stderr = nil
+	cmd.Env = cosignEnv()
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("run cosign version: %w", err)
+	}
+	return parseCosignVersionOutput(stdout.String())
+}
+
+func parseCosignVersionOutput(output string) (string, error) {
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if v, ok := strings.CutPrefix(line, "GitVersion:"); ok {
+			return strings.TrimSpace(v), nil
+		}
+	}
+	re := regexp.MustCompile(`v\d+\.\d+\.\d+`)
+	if m := re.FindString(output); m != "" {
+		return m, nil
+	}
+	return "", errors.New("could not parse cosign version from output")
+}
