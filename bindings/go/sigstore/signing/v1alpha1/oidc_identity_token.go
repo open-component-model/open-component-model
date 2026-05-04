@@ -2,10 +2,10 @@ package v1alpha1
 
 import "ocm.software/open-component-model/bindings/go/runtime"
 
-// IdentityTypeOIDCIdentityToken is the credential consumer identity type for Sigstore
-// keyless signing. It signals that the handler needs an OIDC identity token to authenticate
-// with Fulcio.
-var IdentityTypeOIDCIdentityToken = runtime.NewVersionedType("OIDCIdentityToken", Version)
+// CredentialTypeOIDCIdentityToken is the credential type for OIDC identity tokens
+// used in Sigstore keyless signing. This describes the credential shape, not the
+// consumer identity.
+var CredentialTypeOIDCIdentityToken = runtime.NewVersionedType("OIDCIdentityToken", Version)
 
 // OIDCIdentityToken represents a resolved OIDC identity token credential
 // for Sigstore keyless signing.
