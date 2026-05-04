@@ -13,7 +13,7 @@ In this tutorial, you'll embed an OCI image layout as a local blob inside a comp
 - Create an OCI image layout using the ORAS CLI
 - Embed an OCI image layout as a local blob in a component version
 - Transfer a component version with `--copy-resources` so that external OCI image references are internalized as local blobs
-- Access local blobs natively from an OCI registry by their digest and media type
+- Access local blobs natively from an OCI registry by their `localReference` digest and media type
 
 **Estimated time:** ~20 minutes
 
@@ -244,7 +244,7 @@ After transfer, inspect the component version in the registry to find the image'
 ocm get cv <your-registry>//github.com/acme.org/native-oci-demo:1.0.0 -o yaml
 ```
 
-Look for the `globalAccess` field in the resource's access specification — it contains the native OCI image reference including the digest:
+Look for the `localReference` field in the resource's access specification — it contains the digest of the native OCI manifest:
 
 ```yaml
 resources:
@@ -252,22 +252,23 @@ resources:
       localReference: sha256:...
       mediaType: application/vnd.oci.image.manifest.v1+json
       type: localBlob/v1
-      globalAccess:
-        type: OCIImage/v1
-        imageReference: <your-registry>/component-descriptors/github.com/acme.org/native-oci-demo:1.0.0@sha256:...
     name: my-oci-artifact
     type: ociArtifact
 ```
 
-You can now pull the artifact natively using the digest from `globalAccess.imageReference`:
+The `localReference` digest identifies the OCI manifest stored within the component version's OCI index. You can pull the artifact natively using this digest combined with the component version's repository path:
 
 ```bash
 # Using ORAS
-oras pull <your-registry>/<repository>@sha256:abc123...
+oras pull <your-registry>/component-descriptors/github.com/acme.org/native-oci-demo@sha256:...
 
 # Using crane
-crane pull <your-registry>/<repository>@sha256:abc123... image.tar
+crane pull <your-registry>/component-descriptors/github.com/acme.org/native-oci-demo@sha256:... image.tar
 ```
+
+{{< callout type="info" >}}
+The repository path follows the pattern `<registry>/<subpath>/component-descriptors/<component-name>`. The digest from `localReference` addresses the manifest directly within the component version's OCI index.
+{{< /callout >}}
 
 {{< /step >}}
 
@@ -377,7 +378,7 @@ With `--copy-resources`, OCM:
 1. Downloads the image from `ghcr.io/stefanprodan/podinfo:6.9.1`
 2. Stores it as a local blob in the target component version
 3. Maps it to a native OCI manifest in the component version's index
-4. Updates the access specification with a `localReference` (digest) and `globalAccess` (native OCI reference)
+4. Updates the access specification with a `localReference` (digest) pointing to the native OCI manifest
 
 {{< /step >}}
 
@@ -389,7 +390,7 @@ With `--copy-resources`, OCM:
 ocm get cv <your-registry>//github.com/acme.org/transfer-demo:1.0.0 -o yaml
 ```
 
-After transfer with `--copy-resources`, the access specification changes from an external reference to a local blob with global access:
+After transfer with `--copy-resources`, the access specification changes from an external reference to a local blob:
 
 ```yaml
 resources:
@@ -398,9 +399,6 @@ resources:
       mediaType: application/vnd.oci.image.index.v1+json
       referenceName: stefanprodan/podinfo:6.9.1
       type: localBlob/v1
-      globalAccess:
-        type: OCIImage/v1
-        imageReference: <your-registry>/component-descriptors/github.com/acme.org/transfer-demo:1.0.0@sha256:...
     name: app-image
     relation: external
     type: ociImage
@@ -410,10 +408,9 @@ resources:
 Key observations:
 
 - `access.type` changed from `ociArtifact` to `localBlob/v1` — the image is now embedded
-- `localReference` contains the digest of the stored image
+- `localReference` contains the digest of the stored image manifest/index
 - `mediaType` is `application/vnd.oci.image.index.v1+json` (or `application/vnd.oci.image.manifest.v1+json` for single-platform images)
 - `referenceName` preserves the original image reference for traceability
-- `globalAccess` provides the native OCI reference in the target registry
 - `relation` remains `external` — this indicates the resource was originally sourced externally, even though it is now stored locally
 
 {{< /step >}}
@@ -422,14 +419,14 @@ Key observations:
 
 ### Pull the image natively
 
-Use the `globalAccess.imageReference` to pull the image with standard OCI tooling:
+Use the `localReference` digest to pull the image with standard OCI tooling. The image is stored within the component version's repository:
 
 ```bash
 # Using docker
-docker pull <your-registry>/<repository>@sha256:...
+docker pull <your-registry>/component-descriptors/github.com/acme.org/transfer-demo@sha256:...
 
 # Using crane
-crane manifest <your-registry>/<repository>@sha256:...
+crane manifest <your-registry>/component-descriptors/github.com/acme.org/transfer-demo@sha256:...
 ```
 
 The image is stored as a first-class OCI manifest in the registry. No OCM tooling is required to access it — any OCI-compliant client works.
@@ -451,8 +448,8 @@ ocm download resource <your-registry>//github.com/acme.org/transfer-demo:1.0.0 \
 - OCI image layouts can be embedded in component versions using the `file/v1` input type with media type `application/vnd.ocm.software.oci.layout.v1+tar`
 - External OCI image references become local blobs when transferred with `--copy-resources`
 - OCM v2's [index representation](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/03-storage-backends/oci.md#62-index-representation) stores native OCI artifacts as proper manifests in the component version's OCI index
-- Local blobs with OCI media types are natively accessible by digest using any OCI-compliant tool
-- The `globalAccess` field in the access specification provides the native OCI image reference
+- Local blobs with OCI media types are natively accessible by their `localReference` digest using any OCI-compliant tool
+- The `globalAccess` field is not set by default — native access works directly via the digest and the component version's repository path
 
 ## How Native Access Works
 
@@ -486,9 +483,15 @@ The media type (`application/vnd.ocm.software.oci.layout.v1+tar`) tells OCM that
 
 {{< details "What is the difference between localReference and globalAccess?" >}}
 
-- **`localReference`** is a content-addressable digest that identifies the blob within the component version's storage. It is **stable across transfers** — the same digest works regardless of which registry hosts the component, because it is derived from the blob content itself. It works with any OCM repository implementation (CTF archives, OCI registries).
-- **`globalAccess`** is a location-specific access specification that points to the artifact in a particular registry. In OCI registries, this is typically an `OCIImage/v1` reference like `registry.example.com/repo@sha256:...`. It allows non-OCM tools to access the artifact directly, but **changes when the component is transferred** to a different registry. After each transfer, OCM updates `globalAccess` to reflect the new location, while `localReference` remains the same.
+- **`localReference`** is a content-addressable digest that identifies the blob within the component version's storage. It is **stable across transfers** — the same digest works regardless of which registry hosts the component, because it is derived from the blob content itself. It works with any OCM repository implementation (CTF archives, OCI registries). For native OCI artifacts stored in an OCI registry, you can access them directly using this digest combined with the component version's repository path.
+- **`globalAccess`** is an optional, location-specific access specification that points to the artifact in a particular registry. It is **not set by default** — the `globalAccessPolicy` must be explicitly set to `auto` on the repository to enable it. When enabled, it provides a convenience reference like `registry.example.com/repo@sha256:...` that changes when the component is transferred to a different registry.
 
+{{< /details >}}
+
+{{< details "How do I enable globalAccess references?" >}}
+By default, `globalAccess` is not populated. To enable it, set `globalAccessPolicy: auto` in the OCI repository specification. This is an experimental feature carried over from OCM v1 for backwards compatibility — its future availability is being evaluated by the community.
+
+Without `globalAccess`, you can still access native OCI artifacts directly using the `localReference` digest and the component version's repository path in the registry.
 {{< /details >}}
 
 {{< details "Can I use `--upload-as` to control how artifacts are stored?" >}}
