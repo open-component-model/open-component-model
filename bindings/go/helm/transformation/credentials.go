@@ -24,6 +24,10 @@ func resolveCredentialsMap(ctx context.Context, resolver credentials.Resolver, i
 		return nil, err
 	}
 
+	if typed == nil {
+		return nil, nil
+	}
+
 	switch c := typed.(type) {
 	case *helmcredsv1.HelmHTTPCredentials:
 		result := map[string]string{}
