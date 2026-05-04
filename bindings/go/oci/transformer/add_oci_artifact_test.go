@@ -3,6 +3,7 @@ package transformer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -65,12 +67,14 @@ func (m *mockResourceRepositoryForAddOCI) GetResourceCredentialConsumerIdentity(
 // mockCredentialResolver implements credentials.Resolver for testing
 type mockCredentialResolver struct{}
 
-func (m *mockCredentialResolver) Resolve(ctx context.Context, id runtime.Identity) (map[string]string, error) {
-	return map[string]string{"username": "test-user"}, nil
+func (m *mockCredentialResolver) Resolve(_ context.Context, _ runtime.Identity) (map[string]string, error) {
+	return nil, errors.New("unexpected legacy Resolve call")
 }
 
 func (m *mockCredentialResolver) ResolveTyped(_ context.Context, _ runtime.Typed) (runtime.Typed, error) {
-	return runtime.Identity{"username": "test-user"}, nil
+	return &ocicredsv1.OCICredentials{
+		Username: "test-user",
+	}, nil
 }
 
 func TestAddOCIArtifact_Transform(t *testing.T) {

@@ -17,26 +17,26 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// CredentialKey constants define the standard keys used in credential maps.
-// These keys are used to store and retrieve different types of credentials.
+// Credential key constants re-exported from the typed credential package for backward compatibility.
 const (
-	// CredentialKeyUsername is the key for storing username credentials
-	CredentialKeyUsername = "username"
-	// CredentialKeyPassword is the key for storing password credentials
-	CredentialKeyPassword = "password"
-	// CredentialKeyAccessToken is the key for storing access token credentials
-	CredentialKeyAccessToken = "accessToken"
-	// CredentialKeyRefreshToken is the key for storing refresh token credentials
-	CredentialKeyRefreshToken = "refreshToken"
-
+	// CredentialKeyUsername is the key for basic auth username.
+	CredentialKeyUsername = credentialsv1.CredentialKeyUsername
+	// CredentialKeyPassword is the key for basic auth password.
+	CredentialKeyPassword = credentialsv1.CredentialKeyPassword
+	// CredentialKeyAccessToken is the key for OAuth2/bearer access tokens.
+	CredentialKeyAccessToken = credentialsv1.CredentialKeyAccessToken
+	// CredentialKeyRefreshToken is the key for OAuth2 refresh tokens.
+	CredentialKeyRefreshToken = credentialsv1.CredentialKeyRefreshToken
 	// LegacyCredentialKeyAccessToken is the legacy snake_case key for access tokens.
 	//
-	// Deprecated: Use CredentialKeyAccessToken instead. The removal of this key is tracked here: https://github.com/open-component-model/ocm-project/issues/1037
-	LegacyCredentialKeyAccessToken = "access_token"
+	// Deprecated: Use CredentialKeyAccessToken instead.
+	//nolint:staticcheck // will be removed in the future
+	LegacyCredentialKeyAccessToken = credentialsv1.LegacyCredentialKeyAccessToken
 	// LegacyCredentialKeyRefreshToken is the legacy snake_case key for refresh tokens.
 	//
-	// Deprecated: Use CredentialKeyRefreshToken instead. The removal of this key is tracked here: https://github.com/open-component-model/ocm-project/issues/1037
-	LegacyCredentialKeyRefreshToken = "refresh_token"
+	// Deprecated: Use CredentialKeyRefreshToken instead.
+	//nolint:staticcheck // will be removed in the future
+	LegacyCredentialKeyRefreshToken = credentialsv1.LegacyCredentialKeyRefreshToken
 )
 
 // CredentialFromMap converts a credential map to an auth.Credential.
