@@ -41,10 +41,12 @@ func init() {
 // the handler returns an error if no token credential is resolved.
 //
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 type SignConfig struct {
 	// Type identifies this configuration object's runtime type.
+	// +ocm:jsonschema-gen:enum=SigstoreSigningConfiguration/v1alpha1
 	Type runtime.Type `json:"type"`
 
 	// SigningConfig is a filesystem path to a cosign signing configuration file
@@ -93,10 +95,12 @@ type SignConfig struct {
 // See https://docs.sigstore.dev/cosign/verifying/verify/ for cosign verification documentation.
 //
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 type VerifyConfig struct {
 	// Type identifies this configuration object's runtime type.
+	// +ocm:jsonschema-gen:enum=SigstoreVerificationConfiguration/v1alpha1
 	Type runtime.Type `json:"type"`
 
 	// TrustedRoot is a filesystem path to a trusted root JSON file for offline verification.
