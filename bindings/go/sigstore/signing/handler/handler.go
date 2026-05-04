@@ -78,8 +78,9 @@ func (h *Handler) Sign(
 	token := strings.TrimSpace(creds[CredentialKeyOIDCToken])
 	if token == "" {
 		return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required for signing: " +
-			"configure a consumer identity of type SigstoreSigner/v1alpha1 with a " +
-			"credential providing the \"token\" key in .ocmconfig")
+			"configure a consumer identity of type SigstoreSigner/v1alpha1 with either " +
+			"a direct credential (Credentials/v1) providing the \"token\" key, or a " +
+			"credential plugin (OIDCIdentityTokenProvider/v1alpha1) that resolves one")
 	}
 
 	digestBytes, err := hex.DecodeString(unsigned.Value)
