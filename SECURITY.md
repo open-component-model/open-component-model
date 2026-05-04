@@ -36,12 +36,12 @@ security contact for this project.
 
 ## Supported Versions
 
-Only the latest minor release receives security updates. Given the project's pre-1.0 status and
-biweekly release cadence, we do not maintain long-term support branches.
+Security updates are provided for the latest three minor releases (y, y-1, y-2), consistent with
+the project's [release strategy](docs/adr/0010_release_strategy.md#support-policy-y2--3-months).
 
 | Version | Supported |
 |---------|-----------|
-| Latest minor (currently 0.x) | Yes |
+| Latest 3 minors (y, y-1, y-2) | Yes |
 | Older minors | No |
 
 ## Response Process
