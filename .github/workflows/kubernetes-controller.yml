@@ -123,7 +123,7 @@ jobs:
         with:
           go-version-file: ${{ env.LOCATION }}/go.mod
           cache-dependency-path: ${{ env.LOCATION }}/go.sum
-          cache: false
+          cache: ${{ github.event_name == 'pull_request' }}
 
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
@@ -241,7 +241,7 @@ jobs:
         with:
           go-version-file: ${{ env.LOCATION }}/go.mod
           cache-dependency-path: ${{ env.LOCATION }}/go.sum
-          cache: false
+          cache: ${{ github.event_name == 'pull_request' }}
 
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
