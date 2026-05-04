@@ -1,6 +1,7 @@
 package oidc
 
 import (
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialplugin"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler"
 )
@@ -12,4 +13,9 @@ func Register(signingHandlerRegistry *signinghandler.SigningRegistry) error {
 		return err
 	}
 	return signingHandlerRegistry.RegisterInternalComponentSignatureHandler(h)
+}
+
+// RegisterCredentialPlugin registers the OIDC credential plugin with the credential plugin registry.
+func RegisterCredentialPlugin(registry *credentialplugin.Registry) error {
+	return registry.RegisterInternalCredentialPlugin(&OIDCPlugin{})
 }

@@ -22,6 +22,15 @@ const (
 // OIDCPluginTypeVersioned is the fully qualified type for the OIDCIdentityTokenProvider credential plugin.
 var OIDCPluginTypeVersioned = runtime.NewVersionedType(OIDCPluginType, OIDCPluginVersion)
 
+var pluginScheme = runtime.NewScheme()
+
+func init() {
+	pluginScheme.MustRegisterWithAlias(&runtime.Raw{},
+		runtime.NewUnversionedType(OIDCPluginType),
+		OIDCPluginTypeVersioned,
+	)
+}
+
 // OIDCPlugin implements credentials.CredentialPlugin for interactive OIDC
 // token acquisition via a browser-based OIDC flow.
 //
@@ -37,6 +46,10 @@ var OIDCPluginTypeVersioned = runtime.NewVersionedType(OIDCPluginType, OIDCPlugi
 type OIDCPlugin struct{}
 
 var _ credentials.CredentialPlugin = (*OIDCPlugin)(nil)
+
+func (p *OIDCPlugin) GetCredentialPluginScheme() *runtime.Scheme {
+	return pluginScheme
+}
 
 // GetConsumerIdentity maps an OIDCIdentityTokenProvider credential to a consumer identity.
 func (p *OIDCPlugin) GetConsumerIdentity(_ context.Context, credential runtime.Typed) (runtime.Identity, error) {

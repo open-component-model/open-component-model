@@ -63,6 +63,9 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := oidc.Register(manager.SigningRegistry); err != nil {
 		return fmt.Errorf("could not register Sigstore signing plugin: %w", err)
 	}
+	if err := oidc.RegisterCredentialPlugin(manager.CredentialPluginRegistry); err != nil {
+		return fmt.Errorf("could not register OIDC credential plugin: %w", err)
+	}
 
 	return nil
 }
