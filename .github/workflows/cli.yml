@@ -96,6 +96,7 @@ jobs:
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum  # Cache dependencies by go.sum
+          cache: false
 
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
@@ -254,7 +255,8 @@ jobs:
     uses: ./.github/workflows/conformance.yml
     with:
       cli_image: "ghcr.io/${{ github.repository_owner }}/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
-    secrets: inherit
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Run conformance tests against the built image on PRs to main,
   # but only if the CLI was modified (as determined by the build job)
@@ -266,4 +268,5 @@ jobs:
     with:
       cli_artifact: ${{ needs.build.outputs.artifact_name }}
       cli_version: ${{ needs.build.outputs.version }}
-    secrets: inherit
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

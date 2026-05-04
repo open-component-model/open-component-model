@@ -21,6 +21,10 @@ on:
         description: "The ref to build on (branch or tag). Defaults to the current ref."
         type: string
         required: false
+    secrets:
+      GITHUB_TOKEN:
+        description: "GitHub token"
+        required: false
 
 permissions:
   contents: read
@@ -56,6 +60,7 @@ jobs:
           repository: ${{ env.CHECKOUT_REPO }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Compute VERSION
         id: calculate_version
@@ -72,6 +77,7 @@ jobs:
         with:
           go-version-file: bindings/go/helm/go.mod
           cache-dependency-path: bindings/go/helm/go.sum
+          cache: false
 
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2

@@ -123,6 +123,7 @@ jobs:
         with:
           go-version-file: ${{ env.LOCATION }}/go.mod
           cache-dependency-path: ${{ env.LOCATION }}/go.sum
+          cache: false
 
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
@@ -240,6 +241,7 @@ jobs:
         with:
           go-version-file: ${{ env.LOCATION }}/go.mod
           cache-dependency-path: ${{ env.LOCATION }}/go.sum
+          cache: false
 
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
@@ -324,7 +326,8 @@ jobs:
       toolkit_chart_artifact: controller-chart-pr
       toolkit_image_artifact: ${{ needs.build.outputs.artifact_name }}
       toolkit_version: ${{ needs.build.outputs.version }}
-    secrets: inherit
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
     name: Publish and Attest Image & Chart
@@ -468,4 +471,5 @@ jobs:
     uses: ./.github/workflows/conformance.yml
     with:
       toolkit_image: "oci://ghcr.io/${{ github.repository_owner }}/kubernetes/controller/chart:${{ needs.publish.outputs.chart_version }}"
-    secrets: inherit
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
