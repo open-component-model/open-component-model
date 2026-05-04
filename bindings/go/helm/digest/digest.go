@@ -17,7 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
-	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -77,9 +77,9 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	)
 
 	if strings.HasPrefix(helm.HelmRepository, "oci://") {
-		resolvedDigest, err = p.resolveOCIDigest(ctx, helm, credentials)
+		resolvedDigest, err = p.resolveOCIDigest(ctx, helm, ocicredsv1.FromDirectCredentials(credentials))
 	} else {
-		resolvedDigest, err = p.resolveHTTPDigest(ctx, helm, credentials)
+		resolvedDigest, err = p.resolveHTTPDigest(ctx, helm, helmcredsv1.FromDirectCredentials(credentials))
 	}
 	if err != nil {
 		return nil, err
@@ -99,7 +99,7 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	return resource, nil
 }
 
-func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Helm, credentials map[string]string) (godigest.Digest, error) {
+func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Helm, credentials *helmcredsv1.HelmHTTPCredentials) (godigest.Digest, error) {
 	if err := ctx.Err(); err != nil {
 		return "", fmt.Errorf("context cancelled before resolving HTTP digest: %w", err)
 	}
@@ -113,7 +113,9 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	if err != nil {
 		return "", fmt.Errorf("error creating temporary directory: %w", err)
 	}
-	defer os.RemoveAll(cacheDir)
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(cacheDir)
 
 	entry := &repo.Entry{
 		Name: "digest-resolver",
@@ -121,18 +123,10 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	}
 
 	if credentials != nil {
-		if u, ok := credentials[ocicredentials.CredentialKeyUsername]; ok {
-			entry.Username = u
-		}
-		if pw, ok := credentials[ocicredentials.CredentialKeyPassword]; ok {
-			entry.Password = pw
-		}
-		if certFile, ok := credentials[helmcredsv1.CredentialKeyCertFile]; ok {
-			entry.CertFile = certFile
-		}
-		if keyFile, ok := credentials[helmcredsv1.CredentialKeyKeyFile]; ok {
-			entry.KeyFile = keyFile
-		}
+		entry.Username = credentials.Username
+		entry.Password = credentials.Password
+		entry.CertFile = credentials.CertFile
+		entry.KeyFile = credentials.KeyFile
 	}
 
 	chartRepo, err := repo.NewChartRepository(entry, download.GetterProviders())
@@ -189,7 +183,7 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	return d, nil
 }
 
-func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm, credentials map[string]string) (godigest.Digest, error) {
+func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm, credentials *ocicredsv1.OCICredentials) (godigest.Digest, error) {
 	if err := ctx.Err(); err != nil {
 		return "", fmt.Errorf("context cancelled before resolving OCI digest: %w", err)
 	}
@@ -204,10 +198,10 @@ func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm
 
 	var username, password string
 	if credentials != nil {
-		username = credentials[ocicredentials.CredentialKeyUsername]
-		password = credentials[ocicredentials.CredentialKeyPassword]
+		username = credentials.Username
+		password = credentials.Password
 		if password == "" {
-			if token := credentials[ocicredentials.CredentialKeyAccessToken]; token != "" {
+			if token := credentials.AccessToken; token != "" {
 				password = token
 			}
 		}
