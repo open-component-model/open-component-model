@@ -24,34 +24,14 @@ jobs:
         sparse-checkout: website/static/.well-known/security.txt
         sparse-checkout-cone-mode: false
 
-    - name: Bump Expires date by one year
+    - name: Set Expires to end of next year
       run: |
         set -euo pipefail
         FILE=website/static/.well-known/security.txt
-        CURRENT=$(sed -n 's/^Expires:[[:space:]]*//p' "$FILE")
-        if [[ -z "${CURRENT}" ]]; then
-          echo "::error::Missing Expires field in ${FILE}"
-          exit 1
-    - name: Bump Expires date by one year
-      run: |
-        set -euo pipefail
-        FILE=website/static/.well-known/security.txt
-        # Extract current Expires value (e.g. 2027-04-24T00:00:00.000Z)
-        CURRENT=$(sed -n 's/^Expires:[[:space:]]*//p' "$FILE")
-        if [[ -z "${CURRENT}" ]]; then
-          echo "Missing Expires field in ${FILE}" >&2
-          exit 1
-        fi
-        # Advance by exactly one year using the date tool
-        NEW=$(date -u -d "$CURRENT + 1 year" '+%Y-%m-%dT%H:%M:%S.000Z' 2>/dev/null \
-              || date -u -j -v+1y -f '%Y-%m-%dT%H:%M:%S.000Z' "$CURRENT" '+%Y-%m-%dT%H:%M:%S.000Z') \
-              || { echo "Could not parse Expires value: ${CURRENT}" >&2; exit 1; }
-        if [[ -z "${NEW}" ]]; then
-          echo "Computed Expires is empty" >&2
-          exit 1
-        fi
-        sed -i "s|^Expires:.*|Expires: $NEW|" "$FILE"
-        echo "Updated Expires: $CURRENT → $NEW"
+        YEAR=$(( $(date +%Y) + 1 ))
+        NEW="${YEAR}-12-31T00:00:00.000Z"
+        sed -i "s|^Expires:.*|Expires: ${NEW}|" "$FILE"
+        echo "Set Expires: ${NEW}"
 
     - name: Generate token
       id: generate_token
@@ -74,5 +54,5 @@ jobs:
         body: |
           Automated renewal of the `Expires` field in `website/static/.well-known/security.txt`.
 
-          The expiry date has been advanced by one year. Please review and merge to keep
+          Sets the expiry date to December 31st of next year. Please review and merge to keep
           the security.txt valid per [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116).
