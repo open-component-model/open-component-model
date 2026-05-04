@@ -347,7 +347,7 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 	consumerIdentity, err := f.repositoryProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, specification)
 	if err == nil {
 		if f.credentialsResolver != nil {
-			if c, err := f.credentialsResolver.Resolve(ctx, consumerIdentity); err != nil {
+			if c, err := f.credentialsResolver.Resolve(ctx, consumerIdentity); err != nil { //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
 				// does not know the credentials package - so we need to check manually
 				if errors.Is(err, credentials.ErrNotFound) {
 					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, err.Error()))

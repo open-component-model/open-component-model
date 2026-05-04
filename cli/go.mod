@@ -16,27 +16,27 @@ require (
 	golang.org/x/term v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.12
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260423205942-5236fa6f4d3f
-	ocm.software/open-component-model/bindings/go/configuration v0.0.12
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260430113528-63ec172c3940
+	ocm.software/open-component-model/bindings/go/configuration v0.0.13
 	ocm.software/open-component-model/bindings/go/constructor v0.0.7
-	ocm.software/open-component-model/bindings/go/credentials v0.0.9
+	ocm.software/open-component-model/bindings/go/credentials v0.0.10
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260423205942-5236fa6f4d3f
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260423205942-5236fa6f4d3f
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha2
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260423205942-5236fa6f4d3f
-	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
-	ocm.software/open-component-model/bindings/go/input/file v0.0.3
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260423205942-5236fa6f4d3f
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260430113528-63ec172c3940
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260430113528-63ec172c3940
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260430113528-63ec172c3940
+	ocm.software/open-component-model/bindings/go/input/dir v0.0.3
+	ocm.software/open-component-model/bindings/go/input/file v0.0.4
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260430113528-63ec172c3940
 	ocm.software/open-component-model/bindings/go/oci v0.0.40
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260423205942-5236fa6f4d3f
-	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260423205942-5236fa6f4d3f
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260423205942-5236fa6f4d3f
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260423205942-5236fa6f4d3f
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260430113528-63ec172c3940
+	ocm.software/open-component-model/bindings/go/runtime v0.0.8
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260430113528-63ec172c3940
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260430113528-63ec172c3940
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260430113528-63ec172c3940
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -62,7 +62,7 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/extism/go-sdk v1.7.1 // indirect
 	github.com/fluxcd/cli-utils v0.37.2-flux.1 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
+	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect

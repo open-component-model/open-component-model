@@ -432,7 +432,7 @@ ocm get cv my-product//ocm.software/tutorials/frontend:1.5.0 -o yaml
     - access:
         localReference: sha256:...
         mediaType: application/vnd.oci.image.manifest.v1+json
-        type: localBlob/v1
+        type: LocalBlob/v1
       digest:
         hashAlgorithm: SHA-256
         normalisationAlgorithm: genericBlobDigest/v1

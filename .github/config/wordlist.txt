@@ -218,6 +218,7 @@ docker's
 dockerconfig
 dockerconfigjson
 dockermulti
+Doks
 downgradable
 downloadconstraint
 downloader
@@ -234,6 +235,7 @@ ecrplugin
 elementmeta
 enablement
 entrypoint
+envtest
 eol
 etcd
 etcd's
@@ -506,6 +508,7 @@ ocmops
 ocmrepository
 ocmresourcereference
 ocms
+ocmtypegen
 ocmv
 odg
 offboard
@@ -583,6 +586,7 @@ readonly
 rearchitecture
 reconciledversion
 reconciler
+reconcilers
 refcount
 referencesconfig
 referrs
@@ -727,6 +731,7 @@ templating
 terraform
 testdata
 tgz
+Thulite
 timeframes
 tls
 toc
@@ -805,6 +810,7 @@ xxxx
 yaml
 yitsushi
 yml
+yq
 yy
 yyyy
 zkdev

@@ -8,15 +8,15 @@ require (
 	github.com/stretchr/testify v1.11.1
 	helm.sh/helm/v4 v4.1.4
 	ocm.software/open-component-model/bindings/go/blob v0.0.12
-	ocm.software/open-component-model/bindings/go/configuration v0.0.12
+	ocm.software/open-component-model/bindings/go/configuration v0.0.13
 	ocm.software/open-component-model/bindings/go/constructor v0.0.7
-	ocm.software/open-component-model/bindings/go/credentials v0.0.9
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260423205942-5236fa6f4d3f
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9
+	ocm.software/open-component-model/bindings/go/credentials v0.0.10
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260430113528-63ec172c3940
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.40
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
-	ocm.software/open-component-model/bindings/go/runtime v0.0.7
+	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	oras.land/oras-go/v2 v2.6.0
 )
 
@@ -39,7 +39,7 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/extism/go-sdk v1.7.1 // indirect
 	github.com/fluxcd/cli-utils v0.37.2-flux.1 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
+	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-openapi/jsonpointer v0.22.5 // indirect
@@ -121,7 +121,7 @@ require (
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260423205942-5236fa6f4d3f // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260430113528-63ec172c3940 // indirect
 	sigs.k8s.io/controller-runtime v0.23.3 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
