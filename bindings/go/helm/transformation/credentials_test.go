@@ -107,6 +107,14 @@ func TestResolveCredentialsMap_Error(t *testing.T) {
 	assert.Nil(t, creds)
 }
 
+func TestResolveCredentialsMap_NilTyped(t *testing.T) {
+	resolver := &stubResolver{typed: nil, err: nil}
+
+	creds, err := resolveCredentialsMap(t.Context(), resolver, runtime.Identity{"type": "HelmChartRepository"})
+	require.NoError(t, err)
+	assert.Nil(t, creds, "nil typed should return nil, nil")
+}
+
 func TestResolveCredentialsMap_UnknownType(t *testing.T) {
 	resolver := &stubResolver{typed: &runtime.Raw{}}
 
