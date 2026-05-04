@@ -17,6 +17,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
+	sigcredentials "ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal/credentials"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 )
 
@@ -77,7 +78,7 @@ func (h *Handler) Sign(
 	token := strings.TrimSpace(creds[CredentialKeyOIDCToken])
 	if token == "" {
 		return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required for signing: " +
-			"configure a consumer identity of type OIDCIdentityToken/v1alpha1 with a " +
+			"configure a consumer identity of type SigstoreSigner/v1alpha1 with a " +
 			"credential providing the \"token\" key in .ocmconfig")
 	}
 
@@ -280,7 +281,7 @@ func (*Handler) GetSigningCredentialConsumerIdentity(
 	if err := v1alpha1.Scheme.Convert(rawCfg, &cfg); err != nil {
 		return nil, fmt.Errorf("convert config: %w", err)
 	}
-	id := credentialIdentity(v1alpha1.IdentityTypeOIDCIdentityToken)
+	id := credentialIdentity(sigcredentials.IdentityTypeSigstoreSigner)
 	id[IdentityAttributeSignature] = name
 	return id, nil
 }
@@ -293,7 +294,7 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 	if signature.Signature.MediaType != v1alpha1.MediaTypeSigstoreBundle {
 		return nil, fmt.Errorf("unsupported media type %q for sigstore verification", signature.Signature.MediaType)
 	}
-	id := credentialIdentity(v1alpha1.IdentityTypeTrustedRoot)
+	id := credentialIdentity(sigcredentials.IdentityTypeSigstoreVerifier)
 	id[IdentityAttributeSignature] = signature.Name
 	return id, nil
 }

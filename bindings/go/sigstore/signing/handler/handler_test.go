@@ -22,6 +22,8 @@ import (
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
+
+	sigcredentials "ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal/credentials"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 )
 
@@ -949,7 +951,7 @@ func TestGetSigningCredentialConsumerIdentity(t *testing.T) {
 	r.NoError(err)
 	r.Equal(v1alpha1.AlgorithmSigstore, id[IdentityAttributeAlgorithm])
 	r.Equal("my-sig", id[IdentityAttributeSignature])
-	r.Equal(v1alpha1.IdentityTypeOIDCIdentityToken, id.GetType())
+	r.Equal(sigcredentials.IdentityTypeSigstoreSigner, id.GetType())
 	r.Len(id, 3)
 }
 
@@ -969,7 +971,7 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 	r.NoError(err)
 	r.Equal(v1alpha1.AlgorithmSigstore, id[IdentityAttributeAlgorithm])
 	r.Equal("my-sig", id[IdentityAttributeSignature])
-	r.Equal(v1alpha1.IdentityTypeTrustedRoot, id.GetType())
+	r.Equal(sigcredentials.IdentityTypeSigstoreVerifier, id.GetType())
 	r.Len(id, 3)
 }
 
