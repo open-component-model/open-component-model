@@ -3,8 +3,7 @@ package v1alpha1
 import "ocm.software/open-component-model/bindings/go/runtime"
 
 // CredentialTypeOIDCIdentityToken is the credential type for OIDC identity tokens
-// used in Sigstore keyless signing. This describes the credential shape, not the
-// consumer identity.
+// used in Sigstore keyless signing.
 var CredentialTypeOIDCIdentityToken = runtime.NewVersionedType("OIDCIdentityToken", Version)
 
 // OIDCIdentityToken represents a resolved OIDC identity token credential
