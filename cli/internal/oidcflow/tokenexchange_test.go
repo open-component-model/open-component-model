@@ -67,43 +67,62 @@ func TestExchangeToken_CustomOptions(t *testing.T) {
 	r.Equal("custom-token", token.RawToken)
 }
 
-func TestExchangeToken_HTTPError(t *testing.T) {
+func TestExchangeToken_Errors(t *testing.T) {
 	t.Parallel()
-	r := require.New(t)
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"invalid_grant","error_description":"token expired"}`))
-	}))
-	defer srv.Close()
+	tests := []struct {
+		name       string
+		opts       ExchangeOptions
+		handler    http.HandlerFunc
+		errContains string
+	}{
+		{
+			name:        "empty TokenURL",
+			opts:        ExchangeOptions{SubjectToken: "tok"},
+			errContains: "TokenURL is required",
+		},
+		{
+			name:        "empty SubjectToken",
+			opts:        ExchangeOptions{TokenURL: "https://sts.example.com/token"},
+			errContains: "SubjectToken is required",
+		},
+		{
+			name: "HTTP error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"error":"invalid_grant"}`))
+			},
+			errContains: "HTTP 400",
+		},
+		{
+			name: "missing access_token",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]string{"token_type": "N_A"})
+			},
+			errContains: "missing access_token",
+		},
+	}
 
-	_, err := ExchangeToken(t.Context(), ExchangeOptions{
-		TokenURL:     srv.URL,
-		SubjectToken: "expired-token",
-		HTTPClient:   srv.Client(),
-	})
-	r.Error(err)
-	r.Contains(err.Error(), "HTTP 400")
-	r.Contains(err.Error(), "invalid_grant")
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
 
-func TestExchangeToken_MissingAccessToken(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
+			opts := tt.opts
+			if tt.handler != nil {
+				srv := httptest.NewServer(tt.handler)
+				defer srv.Close()
+				opts.TokenURL = srv.URL
+				opts.SubjectToken = "tok"
+				opts.HTTPClient = srv.Client()
+			}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"token_type": "N_A"})
-	}))
-	defer srv.Close()
-
-	_, err := ExchangeToken(t.Context(), ExchangeOptions{
-		TokenURL:     srv.URL,
-		SubjectToken: "tok",
-		HTTPClient:   srv.Client(),
-	})
-	r.Error(err)
-	r.Contains(err.Error(), "missing access_token")
+			_, err := ExchangeToken(t.Context(), opts)
+			r.Error(err)
+			r.Contains(err.Error(), tt.errContains)
+		})
+	}
 }
 
 func TestExchangeToken_ContextCancellation(t *testing.T) {
@@ -124,26 +143,4 @@ func TestExchangeToken_ContextCancellation(t *testing.T) {
 		HTTPClient:   srv.Client(),
 	})
 	r.Error(err)
-}
-
-func TestExchangeToken_EmptyTokenURL(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	_, err := ExchangeToken(t.Context(), ExchangeOptions{
-		SubjectToken: "tok",
-	})
-	r.Error(err)
-	r.Contains(err.Error(), "TokenURL is required")
-}
-
-func TestExchangeToken_EmptySubjectToken(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	_, err := ExchangeToken(t.Context(), ExchangeOptions{
-		TokenURL: "https://sts.example.com/token",
-	})
-	r.Error(err)
-	r.Contains(err.Error(), "SubjectToken is required")
 }

@@ -27,7 +27,6 @@ const (
 	configKeyAudience           = "audience"
 	credentialKeyToken          = "token"
 
-	flowInteractive   = "interactive"
 	flowTokenExchange = "token-exchange"
 )
 
@@ -82,6 +81,12 @@ func (p *OIDCPlugin) GetConsumerIdentity(_ context.Context, credential runtime.T
 		}
 		if cfg.subjectTokenFile != "" {
 			id[configKeySubjectTokenFile] = cfg.subjectTokenFile
+		}
+		if cfg.subjectTokenType != oidcflow.DefaultSubjectTokenType {
+			id[configKeySubjectTokenType] = cfg.subjectTokenType
+		}
+		if cfg.audience != oidcflow.DefaultAudience {
+			id[configKeyAudience] = cfg.audience
 		}
 	} else {
 		id[configKeyIssuer] = cfg.issuer
@@ -197,39 +202,22 @@ func parseOIDCConfig(typed runtime.Typed) (*oidcConfig, error) {
 		return nil, fmt.Errorf("unmarshal credential: %w", err)
 	}
 
-	cfg := &oidcConfig{
-		issuer:           oidcflow.DefaultIssuer,
-		clientID:         oidcflow.DefaultClientID,
-		flow:             flowInteractive,
-		subjectTokenType: oidcflow.DefaultSubjectTokenType,
-		audience:         oidcflow.DefaultAudience,
+	return &oidcConfig{
+		issuer:             or(raw.Issuer, oidcflow.DefaultIssuer),
+		clientID:           or(raw.ClientID, oidcflow.DefaultClientID),
+		flow:               raw.Flow,
+		tokenURL:           raw.TokenURL,
+		subjectToken:       raw.SubjectToken,
+		subjectTokenEnvVar: raw.SubjectTokenEnvVar,
+		subjectTokenFile:   raw.SubjectTokenFile,
+		subjectTokenType:   or(raw.SubjectTokenType, oidcflow.DefaultSubjectTokenType),
+		audience:           or(raw.Audience, oidcflow.DefaultAudience),
+	}, nil
+}
+
+func or(val, fallback string) string {
+	if val != "" {
+		return val
 	}
-	if raw.Issuer != "" {
-		cfg.issuer = raw.Issuer
-	}
-	if raw.ClientID != "" {
-		cfg.clientID = raw.ClientID
-	}
-	if raw.Flow != "" {
-		cfg.flow = raw.Flow
-	}
-	if raw.TokenURL != "" {
-		cfg.tokenURL = raw.TokenURL
-	}
-	if raw.SubjectToken != "" {
-		cfg.subjectToken = raw.SubjectToken
-	}
-	if raw.SubjectTokenEnvVar != "" {
-		cfg.subjectTokenEnvVar = raw.SubjectTokenEnvVar
-	}
-	if raw.SubjectTokenFile != "" {
-		cfg.subjectTokenFile = raw.SubjectTokenFile
-	}
-	if raw.SubjectTokenType != "" {
-		cfg.subjectTokenType = raw.SubjectTokenType
-	}
-	if raw.Audience != "" {
-		cfg.audience = raw.Audience
-	}
-	return cfg, nil
+	return fallback
 }
