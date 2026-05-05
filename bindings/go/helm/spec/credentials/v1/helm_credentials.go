@@ -11,7 +11,7 @@ const (
 
 	// CredentialKeyUsername is the key for the username in HTTP-based Helm repository credentials.
 	CredentialKeyUsername = "username"
-	CredentialKeyPassword = "password" //nolint:gosec // G101: This is a map key name, not a credential.
+	CredentialKeyPassword = "password"
 	CredentialKeyCertFile = "certFile"
 	CredentialKeyKeyFile  = "keyFile"
 	CredentialKeyKeyring  = "keyring"

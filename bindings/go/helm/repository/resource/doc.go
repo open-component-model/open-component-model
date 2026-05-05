@@ -28,11 +28,8 @@
 //	// Resolve credential consumer identity for a helm resource.
 //	identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, res)
 //
-//	// Resolve credentials
-//	var creds map[string]string
-//	if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
-//		return nil, fmt.Errorf("failed resolving credentials: %w", err)
-//	}
+//	// Resolve credentials using ResolveTyped (returns runtime.Typed)
+//	typed, err := t.CredentialProvider.ResolveTyped(ctx, identity)
 //
 //	// Download a chart from its remote helm repository.
 //	chartBlob, err := repo.DownloadResource(ctx, res, creds)

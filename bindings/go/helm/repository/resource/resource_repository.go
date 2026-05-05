@@ -51,6 +51,9 @@ func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 // for the given helm resource. For OCI-based helm repositories the identity type
 // is OCIRegistry; for HTTP/HTTPS repositories it is HelmChartRepository.
 // Returns nil if the resource has no remote repository (local chart).
+//
+// TODO(Phase 4): migrate return type to runtime.Typed once the ResourceRepository interface is updated.
+// https://github.com/open-component-model/ocm-project/issues/988
 func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	helm, err := r.convertAccess(resource)
 	if err != nil {
