@@ -26,6 +26,15 @@ func TestCosignEnv(t *testing.T) {
 		r.True(hasEnvKey(env, "TUF_ROOT"))
 	})
 
+	t.Run("passes GitHub Actions OIDC vars for ambient signing", func(t *testing.T) {
+		r := require.New(t)
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ghs_fakeRunnerToken")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://token.actions.githubusercontent.com")
+		env := cosignEnv()
+		r.True(hasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN"))
+		r.True(hasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_URL"))
+	})
+
 	t.Run("excludes library injection vectors", func(t *testing.T) {
 		r := require.New(t)
 		denied := map[string]string{

@@ -1,0 +1,46 @@
+name: Sigstore Integration Tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+    paths:
+      - 'bindings/go/sigstore/**'
+      - '.github/workflows/sigstore-integration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'bindings/go/sigstore/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  sigstore-e2e:
+    name: "Sigstore E2E (scaffolding)"
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: bindings/go/sigstore/integration/go.mod
+          cache-dependency-path: bindings/go/sigstore/integration/go.sum
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+        with:
+          cosign-release: 'v3.0.6'
+
+      - name: Setup Sigstore scaffolding
+        uses: sigstore/scaffolding/actions/setup@8bd68672d418e5bd1b0ee1f2e2981874c3a30967 # v0.7.33
+
+      - name: Extract sigstore env and run tests
+        working-directory: bindings/go/sigstore/integration
+        run: |
+          mkdir -p tmp
+          bash hack/extract-sigstore-env.sh > tmp/sigstore-env.sh
+          source tmp/sigstore-env.sh
+          GOWORK=off go test -count=1 -run "Integration" -timeout 180s -v ./...
