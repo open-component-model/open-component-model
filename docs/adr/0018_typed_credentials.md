@@ -136,26 +136,25 @@ credential registered in the `CredentialTypeScheme` (e.g., `HelmHTTPCredentials/
 lookup with no plugin call.
 
 **Indirect credentials** apply when the credential type requires a plugin (e.g., `AWSSecretsManager`,
-`HashiCorpVault`). At ingestion time the graph asks the plugin for its own consumer identity — the identity the plugin
-itself needs credentials for — and creates a DAG edge from the consumer identity to that credential identity. At
-resolution time the graph traverses the edge depth-first: it resolves the credential identity first (which may itself be
-direct or indirect), then calls the plugin with those credentials to obtain the final credentials for the original
-consumer.
+`HashiCorpVault`). The plugin is looked up via the `CredentialPluginProvider` — the plugin registry for credential
+plugins. It is used at ingestion time to call `GetConsumerIdentity`, which tells the graph what identity the plugin
+itself needs credentials for; the graph then creates a DAG edge from the consumer identity to that credential identity.
+At resolution time the `CredentialPluginProvider` is used again to call `Resolve` with the credentials that were
+recursively resolved for the credential identity.
 
-This enables transitive chains of arbitrary depth:
+This enables transitive chains of arbitrary depth. Each node in the tree below needs credentials
+from its child before it can be called:
 
+```text
+HashiCorpVault:myvault.example.com
+  └─ needs: AWSSecretsManager (secretId: vault-access-creds)
+       └─ has: DirectCredentials {roleid: "my-role-id"}   ← leaf, resolved directly at ingestion
 ```
-OCIRegistry:docker.io
-  → HashiCorpVault:other.vault.com         (plugin called with credentials resolved for other.vault.com)
-    → HashiCorpVault:myvault.example.com   (plugin called with credentials resolved for myvault)
-      → AWSSecretsManager:vault-access-creds  (AWS plugin called with direct roleid)
-        → DirectCredentials {roleid: "my-role-id"}  (leaf — stored directly at ingestion)
-```
 
-Each plugin receives only the credentials for its own consumer identity — the AWS plugin uses `{roleid}` to retrieve
-a secret, the `myvault` plugin uses that secret as its token, and so on. Cycles are detected at ingestion time and
-rejected. If no DAG node matches the queried identity, the graph falls back to registered repository plugins (e.g.,
-`DockerConfig`).
+Resolution is bottom-up: the AWS plugin is called first with `{roleid}` and returns a Vault token;
+the HashiCorpVault plugin is then called with that token to return the final credentials.
+Cycles are detected at ingestion time and rejected. If no DAG node matches the queried identity at all,
+the graph falls back to registered repository plugins (e.g., `DockerConfig`).
 
 ### Typed Identity Structs
 
