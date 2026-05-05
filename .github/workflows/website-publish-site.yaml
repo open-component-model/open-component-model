@@ -97,9 +97,11 @@ jobs:
 
       - name: Publish as GitHub Pages
         uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e #v4
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         with:
           github_token: ${{ steps.generate_token.outputs.token }}
           publish_dir: ./website/public
-          commit_message: ${{ github.event.head_commit.message }}
+          commit_message: ${{ env.COMMIT_MSG }}
           user_name: 'GitHub Actions Bot'
           user_email: '<41898282+github-actions[bot]@users.noreply.github.com>'

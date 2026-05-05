@@ -39,6 +39,10 @@ on:
         description: "Version to embed in binary (overrides computed version for ldflags only). Leading 'v' is stripped."
         type: string
         required: false
+    secrets:
+      GITHUB_TOKEN:
+        description: "GitHub token for authentication"
+        required: false
     outputs:
       artifact_name:
         description: "The artifact name that was built."

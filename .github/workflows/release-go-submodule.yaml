@@ -37,8 +37,8 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
+          fetch-tags: true
           persist-credentials: false
-        run: git fetch --tags
 
       - name: Validate path exists
         env:
@@ -186,6 +186,7 @@ jobs:
 
           printf "%s\n" "$msg" > .tagmsg
           git tag -a "$tag" -F .tagmsg
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push origin "$tag"
 
   build:
