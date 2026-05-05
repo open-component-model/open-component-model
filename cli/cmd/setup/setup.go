@@ -20,6 +20,7 @@ import (
 	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin/oidc"
 	"ocm.software/open-component-model/cli/internal/plugin/spec/config/v2alpha1"
 )
 
@@ -111,9 +112,16 @@ func CredentialGraph(cmd *cobra.Command) error {
 	opts := credentials.Options{
 		RepositoryPluginProvider: pluginManager.CredentialRepositoryRegistry,
 		CredentialPluginProvider: credentials.GetCredentialPluginFn(
-			// TODO(jakobmoellerdev): use the plugin manager to get the credential plugin once we have some.
-			func(ctx context.Context, typed runtime.Typed) (credentials.CredentialPlugin, error) {
-				return nil, fmt.Errorf("no credential plugin found for type %s", typed)
+			// TODO(jakobmoellerdev): replace with a CredentialPluginRegistry on the plugin manager
+			// (same pattern as SigningRegistry) once the registry infrastructure exists.
+			func(_ context.Context, typed runtime.Typed) (credentials.CredentialPlugin, error) {
+				if typed == nil {
+					return nil, fmt.Errorf("no credential plugin found: missing type metadata")
+				}
+				if typed.GetType().GetName() == oidc.OIDCPluginType {
+					return &oidc.OIDCPlugin{}, nil
+				}
+				return nil, fmt.Errorf("no credential plugin found for type %s", typed.GetType())
 			},
 		),
 		CredentialRepositoryTypeScheme: pluginManager.CredentialRepositoryRegistry.RepositoryScheme(),

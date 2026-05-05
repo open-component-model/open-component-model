@@ -1514,11 +1514,18 @@ configurations:
 	ocmConfigFilePath := filepath.Join(tmp, "ocm-config.yaml")
 	r.NoError(os.WriteFile(ocmConfigFilePath, []byte(ocmConfigYAML), 0o600))
 
+	signerSpecYAML := `type: RSASigningConfiguration/v1alpha1
+signatureAlgorithm: RSASSA-PSS
+`
+	signerSpecFilePath := filepath.Join(tmp, "signer-spec.yaml")
+	r.NoError(os.WriteFile(signerSpecFilePath, []byte(signerSpecYAML), 0o600))
+
 	reference := archiveFilePath + "//" + name + ":" + version
 
 	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
 		reference,
 		"--signature", signatureName,
+		"--signer-spec", signerSpecFilePath,
 		"--config", ocmConfigFilePath),
 		test.WithOutput(logs),
 	)
@@ -1527,6 +1534,7 @@ configurations:
 	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
 		reference,
 		"--signature", signatureName,
+		"--verifier-spec", signerSpecFilePath,
 		"--config", ocmConfigFilePath),
 		test.WithOutput(logs),
 	)
