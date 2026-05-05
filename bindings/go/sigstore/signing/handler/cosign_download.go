@@ -24,6 +24,9 @@ var envFile string
 // CosignVersion is the pinned cosign version for auto-download, parsed from .env.
 var CosignVersion = parseCosignVersion()
 
+// platformBinaryName is the platform-specific cosign binary name for the current OS/arch.
+var platformBinaryName = cosignBinaryName(runtime.GOOS, runtime.GOARCH)
+
 func parseCosignVersion() string {
 	for _, line := range strings.Split(envFile, "\n") {
 		if v, ok := strings.CutPrefix(line, "COSIGN_VERSION="); ok {
@@ -85,8 +88,7 @@ func ensureOrDownloadCosign(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	binaryName := cosignBinaryName(runtime.GOOS, runtime.GOARCH)
-	cachedPath := filepath.Join(cacheDir, binaryName)
+	cachedPath := filepath.Join(cacheDir, platformBinaryName)
 
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return "", fmt.Errorf("create cache directory %s: %w", cacheDir, err)
@@ -109,7 +111,7 @@ func ensureOrDownloadCosign(ctx context.Context) (string, error) {
 		}
 	}
 
-	expectedHash, err := fetchExpectedChecksum(ctx, CosignVersion, binaryName)
+	expectedHash, err := fetchExpectedChecksum(ctx, CosignVersion, platformBinaryName)
 	if err != nil {
 		return "", fmt.Errorf("fetch checksums: %w", err)
 	}
