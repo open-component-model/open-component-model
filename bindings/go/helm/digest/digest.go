@@ -45,7 +45,7 @@ func (p *DigestProcessor) GetResourceRepositoryScheme() *ocmruntime.Scheme {
 
 // GetResourceDigestProcessorCredentialConsumerIdentity resolves the credential consumer identity for digest processing.
 //
-// TODO(Phase 4): migrate return type to runtime.Typed once the DigestProcessor interface is updated.
+// TODO(matthiasbruns): migrate return type to runtime.Typed once the DigestProcessor interface is updated.
 // https://github.com/open-component-model/ocm-project/issues/988
 func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 	ctx context.Context, resource *runtime.Resource,
@@ -65,7 +65,7 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 
 // ProcessResourceDigest resolves the digest of a Helm chart resource.
 //
-// TODO(Phase 4): migrate credentials parameter to runtime.Typed once the DigestProcessor interface is updated.
+// TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the DigestProcessor interface is updated.
 // https://github.com/open-component-model/ocm-project/issues/988
 func (p *DigestProcessor) ProcessResourceDigest(
 	ctx context.Context, resource *runtime.Resource, credentials map[string]string,

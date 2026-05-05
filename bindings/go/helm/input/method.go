@@ -66,7 +66,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context,
 // For local charts (a path specified): Returns only ProcessedBlobData (local access)
 // For remote charts (helmRepository specified): Returns both ProcessedResource (remote access) and ProcessedBlobData
 //
-// TODO(Phase 4): migrate credentials parameter to runtime.Typed once the ResourceInputMethod interface is updated.
+// TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the ResourceInputMethod interface is updated.
 // https://github.com/open-component-model/ocm-project/issues/988
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
 	helm := v1.Helm{}
