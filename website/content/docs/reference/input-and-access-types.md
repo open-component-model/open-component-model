@@ -80,7 +80,7 @@ resources:
     mediaType: application/vnd.ocm.software.oci.layout.v1+tar
 ```
 
-See the [Working with Native OCI Image Stores]({{< relref "docs/tutorials/native-oci-image-stores.md" >}}) tutorial for a complete walkthrough.
+See the [Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) tutorial for a complete walkthrough.
 
 ### `Helm/v1`
 
@@ -171,7 +171,7 @@ resources:
 References content stored alongside the component descriptor in the same repository. Legacy alias: `localBlob`.
 Typically created automatically when using input types or when transferring with `--copy-resources`.
 
-When stored in an OCI registry, local blobs with OCI-native media types (e.g. `application/vnd.oci.image.manifest.v1+json`, `application/vnd.oci.image.index.v1+json`) are mapped to native OCI manifests and can be accessed directly by digest using standard OCI tools. When `globalAccess` is enabled via the repository's `globalAccessPolicy`, the field provides the native image reference. See the [Working with Native OCI Image Stores]({{< relref "docs/tutorials/native-oci-image-stores.md" >}}) tutorial for details.
+When stored in an OCI registry, local blobs with OCI-native media types (e.g. `application/vnd.oci.image.manifest.v1+json`, `application/vnd.oci.image.index.v1+json`) are mapped to native OCI manifests and can be accessed directly by digest using standard OCI tools. The `globalAccess` field provides the native image reference for direct access. See the [Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) tutorial for details.
 
 | Field            | Type   | Required | Description                                                      |
 |------------------|--------|----------|------------------------------------------------------------------|

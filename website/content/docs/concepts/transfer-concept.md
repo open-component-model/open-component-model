@@ -146,5 +146,5 @@ The [sovereign conformance scenario](https://github.com/open-component-model/ope
 ## Related Documentation
 
 - [Tutorial: Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}}) - Sign and verify component versions
-- [Tutorial: Working with Native OCI Image Stores]({{< relref "docs/tutorials/native-oci-image-stores.md" >}}) - Embed OCI images and access them natively after transfer
+- [Tutorial: Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) - Embed OCI images and access them natively after transfer
 - [Concept: OCM Controllers]({{< relref "docs/concepts/ocm-controllers.md" >}}) - Kubernetes controllers for deploying and transferring OCM components
