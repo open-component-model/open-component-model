@@ -73,6 +73,8 @@ func (p *OIDCPlugin) GetConsumerIdentity(_ context.Context, credential runtime.T
 	if cfg.flow == flowTokenExchange {
 		id[configKeyFlow] = cfg.flow
 		id[configKeyTokenURL] = cfg.tokenURL
+		id[configKeySubjectTokenType] = cfg.subjectTokenType
+		id[configKeyAudience] = cfg.audience
 		if cfg.subjectTokenEnvVar != "" {
 			id[configKeySubjectTokenEnvVar] = cfg.subjectTokenEnvVar
 		}
@@ -81,12 +83,6 @@ func (p *OIDCPlugin) GetConsumerIdentity(_ context.Context, credential runtime.T
 		}
 		if cfg.subjectTokenFile != "" {
 			id[configKeySubjectTokenFile] = cfg.subjectTokenFile
-		}
-		if cfg.subjectTokenType != oidcflow.DefaultSubjectTokenType {
-			id[configKeySubjectTokenType] = cfg.subjectTokenType
-		}
-		if cfg.audience != oidcflow.DefaultAudience {
-			id[configKeyAudience] = cfg.audience
 		}
 	} else {
 		id[configKeyIssuer] = cfg.issuer
