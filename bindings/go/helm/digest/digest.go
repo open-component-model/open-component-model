@@ -59,6 +59,10 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 	return helminternal.CredentialConsumerIdentityCompat(helm.HelmRepository)
 }
 
+// ProcessResourceDigest resolves the digest of a Helm chart resource.
+//
+// TODO(Phase 4): migrate credentials parameter to runtime.Typed once the DigestProcessor interface is updated.
+// https://github.com/open-component-model/ocm-project/issues/988
 func (p *DigestProcessor) ProcessResourceDigest(
 	ctx context.Context, resource *runtime.Resource, credentials map[string]string,
 ) (*runtime.Resource, error) {

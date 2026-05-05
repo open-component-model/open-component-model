@@ -28,9 +28,9 @@ func resolveCredentialsMap(ctx context.Context, resolver credentials.Resolver, i
 		return nil, nil
 	}
 
+	result := map[string]string{}
 	switch c := typed.(type) {
 	case *helmcredsv1.HelmHTTPCredentials:
-		result := map[string]string{}
 		if c.Username != "" {
 			result[helmcredsv1.CredentialKeyUsername] = c.Username
 		}
@@ -46,13 +46,14 @@ func resolveCredentialsMap(ctx context.Context, resolver credentials.Resolver, i
 		if c.Keyring != "" {
 			result[helmcredsv1.CredentialKeyKeyring] = c.Keyring
 		}
-		if len(result) == 0 {
-			return nil, nil
-		}
-		return result, nil
 	case *credconfigv1.DirectCredentials:
-		return maps.Clone(c.Properties), nil
+		result = maps.Clone(c.Properties)
 	default:
 		return nil, fmt.Errorf("unsupported credential type %T", typed)
 	}
+
+	if len(result) == 0 {
+		return nil, nil
+	}
+	return result, nil
 }
