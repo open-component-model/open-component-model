@@ -17,6 +17,7 @@ import (
 	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
 	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry"
 
@@ -241,15 +242,15 @@ func (repo *Repository) AddLocalResource(
 
 	resource = resource.DeepCopy()
 
-	desc, store, err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, resource, b)
-	if err != nil {
-		return nil, err
+	var attachments tar.AttachmentsFunc
+	if repo.ownershipReferrerPolicy == OwnershipReferrerPolicyEnabled {
+		attachments = func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, content.ReadOnlyStorage, error) {
+			return ownershipReferrerAttachment(ctx, top, resource, component, version)
+		}
 	}
 
-	if repo.ownershipReferrerPolicy == OwnershipReferrerPolicyEnabled {
-		if err := pushOwnershipReferrer(ctx, store, desc, resource, component, version); err != nil {
-			return nil, fmt.Errorf("failed to push ownership referrer: %w", err)
-		}
+	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, resource, b, attachments); err != nil {
+		return nil, err
 	}
 
 	return resource, nil
@@ -270,7 +271,7 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 
 	source = source.DeepCopy()
 
-	if _, _, err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, source, content); err != nil {
+	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, source, content, nil); err != nil {
 		return nil, err
 	}
 
@@ -453,32 +454,40 @@ func identifyLocalBlobManifestsAndLayers(ctx context.Context, store oras.Target,
 	return manifests, layers, nil
 }
 
-func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, component string, version string, artifact descriptor.Artifact, b blob.ReadOnlyBlob) (ociImageSpecV1.Descriptor, spec.Store, error) {
+func (repo *Repository) uploadAndUpdateLocalArtifact(
+	ctx context.Context,
+	component string,
+	version string,
+	artifact descriptor.Artifact,
+	b blob.ReadOnlyBlob,
+	attachments tar.AttachmentsFunc,
+) error {
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, err
+		return err
 	}
 
 	if err := ociblob.UpdateArtifactWithInformationFromBlob(artifact, b); err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to update artifact with data from blob: %w", err)
+		return fmt.Errorf("failed to update artifact with data from blob: %w", err)
 	}
 
 	artifactBlob, err := ociblob.NewArtifactBlob(artifact, b)
 	if err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to create resource blob: %w", err)
+		return fmt.Errorf("failed to create resource blob: %w", err)
 	}
 
-	desc, err := pack.ArtifactBlob(ctx, store, artifactBlob, pack.Options{
+	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, pack.Options{
 		AccessScheme:       repo.scheme,
 		CopyGraphOptions:   repo.resourceCopyOptions.CopyGraphOptions,
 		BaseReference:      reference,
 		GlobalAccessPolicy: repo.globalAccessPolicy,
+		Attachments:        attachments,
 	})
 	if err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to pack resource blob: %w", err)
+		return fmt.Errorf("failed to pack resource blob: %w", err)
 	}
 
-	return desc, store, nil
+	return nil
 }
 
 // GetLocalResource retrieves a local resource from the repository.

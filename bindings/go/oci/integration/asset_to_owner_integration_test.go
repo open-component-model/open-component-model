@@ -114,7 +114,7 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 	t.Run("verify ownership referrer", func(t *testing.T) {
 		r := require.New(t)
 		r.NotEmpty(resourceDigest, "step 1 must have set resourceDigest")
-		
+
 		compRef := resolver.ComponentVersionReference(ctx, componentName, componentVersion)
 		store, err := resolver.StoreForReference(ctx, compRef)
 		r.NoError(err)
@@ -153,7 +153,7 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 		r.NotEmpty(resourceDigest, "step 1 must have set resourceDigest")
 
 		// Re-run AddLocalResource three times with the same inputs. Because
-		// pushOwnershipReferrer omits org.opencontainers.image.created, every
+		// the referrer manifest omits org.opencontainers.image.created, every
 		// attempt produces an identical manifest digest, and the registry
 		// returns the existing manifest rather than indexing additional
 		// referrers. End-to-end proof of `ocm add cv` idempotency at the
@@ -192,4 +192,5 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 		assert.Lenf(t, referrers, 1,
 			"identical re-uploads must converge on a single referrer; got %d distinct manifests", len(referrers))
 	})
+
 }

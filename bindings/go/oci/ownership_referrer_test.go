@@ -9,6 +9,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/memory"
 
@@ -24,6 +25,41 @@ func fetchManifest(t *testing.T, ctx context.Context, store *memory.Store, desc 
 	var m ociImageSpecV1.Manifest
 	require.NoError(t, json.Unmarshal(raw, &m))
 	return m
+}
+
+// materializeOwnershipReferrer asks ownershipReferrerAttachment for the referrer
+// descriptors and source store, then drives them into dst via oras.CopyGraph —
+// mirroring how the OCI-layout copy proxy folds the referrer into the artifact
+// upload's traversal in production. Subject is filtered from the referrer's
+// successors so CopyGraph does not try to fetch the subject as a leaf (subject
+// lives in the artifact's source store, not in the referrer source store).
+func materializeOwnershipReferrer(t *testing.T, ctx context.Context, dst *memory.Store, subject ociImageSpecV1.Descriptor, resource *descriptor.Resource, component, version string) error {
+	t.Helper()
+	descs, src, err := ownershipReferrerAttachment(ctx, subject, resource, component, version)
+	if err != nil || len(descs) == 0 {
+		return err
+	}
+	opts := oras.CopyGraphOptions{
+		FindSuccessors: func(ctx context.Context, fetcher content.Fetcher, d ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+			successors, err := content.Successors(ctx, fetcher, d)
+			if err != nil {
+				return nil, err
+			}
+			filtered := successors[:0]
+			for _, s := range successors {
+				if s.Digest != subject.Digest {
+					filtered = append(filtered, s)
+				}
+			}
+			return filtered, nil
+		},
+	}
+	for _, d := range descs {
+		if err := oras.CopyGraph(ctx, src, dst, d, opts); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func TestPushOwnershipReferrer(t *testing.T) {
@@ -44,7 +80,7 @@ func TestPushOwnershipReferrer(t *testing.T) {
 			},
 		}
 
-		r.NoError(pushOwnershipReferrer(ctx, store, subject, resource, "ocm.software/my-component", "1.0.0"))
+		r.NoError(materializeOwnershipReferrer(t, ctx, store, subject, resource, "ocm.software/my-component", "1.0.0"))
 
 		// memory.Store indexes Subject as a successor on Push, so the
 		// referrer is discoverable as a predecessor of the subject.
@@ -111,9 +147,9 @@ func TestPushOwnershipReferrer(t *testing.T) {
 		// same target. Without org.opencontainers.image.created the manifest is
 		// fully deterministic, so all attempts must yield the same digest and
 		// only one referrer must be visible.
-		r.NoError(pushOwnershipReferrer(ctx, store, subject, resource, "ocm.software/c", "1.0.0"))
-		r.NoError(pushOwnershipReferrer(ctx, store, subject, resource, "ocm.software/c", "1.0.0"))
-		r.NoError(pushOwnershipReferrer(ctx, store, subject, resource, "ocm.software/c", "1.0.0"))
+		r.NoError(materializeOwnershipReferrer(t, ctx, store, subject, resource, "ocm.software/c", "1.0.0"))
+		r.NoError(materializeOwnershipReferrer(t, ctx, store, subject, resource, "ocm.software/c", "1.0.0"))
+		r.NoError(materializeOwnershipReferrer(t, ctx, store, subject, resource, "ocm.software/c", "1.0.0"))
 
 		predecessors, err := store.Predecessors(ctx, subject)
 		r.NoError(err)
@@ -136,7 +172,7 @@ func TestPushOwnershipReferrer(t *testing.T) {
 				ObjectMeta: descriptor.ObjectMeta{Name: "raw-blob", Version: "1.0.0"},
 			},
 		}
-		r.NoError(pushOwnershipReferrer(ctx, store, subject, resource, "c", "1.0.0"))
+		r.NoError(materializeOwnershipReferrer(t, ctx, store, subject, resource, "c", "1.0.0"))
 
 		predecessors, err := store.Predecessors(ctx, subject)
 		r.NoError(err)

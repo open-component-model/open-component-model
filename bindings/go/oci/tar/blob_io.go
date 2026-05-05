@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
@@ -80,9 +81,15 @@ func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyStora
 	}
 }
 
+// AttachmentsFunc returns descriptors and a source store for content copied
+// as additional children of root in the same CopyGraph traversal — e.g. OCI
+// referrers, which CopyGraph does not follow by default.
+type AttachmentsFunc func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, content.ReadOnlyStorage, error)
+
 type CopyOCILayoutWithIndexOptions struct {
 	oras.CopyGraphOptions
 	MutateParentFunc func(*ociImageSpecV1.Descriptor) error
+	Attachments      AttachmentsFunc
 }
 
 func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.ReadOnlyBlob, opts CopyOCILayoutWithIndexOptions) (top ociImageSpecV1.Descriptor, err error) {
@@ -146,6 +153,13 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to read top level descriptor stream: %w", err)
 	}
 
+	var attachments []ociImageSpecV1.Descriptor
+	var attachmentsStore content.ReadOnlyStorage
+	if opts.Attachments != nil {
+		if attachments, attachmentsStore, err = opts.Attachments(ctx, topLevelDesc); err != nil {
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to resolve attachments: %w", err)
+		}
+	}
 	switch topLevelDesc.MediaType {
 	case ociImageSpecV1.MediaTypeImageManifest:
 		var manifest ociImageSpecV1.Manifest
@@ -157,9 +171,17 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		}
 		opts.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
 			if content.Equal(desc, topLevelDesc) {
-				return append([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers...), nil
+				return append(append([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers...), attachments...), nil
 			}
-			return content.Successors(ctx, ociStore, desc)
+			successors, err := content.Successors(ctx, fetcher, desc)
+			if err != nil {
+				return nil, err
+			}
+			// Drop the attachment's Subject pointing back at root; otherwise
+			// CopyGraph would loop back into root.
+			return slices.DeleteFunc(successors, func(d ociImageSpecV1.Descriptor) bool {
+				return d.Digest == topLevelDesc.Digest
+			}), nil
 		}
 	case ociImageSpecV1.MediaTypeImageIndex:
 		var index ociImageSpecV1.Index
@@ -171,23 +193,33 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		}
 		opts.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
 			if content.Equal(desc, topLevelDesc) {
-				return index.Manifests, nil
+				return append(slices.Clone(index.Manifests), attachments...), nil
 			}
-			return content.Successors(ctx, ociStore, desc)
+			successors, err := content.Successors(ctx, fetcher, desc)
+			if err != nil {
+				return nil, err
+			}
+			// Drop the attachment's Subject pointing back at root; otherwise
+			// CopyGraph would loop back into root.
+			return slices.DeleteFunc(successors, func(d ociImageSpecV1.Descriptor) bool {
+				return d.Digest == topLevelDesc.Digest
+			}), nil
 		}
 	}
 
 	proxy := &descriptorStoreProxy{
 		raw:             descRaw,
 		desc:            topLevelDesc,
+		attachments:     attachmentsStore,
 		ReadOnlyStorage: ociStore,
 	}
 	return topLevelDesc, proxy, nil
 }
 
 type descriptorStoreProxy struct {
-	raw  []byte
-	desc ociImageSpecV1.Descriptor
+	raw         []byte
+	desc        ociImageSpecV1.Descriptor
+	attachments content.ReadOnlyStorage // optional, consulted before the base store
 	content.ReadOnlyStorage
 }
 
@@ -195,12 +227,24 @@ func (p *descriptorStoreProxy) Exists(ctx context.Context, desc ociImageSpecV1.D
 	if p.desc.Digest.String() == desc.Digest.String() {
 		return true, nil
 	}
+	if p.attachments != nil {
+		if attachmentExists, err := p.attachments.Exists(ctx, desc); err != nil {
+			return false, err
+		} else {
+			return attachmentExists, nil
+		}
+	}
 	return p.ReadOnlyStorage.Exists(ctx, desc)
 }
 
 func (p *descriptorStoreProxy) Fetch(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	if p.desc.Digest.String() == desc.Digest.String() {
 		return io.NopCloser(bytes.NewReader(p.raw)), nil
+	}
+	if p.attachments != nil {
+		if ok, _ := p.attachments.Exists(ctx, desc); ok {
+			return p.attachments.Fetch(ctx, desc)
+		}
 	}
 	return p.ReadOnlyStorage.Fetch(ctx, desc)
 }

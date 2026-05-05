@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -12,11 +11,11 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/errdef"
+	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/content/memory"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
-	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -26,29 +25,23 @@ import (
 // (GET /v2/<name>/referrers/<digest>?artifactType=...).
 const OwnershipArtifactType = "application/vnd.ocm.software.ownership.v1+json"
 
-// pushOwnershipReferrer pushes an OCI referrer manifest linking subject to
-// the owning component version, per docs/adr/0015_ownership_annotations.md.
+// buildOwnershipReferrer constructs an OCI referrer manifest linking subject
+// to the owning component version (ADR 0015).
 //
-// The manifest is built by hand rather than via [oras.PackManifest] because
-// PackManifest unconditionally stamps org.opencontainers.image.created (caller
-// value or time.Now()), which would make the digest non-deterministic.
-// Omitting that annotation is spec-legal — created is optional in the OCI
-// image-spec — so identical inputs produce identical bytes and re-running
-// `ocm add cv` is a no-op at the registry instead of a new referrer per run.
-func pushOwnershipReferrer(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, resource *descriptor.Resource, component, version string) error {
+// Built by hand rather than via [oras.PackManifest] because PackManifest
+// stamps org.opencontainers.image.created, breaking idempotency.
+func buildOwnershipReferrer(ctx context.Context, subject ociImageSpecV1.Descriptor, resource *descriptor.Resource, component, version string) (manifestBytes []byte, manifestDesc ociImageSpecV1.Descriptor, ok bool, err error) {
 	if !introspection.IsOCICompliantManifest(subject) {
 		slog.DebugContext(ctx, "skipping ownership referrer: subject is not an OCI manifest", "mediaType", subject.MediaType, "digest", subject.Digest.String())
-		return nil
+		return nil, ociImageSpecV1.Descriptor{}, false, nil
 	}
 
 	meta := resource.GetElementMeta()
 	artifactValue, err := marshalArtifactAnnotation(meta.ToIdentity(), annotations.ArtifactKindResource)
 	if err != nil {
-		return fmt.Errorf("failed to build ownership artifact annotation: %w", err)
+		return nil, ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to build ownership artifact annotation: %w", err)
 	}
 
-	// Both the config and the single layer point at the standard empty-JSON
-	// blob ({}). One Push covers both fields.
 	emptyDesc := ociImageSpecV1.DescriptorEmptyJSON
 	manifest := ociImageSpecV1.Manifest{
 		Versioned:    specs.Versioned{SchemaVersion: 2},
@@ -65,27 +58,42 @@ func pushOwnershipReferrer(ctx context.Context, store spec.Store, subject ociIma
 	}
 	body, err := json.Marshal(manifest)
 	if err != nil {
-		return fmt.Errorf("failed to marshal ownership referrer manifest: %w", err)
+		return nil, ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to marshal ownership referrer manifest: %w", err)
 	}
 
-	// Push the empty config/layer blob. errdef.ErrAlreadyExists is the normal
-	// signal that the content is already present — expected on re-runs and
-	// across referrers that share the same empty blob.
-	if err := store.Push(ctx, emptyDesc, bytes.NewReader(emptyDesc.Data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
-		return fmt.Errorf("failed to push empty config/layer blob for ownership referrer: %w", err)
-	}
-
-	manifestDesc := ociImageSpecV1.Descriptor{
+	desc := ociImageSpecV1.Descriptor{
 		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
 		ArtifactType: OwnershipArtifactType,
 		Digest:       digest.FromBytes(body),
 		Size:         int64(len(body)),
 	}
-	if err := store.Push(ctx, manifestDesc, bytes.NewReader(body)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
-		return fmt.Errorf("failed to push ownership referrer manifest: %w", err)
+	return body, desc, true, nil
+}
+
+// ownershipReferrerAttachment builds the ownership referrer for subject as
+// an attachment (descriptors + source store) for the artifact upload's
+// CopyGraph. Returns nil/nil when subject is not an OCI manifest — referrers
+// only attach to manifests (ADR 0015).
+func ownershipReferrerAttachment(
+	ctx context.Context,
+	subject ociImageSpecV1.Descriptor,
+	resource *descriptor.Resource,
+	component, version string,
+) ([]ociImageSpecV1.Descriptor, content.ReadOnlyStorage, error) {
+	body, desc, ok, err := buildOwnershipReferrer(ctx, subject, resource, component, version)
+	if err != nil || !ok {
+		return nil, nil, err
 	}
 
-	return nil
+	emptyDesc := ociImageSpecV1.DescriptorEmptyJSON
+	src := memory.New()
+	if err := src.Push(ctx, emptyDesc, bytes.NewReader(emptyDesc.Data)); err != nil {
+		return nil, nil, fmt.Errorf("failed to stage empty config/layer blob: %w", err)
+	}
+	if err := src.Push(ctx, desc, bytes.NewReader(body)); err != nil {
+		return nil, nil, fmt.Errorf("failed to stage ownership referrer manifest: %w", err)
+	}
+	return []ociImageSpecV1.Descriptor{desc}, src, nil
 }
 
 // marshalArtifactAnnotation serialises the {identity, kind} value stored under
