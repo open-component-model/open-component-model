@@ -8,10 +8,16 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Type is the Consumer Identity type for any OCI Repository.
-// It can be used inside the credential graph as a consumer type and will be
-// used when translating from a repository type into a consumer identity.
-var Type = runtime.NewUnversionedType("OCIRegistry")
+const (
+	OCIRegistryIdentityType = "OCIRegistry"
+	Version                 = "v1"
+)
+
+// Type is the unversioned Consumer Identity type for any OCI Repository (backward compat).
+var Type = runtime.NewUnversionedType(OCIRegistryIdentityType)
+
+// VersionedType is the versioned consumer identity type.
+var VersionedType = runtime.NewVersionedType(OCIRegistryIdentityType, Version)
 
 func IdentityFromOCIRepository(repository *oci.Repository) (runtime.Identity, error) {
 	identity, err := runtime.ParseURLToIdentity(repository.BaseUrl)

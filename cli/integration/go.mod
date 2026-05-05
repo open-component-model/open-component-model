@@ -16,14 +16,14 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.13
 	ocm.software/open-component-model/bindings/go/credentials v0.0.10
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260430113528-63ec172c3940
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260430113528-63ec172c3940
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260505072254-1c17fcd5c971
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260430113528-63ec172c3940
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/oci v0.0.40
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260430113528-63ec172c3940
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/cli v0.4.0
 	oras.land/oras-go/v2 v2.6.0
 )
@@ -67,7 +67,7 @@ require (
 	github.com/extism/go-sdk v1.7.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fluxcd/cli-utils v0.37.2-flux.1 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
+	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -102,7 +102,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
-	github.com/lufia/plan9stats v0.0.0-20260216142805-b3301c5f2a88 // indirect
+	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mailru/easyjson v0.9.2 // indirect
 	github.com/mattn/go-runewidth v0.0.21 // indirect
@@ -173,16 +173,16 @@ require (
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
 	k8s.io/kubectl v0.35.3 // indirect
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260430113528-63ec172c3940 // indirect
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260505072254-1c17fcd5c971 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.7 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.3 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.4 // indirect
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260430113528-63ec172c3940 // indirect
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260505072254-1c17fcd5c971 // indirect
 	ocm.software/open-component-model/bindings/go/plugin v0.0.14 // indirect
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260430113528-63ec172c3940 // indirect
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260430113528-63ec172c3940 // indirect
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260430113528-63ec172c3940 // indirect
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260505072254-1c17fcd5c971 // indirect
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260505072254-1c17fcd5c971 // indirect
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260505072254-1c17fcd5c971 // indirect
 	sigs.k8s.io/controller-runtime v0.23.3 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
