@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	_ "embed"
 )
@@ -69,7 +68,7 @@ func cosignCachePath(version string) (string, error) {
 // It checks the cache first, then downloads if necessary with checksum verification.
 // This function is not safe for concurrent use; the caller must serialize access
 // (DefaultExecutor.ensureCosignAvailable holds its mutex before calling this).
-func ensureOrDownloadCosign(ctx context.Context) (string, error) {
+func ensureOrDownloadCosign(ctx context.Context, client *http.Client) (string, error) {
 	cacheDir, err := cosignCachePath(CosignVersion)
 	if err != nil {
 		return "", err
@@ -98,59 +97,29 @@ func ensureOrDownloadCosign(ctx context.Context) (string, error) {
 		}
 	}
 
-	expectedHash, err := fetchExpectedChecksum(ctx, CosignVersion, platformBinaryName)
+	expectedHash, err := fetchExpectedChecksumWith(ctx, client, CosignVersion, platformBinaryName)
 	if err != nil {
 		return "", fmt.Errorf("fetch checksums: %w", err)
 	}
 
 	binaryURL := cosignDownloadURL(CosignVersion, runtime.GOOS, runtime.GOARCH)
-	if err := downloadAndVerify(ctx, binaryURL, cachedPath, expectedHash); err != nil {
+	if err := downloadAndVerifyWith(ctx, client, binaryURL, cachedPath, expectedHash); err != nil {
 		return "", err
 	}
 
 	return cachedPath, nil
 }
 
-// downloadHTTPClient is used for all cosign download HTTP requests.
-var downloadHTTPClient = &http.Client{Timeout: 2 * time.Minute}
-
 const (
 	maxBinaryDownloadSize   = 150 << 20 // 150 MB safety cap
 	maxChecksumDownloadSize = 1 << 20   // 1 MB
 )
 
-// fetchExpectedChecksum downloads the cosign_checksums.txt for the given version
+// fetchExpectedChecksumWith downloads cosign_checksums.txt for the given version
 // and returns the SHA256 hash for the specified binary name.
-//
-// Security note (threat model): Both the binary and the checksums file are
-// fetched over HTTPS from the same GitHub release. Go's net/http validates the
-// TLS certificate against the OS trust store, so an attacker needs a trusted CA
-// (or local TLS proxy) to intercept the connection. Given that baseline, the
-// SHA256 check guards against:
-//   - accidental data corruption or truncation during download,
-//   - partial CDN cache poisoning where only one artefact is stale.
-//
-// It does NOT guard against a fully compromised GitHub release where binary and
-// checksums are replaced atomically. That scenario also compromises the Sigstore
-// bundle shipped alongside the release (cosign_checksums.txt.sigstore.json),
-// because the attacker controls the signing workflow that produces it. Full
-// Sigstore bundle verification (cert chain + Rekor inclusion proof + RFC 3161
-// timestamps) would add defence-in-depth, but the complexity (~300-800 lines of
-// hand-rolled stdlib crypto to preserve the zero-sigstore-deps constraint) is
-// disproportionate for a convenience auto-download fallback.
-//
-// TODO(ocm-project#996): Consider a lightweight identity check as an incremental
-// improvement. Download cosign_checksums.txt.sigstore.json, parse the Fulcio leaf
-// certificate (stdlib crypto/x509 + encoding/json, ~100 lines), and verify the
-// SAN matches the expected GitHub Actions workflow identity
-// (sigstore/cosign/.github/workflows/release.yml). This does not verify the
-// cryptographic chain but confirms the bundle claims the expected signer, which
-// catches accidental mis-signing and adds a meaningful signal without a full
-// hand-rolled Sigstore verifier.
-func fetchExpectedChecksum(ctx context.Context, version, binaryName string) (string, error) {
-	return fetchExpectedChecksumWith(ctx, downloadHTTPClient, version, binaryName)
-}
-
+// The checksum guards against download corruption and partial CDN cache poisoning.
+// Full Sigstore bundle verification of the release is not implemented: verifying
+// the bundle requires cosign itself (chicken-and-egg for an auto-download fallback).
 func fetchExpectedChecksumWith(ctx context.Context, client *http.Client, version, binaryName string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cosignChecksumsURL(version), nil)
 	if err != nil {
@@ -208,12 +177,8 @@ func verifyFileChecksum(path, expectedHash string) error {
 	return nil
 }
 
-// downloadAndVerify downloads the binary from url, verifies its SHA256 against
+// downloadAndVerifyWith downloads the binary from url, verifies its SHA256 against
 // expectedHash, writes it to destPath, and makes it executable.
-func downloadAndVerify(ctx context.Context, url, destPath, expectedHash string) error {
-	return downloadAndVerifyWith(ctx, downloadHTTPClient, url, destPath, expectedHash)
-}
-
 func downloadAndVerifyWith(ctx context.Context, client *http.Client, url, destPath, expectedHash string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
