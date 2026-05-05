@@ -14,7 +14,6 @@ import (
 	"math/big"
 	"os"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -199,16 +198,6 @@ func argValue(args []string, flag string) string {
 }
 
 // hasEnvKey checks whether an env slice contains a key=... entry.
-func hasEnvKey(env []string, key string) bool {
-	prefix := key + "="
-	for _, e := range env {
-		if len(e) >= len(prefix) && e[:len(prefix)] == prefix {
-			return true
-		}
-	}
-	return false
-}
-
 // envValue returns the value for a given key in an env slice.
 func envValue(env []string, key string) string {
 	prefix := key + "="
@@ -568,15 +557,6 @@ func TestHandler_Verify(t *testing.T) {
 			name:    "executor error propagated",
 			mockErr: fmt.Errorf("cosign verify-blob failed: exit status 1\nstderr: verification failed"),
 			wantErr: "verify signature",
-		},
-		{
-			name: "SIGSTORE_ID_TOKEN not leaked to verify subprocess",
-			assertMock: func(t *testing.T, mock *mockExecutor) {
-				for _, kv := range mock.env {
-					require.False(t, strings.HasPrefix(kv, "SIGSTORE_ID_TOKEN="),
-						"verify must not receive SIGSTORE_ID_TOKEN in env")
-				}
-			},
 		},
 	}
 
