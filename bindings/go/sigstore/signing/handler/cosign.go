@@ -29,6 +29,9 @@ type Executor interface {
 }
 
 // DefaultExecutor invokes the cosign binary via os/exec.
+// After resolution (via the first Run() call or an explicit Ensure()), concurrent
+// Run() calls are safe — each spawns an independent subprocess with no shared
+// mutable state. Resolution itself is serialized by the internal mutex.
 type DefaultExecutor struct {
 	mu         sync.Mutex
 	binaryPath string

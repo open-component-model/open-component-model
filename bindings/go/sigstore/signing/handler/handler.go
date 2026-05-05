@@ -33,6 +33,8 @@ const (
 )
 
 // Handler implements signing.Handler by delegating to the cosign CLI.
+// A Handler is safe for concurrent use after construction. Binary resolution
+// is serialized internally; subsequent Sign/Verify calls execute concurrently.
 type Handler struct {
 	executor Executor
 }
