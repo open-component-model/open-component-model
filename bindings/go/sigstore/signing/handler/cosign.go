@@ -53,7 +53,7 @@ func (e *DefaultExecutor) ensureCosignAvailable(ctx context.Context) error {
 	}
 	path, err := exec.LookPath(e.binaryPath)
 	if err == nil {
-		if verr := e.checkVersion(path); verr != nil {
+		if verr := e.checkVersion(ctx, path); verr != nil {
 			return verr
 		}
 		e.binaryPath = path
@@ -178,8 +178,8 @@ func scrubStderr(s string) string {
 	return s
 }
 
-func (e *DefaultExecutor) checkVersion(binaryPath string) error {
-	detected, err := detectCosignVersion(binaryPath)
+func (e *DefaultExecutor) checkVersion(ctx context.Context, binaryPath string) error {
+	detected, err := detectCosignVersion(ctx, binaryPath)
 	if err != nil {
 		slog.Warn("could not determine cosign version on PATH; if signing fails, "+
 			"verify cosign is >= "+CosignMinimumVersion+" or remove it from PATH to trigger auto-download",
@@ -211,8 +211,8 @@ func (e *DefaultExecutor) checkVersion(binaryPath string) error {
 	return nil
 }
 
-func detectCosignVersion(binaryPath string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func detectCosignVersion(ctx context.Context, binaryPath string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	var stdout bytes.Buffer
 	cmd := exec.CommandContext(ctx, binaryPath, "version")
