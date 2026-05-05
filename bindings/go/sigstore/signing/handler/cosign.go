@@ -80,9 +80,9 @@ func (e *DefaultExecutor) Run(ctx context.Context, args []string, env []string) 
 	ctx, cancel := context.WithTimeout(ctx, defaultOperationTimeout)
 	defer cancel()
 
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, e.binaryPath, args...) //nolint:gosec // G204: args are constructed from trusted config, not user input
-	cmd.Stdout = nil
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	cmd.Env = env
 
@@ -97,6 +97,9 @@ func (e *DefaultExecutor) Run(ctx context.Context, args []string, env []string) 
 			return fmt.Errorf("cosign %s timed out: %w\nstderr: %s", args[0], err, msg)
 		}
 		return fmt.Errorf("cosign %s failed: %w\nstderr: %s", args[0], err, msg)
+	}
+	if out := strings.TrimSpace(stdout.String()); out != "" {
+		slog.Debug("cosign output", "subcommand", args[0], "stdout", out)
 	}
 	return nil
 }
