@@ -11,10 +11,18 @@ const (
 
 	// CredentialKeyUsername is the key for the username in HTTP-based Helm repository credentials.
 	CredentialKeyUsername = "username"
+
+	// CredentialKeyPassword is the key for the password in HTTP-based Helm repository credentials.
 	CredentialKeyPassword = "password"
+
+	// CredentialKeyCertFile is the key for the client certificate file path in HTTP-based Helm repository credentials.
 	CredentialKeyCertFile = "certFile"
-	CredentialKeyKeyFile  = "keyFile"
-	CredentialKeyKeyring  = "keyring"
+
+	// CredentialKeyKeyFile is the key for the client key file path in HTTP-based Helm repository credentials.
+	CredentialKeyKeyFile = "keyFile"
+
+	// CredentialKeyKeyring is the key for the keyring file path in HTTP-based Helm repository credentials.
+	CredentialKeyKeyring = "keyring"
 )
 
 // HelmHTTPCredentials represents typed credentials for HTTP/S-based Helm chart repositories.
