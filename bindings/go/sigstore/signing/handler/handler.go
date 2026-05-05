@@ -73,12 +73,12 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
 	}
 
-	token := strings.TrimSpace(creds[CredentialKeyOIDCToken])
-	if token == "" {
-		return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required for signing: " +
-			"configure a consumer identity of type SigstoreSigner/v1alpha1 with either " +
-			"a direct credential (Credentials/v1) providing the \"token\" key, or a " +
-			"credential plugin (OIDCIdentityTokenProvider/v1alpha1) that resolves one")
+	if err := cfg.Validate(); err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("invalid signing config: %w", err)
+	}
+
+	if cfg.AllowInsecureEndpoints {
+		slog.Warn("insecure endpoints enabled: HTTP URLs accepted without TLS verification")
 	}
 
 	digestBytes, err := hex.DecodeString(unsigned.Value)
@@ -89,12 +89,16 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("digest value must not be empty")
 	}
 
-	if err := cfg.Validate(); err != nil {
-		return descruntime.SignatureInfo{}, fmt.Errorf("invalid signing config: %w", err)
-	}
-
-	if cfg.AllowInsecureEndpoints {
-		slog.Warn("insecure endpoints enabled: HTTP URLs accepted without TLS verification")
+	env := cosignEnv()
+	if !hasEnvKey(env, "SIGSTORE_ID_TOKEN") {
+		token := strings.TrimSpace(creds[CredentialKeyOIDCToken])
+		if token == "" {
+			return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required for signing: " +
+				"set SIGSTORE_ID_TOKEN in the environment, or configure a consumer identity of type " +
+				"SigstoreSigner/v1alpha1 with either a direct credential (Credentials/v1) providing " +
+				"the \"token\" key, or a credential plugin (OIDCIdentityTokenProvider/v1alpha1) that resolves one")
+		}
+		env = append(env, "SIGSTORE_ID_TOKEN="+token)
 	}
 
 	tmpDir, err := os.MkdirTemp("", "cosign-sign-*")
@@ -136,10 +140,6 @@ func (h *Handler) Sign(
 	if cfg.TrustedRoot != "" {
 		args = append(args, "--trusted-root", cfg.TrustedRoot)
 	}
-
-	// Token comes from OCM credential system, not ambient env. The allowlist
-	// deliberately excludes sigstore-specific env vars (SIGSTORE_*, TUF_*, COSIGN_*).
-	env := append(cosignEnv(), "SIGSTORE_ID_TOKEN="+token)
 
 	if err := h.executor.Run(ctx, args, env); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("cosign sign: %w", err)

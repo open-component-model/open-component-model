@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,49 +9,39 @@ import (
 )
 
 func TestCosignEnv(t *testing.T) {
-	t.Run("passes through allowlisted keys", func(t *testing.T) {
+	t.Run("passes through standard and sigstore env vars", func(t *testing.T) {
 		r := require.New(t)
 		t.Setenv("PATH", "/usr/bin")
 		t.Setenv("HOME", "/home/test")
 		t.Setenv("HTTPS_PROXY", "https://proxy.example.com")
+		t.Setenv("SIGSTORE_ID_TOKEN", "some-token")
+		t.Setenv("COSIGN_EXPERIMENTAL", "1")
+		t.Setenv("TUF_ROOT", "/tmp/tuf")
 		env := cosignEnv()
-		r.True(containsEnvKey(env, "PATH"))
-		r.True(containsEnvKey(env, "HOME"))
-		r.True(containsEnvKey(env, "HTTPS_PROXY"))
+		r.True(hasEnvKey(env, "PATH"))
+		r.True(hasEnvKey(env, "HOME"))
+		r.True(hasEnvKey(env, "HTTPS_PROXY"))
+		r.True(hasEnvKey(env, "SIGSTORE_ID_TOKEN"))
+		r.True(hasEnvKey(env, "COSIGN_EXPERIMENTAL"))
+		r.True(hasEnvKey(env, "TUF_ROOT"))
 	})
 
-	t.Run("excludes dangerous and non-allowlisted keys", func(t *testing.T) {
+	t.Run("excludes library injection vectors", func(t *testing.T) {
 		r := require.New(t)
-		excluded := map[string]string{
-			"SECRET_KEY":                "supersecret",
-			"AWS_ACCESS_KEY_ID":         "AKIA...",
-			"SIGSTORE_ID_TOKEN":         "oidc-token",
-			"TUF_ROOT":                  "/tmp/tuf",
-			"COSIGN_EXPERIMENTAL":       "1",
-			"SIGSTORE_CT_LOG_PUBLIC_KEY": "/tmp/key.pem",
-			"LD_PRELOAD":                "/tmp/evil.so",
-			"DYLD_INSERT_LIBRARIES":     "/tmp/evil.dylib",
-			"LD_LIBRARY_PATH":           "/tmp/lib",
-			"BASH_ENV":                  "/tmp/evil.sh",
+		denied := map[string]string{
+			"LD_PRELOAD":            "/tmp/evil.so",
+			"DYLD_INSERT_LIBRARIES": "/tmp/evil.dylib",
+			"LD_LIBRARY_PATH":       "/tmp/lib",
+			"BASH_ENV":              "/tmp/evil.sh",
 		}
-		for k, v := range excluded {
+		for k, v := range denied {
 			t.Setenv(k, v)
 		}
 		env := cosignEnv()
-		for k := range excluded {
-			r.False(containsEnvKey(env, k), "expected %s to be excluded", k)
+		for k := range denied {
+			r.False(hasEnvKey(env, k), "expected %s to be excluded", k)
 		}
 	})
-}
-
-func containsEnvKey(env []string, key string) bool {
-	prefix := key + "="
-	for _, e := range env {
-		if strings.HasPrefix(e, prefix) {
-			return true
-		}
-	}
-	return false
 }
 
 func TestSignConfigValidateHTTPS(t *testing.T) {
@@ -96,8 +85,8 @@ func TestVerifyConfigValidateAllowInsecure(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 	cfg := &v1alpha1.VerifyConfig{
-		CertificateOIDCIssuer: "http://issuer.local",
-		CertificateIdentity:  "user@example.com",
+		CertificateOIDCIssuer:  "http://issuer.local",
+		CertificateIdentity:    "user@example.com",
 		AllowInsecureEndpoints: false,
 	}
 	r.Error(cfg.Validate())

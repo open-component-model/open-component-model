@@ -150,39 +150,36 @@ func writeTemp(dir, pattern string, r io.Reader) (path string, err error) {
 	return f.Name(), nil
 }
 
-// cosignPassthroughEnvKeys is an allowlist of environment variables forwarded to the cosign
-// subprocess. Only system paths, proxy settings, and TLS trust anchors are included.
-// Sigstore-specific env vars (SIGSTORE_*, TUF_*, COSIGN_*) are deliberately excluded:
-// all signing configuration flows through OCM config types mapped to cosign CLI flags.
-var cosignPassthroughEnvKeys = map[string]bool{
-	"PATH":               true,
-	"HOME":               true,
-	"TMPDIR":             true,
-	"TMP":                true,
-	"TEMP":               true,
-	"USERPROFILE":        true,
-	"HTTP_PROXY":         true,
-	"HTTPS_PROXY":        true,
-	"NO_PROXY":           true,
-	"http_proxy":         true,
-	"https_proxy":        true,
-	"no_proxy":           true,
-	"SSL_CERT_FILE":      true,
-	"SSL_CERT_DIR":       true,
-	"REQUESTS_CA_BUNDLE": true,
+// cosignDenyEnvKeys is a denylist of environment variables that must never be forwarded
+// to the cosign subprocess (library injection vectors).
+var cosignDenyEnvKeys = map[string]bool{
+	"LD_PRELOAD":            true,
+	"DYLD_INSERT_LIBRARIES": true,
+	"LD_LIBRARY_PATH":       true,
+	"BASH_ENV":              true,
 }
 
-// cosignEnv builds the environment slice for the cosign subprocess from the
-// current process environment, filtered through cosignPassthroughEnvKeys.
+// cosignEnv builds the environment slice for the cosign subprocess by passing through
+// the full process environment minus denylisted keys.
 func cosignEnv() []string {
 	var env []string
 	for _, kv := range os.Environ() {
 		key, _, _ := strings.Cut(kv, "=")
-		if cosignPassthroughEnvKeys[key] {
+		if !cosignDenyEnvKeys[key] {
 			env = append(env, kv)
 		}
 	}
 	return env
+}
+
+func hasEnvKey(env []string, key string) bool {
+	prefix := key + "="
+	for _, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 var versionRegexp = regexp.MustCompile(`v\d+\.\d+\.\d+`)
