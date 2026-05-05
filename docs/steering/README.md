@@ -8,9 +8,9 @@ OCM is an open standard for describing software artifacts and lifecycle metadata
 
 > We'll host public monthly steering meetings, links and dates to be announced.
 
-For now, an invitation to the meeting is required, please contact the TSC Chair to get an invitation, see [OWNERS.md](./OWNERS.md).
-
 Meeting Notes can be found in the [./meeting-notes](./meeting-notes/) folder.
+
+Each meeting note also contains a reference to the respective meeting location.
 
 ## Technical Steering Committee (TSC)
 
