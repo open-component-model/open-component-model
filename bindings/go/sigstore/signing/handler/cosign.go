@@ -31,9 +31,7 @@ type Executor interface {
 }
 
 // DefaultExecutor invokes the cosign binary via os/exec.
-// After resolution (via the first Run() call or an explicit Ensure()), concurrent
-// Run() calls are safe — each spawns an independent subprocess with no shared
-// mutable state. Resolution itself is serialized by the internal mutex.
+// Safe for concurrent use after resolution (first Run or explicit Ensure).
 type DefaultExecutor struct {
 	mu         sync.Mutex
 	binaryPath string
@@ -45,7 +43,6 @@ type DefaultExecutor struct {
 type ExecutorOption func(*DefaultExecutor)
 
 // WithHTTPClient sets the HTTP client used for cosign binary downloads.
-// If nil or not provided, a default client with a 2-minute timeout is used.
 func WithHTTPClient(c *http.Client) ExecutorOption {
 	return func(e *DefaultExecutor) {
 		e.httpClient = c
@@ -54,12 +51,12 @@ func WithHTTPClient(c *http.Client) ExecutorOption {
 
 // NewDefaultExecutor returns an executor that shells out to the cosign binary.
 func NewDefaultExecutor(opts ...ExecutorOption) *DefaultExecutor {
-	e := &DefaultExecutor{
-		binaryPath: "cosign",
-		httpClient: &http.Client{Timeout: 2 * time.Minute},
-	}
+	e := &DefaultExecutor{binaryPath: "cosign"}
 	for _, opt := range opts {
 		opt(e)
+	}
+	if e.httpClient == nil {
+		e.httpClient = &http.Client{Timeout: 2 * time.Minute}
 	}
 	return e
 }
