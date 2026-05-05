@@ -110,6 +110,7 @@ func Test_OIDCPlugin_Resolve_TokenExchange_Errors(t *testing.T) {
 		identity    runtime.Identity
 		envKey      string
 		envVal      string
+		setupFile   func(t *testing.T) string
 		errContains string
 	}{
 		{
@@ -137,6 +138,19 @@ func Test_OIDCPlugin_Resolve_TokenExchange_Errors(t *testing.T) {
 			envVal:      "",
 			errContains: "empty or unset",
 		},
+		{
+			name: "token file empty",
+			identity: runtime.Identity{
+				configKeyFlow:     flowTokenExchange,
+				configKeyTokenURL: "https://sts.example.com/token",
+			},
+			setupFile: func(t *testing.T) string {
+				f := filepath.Join(t.TempDir(), "empty-token")
+				require.NoError(t, os.WriteFile(f, []byte("  \n"), 0o600))
+				return f
+			},
+			errContains: "is empty",
+		},
 	}
 
 	for _, tt := range tests {
@@ -145,9 +159,13 @@ func Test_OIDCPlugin_Resolve_TokenExchange_Errors(t *testing.T) {
 			if tt.envKey != "" {
 				t.Setenv(tt.envKey, tt.envVal)
 			}
+			identity := tt.identity
+			if tt.setupFile != nil {
+				identity[configKeySubjectTokenFile] = tt.setupFile(t)
+			}
 
 			plugin := &OIDCPlugin{}
-			_, err := plugin.Resolve(t.Context(), tt.identity, nil)
+			_, err := plugin.Resolve(t.Context(), identity, nil)
 			r.Error(err)
 			r.Contains(err.Error(), tt.errContains)
 		})
