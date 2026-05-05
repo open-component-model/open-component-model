@@ -11,6 +11,7 @@ import (
 )
 
 func TestExchangeToken_Success(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -42,6 +43,7 @@ func TestExchangeToken_Success(t *testing.T) {
 }
 
 func TestExchangeToken_CustomOptions(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -66,6 +68,7 @@ func TestExchangeToken_CustomOptions(t *testing.T) {
 }
 
 func TestExchangeToken_HTTPError(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -85,6 +88,7 @@ func TestExchangeToken_HTTPError(t *testing.T) {
 }
 
 func TestExchangeToken_MissingAccessToken(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -103,6 +107,7 @@ func TestExchangeToken_MissingAccessToken(t *testing.T) {
 }
 
 func TestExchangeToken_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

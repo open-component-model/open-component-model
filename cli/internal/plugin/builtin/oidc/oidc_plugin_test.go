@@ -160,7 +160,27 @@ func Test_OIDCPlugin_Resolve_TokenExchange_Priority(t *testing.T) {
 	r.Equal("result-token", creds[credentialKeyToken])
 }
 
+func Test_OIDCPlugin_Resolve_TokenExchange_EnvVarEmpty(t *testing.T) {
+	r := require.New(t)
+
+	t.Setenv("TEST_OIDC_EMPTY_TOKEN", "")
+
+	plugin := &OIDCPlugin{}
+	identity := runtime.Identity{
+		configKeyFlow:               flowTokenExchange,
+		configKeyTokenURL:           "https://sts.example.com/token",
+		configKeySubjectTokenEnvVar: "TEST_OIDC_EMPTY_TOKEN",
+		configKeySubjectToken:       "fallback-literal",
+	}
+
+	_, err := plugin.Resolve(t.Context(), identity, nil)
+	r.Error(err)
+	r.Contains(err.Error(), "TEST_OIDC_EMPTY_TOKEN")
+	r.Contains(err.Error(), "empty or unset")
+}
+
 func Test_OIDCPlugin_Resolve_TokenExchange_FileSource(t *testing.T) {
+	t.Parallel()
 	r := require.New(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
