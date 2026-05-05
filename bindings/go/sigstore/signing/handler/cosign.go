@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -107,7 +108,7 @@ func (e *DefaultExecutor) Run(ctx context.Context, args []string, env []string) 
 	return nil
 }
 
-func writeTemp(dir, pattern string, data []byte) (path string, err error) {
+func writeTemp(dir, pattern string, r io.Reader) (path string, err error) {
 	f, err := os.CreateTemp(dir, pattern)
 	if err != nil {
 		return "", fmt.Errorf("create temp file %q: %w", pattern, err)
@@ -120,7 +121,7 @@ func writeTemp(dir, pattern string, data []byte) (path string, err error) {
 			_ = os.Remove(f.Name())
 		}
 	}()
-	if _, err = f.Write(data); err != nil {
+	if _, err = io.Copy(f, r); err != nil {
 		return "", fmt.Errorf("write temp file %q: %w", pattern, err)
 	}
 	return f.Name(), nil
