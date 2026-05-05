@@ -13,7 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/credentials"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	repoSpec "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
