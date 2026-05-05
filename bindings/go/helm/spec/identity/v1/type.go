@@ -26,8 +26,8 @@ type HelmChartRepositoryIdentity struct {
 	// +ocm:jsonschema-gen:enum=HelmChartRepository/v1
 	// +ocm:jsonschema-gen:enum:deprecated=HelmChartRepository
 	Type     runtime.Type `json:"type"`
-	Hostname string       `json:"hostname,omitempty"`
-	Scheme   string       `json:"scheme,omitempty"`
-	Port     string       `json:"port,omitempty"`
-	Path     string       `json:"path,omitempty"`
+	Hostname string `json:"hostname,omitempty"`
+	Scheme   string `json:"scheme,omitempty"`
+	Port string `json:"port,omitempty"`
+	Path string `json:"path,omitempty"`
 }

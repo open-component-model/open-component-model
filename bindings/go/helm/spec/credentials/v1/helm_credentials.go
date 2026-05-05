@@ -11,7 +11,7 @@ const (
 
 	// CredentialKeyUsername is the key for the username in HTTP-based Helm repository credentials.
 	CredentialKeyUsername = "username"
-	CredentialKeyPassword = "password"
+	CredentialKeyPassword = "password" //nolint:gosec // G101: This is a map key name, not a credential.
 	CredentialKeyCertFile = "certFile"
 	CredentialKeyKeyFile  = "keyFile"
 	CredentialKeyKeyring  = "keyring"
@@ -45,6 +45,7 @@ func MustRegisterCredentialType(scheme *runtime.Scheme) {
 
 // FromDirectCredentials converts a DirectCredentials properties map into typed HelmHTTPCredentials.
 // This supports old .ocmconfig files that use Credentials/v1 with Helm HTTP properties.
+// A nil map is safe and returns an empty HelmHTTPCredentials with only the type set.
 func FromDirectCredentials(properties map[string]string) *HelmHTTPCredentials {
 	return &HelmHTTPCredentials{
 		Type:     runtime.NewVersionedType(HelmHTTPCredentialsType, Version),

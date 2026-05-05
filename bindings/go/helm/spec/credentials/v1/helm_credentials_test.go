@@ -49,6 +49,17 @@ func TestFromDirectCredentials_EmptyMap(t *testing.T) {
 	assert.Empty(t, creds.Password)
 }
 
+func TestFromDirectCredentials_NilMap(t *testing.T) {
+	creds := FromDirectCredentials(nil)
+
+	assert.Equal(t, runtime.NewVersionedType(HelmHTTPCredentialsType, Version), creds.Type)
+	assert.Empty(t, creds.Username)
+	assert.Empty(t, creds.Password)
+	assert.Empty(t, creds.CertFile)
+	assert.Empty(t, creds.KeyFile)
+	assert.Empty(t, creds.Keyring)
+}
+
 func TestMustRegisterCredentialType(t *testing.T) {
 	scheme := runtime.NewScheme()
 	MustRegisterCredentialType(scheme)
