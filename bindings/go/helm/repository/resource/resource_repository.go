@@ -52,7 +52,7 @@ func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 // is OCIRegistry; for HTTP/HTTPS repositories it is HelmChartRepository.
 // Returns nil if the resource has no remote repository (local chart).
 //
-// TODO(Phase 4): migrate return type to runtime.Typed once the ResourceRepository interface is updated.
+// TODO(matthiasbruns): migrate return type to runtime.Typed once the ResourceRepository interface is updated.
 // https://github.com/open-component-model/ocm-project/issues/988
 func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	helm, err := r.convertAccess(resource)
@@ -72,7 +72,7 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 // remote repository specified in the resource's helm access. The returned blob
 // is a [helmblob.ChartBlob] wrapping a tar archive of the downloaded files.
 //
-// TODO(Phase 4): migrate credentials parameter to runtime.Typed once the ResourceRepository interface is updated.
+// TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the ResourceRepository interface is updated.
 // https://github.com/open-component-model/ocm-project/issues/988
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	helm, err := r.convertAccess(resource)
@@ -144,7 +144,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 // index.yaml and packaged chart archives; there is no standardized upload API.
 // Charts stored in OCI registries should use the OCI resource repository instead.
 //
-// TODO(Phase 4): migrate credentials parameter to runtime.Typed once the ResourceRepository interface is updated.
+// TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the ResourceRepository interface is updated.
 // https://github.com/open-component-model/ocm-project/issues/988
 func (r *ResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ map[string]string) (*descriptor.Resource, error) {
 	return nil, fmt.Errorf("helm chart repositories do not support upload operations")
