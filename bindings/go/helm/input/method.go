@@ -56,7 +56,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context,
 		return nil, nil
 	}
 
-	return helminternal.CredentialConsumerIdentity(helm.HelmRepository)
+	return helminternal.CredentialConsumerIdentityCompat(helm.HelmRepository)
 }
 
 // ProcessResource processes a helm-based resource input by converting the input specification
