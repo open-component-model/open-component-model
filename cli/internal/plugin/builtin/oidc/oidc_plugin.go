@@ -141,9 +141,11 @@ func (p *OIDCPlugin) resolveTokenExchange(ctx context.Context, identity runtime.
 
 func resolveSubjectToken(identity runtime.Identity) (string, error) {
 	if envVar := identity[configKeySubjectTokenEnvVar]; envVar != "" {
-		if val := os.Getenv(envVar); val != "" {
+		val := os.Getenv(envVar)
+		if val != "" {
 			return val, nil
 		}
+		return "", fmt.Errorf("subject token env var %q is configured but empty or unset", envVar)
 	}
 	if literal := identity[configKeySubjectToken]; literal != "" {
 		return literal, nil
@@ -151,9 +153,13 @@ func resolveSubjectToken(identity runtime.Identity) (string, error) {
 	if file := identity[configKeySubjectTokenFile]; file != "" {
 		data, err := os.ReadFile(file)
 		if err != nil {
-			return "", fmt.Errorf("read subject token file: %w", err)
+			return "", fmt.Errorf("unable to read subject token file %q: %w", file, err)
 		}
-		return strings.TrimSpace(string(data)), nil
+		token := strings.TrimSpace(string(data))
+		if token == "" {
+			return "", fmt.Errorf("subject token file %q is empty", file)
+		}
+		return token, nil
 	}
 	return "", fmt.Errorf("no subject token resolvable: set subjectTokenEnvVar, subjectToken, or subjectTokenFile")
 }
