@@ -199,8 +199,8 @@ flowchart LR
     Plugins["Plugin Discovery"] -->|RegisterFromPlugin<br/>from capability specs| CTR
     Plugins -->|RegisterFromPlugin<br/>from capability specs| ITR
 
-    CTR -->|Scheme()| Graph["Credential Graph"]
-    ITR -->|Scheme() + AcceptedCredentialTypes()| Graph
+    CTR -->|Scheme| Graph["Credential Graph"]
+    ITR -->|Scheme + AcceptedCredentialTypes| Graph
 ```
 
 The schemes serve a fundamentally different purpose than the credential plugins. The `CredentialPlugin` interface

@@ -25,14 +25,9 @@ import (
 	rsasignature "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/pem"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/rfc2253"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	rsacredentialsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/rsa/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-)
-
-// Identity attribute keys used for credential consumer identities.
-const (
-	IdentityAttributeAlgorithm = "algorithm"
-	IdentityAttributeSignature = "signature"
 )
 
 // Common errors for callers to test.
@@ -86,8 +81,9 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
 	}
 	algorithm := supported.GetSignatureAlgorithm()
+	typedCreds := rsacredentialsv1.FromDirectCredentials(creds)
 
-	priv, err := rsacredentials.PrivateKeyFromCredentials(creds)
+	priv, err := rsacredentials.PrivateKeyFromCredentials(typedCreds)
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("cannot load private key from credentials for signing: %w", err)
 	}
@@ -108,7 +104,7 @@ func (h *Handler) Sign(
 	switch supported.GetSignatureEncodingPolicy() {
 	case v1alpha1.SignatureEncodingPolicyPEM:
 		slog.WarnContext(ctx, "signing with PEM encoding is experimental")
-		chain, err := rsacredentials.CertificateChainFromCredentials(creds)
+		chain, err := rsacredentials.CertificateChainFromCredentials(typedCreds)
 		if err != nil {
 			return descruntime.SignatureInfo{}, fmt.Errorf("read certificate chain: %w", err)
 		}
@@ -139,7 +135,8 @@ func (h *Handler) Verify(
 	_ runtime.Typed,
 	creds map[string]string,
 ) error {
-	pubFromCreds, err := rsacredentials.PublicKeyFromCredentials(creds)
+	typedCreds := rsacredentialsv1.FromDirectCredentials(creds)
+	pubFromCreds, err := rsacredentials.PublicKeyFromCredentials(typedCreds)
 	if err != nil {
 		return fmt.Errorf("cannot load public key from credentials for verification: %w", err)
 	}
@@ -166,7 +163,7 @@ func (h *Handler) Verify(
 
 	case v1alpha1.MediaTypePEM:
 		slog.WarnContext(ctx, "verifying signatures with PEM encoding is experimental")
-		return h.verifyPEMSignature(signed, hash, dig, creds)
+		return h.verifyPEMSignature(signed, hash, dig, typedCreds)
 
 	default:
 		return fmt.Errorf("unsupported media type %q", signed.Signature.MediaType)
@@ -181,7 +178,7 @@ func (h *Handler) verifyPEMSignature(
 	signed descruntime.Signature,
 	hash crypto.Hash,
 	dig []byte,
-	creds map[string]string,
+	creds *rsacredentialsv1.RSACredentials,
 ) error {
 	sig, algFromPEM, chain, err := rsasignature.GetSignatureFromPem([]byte(signed.Signature.Value))
 	if err != nil {
@@ -233,8 +230,8 @@ func (*Handler) GetSigningCredentialConsumerIdentity(
 		return nil, fmt.Errorf("convert config: %w", err)
 	}
 	id := baseIdentity(supported.GetSignatureAlgorithm())
-	id[IdentityAttributeSignature] = name
-	return id, nil
+	id.Signature = name
+	return rsaIdentityToMap(id), nil
 }
 
 // GetVerifyingCredentialConsumerIdentity requests credentials for verification.
@@ -266,8 +263,8 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 	}
 
 	id := baseIdentity(v1alpha1.SignatureAlgorithm(alg))
-	id[IdentityAttributeSignature] = signature.Name
-	return id, nil
+	id.Signature = signature.Name
+	return rsaIdentityToMap(id), nil
 }
 
 // ---- internal helpers ----
@@ -294,7 +291,7 @@ func isSelfSigned(cert *x509.Certificate) bool {
 // splits it into intermediates (non-self-signed) and an optional root anchor
 // (the single self-signed cert, which must appear last if present).
 // A self-signed cert at any position other than last is rejected.
-func classifyCredentialChain(creds map[string]string) (intermediates []*x509.Certificate, anchor *x509.Certificate, err error) {
+func classifyCredentialChain(creds *rsacredentialsv1.RSACredentials) (intermediates []*x509.Certificate, anchor *x509.Certificate, err error) {
 	chain, err := rsacredentials.CertificateChainFromCredentials(creds)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot load certificate chain from credentials: %w", err)
@@ -402,9 +399,21 @@ func verifyIssuerForLeafCert(signed descruntime.Signature, leaf *x509.Certificat
 	return nil
 }
 
-// baseIdentity builds a credential consumer identity for RSA handlers.
-func baseIdentity(algorithm v1alpha1.SignatureAlgorithm) runtime.Identity {
-	id := runtime.Identity{IdentityAttributeAlgorithm: string(algorithm)}
-	id.SetType(identityv1.V1Alpha1Type)
-	return id
+// baseIdentity builds a typed RSA credential consumer identity.
+func baseIdentity(algorithm v1alpha1.SignatureAlgorithm) *identityv1.RSAIdentity {
+	return &identityv1.RSAIdentity{
+		Type:      identityv1.V1Alpha1Type,
+		Algorithm: string(algorithm),
+	}
+}
+
+// rsaIdentityToMap converts a typed RSAIdentity to a runtime.Identity map.
+// Used at the Signer/Verifier interface boundary until Phase 4 migrates those to runtime.Typed.
+func rsaIdentityToMap(id *identityv1.RSAIdentity) runtime.Identity {
+	m := runtime.Identity{
+		identityv1.IdentityAttributeAlgorithm: id.Algorithm,
+		identityv1.IdentityAttributeSignature: id.Signature,
+	}
+	m.SetType(id.Type)
+	return m
 }
