@@ -2,6 +2,7 @@ package oidc
 
 import (
 	"context"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -199,21 +200,14 @@ func parseOIDCConfig(typed runtime.Typed) (*oidcConfig, error) {
 	}
 
 	return &oidcConfig{
-		issuer:             or(raw.Issuer, oidcflow.DefaultIssuer),
-		clientID:           or(raw.ClientID, oidcflow.DefaultClientID),
+		issuer:             cmp.Or(raw.Issuer, oidcflow.DefaultIssuer),
+		clientID:           cmp.Or(raw.ClientID, oidcflow.DefaultClientID),
 		flow:               raw.Flow,
 		tokenURL:           raw.TokenURL,
 		subjectToken:       raw.SubjectToken,
 		subjectTokenEnvVar: raw.SubjectTokenEnvVar,
 		subjectTokenFile:   raw.SubjectTokenFile,
-		subjectTokenType:   or(raw.SubjectTokenType, oidcflow.DefaultSubjectTokenType),
-		audience:           or(raw.Audience, oidcflow.DefaultAudience),
+		subjectTokenType:   cmp.Or(raw.SubjectTokenType, oidcflow.DefaultSubjectTokenType),
+		audience:           cmp.Or(raw.Audience, oidcflow.DefaultAudience),
 	}, nil
-}
-
-func or(val, fallback string) string {
-	if val != "" {
-		return val
-	}
-	return fallback
 }
