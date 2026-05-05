@@ -155,6 +155,8 @@ func cosignEnv() []string {
 	return env
 }
 
+var versionRegexp = regexp.MustCompile(`v\d+\.\d+\.\d+`)
+
 var stderrScrubbers = []struct {
 	pattern     *regexp.Regexp
 	replacement string
@@ -230,8 +232,7 @@ func parseCosignVersionOutput(output string) (string, error) {
 			return strings.TrimSpace(v), nil
 		}
 	}
-	re := regexp.MustCompile(`v\d+\.\d+\.\d+`)
-	if m := re.FindString(output); m != "" {
+	if m := versionRegexp.FindString(output); m != "" {
 		return m, nil
 	}
 	return "", errors.New("could not parse cosign version from output")
