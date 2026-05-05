@@ -33,6 +33,7 @@ func PublicKeyFromCredentials(creds *rsacredentialsv1.RSACredentials) (*rsapem.R
 		return nil, fmt.Errorf("failed loading public key PEM: %w", err)
 	}
 	if len(b) == 0 {
+		// fallback: derive from private
 		pk, err := PrivateKeyFromCredentials(creds)
 		if err != nil {
 			return nil, err
@@ -57,6 +58,7 @@ func CertificateChainFromCredentials(creds *rsacredentialsv1.RSACredentials) ([]
 
 func loadBytes(inline, file string) ([]byte, error) {
 	if inline != "" {
+		// treat as literal bytes
 		return []byte(inline), nil
 	}
 	if file != "" {

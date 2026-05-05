@@ -30,6 +30,18 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+const (
+	// IdentityAttributeAlgorithm will be removed in the future
+	//
+	// Deprecated: Use typed identity [identityv1.RSAIdentity] instead
+	IdentityAttributeAlgorithm = identityv1.IdentityAttributeAlgorithm
+
+	// IdentityAttributeSignature will be removed in the future
+	//
+	// Deprecated: Use typed identity [identityv1.RSAIdentity] instead
+	IdentityAttributeSignature = identityv1.IdentityAttributeSignature
+)
+
 // Common errors for callers to test.
 var (
 	ErrInvalidAlgorithm  = errors.New("invalid algorithm")

@@ -67,142 +67,156 @@ func writeTempFile(t *testing.T, content string) string {
 func TestPrivateKeyFromCredentials(t *testing.T) {
 	key := newKey(t)
 	privPEM := pkcs1PrivatePEM(key)
+	privFile := writeTempFile(t, privPEM)
+	otherFile := writeTempFile(t, pkcs1PrivatePEM(newKey(t)))
 
-	t.Run("inline PEM", func(t *testing.T) {
-		creds := &rsacredentialsv1.RSACredentials{PrivateKeyPEM: privPEM}
-		got, err := PrivateKeyFromCredentials(creds)
-		require.NoError(t, err)
-		require.NotNil(t, got)
-		assert.Equal(t, key.D, got.D)
-	})
-
-	t.Run("file path", func(t *testing.T) {
-		path := writeTempFile(t, privPEM)
-		creds := &rsacredentialsv1.RSACredentials{PrivateKeyPEMFile: path}
-		got, err := PrivateKeyFromCredentials(creds)
-		require.NoError(t, err)
-		require.NotNil(t, got)
-		assert.Equal(t, key.D, got.D)
-	})
-
-	t.Run("empty returns nil", func(t *testing.T) {
-		creds := &rsacredentialsv1.RSACredentials{}
-		got, err := PrivateKeyFromCredentials(creds)
-		require.NoError(t, err)
-		assert.Nil(t, got)
-	})
-
-	t.Run("inline takes priority over file", func(t *testing.T) {
-		otherKey := newKey(t)
-		path := writeTempFile(t, pkcs1PrivatePEM(otherKey))
-		creds := &rsacredentialsv1.RSACredentials{
-			PrivateKeyPEM:     privPEM,
-			PrivateKeyPEMFile: path,
-		}
-		got, err := PrivateKeyFromCredentials(creds)
-		require.NoError(t, err)
-		require.NotNil(t, got)
-		assert.Equal(t, key.D, got.D)
-	})
+	tests := []struct {
+		name    string
+		creds   *rsacredentialsv1.RSACredentials
+		wantNil bool
+	}{
+		{
+			name:  "inline PEM",
+			creds: &rsacredentialsv1.RSACredentials{PrivateKeyPEM: privPEM},
+		},
+		{
+			name:  "file path",
+			creds: &rsacredentialsv1.RSACredentials{PrivateKeyPEMFile: privFile},
+		},
+		{
+			name:    "empty returns nil",
+			creds:   &rsacredentialsv1.RSACredentials{},
+			wantNil: true,
+		},
+		{
+			name: "inline takes priority over file",
+			creds: &rsacredentialsv1.RSACredentials{
+				PrivateKeyPEM:     privPEM,
+				PrivateKeyPEMFile: otherFile,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := PrivateKeyFromCredentials(tt.creds)
+			require.NoError(t, err)
+			if tt.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, key.D, got.D)
+		})
+	}
 }
 
 func TestPublicKeyFromCredentials(t *testing.T) {
 	key := newKey(t)
 	pubPEM := pkixPublicPEM(key)
+	pubFile := writeTempFile(t, pubPEM)
 
-	t.Run("inline public key PEM", func(t *testing.T) {
-		creds := &rsacredentialsv1.RSACredentials{PublicKeyPEM: pubPEM}
-		got, err := PublicKeyFromCredentials(creds)
-		require.NoError(t, err)
-		require.NotNil(t, got)
-		assert.Equal(t, key.PublicKey.N, got.PublicKey.N)
-	})
-
-	t.Run("file path", func(t *testing.T) {
-		path := writeTempFile(t, pubPEM)
-		creds := &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: path}
-		got, err := PublicKeyFromCredentials(creds)
-		require.NoError(t, err)
-		require.NotNil(t, got)
-		assert.Equal(t, key.PublicKey.N, got.PublicKey.N)
-	})
-
-	t.Run("empty with private key derives public", func(t *testing.T) {
-		creds := &rsacredentialsv1.RSACredentials{PrivateKeyPEM: pkcs1PrivatePEM(key)}
-		got, err := PublicKeyFromCredentials(creds)
-		require.NoError(t, err)
-		require.NotNil(t, got)
-		assert.Equal(t, key.PublicKey.N, got.PublicKey.N)
-	})
-
-	t.Run("completely empty returns nil", func(t *testing.T) {
-		creds := &rsacredentialsv1.RSACredentials{}
-		got, err := PublicKeyFromCredentials(creds)
-		require.NoError(t, err)
-		assert.Nil(t, got)
-	})
+	tests := []struct {
+		name    string
+		creds   *rsacredentialsv1.RSACredentials
+		wantNil bool
+	}{
+		{
+			name:  "inline public key PEM",
+			creds: &rsacredentialsv1.RSACredentials{PublicKeyPEM: pubPEM},
+		},
+		{
+			name:  "file path",
+			creds: &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: pubFile},
+		},
+		{
+			name:  "empty with private key derives public",
+			creds: &rsacredentialsv1.RSACredentials{PrivateKeyPEM: pkcs1PrivatePEM(key)},
+		},
+		{
+			name:    "completely empty returns nil",
+			creds:   &rsacredentialsv1.RSACredentials{},
+			wantNil: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := PublicKeyFromCredentials(tt.creds)
+			require.NoError(t, err)
+			if tt.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, key.PublicKey.N, got.PublicKey.N)
+		})
+	}
 }
 
 func TestCertificateChainFromCredentials(t *testing.T) {
 	key := newKey(t)
 	certPEM := selfSignedCertPEM(t, key)
+	certFile := writeTempFile(t, certPEM)
 
-	t.Run("inline cert PEM", func(t *testing.T) {
-		creds := &rsacredentialsv1.RSACredentials{PublicKeyPEM: certPEM}
-		got, err := CertificateChainFromCredentials(creds)
-		require.NoError(t, err)
-		require.Len(t, got, 1)
-		assert.Equal(t, "test", got[0].Subject.CommonName)
-	})
-
-	t.Run("file path", func(t *testing.T) {
-		path := writeTempFile(t, certPEM)
-		creds := &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: path}
-		got, err := CertificateChainFromCredentials(creds)
-		require.NoError(t, err)
-		require.Len(t, got, 1)
-		assert.Equal(t, "test", got[0].Subject.CommonName)
-	})
-
-	t.Run("empty returns nil", func(t *testing.T) {
-		creds := &rsacredentialsv1.RSACredentials{}
-		got, err := CertificateChainFromCredentials(creds)
-		require.NoError(t, err)
-		assert.Nil(t, got)
-	})
+	tests := []struct {
+		name    string
+		creds   *rsacredentialsv1.RSACredentials
+		wantNil bool
+	}{
+		{
+			name:  "inline cert PEM",
+			creds: &rsacredentialsv1.RSACredentials{PublicKeyPEM: certPEM},
+		},
+		{
+			name:  "file path",
+			creds: &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: certFile},
+		},
+		{
+			name:    "empty returns nil",
+			creds:   &rsacredentialsv1.RSACredentials{},
+			wantNil: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := CertificateChainFromCredentials(tt.creds)
+			require.NoError(t, err)
+			if tt.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+			require.Len(t, got, 1)
+			assert.Equal(t, "test", got[0].Subject.CommonName)
+		})
+	}
 }
 
 func TestLoadBytes(t *testing.T) {
-	t.Run("inline value returned directly", func(t *testing.T) {
-		b, err := loadBytes("hello", "")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("hello"), b)
-	})
+	existingFile := filepath.Join(t.TempDir(), "data.txt")
+	require.NoError(t, os.WriteFile(existingFile, []byte("from-file"), 0o600))
+	missingFile := filepath.Join(t.TempDir(), "nonexistent.pem")
 
-	t.Run("file read when inline empty", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "data.txt")
-		require.NoError(t, os.WriteFile(path, []byte("from-file"), 0o600))
-		b, err := loadBytes("", path)
-		require.NoError(t, err)
-		assert.Equal(t, []byte("from-file"), b)
-	})
-
-	t.Run("both empty returns nil", func(t *testing.T) {
-		b, err := loadBytes("", "")
-		require.NoError(t, err)
-		assert.Nil(t, b)
-	})
-
-	t.Run("missing file returns error", func(t *testing.T) {
-		_, err := loadBytes("", filepath.Join(t.TempDir(), "nonexistent.pem"))
-		require.Error(t, err)
-	})
-
-	t.Run("inline takes priority over file", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "data.txt")
-		require.NoError(t, os.WriteFile(path, []byte("from-file"), 0o600))
-		b, err := loadBytes("inline", path)
-		require.NoError(t, err)
-		assert.Equal(t, []byte("inline"), b)
-	})
+	tests := []struct {
+		name    string
+		inline  string
+		file    string
+		want    []byte
+		wantErr bool
+	}{
+		{name: "inline value returned directly", inline: "hello", want: []byte("hello")},
+		{name: "file read when inline empty", file: existingFile, want: []byte("from-file")},
+		{name: "both empty returns nil"},
+		{name: "missing file returns error", file: missingFile, wantErr: true},
+		{name: "inline takes priority over file", inline: "inline", file: existingFile, want: []byte("inline")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b, err := loadBytes(tt.inline, tt.file)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, b)
+		})
+	}
 }
