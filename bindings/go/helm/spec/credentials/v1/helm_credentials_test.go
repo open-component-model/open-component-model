@@ -45,8 +45,12 @@ func TestFromDirectCredentials_PartialFields(t *testing.T) {
 func TestFromDirectCredentials_EmptyMap(t *testing.T) {
 	creds := FromDirectCredentials(map[string]string{})
 
+	assert.Equal(t, runtime.NewVersionedType(HelmHTTPCredentialsType, Version), creds.Type)
 	assert.Empty(t, creds.Username)
 	assert.Empty(t, creds.Password)
+	assert.Empty(t, creds.CertFile)
+	assert.Empty(t, creds.KeyFile)
+	assert.Empty(t, creds.Keyring)
 }
 
 func TestFromDirectCredentials_NilMap(t *testing.T) {
