@@ -44,8 +44,8 @@ type Handler struct {
 // Binary resolution is lazy — on first Sign/Verify call, it looks for cosign
 // on PATH and falls back to auto-downloading the pinned version if not found.
 // Call Ensure() after New() for fail-fast behavior at startup.
-func New() *Handler {
-	return &Handler{executor: NewDefaultExecutor()}
+func New(opts ...ExecutorOption) *Handler {
+	return &Handler{executor: NewDefaultExecutor(opts...)}
 }
 
 // Ensure resolves the cosign binary eagerly. Call after New() when you want

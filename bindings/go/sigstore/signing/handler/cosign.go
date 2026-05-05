@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
@@ -37,11 +38,30 @@ type DefaultExecutor struct {
 	mu         sync.Mutex
 	binaryPath string
 	resolved   bool
+	httpClient *http.Client
+}
+
+// ExecutorOption configures a DefaultExecutor.
+type ExecutorOption func(*DefaultExecutor)
+
+// WithHTTPClient sets the HTTP client used for cosign binary downloads.
+// If nil or not provided, a default client with a 2-minute timeout is used.
+func WithHTTPClient(c *http.Client) ExecutorOption {
+	return func(e *DefaultExecutor) {
+		e.httpClient = c
+	}
 }
 
 // NewDefaultExecutor returns an executor that shells out to the cosign binary.
-func NewDefaultExecutor() *DefaultExecutor {
-	return &DefaultExecutor{binaryPath: "cosign"}
+func NewDefaultExecutor(opts ...ExecutorOption) *DefaultExecutor {
+	e := &DefaultExecutor{
+		binaryPath: "cosign",
+		httpClient: &http.Client{Timeout: 2 * time.Minute},
+	}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e
 }
 
 // Ensure resolves the cosign binary eagerly for fail-fast behavior at startup.
@@ -64,7 +84,7 @@ func (e *DefaultExecutor) ensureCosignAvailable(ctx context.Context) error {
 		e.resolved = true
 		return nil
 	}
-	path, dlErr := ensureOrDownloadCosign(ctx)
+	path, dlErr := ensureOrDownloadCosign(ctx, e.httpClient)
 	if dlErr != nil {
 		return fmt.Errorf(
 			"cosign binary not found on PATH and auto-download failed: %w "+
