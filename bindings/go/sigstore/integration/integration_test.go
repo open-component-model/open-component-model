@@ -459,3 +459,25 @@ func Test_Integration_PrivateInfrastructure(t *testing.T) {
 	})
 	r.NoError(err)
 }
+
+func Test_Integration_AmbientSIGSTORE_ID_TOKEN(t *testing.T) {
+	t.Setenv("SIGSTORE_ID_TOKEN", stack.OIDCToken)
+
+	h := newHandler(t)
+	digest := uniqueDigest(t, "ambient-sigstore-id-token")
+
+	sigInfo, err := h.Sign(t.Context(), digest, defaultSignConfig(), map[string]string{})
+	require.NoError(t, err, "signing with ambient SIGSTORE_ID_TOKEN should succeed without credential")
+	require.Equal(t, v1alpha1.AlgorithmSigstore, sigInfo.Algorithm)
+	require.NotEmpty(t, sigInfo.Value)
+	require.NotEmpty(t, sigInfo.Issuer)
+
+	signed := descruntime.Signature{
+		Name:      "ambient-sigstore-id-token-test",
+		Digest:    digest,
+		Signature: sigInfo,
+	}
+
+	r := require.New(t)
+	r.NoError(h.Verify(t.Context(), signed, verifyConfig(), nil))
+}

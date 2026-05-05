@@ -472,6 +472,33 @@ func TestSign_UnregisteredConfigType(t *testing.T) {
 	r.Contains(err.Error(), "convert config")
 }
 
+func TestSign_AmbientSIGSTORE_ID_TOKEN(t *testing.T) {
+	t.Setenv("SIGSTORE_ID_TOKEN", "ambient-token-from-env")
+
+	mock := newSignMock(t, fakeBundleJSON(t))
+	h := NewWithExecutor(mock)
+
+	result, err := h.Sign(t.Context(), testDigest(), testSignConfig(), map[string]string{})
+	require.NoError(t, err)
+	require.True(t, mock.called)
+	require.Equal(t, "ambient-token-from-env", envValue(mock.env, "SIGSTORE_ID_TOKEN"))
+	require.NotEmpty(t, result.Value)
+}
+
+func TestSign_AmbientACTIONS_ID_TOKEN_vars(t *testing.T) {
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ghs_fakeRunnerJWT")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://token.actions.githubusercontent.com")
+
+	mock := newSignMock(t, fakeBundleJSON(t))
+	h := NewWithExecutor(mock)
+
+	_, err := h.Sign(t.Context(), testDigest(), testSignConfig(), map[string]string{})
+	require.NoError(t, err)
+	require.Equal(t, "ghs_fakeRunnerJWT", envValue(mock.env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN"))
+	require.Equal(t, "https://token.actions.githubusercontent.com", envValue(mock.env, "ACTIONS_ID_TOKEN_REQUEST_URL"))
+	require.False(t, hasEnvKey(mock.env, "SIGSTORE_ID_TOKEN"), "should not inject SIGSTORE_ID_TOKEN when Actions OIDC is available")
+}
+
 // --- Verify Tests ---
 
 func TestHandler_Verify(t *testing.T) {
