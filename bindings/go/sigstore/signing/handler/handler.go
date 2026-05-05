@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"encoding/asn1"
@@ -111,7 +112,7 @@ func (h *Handler) Sign(
 		}
 	}()
 
-	dataPath, err := writeTemp(tmpDir, "data-*", digestBytes)
+	dataPath, err := writeTemp(tmpDir, "data-*", bytes.NewReader(digestBytes))
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("write sign data to temp file: %w", err)
 	}
@@ -237,12 +238,12 @@ func (h *Handler) Verify(
 		return fmt.Errorf("resolve trusted root: %w", err)
 	}
 
-	dataPath, err := writeTemp(tmpDir, "data-*", digestBytes)
+	dataPath, err := writeTemp(tmpDir, "data-*", bytes.NewReader(digestBytes))
 	if err != nil {
 		return fmt.Errorf("write verify data to temp file: %w", err)
 	}
 
-	bundlePath, err := writeTemp(tmpDir, "bundle-*.json", bundleJSON)
+	bundlePath, err := writeTemp(tmpDir, "bundle-*.json", bytes.NewReader(bundleJSON))
 	if err != nil {
 		return fmt.Errorf("write bundle to temp file: %w", err)
 	}
@@ -318,7 +319,7 @@ func credentialIdentity(identityType runtime.Type) runtime.Identity {
 //  4. "" — cosign falls back to public-good TUF
 func resolveTrustedRootPath(cfg *v1alpha1.VerifyConfig, creds map[string]string, tmpDir string) (string, error) {
 	if jsonVal := strings.TrimSpace(creds[CredentialKeyTrustedRootJSON]); jsonVal != "" {
-		path, err := writeTemp(tmpDir, "cosign-trusted-root-*.json", []byte(jsonVal))
+		path, err := writeTemp(tmpDir, "cosign-trusted-root-*.json", strings.NewReader(jsonVal))
 		if err != nil {
 			return "", fmt.Errorf("write trusted root to temp file: %w", err)
 		}
