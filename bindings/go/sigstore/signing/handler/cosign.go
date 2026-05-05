@@ -25,13 +25,17 @@ const defaultOperationTimeout = 3 * time.Minute
 const CosignMinimumVersion = "v3.0.4"
 
 // Executor abstracts cosign CLI invocations for testability.
+// Callers must call Ensure before Run.
 type Executor interface {
 	Run(ctx context.Context, args []string, env []string) error
 	Ensure(ctx context.Context) error
 }
 
+// ErrNotResolved is returned by Run when Ensure has not been called.
+var ErrNotResolved = errors.New("executor not resolved: call Ensure before Run")
+
 // DefaultExecutor invokes the cosign binary via os/exec.
-// Safe for concurrent use after resolution (first Run or explicit Ensure).
+// Call Ensure to resolve the binary, then Run to execute commands.
 type DefaultExecutor struct {
 	mu         sync.Mutex
 	binaryPath string
@@ -61,7 +65,8 @@ func NewDefaultExecutor(opts ...ExecutorOption) *DefaultExecutor {
 	return e
 }
 
-// Ensure resolves the cosign binary eagerly for fail-fast behavior at startup.
+// Ensure resolves the cosign binary (PATH lookup or auto-download).
+// Must be called before Run. Safe to call multiple times (no-op after first success).
 func (e *DefaultExecutor) Ensure(ctx context.Context) error {
 	return e.ensureCosignAvailable(ctx)
 }
@@ -94,9 +99,10 @@ func (e *DefaultExecutor) ensureCosignAvailable(ctx context.Context) error {
 }
 
 // Run executes the cosign binary with the given arguments and environment.
+// Ensure must be called before Run; returns ErrNotResolved otherwise.
 func (e *DefaultExecutor) Run(ctx context.Context, args []string, env []string) error {
-	if err := e.ensureCosignAvailable(ctx); err != nil {
-		return err
+	if !e.resolved {
+		return ErrNotResolved
 	}
 	ctx, cancel := context.WithTimeout(ctx, defaultOperationTimeout)
 	defer cancel()

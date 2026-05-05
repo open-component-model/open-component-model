@@ -34,21 +34,17 @@ const (
 )
 
 // Handler implements signing.Handler by delegating to the cosign CLI.
-// Safe for concurrent use after construction.
+// Ensure must be called before Sign/Verify. Safe for concurrent use after Ensure.
 type Handler struct {
 	executor Executor
 }
 
-// New returns a Handler that uses the default cosign executor.
-// Binary resolution is lazy — on first Sign/Verify call, it looks for cosign
-// on PATH and falls back to auto-downloading the pinned version if not found.
-// Call Ensure() after New() for fail-fast behavior at startup.
+// New creates a Handler. Call Ensure before Sign/Verify to resolve the cosign binary.
 func New(opts ...ExecutorOption) *Handler {
 	return &Handler{executor: NewDefaultExecutor(opts...)}
 }
 
-// Ensure resolves the cosign binary eagerly. Call after New() when you want
-// startup-time errors rather than first-use errors.
+// Ensure resolves the cosign binary. Must be called before Sign/Verify.
 func (h *Handler) Ensure(ctx context.Context) error {
 	return h.executor.Ensure(ctx)
 }
