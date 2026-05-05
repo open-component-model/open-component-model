@@ -72,11 +72,22 @@ func TestCredentialConsumerIdentity(t *testing.T) {
 				return
 			}
 
+			compatIdentity, err := internal.CredentialConsumerIdentityCompat(tt.repository)
+			if tt.expectedErr != "" {
+				require.ErrorContains(t, err, tt.expectedErr)
+				assert.Nil(t, compatIdentity)
+				return
+			}
+
+			legacyIdentity, ok := identity.(runtime.Identity)
+			require.True(t, ok, "expected identity to implement runtime.Identity")
+			require.Equal(t, compatIdentity, legacyIdentity, "expected compat identity to match legacy identity")
+
 			require.NoError(t, err)
 			require.NotNil(t, identity)
 			assert.Equal(t, tt.expectedType, identity.GetType())
 			for key, value := range tt.expectedIdentity {
-				assert.Equal(t, value, identity[key])
+				assert.Equal(t, value, legacyIdentity[key])
 			}
 		})
 	}

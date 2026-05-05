@@ -56,7 +56,7 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 		return nil, nil
 	}
 
-	return helminternal.CredentialConsumerIdentity(helm.HelmRepository)
+	return helminternal.CredentialConsumerIdentityCompat(helm.HelmRepository)
 }
 
 func (p *DigestProcessor) ProcessResourceDigest(

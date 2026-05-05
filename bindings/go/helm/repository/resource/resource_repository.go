@@ -62,7 +62,7 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 		return nil, nil
 	}
 
-	return helminternal.CredentialConsumerIdentity(helm.HelmRepository)
+	return helminternal.CredentialConsumerIdentityCompat(helm.HelmRepository)
 }
 
 // DownloadResource fetches a helm chart (and optional provenance file) from the
