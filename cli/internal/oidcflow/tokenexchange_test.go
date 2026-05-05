@@ -125,3 +125,25 @@ func TestExchangeToken_ContextCancellation(t *testing.T) {
 	})
 	r.Error(err)
 }
+
+func TestExchangeToken_EmptyTokenURL(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	_, err := ExchangeToken(t.Context(), ExchangeOptions{
+		SubjectToken: "tok",
+	})
+	r.Error(err)
+	r.Contains(err.Error(), "TokenURL is required")
+}
+
+func TestExchangeToken_EmptySubjectToken(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	_, err := ExchangeToken(t.Context(), ExchangeOptions{
+		TokenURL: "https://sts.example.com/token",
+	})
+	r.Error(err)
+	r.Contains(err.Error(), "SubjectToken is required")
+}
