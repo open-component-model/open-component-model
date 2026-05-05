@@ -1,10 +1,10 @@
 # Contributing to an OCM SIG
 
-Welcome, and thanks for your interest in joining one of the Open Component Model (OCM) Special Interest Groups.
+Welcome, and thanks for your interest in joining one of the Open Component Model (OCM) Special Interest Groups (SIG).
 This document is the front door for participating in a SIG. It points you at the channels, ceremonies, and paths that
 that help you navigate the processes around this SIG.
 
-This guide covers participation in the SIG itself. For contributing **code** to OCM repositories see the [neonephos contributing guide](https://github.com/neonephos/.github/blob/main/CONTRIBUTING.md).
+This guide covers participation in the SIG itself. For contributing **code** to OCM repositories see the [NeoNephos contributing guide](https://github.com/neonephos/.github/blob/main/CONTRIBUTING.md).
 For the formal governance rules, see the [SIG Handbook](./SIG-Handbook.md).
 
 ## Before You Start
@@ -66,7 +66,7 @@ Code contributions follow the standard OCM flow:
 4. Address review feedback. Maintainers prioritize reviews but may take time on larger changes.
 5. Once approved and merged, you are done.
 
-Full details: [neonephos CONTRIBUTING.md](https://github.com/neonephos/.github/blob/main/CONTRIBUTING.md).
+Full details: [NeoNephos CONTRIBUTING.md](https://github.com/neonephos/.github/blob/main/CONTRIBUTING.md).
 
 For larger changes (new features, API changes, cross-cutting refactors), open an issue or raise it at a community call **before** writing code. It saves everyone time.
 
