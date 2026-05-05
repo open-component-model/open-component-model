@@ -67,21 +67,8 @@ func cosignCachePath(version string) (string, error) {
 
 // ensureOrDownloadCosign returns a path to a usable cosign binary.
 // It checks the cache first, then downloads if necessary with checksum verification.
-//
-// Concurrency: Multiple goroutines (or processes) may call this concurrently.
-// The final os.Rename is atomic on POSIX, so concurrent downloads produce a valid
-// binary but waste bandwidth. Within a single DefaultExecutor instance, the mutex
-// and resolved flag ensure at most one resolution attempt per process (with retry
-// on transient failure).
-// TODO(controller): add flock-based locking when concurrent controller access is needed.
-//
-// Security note (TOCTOU): The cache check (Stat) and binary execution are two
-// separate non-atomic steps. On a shared machine, a malicious local user with
-// write access to the cache directory could replace the verified binary between
-// Stat and exec. The cache directory is created with 0o700 permissions (owner-only)
-// which eliminates this risk for the common case. On network filesystems or when
-// running as root, additional hardening (e.g. executing from an fd rather than
-// a path) would be needed.
+// This function is not safe for concurrent use; the caller must serialize access
+// (DefaultExecutor.ensureCosignAvailable holds its mutex before calling this).
 func ensureOrDownloadCosign(ctx context.Context) (string, error) {
 	cacheDir, err := cosignCachePath(CosignVersion)
 	if err != nil {
