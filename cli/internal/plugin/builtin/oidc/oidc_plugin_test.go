@@ -15,61 +15,65 @@ import (
 
 func Test_OIDCPlugin_GetConsumerIdentity(t *testing.T) {
 	t.Parallel()
-	r := require.New(t)
 
-	plugin := &OIDCPlugin{}
+	tests := []struct {
+		name     string
+		config   string
+		assertFn func(t *testing.T, id runtime.Identity)
+	}{
+		{
+			name:   "interactive with custom values",
+			config: `{"type":"OIDCIdentityTokenProvider/v1alpha1","issuer":"https://custom.issuer.dev","clientID":"my-client"}`,
+			assertFn: func(t *testing.T, id runtime.Identity) {
+				r := require.New(t)
+				r.Equal("https://custom.issuer.dev", id[configKeyIssuer])
+				r.Equal("my-client", id[configKeyClientID])
+				r.Empty(id[configKeyFlow])
+			},
+		},
+		{
+			name:   "interactive with defaults",
+			config: `{"type":"OIDCIdentityTokenProvider/v1alpha1"}`,
+			assertFn: func(t *testing.T, id runtime.Identity) {
+				r := require.New(t)
+				r.Equal("https://oauth2.sigstore.dev/auth", id[configKeyIssuer])
+				r.Equal("sigstore", id[configKeyClientID])
+			},
+		},
+		{
+			name:   "token-exchange",
+			config: `{"type":"OIDCIdentityTokenProvider/v1alpha1","flow":"token-exchange","tokenURL":"https://sts.example.com/token","subjectTokenEnvVar":"CI_TOKEN"}`,
+			assertFn: func(t *testing.T, id runtime.Identity) {
+				r := require.New(t)
+				r.Equal("token-exchange", id[configKeyFlow])
+				r.Equal("https://sts.example.com/token", id[configKeyTokenURL])
+				r.Equal("CI_TOKEN", id[configKeySubjectTokenEnvVar])
+				r.Empty(id[configKeyIssuer])
+				r.Empty(id[configKeyClientID])
+			},
+		},
+	}
 
-	raw := &runtime.Raw{}
-	raw.SetType(OIDCPluginTypeVersioned)
-	raw.Data = []byte(`{"type":"OIDCIdentityTokenProvider/v1alpha1","issuer":"https://custom.issuer.dev","clientID":"my-client"}`)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
 
-	id, err := plugin.GetConsumerIdentity(t.Context(), raw)
-	r.NoError(err)
-	r.Equal("https://custom.issuer.dev", id[configKeyIssuer])
-	r.Equal("my-client", id[configKeyClientID])
+			plugin := &OIDCPlugin{}
+			raw := &runtime.Raw{}
+			raw.SetType(OIDCPluginTypeVersioned)
+			raw.Data = []byte(tt.config)
 
-	idType, err := id.ParseType()
-	r.NoError(err)
-	r.Equal(OIDCPluginTypeVersioned, idType)
-}
+			id, err := plugin.GetConsumerIdentity(t.Context(), raw)
+			r.NoError(err)
 
-func Test_OIDCPlugin_GetConsumerIdentity_Defaults(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
+			idType, err := id.ParseType()
+			r.NoError(err)
+			r.Equal(OIDCPluginTypeVersioned, idType)
 
-	plugin := &OIDCPlugin{}
-
-	raw := &runtime.Raw{}
-	raw.SetType(OIDCPluginTypeVersioned)
-	raw.Data = []byte(`{"type":"OIDCIdentityTokenProvider/v1alpha1"}`)
-
-	id, err := plugin.GetConsumerIdentity(t.Context(), raw)
-	r.NoError(err)
-	r.Equal("https://oauth2.sigstore.dev/auth", id[configKeyIssuer])
-	r.Equal("sigstore", id[configKeyClientID])
-}
-
-func Test_OIDCPlugin_GetConsumerIdentity_TokenExchange(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	plugin := &OIDCPlugin{}
-
-	raw := &runtime.Raw{}
-	raw.SetType(OIDCPluginTypeVersioned)
-	raw.Data = []byte(`{"type":"OIDCIdentityTokenProvider/v1alpha1","flow":"token-exchange","tokenURL":"https://sts.example.com/token","subjectTokenEnvVar":"CI_TOKEN"}`)
-
-	id, err := plugin.GetConsumerIdentity(t.Context(), raw)
-	r.NoError(err)
-	r.Equal("token-exchange", id[configKeyFlow])
-	r.Equal("https://sts.example.com/token", id[configKeyTokenURL])
-	r.Equal("CI_TOKEN", id[configKeySubjectTokenEnvVar])
-	r.Empty(id[configKeyIssuer])
-	r.Empty(id[configKeyClientID])
-
-	idType, err := id.ParseType()
-	r.NoError(err)
-	r.Equal(OIDCPluginTypeVersioned, idType)
+			tt.assertFn(t, id)
+		})
+	}
 }
 
 func Test_OIDCPlugin_Resolve_TokenExchange(t *testing.T) {
@@ -90,11 +94,9 @@ func Test_OIDCPlugin_Resolve_TokenExchange(t *testing.T) {
 
 	plugin := &OIDCPlugin{}
 	identity := runtime.Identity{
-		configKeyFlow:              flowTokenExchange,
-		configKeyTokenURL:          srv.URL,
+		configKeyFlow:               flowTokenExchange,
+		configKeyTokenURL:           srv.URL,
 		configKeySubjectTokenEnvVar: "TEST_OIDC_SUBJECT_TOKEN",
-		configKeySubjectTokenType:  "urn:ietf:params:oauth:token-type:jwt",
-		configKeyAudience:          "sigstore",
 	}
 
 	creds, err := plugin.Resolve(t.Context(), identity, nil)
@@ -102,33 +104,54 @@ func Test_OIDCPlugin_Resolve_TokenExchange(t *testing.T) {
 	r.Equal("exchanged-id-token", creds[credentialKeyToken])
 }
 
-func Test_OIDCPlugin_Resolve_TokenExchange_MissingTokenURL(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	plugin := &OIDCPlugin{}
-	identity := runtime.Identity{
-		configKeyFlow: flowTokenExchange,
+func Test_OIDCPlugin_Resolve_TokenExchange_Errors(t *testing.T) {
+	tests := []struct {
+		name        string
+		identity    runtime.Identity
+		envKey      string
+		envVal      string
+		errContains string
+	}{
+		{
+			name:        "missing tokenURL",
+			identity:    runtime.Identity{configKeyFlow: flowTokenExchange},
+			errContains: "tokenURL",
+		},
+		{
+			name: "no token source",
+			identity: runtime.Identity{
+				configKeyFlow:     flowTokenExchange,
+				configKeyTokenURL: "https://sts.example.com/token",
+			},
+			errContains: "no subject token",
+		},
+		{
+			name: "env var empty",
+			identity: runtime.Identity{
+				configKeyFlow:               flowTokenExchange,
+				configKeyTokenURL:           "https://sts.example.com/token",
+				configKeySubjectTokenEnvVar: "TEST_OIDC_ERR_TOKEN",
+				configKeySubjectToken:       "fallback-literal",
+			},
+			envKey:      "TEST_OIDC_ERR_TOKEN",
+			envVal:      "",
+			errContains: "empty or unset",
+		},
 	}
 
-	_, err := plugin.Resolve(t.Context(), identity, nil)
-	r.Error(err)
-	r.Contains(err.Error(), "tokenURL")
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			if tt.envKey != "" {
+				t.Setenv(tt.envKey, tt.envVal)
+			}
 
-func Test_OIDCPlugin_Resolve_TokenExchange_NoTokenSource(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	plugin := &OIDCPlugin{}
-	identity := runtime.Identity{
-		configKeyFlow:     flowTokenExchange,
-		configKeyTokenURL: "https://sts.example.com/token",
+			plugin := &OIDCPlugin{}
+			_, err := plugin.Resolve(t.Context(), tt.identity, nil)
+			r.Error(err)
+			r.Contains(err.Error(), tt.errContains)
+		})
 	}
-
-	_, err := plugin.Resolve(t.Context(), identity, nil)
-	r.Error(err)
-	r.Contains(err.Error(), "no subject token")
 }
 
 func Test_OIDCPlugin_Resolve_TokenExchange_Priority(t *testing.T) {
@@ -147,36 +170,15 @@ func Test_OIDCPlugin_Resolve_TokenExchange_Priority(t *testing.T) {
 
 	plugin := &OIDCPlugin{}
 	identity := runtime.Identity{
-		configKeyFlow:              flowTokenExchange,
-		configKeyTokenURL:          srv.URL,
+		configKeyFlow:               flowTokenExchange,
+		configKeyTokenURL:           srv.URL,
 		configKeySubjectTokenEnvVar: "TEST_OIDC_PRIORITY_TOKEN",
-		configKeySubjectToken:      "literal-token-value",
-		configKeySubjectTokenType:  "urn:ietf:params:oauth:token-type:jwt",
-		configKeyAudience:          "sigstore",
+		configKeySubjectToken:       "literal-token-value",
 	}
 
 	creds, err := plugin.Resolve(t.Context(), identity, nil)
 	r.NoError(err)
 	r.Equal("result-token", creds[credentialKeyToken])
-}
-
-func Test_OIDCPlugin_Resolve_TokenExchange_EnvVarEmpty(t *testing.T) {
-	r := require.New(t)
-
-	t.Setenv("TEST_OIDC_EMPTY_TOKEN", "")
-
-	plugin := &OIDCPlugin{}
-	identity := runtime.Identity{
-		configKeyFlow:               flowTokenExchange,
-		configKeyTokenURL:           "https://sts.example.com/token",
-		configKeySubjectTokenEnvVar: "TEST_OIDC_EMPTY_TOKEN",
-		configKeySubjectToken:       "fallback-literal",
-	}
-
-	_, err := plugin.Resolve(t.Context(), identity, nil)
-	r.Error(err)
-	r.Contains(err.Error(), "TEST_OIDC_EMPTY_TOKEN")
-	r.Contains(err.Error(), "empty or unset")
 }
 
 func Test_OIDCPlugin_Resolve_TokenExchange_FileSource(t *testing.T) {
@@ -200,8 +202,6 @@ func Test_OIDCPlugin_Resolve_TokenExchange_FileSource(t *testing.T) {
 		configKeyFlow:             flowTokenExchange,
 		configKeyTokenURL:         srv.URL,
 		configKeySubjectTokenFile: tokenFile,
-		configKeySubjectTokenType: "urn:ietf:params:oauth:token-type:jwt",
-		configKeyAudience:         "sigstore",
 	}
 
 	creds, err := plugin.Resolve(t.Context(), identity, nil)
