@@ -22,7 +22,7 @@ import (
 const defaultOperationTimeout = 3 * time.Minute
 
 // CosignMinimumVersion is the minimum cosign version required on PATH.
-// v3.0.4 introduced --use-signing-config which this handler depends on.
+// v3.0.4 introduced --signing-config which this handler depends on.
 const CosignMinimumVersion = "v3.0.4"
 
 // Executor abstracts cosign CLI invocations for testability.
@@ -151,6 +151,7 @@ func writeTemp(dir, pattern string, r io.Reader) (path string, err error) {
 	return f.Name(), nil
 }
 
+// cosignEnv returns the full process environment — COSIGN_*, SIGSTORE_*, TUF_*, proxy vars all pass through.
 func cosignEnv() []string {
 	return os.Environ()
 }
@@ -210,7 +211,7 @@ func (e *DefaultExecutor) checkVersion(ctx context.Context, binaryPath string) e
 	if detectedVer.LessThan(minimumVer) {
 		return fmt.Errorf(
 			"cosign on PATH (%s) is version %s, minimum required is %s "+
-				"(--use-signing-config flag not available in older versions)",
+				"(--signing-config flag not available in older versions)",
 			binaryPath, detected, CosignMinimumVersion)
 	}
 	pinnedVer, _ := semver.NewVersion(CosignVersion)
