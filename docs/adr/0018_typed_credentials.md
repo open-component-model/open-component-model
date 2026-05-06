@@ -136,8 +136,8 @@ credential registered in the `CredentialTypeScheme` (e.g., `HelmHTTPCredentials/
 lookup with no plugin call.
 
 **Indirect credentials** apply when the credential type requires a plugin (e.g., `AWSSecretsManager`,
-`HashiCorpVault`). The plugin is looked up via the `CredentialPluginProvider` — the plugin registry for credential
-plugins. It is used at ingestion time to call `GetConsumerIdentity`, which tells the graph what identity the plugin
+`HashiCorpVault`). The plugin is looked up via the `CredentialPluginProvider`. 
+It is used at ingestion time to call `GetConsumerIdentity`, which tells the graph what identity the plugin
 itself needs credentials for; the graph then creates a DAG edge from the consumer identity to that credential identity.
 At resolution time the `CredentialPluginProvider` is used again to call `Resolve` with the credentials that were
 recursively resolved for the credential identity.
