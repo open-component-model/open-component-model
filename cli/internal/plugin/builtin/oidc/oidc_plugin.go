@@ -28,7 +28,8 @@ const (
 	configKeyAudience           = "audience"
 	credentialKeyToken          = "token"
 
-	flowTokenExchange = "token-exchange"
+	flowTokenExchange    = "token-exchange"
+	flowAuthorizationCode = "authorization-code"
 )
 
 // OIDCPluginTypeVersioned is the fully qualified type for the OIDCIdentityTokenProvider credential plugin.
@@ -74,7 +75,12 @@ func (p *OIDCPlugin) GetConsumerIdentity(_ context.Context, credential runtime.T
 	id := runtime.Identity{}
 	if cfg.flow == flowTokenExchange {
 		id[configKeyFlow] = cfg.flow
-		id[configKeyTokenURL] = cfg.tokenURL
+		if cfg.tokenURL != "" {
+			id[configKeyTokenURL] = cfg.tokenURL
+		}
+		if cfg.issuer != "" {
+			id[configKeyIssuer] = cfg.issuer
+		}
 		id[configKeySubjectTokenType] = cfg.subjectTokenType
 		id[configKeyAudience] = cfg.audience
 		if cfg.subjectTokenEnvVar != "" {
@@ -121,7 +127,15 @@ func (p *OIDCPlugin) resolveInteractive(ctx context.Context, identity runtime.Id
 func (p *OIDCPlugin) resolveTokenExchange(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
 	tokenURL := identity[configKeyTokenURL]
 	if tokenURL == "" {
-		return nil, fmt.Errorf("token-exchange flow requires tokenURL")
+		issuer := identity[configKeyIssuer]
+		if issuer == "" {
+			return nil, fmt.Errorf("token-exchange flow requires issuer or tokenURL")
+		}
+		discovered, err := oidcflow.DiscoverTokenURL(ctx, issuer, nil)
+		if err != nil {
+			return nil, err
+		}
+		tokenURL = discovered
 	}
 
 	subjectToken, err := resolveSubjectToken(identity)
@@ -200,9 +214,7 @@ func parseOIDCConfig(typed runtime.Typed) (*oidcConfig, error) {
 		return nil, fmt.Errorf("unmarshal credential: %w", err)
 	}
 
-	return &oidcConfig{
-		issuer:             cmp.Or(raw.Issuer, oidcflow.DefaultIssuer),
-		clientID:           cmp.Or(raw.ClientID, oidcflow.DefaultClientID),
+	cfg := &oidcConfig{
 		flow:               raw.Flow,
 		tokenURL:           raw.TokenURL,
 		subjectToken:       raw.SubjectToken,
@@ -210,5 +222,15 @@ func parseOIDCConfig(typed runtime.Typed) (*oidcConfig, error) {
 		subjectTokenFile:   raw.SubjectTokenFile,
 		subjectTokenType:   cmp.Or(raw.SubjectTokenType, oidcflow.DefaultSubjectTokenType),
 		audience:           cmp.Or(raw.Audience, oidcflow.DefaultAudience),
-	}, nil
+	}
+
+	if raw.Flow == flowTokenExchange {
+		cfg.issuer = raw.Issuer
+		cfg.clientID = raw.ClientID
+	} else {
+		cfg.issuer = cmp.Or(raw.Issuer, oidcflow.DefaultIssuer)
+		cfg.clientID = cmp.Or(raw.ClientID, oidcflow.DefaultClientID)
+	}
+
+	return cfg, nil
 }
