@@ -97,7 +97,22 @@ func Test_OIDCPlugin_GetConsumerIdentity(t *testing.T) {
 	}
 }
 
+func Test_OIDCPlugin_GetConsumerIdentity_UnknownFlow(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	plugin := &OIDCPlugin{}
+	raw := &runtime.Raw{}
+	raw.SetType(OIDCPluginTypeVersioned)
+	raw.Data = []byte(`{"type":"OIDCIdentityTokenProvider/v1alpha1","flow":"invalid-flow"}`)
+
+	_, err := plugin.GetConsumerIdentity(t.Context(), raw)
+	r.Error(err)
+	r.Contains(err.Error(), "unknown flow")
+}
+
 func Test_OIDCPlugin_Resolve_TokenExchange(t *testing.T) {
+	// not parallel: uses t.Setenv
 	r := require.New(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -126,6 +141,7 @@ func Test_OIDCPlugin_Resolve_TokenExchange(t *testing.T) {
 }
 
 func Test_OIDCPlugin_Resolve_TokenExchange_Errors(t *testing.T) {
+	// not parallel: subtests use t.Setenv
 	tests := []struct {
 		name        string
 		identity    runtime.Identity
@@ -194,6 +210,7 @@ func Test_OIDCPlugin_Resolve_TokenExchange_Errors(t *testing.T) {
 }
 
 func Test_OIDCPlugin_Resolve_TokenExchange_Priority(t *testing.T) {
+	// not parallel: uses t.Setenv
 	r := require.New(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -249,6 +266,7 @@ func Test_OIDCPlugin_Resolve_TokenExchange_FileSource(t *testing.T) {
 }
 
 func Test_OIDCPlugin_Resolve_TokenExchange_IssuerDiscovery(t *testing.T) {
+	// not parallel: uses t.Setenv
 	r := require.New(t)
 
 	mux := http.NewServeMux()
