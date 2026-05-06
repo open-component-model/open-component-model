@@ -90,13 +90,12 @@ func (h *Handler) Sign(
 	}
 
 	env := cosignEnv()
-	if !hasEnvKey(env, "SIGSTORE_ID_TOKEN") {
+	if !hasEnvKey(env, "SIGSTORE_ID_TOKEN") && !hasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN") {
 		token := strings.TrimSpace(creds[CredentialKeyOIDCToken])
 		if token == "" {
-			return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required for signing: " +
-				"set SIGSTORE_ID_TOKEN in the environment, or configure a consumer identity of type " +
-				"SigstoreSigner/v1alpha1 with either a direct credential (Credentials/v1) providing " +
-				"the \"token\" key, or a credential plugin (OIDCIdentityTokenProvider/v1alpha1) that resolves one")
+			return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required: " +
+				"set SIGSTORE_ID_TOKEN env var, use GitHub Actions OIDC, " +
+				"or configure an OIDCIdentityToken credential")
 		}
 		env = append(env, "SIGSTORE_ID_TOKEN="+token)
 	}
@@ -345,12 +344,12 @@ func validateTrustedRootPath(p string) error {
 	return nil
 }
 
-var permissivePatterns = map[string]bool{
-	".*": true, ".+": true, "^.*$": true, "^.+$": true,
-}
-
 func isPermissivePattern(pattern string) bool {
-	return permissivePatterns[pattern]
+	switch pattern {
+	case ".*", ".+", "^.*$", "^.+$":
+		return true
+	}
+	return false
 }
 
 var (

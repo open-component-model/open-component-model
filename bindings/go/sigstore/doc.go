@@ -62,9 +62,10 @@
 // handler forwards the resolved token to cosign internally via the
 // SIGSTORE_ID_TOKEN environment variable.
 //
-// The SIGSTORE_ID_TOKEN environment variable is deliberately excluded from
-// the general environment allowlist passed to cosign. The handler never reads
-// or forwards ambient SIGSTORE_ID_TOKEN values — the token always originates
-// from the OCM credential graph. This prevents accidental use of stale or
-// unintended tokens from the parent process environment.
+// If SIGSTORE_ID_TOKEN or ACTIONS_ID_TOKEN_REQUEST_TOKEN is already set in
+// the process environment, the handler uses the ambient token and skips
+// credential graph lookup. Otherwise the token must be resolved through
+// the credential graph and is injected into the cosign subprocess via
+// SIGSTORE_ID_TOKEN. The full parent process environment is forwarded to
+// cosign without filtering.
 package sigstore
