@@ -162,7 +162,8 @@ Values are overwritten in the order environment, settings file, command line set
   key:
     subkey: "abc ${MY_VAL}"
 </pre></li></ul><p>The resource specification supports the following blob input types, specified
-with the field <code>type</code> in the <code>input</code> field:</p><ul><li><p>Input type <code>binary</code></p><p>This blob type is used to provide base64 encoded binary content. The
+with the field <code>type</code> in the <code>input</code> field:</p><p>UpperCamelCase type names (e.g. <code>Helm</code>) are aliases for the corresponding
+lowercase types (e.g. <code>helm</code>). See the lowercase entry for full documentation.</p><ul><li><p>Input type <code>binary</code></p><p>This blob type is used to provide base64 encoded binary content. The
 specification supports the following fields:</p><ul><li><p><strong><code>data</code></strong> <em>[]byte</em></p><p>The binary data to provide.</p></li><li><p><strong><code>mediaType</code></strong> <em>string</em></p><p>This OPTIONAL property describes the media type to store with the local blob.
 The default media type is application/octet-stream and
 application/gzip if compression is enabled.</p></li><li><p><strong><code>compress</code></strong> <em>bool</em></p><p>This OPTIONAL property describes whether the content should be stored

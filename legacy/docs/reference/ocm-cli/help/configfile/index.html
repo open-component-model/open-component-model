@@ -156,7 +156,34 @@ on-demand. On the CLI, this can be done using the main command option
 The config type <code>hasher.config.ocm.software</code> can be used to define
 the default hash algorithm used to calculate digests for resources.
 It supports the field <code>hashAlgorithm</code>, with one of the following
-values:</p><ul><li><code>NO-DIGEST</code></li><li><code>SHA-256</code> (default)</li><li><code>SHA-512</code></li></ul></li><li><p><code>keys.config.ocm.software</code>
+values:</p><ul><li><code>NO-DIGEST</code></li><li><code>SHA-256</code> (default)</li><li><code>SHA-512</code></li></ul></li><li><p><code>http.config.ocm.software</code>
+The config type <code>http.config.ocm.software</code> can be used to configure
+HTTP client settings:</p><pre>
+    type: generic.config.ocm.software/v1
+    configurations:
+      - type: http.config.ocm.software
+        timeout: "0s"
+        tcpDialTimeout: "30s"
+        tcpKeepAlive: "30s"
+        tlsHandshakeTimeout: "10s"
+        responseHeaderTimeout: "0s"
+        idleConnTimeout: "90s"
+</pre><p>All timeout values are Go duration strings (e.g. &ldquo;30s&rdquo;, &ldquo;5m&rdquo;, &ldquo;1h&rdquo;).
+Use &ldquo;0s&rdquo; to disable a specific timeout. If not set, the <code>http.DefaultTransport</code>
+values from the Go standard library are used.</p><p>The fields have the following meaning:</p><ul><li><p><code>timeout</code> — specifies a time limit for requests made by the HTTP
+client. The timeout includes connection time, any redirects, and reading
+the response body. A timeout of zero means no timeout.</p></li><li><p><code>tcpDialTimeout</code> — the maximum amount of time a dial will wait
+for a TCP connect to complete. When dialing a host name with multiple IP
+addresses, the timeout may be divided between them. The operating system
+may impose its own earlier timeout.</p></li><li><p><code>tcpKeepAlive</code> — specifies the interval between keep-alive
+probes for an active network connection. If negative, keep-alive probes
+are disabled.</p></li><li><p><code>tlsHandshakeTimeout</code> — specifies the maximum amount of time
+to wait for a TLS handshake. Zero means no timeout.</p></li><li><p><code>responseHeaderTimeout</code> — specifies the amount of time to wait
+for a server&rsquo;s response headers after fully writing the request (including
+its body, if any). This time does not include the time to read the response
+body.</p></li><li><p><code>idleConnTimeout</code> — the maximum amount of time an idle
+(keep-alive) connection will remain idle before closing itself. Zero means
+no limit.</p></li></ul></li><li><p><code>keys.config.ocm.software</code>
 The config type <code>keys.config.ocm.software</code> can be used to define
 public and private keys. A key value might be given by one of the fields:</p><ul><li><code>path</code>: path of file with key data</li><li><code>data</code>: base64 encoded binary data</li><li><code>stringdata</code>: data a string parsed by key handler</li></ul><pre>
     type: keys.config.ocm.software
