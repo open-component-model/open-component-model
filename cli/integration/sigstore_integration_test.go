@@ -97,7 +97,7 @@ configurations:
 - type: credentials.config.ocm.software
   consumers:
   - identity:
-      type: OIDCIdentityToken/v1alpha1
+      type: SigstoreSigner/v1alpha1
       algorithm: sigstore
       signature: default
     credentials:
@@ -153,6 +153,8 @@ trustedRoot: %s
 	})
 
 	t.Run("sign fails without OIDC token in config", func(t *testing.T) {
+		t.Setenv("SIGSTORE_ID_TOKEN", "")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
 		r := require.New(t)
 
 		noTokenCfg := `type: generic.config.ocm.software/v1
