@@ -31,6 +31,9 @@
     {
       matchFileNames: ['kubernetes/controller/chart/**'],
       enabled: true,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
     },
     {
       matchUpdateTypes: ['minor','patch'],
@@ -55,8 +58,11 @@
     {
       matchManagers: ['github-actions'],
       matchDepNames: ['go'],
-      groupName: 'Golang versions',
-      groupSlug: 'golang-versions',
+      groupName: 'Github Actions',
+      groupSlug: 'github-actions',
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
     },
     {
       matchManagers: [
@@ -73,7 +79,7 @@
       groupSlug: 'kubernetes-deps',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
-      ]
+      ],
     },
     {
       groupName: 'Docker dependencies',
