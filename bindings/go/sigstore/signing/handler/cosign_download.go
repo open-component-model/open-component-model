@@ -218,6 +218,13 @@ func downloadAndVerifyWith(ctx context.Context, client *http.Client, url, destPa
 		_ = tmpFile.Close()
 		return fmt.Errorf("download cosign binary: %w", err)
 	}
+
+	var probe [1]byte
+	if n, _ := resp.Body.Read(probe[:]); n > 0 {
+		_ = tmpFile.Close()
+		return fmt.Errorf("cosign binary download exceeded size limit of %d bytes", maxBinaryDownloadSize)
+	}
+
 	if err := tmpFile.Close(); err != nil {
 		return fmt.Errorf("flush cosign binary download: %w", err)
 	}
