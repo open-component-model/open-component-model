@@ -157,7 +157,7 @@ func cosignEnv() []string {
 func hasEnvKey(env []string, key string) bool {
 	prefix := key + "="
 	for _, kv := range env {
-		if strings.HasPrefix(kv, prefix) {
+		if strings.HasPrefix(kv, prefix) && len(kv) > len(prefix) {
 			return true
 		}
 	}
