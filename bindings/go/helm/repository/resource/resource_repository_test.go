@@ -19,7 +19,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
-	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
+	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
