@@ -18,19 +18,30 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
-	sigcredentials "ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal/credentials"
+	oidctokenv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1"
+	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1"
+	signeridentityv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1"
+	verifieridentityv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 )
 
 var _ signing.Handler = (*Handler)(nil)
 
 const (
-	IdentityAttributeAlgorithm = "algorithm"
-	IdentityAttributeSignature = "signature"
+	// Deprecated: Use signeridentityv1.IdentityAttributeAlgorithm instead.
+	IdentityAttributeAlgorithm = signeridentityv1.IdentityAttributeAlgorithm
 
-	CredentialKeyOIDCToken           = "token"
-	CredentialKeyTrustedRootJSON     = "trusted_root_json"
-	CredentialKeyTrustedRootJSONFile = CredentialKeyTrustedRootJSON + "_file"
+	// Deprecated: Use signeridentityv1.IdentityAttributeSignature instead.
+	IdentityAttributeSignature = signeridentityv1.IdentityAttributeSignature
+
+	// Deprecated: Use oidctokenv1.CredentialKeyToken instead.
+	CredentialKeyOIDCToken = oidctokenv1.CredentialKeyToken
+
+	// Deprecated: Use trustedrootv1.CredentialKeyTrustedRootJSON instead.
+	CredentialKeyTrustedRootJSON = trustedrootv1.CredentialKeyTrustedRootJSON
+
+	// Deprecated: Use trustedrootv1.CredentialKeyTrustedRootJSONFile instead.
+	CredentialKeyTrustedRootJSONFile = trustedrootv1.CredentialKeyTrustedRootJSONFile
 )
 
 // Handler implements signing.Handler by delegating to the cosign CLI.
@@ -89,9 +100,18 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("digest value must not be empty")
 	}
 
+	typedCreds := oidctokenv1.FromDirectCredentials(creds)
+
 	env := cosignEnv()
 	if !hasEnvKey(env, "SIGSTORE_ID_TOKEN") && !hasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN") {
-		token := strings.TrimSpace(creds[CredentialKeyOIDCToken])
+		token := strings.TrimSpace(typedCreds.Token)
+		if token == "" && typedCreds.TokenFile != "" {
+			tokenBytes, err := os.ReadFile(typedCreds.TokenFile)
+			if err != nil {
+				return descruntime.SignatureInfo{}, fmt.Errorf("read OIDC token file: %w", err)
+			}
+			token = strings.TrimSpace(string(tokenBytes))
+		}
 		if token == "" {
 			return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required for signing: " +
 				"set SIGSTORE_ID_TOKEN in the environment, provide ACTIONS_ID_TOKEN_REQUEST_TOKEN " +
@@ -188,9 +208,11 @@ func (h *Handler) Verify(
 		return fmt.Errorf("invalid verification config: %w", err)
 	}
 
+	typedCreds := trustedrootv1.FromDirectCredentials(creds)
+
 	if cfg.PrivateInfrastructure && cfg.TrustedRoot == "" &&
-		strings.TrimSpace(creds[CredentialKeyTrustedRootJSON]) == "" &&
-		strings.TrimSpace(creds[CredentialKeyTrustedRootJSONFile]) == "" {
+		strings.TrimSpace(typedCreds.TrustedRootJSON) == "" &&
+		strings.TrimSpace(typedCreds.TrustedRootJSONFile) == "" {
 		return fmt.Errorf("privateInfrastructure requires a trusted root: " +
 			"set TrustedRoot in the verifier config or provide a TrustedRoot credential")
 	}
@@ -229,7 +251,7 @@ func (h *Handler) Verify(
 		}
 	}()
 
-	trustedRootPath, err := resolveTrustedRootPath(&cfg, creds, tmpDir)
+	trustedRootPath, err := resolveTrustedRootPath(&cfg, typedCreds, tmpDir)
 	if err != nil {
 		return fmt.Errorf("resolve trusted root: %w", err)
 	}
@@ -281,9 +303,7 @@ func (*Handler) GetSigningCredentialConsumerIdentity(
 	if err := v1alpha1.Scheme.Convert(rawCfg, &cfg); err != nil {
 		return nil, fmt.Errorf("convert config: %w", err)
 	}
-	id := credentialIdentity(sigcredentials.IdentityTypeSigstoreSigner)
-	id[IdentityAttributeSignature] = name
-	return id, nil
+	return sigstoreIdentityToMap(signeridentityv1.V1Alpha1Type, v1alpha1.AlgorithmSigstore, name), nil
 }
 
 func (*Handler) GetVerifyingCredentialConsumerIdentity(
@@ -294,15 +314,16 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 	if signature.Signature.MediaType != v1alpha1.MediaTypeSigstoreBundle {
 		return nil, fmt.Errorf("unsupported media type %q for sigstore verification", signature.Signature.MediaType)
 	}
-	id := credentialIdentity(sigcredentials.IdentityTypeSigstoreVerifier)
-	id[IdentityAttributeSignature] = signature.Name
-	return id, nil
+	return sigstoreIdentityToMap(verifieridentityv1.V1Alpha1Type, v1alpha1.AlgorithmSigstore, signature.Name), nil
 }
 
-func credentialIdentity(identityType runtime.Type) runtime.Identity {
-	id := runtime.Identity{IdentityAttributeAlgorithm: v1alpha1.AlgorithmSigstore}
-	id.SetType(identityType)
-	return id
+func sigstoreIdentityToMap(identityType runtime.Type, algorithm, signature string) runtime.Identity {
+	m := runtime.Identity{
+		signeridentityv1.IdentityAttributeAlgorithm: algorithm,
+		signeridentityv1.IdentityAttributeSignature: signature,
+	}
+	m.SetType(identityType)
+	return m
 }
 
 // resolveTrustedRootPath returns a path to the trusted root JSON, or ""
@@ -313,8 +334,8 @@ func credentialIdentity(identityType runtime.Type) runtime.Identity {
 //  2. File path from credentials (not removed on cleanup)
 //  3. Config field value (not removed on cleanup)
 //  4. "" — cosign falls back to public-good TUF
-func resolveTrustedRootPath(cfg *v1alpha1.VerifyConfig, creds map[string]string, tmpDir string) (string, error) {
-	if jsonVal := strings.TrimSpace(creds[CredentialKeyTrustedRootJSON]); jsonVal != "" {
+func resolveTrustedRootPath(cfg *v1alpha1.VerifyConfig, creds *trustedrootv1.TrustedRoot, tmpDir string) (string, error) {
+	if jsonVal := strings.TrimSpace(creds.TrustedRootJSON); jsonVal != "" {
 		path, err := writeTemp(tmpDir, "cosign-trusted-root-*.json", strings.NewReader(jsonVal))
 		if err != nil {
 			return "", fmt.Errorf("write trusted root to temp file: %w", err)
@@ -322,7 +343,7 @@ func resolveTrustedRootPath(cfg *v1alpha1.VerifyConfig, creds map[string]string,
 		return path, nil
 	}
 
-	if filePath := strings.TrimSpace(creds[CredentialKeyTrustedRootJSONFile]); filePath != "" {
+	if filePath := strings.TrimSpace(creds.TrustedRootJSONFile); filePath != "" {
 		if err := validateTrustedRootPath(filePath); err != nil {
 			return "", err
 		}
