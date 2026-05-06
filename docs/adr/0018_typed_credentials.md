@@ -126,6 +126,36 @@ sequenceDiagram
     C->>C: type-assert fields<br/>(CertFile, KeyFile, Keyring)
 ```
 
+### Credential Resolution: Direct vs. Indirect
+
+The credential graph resolves credentials through two paths, determined at ingestion time.
+
+**Direct credentials** apply when a consumer's credential entry is a `Credentials/v1` (plain `properties` map) or a typed
+credential registered in the `CredentialTypeScheme` (e.g., `HelmHTTPCredentials/v1`). The graph stores these as
+`runtime.Typed` directly on the identity node at ingestion time; `ResolveTyped` returns them immediately as a leaf
+lookup with no plugin call.
+
+**Indirect credentials** apply when the credential type requires a plugin (e.g., `AWSSecretsManager`,
+`HashiCorpVault`). The plugin is looked up via the `CredentialPluginProvider` — the plugin registry for credential
+plugins. It is used at ingestion time to call `GetConsumerIdentity`, which tells the graph what identity the plugin
+itself needs credentials for; the graph then creates a DAG edge from the consumer identity to that credential identity.
+At resolution time the `CredentialPluginProvider` is used again to call `Resolve` with the credentials that were
+recursively resolved for the credential identity.
+
+This enables transitive chains of arbitrary depth. Each node in the tree below needs credentials
+from its child before it can be called:
+
+```text
+HashiCorpVault:myvault.example.com
+  └─ needs: AWSSecretsManager (secretId: vault-access-creds)
+       └─ has: DirectCredentials {roleid: "my-role-id"}   ← leaf, resolved directly at ingestion
+```
+
+Resolution is bottom-up: the AWS plugin is called first with `{roleid}` and returns a Vault token;
+the HashiCorpVault plugin is then called with that token to return the final credentials.
+Cycles are detected at ingestion time and rejected. If no DAG node matches the queried identity at all,
+the graph falls back to registered repository plugins (e.g., `DockerConfig`).
+
 ### Typed Identity Structs
 
 Typed identity structs are `runtime.Typed` objects that represent consumer identities with structured fields instead of
@@ -199,8 +229,8 @@ flowchart LR
     Plugins["Plugin Discovery"] -->|RegisterFromPlugin<br/>from capability specs| CTR
     Plugins -->|RegisterFromPlugin<br/>from capability specs| ITR
 
-    CTR -->|Scheme()| Graph["Credential Graph"]
-    ITR -->|Scheme() + AcceptedCredentialTypes()| Graph
+    CTR -->|Scheme| Graph["Credential Graph"]
+    ITR -->|Scheme + AcceptedCredentialTypes| Graph
 ```
 
 The schemes serve a fundamentally different purpose than the credential plugins. The `CredentialPlugin` interface
@@ -317,6 +347,15 @@ binding owns its credential and identity types. The graph validates and stores t
 migration path ensures no development blocking while transitioning the multi-module monorepo.
 
 ## Changelog
+
+### 2026-05-05 — Credential resolution mechanics documented
+
+- **Direct vs. indirect credential resolution** clarified. Direct credentials (`Credentials/v1` or typed credentials
+  registered in the `CredentialTypeScheme`) are stored as leaf nodes and returned immediately. Indirect credentials
+  (plugin-backed types such as `AWSSecretsManager` or `HashiCorpVault`) create DAG edges at ingestion time; at
+  resolution time the graph traverses edges depth-first, calling each plugin with the credentials resolved for its own
+  consumer identity. Chains of arbitrary depth are supported; cycles are rejected at ingestion. Repository plugins
+  serve as a fallback when no DAG node matches, but repository-to-repository recursion is not supported.
 
 ### 2026-04-25 — Phase 1 implementation refinements
 
