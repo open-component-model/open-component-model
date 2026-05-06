@@ -30,11 +30,9 @@ func init() {
 //
 // Endpoint configuration:
 //  1. SigningConfig — cosign reads a local signing_config.json for endpoint
-//     discovery. Explicit URL fields below supplement/override endpoints from the file.
-//  2. Explicit URL fields only (no SigningConfig) — passed directly to cosign
-//     with --use-signing-config=false to disable TUF-based auto-discovery.
-//  3. Neither set — cosign's default (--use-signing-config=true) fetches
-//     the signing config from the public-good Sigstore TUF repository.
+//     discovery (Fulcio, Rekor, TSA). Create one with `cosign signing-config create`.
+//  2. Neither set — cosign's default fetches the signing config from the
+//     public-good Sigstore TUF repository.
 //
 // When an OIDC token is available in credentials, it is forwarded to cosign
 // via the SIGSTORE_ID_TOKEN environment variable. A token is required;
@@ -52,35 +50,18 @@ type SignConfig struct {
 	// SigningConfig is a filesystem path to a cosign signing configuration file
 	// (conventionally named signing_config.json).
 	// When set, cosign discovers all service endpoints (Fulcio, Rekor, TSA) from
-	// this file instead of using the individual URL fields or TUF auto-discovery.
+	// this file instead of TUF auto-discovery.
 	// Maps to cosign --signing-config.
 	SigningConfig string `json:"signingConfig,omitempty"`
-
-	// FulcioURL is the URL of the Fulcio certificate authority for keyless signing.
-	// Maps to cosign --fulcio-url.
-	FulcioURL string `json:"fulcioURL,omitempty"`
-
-	// RekorURL is the URL of the Rekor transparency log.
-	// Maps to cosign --rekor-url.
-	RekorURL string `json:"rekorURL,omitempty"`
-
-	// TimestampServerURL is the full URL of a RFC 3161 Timestamp Authority endpoint.
-	// Maps to cosign --timestamp-server-url.
-	TimestampServerURL string `json:"timestampServerURL,omitempty"`
 
 	// TrustedRoot is a filesystem path to a trusted root JSON file.
 	// When set during signing, cosign validates the Fulcio certificate chain
 	// against this root instead of the public-good Sigstore TUF root.
 	// Required when signing against a privately deployed Sigstore infrastructure
 	// (e.g. a private Fulcio CA without a CT log).
+	// Requires SigningConfig to be set (endpoints must be known).
 	// Maps to cosign --trusted-root.
 	TrustedRoot string `json:"trustedRoot,omitempty"`
-
-	// AllowInsecureEndpoints permits HTTP (non-TLS) endpoint URLs for Fulcio,
-	// Rekor, and TSA. Default false enforces HTTPS for all service communication.
-	// Only use when the network path is otherwise secured (e.g. loopback, mTLS
-	// overlay, air-gapped cluster, or local development/testing).
-	AllowInsecureEndpoints bool `json:"allowInsecureEndpoints,omitempty"`
 }
 
 // VerifyConfig defines configuration for Sigstore-based keyless verification via the cosign CLI.
@@ -143,26 +124,10 @@ type VerifyConfig struct {
 
 // Validate checks that SignConfig fields are well-formed.
 func (c *SignConfig) Validate() error {
-	if c.TrustedRoot != "" && c.SigningConfig == "" &&
-		c.FulcioURL == "" && c.RekorURL == "" && c.TimestampServerURL == "" {
+	if c.TrustedRoot != "" && c.SigningConfig == "" {
 		return fmt.Errorf("trustedRoot specifies whom to trust but no signing " +
-			"infrastructure is configured; set signingConfig or explicit endpoint URLs " +
-			"(fulcioURL, rekorURL, timestampServerURL)")
-	}
-	for _, u := range []struct{ field, val string }{
-		{"FulcioURL", c.FulcioURL},
-		{"RekorURL", c.RekorURL},
-		{"TimestampServerURL", c.TimestampServerURL},
-	} {
-		if c.AllowInsecureEndpoints {
-			if err := validateURL(u.field, u.val); err != nil {
-				return err
-			}
-		} else {
-			if err := validateHTTPS(u.field, u.val); err != nil {
-				return err
-			}
-		}
+			"infrastructure is configured; set signingConfig to point at a signing " +
+			"configuration file (create one with `cosign signing-config create`)")
 	}
 	return nil
 }

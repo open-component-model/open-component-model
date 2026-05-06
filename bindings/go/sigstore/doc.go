@@ -8,7 +8,7 @@
 //
 // # Prerequisites
 //
-// Cosign >= v3.0.4 is required (introduces --use-signing-config).
+// Cosign >= v3.0.4 is required (introduces --signing-config).
 // The tested/pinned version is defined in signing/handler/.env (COSIGN_VERSION).
 // At runtime the handler hard-fails below the minimum and warns below the
 // pinned version.
@@ -18,6 +18,13 @@
 // The handler registers two config types in its runtime.Scheme:
 //   - SigstoreSigningConfiguration/v1alpha1 — passed via --signer-spec
 //   - SigstoreVerificationConfiguration/v1alpha1 — passed via --verifier-spec
+//
+// # Endpoint Discovery
+//
+// Signing endpoints (Fulcio, Rekor, TSA) are configured via a signing config
+// file (cosign --signing-config). Create one with `cosign signing-config create`.
+// When no signing config is provided, cosign fetches the public-good Sigstore
+// signing config from its TUF repository.
 //
 // # Credential Consumer Identities
 //

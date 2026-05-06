@@ -15,13 +15,9 @@ func TestSignConfig_Validate(t *testing.T) {
 		wantErr string
 	}{
 		{"valid empty", SignConfig{}, ""},
-		{"valid https URLs", SignConfig{FulcioURL: "https://fulcio.example.com", RekorURL: "https://rekor.example.com"}, ""},
-		{"trustedRoot without endpoints rejected", SignConfig{TrustedRoot: "/path/to/root.json"}, "no signing infrastructure is configured"},
+		{"valid signingConfig only", SignConfig{SigningConfig: "/path/to/config.json"}, ""},
+		{"trustedRoot without signingConfig rejected", SignConfig{TrustedRoot: "/path/to/root.json"}, "no signing infrastructure is configured"},
 		{"trustedRoot with signingConfig accepted", SignConfig{TrustedRoot: "/path/to/root.json", SigningConfig: "/path/to/config.json"}, ""},
-		{"trustedRoot with explicit URL accepted", SignConfig{TrustedRoot: "/path/to/root.json", FulcioURL: "https://fulcio.example.com"}, ""},
-		{"http FulcioURL rejected", SignConfig{FulcioURL: "http://fulcio.example.com"}, "must use https scheme"},
-		{"http RekorURL rejected", SignConfig{RekorURL: "http://rekor.example.com"}, "must use https scheme"},
-		{"http TimestampServerURL rejected", SignConfig{TimestampServerURL: "http://tsa.example.com"}, "must use https scheme"},
 	}
 
 	for _, tc := range tests {

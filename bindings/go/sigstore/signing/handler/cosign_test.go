@@ -25,43 +25,6 @@ func TestHasEnvKey_EmptyValueTreatedAsAbsent(t *testing.T) {
 	r.True(hasEnvKey(env, "OTHER_KEY"))
 }
 
-func TestSignConfigValidateHTTPS(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name, url, wantErr string
-	}{
-		{"empty is valid", "", ""},
-		{"valid https", "https://example.com/path", ""},
-		{"http rejected", "http://example.com", "must use https scheme"},
-		{"no host", "https://", "has no host"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			r := require.New(t)
-			cfg := &v1alpha1.SignConfig{FulcioURL: tc.url}
-			err := cfg.Validate()
-			if tc.wantErr == "" {
-				r.NoError(err)
-			} else {
-				r.ErrorContains(err, tc.wantErr)
-			}
-		})
-	}
-}
-
-func TestSignConfigValidateAllowInsecure(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-	cfg := &v1alpha1.SignConfig{
-		FulcioURL: "http://fulcio.local:8080", RekorURL: "http://rekor.local:3000",
-		TimestampServerURL: "http://tsa.local:5555", AllowInsecureEndpoints: false,
-	}
-	r.Error(cfg.Validate())
-	cfg.AllowInsecureEndpoints = true
-	r.NoError(cfg.Validate())
-}
-
 func TestVerifyConfigValidateAllowInsecure(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)

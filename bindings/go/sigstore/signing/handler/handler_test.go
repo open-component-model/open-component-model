@@ -77,9 +77,7 @@ func testDigest() descruntime.Digest {
 
 func testSignConfig() *v1alpha1.SignConfig {
 	cfg := &v1alpha1.SignConfig{
-		FulcioURL:          "https://fulcio.example.com",
-		RekorURL:           "https://rekor.example.com",
-		TimestampServerURL: "https://tsa.example.com/api/v1/timestamp",
+		SigningConfig: "/etc/sigstore/signing_config.json",
 	}
 	cfg.SetType(runtime.NewVersionedType(v1alpha1.SignConfigType, v1alpha1.Version))
 	return cfg
@@ -228,37 +226,19 @@ func TestHandler_Sign(t *testing.T) {
 		assertMock   func(t *testing.T, mock *mockExecutor)
 	}{
 		{
-			name:  "builds correct args with explicit URLs",
+			name:  "builds correct args with signing config",
 			creds: map[string]string{CredentialKeyOIDCToken: "test-token"},
 			assertArgs: func(t *testing.T, args []string) {
 				r := require.New(t)
 				r.Equal("sign-blob", args[0])
 				r.True(hasArg(args, "--yes"))
 				r.True(hasArg(args, "--bundle"))
-				r.True(hasArg(args, "--use-signing-config=false"))
-				r.Equal("https://fulcio.example.com", argValue(args, "--fulcio-url"))
-				r.Equal("https://rekor.example.com", argValue(args, "--rekor-url"))
-				r.Equal("https://tsa.example.com/api/v1/timestamp", argValue(args, "--timestamp-server-url"))
+				r.Equal("/etc/sigstore/signing_config.json", argValue(args, "--signing-config"))
 			},
 			assertEnv: func(t *testing.T, env []string) {
 				r := require.New(t)
 				r.True(hasEnvKey(env, "SIGSTORE_ID_TOKEN"))
 				r.Equal("test-token", envValue(env, "SIGSTORE_ID_TOKEN"))
-			},
-		},
-		{
-			name: "signing config takes precedence over URLs",
-			cfg: func() *v1alpha1.SignConfig {
-				c := testSignConfig()
-				c.SigningConfig = "/etc/sigstore/signing_config.json"
-				return c
-			},
-			creds: map[string]string{CredentialKeyOIDCToken: "test-token"},
-			assertArgs: func(t *testing.T, args []string) {
-				r := require.New(t)
-				r.Equal("/etc/sigstore/signing_config.json", argValue(args, "--signing-config"))
-				r.False(hasArg(args, "--use-signing-config=false"))
-				r.Equal("https://fulcio.example.com", argValue(args, "--fulcio-url"))
 			},
 		},
 		{
@@ -293,7 +273,7 @@ func TestHandler_Sign(t *testing.T) {
 			},
 		},
 		{
-			name: "TrustedRoot without endpoint config rejected",
+			name: "TrustedRoot without signingConfig rejected",
 			cfg: func() *v1alpha1.SignConfig {
 				c := &v1alpha1.SignConfig{
 					TrustedRoot: "/path/to/trusted_root.json",
@@ -303,57 +283,6 @@ func TestHandler_Sign(t *testing.T) {
 			},
 			creds:   map[string]string{CredentialKeyOIDCToken: "tok"},
 			wantErr: "no signing infrastructure is configured",
-		},
-		{
-			name: "non-HTTPS FulcioURL rejected",
-			cfg: func() *v1alpha1.SignConfig {
-				c := testSignConfig()
-				c.FulcioURL = "http://fulcio.example.com"
-				return c
-			},
-			creds:   map[string]string{CredentialKeyOIDCToken: "tok"},
-			wantErr: "must use https scheme",
-		},
-		{
-			name: "non-HTTPS RekorURL rejected",
-			cfg: func() *v1alpha1.SignConfig {
-				c := testSignConfig()
-				c.RekorURL = "http://rekor.example.com"
-				return c
-			},
-			creds:   map[string]string{CredentialKeyOIDCToken: "tok"},
-			wantErr: "must use https scheme",
-		},
-		{
-			name: "non-HTTPS TimestampServerURL rejected",
-			cfg: func() *v1alpha1.SignConfig {
-				c := testSignConfig()
-				c.TimestampServerURL = "http://tsa.example.com"
-				return c
-			},
-			creds:   map[string]string{CredentialKeyOIDCToken: "tok"},
-			wantErr: "must use https scheme",
-		},
-		{
-			name: "HTTP URLs accepted with AllowInsecureEndpoints",
-			cfg: func() *v1alpha1.SignConfig {
-				c := testSignConfig()
-				c.FulcioURL = "http://fulcio.local:8080"
-				c.RekorURL = "http://rekor.local:3000"
-				c.TimestampServerURL = "http://tsa.local:5555"
-				c.AllowInsecureEndpoints = true
-				return c
-			},
-			creds: map[string]string{CredentialKeyOIDCToken: "test-token"},
-			assertArgs: func(t *testing.T, args []string) {
-				r := require.New(t)
-				r.Contains(args, "--fulcio-url")
-				r.Contains(args, "http://fulcio.local:8080")
-				r.Contains(args, "--rekor-url")
-				r.Contains(args, "http://rekor.local:3000")
-				r.Contains(args, "--timestamp-server-url")
-				r.Contains(args, "http://tsa.local:5555")
-			},
 		},
 		{
 			name:    "executor error propagated",
