@@ -150,26 +150,8 @@ func writeTemp(dir, pattern string, r io.Reader) (path string, err error) {
 	return f.Name(), nil
 }
 
-// cosignDenyEnvKeys is a denylist of environment variables that must never be forwarded
-// to the cosign subprocess (library injection vectors).
-var cosignDenyEnvKeys = map[string]bool{
-	"LD_PRELOAD":            true,
-	"DYLD_INSERT_LIBRARIES": true,
-	"LD_LIBRARY_PATH":       true,
-	"BASH_ENV":              true,
-}
-
-// cosignEnv builds the environment slice for the cosign subprocess by passing through
-// the full process environment minus denylisted keys.
 func cosignEnv() []string {
-	var env []string
-	for _, kv := range os.Environ() {
-		key, _, _ := strings.Cut(kv, "=")
-		if !cosignDenyEnvKeys[key] {
-			env = append(env, kv)
-		}
-	}
-	return env
+	return os.Environ()
 }
 
 func hasEnvKey(env []string, key string) bool {
