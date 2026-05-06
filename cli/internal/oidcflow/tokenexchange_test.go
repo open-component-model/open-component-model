@@ -3,6 +3,7 @@ package oidcflow
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -143,4 +144,84 @@ func TestExchangeToken_ContextCancellation(t *testing.T) {
 		HTTPClient:   srv.Client(),
 	})
 	r.Error(err)
+}
+
+func TestDiscoverTokenURL_Success(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"issuer":                 srv.URL,
+			"token_endpoint":         srv.URL + "/token",
+			"authorization_endpoint": srv.URL + "/authorize",
+			"jwks_uri":               srv.URL + "/keys",
+		})
+	})
+
+	tokenURL, err := DiscoverTokenURL(t.Context(), srv.URL, srv.Client())
+	r.NoError(err)
+	r.Equal(fmt.Sprintf("%s/token", srv.URL), tokenURL)
+}
+
+func TestDiscoverTokenURL_Errors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		issuer      string
+		handler     http.HandlerFunc
+		errContains string
+	}{
+		{
+			name:        "empty issuer",
+			issuer:      "",
+			errContains: "issuer is required",
+		},
+		{
+			name: "discovery endpoint not found",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "not found", http.StatusNotFound)
+			},
+			errContains: "OIDC discovery",
+		},
+		{
+			name: "missing token_endpoint",
+			handler: func(w http.ResponseWriter, req *http.Request) {
+				if req.URL.Path == "/.well-known/openid-configuration" {
+					w.Header().Set("Content-Type", "application/json")
+					fmt.Fprintf(w, `{"issuer":"http://%s","authorization_endpoint":"http://%s/authorize","jwks_uri":"http://%s/keys"}`,
+						req.Host, req.Host, req.Host)
+					return
+				}
+				http.NotFound(w, req)
+			},
+			errContains: "no token_endpoint",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+
+			issuer := tt.issuer
+			var client *http.Client
+			if tt.handler != nil {
+				srv := httptest.NewServer(tt.handler)
+				defer srv.Close()
+				issuer = srv.URL
+				client = srv.Client()
+			}
+
+			_, err := DiscoverTokenURL(t.Context(), issuer, client)
+			r.Error(err)
+			r.Contains(err.Error(), tt.errContains)
+		})
+	}
 }

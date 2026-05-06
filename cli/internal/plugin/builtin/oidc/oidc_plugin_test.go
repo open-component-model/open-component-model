@@ -41,6 +41,27 @@ func Test_OIDCPlugin_GetConsumerIdentity(t *testing.T) {
 			},
 		},
 		{
+			name:   "authorization-code explicit flow",
+			config: `{"type":"OIDCIdentityTokenProvider/v1alpha1","flow":"authorization-code","issuer":"https://accounts.google.com","clientID":"my-app"}`,
+			assertFn: func(t *testing.T, id runtime.Identity) {
+				r := require.New(t)
+				r.Equal("https://accounts.google.com", id[configKeyIssuer])
+				r.Equal("my-app", id[configKeyClientID])
+				r.Empty(id[configKeyFlow])
+			},
+		},
+		{
+			name:   "token-exchange with issuer",
+			config: `{"type":"OIDCIdentityTokenProvider/v1alpha1","flow":"token-exchange","issuer":"https://keycloak.example.com/realms/myrealm","subjectTokenEnvVar":"K8S_TOKEN"}`,
+			assertFn: func(t *testing.T, id runtime.Identity) {
+				r := require.New(t)
+				r.Equal("token-exchange", id[configKeyFlow])
+				r.Equal("https://keycloak.example.com/realms/myrealm", id[configKeyIssuer])
+				r.Empty(id[configKeyTokenURL])
+				r.Equal("K8S_TOKEN", id[configKeySubjectTokenEnvVar])
+			},
+		},
+		{
 			name:   "token-exchange",
 			config: `{"type":"OIDCIdentityTokenProvider/v1alpha1","flow":"token-exchange","tokenURL":"https://sts.example.com/token","subjectTokenEnvVar":"CI_TOKEN"}`,
 			assertFn: func(t *testing.T, id runtime.Identity) {
@@ -116,7 +137,7 @@ func Test_OIDCPlugin_Resolve_TokenExchange_Errors(t *testing.T) {
 		{
 			name:        "missing tokenURL",
 			identity:    runtime.Identity{configKeyFlow: flowTokenExchange},
-			errContains: "tokenURL",
+			errContains: "issuer or tokenURL",
 		},
 		{
 			name: "no token source",
@@ -225,4 +246,41 @@ func Test_OIDCPlugin_Resolve_TokenExchange_FileSource(t *testing.T) {
 	creds, err := plugin.Resolve(t.Context(), identity, nil)
 	r.NoError(err)
 	r.Equal("file-result-token", creds[credentialKeyToken])
+}
+
+func Test_OIDCPlugin_Resolve_TokenExchange_IssuerDiscovery(t *testing.T) {
+	r := require.New(t)
+
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"issuer":                 srv.URL,
+			"token_endpoint":         srv.URL + "/token",
+			"authorization_endpoint": srv.URL + "/authorize",
+			"jwks_uri":               srv.URL + "/keys",
+		})
+	})
+	mux.HandleFunc("/token", func(w http.ResponseWriter, req *http.Request) {
+		r.NoError(req.ParseForm())
+		r.Equal("my-subject-token", req.PostForm.Get("subject_token"))
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"access_token": "discovered-token"}) //nolint:errcheck
+	})
+
+	t.Setenv("TEST_DISCOVERY_TOKEN", "my-subject-token")
+
+	plugin := &OIDCPlugin{}
+	identity := runtime.Identity{
+		configKeyFlow:               flowTokenExchange,
+		configKeyIssuer:             srv.URL,
+		configKeySubjectTokenEnvVar: "TEST_DISCOVERY_TOKEN",
+	}
+
+	creds, err := plugin.Resolve(t.Context(), identity, nil)
+	r.NoError(err)
+	r.Equal("discovered-token", creds[credentialKeyToken])
 }

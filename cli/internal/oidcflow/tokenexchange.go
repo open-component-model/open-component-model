@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/coreos/go-oidc/v3/oidc"
 )
 
 const (
@@ -21,6 +23,26 @@ const (
 	defaultHTTPTimeout = 2 * time.Minute
 	maxErrorBodyBytes  = 512
 )
+
+// DiscoverTokenURL performs OIDC discovery on the given issuer and returns the token_endpoint.
+func DiscoverTokenURL(ctx context.Context, issuer string, httpClient *http.Client) (string, error) {
+	if issuer == "" {
+		return "", fmt.Errorf("issuer is required for OIDC discovery")
+	}
+	providerCtx := ctx
+	if httpClient != nil {
+		providerCtx = oidc.ClientContext(ctx, httpClient)
+	}
+	provider, err := oidc.NewProvider(providerCtx, issuer)
+	if err != nil {
+		return "", fmt.Errorf("OIDC discovery for issuer %q: %w", issuer, err)
+	}
+	tokenURL := provider.Endpoint().TokenURL
+	if tokenURL == "" {
+		return "", fmt.Errorf("OIDC discovery: issuer %q has no token_endpoint", issuer)
+	}
+	return tokenURL, nil
+}
 
 // ExchangeOptions configures an RFC 8693 token exchange request.
 type ExchangeOptions struct {
