@@ -50,23 +50,14 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Typed) (r
 			return nil, fmt.Errorf("could not get credential plugin for node %q: %w", edgeID, err)
 		}
 
-		// Extract map from child credentials for plugin resolution.
-		childMap := typedToMap(childCredentials)
-
-		// Plugin interfaces still use runtime.Identity — convert for the call.
-		childID, err := toIdentity(childTyped)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert child identity %q: %w", edgeID, err)
-		}
-
-		// Let the plugin resolve the child's credentials.
-		credentials, err := plugin.Resolve(ctx, childID, childMap)
+		// Let the plugin resolve the child's credentials using the typed interface.
+		resolved, err := plugin.ResolveTyped(ctx, childTyped, childCredentials)
 		if err != nil {
 			return nil, fmt.Errorf("no credentials for node %q resolved from plugin: %w", edgeID, err)
 		}
 
 		// Merge the resolved credentials into the result
-		maps.Copy(result, credentials)
+		maps.Copy(result, typedToMap(resolved))
 	}
 
 	// Store as DirectCredentials
@@ -82,11 +73,11 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Typed) (r
 }
 
 // typedToMap extracts map[string]string from a runtime.Typed credential.
-// Used internally for plugin interfaces that still work with maps.
+// Used internally to merge multi-edge credential results in resolveFromGraph.
 // For DirectCredentials, it returns the Properties map directly.
 // For other typed credentials (e.g. HelmHTTPCredentials), it falls back to a JSON
 // round-trip, extracting only string-valued fields (excluding the "type" field).
-// TODO(matthiasbruns): Remove once plugin interfaces migrate to runtime.Typed https://github.com/open-component-model/ocm-project/issues/980
+// TODO(matthiasbruns): Remove once resolveFromGraph stores typed credentials natively (Phase 4+)
 func typedToMap(cred runtime.Typed) map[string]string {
 	if cred == nil {
 		return nil
