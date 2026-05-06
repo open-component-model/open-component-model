@@ -118,7 +118,7 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
 			return identity.Adopt(idx, b.Artifact)
 		},
-		Referrers: opts.Referrers,
+		ReferrersFunc: opts.Referrers,
 	})
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy OCI layout: %w", err)

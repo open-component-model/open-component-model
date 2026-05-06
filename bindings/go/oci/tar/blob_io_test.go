@@ -255,7 +255,7 @@ func TestCopyOCILayoutWithIndex_Attachments(t *testing.T) {
 	dst := memory.New()
 	returnedTop, err := CopyOCILayoutWithIndex(t.Context(), dst, &testReadOnlyBlob{data: layoutBytes}, CopyOCILayoutWithIndexOptions{
 		MutateParentFunc: func(d *ociImageSpecV1.Descriptor) error { return nil },
-		Referrers:        []ReferrersFunc{attachments},
+		ReferrersFunc:    []ReferrersFunc{attachments},
 	})
 	require.NoError(t, err)
 
