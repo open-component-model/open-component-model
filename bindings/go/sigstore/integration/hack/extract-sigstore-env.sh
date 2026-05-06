@@ -87,9 +87,10 @@ cp "$WORK_DIR/trusted_root.json" "$OUTDIR/"
 cp "$WORK_DIR/signing_config.json" "$OUTDIR/"
 
 # Initialize cosign's local TUF cache with the scaffolding's TUF mirror.
-# The signing handler builds a curated env for the cosign subprocess (only
-# PATH, HOME, proxy, and TLS vars), so SIGSTORE_*/TUF_* vars are not
-# forwarded.  Cosign must therefore find trust material in ~/.sigstore/root/.
+# The handler forwards the full parent process environment to the cosign
+# subprocess, but cosign's TUF client uses ~/.sigstore/root/ as its cache
+# regardless of env vars.  Pre-seeding it ensures cosign trusts the local
+# scaffolding CA chain without network access to the public TUF mirror.
 TUF_MIRROR=$(kubectl -n tuf-system get ksvc tuf -ojsonpath='{.status.url}')
 require_nonempty TUF_MIRROR "$TUF_MIRROR"
 kubectl -n tuf-system get secrets tuf-root -ojsonpath='{.data.root}' | base64 -d > "$WORK_DIR/tuf-root.json"
