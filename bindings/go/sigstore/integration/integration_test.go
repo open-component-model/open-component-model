@@ -24,8 +24,8 @@ import (
 
 //nolint:gosec // these are not secrets
 const (
-	credOIDCToken           = "token"
-	credTrustedRootJSONFile = "trusted_root_json_file"
+	credOIDCToken           = handler.CredentialKeyOIDCToken
+	credTrustedRootJSONFile = handler.CredentialKeyTrustedRootJSONFile
 )
 
 // sigstoreEnv holds the environment configuration for the sigstore integration
@@ -137,8 +137,8 @@ func testSignature(t *testing.T, h *handler.Handler, name, label string) descrun
 
 func verifyConfig(opts ...func(*v1alpha1.VerifyConfig)) *v1alpha1.VerifyConfig {
 	cfg := &v1alpha1.VerifyConfig{
-		CertificateOIDCIssuer:     stack.OIDCIssuer,
-		CertificateIdentityRegexp: ".*",
+		CertificateOIDCIssuer: stack.OIDCIssuer,
+		CertificateIdentity:  stack.OIDCIdentity,
 	}
 	for _, o := range opts {
 		o(cfg)
@@ -425,7 +425,7 @@ func Test_Integration_VerifyWithExplicitTrustedRoot(t *testing.T) {
 		r.NoError(err)
 
 		err = h.Verify(t.Context(), signed, verifyConfig(), map[string]string{
-			"trusted_root_json": string(trustedRootJSON),
+			handler.CredentialKeyTrustedRootJSON: string(trustedRootJSON),
 		})
 		r.NoError(err)
 	})
