@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -39,7 +40,7 @@ var ErrNotResolved = errors.New("executor not resolved: call Ensure before Run")
 type DefaultExecutor struct {
 	mu         sync.Mutex
 	binaryPath string
-	resolved   bool
+	resolved   atomic.Bool
 	httpClient *http.Client
 }
 
@@ -74,7 +75,7 @@ func (e *DefaultExecutor) Ensure(ctx context.Context) error {
 func (e *DefaultExecutor) ensureCosignAvailable(ctx context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.resolved {
+	if e.resolved.Load() {
 		return nil
 	}
 	path, err := exec.LookPath(e.binaryPath)
@@ -83,7 +84,7 @@ func (e *DefaultExecutor) ensureCosignAvailable(ctx context.Context) error {
 			return verr
 		}
 		e.binaryPath = path
-		e.resolved = true
+		e.resolved.Store(true)
 		return nil
 	}
 	path, dlErr := ensureOrDownloadCosign(ctx, e.httpClient)
@@ -94,14 +95,14 @@ func (e *DefaultExecutor) ensureCosignAvailable(ctx context.Context) error {
 				"and ensure it is on PATH, or fix the download error)", dlErr)
 	}
 	e.binaryPath = path
-	e.resolved = true
+	e.resolved.Store(true)
 	return nil
 }
 
 // Run executes the cosign binary with the given arguments and environment.
 // Ensure must be called before Run; returns ErrNotResolved otherwise.
 func (e *DefaultExecutor) Run(ctx context.Context, args []string, env []string) error {
-	if !e.resolved {
+	if !e.resolved.Load() {
 		return ErrNotResolved
 	}
 	ctx, cancel := context.WithTimeout(ctx, defaultOperationTimeout)
