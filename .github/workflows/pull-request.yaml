@@ -154,5 +154,7 @@ jobs:
   verify-labels:
     needs: [labeler, size-labeler, conventional-commit-labeler]
     uses: ./.github/workflows/verify-labels.yaml
+    permissions:
+      pull-requests: read
     with:
       any_of: kind/chore,kind/bugfix,kind/feature,kind/dependency,kind/refactor
