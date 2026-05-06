@@ -5,7 +5,6 @@ description: >-
   in the Open Component Model project.
 slug: "how-we-work"
 toc: true
-hasMermaid: true
 weight: 4
 ---
 
@@ -17,60 +16,12 @@ the public - anyone is welcome to join, listen, or participate.
 All work items are GitHub issues tracked on the
 [OCM Backlog Board](https://github.com/orgs/open-component-model/projects/10). Work is organized in a hierarchy:
 
-```mermaid
-graph TD
-    I["Initiative\n(spans multiple quarters)"]
-    E["Epic\n(roughly one quarter)"]
-    T["Task / Spike\n(one sprint)"]
-
-    I --> E
-    E --> T
-```
-
-### Initiatives
-
-An initiative is a top-level work item. Its title is prefixed with `Initiative:` and it aggregates
-multiple epics. Initiatives represent the team's vision and are used to communicate progress to stakeholders from a
-broader perspective.
-
-Example:
-[Initiative: Lifecycle Management](https://github.com/open-component-model/ocm-project/issues/409)
-
-### Epics
-
-An epic is a work item prefixed with `EPIC:` that uses the `epic` type. Epics
-organize tasks into manageable chunks that help track progress towards a larger goal.
-
-Epics contain:
-
-- A technical description
-- A user story
-- Defined scope
-- Sub-issues as tasks
-
-An epic should have one assignee who takes ownership of the story. See the
-[epic template](https://github.com/open-component-model/ocm-project/blob/main/.github/ISSUE_TEMPLATE/epic.md)
-for the expected structure.
-
-### Tasks
-
-A task is a work item using the `task` type. It is a small item of work that should be completable in one
-sprint. All planned tasks are part of an epic.
-
-Tasks document work and make progress traceable so someone else can pick it up. They contain a technical description
-and structure the work for the engineer. See the
-[task template](https://github.com/open-component-model/ocm-project/blob/main/.github/ISSUE_TEMPLATE/task.md)
-for the expected structure.
-
-### Spikes
-
-A spike is a work item using the `spike` type. It is used for explorative work - research tasks or
-proofs-of-concept. A spike is time-boxed to answer a predefined question or to conceptualize a solution.
-
-Unlike a task, the result of a spike is open-ended. Story points for spikes are referential and should roughly align
-with the number of days spent (e.g., 1 day time-boxed = 1 story point). See the
-[spike template](https://github.com/open-component-model/ocm-project/blob/main/.github/ISSUE_TEMPLATE/spike.md)
-for the expected structure.
+| Type | Prefix / Label | Scope | Purpose | Template |
+| --- | --- | --- | --- | --- |
+| Initiative | `Initiative:` | Multiple quarters | Communicates vision and progress to stakeholders by aggregating <u>**epics**</u> | - |
+| Epic | `EPIC:` (`epic` type) | ~1 quarter | Organizes <u>**tasks**</u> into a manageable chunk that tracks progress towards an <u>**initiative**</u> | [epic](https://github.com/open-component-model/ocm-project/blob/main/.github/ISSUE_TEMPLATE/epic.md) |
+| Task | `task` type | 1 sprint | Documents a small unit of work within an <u>**epic**</u> so progress is traceable and hand-off is possible | [task](https://github.com/open-component-model/ocm-project/blob/main/.github/ISSUE_TEMPLATE/task.md) |
+| Spike | `spike` type | Time-boxed | Explores a question or proof-of-concept within an <u>**epic**</u>; result is open-ended | [spike](https://github.com/open-component-model/ocm-project/blob/main/.github/ISSUE_TEMPLATE/spike.md) |
 
 ## Project Board and Issue Tracking
 
