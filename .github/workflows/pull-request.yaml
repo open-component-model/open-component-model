@@ -121,7 +121,7 @@ jobs:
         with:
           sparse-checkout: |
             .github/config/labeler.yml
-      - uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b # v6
+      - uses: actions/labeler@f27b608878404679385c85cfa523b85ccb86e213 # v6
         with:
           configuration-path: .github/config/labeler.yml
   size-labeler:
@@ -153,14 +153,6 @@ jobs:
           # files_to_ignore: ''
   verify-labels:
     needs: [labeler, size-labeler, conventional-commit-labeler]
-    name: verify labels
-    # docker://agilepathway/pull-request-label-checker is an amd64-only image.
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: read
-    steps:
-      - name: PRs should have at least one qualifying label
-        uses: docker://agilepathway/pull-request-label-checker:latest@sha256:14f5f3dfda922496d07d53494e2d2b42885165f90677a1c03d600059b7706a61
-        with:
-          any_of: kind/chore,kind/bugfix,kind/feature,kind/dependency,kind/refactor
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
+    uses: ./.github/workflows/verify-labels.yaml
+    with:
+      any_of: kind/chore,kind/bugfix,kind/feature,kind/dependency,kind/refactor
