@@ -58,7 +58,7 @@
     {
       matchManagers: ['github-actions'],
       matchDepNames: ['go'],
-      groupName: 'Golang Versions',
+      groupName: 'Golang versions',
       groupSlug: 'golang-versions',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
