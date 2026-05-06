@@ -17,6 +17,14 @@ func TestCosignEnv(t *testing.T) {
 	r.True(hasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN"))
 }
 
+func TestHasEnvKey_EmptyValueTreatedAsAbsent(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	env := []string{"SIGSTORE_ID_TOKEN=", "OTHER_KEY=value"}
+	r.False(hasEnvKey(env, "SIGSTORE_ID_TOKEN"))
+	r.True(hasEnvKey(env, "OTHER_KEY"))
+}
+
 func TestSignConfigValidateHTTPS(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
