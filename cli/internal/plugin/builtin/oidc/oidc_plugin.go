@@ -43,8 +43,9 @@ func init() {
 	)
 }
 
-// OIDCPlugin implements credentials.CredentialPlugin for interactive OIDC
-// token acquisition via a browser-based OIDC flow.
+// OIDCPlugin implements credentials.CredentialPlugin for OIDC identity token
+// acquisition, supporting both interactive browser-based flows and non-interactive
+// RFC 8693 token exchange for CI/CD environments.
 //
 // Example .ocmconfig entry:
 //
