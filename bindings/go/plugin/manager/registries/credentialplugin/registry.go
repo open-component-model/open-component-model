@@ -61,6 +61,7 @@ func (r *Registry) GetCredentialPlugin(_ context.Context, typed runtime.Typed) (
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	_, _ = r.scheme.DefaultType(typed)
 	typ := typed.GetType()
 	if typ.IsEmpty() {
 		return nil, fmt.Errorf("credential plugin lookup requires a type")
