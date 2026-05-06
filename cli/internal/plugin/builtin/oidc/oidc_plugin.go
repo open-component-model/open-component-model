@@ -1,8 +1,8 @@
 package oidc
 
 import (
-	"context"
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -212,6 +212,10 @@ func parseOIDCConfig(typed runtime.Typed) (*oidcConfig, error) {
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("unmarshal credential: %w", err)
+	}
+
+	if raw.Flow != "" && raw.Flow != flowTokenExchange && raw.Flow != flowAuthorizationCode {
+		return nil, fmt.Errorf("unknown flow %q: must be %q or %q", raw.Flow, flowAuthorizationCode, flowTokenExchange)
 	}
 
 	cfg := &oidcConfig{
