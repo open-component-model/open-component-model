@@ -31,10 +31,10 @@ type RSACredentials struct {
 	// +ocm:jsonschema-gen:enum=RSACredentials/v1
 	// +ocm:jsonschema-gen:enum:deprecated=RSACredentials
 	Type              runtime.Type `json:"type"`
-	PublicKeyPEM      string       `json:"public_key_pem,omitempty"`
-	PublicKeyPEMFile  string       `json:"public_key_pem_file,omitempty"`
-	PrivateKeyPEM     string       `json:"private_key_pem,omitempty"`
-	PrivateKeyPEMFile string       `json:"private_key_pem_file,omitempty"`
+	PublicKeyPEM      string       `json:"publicKeyPEM,omitempty"`
+	PublicKeyPEMFile  string       `json:"publicKeyPEMFile,omitempty"`
+	PrivateKeyPEM     string       `json:"privateKeyPEM,omitempty"`
+	PrivateKeyPEMFile string       `json:"privateKeyPEMFile,omitempty"`
 }
 
 // MustRegisterCredentialType registers RSACredentials/v1 in the given scheme.
@@ -47,6 +47,7 @@ func MustRegisterCredentialType(scheme *runtime.Scheme) {
 
 // FromDirectCredentials converts a DirectCredentials properties map into typed RSACredentials.
 // This supports old .ocmconfig files that use Credentials/v1 with RSA properties.
+// A nil map is safe and returns an RSACredentials with only the type set.
 func FromDirectCredentials(properties map[string]string) *RSACredentials {
 	return &RSACredentials{
 		Type:              runtime.NewVersionedType(RSACredentialsType, Version),
