@@ -1,17 +1,19 @@
-package oci
+package pack
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/memory"
+	"oras.land/oras-go/v2/errdef"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
@@ -27,36 +29,20 @@ func fetchManifest(t *testing.T, ctx context.Context, store *memory.Store, desc 
 	return m
 }
 
-// materializeOwnershipReferrer asks ownershipReferrerAttachment for the referrer
-// descriptors and source store, then drives them into dst via oras.CopyGraph —
-// mirroring how the OCI-layout copy proxy folds the referrer into the artifact
-// upload's traversal in production. Subject is filtered from the referrer's
-// successors so CopyGraph does not try to fetch the subject as a leaf (subject
-// lives in the artifact's source store, not in the referrer source store).
+// materializeOwnershipReferrer calls OwnershipReferrer and pushes every
+// returned referrer's raw bytes directly into dst, mirroring what the
+// OCI-layout copy proxy does during artifact upload.
 func materializeOwnershipReferrer(t *testing.T, ctx context.Context, dst *memory.Store, subject ociImageSpecV1.Descriptor, resource *descriptor.Resource, component, version string) error {
 	t.Helper()
-	descs, src, err := ownershipReferrerAttachment(ctx, subject, resource, component, version)
-	if err != nil || len(descs) == 0 {
+	referrers, err := OwnershipReferrer(resource, component, version)(ctx, subject)
+	if err != nil {
 		return err
 	}
-	opts := oras.CopyGraphOptions{
-		FindSuccessors: func(ctx context.Context, fetcher content.Fetcher, d ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-			successors, err := content.Successors(ctx, fetcher, d)
-			if err != nil {
-				return nil, err
+	for _, r := range referrers {
+		if pushErr := dst.Push(ctx, r.Descriptor, bytes.NewReader(r.Raw)); pushErr != nil {
+			if !errors.Is(pushErr, errdef.ErrAlreadyExists) {
+				return pushErr
 			}
-			filtered := successors[:0]
-			for _, s := range successors {
-				if s.Digest != subject.Digest {
-					filtered = append(filtered, s)
-				}
-			}
-			return filtered, nil
-		},
-	}
-	for _, d := range descs {
-		if err := oras.CopyGraph(ctx, src, dst, d, opts); err != nil {
-			return err
 		}
 	}
 	return nil

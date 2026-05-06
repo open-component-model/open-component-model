@@ -226,7 +226,7 @@ func TestCopyOCILayoutWithIndex_Attachments(t *testing.T) {
 	layoutBytes, rootDesc, layerDesc := buildSingleLayerOCILayout(t)
 
 	var receivedRoot, attachmentDesc ociImageSpecV1.Descriptor
-	attachments := func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, content.ReadOnlyStorage, error) {
+	attachments := func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]Referrer, error) {
 		receivedRoot = top
 		emptyDesc := ociImageSpecV1.DescriptorEmptyJSON
 		body, err := json.Marshal(ociImageSpecV1.Manifest{
@@ -238,7 +238,7 @@ func TestCopyOCILayoutWithIndex_Attachments(t *testing.T) {
 			Subject:      &top,
 		})
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		attachmentDesc = ociImageSpecV1.Descriptor{
 			MediaType:    ociImageSpecV1.MediaTypeImageManifest,
@@ -246,16 +246,16 @@ func TestCopyOCILayoutWithIndex_Attachments(t *testing.T) {
 			Digest:       digest.FromBytes(body),
 			Size:         int64(len(body)),
 		}
-		src := memory.New()
-		require.NoError(t, src.Push(ctx, emptyDesc, bytes.NewReader(emptyDesc.Data)))
-		require.NoError(t, src.Push(ctx, attachmentDesc, bytes.NewReader(body)))
-		return []ociImageSpecV1.Descriptor{attachmentDesc}, src, nil
+		return []Referrer{
+			{Descriptor: attachmentDesc, Raw: body},
+			{Descriptor: emptyDesc, Raw: []byte("{}")},
+		}, nil
 	}
 
 	dst := memory.New()
 	returnedTop, err := CopyOCILayoutWithIndex(t.Context(), dst, &testReadOnlyBlob{data: layoutBytes}, CopyOCILayoutWithIndexOptions{
 		MutateParentFunc: func(d *ociImageSpecV1.Descriptor) error { return nil },
-		Attachments:      attachments,
+		Referrers:        []ReferrersFunc{attachments},
 	})
 	require.NoError(t, err)
 

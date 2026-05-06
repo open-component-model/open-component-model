@@ -17,7 +17,6 @@ import (
 	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
 	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry"
 
@@ -242,14 +241,7 @@ func (repo *Repository) AddLocalResource(
 
 	resource = resource.DeepCopy()
 
-	var attachments tar.AttachmentsFunc
-	if repo.ownershipReferrerPolicy == OwnershipReferrerPolicyEnabled {
-		attachments = func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, content.ReadOnlyStorage, error) {
-			return ownershipReferrerAttachment(ctx, top, resource, component, version)
-		}
-	}
-
-	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, resource, b, attachments); err != nil {
+	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, resource, b); err != nil {
 		return nil, err
 	}
 
@@ -271,7 +263,7 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 
 	source = source.DeepCopy()
 
-	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, source, content, nil); err != nil {
+	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, source, content); err != nil {
 		return nil, err
 	}
 
@@ -460,7 +452,6 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 	version string,
 	artifact descriptor.Artifact,
 	b blob.ReadOnlyBlob,
-	attachments tar.AttachmentsFunc,
 ) error {
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
@@ -476,13 +467,16 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 		return fmt.Errorf("failed to create resource blob: %w", err)
 	}
 
-	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, pack.Options{
+	packOptions := pack.Options{
 		AccessScheme:       repo.scheme,
 		CopyGraphOptions:   repo.resourceCopyOptions.CopyGraphOptions,
 		BaseReference:      reference,
 		GlobalAccessPolicy: repo.globalAccessPolicy,
-		Attachments:        attachments,
-	})
+	}
+	if repo.ownershipReferrerPolicy == OwnershipReferrerPolicyEnabled {
+		packOptions.Referrers = []tar.ReferrersFunc{pack.OwnershipReferrer(artifact, component, version)}
+	}
+	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, packOptions)
 	if err != nil {
 		return fmt.Errorf("failed to pack resource blob: %w", err)
 	}

@@ -81,15 +81,22 @@ func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyStora
 	}
 }
 
-// AttachmentsFunc returns descriptors and a source store for content copied
-// as additional children of root in the same CopyGraph traversal — e.g. OCI
-// referrers, which CopyGraph does not follow by default.
-type AttachmentsFunc func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, content.ReadOnlyStorage, error)
+// Referrer pairs a descriptor with its raw content bytes. Raw is required because
+// referrers are generated on-the-fly and never exist in the source OCI layout store.
+type Referrer struct {
+	Descriptor ociImageSpecV1.Descriptor
+	Raw        []byte
+}
+
+// ReferrersFunc returns referrers to be copied as additional children of top in
+// the same CopyGraph traversal — e.g. OCI referrers, which CopyGraph does not
+// follow by default.
+type ReferrersFunc func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]Referrer, error)
 
 type CopyOCILayoutWithIndexOptions struct {
 	oras.CopyGraphOptions
 	MutateParentFunc func(*ociImageSpecV1.Descriptor) error
-	Attachments      AttachmentsFunc
+	Referrers        []ReferrersFunc
 }
 
 func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.ReadOnlyBlob, opts CopyOCILayoutWithIndexOptions) (top ociImageSpecV1.Descriptor, err error) {
@@ -153,13 +160,15 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to read top level descriptor stream: %w", err)
 	}
 
-	var attachments []ociImageSpecV1.Descriptor
-	var attachmentsStore content.ReadOnlyStorage
-	if opts.Attachments != nil {
-		if attachments, attachmentsStore, err = opts.Attachments(ctx, topLevelDesc); err != nil {
-			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to resolve attachments: %w", err)
+	var referrers []Referrer
+	for _, referrer := range opts.Referrers {
+		refs, err := referrer(ctx, topLevelDesc)
+		if err != nil {
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to resolve referrer: %w", err)
 		}
+		referrers = append(referrers, refs...)
 	}
+
 	switch topLevelDesc.MediaType {
 	case ociImageSpecV1.MediaTypeImageManifest:
 		var manifest ociImageSpecV1.Manifest
@@ -171,11 +180,15 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		}
 		opts.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
 			if content.Equal(desc, topLevelDesc) {
-				return append(append([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers...), attachments...), nil
+				referrerDescriptors := make([]ociImageSpecV1.Descriptor, 0, len(referrers))
+				for _, r := range referrers {
+					referrerDescriptors = append(referrerDescriptors, r.Descriptor)
+				}
+				return append(append([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers...), referrerDescriptors...), nil
 			}
 			successors, err := content.Successors(ctx, fetcher, desc)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to find successors: %w", err)
 			}
 			// Drop the attachment's Subject pointing back at root; otherwise
 			// CopyGraph would loop back into root.
@@ -193,11 +206,15 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		}
 		opts.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
 			if content.Equal(desc, topLevelDesc) {
-				return append(slices.Clone(index.Manifests), attachments...), nil
+				referrerDescriptors := make([]ociImageSpecV1.Descriptor, 0, len(referrers))
+				for _, r := range referrers {
+					referrerDescriptors = append(referrerDescriptors, r.Descriptor)
+				}
+				return append(index.Manifests, referrerDescriptors...), nil
 			}
 			successors, err := content.Successors(ctx, fetcher, desc)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to find successors: %w", err)
 			}
 			// Drop the attachment's Subject pointing back at root; otherwise
 			// CopyGraph would loop back into root.
@@ -210,16 +227,16 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 	proxy := &descriptorStoreProxy{
 		raw:             descRaw,
 		desc:            topLevelDesc,
-		attachments:     attachmentsStore,
 		ReadOnlyStorage: ociStore,
+		referrers:       referrers,
 	}
 	return topLevelDesc, proxy, nil
 }
 
 type descriptorStoreProxy struct {
-	raw         []byte
-	desc        ociImageSpecV1.Descriptor
-	attachments content.ReadOnlyStorage // optional, consulted before the base store
+	raw       []byte
+	desc      ociImageSpecV1.Descriptor
+	referrers []Referrer
 	content.ReadOnlyStorage
 }
 
@@ -227,12 +244,10 @@ func (p *descriptorStoreProxy) Exists(ctx context.Context, desc ociImageSpecV1.D
 	if p.desc.Digest.String() == desc.Digest.String() {
 		return true, nil
 	}
-	if p.attachments != nil {
-		if attachmentExists, err := p.attachments.Exists(ctx, desc); err != nil {
-			return false, err
-		} else {
-			return attachmentExists, nil
-		}
+	if slices.ContainsFunc(p.referrers, func(r Referrer) bool {
+		return r.Descriptor.Digest == desc.Digest
+	}) {
+		return true, nil
 	}
 	return p.ReadOnlyStorage.Exists(ctx, desc)
 }
@@ -241,9 +256,9 @@ func (p *descriptorStoreProxy) Fetch(ctx context.Context, desc ociImageSpecV1.De
 	if p.desc.Digest.String() == desc.Digest.String() {
 		return io.NopCloser(bytes.NewReader(p.raw)), nil
 	}
-	if p.attachments != nil {
-		if ok, _ := p.attachments.Exists(ctx, desc); ok {
-			return p.attachments.Fetch(ctx, desc)
+	for _, ref := range p.referrers {
+		if ref.Descriptor.Digest == desc.Digest {
+			return io.NopCloser(bytes.NewReader(ref.Raw)), nil
 		}
 	}
 	return p.ReadOnlyStorage.Fetch(ctx, desc)
