@@ -31,7 +31,7 @@ import (
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
