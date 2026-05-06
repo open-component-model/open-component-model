@@ -50,6 +50,29 @@ func (p CredentialPlugin) GetConsumerIdentity(_ context.Context, typed runtime.T
 	return identity, nil
 }
 
+// ResolveTyped delegates to Resolve via the legacy map path for backward compat during migration.
+func (p CredentialPlugin) ResolveTyped(ctx context.Context, identity runtime.Typed, credentials runtime.Typed) (runtime.Typed, error) {
+	id, ok := identity.(runtime.Identity)
+	if !ok {
+		return nil, fmt.Errorf("expected runtime.Identity, got %T", identity)
+	}
+	var credMap map[string]string
+	if dc, ok := credentials.(*v1.DirectCredentials); ok && credentials != nil {
+		credMap = dc.Properties
+	}
+	result, err := p.Resolve(ctx, id, credMap)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+	return &v1.DirectCredentials{
+		Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+		Properties: result,
+	}, nil
+}
+
 func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
 	if p.CredentialFunc == nil {
 		return nil, fmt.Errorf("no credential function for %v", identity)
@@ -68,6 +91,29 @@ func (s RepositoryPlugin) GetCredentialRepositoryScheme() *runtime.Scheme {
 
 func (s RepositoryPlugin) ConsumerIdentityForConfig(_ context.Context, config runtime.Typed) (runtime.Identity, error) {
 	return s.RepositoryIdentityFunc(config)
+}
+
+// ResolveTyped delegates to Resolve via the legacy map path for backward compat during migration.
+func (s RepositoryPlugin) ResolveTyped(ctx context.Context, cfg runtime.Typed, identity runtime.Typed, credentials runtime.Typed) (runtime.Typed, error) {
+	id, ok := identity.(runtime.Identity)
+	if !ok {
+		return nil, fmt.Errorf("expected runtime.Identity, got %T", identity)
+	}
+	var credMap map[string]string
+	if dc, ok := credentials.(*v1.DirectCredentials); ok && credentials != nil {
+		credMap = dc.Properties
+	}
+	result, err := s.Resolve(ctx, cfg, id, credMap)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+	return &v1.DirectCredentials{
+		Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+		Properties: result,
+	}, nil
 }
 
 func (s RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {

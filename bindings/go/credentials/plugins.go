@@ -20,10 +20,14 @@ type RepositoryPlugin interface {
 	// This identity is used to look up credentials in the credential graph.
 	ConsumerIdentityForConfig(ctx context.Context, config runtime.Typed) (runtime.Identity, error)
 
-	// Resolve attempts to resolve credentials for a given repository configuration
-	// and consumer identity. The provided credentials map may contain pre-resolved
-	// credentials from the credential graph.
-	// TODO(matthiasbruns): Migrate to runtime.Typed https://github.com/open-component-model/ocm-project/issues/980
+	// ResolveTyped resolves credentials for a given repository configuration and consumer
+	// identity, returning a runtime.Typed credential.
+	// The credentials parameter contains any pre-resolved credentials from the credential
+	// graph; it may be nil when no graph credentials are available for this repository.
+	ResolveTyped(ctx context.Context, cfg runtime.Typed, identity runtime.Typed, credentials runtime.Typed) (runtime.Typed, error)
+
+	// Deprecated: Migrate to ResolveTyped for typed credential support.
+	// https://github.com/open-component-model/ocm-project/issues/1047
 	Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
 }
 
@@ -36,10 +40,13 @@ type CredentialPlugin interface {
 	// This identity is used to look up credentials in the credential graph.
 	GetConsumerIdentity(ctx context.Context, credential runtime.Typed) (runtime.Identity, error)
 
-	// Resolve attempts to resolve credentials for a given consumer identity.
-	// The provided credentials map may contain pre-resolved credentials from
-	// the credential graph.
-	// TODO(matthiasbruns): Migrate to runtime.Typed https://github.com/open-component-model/ocm-project/issues/980
+	// ResolveTyped resolves credentials for a given consumer identity, returning a
+	// runtime.Typed credential. The credentials parameter contains any pre-resolved
+	// credentials from the credential graph; it may be nil.
+	ResolveTyped(ctx context.Context, identity runtime.Typed, credentials runtime.Typed) (runtime.Typed, error)
+
+	// Deprecated: Migrate to ResolveTyped for typed credential support.
+	// https://github.com/open-component-model/ocm-project/issues/1047
 	Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
 }
 
