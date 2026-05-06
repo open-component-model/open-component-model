@@ -42,6 +42,7 @@ An epic is a work item prefixed with `EPIC:` that uses the `epic` type. Epics
 organize tasks into manageable chunks that help track progress towards a larger goal.
 
 Epics contain:
+
 - A technical description
 - A user story
 - Defined scope
@@ -78,7 +79,7 @@ All work is tracked on the
 [ocm-project](https://github.com/open-component-model/ocm-project) repository. The board has several views:
 
 | View | Purpose |
-|------|---------|
+| --- | --- |
 | [Current Sprint](https://github.com/orgs/open-component-model/projects/10/views/20) | Active sprint work |
 | [Next Sprint](https://github.com/orgs/open-component-model/projects/10/views/21) | Upcoming sprint queue |
 | [Backlog](https://github.com/orgs/open-component-model/projects/10/views/1) | All open issues, prioritized |
@@ -108,7 +109,7 @@ We are working on making all meeting links publicly discoverable. In the meantim
 {{< /callout >}}
 
 | Meeting | Cadence | Purpose |
-|---------|---------|---------|
+| --- | --- | --- |
 | Daily Standup | Every workday | Casual sync - not mandatory, not necessarily work-related |
 | Planning | Biweekly (Monday) | Review the [Next Sprint](https://github.com/orgs/open-component-model/projects/10/views/21) view, agree on sprint goals |
 | Retrospective | Biweekly (Monday) | Reflect on what went well and what to improve, then close the sprint |
