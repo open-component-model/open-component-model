@@ -10,6 +10,7 @@ ClusterRoleBinding
 ConvertHelmToOCI
 DSL
 Discoverability
+discoverable
 GetHelmChart
 GetOCIArtifact
 GmbH
@@ -688,6 +689,7 @@ srcrefs
 sre
 sres
 stackit
+standup
 stateful
 statefulset
 stderr
