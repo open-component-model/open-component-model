@@ -77,10 +77,6 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("invalid signing config: %w", err)
 	}
 
-	if cfg.AllowInsecureEndpoints {
-		slog.Warn("insecure endpoints enabled: HTTP URLs accepted without TLS verification")
-	}
-
 	digestBytes, err := hex.DecodeString(unsigned.Value)
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("decode digest hex value: %w", err)
@@ -124,17 +120,6 @@ func (h *Handler) Sign(
 	}
 	if cfg.SigningConfig != "" {
 		args = append(args, "--signing-config", cfg.SigningConfig)
-	} else if cfg.FulcioURL != "" || cfg.RekorURL != "" || cfg.TimestampServerURL != "" {
-		args = append(args, "--use-signing-config=false")
-	}
-	if cfg.FulcioURL != "" {
-		args = append(args, "--fulcio-url", cfg.FulcioURL)
-	}
-	if cfg.RekorURL != "" {
-		args = append(args, "--rekor-url", cfg.RekorURL)
-	}
-	if cfg.TimestampServerURL != "" {
-		args = append(args, "--timestamp-server-url", cfg.TimestampServerURL)
 	}
 	if cfg.TrustedRoot != "" {
 		args = append(args, "--trusted-root", cfg.TrustedRoot)
