@@ -16,9 +16,9 @@ const (
 //nolint:gosec // G101: These are key names, not credentials.
 const (
 	CredentialKeyPublicKeyPEM      = "public_key_pem"
-	CredentialKeyPublicKeyPEMFile  = "public_key_pem_file"
+	CredentialKeyPublicKeyPEMFile  = CredentialKeyPublicKeyPEM + "_file"
 	CredentialKeyPrivateKeyPEM     = "private_key_pem"
-	CredentialKeyPrivateKeyPEMFile = "private_key_pem_file"
+	CredentialKeyPrivateKeyPEMFile = CredentialKeyPrivateKeyPEM + "_file"
 )
 
 // RSACredentials represents typed credentials for RSA signing and verification.
