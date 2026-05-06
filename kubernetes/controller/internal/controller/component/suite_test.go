@@ -26,7 +26,7 @@ import (
 
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -44,12 +44,14 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-var cfg *rest.Config
-var k8sClient client.Client
-var k8sManager ctrl.Manager
-var testEnv *envtest.Environment
-var recorder record.EventRecorder
-var pm *manager.PluginManager
+var (
+	cfg        *rest.Config
+	k8sClient  client.Client
+	k8sManager ctrl.Manager
+	testEnv    *envtest.Environment
+	recorder   record.EventRecorder
+	pm         *manager.PluginManager
+)
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)

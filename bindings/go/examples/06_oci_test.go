@@ -35,7 +35,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
-	credidentity "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
+	credidentity "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
