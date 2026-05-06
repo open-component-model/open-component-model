@@ -102,11 +102,11 @@ Anyone can propose work for an upcoming sprint. The process is:
 
 ## Meetings
 
-{{< callout context="note" title="Joining meetings" icon="outline/info-circle" >}}
+{{<callout context="note" title="Joining meetings" icon="outline/info-circle">}}
 We are working on making all meeting links publicly discoverable. In the meantime, reach out on
 [Zulip](https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support) or
 [Slack](https://kubernetes.slack.com/archives/C05UWBE8R1D) to receive a calendar invite.
-{{< /callout >}}
+{{</callout>}}
 
 | Meeting | Cadence | Purpose |
 | --- | --- | --- |

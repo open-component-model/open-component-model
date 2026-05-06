@@ -12,7 +12,7 @@ weight: 2
 Welcome to the Open Component Model (OCM). This page gives you everything you need to orient yourself in the project,
 understand how it is built, and find the right starting point for your interests.
 
-{{< callout context="note" title="Prerequisites" icon="outline/info-circle" >}}
+{{<callout context="note" title="Prerequisites" icon="outline/info-circle">}}
 **To use the OCM CLI**: basic command-line experience and familiarity with container images or software packaging
 concepts.
 
@@ -21,15 +21,15 @@ concepts.
 **To contribute code**: the core libraries, CLI, and controllers are written in Go (1.26+) and use
 [Task](https://taskfile.dev/) as their build runner. Contributions in other areas - such as language bindings,
 documentation, the website, or tooling - may use different languages and are equally welcome.
-{{< /callout >}}
+{{</callout>}}
 
 ## What is OCM?
 
 Imagine you ship a product that consists of a container image, a Helm chart, two config files, and a monitoring
 dashboard. Today, these artifacts live in registries in different locations, are versioned independently, and have no
 formal link between them. When you need to deliver the whole product to a customer - especially one running in a
-restricted network
-with no internet access - you must assemble everything manually, hoping nothing is missing or mismatched.
+restricted network with no internet access - you must assemble everything manually, hoping nothing is missing or
+mismatched.
 
 The Open Component Model solves this. Think of it as a **delivery receipt** for software: a signed document that lists
 exactly what is in the package, where each piece came from, and who verified it. OCM calls this a **Software Bill of
@@ -74,13 +74,13 @@ graph TD
     Root --> Docs
 ```
 
-{{< callout context="caution" title="Legacy repositories" icon="outline/alert-triangle" >}}
+{{<callout context="caution" title="Legacy repositories" icon="outline/alert-triangle">}}
 The [ocm](https://github.com/open-component-model/ocm) and
 [ocm-controller](https://github.com/open-component-model/ocm-controller) repositories are the previous generation of
 OCM tooling. They are no longer actively developed. All new work targets the mono-repo above. Read the
 [OCM v2 announcement]({{< relref "blog/ocm_v2_announcement.md" >}}) for background on why the project was completely
 rewritten.
-{{< /callout >}}
+{{</callout>}}
 
 ## Technical Layers
 
