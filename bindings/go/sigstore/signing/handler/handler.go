@@ -344,12 +344,12 @@ func validateTrustedRootPath(p string) error {
 	return nil
 }
 
-var permissivePatterns = map[string]bool{
-	".*": true, ".+": true, "^.*$": true, "^.+$": true,
-}
-
 func isPermissivePattern(pattern string) bool {
-	return permissivePatterns[pattern]
+	switch pattern {
+	case ".*", ".+", "^.*$", "^.+$":
+		return true
+	}
+	return false
 }
 
 var (
