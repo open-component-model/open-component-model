@@ -27,6 +27,7 @@ func (t *File) String() string {
 }
 
 const (
-	Version = "v1"
-	Type    = "file"
+	Version    = "v1"
+	Type       = "File"
+	LegacyType = "file"
 )

@@ -227,22 +227,19 @@ source-controller-6ff87cb475-2h2lv           1/1     Running     0              
 Use Helm to install the OCM controllers:
 
 ```bash
-helm install ocm-k8s-toolkit "oci://ghcr.io/open-component-model/kubernetes/controller/chart:<pre-release>" \
+helm install ocm-k8s-toolkit "oci://ghcr.io/open-component-model/kubernetes/controller/chart" \
   --namespace ocm-k8s-toolkit-system \
   --create-namespace
 ```
-
-You can check out this [list](https://github.com/open-component-model/open-component-model/pkgs/container/kubernetes%2Fcontroller%2Fchart/versions?filters%5Bversion_type%5D=tagged)
-to pick the latest pre-release version until an official release was published.
 
 <details>
 <summary>You should see this output</summary>
 
 ```text
-Pulled: ghcr.io/open-component-model/kubernetes/controller/chart:0.0.0-66b9926
-Digest: sha256:cfa13f5c98fc41c3d318471241e431479d2f35c492431c82e76b14dc6dcfcd9a
+Pulled: ghcr.io/open-component-model/kubernetes/controller/chart:0.4.0
+Digest: sha256:eac0dc587a1d288f36ef1961bb69f0ffb2791e0153f86d1fdbe54ae2f36f1194
 NAME: ocm-k8s-toolkit
-LAST DEPLOYED: Mon Mar  9 11:59:18 2026
+LAST DEPLOYED: Tue Apr 28 17:42:51 2026
 NAMESPACE: ocm-k8s-toolkit-system
 STATUS: deployed
 REVISION: 1
@@ -300,7 +297,8 @@ ocm-k8s-toolkit-system   ocm-k8s-toolkit-controller-manager-788f58d4bd-ntbx8   1
 The OCM Controllers need access to an OCI registry to fetch component versions.
 
 {{< callout context="tip" title="Tip" icon="outline/rocket" >}}
-We recommend using a publicly accessible registry like [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages). Using a local registry requires additional configuration to ensure it's accessible both from your CLI and from within the cluster.
+We recommend using a publicly accessible registry like [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages).
+Using a local registry requires additional configuration to ensure it's accessible both from your CLI and from within the cluster.
 {{< /callout >}}
 
 For private registries, you'll need to configure credentials. See [Configure Credentials for Private Registries]({{< relref "/docs/how-to/configure-multiple-credentials.md" >}}) for details.

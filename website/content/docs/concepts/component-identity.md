@@ -142,7 +142,9 @@ For more details, see [Artifact Types](https://github.com/open-component-model/o
 
 Access specifications decouple an artifact's identity from its storage location. The `access.type` field determines how to retrieve the artifact, while the remaining fields provide the location-specific details.
 
-The same artifact type can be accessed through different access specifications. For example, an `ociImage` could be stored in an OCI registry (`ociArtifact`) or bundled into a CTF archive (`localBlob`).
+The same artifact type can be accessed through different access specifications. For example, an `ociImage` could be stored in an OCI registry (`OCIImage/v1`) or bundled into a CTF archive (`LocalBlob/v1`).
+
+The `access.type` also determines which [resource repository]({{< relref "docs/concepts/resource-repositories.md" >}}) handles the actual download and upload of the artifact. Each resource repository knows how to interact with a specific storage backend and how to resolve the credentials needed to access it.
 
 For available access types and their fields, see [Access Specification]({{< relref "docs/reference/component-descriptor.md" >}}#access-specification) and [Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}).
 
@@ -169,6 +171,7 @@ For hands-on signing instructions, see [Sign Component Versions]({{< relref "doc
 
 ## Related Documentation
 
-- [The OCM Core Model]({{< relref "docs/overview/core-model.md" >}}) — high-level introduction to OCM's building blocks.
-- [Component Descriptor Reference]({{< relref "docs/reference/component-descriptor.md" >}}) — field-by-field reference for the component descriptor.
-- [OCM Specification](https://github.com/open-component-model/ocm-spec) — the formal specification of the Open Component Model.
+- [The OCM Core Model]({{< relref "docs/overview/core-model.md" >}}): high-level introduction to OCM's building blocks.
+- [Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}): how access types map to storage backends for downloading and uploading resources.
+- [Component Descriptor Reference]({{< relref "docs/reference/component-descriptor.md" >}}): field-by-field reference for the component descriptor.
+- [OCM Specification](https://github.com/open-component-model/ocm-spec): the formal specification of the Open Component Model.

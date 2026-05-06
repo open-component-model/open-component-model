@@ -2,6 +2,19 @@ name: CLI Release
 
 run-name: CLI Release from ${{ github.ref_name }}${{ github.event.inputs.dry_run == 'true' && '(dry-run)' || '' }}
 
+# Dispatch model:
+# The operator MUST select a release branch (e.g. releases/v0.4) in the
+# GitHub UI "Use workflow from" dropdown. This sets github.ref_name for
+# the entire run — there is no separate branch input.
+# parseBranch() in release-versioning.js validates the format and rejects
+# anything that doesn't match releases/v0.\d+.
+#
+# Interaction with cli.yml:
+# This workflow calls cli.yml via workflow_call. In that context,
+# github.ref_name in cli.yml inherits THIS workflow's ref (the release
+# branch), NOT the ref input we pass. We pass inputs.ref = the RC tag
+# (e.g. cli/v0.4.0-rc.1) so cli.yml checks out the right code AND uses
+# it to determine publish eligibility. See cli.yml's branch-check step.
 on:
   workflow_dispatch:
     inputs:
@@ -43,7 +56,7 @@ jobs:
   # --------------------------------------------------------
   tag_rc:
     name: Create and Push RC Tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [prepare]
     if: ${{ github.event.inputs.dry_run == 'false' }}
     permissions:
@@ -54,7 +67,9 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          sparse-checkout: ${{ env.COMPONENT_PATH }}
+          sparse-checkout: |
+            ${{ env.COMPONENT_PATH }}
+            .github/scripts
           ref: ${{ github.ref_name }}
 
       - name: Setup git config
@@ -62,33 +77,30 @@ jobs:
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
 
-      - name: Download changelog artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7
         with:
-          name: ${{ needs.prepare.outputs.changelog_artifact }}
-          path: ${{ runner.temp }}
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY_FOR_SIGNING }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_tag_gpgsign: true
 
       - name: Create ${{ needs.prepare.outputs.new_tag }}
         id: tag
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           TAG: ${{ needs.prepare.outputs.new_tag }}
-          CHANGELOG_FILE: ${{ runner.temp }}/CHANGELOG.md
         with:
           script: |
-            const { execFileSync } = require("child_process");
-            const fs = require("fs");
-            const tag = process.env.TAG;
-            const msg = fs.readFileSync(process.env.CHANGELOG_FILE, "utf8");
-            try { execFileSync("git", ["rev-parse", `refs/tags/${tag}`], { stdio: "pipe" }); core.info(`Tag ${tag} exists`); core.setOutput("pushed","false"); return; } catch {}
-            fs.writeFileSync(".tagmsg", msg);
-            execFileSync("git", ["tag", "-a", tag, "-F", ".tagmsg"]);
-            execFileSync("git", ["push", "origin", `refs/tags/${tag}`]);
-            core.setOutput("pushed","true");
-            core.info(`✅ Created RC tag ${tag}`);
+            const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
+            await script.createRcTag({ core });
 
   # --------------------------------------------------------
-  # 3. BUILD CLI
+  # 3. BUILD CLI: calls cli.yml via workflow_call
+  #    ref = RC tag (e.g. cli/v0.4.0-rc.1) → used for checkout and publish eligibility.
+  #    Note: github.ref_name inside cli.yml will be the release branch (inherited from
+  #    this workflow), not the ref input. cli.yml's branch-check uses inputs.ref to
+  #    resolve this. See cli.yml for details.
   # --------------------------------------------------------
   build:
     name: Build CLI for ${{ needs.prepare.outputs.new_tag }}
@@ -114,7 +126,7 @@ jobs:
     name: Create RC Pre-Release
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
     needs: [prepare, tag_rc, build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: write
     steps:
@@ -133,7 +145,7 @@ jobs:
           path: ${{ runner.temp }}/rc-build-assets
 
       - name: Create RC Release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: CLI ${{ needs.prepare.outputs.new_version }}
           tag_name: ${{ needs.prepare.outputs.new_tag }}
@@ -190,7 +202,7 @@ jobs:
   verify_attestations:
     name: Verify RC Attestations
     needs: [prepare, build, release_rc]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     environment:
       name: release
     permissions:
@@ -233,7 +245,7 @@ jobs:
   promote_final:
     name: Promote to Final Release
     needs: [prepare, build, verify_attestations]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: write
       packages: write
@@ -241,7 +253,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          sparse-checkout: ${{ env.COMPONENT_PATH }}
+          sparse-checkout: |
+            ${{ env.COMPONENT_PATH }}
+            .github/scripts
           fetch-depth: 0
           ref: ${{ github.ref_name }}
 
@@ -250,46 +264,26 @@ jobs:
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
 
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY_FOR_SIGNING }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_tag_gpgsign: true
+
       - name: Create new release tag
-        # Points new release tag to same commit as RC tag (no rebuild needed)
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
         with:
           script: |
-            const { execFileSync } = require("child_process");
-            const { RC_TAG: rcTag, NEW_RELEASE_TAG: newReleaseTag } = process.env;
-
-            // Pre-flight checks
-            if (!rcTag || !newReleaseTag) {
-              core.setFailed("Missing RC_TAG or NEW_RELEASE_TAG");
-              return;
-            }
-
-            // Check if new release tag already exists
-            try {
-              execFileSync("git", ["rev-parse", `refs/tags/${newReleaseTag}`], { stdio: "pipe" });
-              core.setFailed(`Tag ${newReleaseTag} already exists`);
-              return;
-            } catch {
-              // Expected: tag doesn't exist, continue
-            }
-
-            // Resolve RC commit
-            const rcSha = execFileSync("git", ["rev-parse", `refs/tags/${rcTag}^{commit}`], { stdio: "pipe" }).toString().trim();
-            if (!rcSha) {
-              core.setFailed(`Could not resolve commit for RC tag ${rcTag}`);
-              return;
-            }
-
-            // Create and push new release tag
-            execFileSync("git", ["tag", "-a", newReleaseTag, rcSha, "-m", `Promote ${rcTag} to ${newReleaseTag}`]);
-            execFileSync("git", ["push", "origin", `refs/tags/${newReleaseTag}`]);
-            core.info(`✅ Created new release tag ${newReleaseTag} from ${rcTag} (${rcSha.substring(0,7)})`);
+            const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
+            await script.createNewReleaseTag({ core });
 
       - name: Setup ORAS
-        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
 
       - name: Log in to GHCR
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
@@ -319,7 +313,7 @@ jobs:
   release_final:
     name: Create Final Release
     needs: [prepare, promote_final]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: write
     steps:

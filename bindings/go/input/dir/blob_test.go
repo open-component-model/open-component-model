@@ -494,3 +494,23 @@ func extractFileFromTar(tarData []byte, fileName string) ([]byte, error) {
 	// File not found.
 	return nil, fmt.Errorf("file '%s' not found in tar archive", fileName)
 }
+
+func TestScheme_ResolvesAllDirInputAliases(t *testing.T) {
+	tests := []struct {
+		name string
+		typ  runtime.Type
+	}{
+		{"versioned", runtime.NewVersionedType(v1.Type, v1.Version)},
+		{"unversioned", runtime.NewUnversionedType(v1.Type)},
+		{"legacy versioned", runtime.NewVersionedType(v1.LegacyType, v1.Version)},
+		{"legacy unversioned", runtime.NewUnversionedType(v1.LegacyType)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obj, err := dir.Scheme.NewObject(tt.typ)
+			require.NoError(t, err)
+			require.IsType(t, &v1.Dir{}, obj)
+		})
+	}
+}

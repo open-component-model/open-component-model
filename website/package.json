@@ -5,15 +5,15 @@
   "author": "open-component-model",
   "license": "Apache-2.0",
   "scripts": {
-    "build": "./node_modules/.bin/hugo --minify --gc",
+    "build": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo --minify --gc",
     "clean:build": "shx rm -rf public resources .hugo_build.lock",
     "clean:install": "shx rm -rf node_modules package-lock.json yarn.lock pnpm-lock.yaml",
     "clean:lint": "shx rm -rf .eslintcache .stylelintcache",
     "clean": "npm run clean:build && npm run clean:lint && npm run clean:install",
     "create": "./node_modules/.bin/hugo new",
     "cutoff": "node scripts/cutoff-version.js",
-    "dev:drafts": "./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --baseURL=http://localhost --noHTTPCache --buildDrafts",
-    "dev": "./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --noHTTPCache",
+    "dev:drafts": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --baseURL=http://localhost --noHTTPCache --buildDrafts",
+    "dev": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --noHTTPCache",
     "hugo": "./node_modules/.bin/hugo",
     "info": "npm list",
     "lint:markdown": "markdownlint-cli2 \"*.md\" \"content/**/*.md\"",
@@ -43,16 +43,16 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/js-yaml": "4.0.9",
-    "@types/node": "25.5.2",
-    "eslint": "10.2.0",
-    "globals": "17.4.0",
-    "hugo-extended": "0.160.1",
+    "@types/node": "25.6.0",
+    "eslint": "10.3.0",
+    "globals": "17.6.0",
+    "hugo-extended": "0.161.1",
     "jiti": "2.6.1",
     "sass-embedded": "1.99.0",
     "shx": "0.4.0",
     "smol-toml": "1.6.1",
-    "typescript": "6.0.2",
-    "typescript-eslint": "8.58.1"
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.59.1"
   },
   "overrides": {
     "semver": "^7.5.4",
@@ -66,5 +66,5 @@
     "node": ">=25.8.0",
     "npm": ">=11.11.0"
   },
-  "packageManager": "npm@11.12.1"
+  "packageManager": "npm@11.13.0"
 }

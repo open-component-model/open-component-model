@@ -19,6 +19,7 @@ func TestCredentialFunc(t *testing.T) {
 		hostport    string
 		wantErr     bool
 		wantEmpty   bool
+		wantCred    *auth.Credential // if set, assert exact credential match
 	}{
 		{
 			name: "matching host and port",
@@ -27,8 +28,8 @@ func TestCredentialFunc(t *testing.T) {
 				runtime.IdentityAttributePort:     "443",
 			},
 			credentials: map[string]string{
-				CredentialKeyUsername: "testuser",
-				CredentialKeyPassword: "testpass",
+				"username": "testuser",
+				"password": "testpass",
 			},
 			hostport:  "example.com:443",
 			wantErr:   false,
@@ -41,8 +42,8 @@ func TestCredentialFunc(t *testing.T) {
 				runtime.IdentityAttributePort:     "443",
 			},
 			credentials: map[string]string{
-				CredentialKeyUsername: "testuser",
-				CredentialKeyPassword: "testpass",
+				"username": "testuser",
+				"password": "testpass",
 			},
 			hostport:  "wrong.com:443",
 			wantErr:   false,
@@ -55,8 +56,8 @@ func TestCredentialFunc(t *testing.T) {
 				runtime.IdentityAttributePort:     "443",
 			},
 			credentials: map[string]string{
-				CredentialKeyUsername: "testuser",
-				CredentialKeyPassword: "testpass",
+				"username": "testuser",
+				"password": "testpass",
 			},
 			hostport:  "example.com:80",
 			wantErr:   false,
@@ -68,7 +69,7 @@ func TestCredentialFunc(t *testing.T) {
 				runtime.IdentityAttributeHostname: "example.com",
 			},
 			credentials: map[string]string{
-				CredentialKeyUsername: "testuser",
+				"username": "testuser",
 			},
 			hostport:  "example.com",
 			wantErr:   false,
@@ -80,14 +81,46 @@ func TestCredentialFunc(t *testing.T) {
 				runtime.IdentityAttributeHostname: "example.com",
 			},
 			credentials: map[string]string{
-				CredentialKeyUsername:     "testuser",
-				CredentialKeyPassword:     "testpass",
-				CredentialKeyAccessToken:  "testtoken",
-				CredentialKeyRefreshToken: "refreshtoken",
+				"username":     "testuser",
+				"password":     "testpass",
+				"accessToken":  "testtoken",
+				"refreshToken": "refreshtoken",
 			},
 			hostport:  "example.com:443",
 			wantErr:   false,
 			wantEmpty: false,
+		},
+		{
+			name: "legacy snake_case token keys",
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "example.com",
+			},
+			credentials: map[string]string{
+				"access_token":  "snake-access",
+				"refresh_token": "snake-refresh",
+			},
+			hostport: "example.com",
+			wantCred: &auth.Credential{
+				AccessToken:  "snake-access",
+				RefreshToken: "snake-refresh",
+			},
+		},
+		{
+			name: "camelCase takes precedence over snake_case",
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "example.com",
+			},
+			credentials: map[string]string{
+				"accessToken":   "camel-access",
+				"access_token":  "snake-access",
+				"refreshToken":  "camel-refresh",
+				"refresh_token": "snake-refresh",
+			},
+			hostport: "example.com",
+			wantCred: &auth.Credential{
+				AccessToken:  "camel-access",
+				RefreshToken: "camel-refresh",
+			},
 		},
 	}
 
@@ -107,18 +140,87 @@ func TestCredentialFunc(t *testing.T) {
 				return
 			}
 
-			if username, ok := tt.credentials[CredentialKeyUsername]; ok {
+			if tt.wantCred != nil {
+				assert.Equal(t, *tt.wantCred, cred)
+				return
+			}
+
+			if username, ok := tt.credentials["username"]; ok {
 				assert.Equal(t, username, cred.Username)
 			}
-			if password, ok := tt.credentials[CredentialKeyPassword]; ok {
+			if password, ok := tt.credentials["password"]; ok {
 				assert.Equal(t, password, cred.Password)
 			}
-			if token, ok := tt.credentials[CredentialKeyAccessToken]; ok {
+			if token, ok := tt.credentials["accessToken"]; ok {
 				assert.Equal(t, token, cred.AccessToken)
 			}
-			if refreshToken, ok := tt.credentials[CredentialKeyRefreshToken]; ok {
+			if refreshToken, ok := tt.credentials["refreshToken"]; ok {
 				assert.Equal(t, refreshToken, cred.RefreshToken)
 			}
+		})
+	}
+}
+
+func TestCredentialFromMap(t *testing.T) {
+	tests := []struct {
+		name        string
+		credentials map[string]string
+		expected    auth.Credential
+	}{
+		{
+			name:        "empty credentials",
+			credentials: map[string]string{},
+			expected:    auth.Credential{},
+		},
+		{
+			name: "camelCase keys (canonical)",
+			credentials: map[string]string{
+				"username":     "user",
+				"password":     "pass",
+				"accessToken":  "atoken",
+				"refreshToken": "rtoken",
+			},
+			expected: auth.Credential{
+				Username:     "user",
+				Password:     "pass",
+				AccessToken:  "atoken",
+				RefreshToken: "rtoken",
+			},
+		},
+		{
+			name: "legacy snake_case keys",
+			credentials: map[string]string{
+				"username":      "user",
+				"password":      "pass",
+				"access_token":  "atoken",
+				"refresh_token": "rtoken",
+			},
+			expected: auth.Credential{
+				Username:     "user",
+				Password:     "pass",
+				AccessToken:  "atoken",
+				RefreshToken: "rtoken",
+			},
+		},
+		{
+			name: "camelCase takes precedence over snake_case",
+			credentials: map[string]string{
+				"accessToken":   "camel",
+				"access_token":  "snake",
+				"refreshToken":  "camel-refresh",
+				"refresh_token": "snake-refresh",
+			},
+			expected: auth.Credential{
+				AccessToken:  "camel",
+				RefreshToken: "camel-refresh",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := CredentialFromMap(tt.credentials)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -165,8 +267,8 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 				runtime.IdentityAttributeHostname: "registry.example.com",
 			},
 			wantCreds: map[string]string{
-				CredentialKeyUsername: "testuser",
-				CredentialKeyPassword: "testpass",
+				"username": "testuser",
+				"password": "testpass",
 			},
 		},
 		{
@@ -178,8 +280,8 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 				runtime.IdentityAttributeHostname: "docker.io",
 			},
 			wantCreds: map[string]string{
-				CredentialKeyUsername: "testuser",
-				CredentialKeyPassword: "testpass",
+				"username": "testuser",
+				"password": "testpass",
 			},
 		},
 		{
@@ -192,8 +294,8 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 				runtime.IdentityAttributePort:     "5000",
 			},
 			wantCreds: map[string]string{
-				CredentialKeyUsername: "portuser",
-				CredentialKeyPassword: "portpass",
+				"username": "portuser",
+				"password": "portpass",
 			},
 		},
 		{
@@ -227,8 +329,8 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 				runtime.IdentityAttributePort:     "443",
 			},
 			wantCreds: map[string]string{
-				CredentialKeyUsername: "user",
-				CredentialKeyPassword: "pass",
+				"username": "user",
+				"password": "pass",
 			},
 		},
 		{
@@ -241,8 +343,8 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 				runtime.IdentityAttributePort:     "8080",
 			},
 			wantCreds: map[string]string{
-				CredentialKeyUsername: "fulluser",
-				CredentialKeyPassword: "fullpass",
+				"username": "fulluser",
+				"password": "fullpass",
 			},
 		},
 		{
@@ -255,8 +357,8 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 				runtime.IdentityAttributePort:     "5000",
 			},
 			wantCreds: map[string]string{
-				CredentialKeyUsername: "noport",
-				CredentialKeyPassword: "noport",
+				"username": "noport",
+				"password": "noport",
 			},
 		},
 		{

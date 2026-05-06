@@ -18,7 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
-	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
@@ -52,7 +52,7 @@ func TestHelmPluginCapabilities(t *testing.T) {
 	require.Len(t, inputCapability.(*v1.CapabilitySpec).SupportedInputTypes, 1, "should have exactly one helm input type")
 
 	helmInputType := inputCapability.(*v1.CapabilitySpec).SupportedInputTypes[0]
-	require.Equal(t, helmv1.Type, helmInputType.Type.Name, "type name should be 'helm'")
+	require.Equal(t, helmv1.Type, helmInputType.Type.Name, "type name should be 'Helm'")
 	require.Equal(t, helmv1.Version, helmInputType.Type.Version, "type version should be 'v1'")
 }
 

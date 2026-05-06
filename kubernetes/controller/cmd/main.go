@@ -87,6 +87,7 @@ func main() {
 		resourceConcurrency       int
 		resolverWorkerCount       int
 		resolverWorkerQueueLength int
+		resolverSubscriberBuffer  int
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
@@ -109,6 +110,9 @@ func main() {
 		"This is the number of active resolver workers.")
 	flag.IntVar(&resolverWorkerQueueLength, "resolver-worker-queue-length", 1000, //nolint:mnd // no magic number
 		"The maximum number of work items in the queue for the workers to pick up component versions to resolve from.")
+	flag.IntVar(&resolverSubscriberBuffer, "resolver-subscriber-buffer-size", 100, //nolint:mnd // no magic number
+		"The buffer size for each subscriber's event channel. A larger buffer reduces the probability of dropped resolution events under load. "+
+			"Tune upward if the resolver_event_channel_drops_total metric is non-zero.")
 
 	opts := zap.Options{
 		Development: true,
@@ -124,6 +128,19 @@ func main() {
 	maxResourceSizeBytes := maxResourceQuantity.Value()
 	if maxResourceSizeBytes < 0 {
 		setupLog.Error(nil, "invalid flag value", "flag", "deployer-download-max-resource-size", "value", deployerMaxResourceSize, "reason", "must be >= 0")
+		os.Exit(1)
+	}
+
+	if resolverSubscriberBuffer <= 0 {
+		setupLog.Error(nil, "invalid flag value", "flag", "resolver-subscriber-buffer-size",
+			"value", resolverSubscriberBuffer, "reason", "must be > 0")
+		os.Exit(1)
+	}
+	// A subscriber channel deeper than the work queue is wasteful: the queue bounds
+	// how many resolution events can be in flight, so a larger buffer can never fill.
+	if resolverSubscriberBuffer > resolverWorkerQueueLength {
+		setupLog.Error(nil, "invalid flag value", "flag", "resolver-subscriber-buffer-size",
+			"value", resolverSubscriberBuffer, "reason", "must not exceed resolver-worker-queue-length")
 		os.Exit(1)
 	}
 
@@ -237,11 +254,12 @@ func main() {
 
 	// Create worker pool with its own dependencies
 	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
-		WorkerCount: resolverWorkerCount,
-		QueueSize:   resolverWorkerQueueLength,
-		Logger:      &setupLog,
-		Client:      mgr.GetClient(),
-		Cache:       resolverCache,
+		WorkerCount:          resolverWorkerCount,
+		QueueSize:            resolverWorkerQueueLength,
+		SubscriberBufferSize: resolverSubscriberBuffer,
+		Logger:               &setupLog,
+		Client:               mgr.GetClient(),
+		Cache:                resolverCache,
 	})
 	if err := mgr.Add(workerPool); err != nil {
 		setupLog.Error(err, "unable to add worker pool")
@@ -303,6 +321,22 @@ func main() {
 		MaxResourceSizeBytes: maxResourceSizeBytes,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Deployer")
+		os.Exit(1)
+	}
+	if err = (&v1alpha1.Component{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Component")
+		os.Exit(1)
+	}
+	if err = (&v1alpha1.Deployer{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Deployer")
+		os.Exit(1)
+	}
+	if err = (&v1alpha1.Repository{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Repository")
+		os.Exit(1)
+	}
+	if err = (&v1alpha1.Resource{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Resource")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

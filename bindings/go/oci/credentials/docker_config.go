@@ -17,18 +17,51 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// CredentialKey constants define the standard keys used in credential maps.
-// These keys are used to store and retrieve different types of credentials.
+// Credential key constants re-exported from the typed credential package for backward compatibility.
 const (
-	// CredentialKeyUsername is the key for storing username credentials
-	CredentialKeyUsername = "username"
-	// CredentialKeyPassword is the key for storing password credentials
-	CredentialKeyPassword = "password"
-	// CredentialKeyAccessToken is the key for storing access token credentials
-	CredentialKeyAccessToken = "accessToken"
-	// CredentialKeyRefreshToken is the key for storing refresh token credentials
-	CredentialKeyRefreshToken = "refreshToken"
+	// CredentialKeyUsername is the key for basic auth username.
+	CredentialKeyUsername = credentialsv1.CredentialKeyUsername
+	// CredentialKeyPassword is the key for basic auth password.
+	CredentialKeyPassword = credentialsv1.CredentialKeyPassword
+	// CredentialKeyAccessToken is the key for OAuth2/bearer access tokens.
+	CredentialKeyAccessToken = credentialsv1.CredentialKeyAccessToken
+	// CredentialKeyRefreshToken is the key for OAuth2 refresh tokens.
+	CredentialKeyRefreshToken = credentialsv1.CredentialKeyRefreshToken
+	// LegacyCredentialKeyAccessToken is the legacy snake_case key for access tokens.
+	//
+	// Deprecated: Use CredentialKeyAccessToken instead.
+	//nolint:staticcheck // will be removed in the future
+	LegacyCredentialKeyAccessToken = credentialsv1.LegacyCredentialKeyAccessToken
+	// LegacyCredentialKeyRefreshToken is the legacy snake_case key for refresh tokens.
+	//
+	// Deprecated: Use CredentialKeyRefreshToken instead.
+	//nolint:staticcheck // will be removed in the future
+	LegacyCredentialKeyRefreshToken = credentialsv1.LegacyCredentialKeyRefreshToken
 )
+
+// CredentialFromMap converts a credential map to an auth.Credential.
+// It supports both canonical camelCase keys and legacy snake_case keys for token fields,
+// with camelCase taking precedence.
+func CredentialFromMap(credentials map[string]string) auth.Credential {
+	cred := auth.Credential{}
+	if v, ok := credentials[CredentialKeyUsername]; ok {
+		cred.Username = v
+	}
+	if v, ok := credentials[CredentialKeyPassword]; ok {
+		cred.Password = v
+	}
+	if v, ok := credentials[CredentialKeyAccessToken]; ok {
+		cred.AccessToken = v
+	} else if v, ok := credentials[LegacyCredentialKeyAccessToken]; ok {
+		cred.AccessToken = v
+	}
+	if v, ok := credentials[CredentialKeyRefreshToken]; ok {
+		cred.RefreshToken = v
+	} else if v, ok := credentials[LegacyCredentialKeyRefreshToken]; ok {
+		cred.RefreshToken = v
+	}
+	return cred
+}
 
 // CredentialFunc creates a function that returns credentials based on host and port matching.
 // It takes an identity map and a credentials map as input and returns a function that can be
@@ -55,19 +88,7 @@ const (
 // and returns the provided credentials if they do. If the host and port don't match,
 // it will return empty credentials.
 func CredentialFunc(identity runtime.Identity, credentials map[string]string) auth.CredentialFunc {
-	credential := auth.Credential{}
-	if v, ok := credentials[CredentialKeyUsername]; ok {
-		credential.Username = v
-	}
-	if v, ok := credentials[CredentialKeyPassword]; ok {
-		credential.Password = v
-	}
-	if v, ok := credentials[CredentialKeyAccessToken]; ok {
-		credential.AccessToken = v
-	}
-	if v, ok := credentials[CredentialKeyRefreshToken]; ok {
-		credential.RefreshToken = v
-	}
+	credential := CredentialFromMap(credentials)
 	registeredHostname, hostInIdentity := identity[runtime.IdentityAttributeHostname]
 	registeredPort, portInIdentity := identity[runtime.IdentityAttributePort]
 

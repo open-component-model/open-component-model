@@ -5,6 +5,7 @@ import (
 )
 
 const (
+	OCIImageType       = "OCIImage"
 	LegacyType         = "ociArtifact"
 	LegacyTypeVersion  = "v1"
 	LegacyType2        = "ociRegistry"

@@ -12,7 +12,7 @@ manager:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
     # -- Controller image tag
-    tag: latest@sha256:64a8dd1505c5aa0a8a57ac8c6ab806f74f1b572800f35876d5a84fbdaca9eb7c
+    tag: latest@sha256:7d0d8d1609af8480ee3e16399b182ee2cfb5ca33359a7e2843710d23350c6feb
     # -- Image pull policy
     pullPolicy: IfNotPresent
   ## Controller concurrency settings
@@ -25,6 +25,8 @@ manager:
     workerCount: 10
     # -- Maximum work items in queue for component version resolution
     workerQueueLength: 1000
+    # -- Buffer size for each subscriber's event channel. Larger values reduce dropped resolution events under load. Monitor resolver_event_channel_drops_total metric.
+    subscriberBufferSize: 100
   ## Cache settings
   cache:
     # -- Maximum size of the deployer download object LRU cache
@@ -113,12 +115,12 @@ crd:
   enable: true
   # -- Keep CRDs when uninstalling
   keep: true
-## Controller metrics endpoint
-metrics:
-  # -- Enable metrics endpoint with RBAC protection
+## Webhook configuration
+webhook:
+  # -- Enable conversion webhook for CRD version conversion
   enable: false
-  # -- Metrics server port
-  port: 8443
+  # -- Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually)
+  certSecret: ""
 ## Cert-manager integration
 certManager:
   # -- Enable cert-manager for TLS certificates

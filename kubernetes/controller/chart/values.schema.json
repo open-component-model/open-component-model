@@ -164,6 +164,9 @@
                 "resolver": {
                     "type": "object",
                     "properties": {
+                        "subscriberBufferSize": {
+                            "type": "integer"
+                        },
                         "workerCount": {
                             "type": "integer"
                         },
@@ -223,17 +226,6 @@
                 }
             }
         },
-        "metrics": {
-            "type": "object",
-            "properties": {
-                "enable": {
-                    "type": "boolean"
-                },
-                "port": {
-                    "type": "integer"
-                }
-            }
-        },
         "prometheus": {
             "type": "object",
             "properties": {
@@ -245,6 +237,17 @@
         "rbacHelpers": {
             "type": "object",
             "properties": {
+                "enable": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "webhook": {
+            "type": "object",
+            "properties": {
+                "certSecret": {
+                    "type": "string"
+                },
                 "enable": {
                     "type": "boolean"
                 }

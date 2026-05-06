@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/input/utf8"
 	v1 "ocm.software/open-component-model/bindings/go/input/utf8/spec/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestGetV1UTF8Blob(t *testing.T) {
@@ -382,6 +383,26 @@ func TestGetV1UTF8Blob(t *testing.T) {
 			if tt.check != nil {
 				tt.check(t, blob)
 			}
+		})
+	}
+}
+
+func TestScheme_ResolvesAllUTF8InputAliases(t *testing.T) {
+	tests := []struct {
+		name string
+		typ  runtime.Type
+	}{
+		{"versioned", runtime.NewVersionedType(v1.Type, v1.Version)},
+		{"unversioned", runtime.NewUnversionedType(v1.Type)},
+		{"legacy versioned", runtime.NewVersionedType(v1.LegacyType, v1.Version)},
+		{"legacy unversioned", runtime.NewUnversionedType(v1.LegacyType)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obj, err := utf8.Scheme.NewObject(tt.typ)
+			require.NoError(t, err)
+			require.IsType(t, &v1.UTF8{}, obj)
 		})
 	}
 }

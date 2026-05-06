@@ -317,6 +317,83 @@ func TestRegistry_NewObject_Based_On_Alias(t *testing.T) {
 	r.Equal(obj.GetType(), alias)
 }
 
+func TestScheme_ResolveCanonicalType(t *testing.T) {
+	helmDefault := NewVersionedType("HelmHTTPCredentials", "v1")
+	helmAlias := NewUnversionedType("HelmHTTPCredentials")
+	helmAlpha := NewVersionedType("HelmHTTPCredentials", "v1alpha1")
+
+	ociDefault := NewVersionedType("OCICredentials", "v1")
+	ociAlias := NewUnversionedType("OCICredentials")
+
+	scheme := NewScheme()
+	scheme.MustRegisterWithAlias(&TestType{}, helmDefault, helmAlias, helmAlpha)
+	scheme.MustRegisterWithAlias(&Raw{}, ociDefault, ociAlias)
+
+	tests := []struct {
+		name       string
+		input      Type
+		expected   Type
+		expectedOk bool
+	}{
+		{
+			name:       "default type resolves to itself",
+			input:      helmDefault,
+			expected:   helmDefault,
+			expectedOk: true,
+		},
+		{
+			name:       "unversioned alias resolves to default",
+			input:      helmAlias,
+			expected:   helmDefault,
+			expectedOk: true,
+		},
+		{
+			name:       "versioned alias resolves to default",
+			input:      helmAlpha,
+			expected:   helmDefault,
+			expectedOk: true,
+		},
+		{
+			name:       "unregistered type returns unchanged",
+			input:      NewVersionedType("Unknown", "v1"),
+			expected:   NewVersionedType("Unknown", "v1"),
+			expectedOk: false,
+		},
+		{
+			name:       "empty type returns empty",
+			input:      Type{},
+			expected:   Type{},
+			expectedOk: false,
+		},
+		{
+			name:       "second registered type resolves to itself",
+			input:      ociDefault,
+			expected:   ociDefault,
+			expectedOk: true,
+		},
+		{
+			name:       "second type alias resolves to its own default",
+			input:      ociAlias,
+			expected:   ociDefault,
+			expectedOk: true,
+		},
+		{
+			name:       "different version of unregistered type returns unchanged",
+			input:      NewVersionedType("HelmHTTPCredentials", "v2"),
+			expected:   NewVersionedType("HelmHTTPCredentials", "v2"),
+			expectedOk: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resolved, ok := scheme.ResolveCanonicalType(tc.input)
+			assert.Equal(t, tc.expected, resolved)
+			assert.Equal(t, tc.expectedOk, ok)
+		})
+	}
+}
+
 func TestRegistry_RegisterScheme(t *testing.T) {
 	// Create source scheme with some types
 	sourceScheme := NewScheme()

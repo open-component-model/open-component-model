@@ -1,3 +1,6 @@
+{{- if and (gt (int .Values.manager.replicas) 1) (not .Values.manager.leaderElection.enabled) }}
+{{- fail "manager.replicas > 1 requires manager.leaderElection.enabled=true to prevent concurrent reconcilers from racing on the same resources" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -10,15 +13,19 @@ metadata:
     name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "controller-manager" "context" $) }}
     namespace: {{ .Release.Namespace }}
 spec:
-    replicas: 1
+    replicas: {{ .Values.manager.replicas }}
     selector:
         matchLabels:
+            app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
             control-plane: controller-manager
     template:
         metadata:
             annotations:
                 kubectl.kubernetes.io/default-container: manager
             labels:
+                app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+                app.kubernetes.io/instance: {{ .Release.Name }}
                 control-plane: controller-manager
         spec:
             {{- with .Values.manager.tolerations }}
@@ -29,6 +36,9 @@ spec:
             {{- end }}
             {{- with .Values.manager.nodeSelector }}
             nodeSelector: {{ toYaml . | nindent 16 }}
+            {{- end }}
+            {{- with .Values.manager.imagePullSecrets }}
+            imagePullSecrets: {{ toYaml . | nindent 16 }}
             {{- end }}
             containers:
                 - args:
@@ -62,6 +72,9 @@ spec:
                     {{- if .workerQueueLength }}
                     - --resolver-worker-queue-length={{ .workerQueueLength }}
                     {{- end }}
+                    {{- if hasKey . "subscriberBufferSize" }}
+                    - --resolver-subscriber-buffer-size={{ .subscriberBufferSize }}
+                    {{- end }}
                     {{- end }}
                     {{- /* Cache */}}
                     {{- with .Values.manager.cache }}
@@ -92,6 +105,9 @@ spec:
                     - /manager
                   image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag }}"
                   imagePullPolicy: {{ .Values.manager.image.pullPolicy }}
+                  {{- with .Values.manager.env }}
+                  env: {{ toYaml . | nindent 20 }}
+                  {{- end }}
                   livenessProbe:
                     httpGet:
                         path: {{ .Values.manager.livenessProbe.path }}
@@ -103,6 +119,11 @@ spec:
                     - containerPort: 9090
                       name: http
                       protocol: TCP
+                    {{- if .Values.webhook.enable }}
+                    - containerPort: 9443
+                      name: webhook-server
+                      protocol: TCP
+                    {{- end }}
                   readinessProbe:
                     httpGet:
                         path: {{ .Values.manager.readinessProbe.path }}
@@ -124,6 +145,11 @@ spec:
                   volumeMounts:
                     - mountPath: /data
                       name: data
+                    {{- if .Values.webhook.enable }}
+                    - mountPath: /tmp/k8s-webhook-server/serving-certs
+                      name: cert
+                      readOnly: true
+                    {{- end }}
             securityContext:
               {{- if .Values.manager.podSecurityContext }}
               {{- toYaml .Values.manager.podSecurityContext | nindent 14 }}
@@ -135,3 +161,9 @@ spec:
             volumes:
                 - emptyDir: {}
                   name: data
+                {{- if .Values.webhook.enable }}
+                - name: cert
+                  secret:
+                    defaultMode: 420
+                    secretName: {{ .Values.webhook.certSecret | default (include "ocm-k8s-toolkit.resourceName" (dict "suffix" "webhook-server-cert" "context" $)) }}
+                {{- end }}

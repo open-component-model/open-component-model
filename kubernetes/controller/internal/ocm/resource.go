@@ -12,10 +12,10 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 var ErrPluginNotFound = errors.New("digest processor plugin not found")
@@ -48,7 +48,7 @@ func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *de
 			return nil, fmt.Errorf("failed creating credential graph: %w", err)
 		}
 
-		creds, err = credGraph.Resolve(ctx, id)
+		creds, err = credGraph.Resolve(ctx, id) //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
 		if err != nil && !errors.Is(err, credentials.ErrNotFound) {
 			return nil, fmt.Errorf("failed resolving credentials for digest processor: %w", err)
 		}

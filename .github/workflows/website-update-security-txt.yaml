@@ -8,11 +8,13 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   update:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
     - name: Generate token
@@ -33,7 +35,7 @@ jobs:
           https://raw.github.tools.sap/sgsc-engineering-and-automation/securitytxt/main/security.txt -o website/static/.well-known/security.txt
 
     - name: Create Pull Request
-      uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8
+      uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
       with:
         token: ${{ steps.generate_token.outputs.token }}
         title: "chore: update '.well-known/security.text'"

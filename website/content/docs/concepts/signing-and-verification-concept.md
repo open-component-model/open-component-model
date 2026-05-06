@@ -132,7 +132,7 @@ component:
       version: 1.0.0
       relation: local
       access:                          # NOT included in signature
-        type: localBlob
+        type: LocalBlob/v1
         localReference: sha256:70a257...
         mediaType: text/plain; charset=utf-8
       digest:                          # Included in signature
@@ -144,7 +144,7 @@ component:
       version: 1.0.0
       relation: external
       access:                          # NOT included in signature
-        type: ociArtifact
+        type: OCIImage/v1
         imageReference: ghcr.io/stefanprodan/podinfo:6.9.1@sha256:262578cd...
       digest:                          # Included in signature
         hashAlgorithm: SHA-256
@@ -190,10 +190,10 @@ A component version can have **multiple signatures** from different parties, ena
 
 OCM currently only supports RSA-based signing algorithms:
 
-| Algorithm            | Type       | Characteristics                                                                                      |
-|----------------------|------------|------------------------------------------------------------------------------------------------------|
-| RSASSA-PSS (default) | Asymmetric | Probabilistic, stronger security guarantees, recommended for new implementations                     |
-| RSA-PKCS#1 v1.5      | Asymmetric | Deterministic, widely supported, compatible with legacy systems                                      |
+| Algorithm | Type | Characteristics |
+| --------- | ---- | --------------- |
+| RSASSA-PSS (default) | Asymmetric | Probabilistic, stronger security guarantees, recommended for new implementations |
+| RSA-PKCS#1 v1.5 | Asymmetric | Deterministic, widely supported, compatible with legacy systems |
 
 To override the default signing algorithm or encoding policy, see the `--signer-spec` flag in the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}).
 The signer spec file configures only the algorithm and encoding policy — credentials are always resolved separately via the [`.ocmconfig`]({{< relref "configure-multiple-credentials.md" >}}) file.
@@ -217,7 +217,7 @@ The `signatureEncodingPolicy` in the [signer spec]({{< relref "/docs/reference/o
 | Policy | Signature Format | Media Type | Certificate Chain | Verification Requires |
 | ------ | ---------------- | ---------- | ----------------- | --------------------- |
 | **Plain** (default) | Hex-encoded raw bytes | `application/vnd.ocm.signature.rsa.pss` | Not embedded | Externally supplied public key |
-| **PEM** (experimental) | PEM `SIGNATURE` block + `CERTIFICATE` blocks | `application/x-pem-file` | Embedded in signature | Valid certificate chain in signature |
+| **PEM** (early access) | PEM `SIGNATURE` block + `CERTIFICATE` blocks | `application/x-pem-file` | Embedded in signature | Valid certificate chain in signature |
 
 #### Plain Encoding (Default)
 
@@ -233,7 +233,7 @@ signature:
   value: d1ea6e0cd850c8dbd0d20cd39b9c7954...
 ```
 
-#### PEM Encoding (Experimental)
+#### PEM Encoding (Early Access)
 
 The signature is wrapped in a PEM block of type `SIGNATURE`, optionally followed by the signer's X.509 certificate chain.
 This makes the signature **self-contained**: verifiers can extract and validate the public key from the embedded chain
@@ -243,24 +243,24 @@ Example of a PEM-encoded signature value:
 
 ```yaml
 signature:
-      algorithm: RSASSA-PSS
-      mediaType: application/x-pem-file
-      value: |
-        -----BEGIN SIGNATURE-----
-        Signature Algorithm: RSASSA-PSS
-        
-        <base64-encoded signature bytes>
-        -----END SIGNATURE-----
-        -----BEGIN CERTIFICATE-----
-        <leaf certificate>
-        -----END CERTIFICATE-----
-        -----BEGIN CERTIFICATE-----
-        <intermediate CA, if applicable>
-        -----END CERTIFICATE-----
+  algorithm: RSASSA-PSS
+  mediaType: application/x-pem-file
+  value: |
+    -----BEGIN SIGNATURE-----
+    Signature Algorithm: RSASSA-PSS
+    
+    <base64-encoded signature bytes>
+    -----END SIGNATURE-----
+    -----BEGIN CERTIFICATE-----
+    <leaf certificate>
+    -----END CERTIFICATE-----
+    -----BEGIN CERTIFICATE-----
+    <intermediate CA, if applicable>
+    -----END CERTIFICATE-----
 ```
 
-{{< callout context="caution" title="PEM encoding is experimental" icon="outline/alert-triangle" >}}
-This encoding policy may change or be deprecated in future versions. For production use, prefer the default Plain encoding.
+{{< callout context="note" title="PEM encoding is in early access" icon="outline/info-circle" >}}
+PEM encoding is currently being rolled out across projects and we are awaiting feedback. The interface may evolve based on that feedback.
 {{< /callout >}}
 
 {{< callout context="note" title="Key files vs. signature encoding" icon="outline/info-circle" >}}
@@ -268,6 +268,40 @@ A common source of confusion: "PEM" in `signatureEncodingPolicy` refers to the *
 
 When using PEM encoding for signing, the credential referenced by `public_key_pem` / `public_key_pem_file` must contain **X.509 certificates** (not bare public keys), because the certificate chain is embedded into the signature for self-contained verification.
 {{< /callout >}}
+
+## Trust Models
+
+The encoding policy you choose determines how verifiers establish trust in a signature.
+
+### Key Pinning (Plain Encoding)
+
+The verifier explicitly configures the signer's public key in `.ocmconfig`. Trust is established by knowing the exact key that was used to sign.
+
+- No PKI infrastructure required
+- Simple to set up for small teams or self-signed workflows
+- Verifier must obtain the public key out-of-band (e.g., from a secrets manager or shared repository)
+- Rotating keys requires updating every verifier's configuration
+
+### Certificate Chain Trust (PEM Encoding)
+
+The signer embeds the certificate chain (leaf + any intermediates) directly in the signature value. The verifier pins only the root CA certificate as a trust anchor.
+
+- Requires PKI infrastructure (or a locally generated CA)
+- Verifier only needs the root CA -- leaf certificates can change without reconfiguring verifiers
+- Supports organizational delegation: the root CA can issue intermediate CAs for different teams
+- The root CA is never embedded in the signature; OCM rejects self-signed certificates found in the embedded chain
+
+### When to Use Each
+
+| Criterion | Plain (Key Pinning) | PEM (Certificate Chain) |
+| --------- | ------------------- | ----------------------- |
+| PKI infrastructure available | No | Yes |
+| Number of signers | Few | Many or changing |
+| Key rotation complexity | High (update all verifiers) | Low (root CA stays stable) |
+| Signature is self-contained | No (public key needed separately) | Yes |
+| Recommended for | Simple setups, personal projects | Enterprise environments |
+
+For hands-on steps, see [Tutorial: Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) and [Tutorial: Certificate Chains (PEM)]({{< relref "docs/tutorials/signing/pem.md" >}}).
 
 ## Next Steps
 

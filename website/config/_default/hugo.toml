@@ -8,17 +8,12 @@ enableEmoji = true
 enableGitInfo = false
 enableRobotsTXT = true
 languageCode = "en-US"
-rssLimit = 10
 summarylength = 20
 
 defaultContentLanguage = "en"
 disableLanguages = ["de", "nl"]
 defaultContentLanguageInSubdir = false
 
-repoHost = "GitHub"
-docsRepo = "https://github.com/open-component-model/open-component-model"
-docsRepoBranch = "main"
-docsRepoSubPath = "website"
 editPage = false
 lastMod = false
 
@@ -35,7 +30,7 @@ defaultContentVersion = "latest"
   enable = true
 
 [outputs]
-  home = ["HTML", "RSS", "searchIndex"]
+  home = ["HTML", "searchIndex"]
   section = ["HTML", "RSS", "SITEMAP"]
 
 [outputFormats.searchIndex]
@@ -97,7 +92,13 @@ defaultContentVersion = "latest"
   resampleFilter = "Lanczos"
 
 [versions]
-  [versions."latest"]
+  [versions."main"]
     weight = 1
-  [versions."legacy"]
+  [versions."latest"]
     weight = 2
+  [versions."legacy"]
+    weight = 3
+
+[services]
+  [services.rss]
+    limit = 20

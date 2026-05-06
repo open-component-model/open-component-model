@@ -1,5 +1,8 @@
 dirs:
   - ./
+excludedDirs:
+  - website
+modifiedFilesOnly: true
 replacementPatterns:
   - pattern: "^/"
     replacement: "{{BASEURL}}/"

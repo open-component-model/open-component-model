@@ -39,7 +39,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
@@ -51,6 +50,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 const (
@@ -732,7 +732,7 @@ func resolveResourceCredentials(
 		return nil, fmt.Errorf("failed to create credential graph: %w", err)
 	}
 
-	creds, err := credGraph.Resolve(ctx, id)
+	creds, err := credGraph.Resolve(ctx, id) //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
 	}
@@ -831,7 +831,7 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 	}
 
 	logger.Info("applying ApplySet")
-	applyResult, metadata, err := set.Apply(ctx, resourcesToAdd, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
+	applyResult, err := set.Apply(ctx, resourcesToAdd, applyset.ApplyMode{Concurrency: runtime.NumCPU()})
 	if err != nil {
 		return fmt.Errorf("failed to apply ApplySet: %w", err)
 	}
