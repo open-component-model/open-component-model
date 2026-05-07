@@ -54,7 +54,9 @@ func WithTempDir(dir string) HandlerOption {
 	}
 }
 
-// WithHTTPClient sets the HTTP client used for cosign binary downloads.
+// WithHTTPClient sets the HTTP client used for cosign binary auto-downloads.
+// Only relevant when cosign is not already on PATH. If not set, a default client with a 2-minute
+// timeout is used.
 func WithHTTPClient(c *http.Client) HandlerOption {
 	return func(h *Handler) {
 		if b, ok := h.runner.(*cosignBinary); ok {
@@ -63,7 +65,8 @@ func WithHTTPClient(c *http.Client) HandlerOption {
 	}
 }
 
-// WithOperationTimeout sets the maximum duration for a single cosign subprocess invocation.
+// WithOperationTimeout sets the maximum duration for a single cosign subprocess invocation
+// The timeout is applied via context.WithTimeout before exec. If not set, defaults to 3 minutes.
 func WithOperationTimeout(d time.Duration) HandlerOption {
 	return func(h *Handler) {
 		if b, ok := h.runner.(*cosignBinary); ok {
