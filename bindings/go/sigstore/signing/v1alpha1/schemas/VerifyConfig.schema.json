@@ -6,10 +6,6 @@
   "type": "object",
   "description": "VerifyConfig defines configuration for Sigstore-based keyless verification via the cosign CLI.\n\nFor keyless (Sigstore) verification, identity constraints are REQUIRED: you must set either\nCertificateOIDCIssuer (or CertificateOIDCIssuerRegexp) AND CertificateIdentity\n(or CertificateIdentityRegexp), via config fields.\nWithout them, verification cannot establish whose signature is being accepted, making the\nverification meaningless from a supply-chain security perspective. This mirrors cosign's own\nrequirement for --certificate-oidc-issuer and --certificate-identity on keyless verify.\n\nSee https://docs.sigstore.dev/cosign/verifying/verify/ for cosign verification documentation.",
   "properties": {
-    "allowInsecureEndpoints": {
-      "type": "boolean",
-      "description": "AllowInsecureEndpoints permits HTTP (non-TLS) URLs in CertificateOIDCIssuer.\nDefault false enforces HTTPS. Only enable for testing or air-gapped environments."
-    },
     "certificateIdentity": {
       "type": "string",
       "description": "CertificateIdentity is the exact Subject Alternative Name that the signing certificate\nmust carry. Typically the signer's email or CI workflow URI.\nRequired for keyless verification unless CertificateIdentityRegexp is set.\nMaps to cosign --certificate-identity."

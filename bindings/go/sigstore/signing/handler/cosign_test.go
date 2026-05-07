@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 )
 
 func TestCosignEnv(t *testing.T) {
@@ -23,19 +21,6 @@ func TestHasEnvKey_EmptyValueTreatedAsAbsent(t *testing.T) {
 	env := []string{"SIGSTORE_ID_TOKEN=", "OTHER_KEY=value"}
 	r.False(hasEnvKey(env, "SIGSTORE_ID_TOKEN"))
 	r.True(hasEnvKey(env, "OTHER_KEY"))
-}
-
-func TestVerifyConfigValidateAllowInsecure(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-	cfg := &v1alpha1.VerifyConfig{
-		CertificateOIDCIssuer:  "http://issuer.local",
-		CertificateIdentity:    "user@example.com",
-		AllowInsecureEndpoints: false,
-	}
-	r.Error(cfg.Validate())
-	cfg.AllowInsecureEndpoints = true
-	r.NoError(cfg.Validate())
 }
 
 func TestParseCosignVersionOutput(t *testing.T) {

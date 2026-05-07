@@ -664,32 +664,7 @@ func TestVerify_PrivateInfrastructureWithTrustedRootCredential(t *testing.T) {
 	r.True(hasArg(mock.lastVerifyArgs, "--private-infrastructure"))
 }
 
-func TestVerify_CertificateOIDCIssuerRejectsHTTP(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	h := newWithRunner(&mockCosignRunner{})
-
-	cfg := testVerifyConfig()
-	cfg.CertificateOIDCIssuer = "http://accounts.google.com"
-
-	bundleJSON := fakeBundleJSON(t)
-	signed := descruntime.Signature{
-		Name:   "test-sig",
-		Digest: testDigest(),
-		Signature: descruntime.SignatureInfo{
-			Algorithm: v1alpha1.AlgorithmSigstore,
-			MediaType: v1alpha1.MediaTypeSigstoreBundle,
-			Value:     base64.StdEncoding.EncodeToString(bundleJSON),
-		},
-	}
-
-	err := h.Verify(t.Context(), signed, cfg, map[string]string{})
-	r.Error(err)
-	r.Contains(err.Error(), "must use https scheme")
-}
-
-func TestVerify_CertificateOIDCIssuerAcceptsHTTPWithInsecureFlag(t *testing.T) {
+func TestVerify_CertificateOIDCIssuerAcceptsHTTP(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
@@ -698,7 +673,6 @@ func TestVerify_CertificateOIDCIssuerAcceptsHTTPWithInsecureFlag(t *testing.T) {
 
 	cfg := testVerifyConfig()
 	cfg.CertificateOIDCIssuer = "http://accounts.google.com"
-	cfg.AllowInsecureEndpoints = true
 
 	bundleJSON := fakeBundleJSON(t)
 	signed := descruntime.Signature{

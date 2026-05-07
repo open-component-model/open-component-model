@@ -49,7 +49,7 @@ func TestVerifyConfig_Validate(t *testing.T) {
 		{"valid regexp issuer + regexp identity", VerifyConfig{CertificateOIDCIssuerRegexp: "https://.*", CertificateIdentityRegexp: ".*@example.com"}, ""},
 		{"valid issuer + identity regexp", VerifyConfig{CertificateOIDCIssuer: "https://accounts.google.com", CertificateIdentityRegexp: ".*@example.com"}, ""},
 		{"valid issuer regexp + identity", VerifyConfig{CertificateOIDCIssuerRegexp: "https://.*", CertificateIdentity: "user@example.com"}, ""},
-		{"http issuer rejected", VerifyConfig{CertificateOIDCIssuer: "http://accounts.google.com", CertificateIdentity: "user@example.com"}, "must use https scheme"},
+		{"http issuer accepted", VerifyConfig{CertificateOIDCIssuer: "http://accounts.google.com", CertificateIdentity: "user@example.com"}, ""},
 		{"invalid issuer regexp", VerifyConfig{CertificateOIDCIssuerRegexp: "[invalid", CertificateIdentity: "user@example.com"}, "invalid regexp"},
 		{"invalid identity regexp", VerifyConfig{CertificateOIDCIssuer: "https://accounts.google.com", CertificateIdentityRegexp: "(unclosed"}, "invalid regexp"},
 	}
