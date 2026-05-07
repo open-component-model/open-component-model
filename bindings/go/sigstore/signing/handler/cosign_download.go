@@ -127,6 +127,7 @@ func ensureOrDownloadCosign(ctx context.Context, client *http.Client) (string, e
 const (
 	maxBinaryDownloadSize   = 150 << 20 // 150 MB safety cap
 	maxChecksumDownloadSize = 1 << 20   // 1 MB
+	userAgent               = "ocm.software/open-component-model/bindings/go/sigstore"
 )
 
 // fetchExpectedChecksumWith downloads cosign_checksums.txt for the pinned version
@@ -134,16 +135,21 @@ const (
 // The checksum guards against download corruption and partial CDN cache poisoning.
 // Full Sigstore bundle verification of the release is not implemented: verifying
 // the bundle requires cosign itself (chicken-and-egg for an auto-download fallback).
-func fetchExpectedChecksumWith(ctx context.Context, client *http.Client, binaryName string) (string, error) {
+func fetchExpectedChecksumWith(ctx context.Context, client *http.Client, binaryName string) (result string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pinnedChecksumsURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("create checksums request: %w", err)
 	}
+	req.Header.Set("User-Agent", userAgent)
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("download checksums file: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			err = errors.Join(err, cerr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download checksums file: HTTP %d", resp.StatusCode)
@@ -173,12 +179,16 @@ func parseChecksum(r io.Reader, filename string) (string, error) {
 }
 
 // verifyFileChecksum checks that the SHA256 hash of a file matches the expected value.
-func verifyFileChecksum(path, expectedHash string) error {
+func verifyFileChecksum(path, expectedHash string) (err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			err = errors.Join(err, cerr)
+		}
+	}()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, f); err != nil {
@@ -193,16 +203,21 @@ func verifyFileChecksum(path, expectedHash string) error {
 
 // downloadAndVerifyWith downloads the binary from url, verifies its SHA256 against
 // expectedHash, writes it to destPath, and makes it executable.
-func downloadAndVerifyWith(ctx context.Context, client *http.Client, url, destPath, expectedHash string) error {
+func downloadAndVerifyWith(ctx context.Context, client *http.Client, url, destPath, expectedHash string) (err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("create download request: %w", err)
 	}
+	req.Header.Set("User-Agent", userAgent)
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("download cosign binary: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			err = errors.Join(err, cerr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download cosign binary: HTTP %d from %s", resp.StatusCode, url)
