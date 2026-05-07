@@ -289,7 +289,7 @@ func (h *Handler) Verify(
 	}
 
 	if err := h.runner.verify(ctx, dataPath, bundlePath, extraArgs, cosignEnv()); err != nil {
-		return fmt.Errorf("verify signature: %w", err)
+		return err
 	}
 
 	return nil
@@ -388,14 +388,21 @@ type bundleCertInfo struct {
 	Identity string // SAN: first email or URI from Fulcio cert
 }
 
+type sigstoreBundle struct {
+	VerificationMaterial struct {
+		Certificate struct {
+			RawBytes string `json:"rawBytes"`
+		} `json:"certificate"`
+	} `json:"verificationMaterial"`
+}
+
+// extractCertInfoFromBundleJSON extracts the OIDC issuer and signer identity from
+// the Fulcio certificate embedded in a Sigstore bundle.
+// The caller needs these to populate SignatureInfo so consumers can attribute a signature
+// to a specific identity without re-parsing the bundle.
+// Tries the V2 issuer OID first, falls back to V1 for older Fulcio deployments.
 func extractCertInfoFromBundleJSON(bundleJSON []byte) (bundleCertInfo, error) {
-	var bundle struct {
-		VerificationMaterial struct {
-			Certificate struct {
-				RawBytes string `json:"rawBytes"`
-			} `json:"certificate"`
-		} `json:"verificationMaterial"`
-	}
+	var bundle sigstoreBundle
 	if err := json.Unmarshal(bundleJSON, &bundle); err != nil {
 		return bundleCertInfo{}, fmt.Errorf("unmarshal bundle JSON: %w", err)
 	}
