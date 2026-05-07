@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -21,26 +20,37 @@ import (
 
 const defaultOperationTimeout = 3 * time.Minute
 
-// CosignMinimumVersion is the minimum cosign version required on PATH.
+// cosignMinimumVersion is the minimum cosign version required on PATH.
 // v3.0.4 introduced --signing-config which this handler depends on.
-const CosignMinimumVersion = "v3.0.4"
+const cosignMinimumVersion = "v3.0.4"
 
-// Executor abstracts cosign CLI invocations for testability.
-// Callers must call Ensure before Run.
+//// Executor abstracts cosign CLI invocations for testability.
+//// Callers must call Ensure before Run.
 type Executor interface {
 	Run(ctx context.Context, args []string, env []string) error
 	Ensure(ctx context.Context) error
 }
 
+type cosignRunner interface {
+	SignBlob(ctx context.Context, dataPath, bundlePath string, args, env []string) error
+	VerifyBlob(ctx context.Context, dataPath, bundlePath string, args, env []string) error
+}
+
 // ErrNotResolved is returned by Run when Ensure has not been called.
 var ErrNotResolved = errors.New("executor not resolved: call Ensure before Run")
 
-// DefaultExecutor invokes the cosign binary via os/exec.
-// Call Ensure to resolve the binary, then Run to execute commands.
+//// DefaultExecutor invokes the cosign binary via os/exec.
+//// Call Ensure to resolve the binary, then Run to execute commands.
 type DefaultExecutor struct {
 	mu         sync.Mutex
 	binaryPath string
 	resolved   atomic.Bool
+	httpClient *http.Client
+}
+
+type cosignBinary struct {
+	mu         sync.Mutex
+	binaryPath string // empty until first successful resolve
 	httpClient *http.Client
 }
 
@@ -132,25 +142,6 @@ func (e *DefaultExecutor) Run(ctx context.Context, args []string, env []string) 
 	return nil
 }
 
-func writeTemp(dir, pattern string, r io.Reader) (path string, err error) {
-	f, err := os.CreateTemp(dir, pattern)
-	if err != nil {
-		return "", fmt.Errorf("create temp file %q: %w", pattern, err)
-	}
-	defer func() {
-		if cerr := f.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("close temp file %q: %w", pattern, cerr)
-		}
-		if err != nil {
-			_ = os.Remove(f.Name())
-		}
-	}()
-	if _, err = io.Copy(f, r); err != nil {
-		return "", fmt.Errorf("write temp file %q: %w", pattern, err)
-	}
-	return f.Name(), nil
-}
-
 // cosignEnv returns the full process environment — COSIGN_*, SIGSTORE_*, TUF_*, proxy vars all pass through.
 func cosignEnv() []string {
 	return os.Environ()
@@ -168,43 +159,22 @@ func hasEnvKey(env []string, key string) bool {
 
 var versionRegexp = regexp.MustCompile(`v\d+\.\d+\.\d+`)
 
-var stderrScrubbers = []struct {
-	pattern     *regexp.Regexp
-	replacement string
-}{
-	{regexp.MustCompile(`(?i)bearer\s+\S+`), "bearer [REDACTED]"},
-	{regexp.MustCompile(`SIGSTORE_ID_TOKEN=\S+`), "SIGSTORE_ID_TOKEN=[REDACTED]"},
-	// Matches key=value where value may be quoted (single or double) or unquoted.
-	{regexp.MustCompile(`(?i)(token|secret|password|key)="[^"]*"`), "${1}=[REDACTED]"},
-	{regexp.MustCompile(`(?i)(token|secret|password|key)='[^']*'`), "${1}=[REDACTED]"},
-	{regexp.MustCompile(`(?i)(token|secret|password|key)=\S+`), "${1}=[REDACTED]"},
-	// Bare JWT tokens (header.payload.signature) — common in cosign error messages.
-	{regexp.MustCompile(`eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`), "[REDACTED-JWT]"},
-}
-
-func scrubStderr(s string) string {
-	for _, sc := range stderrScrubbers {
-		s = sc.pattern.ReplaceAllString(s, sc.replacement)
-	}
-	return s
-}
-
 func (e *DefaultExecutor) checkVersion(ctx context.Context, binaryPath string) error {
 	detected, err := detectCosignVersion(ctx, binaryPath)
 	if err != nil {
 		slog.Warn("could not determine cosign version on PATH; if signing fails, "+
-			"verify cosign is >= "+CosignMinimumVersion+" or remove it from PATH to trigger auto-download",
+			"verify cosign is >= "+cosignMinimumVersion+" or remove it from PATH to trigger auto-download",
 			"path", binaryPath, "error", err)
 		return nil
 	}
 	detectedVer, err := semver.NewVersion(detected)
 	if err != nil {
 		slog.Warn("could not parse cosign version; if signing fails, "+
-			"verify cosign is >= "+CosignMinimumVersion+" or remove it from PATH to trigger auto-download",
+			"verify cosign is >= "+cosignMinimumVersion+" or remove it from PATH to trigger auto-download",
 			"detected", detected, "error", err)
 		return nil
 	}
-	minimumVer, err := semver.NewVersion(CosignMinimumVersion)
+	minimumVer, err := semver.NewVersion(cosignMinimumVersion)
 	if err != nil {
 		return fmt.Errorf("parse minimum version constant: %w", err)
 	}
@@ -212,12 +182,12 @@ func (e *DefaultExecutor) checkVersion(ctx context.Context, binaryPath string) e
 		return fmt.Errorf(
 			"cosign on PATH (%s) is version %s, minimum required is %s "+
 				"(--signing-config flag not available in older versions)",
-			binaryPath, detected, CosignMinimumVersion)
+			binaryPath, detected, cosignMinimumVersion)
 	}
-	pinnedVer, _ := semver.NewVersion(CosignVersion)
+	pinnedVer, _ := semver.NewVersion(cosignVersion)
 	if pinnedVer != nil && detectedVer.LessThan(pinnedVer) {
 		slog.Warn("cosign on PATH is older than the tested/pinned version; consider upgrading",
-			"path", binaryPath, "path_version", detected, "pinned_version", CosignVersion)
+			"path", binaryPath, "path_version", detected, "pinned_version", cosignVersion)
 	}
 	return nil
 }
