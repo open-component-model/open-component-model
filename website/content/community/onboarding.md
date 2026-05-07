@@ -13,14 +13,17 @@ Welcome to the Open Component Model (OCM). This page gives you everything you ne
 understand how it is built, and find the right starting point for your interests.
 
 {{<callout context="note" title="Prerequisites" icon="outline/info-circle">}}
-**To use the OCM CLI**: basic command-line experience and familiarity with container images or software packaging
-concepts.
 
-**To use the Kubernetes controllers**: working knowledge of Kubernetes (clusters, manifests, custom resources).
+**To use the OCM CLI**
+Basic command-line experience and familiarity with container images or software packaging concepts.
 
-**To contribute code**: the core libraries, CLI, and controllers are written in Go (1.26+) and use
-[Task](https://taskfile.dev/) as their build runner. Contributions in other areas - such as language bindings,
-documentation, the website, or tooling - may use different languages and are equally welcome.
+**To use the Kubernetes controllers**
+Working knowledge of Kubernetes (clusters, manifests, custom resources).
+
+**To contribute code**
+The core libraries, CLI, and controllers are written in Go (1.26+) and use [Task](https://taskfile.dev/) as their build
+runner. Contributions in other areas - such as language bindings, documentation, the website, or tooling - may use
+different languages and are equally welcome
 {{</callout>}}
 
 ## What is OCM?
@@ -61,7 +64,7 @@ graph TD
     Root["open-component-model/"]
     Bindings["bindings/\nLanguage bindings (currently Go)"]
     CLI["cli/\nOCM CLI"]
-    K8s["kubernetes/controller/\nKubernetes controllers"]
+    K8s["kubernetes/controller/\nOCM K8s Toolkit"]
     Website["website/\nProject website"]
     Conformance["conformance/\nConformance tests"]
     Docs["docs/\nCommunity docs & governance"]
@@ -91,9 +94,11 @@ flowchart TD
     Spec["OCM Specification\n(defines the model)"]
     Go["Go Bindings\n(bindings/go/)"]
     CLI["OCM CLI\n(cli/)"]
-    Controllers["Kubernetes Controllers\n(kubernetes/controller/)"]
+    Controllers["OCM K8s Toolkit\n(kubernetes/controller/)"]
+    ODG["Open Delivery Gear\n(separate repository, Python)"]
 
     Spec --> Go
+    Spec -.->|"implements spec\n(via Python/cc-utils)"| ODG
     Go --> CLI
     Go --> Controllers
 ```
@@ -110,14 +115,16 @@ operations (creating, signing, resolving, transferring component versions) that 
 it is designed for interactive use and CI/CD pipelines. Start with
 [Install the OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}).
 
-**Kubernetes Controllers** (`kubernetes/controller/`) - A set of controllers that handle deployment and verification of
+**OCM K8s toolkit** (`kubernetes/controller/`) - A set of controllers that handle deployment and verification of
 OCM component versions in Kubernetes clusters. They use a dependency chain of custom resources: Repository, Component,
 Resource, and Deployer. Read more in the [Kubernetes Controllers]({{< relref "docs/concepts/ocm-controllers.md" >}})
 concept page.
 
-**Open Delivery Gear (ODG)** - A separate project in the OCM ecosystem that builds on top of the Go bindings and
-controllers. ODG is an extensible, cloud-native compliance delivery engine. It lives in its own repository:
-[open-delivery-gear](https://github.com/open-component-model/open-delivery-gear).
+**Open Delivery Gear (ODG)** - A compliance automation engine that subscribes to OCM component versions and
+continuously scans delivery artifacts for security and compliance issues. ODG tracks findings against configurable SLAs,
+supports assisted rescoring, and provides a Delivery Dashboard UI for both platform operators and application teams. It
+is designed for public and sovereign cloud scenarios where trust-but-verify assurance is required. ODG lives in its own
+repository: [open-delivery-gear](https://github.com/open-component-model/open-delivery-gear).
 
 ## Getting Started
 
