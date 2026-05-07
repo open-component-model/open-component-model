@@ -194,8 +194,6 @@ jobs:
     if: ${{ contains(needs.version.outputs.new_tag, 'bindings/go/helm') }}
     needs: [ version, release ]
     uses: ./.github/workflows/publish-helminput-plugin-component.yaml
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       # write is now requested because the helminput flow also triggers the registry update.
       contents: write
