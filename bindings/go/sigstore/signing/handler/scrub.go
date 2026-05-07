@@ -1,7 +1,5 @@
 // Cosign error messages can contain OIDC tokens, bearer tokens, and bare JWTs
-// in plaintext — for example when an OIDC exchange fails, the full request URL
-// (including the token as a query parameter) or the raw HTTP response body may
-// appear in the error string. scrubStderr redacts these patterns before the
+// in plaintext. scrubStderr redacts these patterns before the
 // message surfaces in Go errors or structured logs, preventing accidental
 // secret leakage through log aggregation pipelines.
 package handler
