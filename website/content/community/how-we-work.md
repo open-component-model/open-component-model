@@ -63,7 +63,7 @@ We are working on making all meeting links publicly discoverable. In the meantim
 | --- | --- | --- |
 | Daily Standup | Every workday | Casual sync - not mandatory, not necessarily work-related |
 | Planning | Biweekly (Monday) | Review the [Next Sprint](https://github.com/orgs/open-component-model/projects/10/views/21) view, agree on sprint goals |
-| Retrospective | Biweekly (Monday) | Reflect on what went well and what to improve, then close the sprint |
+| Retrospective | Biweekly (Monday) | Reflect on what went well and what to improve (invited members only to maintain a safe space for feedback) |
 | Refinement | Weekly (Thursday) | Discuss items in "Needs Refinement" on the [Next Sprint](https://github.com/orgs/open-component-model/projects/10/views/21) view, clarify scope, and story-point |
 | Warroom | Every workday | Synchronous coordination on tasks or open topics |
 | [Community Call]({{< relref "community.md" >}}) | First Wednesday of the month | Project updates, demos, and open Q&A with the broader community |
