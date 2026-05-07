@@ -2,8 +2,9 @@ name: "Website: Update security.txt"
 
 on:
   schedule:
-    # Job runs every day in December at 00:00 UTC
-    - cron: '0 0 * 12 *'
+    # Run every weekday in December at 09:00 UTC. The create-pull-request
+    # action is idempotent so repeated runs simply update the same PR branch.
+    - cron: '0 9 * 12 1-5'
   workflow_dispatch:
 
 permissions:
@@ -17,6 +18,21 @@ jobs:
       pull-requests: write
 
     steps:
+    - name: Checkout repo
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      with:
+        sparse-checkout: website/static/.well-known/security.txt
+        sparse-checkout-cone-mode: false
+
+    - name: Set Expires to end of next year
+      run: |
+        set -euo pipefail
+        FILE=website/static/.well-known/security.txt
+        YEAR=$(( $(date +%Y) + 1 ))
+        NEW="${YEAR}-12-31T00:00:00.000Z"
+        sed -i "s|^Expires:.*|Expires: ${NEW}|" "$FILE"
+        echo "Set Expires: ${NEW}"
+
     - name: Generate token
       id: generate_token
       uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2
@@ -24,26 +40,19 @@ jobs:
         app_id: ${{ secrets.OCMBOT_APP_ID }}
         private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
 
-    - name: Checkout repo
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-    - name: Fetch security.txt
-      run: |
-        curl -sSL \
-          -H "Accept: application/vnd.github+json" \
-          -H "Authorization: Bearer ${{ secrets.SECURITY_TXT_READ }}" \
-          https://raw.github.tools.sap/sgsc-engineering-and-automation/securitytxt/main/security.txt -o website/static/.well-known/security.txt
-
     - name: Create Pull Request
       uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
       with:
         token: ${{ steps.generate_token.outputs.token }}
-        title: "chore: update '.well-known/security.text'"
-        commit-message: "[github-actions] auto update security.txt"
-        branch: security/update-security-txt
+        title: "chore: renew security.txt expiry date"
+        commit-message: "[github-actions] renew security.txt expiry date"
+        branch: security/renew-security-txt
         delete-branch: true
         sign-commits: true
         labels: |
           kind/chore
         body: |
-          Update .well-known/security.txt with the latest content from the security.txt repository.
+          Automated renewal of the `Expires` field in `website/static/.well-known/security.txt`.
+
+          Sets the expiry date to December 31st of next year. Please review and merge to keep
+          the security.txt valid per [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116).
