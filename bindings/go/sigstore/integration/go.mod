@@ -24,5 +24,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-// TODO: remove replace once bindings/go/sigstore is published (PR #2344).
 replace ocm.software/open-component-model/bindings/go/sigstore => ../
