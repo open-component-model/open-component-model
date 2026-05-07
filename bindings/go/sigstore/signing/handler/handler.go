@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -58,6 +59,15 @@ func WithHTTPClient(c *http.Client) HandlerOption {
 	return func(h *Handler) {
 		if b, ok := h.runner.(*cosignBinary); ok {
 			b.httpClient = c
+		}
+	}
+}
+
+// WithOperationTimeout sets the maximum duration for a single cosign subprocess invocation.
+func WithOperationTimeout(d time.Duration) HandlerOption {
+	return func(h *Handler) {
+		if b, ok := h.runner.(*cosignBinary); ok {
+			b.operationTimeout = d
 		}
 	}
 }

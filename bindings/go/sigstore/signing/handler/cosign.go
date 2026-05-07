@@ -36,9 +36,10 @@ type cosignRunner interface {
 // resolved path is reused without locking. This makes resolution safe to retry
 // in controller reconcile loops where transient failures must not be permanent.
 type cosignBinary struct {
-	mu         sync.Mutex
-	binaryPath string // non-empty after first successful resolution
-	httpClient *http.Client
+	mu               sync.Mutex
+	binaryPath       string // non-empty after first successful resolution
+	httpClient       *http.Client
+	operationTimeout time.Duration // zero means use defaultOperationTimeout
 }
 
 func newCosignBinary(httpClient *http.Client) *cosignBinary {
@@ -97,7 +98,11 @@ func (b *cosignBinary) verify(ctx context.Context, dataPath, bundlePath string, 
 }
 
 func (b *cosignBinary) execCosign(ctx context.Context, binaryPath string, args, env []string) error {
-	ctx, cancel := context.WithTimeout(ctx, defaultOperationTimeout)
+	timeout := b.operationTimeout
+	if timeout == 0 {
+		timeout = defaultOperationTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var stdout, stderr bytes.Buffer
@@ -158,7 +163,7 @@ func (b *cosignBinary) checkVersion(ctx context.Context, binaryPath string) erro
 }
 
 func detectCosignVersion(ctx context.Context, binaryPath string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	var stdout bytes.Buffer
 	cmd := exec.CommandContext(ctx, binaryPath, "version")

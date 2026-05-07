@@ -1085,3 +1085,18 @@ func TestScrubStderr(t *testing.T) {
 		})
 	}
 }
+
+func TestWithOperationTimeout_DeadlineExceeded(t *testing.T) {
+	t.Parallel()
+
+	// A real cosign binary will never finish in 1ns; execCosign must surface deadline-exceeded.
+	h := newWithRunner(newCosignBinary(nil), WithOperationTimeout(time.Nanosecond))
+
+	_, err := h.Sign(
+		t.Context(),
+		testDigest(),
+		testSignConfig(),
+		map[string]string{CredentialKeyOIDCToken: "tok"},
+	)
+	require.ErrorContains(t, err, "timed out")
+}
