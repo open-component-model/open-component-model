@@ -1,16 +1,6 @@
 name: Sigstore Integration Tests
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main]
-    paths:
-      - 'bindings/go/sigstore/**'
-      - '.github/workflows/sigstore-integration.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'bindings/go/sigstore/**'
   workflow_dispatch: {}
 
 permissions:
