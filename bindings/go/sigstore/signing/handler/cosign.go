@@ -12,114 +12,96 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
 )
 
-const defaultOperationTimeout = 3 * time.Minute
+const (
+	defaultOperationTimeout = 3 * time.Minute
+	cosignMinimumVersion    = "v3.0.4"
+)
 
-// cosignMinimumVersion is the minimum cosign version required on PATH.
-// v3.0.4 introduced --signing-config which this handler depends on.
-const cosignMinimumVersion = "v3.0.4"
-
-//// Executor abstracts cosign CLI invocations for testability.
-//// Callers must call Ensure before Run.
-type Executor interface {
-	Run(ctx context.Context, args []string, env []string) error
-	Ensure(ctx context.Context) error
-}
-
+// cosignRunner is the internal seam between Handler and the cosign binary.
+// sign and verify correspond to the cosign sign-blob and verify-blob subcommands.
+// extraArgs are config-driven flags (e.g. --signing-config, --trusted-root).
+// env is the full environment passed to the subprocess.
 type cosignRunner interface {
-	SignBlob(ctx context.Context, dataPath, bundlePath string, args, env []string) error
-	VerifyBlob(ctx context.Context, dataPath, bundlePath string, args, env []string) error
+	sign(ctx context.Context, dataPath, bundlePath string, extraArgs, env []string) error
+	verify(ctx context.Context, dataPath, bundlePath string, extraArgs, env []string) error
 }
 
-// ErrNotResolved is returned by Run when Ensure has not been called.
-var ErrNotResolved = errors.New("executor not resolved: call Ensure before Run")
-
-//// DefaultExecutor invokes the cosign binary via os/exec.
-//// Call Ensure to resolve the binary, then Run to execute commands.
-type DefaultExecutor struct {
-	mu         sync.Mutex
-	binaryPath string
-	resolved   atomic.Bool
-	httpClient *http.Client
-}
-
+// cosignBinary resolves and invokes the cosign binary.
+// Resolution is attempted on every call until it succeeds once; after that the
+// resolved path is reused without locking. This makes resolution safe to retry
+// in controller reconcile loops where transient failures must not be permanent.
 type cosignBinary struct {
 	mu         sync.Mutex
-	binaryPath string // empty until first successful resolve
+	binaryPath string // non-empty after first successful resolution
 	httpClient *http.Client
 }
 
-// ExecutorOption configures a DefaultExecutor.
-type ExecutorOption func(*DefaultExecutor)
-
-// WithHTTPClient sets the HTTP client used for cosign binary downloads.
-func WithHTTPClient(c *http.Client) ExecutorOption {
-	return func(e *DefaultExecutor) {
-		e.httpClient = c
+func newCosignBinary(httpClient *http.Client) *cosignBinary {
+	b := &cosignBinary{httpClient: httpClient}
+	if b.httpClient == nil {
+		b.httpClient = &http.Client{Timeout: 2 * time.Minute}
 	}
+	return b
 }
 
-// NewDefaultExecutor returns an executor that shells out to the cosign binary.
-func NewDefaultExecutor(opts ...ExecutorOption) *DefaultExecutor {
-	e := &DefaultExecutor{binaryPath: "cosign"}
-	for _, opt := range opts {
-		opt(e)
+func (b *cosignBinary) resolveBinary(ctx context.Context) (string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.binaryPath != "" {
+		return b.binaryPath, nil
 	}
-	if e.httpClient == nil {
-		e.httpClient = &http.Client{Timeout: 2 * time.Minute}
-	}
-	return e
-}
-
-// Ensure resolves the cosign binary (PATH lookup or auto-download).
-// Must be called before Run. Safe to call multiple times (no-op after first success).
-func (e *DefaultExecutor) Ensure(ctx context.Context) error {
-	return e.ensureCosignAvailable(ctx)
-}
-
-func (e *DefaultExecutor) ensureCosignAvailable(ctx context.Context) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.resolved.Load() {
-		return nil
-	}
-	path, err := exec.LookPath(e.binaryPath)
+	path, err := exec.LookPath("cosign")
 	if err == nil {
-		if verr := e.checkVersion(ctx, path); verr != nil {
-			return verr
+		if verr := b.checkVersion(ctx, path); verr != nil {
+			return "", verr
 		}
-		e.binaryPath = path
-		e.resolved.Store(true)
-		return nil
+		b.binaryPath = path
+		return path, nil
 	}
-	path, dlErr := ensureOrDownloadCosign(ctx, e.httpClient)
+	path, dlErr := ensureOrDownloadCosign(ctx, b.httpClient)
 	if dlErr != nil {
-		return fmt.Errorf(
+		return "", fmt.Errorf(
 			"cosign binary not found on PATH and auto-download failed: %w "+
 				"(install cosign from https://github.com/sigstore/cosign?tab=readme-ov-file#installation "+
 				"and ensure it is on PATH, or fix the download error)", dlErr)
 	}
-	e.binaryPath = path
-	e.resolved.Store(true)
-	return nil
+	b.binaryPath = path
+	return path, nil
 }
 
-// Run executes the cosign binary with the given arguments and environment.
-// Ensure must be called before Run; returns ErrNotResolved otherwise.
-func (e *DefaultExecutor) Run(ctx context.Context, args []string, env []string) error {
-	if !e.resolved.Load() {
-		return ErrNotResolved
+func (b *cosignBinary) sign(ctx context.Context, dataPath, bundlePath string, extraArgs, env []string) error {
+	path, err := b.resolveBinary(ctx)
+	if err != nil {
+		return err
 	}
+	args := make([]string, 0, 5+len(extraArgs))
+	args = append(args, "sign-blob", dataPath, "--bundle", bundlePath, "--yes")
+	args = append(args, extraArgs...)
+	return b.execCosign(ctx, path, args, env)
+}
+
+func (b *cosignBinary) verify(ctx context.Context, dataPath, bundlePath string, extraArgs, env []string) error {
+	path, err := b.resolveBinary(ctx)
+	if err != nil {
+		return err
+	}
+	args := make([]string, 0, 4+len(extraArgs))
+	args = append(args, "verify-blob", dataPath, "--bundle", bundlePath)
+	args = append(args, extraArgs...)
+	return b.execCosign(ctx, path, args, env)
+}
+
+func (b *cosignBinary) execCosign(ctx context.Context, binaryPath string, args, env []string) error {
 	ctx, cancel := context.WithTimeout(ctx, defaultOperationTimeout)
 	defer cancel()
 
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, e.binaryPath, args...) //nolint:gosec // G204: args are constructed from trusted config, not user input
+	cmd := exec.CommandContext(ctx, binaryPath, args...) //nolint:gosec // G204: args constructed from trusted config
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	cmd.Env = env
@@ -142,24 +124,7 @@ func (e *DefaultExecutor) Run(ctx context.Context, args []string, env []string) 
 	return nil
 }
 
-// cosignEnv returns the full process environment — COSIGN_*, SIGSTORE_*, TUF_*, proxy vars all pass through.
-func cosignEnv() []string {
-	return os.Environ()
-}
-
-func hasEnvKey(env []string, key string) bool {
-	prefix := key + "="
-	for _, kv := range env {
-		if strings.HasPrefix(kv, prefix) && len(kv) > len(prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-var versionRegexp = regexp.MustCompile(`v\d+\.\d+\.\d+`)
-
-func (e *DefaultExecutor) checkVersion(ctx context.Context, binaryPath string) error {
+func (b *cosignBinary) checkVersion(ctx context.Context, binaryPath string) error {
 	detected, err := detectCosignVersion(ctx, binaryPath)
 	if err != nil {
 		slog.Warn("could not determine cosign version on PATH; if signing fails, "+
@@ -213,8 +178,23 @@ func parseCosignVersionOutput(output string) (string, error) {
 			return strings.TrimSpace(v), nil
 		}
 	}
+	versionRegexp := regexp.MustCompile(`v\d+\.\d+\.\d+`)
 	if m := versionRegexp.FindString(output); m != "" {
 		return m, nil
 	}
 	return "", errors.New("could not parse cosign version from output")
+}
+
+func cosignEnv() []string {
+	return os.Environ()
+}
+
+func hasEnvKey(env []string, key string) bool {
+	prefix := key + "="
+	for _, kv := range env {
+		if strings.HasPrefix(kv, prefix) && len(kv) > len(prefix) {
+			return true
+		}
+	}
+	return false
 }
