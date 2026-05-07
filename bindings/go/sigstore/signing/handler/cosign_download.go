@@ -243,7 +243,7 @@ func downloadAndVerifyWith(ctx context.Context, client *http.Client, url, destPa
 	hasher := sha256.New()
 	writer := io.MultiWriter(tmpFile, hasher)
 
-	if _, err := io.Copy(writer, io.LimitReader(resp.Body, maxBinaryDownloadSize)); err != nil {
+	if _, err := io.CopyN(writer, resp.Body, maxBinaryDownloadSize); err != nil && !errors.Is(err, io.EOF) {
 		_ = tmpFile.Close()
 		return fmt.Errorf("download cosign binary: %w", err)
 	}
