@@ -62,6 +62,10 @@ jobs:
             ${{ inputs.component_path }}
             .github/scripts
           fetch-depth: 0
+          # v6 defaults to --filter:blob:none. Then lazy-fetch fails to get blobs
+          # from a partial clone resulting in "object not found" when walking history.
+          # We force disable that filter logic here.
+          filter: ''
           ref: ${{ inputs.branch }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
