@@ -64,6 +64,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.branch }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       # Compute new RC version based on branch and existing tags
       - name: Compute new RC version
