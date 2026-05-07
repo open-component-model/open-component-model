@@ -136,7 +136,7 @@ func testSignature(t *testing.T, h *handler.Handler, name, label string) descrun
 func verifyConfig(opts ...func(*v1alpha1.VerifyConfig)) *v1alpha1.VerifyConfig {
 	cfg := &v1alpha1.VerifyConfig{
 		CertificateOIDCIssuer: stack.OIDCIssuer,
-		CertificateIdentity:  stack.OIDCIdentity,
+		CertificateIdentity:   stack.OIDCIdentity,
 	}
 	for _, o := range opts {
 		o(cfg)
@@ -358,12 +358,12 @@ func Test_Integration_SignWithTrustedRoot(t *testing.T) {
 
 	signCfg := &v1alpha1.SignConfig{
 		SigningConfig: stack.SigningConfigPath,
-		TrustedRoot:  stack.TrustedRootPath,
 	}
 	signCfg.SetType(runtime.NewVersionedType(v1alpha1.SignConfigType, v1alpha1.Version))
 
 	sigInfo, err := h.Sign(t.Context(), digest, signCfg, map[string]string{
-		credOIDCToken: stack.OIDCToken,
+		credOIDCToken:           stack.OIDCToken,
+		credTrustedRootJSONFile: stack.TrustedRootPath,
 	})
 	r.NoError(err)
 
@@ -388,10 +388,7 @@ func Test_Integration_SignWithTrustedRoot(t *testing.T) {
 
 	t.Run("verify with explicit trusted root succeeds", func(t *testing.T) {
 		r := require.New(t)
-		cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
-			c.TrustedRoot = stack.TrustedRootPath
-		})
-		err := h.Verify(t.Context(), signed, cfg, map[string]string{
+		err := h.Verify(t.Context(), signed, verifyConfig(), map[string]string{
 			credTrustedRootJSONFile: stack.TrustedRootPath,
 		})
 		r.NoError(err)
@@ -401,14 +398,6 @@ func Test_Integration_SignWithTrustedRoot(t *testing.T) {
 func Test_Integration_VerifyWithExplicitTrustedRoot(t *testing.T) {
 	h := newHandler(t)
 	signed := testSignature(t, h, "verify-explicit-trusted-root-test", "verify-explicit-trusted-root")
-
-	t.Run("trusted root via config field", func(t *testing.T) {
-		r := require.New(t)
-		cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
-			c.TrustedRoot = stack.TrustedRootPath
-		})
-		r.NoError(h.Verify(t.Context(), signed, cfg, nil))
-	})
 
 	t.Run("trusted root via credential file path", func(t *testing.T) {
 		r := require.New(t)
@@ -431,7 +420,6 @@ func Test_Integration_VerifyWithExplicitTrustedRoot(t *testing.T) {
 	t.Run("wrong issuer fails with explicit trusted root", func(t *testing.T) {
 		r := require.New(t)
 		cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
-			c.TrustedRoot = stack.TrustedRootPath
 			c.CertificateOIDCIssuer = "https://wrong-issuer.example.com"
 		})
 		err := h.Verify(t.Context(), signed, cfg, map[string]string{
@@ -447,7 +435,6 @@ func Test_Integration_PrivateInfrastructure(t *testing.T) {
 	signed := testSignature(t, h, "private-infrastructure-test", "private-infrastructure")
 
 	cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
-		c.TrustedRoot = stack.TrustedRootPath
 		c.PrivateInfrastructure = true
 	})
 

@@ -38,6 +38,9 @@ func init() {
 // via the SIGSTORE_ID_TOKEN environment variable. A token is required;
 // the handler returns an error if no token credential is resolved.
 //
+// Trust material (trusted root) is resolved from credentials, not from this
+// config. See the handler package for resolution order.
+//
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
@@ -53,15 +56,6 @@ type SignConfig struct {
 	// this file instead of TUF auto-discovery.
 	// Maps to cosign --signing-config.
 	SigningConfig string `json:"signingConfig,omitempty"`
-
-	// TrustedRoot is a filesystem path to a trusted root JSON file.
-	// When set during signing, cosign validates the Fulcio certificate chain
-	// against this root instead of the public-good Sigstore TUF root.
-	// Required when signing against a privately deployed Sigstore infrastructure
-	// (e.g. a private Fulcio CA without a CT log).
-	// Requires SigningConfig to be set (endpoints must be known).
-	// Maps to cosign --trusted-root.
-	TrustedRoot string `json:"trustedRoot,omitempty"`
 }
 
 // VerifyConfig defines configuration for Sigstore-based keyless verification via the cosign CLI.
@@ -73,6 +67,9 @@ type SignConfig struct {
 // verification meaningless from a supply-chain security perspective. This mirrors cosign's own
 // requirement for --certificate-oidc-issuer and --certificate-identity on keyless verify.
 //
+// Trust material (trusted root) is resolved from credentials, not from this
+// config. See the handler package for resolution order.
+//
 // See https://docs.sigstore.dev/cosign/verifying/verify/ for cosign verification documentation.
 //
 // +ocm:typegen=true
@@ -83,11 +80,6 @@ type VerifyConfig struct {
 	// Type identifies this configuration object's runtime type.
 	// +ocm:jsonschema-gen:enum=SigstoreVerificationConfiguration/v1alpha1
 	Type runtime.Type `json:"type"`
-
-	// TrustedRoot is a filesystem path to a trusted root JSON file for offline verification.
-	// When omitted, cosign uses the public-good Sigstore TUF root.
-	// Maps to cosign --trusted-root.
-	TrustedRoot string `json:"trustedRoot,omitempty"`
 
 	// PrivateInfrastructure skips public transparency log verification.
 	// Use this when verifying artifacts signed by a privately deployed Sigstore
@@ -120,11 +112,6 @@ type VerifyConfig struct {
 
 // Validate checks that SignConfig fields are well-formed.
 func (c *SignConfig) Validate() error {
-	if c.TrustedRoot != "" && c.SigningConfig == "" {
-		return fmt.Errorf("trustedRoot specifies whom to trust but no signing " +
-			"infrastructure is configured; set signingConfig to point at a signing " +
-			"configuration file (create one with `cosign signing-config create`)")
-	}
 	return nil
 }
 

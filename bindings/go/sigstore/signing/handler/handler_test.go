@@ -85,7 +85,7 @@ func testSignConfig() *v1alpha1.SignConfig {
 func testVerifyConfig() *v1alpha1.VerifyConfig {
 	cfg := &v1alpha1.VerifyConfig{
 		CertificateOIDCIssuer: "https://accounts.google.com",
-		CertificateIdentity:  "user@example.com",
+		CertificateIdentity:   "user@example.com",
 	}
 	cfg.SetType(runtime.NewVersionedType(v1alpha1.VerifyConfigType, v1alpha1.Version))
 	return cfg
@@ -269,18 +269,6 @@ func TestHandler_Sign(t *testing.T) {
 			},
 		},
 		{
-			name: "TrustedRoot without signingConfig rejected",
-			cfg: func() *v1alpha1.SignConfig {
-				c := &v1alpha1.SignConfig{
-					TrustedRoot: "/path/to/trusted_root.json",
-				}
-				c.SetType(runtime.NewVersionedType(v1alpha1.SignConfigType, v1alpha1.Version))
-				return c
-			},
-			creds:   map[string]string{CredentialKeyOIDCToken: "tok"},
-			wantErr: "no signing infrastructure is configured",
-		},
-		{
 			name:    "executor error propagated",
 			creds:   map[string]string{CredentialKeyOIDCToken: "test-token"},
 			mockErr: fmt.Errorf("cosign sign-blob failed: exit status 1\nstderr: error signing"),
@@ -307,23 +295,29 @@ func TestHandler_Sign(t *testing.T) {
 			},
 		},
 		{
-			name:       "V2 issuer extracted from bundle",
-			creds:      map[string]string{CredentialKeyOIDCToken: "test-token"},
-			bundleJSON: func(t *testing.T) []byte { return fakeBundleJSONWithCertV2(t, "https://token.actions.githubusercontent.com") },
+			name:  "V2 issuer extracted from bundle",
+			creds: map[string]string{CredentialKeyOIDCToken: "test-token"},
+			bundleJSON: func(t *testing.T) []byte {
+				return fakeBundleJSONWithCertV2(t, "https://token.actions.githubusercontent.com")
+			},
 			assertResult: func(t *testing.T, result descruntime.SignatureInfo) {
 				require.Equal(t, "https://token.actions.githubusercontent.com", result.Issuer)
 			},
 		},
 		{
-			name: "trusted root flag passed",
-			cfg: func() *v1alpha1.SignConfig {
-				c := testSignConfig()
-				c.TrustedRoot = "/path/to/trusted_root.json"
-				return c
-			},
-			creds: map[string]string{CredentialKeyOIDCToken: "test-token"},
+			name:  "trusted root from credential file passed as flag on sign",
+			creds: map[string]string{CredentialKeyOIDCToken: "test-token", CredentialKeyTrustedRootJSONFile: "/path/to/trusted_root.json"},
 			assertArgs: func(t *testing.T, args []string) {
 				require.Equal(t, "/path/to/trusted_root.json", argValue(args, "--trusted-root"))
+			},
+		},
+		{
+			name:  "trusted root from inline JSON credential passed as flag on sign",
+			creds: map[string]string{CredentialKeyOIDCToken: "test-token", CredentialKeyTrustedRootJSON: `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`},
+			assertArgs: func(t *testing.T, args []string) {
+				r := require.New(t)
+				r.True(hasArg(args, "--trusted-root"))
+				r.NotEmpty(argValue(args, "--trusted-root"))
 			},
 		},
 	}
@@ -424,6 +418,50 @@ func TestSign_AmbientACTIONS_ID_TOKEN_vars(t *testing.T) {
 	require.False(t, hasEnvKey(mock.lastSignEnv, "SIGSTORE_ID_TOKEN"), "should not inject SIGSTORE_ID_TOKEN when Actions OIDC is available")
 }
 
+func TestSign_TUF_ROOT_DoesNotSuppressTrustedRootFlag(t *testing.T) {
+	t.Setenv("TUF_ROOT", "/tuf/cache")
+
+	mock := newSignMock(t, fakeBundleJSON(t))
+	h := newWithRunner(mock)
+
+	creds := map[string]string{
+		CredentialKeyOIDCToken:           "test-token",
+		CredentialKeyTrustedRootJSONFile: "/cred/root.json",
+	}
+	_, err := h.Sign(t.Context(), testDigest(), testSignConfig(), creds)
+	require.NoError(t, err)
+	require.Equal(t, "/cred/root.json", argValue(mock.lastSignArgs, "--trusted-root"),
+		"TUF_ROOT is for TUF cache, not trusted root — credential should still produce --trusted-root")
+}
+
+func TestVerify_TUF_ROOT_DoesNotSuppressTrustedRootFlag(t *testing.T) {
+	t.Setenv("TUF_ROOT", "/tuf/cache")
+
+	mock := &mockCosignRunner{}
+	h := newWithRunner(mock)
+
+	cfg := testVerifyConfig()
+	creds := map[string]string{
+		CredentialKeyTrustedRootJSONFile: "/cred/root.json",
+	}
+
+	bundleJSON := fakeBundleJSON(t)
+	signed := descruntime.Signature{
+		Name:   "test-sig",
+		Digest: testDigest(),
+		Signature: descruntime.SignatureInfo{
+			Algorithm: v1alpha1.AlgorithmSigstore,
+			MediaType: v1alpha1.MediaTypeSigstoreBundle,
+			Value:     base64.StdEncoding.EncodeToString(bundleJSON),
+		},
+	}
+
+	err := h.Verify(t.Context(), signed, cfg, creds)
+	require.NoError(t, err)
+	require.Equal(t, "/cred/root.json", argValue(mock.lastVerifyArgs, "--trusted-root"),
+		"TUF_ROOT is for TUF cache, not trusted root — credential should still produce --trusted-root")
+}
+
 // --- Verify Tests ---
 
 func TestHandler_Verify(t *testing.T) {
@@ -455,7 +493,9 @@ func TestHandler_Verify(t *testing.T) {
 				cfg.CertificateIdentity = ""
 				cfg.CertificateOIDCIssuerRegexp = ".*google.*"
 				cfg.CertificateIdentityRegexp = ".*@example.com"
-				cfg.TrustedRoot = "/path/to/trusted_root.json"
+			},
+			creds: map[string]string{
+				CredentialKeyTrustedRootJSONFile: "/path/to/trusted_root.json",
 			},
 			assertArgs: func(t *testing.T, args []string) {
 				r := require.New(t)
@@ -469,8 +509,10 @@ func TestHandler_Verify(t *testing.T) {
 		{
 			name: "private infrastructure",
 			cfgSetup: func(cfg *v1alpha1.VerifyConfig) {
-				cfg.TrustedRoot = "/path/to/private_trusted_root.json"
 				cfg.PrivateInfrastructure = true
+			},
+			creds: map[string]string{
+				CredentialKeyTrustedRootJSONFile: "/path/to/private_trusted_root.json",
 			},
 			assertArgs: func(t *testing.T, args []string) {
 				r := require.New(t)
@@ -762,63 +804,48 @@ func TestResolveTrustedRootPath(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		cfg     *v1alpha1.VerifyConfig
 		creds   map[string]string
 		want    string
 		wantErr string
 		isFile  bool // if true, assert path exists as a file (written from inline JSON)
 	}{
 		{
-			name:   "inline JSON wins over file and config",
-			cfg:    &v1alpha1.VerifyConfig{TrustedRoot: "/config/root.json"},
+			name:   "inline JSON wins over file credential",
 			creds:  map[string]string{CredentialKeyTrustedRootJSON: `{"mediaType":"test"}`, CredentialKeyTrustedRootJSONFile: "/cred/root.json"},
 			isFile: true,
 		},
 		{
-			name:  "file credential wins over config",
-			cfg:   &v1alpha1.VerifyConfig{TrustedRoot: "/config/root.json"},
+			name:  "file credential used",
 			creds: map[string]string{CredentialKeyTrustedRootJSONFile: "/cred/root.json"},
 			want:  "/cred/root.json",
 		},
 		{
-			name:  "config field used when no credentials",
-			cfg:   &v1alpha1.VerifyConfig{TrustedRoot: "/config/root.json"},
-			creds: map[string]string{},
-			want:  "/config/root.json",
-		},
-		{
 			name:  "empty when nothing set",
-			cfg:   &v1alpha1.VerifyConfig{},
 			creds: map[string]string{},
 			want:  "",
 		},
 		{
 			name:    "relative path rejected",
-			cfg:     &v1alpha1.VerifyConfig{},
 			creds:   map[string]string{CredentialKeyTrustedRootJSONFile: "../../etc/passwd"},
 			wantErr: "must be absolute",
 		},
 		{
 			name:    "path traversal rejected",
-			cfg:     &v1alpha1.VerifyConfig{},
 			creds:   map[string]string{CredentialKeyTrustedRootJSONFile: "/legit/../../../etc/passwd"},
 			wantErr: "non-canonical",
 		},
 		{
 			name:  "whitespace-only JSON treated as empty",
-			cfg:   &v1alpha1.VerifyConfig{},
 			creds: map[string]string{CredentialKeyTrustedRootJSON: "   \n\t  "},
 			want:  "",
 		},
 		{
 			name:  "whitespace-only file path treated as empty",
-			cfg:   &v1alpha1.VerifyConfig{},
 			creds: map[string]string{CredentialKeyTrustedRootJSONFile: "   "},
 			want:  "",
 		},
 		{
 			name:  "valid absolute path accepted",
-			cfg:   &v1alpha1.VerifyConfig{},
 			creds: map[string]string{CredentialKeyTrustedRootJSONFile: "/opt/sigstore/trusted_root.json"},
 			want:  "/opt/sigstore/trusted_root.json",
 		},
@@ -828,7 +855,7 @@ func TestResolveTrustedRootPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			r := require.New(t)
-			path, err := resolveTrustedRootPath(tc.cfg, tc.creds, tmpDir)
+			path, err := resolveTrustedRootPath(tc.creds, tmpDir)
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)
 				return
@@ -928,8 +955,10 @@ func TestExtractCertInfoFromBundleJSON(t *testing.T) {
 			expectedIdentity: "signer@example.com",
 		},
 		{
-			name:           "valid v2 issuer OID",
-			input:          func(t *testing.T) []byte { return fakeBundleJSONWithCertV2(t, "https://token.actions.githubusercontent.com") },
+			name: "valid v2 issuer OID",
+			input: func(t *testing.T) []byte {
+				return fakeBundleJSONWithCertV2(t, "https://token.actions.githubusercontent.com")
+			},
 			expectedIssuer: "https://token.actions.githubusercontent.com",
 		},
 		{

@@ -16,8 +16,6 @@ func TestSignConfig_Validate(t *testing.T) {
 	}{
 		{"valid empty", SignConfig{}, ""},
 		{"valid signingConfig only", SignConfig{SigningConfig: "/path/to/config.json"}, ""},
-		{"trustedRoot without signingConfig rejected", SignConfig{TrustedRoot: "/path/to/root.json"}, "no signing infrastructure is configured"},
-		{"trustedRoot with signingConfig accepted", SignConfig{TrustedRoot: "/path/to/root.json", SigningConfig: "/path/to/config.json"}, ""},
 	}
 
 	for _, tc := range tests {

@@ -158,12 +158,17 @@ func (h *Handler) Sign(
 
 	bundlePath := filepath.Join(tmpDir, "bundle.json")
 
+	trustedRootPath, err := resolveTrustedRootPath(creds, tmpDir)
+	if err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("resolve trusted root: %w", err)
+	}
+
 	var extraArgs []string
 	if cfg.SigningConfig != "" {
 		extraArgs = append(extraArgs, "--signing-config", cfg.SigningConfig)
 	}
-	if cfg.TrustedRoot != "" {
-		extraArgs = append(extraArgs, "--trusted-root", cfg.TrustedRoot)
+	if trustedRootPath != "" {
+		extraArgs = append(extraArgs, "--trusted-root", trustedRootPath)
 	}
 
 	if err := h.runner.sign(ctx, dataPath, bundlePath, extraArgs, env); err != nil {
@@ -212,11 +217,11 @@ func (h *Handler) Verify(
 		return fmt.Errorf("invalid verification config: %w", err)
 	}
 
-	if cfg.PrivateInfrastructure && cfg.TrustedRoot == "" &&
+	if cfg.PrivateInfrastructure &&
 		strings.TrimSpace(creds[CredentialKeyTrustedRootJSON]) == "" &&
 		strings.TrimSpace(creds[CredentialKeyTrustedRootJSONFile]) == "" {
 		return fmt.Errorf("privateInfrastructure requires a trusted root: " +
-			"set TrustedRoot in the verifier config or provide a TrustedRoot credential")
+			"provide a TrustedRoot credential (trusted_root_json or trusted_root_json_file)")
 	}
 
 	if strings.HasPrefix(cfg.CertificateOIDCIssuer, "http://") {
@@ -253,7 +258,7 @@ func (h *Handler) Verify(
 		}
 	}()
 
-	trustedRootPath, err := resolveTrustedRootPath(&cfg, creds, tmpDir)
+	trustedRootPath, err := resolveTrustedRootPath(creds, tmpDir)
 	if err != nil {
 		return fmt.Errorf("resolve trusted root: %w", err)
 	}
@@ -335,9 +340,8 @@ func credentialIdentity(identityType runtime.Type) runtime.Identity {
 // Resolution order (first non-empty wins):
 //  1. Inline JSON from credentials (written to a temp file, cleaned up by caller's defer os.RemoveAll(tmpDir))
 //  2. File path from credentials (not removed on cleanup)
-//  3. Config field value (not removed on cleanup)
-//  4. "" — cosign falls back to public-good TUF
-func resolveTrustedRootPath(cfg *v1alpha1.VerifyConfig, creds map[string]string, tmpDir string) (string, error) {
+//  3. "" — cosign falls back to public-good TUF
+func resolveTrustedRootPath(creds map[string]string, tmpDir string) (string, error) {
 	if jsonVal := strings.TrimSpace(creds[CredentialKeyTrustedRootJSON]); jsonVal != "" {
 		path, err := writeTemp(tmpDir, "cosign-trusted-root-*.json", strings.NewReader(jsonVal))
 		if err != nil {
@@ -351,10 +355,6 @@ func resolveTrustedRootPath(cfg *v1alpha1.VerifyConfig, creds map[string]string,
 			return "", err
 		}
 		return filePath, nil
-	}
-
-	if cfg.TrustedRoot != "" {
-		return cfg.TrustedRoot, nil
 	}
 
 	return "", nil
