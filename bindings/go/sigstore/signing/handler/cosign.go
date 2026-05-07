@@ -125,7 +125,7 @@ func (b *cosignBinary) execCosign(ctx context.Context, binaryPath string, args, 
 		return fmt.Errorf("cosign %s failed: %w\nstderr: %s", args[0], err, msg)
 	}
 	if out := strings.TrimSpace(stdout.String()); out != "" {
-		slog.Debug("cosign output", "subcommand", args[0], "stdout", out)
+		slog.DebugContext(ctx, "cosign output", "subcommand", args[0], "stdout", out)
 	}
 	return nil
 }
@@ -133,14 +133,14 @@ func (b *cosignBinary) execCosign(ctx context.Context, binaryPath string, args, 
 func (b *cosignBinary) checkVersion(ctx context.Context, binaryPath string) error {
 	detected, err := detectCosignVersion(ctx, binaryPath)
 	if err != nil {
-		slog.Warn("could not determine cosign version on PATH; if signing fails, "+
+		slog.WarnContext(ctx, "could not determine cosign version on PATH; if signing fails, "+
 			"verify cosign is >= "+cosignMinimumVersion+" or remove it from PATH to trigger auto-download",
 			"path", binaryPath, "error", err)
 		return nil
 	}
 	detectedVer, err := semver.NewVersion(detected)
 	if err != nil {
-		slog.Warn("could not parse cosign version; if signing fails, "+
+		slog.WarnContext(ctx, "could not parse cosign version; if signing fails, "+
 			"verify cosign is >= "+cosignMinimumVersion+" or remove it from PATH to trigger auto-download",
 			"detected", detected, "error", err)
 		return nil
@@ -157,7 +157,7 @@ func (b *cosignBinary) checkVersion(ctx context.Context, binaryPath string) erro
 	}
 	pinnedVer, _ := semver.NewVersion(cosignVersion)
 	if pinnedVer != nil && detectedVer.LessThan(pinnedVer) {
-		slog.Warn("cosign on PATH is older than the tested/pinned version; consider upgrading",
+		slog.WarnContext(ctx, "cosign on PATH is older than the tested/pinned version; consider upgrading",
 			"path", binaryPath, "path_version", detected, "pinned_version", cosignVersion)
 	}
 	return nil
