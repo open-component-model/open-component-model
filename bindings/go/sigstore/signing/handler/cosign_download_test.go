@@ -164,7 +164,7 @@ func TestFetchExpectedChecksumWith(t *testing.T) {
 			w.WriteHeader(http.StatusForbidden)
 		}))
 		t.Cleanup(srv.Close)
-		_, err := fetchExpectedChecksumWith(ctx, redirectAllClient(srv), cosignVersion, "cosign-linux-amd64")
+		_, err := fetchExpectedChecksumWith(ctx, redirectAllClient(srv), "cosign-linux-amd64")
 		require.ErrorContains(t, err, "HTTP 403")
 	})
 	t.Run("success", func(t *testing.T) {
@@ -173,7 +173,7 @@ func TestFetchExpectedChecksumWith(t *testing.T) {
 			_, _ = w.Write([]byte("deadbeef12345678  cosign-linux-amd64\n"))
 		}))
 		t.Cleanup(srv.Close)
-		hash, err := fetchExpectedChecksumWith(ctx, redirectAllClient(srv), cosignVersion, "cosign-linux-amd64")
+		hash, err := fetchExpectedChecksumWith(ctx, redirectAllClient(srv), "cosign-linux-amd64")
 		require.NoError(t, err)
 		require.Equal(t, "deadbeef12345678", hash)
 	})

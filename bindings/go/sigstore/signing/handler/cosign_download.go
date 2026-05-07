@@ -26,6 +26,12 @@ var cosignVersion = parseCosignVersion()
 // platformBinaryName is the platform-specific cosign binary name for the current OS/arch.
 var platformBinaryName = cosignBinaryName(runtime.GOOS, runtime.GOARCH)
 
+// pinnedDownloadURL is the resolved download URL for the pinned cosign version and current platform.
+var pinnedDownloadURL = cosignDownloadURL(cosignVersion, runtime.GOOS, runtime.GOARCH)
+
+// pinnedChecksumsURL is the resolved checksums URL for the pinned cosign version.
+var pinnedChecksumsURL = cosignChecksumsURL(cosignVersion)
+
 func parseCosignVersion() string {
 	for _, line := range strings.Split(envFile, "\n") {
 		if v, ok := strings.CutPrefix(line, "COSIGN_VERSION="); ok {
@@ -97,12 +103,12 @@ func ensureOrDownloadCosign(ctx context.Context, client *http.Client) (string, e
 		}
 	}
 
-	expectedHash, err := fetchExpectedChecksumWith(ctx, client, cosignVersion, platformBinaryName)
+	expectedHash, err := fetchExpectedChecksumWith(ctx, client, platformBinaryName)
 	if err != nil {
 		return "", fmt.Errorf("fetch checksums: %w", err)
 	}
 
-	binaryURL := cosignDownloadURL(cosignVersion, runtime.GOOS, runtime.GOARCH)
+	binaryURL := pinnedDownloadURL
 	if err := downloadAndVerifyWith(ctx, client, binaryURL, cachedPath, expectedHash); err != nil {
 		return "", err
 	}
@@ -115,13 +121,13 @@ const (
 	maxChecksumDownloadSize = 1 << 20   // 1 MB
 )
 
-// fetchExpectedChecksumWith downloads cosign_checksums.txt for the given version
+// fetchExpectedChecksumWith downloads cosign_checksums.txt for the pinned version
 // and returns the SHA256 hash for the specified binary name.
 // The checksum guards against download corruption and partial CDN cache poisoning.
 // Full Sigstore bundle verification of the release is not implemented: verifying
 // the bundle requires cosign itself (chicken-and-egg for an auto-download fallback).
-func fetchExpectedChecksumWith(ctx context.Context, client *http.Client, version, binaryName string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cosignChecksumsURL(version), nil)
+func fetchExpectedChecksumWith(ctx context.Context, client *http.Client, binaryName string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pinnedChecksumsURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("create checksums request: %w", err)
 	}
