@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -86,7 +88,13 @@ func ensureOrDownloadCosign(ctx context.Context, client *http.Client) (string, e
 		return "", fmt.Errorf("create cache directory %s: %w", cacheDir, err)
 	}
 
-	if info, err := os.Lstat(cachedPath); err == nil && info.Mode().IsRegular() {
+	info, err := os.Lstat(cachedPath)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		// No cache — fall through to download.
+	case err != nil:
+		return "", fmt.Errorf("stat cached binary %s: %w", cachedPath, err)
+	case info.Mode().IsRegular():
 		if savedHash, err := os.ReadFile(cachedPath + ".sha256"); err == nil {
 			if err := verifyFileChecksum(cachedPath, strings.TrimSpace(string(savedHash))); err == nil {
 				return cachedPath, nil
