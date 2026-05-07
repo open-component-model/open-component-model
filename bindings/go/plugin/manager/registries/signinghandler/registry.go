@@ -89,12 +89,6 @@ func (r *SigningRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (si
 			return nil, fmt.Errorf("no signing handler registered for type %q (registered: %v)", typ, registered)
 		}
 
-		if e, ok := p.(interface{ Ensure(context.Context) error }); ok {
-			if err := e.Ensure(ctx); err != nil {
-				return nil, fmt.Errorf("ensure signing handler for type %v: %w", typ, err)
-			}
-		}
-
 		return p, nil
 	}
 
