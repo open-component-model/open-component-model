@@ -1,6 +1,6 @@
 ---
 title: "The OCM Community"
-description: "The OCM Community"
+description: "Communication channels, community calls, and ways to engage with the Open Component Model project."
 slug: "engagement"
 toc: true
 weight: 1
@@ -21,6 +21,10 @@ Join our [#open-component-model](https://kubernetes.slack.com/archives/C05UWBE8R
 {{<callout context="note" title="Kubernetes Slack Membership">}}If you aren't already a member in the Kubernetes Slack workspace, please request an [invitation](https://slack.k8s.io){{</callout>}}
 
 Our team is passionate about delving into diverse deployment processes, exploring patterns, aiding in design, and troubleshooting issues. Who knows? Your inquiry might inspire the development of the next useful OCM feature!
+
+### Zulip
+
+Join [neonephos-ocm-support](https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support) on the Linux Foundation Zulip instance for technical discussions. Zulip is open to everyone and does not require prior membership. Its threaded conversation model makes it well-suited for longer design discussions and contributor questions.
 
 ### Community Calls
 
@@ -62,7 +66,7 @@ Stay up to date with the latest OCM blog posts and announcements by subscribing 
 
 ## Contributing
 
-We welcome community contributions! Please see the [Contributing Guideline](https://github.com/open-component-model/.github/blob/main/CONTRIBUTING.md) for instructions on how to submit changes. If you are planning on making more elaborate or potentially controversial changes, please discuss them with the maintainers in the [Slack channel](https://kubernetes.slack.com/archives/C05UWBE8R1D) before sending a pull request.
+We welcome community contributions! Please see the [Contributing Guide]({{< relref "contributing.md" >}}) for instructions on how to submit changes. If you are planning on making more elaborate or potentially controversial changes, please discuss them with the maintainers in the [Slack channel](https://kubernetes.slack.com/archives/C05UWBE8R1D) or on [Zulip](https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support) before sending a pull request.
 
 ## Code of Conduct
 
