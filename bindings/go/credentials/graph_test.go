@@ -50,11 +50,54 @@ func (p CredentialPlugin) GetConsumerIdentity(_ context.Context, typed runtime.T
 	return identity, nil
 }
 
-func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
-	if p.CredentialFunc == nil {
-		return nil, fmt.Errorf("no credential function for %v", identity)
+func (p CredentialPlugin) ResolveTyped(ctx context.Context, identity runtime.Typed, credentials runtime.Typed) (runtime.Typed, error) {
+	id, ok := identity.(runtime.Identity)
+	if !ok {
+		// this is for now a developer error and needs to crash to prevent wrong introductions of non map identities
+		// TODO(matthiasbruns): https://github.com/open-component-model/ocm-project/issues/1041
+		panic(fmt.Sprintf("unexpected type for credential consumer identity: %T", identity))
 	}
-	return p.CredentialFunc(ctx, identity, credentials)
+	var credMap map[string]string
+	if dc, ok := credentials.(*v1.DirectCredentials); ok && credentials != nil {
+		credMap = dc.Properties
+	}
+	if p.CredentialFunc == nil {
+		return nil, fmt.Errorf("no credential function for %v", id)
+	}
+	result, err := p.CredentialFunc(ctx, id, credMap)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+	return &v1.DirectCredentials{
+		Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+		Properties: result,
+	}, nil
+}
+
+// Resolve is a deprecated shim that calls ResolveTyped with map↔typed conversions.
+func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+	var typedCreds runtime.Typed
+	if len(credentials) > 0 {
+		typedCreds = &v1.DirectCredentials{
+			Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+			Properties: credentials,
+		}
+	}
+	result, err := p.ResolveTyped(ctx, identity, typedCreds)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+	dc, ok := result.(*v1.DirectCredentials)
+	if !ok {
+		return nil, fmt.Errorf("unexpected credential type %T from ResolveTyped", result)
+	}
+	return dc.Properties, nil
 }
 
 type RepositoryPlugin struct {
@@ -70,8 +113,49 @@ func (s RepositoryPlugin) ConsumerIdentityForConfig(_ context.Context, config ru
 	return s.RepositoryIdentityFunc(config)
 }
 
-func (s RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
-	return s.ResolveFunc(ctx, config, identity, credentials)
+func (s RepositoryPlugin) ResolveTyped(ctx context.Context, cfg runtime.Typed, identity runtime.Typed, credentials runtime.Typed) (runtime.Typed, error) {
+	id, ok := identity.(runtime.Identity)
+	if !ok {
+		return nil, fmt.Errorf("expected runtime.Identity, got %T", identity)
+	}
+	var credMap map[string]string
+	if dc, ok := credentials.(*v1.DirectCredentials); ok && credentials != nil {
+		credMap = dc.Properties
+	}
+	result, err := s.ResolveFunc(ctx, cfg, id, credMap)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+	return &v1.DirectCredentials{
+		Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+		Properties: result,
+	}, nil
+}
+
+// Resolve is a deprecated shim that calls ResolveTyped with map↔typed conversions.
+func (s RepositoryPlugin) Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+	var typedCreds runtime.Typed
+	if len(credentials) > 0 {
+		typedCreds = &v1.DirectCredentials{
+			Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+			Properties: credentials,
+		}
+	}
+	result, err := s.ResolveTyped(ctx, cfg, identity, typedCreds)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+	dc, ok := result.(*v1.DirectCredentials)
+	if !ok {
+		return nil, fmt.Errorf("unexpected credential type %T from ResolveTyped", result)
+	}
+	return dc.Properties, nil
 }
 
 const testYAML = `
