@@ -156,14 +156,8 @@ jobs:
           # files_to_ignore: ''
   verify-labels:
     needs: [labeler, size-labeler, conventional-commit-labeler]
-    name: verify labels
-    # docker://agilepathway/pull-request-label-checker is an amd64-only image.
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/verify-labels.yaml
     permissions:
       pull-requests: read
-    steps:
-      - name: PRs should have at least one qualifying label
-        uses: docker://agilepathway/pull-request-label-checker:latest@sha256:14f5f3dfda922496d07d53494e2d2b42885165f90677a1c03d600059b7706a61
-        with:
-          any_of: kind/chore,kind/bugfix,kind/feature,kind/dependency,kind/refactor
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      any_of: kind/chore,kind/bugfix,kind/feature,kind/dependency,kind/refactor

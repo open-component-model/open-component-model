@@ -87,6 +87,8 @@ jobs:
           # Empty when this is the first release (no previous tag exists).
           CHANGELOG_RANGE: ${{ steps.compute.outputs.changelog_range }}
         with:
+          # pinning because our release broke with v2.13.0
+          version: 'v2.12.0'
           github_token: ${{ secrets.GITHUB_TOKEN }}
           config: ${{ inputs.component_path }}/cliff.toml
           args: |
