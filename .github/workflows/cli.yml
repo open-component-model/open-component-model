@@ -39,6 +39,10 @@ on:
         description: "Version to embed in binary (overrides computed version for ldflags only). Leading 'v' is stripped."
         type: string
         required: false
+    secrets:
+      GITHUB_TOKEN:
+        description: "GitHub token for authentication"
+        required: false
     outputs:
       artifact_name:
         description: "The artifact name that was built."
@@ -254,7 +258,8 @@ jobs:
     uses: ./.github/workflows/conformance.yml
     with:
       cli_image: "ghcr.io/${{ github.repository_owner }}/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
-    secrets: inherit
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Run conformance tests against the built image on PRs to main,
   # but only if the CLI was modified (as determined by the build job)
@@ -266,4 +271,5 @@ jobs:
     with:
       cli_artifact: ${{ needs.build.outputs.artifact_name }}
       cli_version: ${{ needs.build.outputs.version }}
-    secrets: inherit
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -21,6 +21,10 @@ on:
         description: "The ref to build on (branch or tag). Defaults to the current ref."
         type: string
         required: false
+    secrets:
+      GITHUB_TOKEN:
+        description: "GitHub token"
+        required: false
 
 permissions:
   contents: read
@@ -56,6 +60,7 @@ jobs:
           repository: ${{ env.CHECKOUT_REPO }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Compute VERSION
         id: calculate_version

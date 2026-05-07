@@ -37,6 +37,7 @@ jobs:
         with:
           sparse-checkout:
             ${{ env.RENOVATE_CONFIG_FILE }}
+          persist-credentials: false
 
       # Restore previous cache artifact if enabled
       - name: Restore renovate cache artifact

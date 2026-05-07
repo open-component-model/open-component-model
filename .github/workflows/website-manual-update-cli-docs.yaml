@@ -24,17 +24,20 @@ jobs:
         app_id: ${{ secrets.OCMBOT_APP_ID }}
         private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
     - name: Ensure proper version
+      env:
+        TOKEN: ${{ steps.generate_token.outputs.token }}
+        INPUT_VERSION: ${{ github.event.inputs.version }}
       run: |
-        curl -sSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ steps.generate_token.outputs.token }}" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/open-component-model/ocm/releases > releases.json
+        curl -sSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/open-component-model/ocm/releases > releases.json
         jq -r '.[] | .tag_name' releases.json | grep -v -E '.*-rc|latest' > versions.txt
-        if grep -Fxq '${{ github.event.inputs.version }}' versions.txt; then
-          echo "Version (${{ github.event.inputs.version }}) found!"
+        if grep -Fxq "${INPUT_VERSION}" versions.txt; then
+          echo "Version (${INPUT_VERSION}) found!"
         else
-          echo "Version (${{ github.event.inputs.version }}) not found! This are the availble ones:"
+          echo "Version (${INPUT_VERSION}) not found! This are the availble ones:"
           cat versions.txt
           exit 1
         fi
-        echo "RELEASE_VERSION=$(echo ${{ github.event.inputs.version }} )" >> $GITHUB_ENV
+        echo "RELEASE_VERSION=$(echo "${INPUT_VERSION}" )" >> $GITHUB_ENV
     - name: Publish Event
       uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4
       with:

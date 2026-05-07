@@ -26,12 +26,16 @@ jobs:
 
     - name: Checkout repo
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      with:
+        persist-credentials: false
 
     - name: Fetch security.txt
+      env:
+        SECURITY_TXT_READ: ${{ secrets.SECURITY_TXT_READ }}
       run: |
-        curl -sSL \
+        curl --fail-with-body -sSL \
           -H "Accept: application/vnd.github+json" \
-          -H "Authorization: Bearer ${{ secrets.SECURITY_TXT_READ }}" \
+          -H "Authorization: Bearer ${SECURITY_TXT_READ}" \
           https://raw.github.tools.sap/sgsc-engineering-and-automation/securitytxt/main/security.txt -o website/static/.well-known/security.txt
 
     - name: Create Pull Request
