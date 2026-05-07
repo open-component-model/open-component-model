@@ -102,9 +102,7 @@ func decodeBundle(t *testing.T, sigInfo descruntime.SignatureInfo) *bundleJSON {
 
 func newHandler(t *testing.T) *handler.Handler {
 	t.Helper()
-	h := handler.New()
-	require.NoError(t, h.Ensure(t.Context()))
-	return h
+	return handler.New()
 }
 
 func defaultSignConfig() *v1alpha1.SignConfig {

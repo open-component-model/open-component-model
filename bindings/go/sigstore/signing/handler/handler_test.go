@@ -26,40 +26,39 @@ import (
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 )
 
-// mockExecutor records args/env passed to Run and simulates cosign side effects.
-type mockExecutor struct {
-	called bool
-	args   []string
-	env    []string
-	err    error
-
-	// onRun is called during Run to simulate side effects (e.g. writing bundle file).
-	onRun func(args []string)
+// mockCosignRunner records args/env passed to sign/verify and simulates cosign side effects.
+type mockCosignRunner struct {
+	lastSignArgs   []string
+	lastSignEnv    []string
+	lastVerifyArgs []string
+	lastVerifyEnv  []string
+	signErr        error
+	verifyErr      error
+	onSign         func(dataPath, bundlePath string, extraArgs, env []string)
 }
 
-func (m *mockExecutor) Run(_ context.Context, args []string, env []string) error {
-	m.called = true
-	m.args = args
-	m.env = env
-	if m.onRun != nil {
-		m.onRun(args)
+func (m *mockCosignRunner) sign(_ context.Context, dataPath, bundlePath string, extraArgs, env []string) error {
+	m.lastSignArgs = append([]string{dataPath, bundlePath}, extraArgs...)
+	m.lastSignEnv = env
+	if m.onSign != nil {
+		m.onSign(dataPath, bundlePath, extraArgs, env)
 	}
-	return m.err
+	return m.signErr
 }
 
-func (m *mockExecutor) Ensure(_ context.Context) error { return nil }
+func (m *mockCosignRunner) verify(_ context.Context, dataPath, bundlePath string, extraArgs, env []string) error {
+	m.lastVerifyArgs = append([]string{dataPath, bundlePath}, extraArgs...)
+	m.lastVerifyEnv = env
+	return m.verifyErr
+}
 
-// newSignMock returns a mock that writes bundleJSON to the --bundle path on Run.
-func newSignMock(t *testing.T, bundleJSON []byte) *mockExecutor {
+// newSignMock returns a mock that writes bundleJSON to bundlePath on sign.
+func newSignMock(t *testing.T, bundleJSON []byte) *mockCosignRunner {
 	t.Helper()
-	return &mockExecutor{
-		onRun: func(args []string) {
-			for i, a := range args {
-				if a == "--bundle" && i+1 < len(args) {
-					if err := os.WriteFile(args[i+1], bundleJSON, 0o644); err != nil {
-						t.Fatalf("mock: write bundle: %v", err)
-					}
-				}
+	return &mockCosignRunner{
+		onSign: func(_, bundlePath string, _, _ []string) {
+			if err := os.WriteFile(bundlePath, bundleJSON, 0o644); err != nil {
+				t.Fatalf("mock: write bundle: %v", err)
 			}
 		},
 	}
@@ -223,16 +222,13 @@ func TestHandler_Sign(t *testing.T) {
 		assertArgs   func(t *testing.T, args []string)
 		assertEnv    func(t *testing.T, env []string)
 		assertResult func(t *testing.T, result descruntime.SignatureInfo)
-		assertMock   func(t *testing.T, mock *mockExecutor)
+		assertMock   func(t *testing.T, mock *mockCosignRunner)
 	}{
 		{
 			name:  "builds correct args with signing config",
 			creds: map[string]string{CredentialKeyOIDCToken: "test-token"},
 			assertArgs: func(t *testing.T, args []string) {
 				r := require.New(t)
-				r.Equal("sign-blob", args[0])
-				r.True(hasArg(args, "--yes"))
-				r.True(hasArg(args, "--bundle"))
 				r.Equal("/etc/sigstore/signing_config.json", argValue(args, "--signing-config"))
 			},
 			assertEnv: func(t *testing.T, env []string) {
@@ -245,8 +241,8 @@ func TestHandler_Sign(t *testing.T) {
 			name:    "missing OIDC token fails before executor call",
 			creds:   map[string]string{},
 			wantErr: "OIDC identity token required",
-			assertMock: func(t *testing.T, mock *mockExecutor) {
-				require.False(t, mock.called)
+			assertMock: func(t *testing.T, mock *mockCosignRunner) {
+				require.Nil(t, mock.lastSignArgs)
 			},
 		},
 		{
@@ -343,8 +339,8 @@ func TestHandler_Sign(t *testing.T) {
 			}
 
 			mock := newSignMock(t, bundleJSON)
-			mock.err = tc.mockErr
-			h := NewWithExecutor(mock)
+			mock.signErr = tc.mockErr
+			h := newWithRunner(mock)
 
 			cfg := testSignConfig()
 			if tc.cfg != nil {
@@ -373,10 +369,10 @@ func TestHandler_Sign(t *testing.T) {
 			r.NoError(err)
 
 			if tc.assertArgs != nil {
-				tc.assertArgs(t, mock.args)
+				tc.assertArgs(t, mock.lastSignArgs)
 			}
 			if tc.assertEnv != nil {
-				tc.assertEnv(t, mock.env)
+				tc.assertEnv(t, mock.lastSignEnv)
 			}
 			if tc.assertResult != nil {
 				tc.assertResult(t, result)
@@ -392,7 +388,7 @@ func TestSign_UnregisteredConfigType(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	h := NewWithExecutor(&mockExecutor{})
+	h := newWithRunner(&mockCosignRunner{})
 
 	cfg := &runtime.Raw{}
 	cfg.SetType(runtime.NewVersionedType("UnknownConfig", "v1"))
@@ -405,12 +401,12 @@ func TestSign_AmbientSIGSTORE_ID_TOKEN(t *testing.T) {
 	t.Setenv("SIGSTORE_ID_TOKEN", "ambient-token-from-env")
 
 	mock := newSignMock(t, fakeBundleJSON(t))
-	h := NewWithExecutor(mock)
+	h := newWithRunner(mock)
 
 	result, err := h.Sign(t.Context(), testDigest(), testSignConfig(), map[string]string{})
 	require.NoError(t, err)
-	require.True(t, mock.called)
-	require.Equal(t, "ambient-token-from-env", envValue(mock.env, "SIGSTORE_ID_TOKEN"))
+	require.NotNil(t, mock.lastSignArgs)
+	require.Equal(t, "ambient-token-from-env", envValue(mock.lastSignEnv, "SIGSTORE_ID_TOKEN"))
 	require.NotEmpty(t, result.Value)
 }
 
@@ -419,13 +415,13 @@ func TestSign_AmbientACTIONS_ID_TOKEN_vars(t *testing.T) {
 	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://token.actions.githubusercontent.com")
 
 	mock := newSignMock(t, fakeBundleJSON(t))
-	h := NewWithExecutor(mock)
+	h := newWithRunner(mock)
 
 	_, err := h.Sign(t.Context(), testDigest(), testSignConfig(), map[string]string{})
 	require.NoError(t, err)
-	require.Equal(t, "ghs_fakeRunnerJWT", envValue(mock.env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN"))
-	require.Equal(t, "https://token.actions.githubusercontent.com", envValue(mock.env, "ACTIONS_ID_TOKEN_REQUEST_URL"))
-	require.False(t, hasEnvKey(mock.env, "SIGSTORE_ID_TOKEN"), "should not inject SIGSTORE_ID_TOKEN when Actions OIDC is available")
+	require.Equal(t, "ghs_fakeRunnerJWT", envValue(mock.lastSignEnv, "ACTIONS_ID_TOKEN_REQUEST_TOKEN"))
+	require.Equal(t, "https://token.actions.githubusercontent.com", envValue(mock.lastSignEnv, "ACTIONS_ID_TOKEN_REQUEST_URL"))
+	require.False(t, hasEnvKey(mock.lastSignEnv, "SIGSTORE_ID_TOKEN"), "should not inject SIGSTORE_ID_TOKEN when Actions OIDC is available")
 }
 
 // --- Verify Tests ---
@@ -440,13 +436,12 @@ func TestHandler_Verify(t *testing.T) {
 		mockErr    error
 		wantErr    string
 		assertArgs func(t *testing.T, args []string)
-		assertMock func(t *testing.T, mock *mockExecutor)
+		assertMock func(t *testing.T, mock *mockCosignRunner)
 	}{
 		{
 			name: "exact issuer and identity",
 			assertArgs: func(t *testing.T, args []string) {
 				r := require.New(t)
-				r.Equal("verify-blob", args[0])
 				r.Equal("user@example.com", argValue(args, "--certificate-identity"))
 				r.Equal("https://accounts.google.com", argValue(args, "--certificate-oidc-issuer"))
 				r.False(hasArg(args, "--certificate-identity-regexp"))
@@ -521,8 +516,8 @@ func TestHandler_Verify(t *testing.T) {
 			t.Parallel()
 			r := require.New(t)
 
-			mock := &mockExecutor{err: tc.mockErr}
-			h := NewWithExecutor(mock)
+			mock := &mockCosignRunner{verifyErr: tc.mockErr}
+			h := newWithRunner(mock)
 
 			cfg := testVerifyConfig()
 			if tc.cfgSetup != nil {
@@ -552,10 +547,10 @@ func TestHandler_Verify(t *testing.T) {
 				return
 			}
 			r.NoError(err)
-			r.True(mock.called)
+			r.NotNil(mock.lastVerifyArgs)
 
 			if tc.assertArgs != nil {
-				tc.assertArgs(t, mock.args)
+				tc.assertArgs(t, mock.lastVerifyArgs)
 			}
 			if tc.assertMock != nil {
 				tc.assertMock(t, mock)
@@ -568,7 +563,7 @@ func TestVerify_MissingIdentity(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	h := NewWithExecutor(&mockExecutor{})
+	h := newWithRunner(&mockCosignRunner{})
 
 	cfg := &v1alpha1.VerifyConfig{}
 	cfg.SetType(runtime.NewVersionedType(v1alpha1.VerifyConfigType, v1alpha1.Version))
@@ -593,7 +588,7 @@ func TestVerify_PrivateInfrastructureWithoutTrustedRoot(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	h := NewWithExecutor(&mockExecutor{})
+	h := newWithRunner(&mockCosignRunner{})
 
 	cfg := testVerifyConfig()
 	cfg.PrivateInfrastructure = true
@@ -618,7 +613,7 @@ func TestVerify_EmptyDigestRejected(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	h := NewWithExecutor(&mockExecutor{})
+	h := newWithRunner(&mockCosignRunner{})
 
 	cfg := testVerifyConfig()
 
@@ -642,8 +637,8 @@ func TestVerify_PrivateInfrastructureWithTrustedRootCredential(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	mock := &mockExecutor{}
-	h := NewWithExecutor(mock)
+	mock := &mockCosignRunner{}
+	h := newWithRunner(mock)
 
 	cfg := testVerifyConfig()
 	cfg.PrivateInfrastructure = true
@@ -665,15 +660,15 @@ func TestVerify_PrivateInfrastructureWithTrustedRootCredential(t *testing.T) {
 
 	err := h.Verify(t.Context(), signed, cfg, creds)
 	r.NoError(err)
-	r.True(mock.called)
-	r.True(hasArg(mock.args, "--private-infrastructure"))
+	r.NotNil(mock.lastVerifyArgs)
+	r.True(hasArg(mock.lastVerifyArgs, "--private-infrastructure"))
 }
 
 func TestVerify_CertificateOIDCIssuerRejectsHTTP(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	h := NewWithExecutor(&mockExecutor{})
+	h := newWithRunner(&mockCosignRunner{})
 
 	cfg := testVerifyConfig()
 	cfg.CertificateOIDCIssuer = "http://accounts.google.com"
@@ -698,8 +693,8 @@ func TestVerify_CertificateOIDCIssuerAcceptsHTTPWithInsecureFlag(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	mock := &mockExecutor{}
-	h := NewWithExecutor(mock)
+	mock := &mockCosignRunner{}
+	h := newWithRunner(mock)
 
 	cfg := testVerifyConfig()
 	cfg.CertificateOIDCIssuer = "http://accounts.google.com"
@@ -718,14 +713,14 @@ func TestVerify_CertificateOIDCIssuerAcceptsHTTPWithInsecureFlag(t *testing.T) {
 
 	err := h.Verify(t.Context(), signed, cfg, map[string]string{})
 	r.NoError(err)
-	r.True(mock.called)
+	r.NotNil(mock.lastVerifyArgs)
 }
 
 func TestVerify_InvalidBase64Bundle(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	h := NewWithExecutor(&mockExecutor{})
+	h := newWithRunner(&mockCosignRunner{})
 	cfg := testVerifyConfig()
 	signed := descruntime.Signature{
 		Name:   "test-sig",
@@ -746,7 +741,7 @@ func TestVerify_UnregisteredConfigType(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	h := NewWithExecutor(&mockExecutor{})
+	h := newWithRunner(&mockCosignRunner{})
 	cfg := &runtime.Raw{}
 	cfg.SetType(runtime.NewVersionedType("UnknownConfig", "v1"))
 	signed := descruntime.Signature{
@@ -768,7 +763,7 @@ func TestVerify_UnsupportedMediaType(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	h := NewWithExecutor(&mockExecutor{})
+	h := newWithRunner(&mockCosignRunner{})
 	cfg := testVerifyConfig()
 	signed := descruntime.Signature{
 		Name:   "test-sig",
@@ -880,7 +875,7 @@ func TestGetSigningCredentialConsumerIdentity(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	h := NewWithExecutor(&mockExecutor{})
+	h := newWithRunner(&mockCosignRunner{})
 	cfg := testSignConfig()
 
 	id, err := h.GetSigningCredentialConsumerIdentity(t.Context(), "my-sig", testDigest(), cfg)
@@ -895,7 +890,7 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	h := NewWithExecutor(&mockExecutor{})
+	h := newWithRunner(&mockCosignRunner{})
 	signed := descruntime.Signature{
 		Name: "my-sig",
 		Signature: descruntime.SignatureInfo{
@@ -915,7 +910,7 @@ func TestGetVerifyingCredentialConsumerIdentity_WrongMediaType(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	h := NewWithExecutor(&mockExecutor{})
+	h := newWithRunner(&mockCosignRunner{})
 	signed := descruntime.Signature{
 		Name: "my-sig",
 		Signature: descruntime.SignatureInfo{

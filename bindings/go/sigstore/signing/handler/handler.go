@@ -10,7 +10,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,27 +36,57 @@ const (
 )
 
 // Handler implements signing.Handler by delegating to the cosign CLI.
-// Ensure must be called before Sign/Verify. Safe for concurrent use after Ensure.
+// Safe for concurrent use. Binary resolution happens lazily on first Sign or Verify call.
 type Handler struct {
-	executor Executor
+	runner  cosignRunner
+	tempDir string
 }
 
-// New creates a Handler. Call Ensure before Sign/Verify to resolve the cosign binary.
-func New(opts ...ExecutorOption) *Handler {
-	return &Handler{executor: NewDefaultExecutor(opts...)}
-}
+// HandlerOption configures a Handler.
+type HandlerOption func(*Handler)
 
-// Ensure resolves the cosign binary. Must be called before Sign/Verify.
-func (h *Handler) Ensure(ctx context.Context) error {
-	return h.executor.Ensure(ctx)
-}
-
-// NewWithExecutor returns a Handler with a custom executor (for testing).
-func NewWithExecutor(exec Executor) *Handler {
-	if exec == nil {
-		panic("NewWithExecutor: executor must not be nil")
+// WithTempDir sets the base directory for temporary files created during signing/verification.
+// Corresponds to the filesystem.config.ocm.software TempFolder field.
+func WithTempDir(dir string) HandlerOption {
+	return func(h *Handler) {
+		h.tempDir = dir
 	}
-	return &Handler{executor: exec}
+}
+
+// WithHTTPClient sets the HTTP client used for cosign binary downloads.
+func WithHTTPClient(c *http.Client) HandlerOption {
+	return func(h *Handler) {
+		if b, ok := h.runner.(*cosignBinary); ok {
+			b.httpClient = c
+		}
+	}
+}
+
+// New creates a Handler. Binary resolution happens lazily on first Sign or Verify call.
+func New(opts ...HandlerOption) *Handler {
+	h := &Handler{runner: newCosignBinary(nil)}
+	for _, opt := range opts {
+		opt(h)
+	}
+	if h.tempDir == "" {
+		h.tempDir = os.TempDir()
+	}
+	return h
+}
+
+// newWithRunner returns a Handler with a custom runner (for testing).
+func newWithRunner(r cosignRunner, opts ...HandlerOption) *Handler {
+	if r == nil {
+		panic("newWithRunner: runner must not be nil")
+	}
+	h := &Handler{runner: r}
+	for _, opt := range opts {
+		opt(h)
+	}
+	if h.tempDir == "" {
+		h.tempDir = os.TempDir()
+	}
+	return h
 }
 
 // GetSigningHandlerScheme returns the runtime.Scheme containing registered config types.
@@ -96,7 +128,7 @@ func (h *Handler) Sign(
 		env = append(env, "SIGSTORE_ID_TOKEN="+token)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "cosign-sign-*")
+	tmpDir, err := os.MkdirTemp(h.tempDir, "cosign-sign-*")
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("create temp dir for sign: %w", err)
 	}
@@ -113,19 +145,15 @@ func (h *Handler) Sign(
 
 	bundlePath := filepath.Join(tmpDir, "bundle.json")
 
-	args := []string{
-		"sign-blob", dataPath,
-		"--bundle", bundlePath,
-		"--yes",
-	}
+	var extraArgs []string
 	if cfg.SigningConfig != "" {
-		args = append(args, "--signing-config", cfg.SigningConfig)
+		extraArgs = append(extraArgs, "--signing-config", cfg.SigningConfig)
 	}
 	if cfg.TrustedRoot != "" {
-		args = append(args, "--trusted-root", cfg.TrustedRoot)
+		extraArgs = append(extraArgs, "--trusted-root", cfg.TrustedRoot)
 	}
 
-	if err := h.executor.Run(ctx, args, env); err != nil {
+	if err := h.runner.sign(ctx, dataPath, bundlePath, extraArgs, env); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("cosign sign: %w", err)
 	}
 
@@ -202,7 +230,7 @@ func (h *Handler) Verify(
 		return fmt.Errorf("digest value must not be empty")
 	}
 
-	tmpDir, err := os.MkdirTemp("", "cosign-verify-*")
+	tmpDir, err := os.MkdirTemp(h.tempDir, "cosign-verify-*")
 	if err != nil {
 		return fmt.Errorf("create temp dir for verify: %w", err)
 	}
@@ -227,27 +255,27 @@ func (h *Handler) Verify(
 		return fmt.Errorf("write bundle to temp file: %w", err)
 	}
 
-	args := []string{"verify-blob", dataPath, "--bundle", bundlePath}
+	var extraArgs []string
 	if cfg.CertificateIdentity != "" {
-		args = append(args, "--certificate-identity", cfg.CertificateIdentity)
+		extraArgs = append(extraArgs, "--certificate-identity", cfg.CertificateIdentity)
 	}
 	if cfg.CertificateIdentityRegexp != "" {
-		args = append(args, "--certificate-identity-regexp", cfg.CertificateIdentityRegexp)
+		extraArgs = append(extraArgs, "--certificate-identity-regexp", cfg.CertificateIdentityRegexp)
 	}
 	if cfg.CertificateOIDCIssuer != "" {
-		args = append(args, "--certificate-oidc-issuer", cfg.CertificateOIDCIssuer)
+		extraArgs = append(extraArgs, "--certificate-oidc-issuer", cfg.CertificateOIDCIssuer)
 	}
 	if cfg.CertificateOIDCIssuerRegexp != "" {
-		args = append(args, "--certificate-oidc-issuer-regexp", cfg.CertificateOIDCIssuerRegexp)
+		extraArgs = append(extraArgs, "--certificate-oidc-issuer-regexp", cfg.CertificateOIDCIssuerRegexp)
 	}
 	if trustedRootPath != "" {
-		args = append(args, "--trusted-root", trustedRootPath)
+		extraArgs = append(extraArgs, "--trusted-root", trustedRootPath)
 	}
 	if cfg.PrivateInfrastructure {
-		args = append(args, "--private-infrastructure")
+		extraArgs = append(extraArgs, "--private-infrastructure")
 	}
 
-	if err := h.executor.Run(ctx, args, cosignEnv()); err != nil {
+	if err := h.runner.verify(ctx, dataPath, bundlePath, extraArgs, cosignEnv()); err != nil {
 		return fmt.Errorf("verify signature: %w", err)
 	}
 
@@ -403,4 +431,23 @@ func extractCertInfoFromBundleJSON(bundleJSON []byte) (bundleCertInfo, error) {
 		return bundleCertInfo{}, fmt.Errorf("fulcio certificate: V2 issuer extension (OID %s) present but malformed: %w", sigstoreIssuerV2OID, v2Err)
 	}
 	return bundleCertInfo{}, fmt.Errorf("fulcio certificate contains no issuer extension (OID %s or %s)", sigstoreIssuerV1OID, sigstoreIssuerV2OID)
+}
+
+func writeTemp(dir, pattern string, r io.Reader) (path string, err error) {
+	f, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return "", fmt.Errorf("create temp file %q: %w", pattern, err)
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close temp file %q: %w", pattern, cerr)
+		}
+		if err != nil {
+			_ = os.Remove(f.Name())
+		}
+	}()
+	if _, err = io.Copy(f, r); err != nil {
+		return "", fmt.Errorf("write temp file %q: %w", pattern, err)
+	}
+	return f.Name(), nil
 }
