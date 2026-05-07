@@ -66,6 +66,22 @@ resources:
     mediaType: application/yaml
 ```
 
+#### Embedding OCI Image Layouts
+
+The `file/v1` input type can embed OCI image layout tar archives. When the media type is set to `application/vnd.ocm.software.oci.layout.v1+tar`, OCM recognizes the blob as a native OCI artifact and stores it as a proper OCI manifest during transfer to an OCI registry, making it accessible with standard OCI tooling.
+
+```yaml
+resources:
+- name: my-oci-artifact
+  type: ociArtifact
+  input:
+    type: file/v1
+    path: ./oci-artifact.tar
+    mediaType: application/vnd.ocm.software.oci.layout.v1+tar
+```
+
+See the [Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) tutorial for a complete walkthrough.
+
 ### `Helm/v1`
 
 Embeds a Helm chart from the local filesystem or a remote repository. Exactly one of `path` or `helmRepository` must be
@@ -153,7 +169,9 @@ resources:
 ### `LocalBlob/v1`
 
 References content stored alongside the component descriptor in the same repository. Legacy alias: `localBlob`.
-Typically created automatically when using input types.
+Typically created automatically when using input types or when transferring with `--copy-resources`.
+
+When stored in an OCI registry, local blobs with OCI-native media types (e.g. `application/vnd.oci.image.manifest.v1+json`, `application/vnd.oci.image.index.v1+json`) are mapped to native OCI manifests and can be accessed directly by digest using standard OCI tools. The `globalAccess` field provides the native image reference for direct access. See the [Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) tutorial for details.
 
 | Field            | Type   | Required | Description                                                      |
 |------------------|--------|----------|------------------------------------------------------------------|
