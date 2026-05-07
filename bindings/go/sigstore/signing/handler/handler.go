@@ -130,7 +130,7 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("digest value must not be empty")
 	}
 
-	env := cosignEnv()
+	env := os.Environ()
 	if !hasEnvKey(env, "SIGSTORE_ID_TOKEN") && !hasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN") {
 		token := strings.TrimSpace(creds[CredentialKeyOIDCToken])
 		if token == "" {
@@ -288,7 +288,7 @@ func (h *Handler) Verify(
 		extraArgs = append(extraArgs, "--private-infrastructure")
 	}
 
-	if err := h.runner.verify(ctx, dataPath, bundlePath, extraArgs, cosignEnv()); err != nil {
+	if err := h.runner.verify(ctx, dataPath, bundlePath, extraArgs, os.Environ()); err != nil {
 		return err
 	}
 
