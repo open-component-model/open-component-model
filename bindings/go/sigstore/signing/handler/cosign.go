@@ -106,7 +106,7 @@ func (b *cosignBinary) execCosign(ctx context.Context, binaryPath string, args, 
 	defer cancel()
 
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, binaryPath, args...) //nolint:gosec // G204: args constructed from trusted config
+	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	cmd.Env = env

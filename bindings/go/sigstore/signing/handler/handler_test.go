@@ -507,7 +507,7 @@ func TestHandler_Verify(t *testing.T) {
 		{
 			name:    "executor error propagated",
 			mockErr: fmt.Errorf("cosign verify-blob failed: exit status 1\nstderr: verification failed"),
-			wantErr: "verify signature",
+			wantErr: "cosign verify-blob failed",
 		},
 	}
 

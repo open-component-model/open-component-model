@@ -1,7 +1,3 @@
-// Cosign error messages can contain OIDC tokens, bearer tokens, and bare JWTs
-// in plaintext. scrubStderr redacts these patterns before the
-// message surfaces in Go errors or structured logs, preventing accidental
-// secret leakage through log aggregation pipelines.
 package handler
 
 import "regexp"

@@ -87,7 +87,7 @@ func New(opts ...HandlerOption) *Handler {
 	return h
 }
 
-// newWithRunner returns a Handler with a custom runner (for testing).
+//nolint:unused // used in handler_test.go (same package); linter has tests:false
 func newWithRunner(r cosignRunner, opts ...HandlerOption) *Handler {
 	if r == nil {
 		panic("newWithRunner: runner must not be nil")
