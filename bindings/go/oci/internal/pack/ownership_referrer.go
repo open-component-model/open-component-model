@@ -64,7 +64,7 @@ func OwnershipReferrer(artifact descriptor.Artifact, component string, version s
 
 		return []tar.Referrer{
 			{Descriptor: desc, Raw: body},
-			{Descriptor: ociImageSpecV1.DescriptorEmptyJSON, Raw: []byte("{}")},
+			{Descriptor: ociImageSpecV1.DescriptorEmptyJSON, Raw: ociImageSpecV1.DescriptorEmptyJSON.Data},
 		}, nil
 	}
 }

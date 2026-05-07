@@ -174,7 +174,7 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		if err := opts.MutateParentFunc(&topLevelDesc); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate manifest descriptor before copy: %w", err)
 		}
-		rootChildren := append(append([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers...), referrerDescriptors...)
+		rootChildren := slices.Concat([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers, referrerDescriptors)
 		opts.FindSuccessors = findSuccessorsForRoot(topLevelDesc, rootChildren)
 	case ociImageSpecV1.MediaTypeImageIndex:
 		var index ociImageSpecV1.Index
@@ -184,7 +184,7 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		if err := opts.MutateParentFunc(&topLevelDesc); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate index descriptor before copy: %w", err)
 		}
-		rootChildren := append(index.Manifests, referrerDescriptors...)
+		rootChildren := slices.Concat(index.Manifests, referrerDescriptors)
 		opts.FindSuccessors = findSuccessorsForRoot(topLevelDesc, rootChildren)
 	}
 
@@ -203,8 +203,8 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 // descriptor slice is what gets injected as additional successors of the root
 // in CopyGraph.
 func resolveReferrers(ctx context.Context, funcs []ReferrersFunc, topLevelDesc ociImageSpecV1.Descriptor) ([]Referrer, []ociImageSpecV1.Descriptor, error) {
-	referrers := make([]Referrer, 0, len(funcs))
-	referrerDescriptors := make([]ociImageSpecV1.Descriptor, 0, len(funcs))
+	var referrers []Referrer
+	var referrerDescriptors []ociImageSpecV1.Descriptor
 	for _, fn := range funcs {
 		refs, err := fn(ctx, topLevelDesc)
 		if err != nil {
@@ -233,9 +233,12 @@ func findSuccessorsForRoot(topLevelDesc ociImageSpecV1.Descriptor, rootChildren 
 		if err != nil {
 			return nil, fmt.Errorf("failed to find successors: %w", err)
 		}
-		return slices.DeleteFunc(successors, func(d ociImageSpecV1.Descriptor) bool {
-			return d.Digest == topLevelDesc.Digest
-		}), nil
+		if desc.ArtifactType != "" {
+			return slices.DeleteFunc(successors, func(d ociImageSpecV1.Descriptor) bool {
+				return d.Digest == topLevelDesc.Digest
+			}), nil
+		}
+		return successors, nil
 	}
 }
 

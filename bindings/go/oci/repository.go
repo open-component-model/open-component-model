@@ -248,9 +248,6 @@ func (repo *Repository) AddLocalResource(
 	return resource, nil
 }
 
-// AddLocalSource adds a local source to the repository. Unlike
-// [Repository.AddLocalResource], sources do not get an ownership referrer —
-// ADR 0015 scopes the asset-to-owner linkage to resources only.
 func (repo *Repository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, content blob.ReadOnlyBlob) (newRes *descriptor.Source, err error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "add local source",
