@@ -1,6 +1,8 @@
 name: Pull Request
+# pull_request_target is required to allow labeling on fork PRs (needs write access).
+# No PR code is executed — only the base repository's labeler config is read.
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] intentional: no PR code executed, only base repo config read
     # make sure that when the PR changes, we also update
     types:
       - opened
@@ -121,6 +123,7 @@ jobs:
         with:
           sparse-checkout: |
             .github/config/labeler.yml
+          persist-credentials: false
       - uses: actions/labeler@f27b608878404679385c85cfa523b85ccb86e213 # v6
         with:
           configuration-path: .github/config/labeler.yml
