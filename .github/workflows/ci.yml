@@ -37,6 +37,8 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
       # Detect .env changes so lint runs on all modules when the golangci-lint version changes
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
         id: env_changes
@@ -169,16 +171,25 @@ jobs:
             core.setOutput('integration_test_modules_json', JSON.stringify(integrationTestModules));
       - name: Generate Job Summary
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
+          FILTERED_JSON: ${{ steps.filtered.outputs.modules_json }}
+          LINT_MODULES_JSON: ${{ steps.filtered.outputs.lint_modules_json }}
+          ENV_CHANGED: ${{ steps.env_changes.outputs.env }}
+          CI_CHANGED: ${{ steps.ci_changes.outputs.ci }}
+          CHECK_ONLY_CHANGED: ${{ env.check_only_changed }}
+          UNIT_TESTS_JSON: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
+          INTEGRATION_TESTS_JSON: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
         with:
           script: |
-            const modules = JSON.parse(`${{ steps.discover.outputs.modules_json || '[]' }}`);
-            const filtered = JSON.parse(`${{ steps.filtered.outputs.modules_json || '[]' }}`);
-            const lintModules = JSON.parse(`${{ steps.filtered.outputs.lint_modules_json || '[]' }}`);
-            const envChanged = `${{ steps.env_changes.outputs.env }}` === 'true';
-            const ciChanged = `${{ steps.ci_changes.outputs.ci }}` === 'true';
-            const checkOnlyChanged = `${{ env.check_only_changed }}` === 'true';
-            const unitTests = JSON.parse(`${{ steps.filtered_test.outputs.unit_test_modules_json || '[]' }}`);
-            const integrationTests = JSON.parse(`${{ steps.filtered_test.outputs.integration_test_modules_json || '[]' }}`);
+            const modules = JSON.parse(process.env.MODULES_JSON || '[]');
+            const filtered = JSON.parse(process.env.FILTERED_JSON || '[]');
+            const lintModules = JSON.parse(process.env.LINT_MODULES_JSON || '[]');
+            const envChanged = process.env.ENV_CHANGED === 'true';
+            const ciChanged = process.env.CI_CHANGED === 'true';
+            const checkOnlyChanged = process.env.CHECK_ONLY_CHANGED === 'true';
+            const unitTests = JSON.parse(process.env.UNIT_TESTS_JSON || '[]');
+            const integrationTests = JSON.parse(process.env.INTEGRATION_TESTS_JSON || '[]');
 
             function toMarkdownList(items) {
               return items.length ? items.map(item => `- \`${item}\``).join('\n') : '_None_';
@@ -223,6 +234,7 @@ jobs:
           sparse-checkout: |
             golangci.yml
             .env
+          persist-credentials: false
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
         with:
@@ -261,6 +273,7 @@ jobs:
             ${{ matrix.module }}
             golangci.yml
             .env
+          persist-credentials: false
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
@@ -296,6 +309,8 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
@@ -307,7 +322,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_USER: ${{ github.actor }}
-        run: task ${{ matrix.module }}:test/integration
+          MODULE: ${{ matrix.module }}
+        run: task "${MODULE}:test/integration"
 
   run_unit_tests:
     name: "Unit Tests"
@@ -328,13 +344,16 @@ jobs:
           sparse-checkout: |
             ${{ matrix.module }}
             reuse.Taskfile.yml
+          persist-credentials: false
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
       - name: Run Tests
-        run: task ${{ matrix.module }}:test
+        env:
+          MODULE: ${{ matrix.module }}
+        run: task "${MODULE}:test"
 
   analyze-go:
     name: "Analyze Go Modules"
@@ -361,6 +380,7 @@ jobs:
           sparse-checkout: |
             .github/workflows/ci.yml
             ${{ matrix.project }}
+          persist-credentials: false
       - name: Initialize CodeQL
         uses: github/codeql-action/init@e46ed2cbd01164d986452f91f178727624ae40d7 # v4
         with:
@@ -379,6 +399,8 @@ jobs:
     name: "Code Generation"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
       - name: Install Task
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
         with:
