@@ -116,10 +116,6 @@ type VerifyConfig struct {
 	// Alternative Name. Required for keyless verification unless CertificateIdentity is set.
 	// Maps to cosign --certificate-identity-regexp.
 	CertificateIdentityRegexp string `json:"certificateIdentityRegexp,omitempty"`
-
-	// AllowInsecureEndpoints permits HTTP (non-TLS) URLs in CertificateOIDCIssuer.
-	// Default false enforces HTTPS. Only enable for testing or air-gapped environments.
-	AllowInsecureEndpoints bool `json:"allowInsecureEndpoints,omitempty"`
 }
 
 // Validate checks that SignConfig fields are well-formed.
@@ -142,14 +138,8 @@ func (c *VerifyConfig) Validate() error {
 			"(CertificateIdentity or CertificateIdentityRegexp)")
 	}
 	if c.CertificateOIDCIssuer != "" {
-		if c.AllowInsecureEndpoints {
-			if err := validateURL("CertificateOIDCIssuer", c.CertificateOIDCIssuer); err != nil {
-				return err
-			}
-		} else {
-			if err := validateHTTPS("CertificateOIDCIssuer", c.CertificateOIDCIssuer); err != nil {
-				return err
-			}
+		if err := validateURL("CertificateOIDCIssuer", c.CertificateOIDCIssuer); err != nil {
+			return err
 		}
 	}
 	if c.CertificateOIDCIssuerRegexp != "" {
@@ -172,23 +162,6 @@ func validateURL(field, rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("%s: invalid URL %q: %w", field, rawURL, err)
-	}
-	if u.Host == "" {
-		return fmt.Errorf("%s: URL %q has no host", field, rawURL)
-	}
-	return nil
-}
-
-func validateHTTPS(field, rawURL string) error {
-	if rawURL == "" {
-		return nil
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("%s: invalid URL %q: %w", field, rawURL, err)
-	}
-	if u.Scheme != "https" {
-		return fmt.Errorf("%s: URL %q must use https scheme", field, rawURL)
 	}
 	if u.Host == "" {
 		return fmt.Errorf("%s: URL %q has no host", field, rawURL)

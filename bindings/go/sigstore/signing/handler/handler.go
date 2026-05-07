@@ -219,8 +219,8 @@ func (h *Handler) Verify(
 			"set TrustedRoot in the verifier config or provide a TrustedRoot credential")
 	}
 
-	if cfg.AllowInsecureEndpoints {
-		slog.Warn("insecure endpoints enabled: HTTP URLs accepted without TLS verification")
+	if strings.HasPrefix(cfg.CertificateOIDCIssuer, "http://") {
+		slog.Warn("CertificateOIDCIssuer uses HTTP (non-TLS); this is insecure outside of test environments")
 	}
 
 	if isPermissivePattern(cfg.CertificateOIDCIssuerRegexp) && isPermissivePattern(cfg.CertificateIdentityRegexp) {
