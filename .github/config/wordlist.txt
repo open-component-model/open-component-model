@@ -22,6 +22,8 @@ OCIGetComponentVersion
 Preact
 RGD's
 ResourceGraphDefinitions
+SigstoreSigningConfiguration
+SigstoreVerificationConfiguration
 TGD
 TGDs
 Taskfiles
@@ -99,6 +101,8 @@ cel
 centos
 cest
 cet
+certificateIdentity
+certificateOIDCIssuer
 changelog
 changelogs
 checksums
@@ -750,6 +754,7 @@ typehandler
 typename
 ui
 uis
+ux
 uncomment
 uncommenting
 undefine

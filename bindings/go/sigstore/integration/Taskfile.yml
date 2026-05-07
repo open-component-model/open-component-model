@@ -1,0 +1,121 @@
+version: '3'
+
+# Prerequisites (must be on PATH):
+#   - kubectl: https://kubernetes.io/docs/tasks/tools/
+#   - cosign:  https://github.com/sigstore/cosign (see signing/handler/cosign_version.go for tested version)
+#   - curl
+#   - kind:    https://kind.sigs.k8s.io/docs/user/quick-start/#installation
+#   - yq:     https://github.com/mikefarah/yq (required by upstream setup-kind.sh)
+#   - jq:     https://jqlang.github.io/jq/ (required by upstream setup-kind.sh)
+
+includes:
+  reuse: ../../../../reuse.Taskfile.yml
+
+vars:
+  PROJECT_ROOT:
+    sh: 'git rev-parse --show-toplevel'
+  SCAFFOLDING_VERSION:
+    sh: 'source {{.PROJECT_ROOT}}/.env 2>/dev/null; [ -f .env ] && source .env; echo "$SCAFFOLDING_VERSION"'
+
+  INTEGRATION_TEST_IDENTIFIER: 'Integration'
+  SIGSTORE_ENV_FILE: 'tmp/sigstore-env.sh'
+
+  SSLIP_HOSTS: |
+    127.0.0.1 fulcio.fulcio-system.172.18.255.1.sslip.io
+    127.0.0.1 rekor.rekor-system.172.18.255.1.sslip.io
+    127.0.0.1 ctlog.ctlog-system.172.18.255.1.sslip.io
+    127.0.0.1 tsa.tsa-system.172.18.255.1.sslip.io
+    127.0.0.1 tuf.tuf-system.172.18.255.1.sslip.io
+    127.0.0.1 gettoken.default.172.18.255.1.sslip.io
+    127.0.0.1 registry.local
+
+tasks:
+  scaffolding:setup:
+    desc: "Create kind cluster and deploy sigstore scaffolding (~5 min, skips if already running)"
+    preconditions:
+      # On Linux, Docker host-network mode resolves sslip.io natively; skip hosts check.
+      # On macOS, /etc/hosts must contain the entries (one-time manual setup).
+      - sh: '[ "$(uname -s)" = "Linux" ] || grep -q "fulcio.fulcio-system.172.18.255.1.sslip.io" /etc/hosts'
+        msg: |
+          /etc/hosts is missing sslip.io entries for the scaffolding services.
+          Add them manually (one-time setup):
+            sudo tee -a /etc/hosts <<'EOF'
+          {{.SSLIP_HOSTS}}EOF
+      - sh: '[ "$(uname -s)" = "Linux" ] || grep -q "registry.local" /etc/hosts'
+        msg: |
+          /etc/hosts is missing the registry.local entry (required by upstream setup-kind.sh).
+          Add it (one-time setup):
+            echo '127.0.0.1 registry.local' | sudo tee -a /etc/hosts
+      - sh: '! kind get clusters 2>/dev/null | grep -q "^kind$" || kubectl cluster-info --context kind-kind >/dev/null 2>&1'
+        msg: |
+          A 'kind' cluster exists but is unhealthy. Clean up first:
+            task scaffolding:teardown
+      - sh: '! docker ps -a --format "{{`{{.Names}}`}}" 2>/dev/null | grep -q "^registry.local$" || kind get clusters 2>/dev/null | grep -q "^kind$"'
+        msg: |
+          Orphaned 'registry.local' container found without a cluster. Clean up first:
+            task scaffolding:teardown
+    status:
+      - kubectl -n fulcio-system get ksvc fulcio -ojsonpath='{.status.url}' 2>/dev/null | grep -q .
+      - kubectl -n rekor-system get ksvc rekor -ojsonpath='{.status.url}' 2>/dev/null | grep -q .
+      - kubectl -n tsa-system get ksvc tsa -ojsonpath='{.status.url}' 2>/dev/null | grep -q .
+      - kubectl -n default get ksvc gettoken -ojsonpath='{.status.url}' 2>/dev/null | grep -q .
+    cmds:
+      - |
+        curl -fLo /tmp/setup-kind.sh \
+          "https://github.com/sigstore/scaffolding/releases/download/{{.SCAFFOLDING_VERSION}}/setup-kind.sh"
+        chmod u+x /tmp/setup-kind.sh
+        cd /tmp && ./setup-kind.sh
+      - |
+        curl -fLo /tmp/setup-scaffolding-from-release.sh \
+          "https://github.com/sigstore/scaffolding/releases/download/{{.SCAFFOLDING_VERSION}}/setup-scaffolding-from-release.sh"
+        chmod u+x /tmp/setup-scaffolding-from-release.sh
+        cd /tmp && ./setup-scaffolding-from-release.sh --release-version {{.SCAFFOLDING_VERSION}}
+      - |
+        curl -fL "https://github.com/sigstore/scaffolding/releases/download/{{.SCAFFOLDING_VERSION}}/testrelease.yaml" \
+          | kubectl create -f -
+        kubectl -n default wait --timeout 2m --for=condition=Ready ksvc gettoken
+
+  scaffolding:bridge:
+    desc: "Port-forward Kourier ingress to localhost:8080 (macOS only, no-op on Linux)"
+    deps: [scaffolding:setup]
+    status:
+      - '[ "$(uname -s)" = "Linux" ] || lsof -ti :8080 >/dev/null 2>&1'
+    cmds:
+      - |
+        if [ "$(uname -s)" != "Darwin" ]; then
+          exit 0
+        fi
+        kubectl -n kourier-system port-forward service/kourier-internal 8080:80 &
+        for i in $(seq 1 20); do
+          lsof -ti :8080 >/dev/null 2>&1 && break
+          sleep 0.5
+        done
+        lsof -ti :8080 >/dev/null 2>&1 || { echo "port-forward failed to start" >&2; exit 1; }
+
+  scaffolding:env:
+    desc: "Extract sigstore env vars from running cluster into tmp/sigstore-env.sh"
+    deps: [scaffolding:bridge]
+    vars:
+      BRIDGE_PORT:
+        sh: '[ "$(uname -s)" = "Darwin" ] && echo "8080" || echo ""'
+    cmds:
+      - mkdir -p tmp
+      - SIGSTORE_BRIDGE_PORT={{.BRIDGE_PORT}} bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
+
+  test/integration-sigstore:
+    desc: "Run sigstore integration tests against scaffolding cluster"
+    deps: [scaffolding:env]
+    cmds:
+      - |
+        set -e
+        . {{.SIGSTORE_ENV_FILE}}
+        GOWORK=off go test -count=1 -run "{{.INTEGRATION_TEST_IDENTIFIER}}" -timeout 180s ./...
+
+  scaffolding:teardown:
+    desc: "Delete kind cluster and clean up"
+    cmds:
+      - "lsof -ti :8080 | xargs kill 2>/dev/null || true"
+      - kind delete cluster 2>/dev/null || true
+      - docker network disconnect kind registry.local 2>/dev/null || true
+      - docker rm -f registry.local 2>/dev/null || true
+      - rm -rf tmp

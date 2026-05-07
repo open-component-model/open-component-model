@@ -1,0 +1,444 @@
+package handler
+
+import (
+	"bytes"
+	"context"
+	"crypto/x509"
+	"encoding/asn1"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/signing"
+	oidctokenv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1"
+	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1"
+	signeridentityv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1"
+	verifieridentityv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1"
+	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
+)
+
+var _ signing.Handler = (*Handler)(nil)
+
+const (
+	// Deprecated: Use signeridentityv1.IdentityAttributeAlgorithm instead.
+	IdentityAttributeAlgorithm = signeridentityv1.IdentityAttributeAlgorithm
+
+	// Deprecated: Use signeridentityv1.IdentityAttributeSignature instead.
+	IdentityAttributeSignature = signeridentityv1.IdentityAttributeSignature
+
+	// Deprecated: Use oidctokenv1.CredentialKeyToken instead.
+	CredentialKeyOIDCToken = oidctokenv1.CredentialKeyToken
+
+	// Deprecated: Use trustedrootv1.CredentialKeyTrustedRootJSON instead.
+	CredentialKeyTrustedRootJSON = trustedrootv1.CredentialKeyTrustedRootJSON
+
+	// Deprecated: Use trustedrootv1.CredentialKeyTrustedRootJSONFile instead.
+	CredentialKeyTrustedRootJSONFile = trustedrootv1.CredentialKeyTrustedRootJSONFile
+)
+
+// Handler implements signing.Handler by delegating to the cosign CLI.
+// Ensure must be called before Sign/Verify. Safe for concurrent use after Ensure.
+type Handler struct {
+	executor Executor
+}
+
+// New creates a Handler. Call Ensure before Sign/Verify to resolve the cosign binary.
+func New(opts ...ExecutorOption) *Handler {
+	return &Handler{executor: NewDefaultExecutor(opts...)}
+}
+
+// Ensure resolves the cosign binary. Must be called before Sign/Verify.
+func (h *Handler) Ensure(ctx context.Context) error {
+	return h.executor.Ensure(ctx)
+}
+
+// NewWithExecutor returns a Handler with a custom executor (for testing).
+func NewWithExecutor(exec Executor) *Handler {
+	if exec == nil {
+		panic("NewWithExecutor: executor must not be nil")
+	}
+	return &Handler{executor: exec}
+}
+
+// GetSigningHandlerScheme returns the runtime.Scheme containing registered config types.
+func (h *Handler) GetSigningHandlerScheme() *runtime.Scheme {
+	return v1alpha1.Scheme
+}
+
+func (h *Handler) Sign(
+	ctx context.Context,
+	unsigned descruntime.Digest,
+	rawCfg runtime.Typed,
+	creds map[string]string,
+) (descruntime.SignatureInfo, error) {
+	var cfg v1alpha1.SignConfig
+	if err := v1alpha1.Scheme.Convert(rawCfg, &cfg); err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("invalid signing config: %w", err)
+	}
+
+	if cfg.AllowInsecureEndpoints {
+		slog.Warn("insecure endpoints enabled: HTTP URLs accepted without TLS verification")
+	}
+
+	digestBytes, err := hex.DecodeString(unsigned.Value)
+	if err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("decode digest hex value: %w", err)
+	}
+	if len(digestBytes) == 0 {
+		return descruntime.SignatureInfo{}, fmt.Errorf("digest value must not be empty")
+	}
+
+	typedCreds := oidctokenv1.FromDirectCredentials(creds)
+
+	env := cosignEnv()
+	if !hasEnvKey(env, "SIGSTORE_ID_TOKEN") && !hasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN") {
+		token := strings.TrimSpace(typedCreds.Token)
+		if token == "" && typedCreds.TokenFile != "" {
+			tokenBytes, err := os.ReadFile(typedCreds.TokenFile)
+			if err != nil {
+				return descruntime.SignatureInfo{}, fmt.Errorf("read OIDC token file: %w", err)
+			}
+			token = strings.TrimSpace(string(tokenBytes))
+		}
+		if token == "" {
+			return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required for signing: " +
+				"set SIGSTORE_ID_TOKEN in the environment, provide ACTIONS_ID_TOKEN_REQUEST_TOKEN " +
+				"(GitHub Actions), or configure a consumer identity of type " +
+				"SigstoreSigner/v1alpha1 with either a direct credential (Credentials/v1) providing " +
+				"the \"token\" key, or a credential plugin (OIDCIdentityTokenProvider/v1alpha1) that resolves one")
+		}
+		env = append(env, "SIGSTORE_ID_TOKEN="+token)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "cosign-sign-*")
+	if err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("create temp dir for sign: %w", err)
+	}
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			slog.Warn("failed to remove temp dir containing signing material", "path", tmpDir, "error", err)
+		}
+	}()
+
+	dataPath, err := writeTemp(tmpDir, "data-*", bytes.NewReader(digestBytes))
+	if err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("write sign data to temp file: %w", err)
+	}
+
+	bundlePath := filepath.Join(tmpDir, "bundle.json")
+
+	args := []string{
+		"sign-blob", dataPath,
+		"--bundle", bundlePath,
+		"--yes",
+	}
+	if cfg.SigningConfig != "" {
+		args = append(args, "--signing-config", cfg.SigningConfig)
+	} else if cfg.FulcioURL != "" || cfg.RekorURL != "" || cfg.TimestampServerURL != "" {
+		args = append(args, "--use-signing-config=false")
+	}
+	if cfg.FulcioURL != "" {
+		args = append(args, "--fulcio-url", cfg.FulcioURL)
+	}
+	if cfg.RekorURL != "" {
+		args = append(args, "--rekor-url", cfg.RekorURL)
+	}
+	if cfg.TimestampServerURL != "" {
+		args = append(args, "--timestamp-server-url", cfg.TimestampServerURL)
+	}
+	if cfg.TrustedRoot != "" {
+		args = append(args, "--trusted-root", cfg.TrustedRoot)
+	}
+
+	if err := h.executor.Run(ctx, args, env); err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("cosign sign: %w", err)
+	}
+
+	bundleJSON, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("read bundle output: %w", err)
+	}
+
+	certInfo, err := extractCertInfoFromBundleJSON(bundleJSON)
+	if err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("extract cert info from bundle: %w", err)
+	}
+	if certInfo.Identity == "" {
+		slog.Warn("signing certificate contains no SAN identity (email or URI)")
+	}
+	slog.Debug("signing certificate identity", "issuer", certInfo.Issuer, "identity", certInfo.Identity)
+
+	// MediaType is fixed: this handler produces/verifies Sigstore bundles v0.3+json (cosign >=3.0).
+	return descruntime.SignatureInfo{
+		Algorithm: v1alpha1.AlgorithmSigstore,
+		MediaType: v1alpha1.MediaTypeSigstoreBundle,
+		Value:     base64.StdEncoding.EncodeToString(bundleJSON),
+		Issuer:    certInfo.Issuer,
+	}, nil
+}
+
+func (h *Handler) Verify(
+	ctx context.Context,
+	signed descruntime.Signature,
+	rawCfg runtime.Typed,
+	creds map[string]string,
+) error {
+	var cfg v1alpha1.VerifyConfig
+	if err := v1alpha1.Scheme.Convert(rawCfg, &cfg); err != nil {
+		return fmt.Errorf("convert config: %w", err)
+	}
+
+	if signed.Signature.MediaType != v1alpha1.MediaTypeSigstoreBundle {
+		return fmt.Errorf("unsupported media type %q for sigstore verification", signed.Signature.MediaType)
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid verification config: %w", err)
+	}
+
+	typedCreds := trustedrootv1.FromDirectCredentials(creds)
+
+	if cfg.PrivateInfrastructure && cfg.TrustedRoot == "" &&
+		strings.TrimSpace(typedCreds.TrustedRootJSON) == "" &&
+		strings.TrimSpace(typedCreds.TrustedRootJSONFile) == "" {
+		return fmt.Errorf("privateInfrastructure requires a trusted root: " +
+			"set TrustedRoot in the verifier config or provide a TrustedRoot credential")
+	}
+
+	if cfg.AllowInsecureEndpoints {
+		slog.Warn("insecure endpoints enabled: HTTP URLs accepted without TLS verification")
+	}
+
+	if isPermissivePattern(cfg.CertificateOIDCIssuerRegexp) && isPermissivePattern(cfg.CertificateIdentityRegexp) {
+		slog.Warn("verification uses trivially permissive identity patterns — "+
+			"any valid Sigstore signature will pass regardless of signer identity",
+			"issuerRegexp", cfg.CertificateOIDCIssuerRegexp,
+			"identityRegexp", cfg.CertificateIdentityRegexp)
+	}
+
+	bundleJSON, err := base64.StdEncoding.DecodeString(signed.Signature.Value)
+	if err != nil {
+		return fmt.Errorf("decode bundle base64: %w", err)
+	}
+
+	digestBytes, err := hex.DecodeString(signed.Digest.Value)
+	if err != nil {
+		return fmt.Errorf("decode digest hex: %w", err)
+	}
+	if len(digestBytes) == 0 {
+		return fmt.Errorf("digest value must not be empty")
+	}
+
+	tmpDir, err := os.MkdirTemp("", "cosign-verify-*")
+	if err != nil {
+		return fmt.Errorf("create temp dir for verify: %w", err)
+	}
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			slog.Warn("failed to remove temp dir containing verification material", "path", tmpDir, "error", err)
+		}
+	}()
+
+	trustedRootPath, err := resolveTrustedRootPath(&cfg, typedCreds, tmpDir)
+	if err != nil {
+		return fmt.Errorf("resolve trusted root: %w", err)
+	}
+
+	dataPath, err := writeTemp(tmpDir, "data-*", bytes.NewReader(digestBytes))
+	if err != nil {
+		return fmt.Errorf("write verify data to temp file: %w", err)
+	}
+
+	bundlePath, err := writeTemp(tmpDir, "bundle-*.json", bytes.NewReader(bundleJSON))
+	if err != nil {
+		return fmt.Errorf("write bundle to temp file: %w", err)
+	}
+
+	args := []string{"verify-blob", dataPath, "--bundle", bundlePath}
+	if cfg.CertificateIdentity != "" {
+		args = append(args, "--certificate-identity", cfg.CertificateIdentity)
+	}
+	if cfg.CertificateIdentityRegexp != "" {
+		args = append(args, "--certificate-identity-regexp", cfg.CertificateIdentityRegexp)
+	}
+	if cfg.CertificateOIDCIssuer != "" {
+		args = append(args, "--certificate-oidc-issuer", cfg.CertificateOIDCIssuer)
+	}
+	if cfg.CertificateOIDCIssuerRegexp != "" {
+		args = append(args, "--certificate-oidc-issuer-regexp", cfg.CertificateOIDCIssuerRegexp)
+	}
+	if trustedRootPath != "" {
+		args = append(args, "--trusted-root", trustedRootPath)
+	}
+	if cfg.PrivateInfrastructure {
+		args = append(args, "--private-infrastructure")
+	}
+
+	if err := h.executor.Run(ctx, args, cosignEnv()); err != nil {
+		return fmt.Errorf("verify signature: %w", err)
+	}
+
+	return nil
+}
+
+func (*Handler) GetSigningCredentialConsumerIdentity(
+	_ context.Context,
+	name string,
+	_ descruntime.Digest,
+	rawCfg runtime.Typed,
+) (runtime.Identity, error) {
+	var cfg v1alpha1.SignConfig
+	if err := v1alpha1.Scheme.Convert(rawCfg, &cfg); err != nil {
+		return nil, fmt.Errorf("convert config: %w", err)
+	}
+	return sigstoreIdentityToMap(signeridentityv1.V1Alpha1Type, v1alpha1.AlgorithmSigstore, name), nil
+}
+
+func (*Handler) GetVerifyingCredentialConsumerIdentity(
+	_ context.Context,
+	signature descruntime.Signature,
+	_ runtime.Typed,
+) (runtime.Identity, error) {
+	if signature.Signature.MediaType != v1alpha1.MediaTypeSigstoreBundle {
+		return nil, fmt.Errorf("unsupported media type %q for sigstore verification", signature.Signature.MediaType)
+	}
+	return sigstoreIdentityToMap(verifieridentityv1.V1Alpha1Type, v1alpha1.AlgorithmSigstore, signature.Name), nil
+}
+
+func sigstoreIdentityToMap(identityType runtime.Type, algorithm, signature string) runtime.Identity {
+	m := runtime.Identity{
+		signeridentityv1.IdentityAttributeAlgorithm: algorithm,
+		signeridentityv1.IdentityAttributeSignature: signature,
+	}
+	m.SetType(identityType)
+	return m
+}
+
+// resolveTrustedRootPath returns a path to the trusted root JSON, or ""
+// if no trusted root is configured (cosign falls back to public-good TUF).
+//
+// Resolution order (first non-empty wins):
+//  1. Inline JSON from credentials (written to a temp file, cleaned up by caller's defer os.RemoveAll(tmpDir))
+//  2. File path from credentials (not removed on cleanup)
+//  3. Config field value (not removed on cleanup)
+//  4. "" — cosign falls back to public-good TUF
+func resolveTrustedRootPath(cfg *v1alpha1.VerifyConfig, creds *trustedrootv1.TrustedRoot, tmpDir string) (string, error) {
+	if jsonVal := strings.TrimSpace(creds.TrustedRootJSON); jsonVal != "" {
+		path, err := writeTemp(tmpDir, "cosign-trusted-root-*.json", strings.NewReader(jsonVal))
+		if err != nil {
+			return "", fmt.Errorf("write trusted root to temp file: %w", err)
+		}
+		return path, nil
+	}
+
+	if filePath := strings.TrimSpace(creds.TrustedRootJSONFile); filePath != "" {
+		if err := validateTrustedRootPath(filePath); err != nil {
+			return "", err
+		}
+		return filePath, nil
+	}
+
+	if cfg.TrustedRoot != "" {
+		return cfg.TrustedRoot, nil
+	}
+
+	return "", nil
+}
+
+func validateTrustedRootPath(p string) error {
+	if !filepath.IsAbs(p) {
+		return fmt.Errorf("trusted root file path must be absolute, got %q", p)
+	}
+	if cleaned := filepath.Clean(p); cleaned != p {
+		return fmt.Errorf("trusted root file path contains non-canonical elements (e.g. ..): %q", p)
+	}
+	return nil
+}
+
+var permissivePatterns = map[string]bool{
+	".*": true, ".+": true, "^.*$": true, "^.+$": true,
+}
+
+func isPermissivePattern(pattern string) bool {
+	return permissivePatterns[pattern]
+}
+
+var (
+	sigstoreIssuerV1OID = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57264, 1, 1}
+	sigstoreIssuerV2OID = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57264, 1, 8}
+)
+
+type bundleCertInfo struct {
+	Issuer   string
+	Identity string // SAN: first email or URI from Fulcio cert
+}
+
+func extractCertInfoFromBundleJSON(bundleJSON []byte) (bundleCertInfo, error) {
+	var bundle struct {
+		VerificationMaterial struct {
+			Certificate struct {
+				RawBytes string `json:"rawBytes"`
+			} `json:"certificate"`
+		} `json:"verificationMaterial"`
+	}
+	if err := json.Unmarshal(bundleJSON, &bundle); err != nil {
+		return bundleCertInfo{}, fmt.Errorf("unmarshal bundle JSON: %w", err)
+	}
+
+	certDER, err := base64.StdEncoding.DecodeString(bundle.VerificationMaterial.Certificate.RawBytes)
+	if err != nil {
+		return bundleCertInfo{}, fmt.Errorf("decode certificate base64: %w", err)
+	}
+	if len(certDER) == 0 {
+		return bundleCertInfo{}, errors.New("bundle contains no certificate")
+	}
+
+	cert, err := x509.ParseCertificate(certDER)
+	if err != nil {
+		return bundleCertInfo{}, fmt.Errorf("parse Fulcio certificate: %w", err)
+	}
+
+	var identity string
+	if len(cert.EmailAddresses) > 0 {
+		identity = cert.EmailAddresses[0]
+	} else if len(cert.URIs) > 0 {
+		identity = cert.URIs[0].String()
+	}
+
+	var v1Issuer string
+	var v2Err error
+	for _, ext := range cert.Extensions {
+		if ext.Id.Equal(sigstoreIssuerV2OID) {
+			var issuer string
+			if _, err := asn1.Unmarshal(ext.Value, &issuer); err == nil {
+				return bundleCertInfo{Issuer: issuer, Identity: identity}, nil
+			} else {
+				v2Err = err
+			}
+		}
+		if v1Issuer == "" && ext.Id.Equal(sigstoreIssuerV1OID) {
+			v1Issuer = string(ext.Value)
+		}
+	}
+
+	if v1Issuer != "" {
+		return bundleCertInfo{Issuer: v1Issuer, Identity: identity}, nil
+	}
+
+	if v2Err != nil {
+		return bundleCertInfo{}, fmt.Errorf("fulcio certificate: V2 issuer extension (OID %s) present but malformed: %w", sigstoreIssuerV2OID, v2Err)
+	}
+	return bundleCertInfo{}, fmt.Errorf("fulcio certificate contains no issuer extension (OID %s or %s)", sigstoreIssuerV1OID, sigstoreIssuerV2OID)
+}
