@@ -93,6 +93,10 @@ type Repository struct {
 	// globalAccessPolicy controls whether global access references are added to local blobs.
 	// Default (zero value) is Never, suppressing global access to discourage reliance on it.
 	globalAccessPolicy GlobalAccessPolicy
+
+	// ownershipReferrerPolicy controls asset-to-owner referrer creation on
+	// by-value resource uploads (ADR 0015). Default (zero value) is None.
+	ownershipReferrerPolicy OwnershipReferrerPolicy
 }
 
 // SetGlobalAccessPolicy overrides the global access policy for this repository.
@@ -210,6 +214,16 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 }
 
 // AddLocalResource adds a local resource to the repository.
+//
+// When [Repository.ownershipReferrerPolicy] is [OwnershipReferrerPolicyEnabled]
+// and the packed resource is an OCI-compliant manifest (image manifest or
+// index), the method also pushes an ownership referrer manifest
+// (artifactType "application/vnd.ocm.software.ownership.v1+json") whose subject points
+// at the packed resource and whose annotations carry the owning component
+// name, version, and resource identity per
+// docs/adr/0015_ownership_annotations.md. Raw-blob resources (plain layers,
+// non-OCI media types) do not produce a referrer. Sources are not covered by
+// ownership referrers.
 func (repo *Repository) AddLocalResource(
 	ctx context.Context,
 	component, version string,
@@ -429,7 +443,13 @@ func identifyLocalBlobManifestsAndLayers(ctx context.Context, store oras.Target,
 	return manifests, layers, nil
 }
 
-func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, component string, version string, artifact descriptor.Artifact, b blob.ReadOnlyBlob) error {
+func (repo *Repository) uploadAndUpdateLocalArtifact(
+	ctx context.Context,
+	component string,
+	version string,
+	artifact descriptor.Artifact,
+	b blob.ReadOnlyBlob,
+) error {
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
 		return err
@@ -444,12 +464,16 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, compon
 		return fmt.Errorf("failed to create resource blob: %w", err)
 	}
 
-	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, pack.Options{
+	packOptions := pack.Options{
 		AccessScheme:       repo.scheme,
 		CopyGraphOptions:   repo.resourceCopyOptions.CopyGraphOptions,
 		BaseReference:      reference,
 		GlobalAccessPolicy: repo.globalAccessPolicy,
-	})
+	}
+	if repo.ownershipReferrerPolicy == OwnershipReferrerPolicyEnabled {
+		packOptions.Referrers = []tar.ReferrersFunc{pack.OwnershipReferrer(artifact, component, version)}
+	}
+	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, packOptions)
 	if err != nil {
 		return fmt.Errorf("failed to pack resource blob: %w", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
@@ -80,9 +81,22 @@ func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyStora
 	}
 }
 
+// Referrer pairs a descriptor with its raw content bytes. Raw is required because
+// referrers are generated on-the-fly and never exist in the source OCI layout store.
+type Referrer struct {
+	Descriptor ociImageSpecV1.Descriptor
+	Raw        []byte
+}
+
+// ReferrersFunc returns referrers to be copied as additional children of top in
+// the same CopyGraph traversal — e.g. OCI referrers, which CopyGraph does not
+// follow by default.
+type ReferrersFunc func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]Referrer, error)
+
 type CopyOCILayoutWithIndexOptions struct {
 	oras.CopyGraphOptions
 	MutateParentFunc func(*ociImageSpecV1.Descriptor) error
+	ReferrersFunc    []ReferrersFunc
 }
 
 func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.ReadOnlyBlob, opts CopyOCILayoutWithIndexOptions) (top ociImageSpecV1.Descriptor, err error) {
@@ -146,6 +160,11 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to read top level descriptor stream: %w", err)
 	}
 
+	referrers, referrerDescriptors, err := resolveReferrers(ctx, opts.ReferrersFunc, topLevelDesc)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, err
+	}
+
 	switch topLevelDesc.MediaType {
 	case ociImageSpecV1.MediaTypeImageManifest:
 		var manifest ociImageSpecV1.Manifest
@@ -155,12 +174,8 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		if err := opts.MutateParentFunc(&topLevelDesc); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate manifest descriptor before copy: %w", err)
 		}
-		opts.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-			if content.Equal(desc, topLevelDesc) {
-				return append([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers...), nil
-			}
-			return content.Successors(ctx, ociStore, desc)
-		}
+		rootChildren := slices.Concat([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers, referrerDescriptors)
+		opts.FindSuccessors = findSuccessorsForRoot(topLevelDesc, rootChildren)
 	case ociImageSpecV1.MediaTypeImageIndex:
 		var index ociImageSpecV1.Index
 		if err := json.Unmarshal(descRaw, &index); err != nil {
@@ -169,30 +184,78 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		if err := opts.MutateParentFunc(&topLevelDesc); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate index descriptor before copy: %w", err)
 		}
-		opts.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-			if content.Equal(desc, topLevelDesc) {
-				return index.Manifests, nil
-			}
-			return content.Successors(ctx, ociStore, desc)
-		}
+		rootChildren := slices.Concat(index.Manifests, referrerDescriptors)
+		opts.FindSuccessors = findSuccessorsForRoot(topLevelDesc, rootChildren)
 	}
 
 	proxy := &descriptorStoreProxy{
 		raw:             descRaw,
 		desc:            topLevelDesc,
 		ReadOnlyStorage: ociStore,
+		referrers:       referrers,
 	}
 	return topLevelDesc, proxy, nil
 }
 
+// resolveReferrers invokes each ReferrersFunc against topLevelDesc and returns
+// the flattened list of referrers plus a parallel slice of just their
+// descriptors. The full Referrer slice is what the proxy serves on Fetch; the
+// descriptor slice is what gets injected as additional successors of the root
+// in CopyGraph.
+func resolveReferrers(ctx context.Context, funcs []ReferrersFunc, topLevelDesc ociImageSpecV1.Descriptor) ([]Referrer, []ociImageSpecV1.Descriptor, error) {
+	var referrers []Referrer
+	var referrerDescriptors []ociImageSpecV1.Descriptor
+	for _, fn := range funcs {
+		refs, err := fn(ctx, topLevelDesc)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to resolve referrer: %w", err)
+		}
+		referrers = append(referrers, refs...)
+		for _, ref := range refs {
+			referrerDescriptors = append(referrerDescriptors, ref.Descriptor)
+		}
+	}
+	return referrers, referrerDescriptors, nil
+}
+
+// findSuccessorsForRoot returns a CopyGraph FindSuccessors that injects
+// referrer descriptors as additional children of topLevelDesc, and drops any
+// back-edge to topLevelDesc from a non-root successor's manifest — typically
+// a referrer's Subject pointer, which would otherwise deadlock CopyGraph
+// (CopyGraph copies children before their parent, so a child waiting on the
+// parent's done-signal creates a circular wait via the in-flight tracker).
+func findSuccessorsForRoot(topLevelDesc ociImageSpecV1.Descriptor, rootChildren []ociImageSpecV1.Descriptor) func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+	return func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+		if content.Equal(desc, topLevelDesc) {
+			return rootChildren, nil
+		}
+		successors, err := content.Successors(ctx, fetcher, desc)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find successors: %w", err)
+		}
+		if desc.ArtifactType != "" {
+			return slices.DeleteFunc(successors, func(d ociImageSpecV1.Descriptor) bool {
+				return d.Digest == topLevelDesc.Digest
+			}), nil
+		}
+		return successors, nil
+	}
+}
+
 type descriptorStoreProxy struct {
-	raw  []byte
-	desc ociImageSpecV1.Descriptor
+	raw       []byte
+	desc      ociImageSpecV1.Descriptor
+	referrers []Referrer
 	content.ReadOnlyStorage
 }
 
 func (p *descriptorStoreProxy) Exists(ctx context.Context, desc ociImageSpecV1.Descriptor) (bool, error) {
 	if p.desc.Digest.String() == desc.Digest.String() {
+		return true, nil
+	}
+	if slices.ContainsFunc(p.referrers, func(r Referrer) bool {
+		return r.Descriptor.Digest == desc.Digest
+	}) {
 		return true, nil
 	}
 	return p.ReadOnlyStorage.Exists(ctx, desc)
@@ -201,6 +264,11 @@ func (p *descriptorStoreProxy) Exists(ctx context.Context, desc ociImageSpecV1.D
 func (p *descriptorStoreProxy) Fetch(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	if p.desc.Digest.String() == desc.Digest.String() {
 		return io.NopCloser(bytes.NewReader(p.raw)), nil
+	}
+	for _, ref := range p.referrers {
+		if ref.Descriptor.Digest == desc.Digest {
+			return io.NopCloser(bytes.NewReader(ref.Raw)), nil
+		}
 	}
 	return p.ReadOnlyStorage.Fetch(ctx, desc)
 }
