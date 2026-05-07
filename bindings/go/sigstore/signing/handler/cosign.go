@@ -170,7 +170,7 @@ func detectCosignVersion(ctx context.Context, binaryPath string) (string, error)
 	cmd := exec.CommandContext(ctx, binaryPath, "version")
 	cmd.Stdout = &stdout
 	cmd.Stderr = nil
-	cmd.Env = cosignEnv()
+	cmd.Env = os.Environ()
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("run cosign version: %w", err)
 	}
@@ -189,10 +189,6 @@ func parseCosignVersionOutput(output string) (string, error) {
 		return m, nil
 	}
 	return "", errors.New("could not parse cosign version from output")
-}
-
-func cosignEnv() []string {
-	return os.Environ()
 }
 
 func hasEnvKey(env []string, key string) bool {

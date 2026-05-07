@@ -1,16 +1,17 @@
 package handler
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestCosignEnv(t *testing.T) {
+func TestHasEnvKey(t *testing.T) {
 	r := require.New(t)
 	t.Setenv("SIGSTORE_ID_TOKEN", "some-token")
 	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ghs_fakeRunnerToken")
-	env := cosignEnv()
+	env := os.Environ()
 	r.True(hasEnvKey(env, "SIGSTORE_ID_TOKEN"))
 	r.True(hasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN"))
 }
