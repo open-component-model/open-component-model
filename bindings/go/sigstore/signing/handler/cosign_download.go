@@ -20,8 +20,8 @@ import (
 //go:embed .env
 var envFile string
 
-// CosignVersion is the pinned cosign version for auto-download, parsed from .env.
-var CosignVersion = parseCosignVersion()
+// cosignVersion is the pinned cosign version for auto-download, parsed from .env.
+var cosignVersion = parseCosignVersion()
 
 // platformBinaryName is the platform-specific cosign binary name for the current OS/arch.
 var platformBinaryName = cosignBinaryName(runtime.GOOS, runtime.GOARCH)
@@ -69,7 +69,7 @@ func cosignCachePath(version string) (string, error) {
 // This function is not safe for concurrent use; the caller must serialize access
 // (DefaultExecutor.ensureCosignAvailable holds its mutex before calling this).
 func ensureOrDownloadCosign(ctx context.Context, client *http.Client) (string, error) {
-	cacheDir, err := cosignCachePath(CosignVersion)
+	cacheDir, err := cosignCachePath(cosignVersion)
 	if err != nil {
 		return "", err
 	}
@@ -97,12 +97,12 @@ func ensureOrDownloadCosign(ctx context.Context, client *http.Client) (string, e
 		}
 	}
 
-	expectedHash, err := fetchExpectedChecksumWith(ctx, client, CosignVersion, platformBinaryName)
+	expectedHash, err := fetchExpectedChecksumWith(ctx, client, cosignVersion, platformBinaryName)
 	if err != nil {
 		return "", fmt.Errorf("fetch checksums: %w", err)
 	}
 
-	binaryURL := cosignDownloadURL(CosignVersion, runtime.GOOS, runtime.GOARCH)
+	binaryURL := cosignDownloadURL(cosignVersion, runtime.GOOS, runtime.GOARCH)
 	if err := downloadAndVerifyWith(ctx, client, binaryURL, cachedPath, expectedHash); err != nil {
 		return "", err
 	}

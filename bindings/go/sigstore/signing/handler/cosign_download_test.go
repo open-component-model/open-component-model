@@ -17,11 +17,11 @@ import (
 
 func TestCosignDownloadURL(t *testing.T) {
 	t.Parallel()
-	base := "https://github.com/sigstore/cosign/releases/download/" + CosignVersion + "/"
+	base := "https://github.com/sigstore/cosign/releases/download/" + cosignVersion + "/"
 	tests := []struct{ name, version, goos, goarch, want string }{
-		{"linux amd64", CosignVersion, "linux", "amd64", base + "cosign-linux-amd64"},
-		{"darwin arm64", CosignVersion, "darwin", "arm64", base + "cosign-darwin-arm64"},
-		{"windows amd64", CosignVersion, "windows", "amd64", base + "cosign-windows-amd64.exe"},
+		{"linux amd64", cosignVersion, "linux", "amd64", base + "cosign-linux-amd64"},
+		{"darwin arm64", cosignVersion, "darwin", "arm64", base + "cosign-darwin-arm64"},
+		{"windows amd64", cosignVersion, "windows", "amd64", base + "cosign-windows-amd64.exe"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -49,11 +49,11 @@ func TestCosignBinaryName(t *testing.T) {
 func TestCosignCachePath(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
-	path, err := cosignCachePath(CosignVersion)
+	path, err := cosignCachePath(cosignVersion)
 	r.NoError(err)
 	r.Contains(path, "ocm")
 	r.Contains(path, "cosign")
-	r.Contains(path, CosignVersion)
+	r.Contains(path, cosignVersion)
 }
 
 func TestParseChecksum(t *testing.T) {
@@ -75,8 +75,8 @@ func TestParseChecksum(t *testing.T) {
 func TestCosignVersion_IsSet(t *testing.T) {
 	t.Parallel()
 	semverRE := regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
-	if !semverRE.MatchString(CosignVersion) {
-		t.Fatalf("CosignVersion %q does not match required format vMAJOR.MINOR.PATCH", CosignVersion)
+	if !semverRE.MatchString(cosignVersion) {
+		t.Fatalf("cosignVersion %q does not match required format vMAJOR.MINOR.PATCH", cosignVersion)
 	}
 }
 
@@ -164,7 +164,7 @@ func TestFetchExpectedChecksumWith(t *testing.T) {
 			w.WriteHeader(http.StatusForbidden)
 		}))
 		t.Cleanup(srv.Close)
-		_, err := fetchExpectedChecksumWith(ctx, redirectAllClient(srv), CosignVersion, "cosign-linux-amd64")
+		_, err := fetchExpectedChecksumWith(ctx, redirectAllClient(srv), cosignVersion, "cosign-linux-amd64")
 		require.ErrorContains(t, err, "HTTP 403")
 	})
 	t.Run("success", func(t *testing.T) {
@@ -173,7 +173,7 @@ func TestFetchExpectedChecksumWith(t *testing.T) {
 			_, _ = w.Write([]byte("deadbeef12345678  cosign-linux-amd64\n"))
 		}))
 		t.Cleanup(srv.Close)
-		hash, err := fetchExpectedChecksumWith(ctx, redirectAllClient(srv), CosignVersion, "cosign-linux-amd64")
+		hash, err := fetchExpectedChecksumWith(ctx, redirectAllClient(srv), cosignVersion, "cosign-linux-amd64")
 		require.NoError(t, err)
 		require.Equal(t, "deadbeef12345678", hash)
 	})
