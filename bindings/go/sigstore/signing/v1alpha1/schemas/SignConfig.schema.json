@@ -4,15 +4,11 @@
   "$id": "ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1/schemas/SignConfig.schema.json",
   "title": "SignConfig",
   "type": "object",
-  "description": "SignConfig defines configuration for Sigstore-based keyless signing via the cosign CLI.\n\nEndpoint configuration:\n1. SigningConfig — cosign reads a local signing_config.json for endpoint\ndiscovery (Fulcio, Rekor, TSA). Create one with `cosign signing-config create`.\n2. Neither set — cosign's default fetches the signing config from the\npublic-good Sigstore TUF repository.\n\nWhen an OIDC token is available in credentials, it is forwarded to cosign\nvia the SIGSTORE_ID_TOKEN environment variable. A token is required;\nthe handler returns an error if no token credential is resolved.",
+  "description": "SignConfig defines configuration for Sigstore-based keyless signing via the cosign CLI.\n\nEndpoint configuration:\n1. SigningConfig — cosign reads a local signing_config.json for endpoint\ndiscovery (Fulcio, Rekor, TSA). Create one with `cosign signing-config create`.\n2. Neither set — cosign's default fetches the signing config from the\npublic-good Sigstore TUF repository.\n\nWhen an OIDC token is available in credentials, it is forwarded to cosign\nvia the SIGSTORE_ID_TOKEN environment variable. A token is required;\nthe handler returns an error if no token credential is resolved.\n\nTrust material (trusted root) is resolved from credentials, not from this\nconfig. See the handler package for resolution order.",
   "properties": {
     "signingConfig": {
       "type": "string",
       "description": "SigningConfig is a filesystem path to a cosign signing configuration file\n(conventionally named signing_config.json).\nWhen set, cosign discovers all service endpoints (Fulcio, Rekor, TSA) from\nthis file instead of TUF auto-discovery.\nMaps to cosign --signing-config."
-    },
-    "trustedRoot": {
-      "type": "string",
-      "description": "TrustedRoot is a filesystem path to a trusted root JSON file.\nWhen set during signing, cosign validates the Fulcio certificate chain\nagainst this root instead of the public-good Sigstore TUF root.\nRequired when signing against a privately deployed Sigstore infrastructure\n(e.g. a private Fulcio CA without a CT log).\nRequires SigningConfig to be set (endpoints must be known).\nMaps to cosign --trusted-root."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

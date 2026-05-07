@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1/schemas/VerifyConfig.schema.json",
   "title": "VerifyConfig",
   "type": "object",
-  "description": "VerifyConfig defines configuration for Sigstore-based keyless verification via the cosign CLI.\n\nFor keyless (Sigstore) verification, identity constraints are REQUIRED: you must set either\nCertificateOIDCIssuer (or CertificateOIDCIssuerRegexp) AND CertificateIdentity\n(or CertificateIdentityRegexp), via config fields.\nWithout them, verification cannot establish whose signature is being accepted, making the\nverification meaningless from a supply-chain security perspective. This mirrors cosign's own\nrequirement for --certificate-oidc-issuer and --certificate-identity on keyless verify.\n\nSee https://docs.sigstore.dev/cosign/verifying/verify/ for cosign verification documentation.",
+  "description": "VerifyConfig defines configuration for Sigstore-based keyless verification via the cosign CLI.\n\nFor keyless (Sigstore) verification, identity constraints are REQUIRED: you must set either\nCertificateOIDCIssuer (or CertificateOIDCIssuerRegexp) AND CertificateIdentity\n(or CertificateIdentityRegexp), via config fields.\nWithout them, verification cannot establish whose signature is being accepted, making the\nverification meaningless from a supply-chain security perspective. This mirrors cosign's own\nrequirement for --certificate-oidc-issuer and --certificate-identity on keyless verify.\n\nTrust material (trusted root) is resolved from credentials, not from this\nconfig. See the handler package for resolution order.\n\nSee https://docs.sigstore.dev/cosign/verifying/verify/ for cosign verification documentation.",
   "properties": {
     "certificateIdentity": {
       "type": "string",
@@ -25,10 +25,6 @@
     "privateInfrastructure": {
       "type": "boolean",
       "description": "PrivateInfrastructure skips public transparency log verification.\nUse this when verifying artifacts signed by a privately deployed Sigstore\ninfrastructure where the transparency log is not the public-good Rekor instance.\nMaps to cosign --private-infrastructure."
-    },
-    "trustedRoot": {
-      "type": "string",
-      "description": "TrustedRoot is a filesystem path to a trusted root JSON file for offline verification.\nWhen omitted, cosign uses the public-good Sigstore TUF root.\nMaps to cosign --trusted-root."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
