@@ -60,7 +60,7 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 		return nil, nil
 	}
 
-	return helminternal.CredentialConsumerIdentityCompat(helm.HelmRepository)
+	return helminternal.CredentialConsumerIdentity(helm.HelmRepository)
 }
 
 // ProcessResourceDigest resolves the digest of a Helm chart resource.
@@ -122,7 +122,9 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 		return "", fmt.Errorf("error creating temporary directory: %w", err)
 	}
 	defer func(path string) {
-		_ = os.RemoveAll(path)
+		if err := os.RemoveAll(path); err != nil {
+			slog.WarnContext(ctx, "failed to remove temporary helm digest cache directory", "path", path, "err", err)
+		}
 	}(cacheDir)
 
 	entry := &repo.Entry{

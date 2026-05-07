@@ -64,7 +64,7 @@ func TestCredentialConsumerIdentity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			identity, err := internal.CredentialConsumerIdentity(tt.repository)
+			identity, err := internal.CredentialConsumerIdentityTyped(tt.repository)
 
 			if tt.expectedErr != "" {
 				require.ErrorContains(t, err, tt.expectedErr)
@@ -72,7 +72,7 @@ func TestCredentialConsumerIdentity(t *testing.T) {
 				return
 			}
 
-			compatIdentity, err := internal.CredentialConsumerIdentityCompat(tt.repository)
+			compatIdentity, err := internal.CredentialConsumerIdentity(tt.repository)
 			if tt.expectedErr != "" {
 				require.ErrorContains(t, err, tt.expectedErr)
 				assert.Nil(t, compatIdentity)

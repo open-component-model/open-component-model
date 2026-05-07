@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -19,6 +20,7 @@ func resolveCredentialsMap(ctx context.Context, resolver credentials.Resolver, i
 	typed, err := resolver.ResolveTyped(ctx, identity)
 	if err != nil {
 		if errors.Is(err, credentials.ErrNotFound) {
+			slog.WarnContext(ctx, "no credentials found for identity", "identity", identity)
 			return nil, nil
 		}
 		return nil, err
