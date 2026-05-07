@@ -8,11 +8,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// CredentialConsumerIdentity resolves the credential consumer identity for the
+// CredentialConsumerIdentityTyped resolves the credential consumer identity for the
 // given helm repository URL. For OCI-based repositories (oci:// scheme) the
 // identity type is OCIRegistry; for HTTP/HTTPS repositories it is
 // HelmChartRepository. Returns an error if helmRepository is empty (e.g. for local charts).
-func CredentialConsumerIdentity(helmRepository string) (runtime.Typed, error) {
+func CredentialConsumerIdentityTyped(helmRepository string) (runtime.Typed, error) {
 	if helmRepository == "" {
 		return nil, fmt.Errorf("no helm repository specified")
 	}
@@ -31,12 +31,12 @@ func CredentialConsumerIdentity(helmRepository string) (runtime.Typed, error) {
 	return identity, nil
 }
 
-// CredentialConsumerIdentityCompat resolves the credential consumer identity for the
+// CredentialConsumerIdentity resolves the credential consumer identity for the
 // given helm repository URL and returns runtime.Identity for compatibility.
 // For OCI-based repositories (oci:// scheme) the identity type is OCIRegistry; for HTTP/HTTPS repositories it is
 // HelmChartRepository. Returns an error if helmRepository is empty (e.g. for local charts).
-func CredentialConsumerIdentityCompat(helmRepository string) (runtime.Identity, error) {
-	identity, err := CredentialConsumerIdentity(helmRepository)
+func CredentialConsumerIdentity(helmRepository string) (runtime.Identity, error) {
+	identity, err := CredentialConsumerIdentityTyped(helmRepository)
 	if err != nil {
 		return nil, fmt.Errorf("error getting credential identity: %w", err)
 	}
