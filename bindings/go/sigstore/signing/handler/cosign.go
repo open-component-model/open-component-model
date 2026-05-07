@@ -45,7 +45,7 @@ type cosignBinary struct {
 func newCosignBinary(httpClient *http.Client) *cosignBinary {
 	b := &cosignBinary{httpClient: httpClient}
 	if b.httpClient == nil {
-		b.httpClient = &http.Client{Timeout: 2 * time.Minute}
+		b.httpClient = &http.Client{Timeout: defaultOperationTimeout}
 	}
 	return b
 }
@@ -112,13 +112,14 @@ func (b *cosignBinary) execCosign(ctx context.Context, binaryPath string, args, 
 	cmd.Env = env
 
 	if err := cmd.Run(); err != nil {
+		// Truncate stderr to avoid unbounded error messages in logs and wrapped errors.
 		const maxStderr = 4096
 		msg := strings.TrimSpace(stderr.String())
 		if len(msg) > maxStderr {
 			msg = msg[:maxStderr]
 		}
 		msg = scrubStderr(msg)
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		if errors.Is(err, context.DeadlineExceeded) {
 			return fmt.Errorf("cosign %s timed out: %w\nstderr: %s", args[0], err, msg)
 		}
 		return fmt.Errorf("cosign %s failed: %w\nstderr: %s", args[0], err, msg)
