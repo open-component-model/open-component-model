@@ -147,7 +147,7 @@ func (h *Handler) Sign(
 	}
 	defer func() {
 		if err := os.RemoveAll(tmpDir); err != nil {
-			slog.Warn("failed to remove temp dir containing signing material", "path", tmpDir, "error", err)
+			slog.WarnContext(ctx, "failed to remove temp dir containing signing material", "path", tmpDir, "error", err)
 		}
 	}()
 
@@ -180,9 +180,9 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("extract cert info from bundle: %w", err)
 	}
 	if certInfo.Identity == "" {
-		slog.Warn("signing certificate contains no SAN identity (email or URI)")
+		slog.WarnContext(ctx, "signing certificate contains no SAN identity (email or URI)")
 	}
-	slog.Debug("signing certificate identity", "issuer", certInfo.Issuer, "identity", certInfo.Identity)
+	slog.DebugContext(ctx, "signing certificate identity", "issuer", certInfo.Issuer, "identity", certInfo.Identity)
 
 	// MediaType is fixed: this handler produces/verifies Sigstore bundles v0.3+json (cosign >=3.0).
 	return descruntime.SignatureInfo{
@@ -220,11 +220,11 @@ func (h *Handler) Verify(
 	}
 
 	if strings.HasPrefix(cfg.CertificateOIDCIssuer, "http://") {
-		slog.Warn("CertificateOIDCIssuer uses HTTP (non-TLS); this is insecure outside of test environments")
+		slog.WarnContext(ctx, "CertificateOIDCIssuer uses HTTP (non-TLS); this is insecure outside of test environments")
 	}
 
 	if isPermissivePattern(cfg.CertificateOIDCIssuerRegexp) && isPermissivePattern(cfg.CertificateIdentityRegexp) {
-		slog.Warn("verification uses trivially permissive identity patterns — "+
+		slog.WarnContext(ctx, "verification uses trivially permissive identity patterns — "+
 			"any valid Sigstore signature will pass regardless of signer identity",
 			"issuerRegexp", cfg.CertificateOIDCIssuerRegexp,
 			"identityRegexp", cfg.CertificateIdentityRegexp)
@@ -249,7 +249,7 @@ func (h *Handler) Verify(
 	}
 	defer func() {
 		if err := os.RemoveAll(tmpDir); err != nil {
-			slog.Warn("failed to remove temp dir containing verification material", "path", tmpDir, "error", err)
+			slog.WarnContext(ctx, "failed to remove temp dir containing verification material", "path", tmpDir, "error", err)
 		}
 	}()
 
