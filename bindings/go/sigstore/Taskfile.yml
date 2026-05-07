@@ -1,0 +1,9 @@
+version: '3'
+
+includes:
+  reuse: ../../../reuse.Taskfile.yml
+
+tasks:
+  test:
+    cmds:
+      - task: reuse:run-go-test
