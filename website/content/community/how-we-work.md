@@ -8,8 +8,9 @@ toc: true
 weight: 4
 ---
 
-This page describes how the OCM team organizes its day-to-day development work. All meetings listed here are open to
-the public - anyone is welcome to join, listen, or participate.
+This page describes how the OCM team organizes its day-to-day development work. Most meetings listed here are open to
+the public - anyone is welcome to join, listen, or participate. The Retrospective is invite-only to maintain a safe
+space for feedback.
 
 ## How We Structure Work
 
