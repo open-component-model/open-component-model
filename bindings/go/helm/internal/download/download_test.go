@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 )
 
 func TestGetVersion(t *testing.T) {
@@ -146,8 +147,8 @@ func TestConstructTLSOptions(t *testing.T) {
 	})
 
 	t.Run("certFile credential that does not exist returns error", func(t *testing.T) {
-		_, err := constructTLSOptions(t.TempDir(), withCredentials(map[string]string{
-			CredentialCertFile: "/nonexistent/cert.pem",
+		_, err := constructTLSOptions(t.TempDir(), withCredentials(&helmcredsv1.HelmHTTPCredentials{
+			CertFile: "/nonexistent/cert.pem",
 		}))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "certFile")
@@ -155,8 +156,8 @@ func TestConstructTLSOptions(t *testing.T) {
 	})
 
 	t.Run("keyFile credential that does not exist returns error", func(t *testing.T) {
-		_, err := constructTLSOptions(t.TempDir(), withCredentials(map[string]string{
-			CredentialKeyFile: "/nonexistent/key.pem",
+		_, err := constructTLSOptions(t.TempDir(), withCredentials(&helmcredsv1.HelmHTTPCredentials{
+			KeyFile: "/nonexistent/key.pem",
 		}))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "keyFile")
@@ -170,9 +171,9 @@ func TestConstructTLSOptions(t *testing.T) {
 		require.NoError(t, os.WriteFile(certFile, []byte("fake-cert"), 0o600))
 		require.NoError(t, os.WriteFile(keyFile, []byte("fake-key"), 0o600))
 
-		tlsOpt, err := constructTLSOptions(tmpDir, withCredentials(map[string]string{
-			CredentialCertFile: certFile,
-			CredentialKeyFile:  keyFile,
+		tlsOpt, err := constructTLSOptions(tmpDir, withCredentials(&helmcredsv1.HelmHTTPCredentials{
+			CertFile: certFile,
+			KeyFile:  keyFile,
 		}))
 		require.NoError(t, err)
 		assert.NotNil(t, tlsOpt)

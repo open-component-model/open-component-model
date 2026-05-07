@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	dlinternal "ocm.software/open-component-model/bindings/go/helm/internal/download"
 	"ocm.software/open-component-model/bindings/go/helm/internal/oci"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 )
 
@@ -33,22 +34,14 @@ type ReadOnlyChart struct {
 type Option func(options *Options)
 
 // WithCredentials sets the credentials to use for the remote repository.
-// The credentials could contain the following keys:
-// - "username": for basic authentication
-// - "password": for basic authentication
-// - "certFile": for TLS client certificate
-// - "keyFile": for TLS client private key
-// - "keyring": for keyring name to use
-// - "caCert": for CA certificate
-// - "caCertFile": for CA certificate file
-func WithCredentials(credentials map[string]string) Option {
+func WithCredentials(credentials *helmcredsv1.HelmHTTPCredentials) Option {
 	return func(options *Options) {
 		options.Credentials = credentials
 	}
 }
 
 type Options struct {
-	Credentials map[string]string
+	Credentials *helmcredsv1.HelmHTTPCredentials
 }
 
 // GetV1HelmBlob creates a ReadOnlyBlob from a v1.Helm specification.
@@ -161,7 +154,7 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 
 // newReadOnlyChartFromRemote downloads a chart from a remote Helm repository
 // and creates a ReadOnlyChart from it.
-func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBase string, credentials map[string]string) (result *ReadOnlyChart, err error) {
+func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBase string, credentials *helmcredsv1.HelmHTTPCredentials) (result *ReadOnlyChart, err error) {
 	opts := []dlinternal.Option{
 		dlinternal.WithCredentials(credentials),
 		//nolint:staticcheck // downward compatibility for helm input

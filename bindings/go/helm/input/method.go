@@ -9,6 +9,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
+	credsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
@@ -64,6 +65,9 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context,
 //
 // For local charts (a path specified): Returns only ProcessedBlobData (local access)
 // For remote charts (helmRepository specified): Returns both ProcessedResource (remote access) and ProcessedBlobData
+//
+// TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the ResourceInputMethod interface is updated.
+// https://github.com/open-component-model/ocm-project/issues/988
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
 	helm := v1.Helm{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &helm); err != nil {
@@ -80,7 +84,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		i.TempFolder = temp
 	}
 
-	helmBlob, chart, err := GetV1HelmBlob(ctx, helm, i.TempFolder, WithCredentials(credentials))
+	helmBlob, chart, err := GetV1HelmBlob(ctx, helm, i.TempFolder, WithCredentials(credsv1.FromDirectCredentials(credentials)))
 	if err != nil {
 		return nil, fmt.Errorf("error getting helm blob based on resource input specification: %w", err)
 	}

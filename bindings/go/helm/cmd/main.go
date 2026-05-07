@@ -61,11 +61,15 @@ func (h *HelmInputPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRe
 	return nil, nil
 }
 
+// ProcessResource TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the plugin contract interface is updated.
+// https://github.com/open-component-model/ocm-project/issues/988
 func (h *HelmInputPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceInputResponse, error) {
 	logger.Info("ProcessResource called for Helm input")
 	return processHelmResource(ctx, request, credentials, h.filesystemConfig)
 }
 
+// ProcessSource TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the plugin contract interface is updated.
+// https://github.com/open-component-model/ocm-project/issues/988
 func (h *HelmInputPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceInputResponse, error) {
 	return nil, fmt.Errorf("not implemented")
 }
