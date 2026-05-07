@@ -26,7 +26,7 @@ understand how it is built, and find the right starting point for your interests
 
   The core libraries, CLI, and controllers are written in Go (1.26+) and use [Task](https://taskfile.dev/) as their build
 runner. Contributions in other areas - such as language bindings, documentation, the website, or tooling - may use
-different languages and are equally welcome
+different languages and are equally welcome.
 {{</callout>}}
 
 ## What is OCM?
