@@ -14,14 +14,17 @@ understand how it is built, and find the right starting point for your interests
 
 {{<callout context="note" title="Prerequisites" icon="outline/info-circle">}}
 
-**To use the OCM CLI**
-Basic command-line experience and familiarity with container images or software packaging concepts.
+- **To use the OCM CLI**
 
-**To use the Kubernetes controllers**
-Working knowledge of Kubernetes (clusters, manifests, custom resources).
+  Basic command-line experience and familiarity with container images or software packaging concepts.
 
-**To contribute code**
-The core libraries, CLI, and controllers are written in Go (1.26+) and use [Task](https://taskfile.dev/) as their build
+- **To use the Kubernetes controllers**
+
+  Working knowledge of Kubernetes (clusters, manifests, custom resources).
+
+- **To contribute code**
+
+  The core libraries, CLI, and controllers are written in Go (1.26+) and use [Task](https://taskfile.dev/) as their build
 runner. Contributions in other areas - such as language bindings, documentation, the website, or tooling - may use
 different languages and are equally welcome
 {{</callout>}}
