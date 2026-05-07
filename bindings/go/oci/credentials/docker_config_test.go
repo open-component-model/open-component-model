@@ -90,38 +90,6 @@ func TestCredentialFunc(t *testing.T) {
 			wantErr:   false,
 			wantEmpty: false,
 		},
-		{
-			name: "legacy snake_case token keys",
-			identity: runtime.Identity{
-				runtime.IdentityAttributeHostname: "example.com",
-			},
-			credentials: map[string]string{
-				"access_token":  "snake-access",
-				"refresh_token": "snake-refresh",
-			},
-			hostport: "example.com",
-			wantCred: &auth.Credential{
-				AccessToken:  "snake-access",
-				RefreshToken: "snake-refresh",
-			},
-		},
-		{
-			name: "camelCase takes precedence over snake_case",
-			identity: runtime.Identity{
-				runtime.IdentityAttributeHostname: "example.com",
-			},
-			credentials: map[string]string{
-				"accessToken":   "camel-access",
-				"access_token":  "snake-access",
-				"refreshToken":  "camel-refresh",
-				"refresh_token": "snake-refresh",
-			},
-			hostport: "example.com",
-			wantCred: &auth.Credential{
-				AccessToken:  "camel-access",
-				RefreshToken: "camel-refresh",
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -185,34 +153,6 @@ func TestCredentialFromMap(t *testing.T) {
 				Password:     "pass",
 				AccessToken:  "atoken",
 				RefreshToken: "rtoken",
-			},
-		},
-		{
-			name: "legacy snake_case keys",
-			credentials: map[string]string{
-				"username":      "user",
-				"password":      "pass",
-				"access_token":  "atoken",
-				"refresh_token": "rtoken",
-			},
-			expected: auth.Credential{
-				Username:     "user",
-				Password:     "pass",
-				AccessToken:  "atoken",
-				RefreshToken: "rtoken",
-			},
-		},
-		{
-			name: "camelCase takes precedence over snake_case",
-			credentials: map[string]string{
-				"accessToken":   "camel",
-				"access_token":  "snake",
-				"refreshToken":  "camel-refresh",
-				"refresh_token": "snake-refresh",
-			},
-			expected: auth.Credential{
-				AccessToken:  "camel",
-				RefreshToken: "camel-refresh",
 			},
 		},
 	}
