@@ -7,24 +7,17 @@ import (
 	"os"
 
 	rsapem "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/pem"
-	"ocm.software/open-component-model/bindings/go/runtime"
+	rsacredentialsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
+	identityv1 "ocm.software/open-component-model/bindings/go/rsa/spec/identity/v1"
 )
 
-var IdentityTypeRSA = runtime.NewVersionedType("RSA", "v1alpha1")
-
-// Credential keys.
+// IdentityTypeRSA is the consumer identity type for RSA signing.
 //
-//nolint:gosec // these are not secrets
-const (
-	CredentialKeyPublicKeyPEM      = "public_key_pem" // inline PEM
-	CredentialKeyPublicKeyPEMFile  = CredentialKeyPublicKeyPEM + "_file"
-	CredentialKeyPrivateKeyPEM     = "private_key_pem" // inline PEM
-	CredentialKeyPrivateKeyPEMFile = CredentialKeyPrivateKeyPEM + "_file"
-)
+// Deprecated: Use identityv1.VersionedType or identityv1.V1Alpha1Type instead.
+var IdentityTypeRSA = identityv1.V1Alpha1Type
 
-func PrivateKeyFromCredentials(credentials map[string]string) (*rsa.PrivateKey, error) {
-	val := credentials[CredentialKeyPrivateKeyPEM]
-	b, err := loadBytes(val, CredentialKeyPrivateKeyPEMFile, credentials)
+func PrivateKeyFromCredentials(creds *rsacredentialsv1.RSACredentials) (*rsa.PrivateKey, error) {
+	b, err := loadBytes(creds.PrivateKeyPEM, creds.PrivateKeyPEMFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed loading private key PEM: %w", err)
 	}
@@ -34,15 +27,14 @@ func PrivateKeyFromCredentials(credentials map[string]string) (*rsa.PrivateKey, 
 	return rsapem.ParseRSAPrivateKeyPEM(b), nil
 }
 
-func PublicKeyFromCredentials(credentials map[string]string) (*rsapem.RSAPublicKeyPEM, error) {
-	val := credentials[CredentialKeyPublicKeyPEM]
-	b, err := loadBytes(val, CredentialKeyPublicKeyPEMFile, credentials)
+func PublicKeyFromCredentials(creds *rsacredentialsv1.RSACredentials) (*rsapem.RSAPublicKeyPEM, error) {
+	b, err := loadBytes(creds.PublicKeyPEM, creds.PublicKeyPEMFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed loading public key PEM: %w", err)
 	}
 	if len(b) == 0 {
 		// fallback: derive from private
-		pk, err := PrivateKeyFromCredentials(credentials)
+		pk, err := PrivateKeyFromCredentials(creds)
 		if err != nil {
 			return nil, err
 		}
@@ -56,23 +48,21 @@ func PublicKeyFromCredentials(credentials map[string]string) (*rsapem.RSAPublicK
 	return rsapem.ParseRSAPublicKeyPEM(b), nil
 }
 
-func CertificateChainFromCredentials(credentials map[string]string) ([]*x509.Certificate, error) {
-	val := credentials[CredentialKeyPublicKeyPEM]
-	b, err := loadBytes(val, CredentialKeyPublicKeyPEMFile, credentials)
+func CertificateChainFromCredentials(creds *rsacredentialsv1.RSACredentials) ([]*x509.Certificate, error) {
+	b, err := loadBytes(creds.PublicKeyPEM, creds.PublicKeyPEMFile)
 	if err != nil || len(b) == 0 {
 		return nil, nil
 	}
 	return rsapem.ParseCertificateChain(b)
 }
 
-// loadBytes loads from file or inline PEM
-func loadBytes(val string, fileKey string, credentials map[string]string) ([]byte, error) {
-	if val != "" {
+func loadBytes(inline, file string) ([]byte, error) {
+	if inline != "" {
 		// treat as literal bytes
-		return []byte(val), nil
+		return []byte(inline), nil
 	}
-	if path := credentials[fileKey]; path != "" {
-		return os.ReadFile(path)
+	if file != "" {
+		return os.ReadFile(file)
 	}
 	return nil, nil
 }
