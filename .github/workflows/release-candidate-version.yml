@@ -55,17 +55,14 @@ jobs:
       highest_previous_release_version: ${{ steps.latest.outputs.highest_previous_release_version }}
     steps:
       # Checkout the repository and target branch
+      # Full checkout (no sparse-checkout): actions/checkout auto-applies
+      # --filter=blob:none whenever sparse-checkout is set, and git-cliff (libgit2)
+      # cannot lazy-fetch blobs from a partial clone, erroring with "object not found"
+      # during rename detection on history walks.
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          sparse-checkout: |
-            ${{ inputs.component_path }}
-            .github/scripts
           fetch-depth: 0
-          # v6 defaults to --filter:blob:none. Then lazy-fetch fails to get blobs
-          # from a partial clone resulting in "object not found" when walking history.
-          # We force disable that filter logic here.
-          filter: ''
           ref: ${{ inputs.branch }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
