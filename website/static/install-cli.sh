@@ -10,9 +10,17 @@ set -euo pipefail
 DEFAULT_BIN_DIR="${HOME}/.local/bin"
 BIN_DIR=${1:-"${DEFAULT_BIN_DIR}"}
 GITHUB_REPO="open-component-model/open-component-model"
-# Empty: matches canonical product release tags (vX.Y.Z). Old per-component
-# tags (cli/vX.Y.Z) are not matched and not downloaded by this script.
+# Empty: matches canonical product release tags (vX.Y.Z) — the unified release scheme.
 TAG_PREFIX=""
+# TODO(unified-release-cutover): remove LEGACY_TAG_PREFIX and the fallback in
+# get_release_version once the first canonical v0.X.Y release has shipped
+# upstream. Until then, fall back to cli/v* tags so this script keeps working
+# against legacy releases.
+LEGACY_TAG_PREFIX="cli/"
+# EFFECTIVE_TAG_PREFIX is set during version discovery to whichever scheme actually
+# matched; download_binary uses it to construct the release-asset URL. Defaults to
+# TAG_PREFIX so manual OCM_VERSION overrides target canonical releases.
+EFFECTIVE_TAG_PREFIX="${TAG_PREFIX}"
 
 usage() {
     cat <<EOF
@@ -134,26 +142,37 @@ setup_tmp() {
     trap cleanup INT EXIT
 }
 
-# Extract a stable CLI version from a releases JSON file.
+# Extract a stable CLI version from a releases JSON file using a given tag prefix.
 # Returns the version string (e.g. "0.3.0") or empty if none found.
 extract_stable_version() {
-    grep '"tag_name":' "$1" \
-        | grep -E "\"${TAG_PREFIX}v[0-9]+\.[0-9]+\.[0-9]+\"" \
+    local prefix="$1"
+    local file="$2"
+    grep '"tag_name":' "$file" \
+        | grep -E "\"${prefix}v[0-9]+\.[0-9]+\.[0-9]+\"" \
         | head -1 \
-        | sed -E "s|.*\"${TAG_PREFIX}v([^\"]+)\".*|\1|" \
+        | sed -E "s|.*\"${prefix}v([^\"]+)\".*|\1|" \
         || true # grep returns non-zero when no lines match; prevent set -e from killing the subshell
 }
 
 # Find version from Github metadata
 get_release_version() {
     if [[ -z "${OCM_VERSION:-}" ]]; then
-        # Use the list endpoint so we can filter by TAG_PREFIX; /releases/latest may
+        # Use the list endpoint so we can filter by tag prefix; /releases/latest may
         # point to a non-CLI release (e.g. a website or docs tag published more recently).
         METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100"
         info "Downloading metadata ${METADATA_URL}"
         download "${TMP_METADATA}" "${METADATA_URL}"
 
-        OCM_VERSION=$(extract_stable_version "${TMP_METADATA}")
+        # Prefer canonical product release tags. Fall back to legacy cli/v* tags
+        # during the cutover. See LEGACY_TAG_PREFIX TODO at the top of this file.
+        OCM_VERSION=$(extract_stable_version "${TAG_PREFIX}" "${TMP_METADATA}")
+        if [[ -z "${OCM_VERSION}" ]]; then
+            OCM_VERSION=$(extract_stable_version "${LEGACY_TAG_PREFIX}" "${TMP_METADATA}")
+            if [[ -n "${OCM_VERSION}" ]]; then
+                EFFECTIVE_TAG_PREFIX="${LEGACY_TAG_PREFIX}"
+                info "No canonical v* releases found; falling back to legacy ${LEGACY_TAG_PREFIX}v* scheme"
+            fi
+        fi
     fi
 
     if [[ -n "${OCM_VERSION}" ]]; then
@@ -183,7 +202,7 @@ download() {
 # Download binary from Github URL
 # Assets follow the naming scheme: ocm-{OS}-{ARCH} (no version, no archive)
 download_binary() {
-    BIN_URL="https://github.com/${GITHUB_REPO}/releases/download/${TAG_PREFIX}v${OCM_VERSION}/ocm-${OS}-${ARCH}"
+    BIN_URL="https://github.com/${GITHUB_REPO}/releases/download/${EFFECTIVE_TAG_PREFIX}v${OCM_VERSION}/ocm-${OS}-${ARCH}"
     info "Downloading binary ${BIN_URL}"
     download "${TMP_BIN}" "${BIN_URL}"
 }

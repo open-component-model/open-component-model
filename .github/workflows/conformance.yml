@@ -181,8 +181,8 @@ jobs:
 
       - name: Validate required image references
         run: |
-          if [ -z "$CLI_IMAGE" ] && [ -z "$TOOLKIT_IMAGE" ]; then
-            echo "::error::Neither CLI_IMAGE nor TOOLKIT_IMAGE is set. At least one must be provided via inputs or artifacts."
+          if [ -z "$CLI_IMAGE" ] || [ -z "$TOOLKIT_IMAGE" ]; then
+            echo "::error::Both CLI_IMAGE and TOOLKIT_IMAGE must be set via inputs or artifacts."
             exit 1
           fi
           echo "CLI_IMAGE=${CLI_IMAGE:-(using Taskfile default)}"
