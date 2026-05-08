@@ -2,6 +2,16 @@
 import fs from "fs";
 import path from "path";
 
+// What is this and why is it here? GitHub has a hard limit on the length of the changelog.
+// We could use git-cliff's [limit_commits](https://git-cliff.org/docs/configuration/git#limit_commits) setting, however,
+// that is a _hard_ limit. What does that mean? It will basically cut off at a preconfiugred number.
+// Meaning, the user will have no idea that there are supposed to be more commits if a release genuinely has
+// more than 200 commits (or whatever number is configured).
+// Now, this is fine, it's not really complexity, but I'm willing to drop this if we think it's just overkill.
+// I ran into this while testing the entire flow and had too many releases and went over the 125Kb limit.
+const MAX_RELEASE_BODY_LENGTH = 120000;
+const TRUNCATION_NOTICE = "\n\n---\n\n*Release notes truncated to fit GitHub's 125000-character body limit. See the source changelog or `git log` for the complete history.*";
+
 // --------------------------
 // Helpers
 // --------------------------
@@ -40,16 +50,25 @@ export function prepareReleaseNotes(notesFile, rcTag, newReleaseTag) {
   const escapedRcTag = rcTag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const rcHeaderPattern = new RegExp(`^## \\[${escapedRcTag}\\].*$`, "m");
 
-  if (!rcHeaderPattern.test(notes)) {
-    // If no RC header found, prepend a final header instead of failing.
-    // This handles edge cases like manually edited release notes.
-    return `## [${newReleaseTag}] - promoted from [${rcTag}] on ${today}\n\n${notes}`;
+  if (rcHeaderPattern.test(notes)) {
+    notes = notes.replace(
+      rcHeaderPattern,
+      `## [${newReleaseTag}] - promoted from [${rcTag}] on ${today}`,
+    );
+  } else {
+    // No RC header found — prepend a final header instead of failing.
+    // Handles edge cases like manually edited release notes.
+    notes = `## [${newReleaseTag}] - promoted from [${rcTag}] on ${today}\n\n${notes}`;
   }
 
-  return notes.replace(
-    rcHeaderPattern,
-    `## [${newReleaseTag}] - promoted from [${rcTag}] on ${today}`,
-  );
+  // GitHub rejects release bodies > 125000 chars. Truncate with a notice if
+  // the content (typical for first-release-on-fresh-stream changelogs) tips over.
+  if (notes.length > MAX_RELEASE_BODY_LENGTH) {
+    const safeLength = MAX_RELEASE_BODY_LENGTH - TRUNCATION_NOTICE.length;
+    notes = notes.substring(0, safeLength) + TRUNCATION_NOTICE;
+  }
+
+  return notes;
 }
 
 /**

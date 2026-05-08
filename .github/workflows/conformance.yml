@@ -1,20 +1,25 @@
 name: Conformance
 
+# Reusable conformance run. Always invoked by pipeline.yml with both CLI
+# and controller artifacts, so we exercise a coherent pair end-to-end.
+# Standalone push/PR triggers were removed: changes to conformance/** are
+# picked up via pipeline.yml's paths filter.
+
 on:
   workflow_call:
     inputs:
       cli_image:
-        description: "CLI Docker image reference"
+        description: "CLI Docker image reference (artifact mode is preferred)"
         type: string
         required: false
         default: ""
       toolkit_image:
-        description: "OCI reference to the controller Helm chart (with optional version tag)"
+        description: "OCI reference to the controller Helm chart (artifact mode is preferred)"
         type: string
         required: false
         default: ""
       cli_artifact:
-        description: "Artifact name containing the CLI OCI layout (PR mode)"
+        description: "Artifact name containing the CLI OCI layout"
         type: string
         required: false
         default: ""
@@ -24,12 +29,12 @@ on:
         required: false
         default: ""
       toolkit_chart_artifact:
-        description: "Artifact name containing the packaged Helm chart .tgz (PR mode)"
+        description: "Artifact name containing the packaged Helm chart .tgz"
         type: string
         required: false
         default: ""
       toolkit_image_artifact:
-        description: "Artifact name containing the controller OCI layout (PR mode)"
+        description: "Artifact name containing the controller OCI layout"
         type: string
         required: false
         default: ""
@@ -38,18 +43,6 @@ on:
         type: string
         required: false
         default: ""
-  push:
-    branches:
-      - main
-    paths:
-      - conformance/**
-      - .github/workflows/conformance.yml
-  pull_request:
-    branches:
-      - main
-    paths:
-      - conformance/**
-      - .github/workflows/conformance.yml
 
 permissions:
   contents: read
@@ -60,7 +53,8 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  CONTROLLER_IMAGE_NAME: ${{ github.repository_owner }}/kubernetes/controller
+  # CLI_IMAGE_NAME and CONTROLLER_IMAGE_NAME are computed because
+  # GHCR does not like uppercased owner names.
 
 jobs:
   conformance:
@@ -73,6 +67,16 @@ jobs:
       matrix:
         arch: [arm64]
     steps:
+      - name: Compute image refs (lowercase owner)
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          OWNER="${OWNER,,}"
+          {
+            echo "CLI_IMAGE_NAME=${REGISTRY}/$OWNER/cli"
+            echo "CONTROLLER_IMAGE_NAME=$OWNER/kubernetes/controller"
+          } >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -116,7 +120,6 @@ jobs:
         if: ${{ inputs.cli_artifact != '' }}
         env:
           CLI_VERSION: ${{ inputs.cli_version }}
-          CLI_IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli
         run: |
           mkdir -p tmp/cli-oci-dir
           tar -xf tmp/cli-artifact/oci/cli.tar -C tmp/cli-oci-dir

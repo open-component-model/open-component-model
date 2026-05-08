@@ -131,36 +131,36 @@ assert.ok(
 // extractHighestPreviousReleaseVersion tests
 // ----------------------------------------------------------
 const mockReleases = [
-    { prerelease: false, tag_name: "cli/v0.1.0" },
-    { prerelease: true, tag_name: "cli/v0.1.1-rc.1" },
-    { prerelease: false, tag_name: "cli/v0.1.2" },
-    { prerelease: false, tag_name: "cli/v0.2.0" },
-    { prerelease: false, tag_name: "other/v1.0.0" },
-    { prerelease: true, tag_name: "cli/v0.3.0-rc.1" },
+    { prerelease: false, tag_name: "v0.1.0" },
+    { prerelease: true, tag_name: "v0.1.1-rc.1" },
+    { prerelease: false, tag_name: "v0.1.2" },
+    { prerelease: false, tag_name: "v0.2.0" },
+    { prerelease: false, tag_name: "kubernetes/controller/v1.0.0" }, // side tag, ignored
+    { prerelease: true, tag_name: "v0.3.0-rc.1" },
 ];
 
 assert.strictEqual(
-    extractHighestPreviousReleaseVersion(mockReleases, "cli/v"),
+    extractHighestPreviousReleaseVersion(mockReleases),
     "0.2.0",
-    "Should return highest non-prerelease version for prefix"
+    "Should return highest non-prerelease canonical version"
 );
 
 assert.strictEqual(
-    extractHighestPreviousReleaseVersion(mockReleases, "other/v"),
-    "1.0.0",
-    "Should filter by tag prefix"
-);
-
-assert.strictEqual(
-    extractHighestPreviousReleaseVersion([], "cli/v"),
+    extractHighestPreviousReleaseVersion([]),
     "",
     "Should return empty string for no releases"
 );
 
 assert.strictEqual(
-    extractHighestPreviousReleaseVersion([{ prerelease: true, tag_name: "cli/v0.1.0-rc.1" }], "cli/v"),
+    extractHighestPreviousReleaseVersion([{ prerelease: true, tag_name: "v0.1.0-rc.1" }]),
     "",
     "Should return empty string if only prereleases exist"
+);
+
+assert.strictEqual(
+    extractHighestPreviousReleaseVersion([{ prerelease: false, tag_name: "kubernetes/controller/v0.5.0" }]),
+    "",
+    "Should ignore prefixed Go-module side tags"
 );
 
 // ----------------------------------------------------------
@@ -195,22 +195,19 @@ assert.ok(
 // findPreviousTag tests
 // ----------------------------------------------------------
 
-// Normal case: finds the latest non-RC tag, excluding the new tag
+// Normal case: finds the latest non-RC canonical tag, excluding the new tag
 assert.strictEqual(
     findPreviousTag(
-        ["cli/v0.1.0", "cli/v0.1.0-rc.1", "cli/v0.2.0-rc.1"],
-        "cli/v0.2.0-rc.1"
+        ["v0.1.0", "v0.1.0-rc.1", "v0.2.0-rc.1"],
+        "v0.2.0-rc.1"
     ),
-    "cli/v0.1.0",
-    "Should find cli/v0.1.0 as previous tag"
+    "v0.1.0",
+    "Should find v0.1.0 as previous tag"
 );
 
 // First release: no previous non-RC tags exist
 assert.strictEqual(
-    findPreviousTag(
-        ["cli/v0.1.0-rc.1"],
-        "cli/v0.1.0-rc.1"
-    ),
+    findPreviousTag(["v0.1.0-rc.1"], "v0.1.0-rc.1"),
     "",
     "Should return empty string when only the new RC tag exists"
 );
@@ -218,26 +215,23 @@ assert.strictEqual(
 // Multiple stable versions: picks the highest
 assert.strictEqual(
     findPreviousTag(
-        ["cli/v0.1.0", "cli/v0.1.1", "cli/v0.2.0-rc.1"],
-        "cli/v0.2.0-rc.1"
+        ["v0.1.0", "v0.1.1", "v0.2.0-rc.1"],
+        "v0.2.0-rc.1"
     ),
-    "cli/v0.1.1",
+    "v0.1.1",
     "Should return the highest non-RC tag"
 );
 
 // Excludes the new tag even if it's a stable tag
 assert.strictEqual(
-    findPreviousTag(
-        ["cli/v0.1.0", "cli/v0.2.0"],
-        "cli/v0.2.0"
-    ),
-    "cli/v0.1.0",
+    findPreviousTag(["v0.1.0", "v0.2.0"], "v0.2.0"),
+    "v0.1.0",
     "Should exclude the new tag itself from results"
 );
 
 // Empty input
 assert.strictEqual(
-    findPreviousTag([], "cli/v0.1.0-rc.1"),
+    findPreviousTag([], "v0.1.0-rc.1"),
     "",
     "Should return empty string for empty tag list"
 );
@@ -245,38 +239,38 @@ assert.strictEqual(
 // Only RC tags (first release scenario)
 assert.strictEqual(
     findPreviousTag(
-        ["cli/v0.1.0-rc.1", "cli/v0.1.0-rc.2"],
-        "cli/v0.1.0-rc.3"
+        ["v0.1.0-rc.1", "v0.1.0-rc.2"],
+        "v0.1.0-rc.3"
     ),
     "",
     "Should return empty string when only RC tags exist"
 );
 
-// Controller tags: first release has no previous
+// Side tags (kubernetes/controller/*) are ignored when finding previous canonical
 assert.strictEqual(
     findPreviousTag(
-        ["kubernetes/controller/v0.2.0-rc.1"],
-        "kubernetes/controller/v0.2.0-rc.1"
+        ["v0.1.0", "kubernetes/controller/v0.1.0", "v0.2.0-rc.1"],
+        "v0.2.0-rc.1"
     ),
-    "",
-    "Controller first release should have no previous tag"
+    "v0.1.0",
+    "Should ignore prefixed Go-module side tags"
 );
 
 // Version sorting: 0.10.0 > 0.9.0 > 0.2.0
 assert.strictEqual(
     findPreviousTag(
-        ["cli/v0.2.0", "cli/v0.9.0", "cli/v0.10.0", "cli/v0.11.0-rc.1"],
-        "cli/v0.11.0-rc.1"
+        ["v0.2.0", "v0.9.0", "v0.10.0", "v0.11.0-rc.1"],
+        "v0.11.0-rc.1"
     ),
-    "cli/v0.10.0",
+    "v0.10.0",
     "Should sort versions numerically, not lexicographically"
 );
 
-// Ignore non-semver tags (e.g. experimental marker tags)
+// Ignore non-semver tags
 assert.strictEqual(
     findPreviousTag(
-        ["cli/v2-experimental", "cli/v0.2.0-rc.1"],
-        "cli/v0.2.0-rc.1"
+        ["v2-experimental", "v0.2.0-rc.1"],
+        "v0.2.0-rc.1"
     ),
     "",
     "Should ignore non-semver non-RC tags"
@@ -285,11 +279,11 @@ assert.strictEqual(
 // A stable tag newer than newTag must NOT be returned
 assert.strictEqual(
     findPreviousTag(
-        ["cli/v0.1.0", "cli/v0.3.0", "cli/v0.2.0-rc.1"],
-        "cli/v0.2.0-rc.1"
+        ["v0.1.0", "v0.3.0", "v0.2.0-rc.1"],
+        "v0.2.0-rc.1"
     ),
-    "cli/v0.1.0",
-    "Should not return cli/v0.3.0 because it is newer than the new tag"
+    "v0.1.0",
+    "Should not return v0.3.0 because it is newer than the new tag"
 );
 
 console.log("✅ All tests passed.");

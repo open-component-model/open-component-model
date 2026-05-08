@@ -3,8 +3,8 @@ import {
   tagExists,
   resolveTagCommit,
   createAndPushTag,
-  createRcTag,
-  createNewReleaseTag,
+  createRcTags,
+  createNewReleaseTags,
 } from "./create-tag.js";
 
 // ----------------------------------------------------------
@@ -116,62 +116,74 @@ function mockCore() {
 }
 
 // ----------------------------------------------------------
-// createRcTag tests
+// createRcTags tests
 // ----------------------------------------------------------
 
-// Missing env vars → setFailed
+// Missing CANONICAL_TAG → setFailed
 {
   const core = mockCore();
-  await withEnv({ TAG: undefined }, async () => {
-    await createRcTag({ core });
+  await withEnv({ CANONICAL_TAG: undefined, MODULE_TAG: undefined }, async () => {
+    await createRcTags({ core });
     assert.ok(core._state.failed?.includes("Missing"), `Expected setFailed, got: ${core._state.failed}`);
   });
 }
 
-// Tag already exists at HEAD → idempotent skip with pushed=true
+// Both tags created when neither exists
 {
   const core = mockCore();
-  await withEnv({ TAG: "controller/v0.1.0-rc.1" }, async () => {
+  await withEnv({ CANONICAL_TAG: "v0.1.0-rc.1", MODULE_TAG: "kubernetes/controller/v0.1.0-rc.1" }, async () => {
     const git = mockExecGit({
-      "refs/tags/controller/v0.1.0-rc.1": "abc123",
+      "rev-parse refs/tags/v0.1.0-rc.1": new Error("not found"),
+      "rev-parse refs/tags/kubernetes/controller/v0.1.0-rc.1": new Error("not found"),
+    });
+    await createRcTags({ core, execGit: git });
+    assert.strictEqual(core._state.failed, null);
+    assert.strictEqual(core._state.outputs.pushed, "true");
+    const tagCalls = git.calls.filter((c) => c[0] === "tag");
+    assert.strictEqual(tagCalls.length, 2, "Expected two tag commands (canonical + module)");
+  });
+}
+
+// Canonical-only when MODULE_TAG missing
+{
+  const core = mockCore();
+  await withEnv({ CANONICAL_TAG: "v0.1.0-rc.1", MODULE_TAG: undefined }, async () => {
+    const git = mockExecGit({
+      "rev-parse refs/tags/v0.1.0-rc.1": new Error("not found"),
+    });
+    await createRcTags({ core, execGit: git });
+    assert.strictEqual(core._state.failed, null);
+    assert.strictEqual(core._state.outputs.pushed, "true");
+    const tagCalls = git.calls.filter((c) => c[0] === "tag");
+    assert.strictEqual(tagCalls.length, 1, "Expected only canonical tag");
+  });
+}
+
+// Existing tag at HEAD is idempotent
+{
+  const core = mockCore();
+  await withEnv({ CANONICAL_TAG: "v0.1.0-rc.1", MODULE_TAG: undefined }, async () => {
+    const git = mockExecGit({
+      "refs/tags/v0.1.0-rc.1": "abc123",
       "rc.1^{commit}": "abc123",
       "rev-parse HEAD": "abc123",
     });
-    await createRcTag({ core, execGit: git });
+    await createRcTags({ core, execGit: git });
     assert.strictEqual(core._state.failed, null);
     assert.strictEqual(core._state.outputs.pushed, "true");
     assert.ok(core._state.logs.some((l) => l.includes("already exists")));
   });
 }
 
-// Tag does not exist → creates and pushes
-{
-  const core = mockCore();
-  await withEnv({ TAG: "controller/v0.1.0-rc.1" }, async () => {
-    const git = mockExecGit({
-      "rev-parse refs/tags/controller/v0.1.0-rc.1": new Error("not found"),
-    });
-    await createRcTag({ core, execGit: git });
-    assert.strictEqual(core._state.failed, null);
-    assert.strictEqual(core._state.outputs.pushed, "true");
-    assert.ok(core._state.logs.some((l) => l.includes("✅ Created RC tag")));
-    const tagCall = git.calls.find((c) => c[0] === "tag");
-    assert.ok(tagCall, "Expected a git tag command");
-    assert.ok(tagCall.includes("Release candidate controller/v0.1.0-rc.1"), "Expected simple RC message as tag annotation");
-    const pushCall = git.calls.find((c) => c[0] === "push");
-    assert.ok(pushCall, "Expected a git push command");
-  });
-}
-
 // ----------------------------------------------------------
-// createNewReleaseTag tests
+// createNewReleaseTags tests
 // ----------------------------------------------------------
 
-// Missing env vars → setFailed
+// Missing required env vars → setFailed
 {
   const core = mockCore();
-  await withEnv({ RC_TAG: undefined, NEW_RELEASE_TAG: undefined }, async () => {
-    await createNewReleaseTag({ core });
+  await withEnv({ RC_TAG: undefined, NEW_RELEASE_TAG: undefined, CONTROLLER_MODULE_PROMOTION_TAG: undefined }, async () => {
+    await createNewReleaseTags({ core });
     assert.ok(core._state.failed?.includes("Missing"));
   });
 }
@@ -179,70 +191,56 @@ function mockCore() {
 // RC tag cannot be resolved → setFailed
 {
   const core = mockCore();
-  await withEnv({ RC_TAG: "controller/v0.1.0-rc.1", NEW_RELEASE_TAG: "controller/v0.1.0" }, async () => {
-    const git = mockExecGit({
-      "rc.1^{commit}": new Error("not found"),
-    });
-    await createNewReleaseTag({ core, execGit: git });
+  await withEnv({ RC_TAG: "v0.1.0-rc.1", NEW_RELEASE_TAG: "v0.1.0", CONTROLLER_MODULE_PROMOTION_TAG: undefined }, async () => {
+    const git = mockExecGit({ "rc.1^{commit}": new Error("not found") });
+    await createNewReleaseTags({ core, execGit: git });
     assert.ok(core._state.failed !== null, "Expected setFailed on unresolvable RC tag");
   });
 }
 
-// New release tag exists at correct commit → idempotent success
+// Both new tags created when neither exists
 {
   const core = mockCore();
-  await withEnv({ RC_TAG: "controller/v0.1.0-rc.1", NEW_RELEASE_TAG: "controller/v0.1.0" }, async () => {
-    const git = mockExecGit({
-      "rc.1^{commit}": "abc1234567890",
-      "v0.1.0^{commit}": "abc1234567890",
-      "refs/tags/controller/v0.1.0": "something", // tagExists check
-    });
-    await createNewReleaseTag({ core, execGit: git });
-    assert.strictEqual(core._state.failed, null);
-    assert.ok(core._state.logs.some((l) => l.includes("idempotent rerun")));
-  });
-}
-
-// New release tag exists at wrong commit → setFailed
-{
-  const core = mockCore();
-  await withEnv({ RC_TAG: "controller/v0.1.0-rc.1", NEW_RELEASE_TAG: "controller/v0.1.0" }, async () => {
-    const git = mockExecGit({
-      "rc.1^{commit}": "abc1234567890",
-      "v0.1.0^{commit}": "def9876543210",
-      "refs/tags/controller/v0.1.0": "something", // tagExists check
-    });
-    await createNewReleaseTag({ core, execGit: git });
-    assert.ok(core._state.failed?.includes("already exists but points to"));
-  });
-}
-
-// New release tag does not exist → creates and pushes
-{
-  const core = mockCore();
-  await withEnv({ RC_TAG: "controller/v0.1.0-rc.1", NEW_RELEASE_TAG: "controller/v0.1.0" }, async () => {
-    // Use a custom mock that only throws for the tagExists rev-parse check
+  await withEnv({
+    RC_TAG: "v0.1.0-rc.1",
+    NEW_RELEASE_TAG: "v0.1.0",
+    CONTROLLER_MODULE_PROMOTION_TAG: "kubernetes/controller/v0.1.0",
+  }, async () => {
     const calls = [];
     const git = (args) => {
       calls.push(args);
       const key = args.join(" ");
-      // resolveTagCommit for RC tag
       if (key.includes("rc.1^{commit}")) return "abc1234567890";
-      // tagExists check for new release tag (rev-parse without ^{commit})
-      if (key === "rev-parse refs/tags/controller/v0.1.0") throw new Error("not found");
-      // All other commands (tag, push) succeed
+      if (key === "rev-parse refs/tags/v0.1.0") throw new Error("not found");
+      if (key === "rev-parse refs/tags/kubernetes/controller/v0.1.0") throw new Error("not found");
       return "";
     };
     git.calls = calls;
-    await createNewReleaseTag({ core, execGit: git });
+    await createNewReleaseTags({ core, execGit: git });
     assert.strictEqual(core._state.failed, null);
-    assert.ok(core._state.logs.some((l) => l.includes("✅ Created new release tag")));
-    const tagCall = calls.find((c) => c[0] === "tag");
-    assert.ok(tagCall, "Expected a git tag command");
-    assert.ok(tagCall.includes("abc1234567890"), "Tag should be created at RC commit");
-    const pushCall = calls.find((c) => c[0] === "push");
-    assert.ok(pushCall, "Expected a git push command");
+    assert.strictEqual(core._state.outputs.pushed, "true");
+    const tagCalls = calls.filter((c) => c[0] === "tag");
+    assert.strictEqual(tagCalls.length, 2, "Expected two tag commands (canonical + module)");
+    assert.ok(tagCalls.every((c) => c.includes("abc1234567890")), "Both tags should point at RC commit");
   });
 }
 
-console.log("✅ All create-tag tests passed.");
+// Wrong-commit existing tag → setFailed
+{
+  const core = mockCore();
+  await withEnv({
+    RC_TAG: "v0.1.0-rc.1",
+    NEW_RELEASE_TAG: "v0.1.0",
+    CONTROLLER_MODULE_PROMOTION_TAG: undefined,
+  }, async () => {
+    const git = mockExecGit({
+      "rc.1^{commit}": "abc1234567890",
+      "v0.1.0^{commit}": "def9876543210",
+      "refs/tags/v0.1.0": "something",
+    });
+    await createNewReleaseTags({ core, execGit: git });
+    assert.ok(core._state.failed?.includes("exists at"));
+  });
+}
+
+console.log("All create-tag tests passed.");

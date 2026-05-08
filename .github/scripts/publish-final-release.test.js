@@ -115,6 +115,24 @@ function mockCore() {
   assert.ok(result.includes("- Fix bug"), "Original body should be preserved");
 }
 
+// Truncates body when it exceeds GitHub's 125000-char release body limit
+{
+  const oversize = "## [v0.7.0-rc.1] - 2026-05-08\n\n" + "x".repeat(130000);
+  const dir = tmpDir({ "huge.md": oversize });
+  const result = prepareReleaseNotes(path.join(dir, "huge.md"), "v0.7.0-rc.1", "v0.7.0");
+  assert.ok(result.length <= 125000, `Expected length <= 125000, got: ${result.length}`);
+  assert.ok(result.endsWith("complete history.*"), "Expected truncation notice as suffix");
+  assert.ok(result.startsWith("## [v0.7.0]"), "Expected rewritten header to remain intact");
+}
+
+// Does not truncate body when within limit
+{
+  const fits = "## [v0.7.0-rc.1] - 2026-05-08\n\nSmall body";
+  const dir = tmpDir({ "small.md": fits });
+  const result = prepareReleaseNotes(path.join(dir, "small.md"), "v0.7.0-rc.1", "v0.7.0");
+  assert.ok(!result.includes("Release notes truncated"), "Expected no truncation notice for small body");
+}
+
 // ----------------------------------------------------------
 // getOrCreateRelease tests
 // ----------------------------------------------------------

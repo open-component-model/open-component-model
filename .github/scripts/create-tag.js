@@ -75,66 +75,98 @@ function defaultExecGit(args) {
 }
 
 // --------------------------
-// RC tag entrypoint
+// Multi-tag helpers
 // --------------------------
 
 /**
- * Create an RC tag with a simple annotation message.
- * Idempotent: skips if the tag already exists.
- * Sets output `pushed=true` on success or idempotent skip.
- *
- * Expects env vars: TAG
- *
- * @param {object} args
- * @param {object} args.core - GitHub Actions core module.
- * @param {function} [args.execGit] - Git executor (for testing).
+ * Create one annotated tag pointing at HEAD. Idempotent.
+ * Returns true if created or already at HEAD; false if a hard mismatch was reported.
  */
-export async function createRcTag({ core, execGit = defaultExecGit }) {
-  const { TAG: tag } = process.env;
-
-  if (!tag) {
-    core.setFailed("Missing TAG environment variable");
-    return;
-  }
-
+function tagAtHead({ core, tag, message, execGit }) {
   if (tagExists(tag, execGit)) {
     const existingSha = resolveTagCommit(tag, execGit);
     const headSha = execGit(["rev-parse", "HEAD"]);
     if (existingSha !== headSha) {
       core.setFailed(`Tag ${tag} already exists but points to ${existingSha.substring(0, 7)}, expected HEAD ${headSha.substring(0, 7)}`);
-      return;
+      return false;
     }
-    core.info(`Tag ${tag} already exists at HEAD, skipping (idempotent)`);
-    core.setOutput("pushed", "true");
-    return;
+    core.info(`Tag ${tag} already exists at HEAD (idempotent)`);
+    return true;
   }
-
-  const message = `Release candidate ${tag}`;
   createAndPushTag({ tag, commit: "HEAD", message, execGit });
-  core.setOutput("pushed", "true");
-  core.info(`✅ Created RC tag ${tag}`);
+  core.info(`Created tag ${tag}`);
+  return true;
+}
+
+/**
+ * Create one annotated tag pointing at a specific commit. Idempotent.
+ */
+function tagAtCommit({ core, tag, commit, message, execGit }) {
+  if (tagExists(tag, execGit)) {
+    const existingSha = resolveTagCommit(tag, execGit);
+    if (existingSha === commit) {
+      core.info(`Tag ${tag} already at expected commit (idempotent)`);
+      return true;
+    }
+    core.setFailed(`Tag ${tag} exists at ${existingSha.substring(0, 7)}, expected ${commit.substring(0, 7)}`);
+    return false;
+  }
+  createAndPushTag({ tag, commit, message, execGit });
+  core.info(`Created tag ${tag} at ${commit.substring(0, 7)}`);
+  return true;
 }
 
 // --------------------------
-// New release tag entrypoint
+// RC tags entrypoint (canonical + Go-module side tags)
 // --------------------------
 
 /**
- * Create a new release tag pointing to the same commit as the RC tag.
- * Idempotent: succeeds if the new release tag already points to the correct commit.
- * Fails if the new release tag exists but points to a different commit.
+ * Create RC tags for the unified release: the canonical v0.X.Y-rc.N and the
+ * kubernetes/controller/v0.X.Y-rc.N Go-module side tag. Both point at HEAD.
  *
- * Expects env vars: RC_TAG, NEW_RELEASE_TAG
- *
- * @param {object} args
- * @param {object} args.core - GitHub Actions core module.
- * @param {function} [args.execGit] - Git executor (for testing).
+ * Expects env vars: CANONICAL_TAG, MODULE_TAG (optional).
  */
-export async function createNewReleaseTag({ core, execGit = defaultExecGit }) {
-  const { RC_TAG: rcTag, NEW_RELEASE_TAG: newReleaseTag } = process.env;
+export async function createRcTags({ core, execGit = defaultExecGit }) {
+  const { CANONICAL_TAG: canonicalTag, MODULE_TAG: moduleTag } = process.env;
+
+  if (!canonicalTag) {
+    core.setFailed("Missing CANONICAL_TAG environment variable");
+    return;
+  }
+
+  const targets = [
+    { tag: canonicalTag, message: `Release candidate ${canonicalTag}` },
+  ];
+  if (moduleTag) {
+    targets.push({ tag: moduleTag, message: `Go-module side tag for ${canonicalTag}` });
+  }
+
+  for (const { tag, message } of targets) {
+    if (!tagAtHead({ core, tag, message, execGit })) return;
+  }
+
+  core.setOutput("pushed", "true");
+}
+
+// --------------------------
+// Final release tags entrypoint (canonical + Go-module side tags)
+// --------------------------
+
+/**
+ * Promote RC commit to final release tags: v0.X.Y and
+ * kubernetes/controller/v0.X.Y. Both point at the RC tag's commit.
+ *
+ * Expects env vars: RC_TAG, NEW_RELEASE_TAG, CONTROLLER_MODULE_PROMOTION_TAG (optional).
+ */
+export async function createNewReleaseTags({ core, execGit = defaultExecGit }) {
+  const {
+    RC_TAG: rcTag,
+    NEW_RELEASE_TAG: newReleaseTag,
+    CONTROLLER_MODULE_PROMOTION_TAG: moduleTag,
+  } = process.env;
 
   if (!rcTag || !newReleaseTag) {
-    core.setFailed("Missing RC_TAG or NEW_RELEASE_TAG environment variables");
+    core.setFailed("Missing RC_TAG or NEW_RELEASE_TAG");
     return;
   }
 
@@ -146,35 +178,16 @@ export async function createNewReleaseTag({ core, execGit = defaultExecGit }) {
     return;
   }
 
-  if (tagExists(newReleaseTag, execGit)) {
-    let existingSha;
-    try {
-      existingSha = resolveTagCommit(newReleaseTag, execGit);
-    } catch (err) {
-      core.setFailed(err.message);
-      return;
-    }
-
-    if (existingSha === rcSha) {
-      core.info(
-        `Tag ${newReleaseTag} already exists at expected commit ${rcSha.substring(0, 7)}, continuing (idempotent rerun)`,
-      );
-      core.setOutput("pushed", "true");
-      return;
-    }
-
-    core.setFailed(
-      `Tag ${newReleaseTag} already exists but points to ${existingSha.substring(0, 7)}, expected ${rcSha.substring(0, 7)}`,
-    );
-    return;
+  const targets = [
+    { tag: newReleaseTag, message: `Promote ${rcTag} to ${newReleaseTag}` },
+  ];
+  if (moduleTag) {
+    targets.push({ tag: moduleTag, message: `Go-module side tag for ${newReleaseTag}` });
   }
 
-  createAndPushTag({
-    tag: newReleaseTag,
-    commit: rcSha,
-    message: `Promote ${rcTag} to ${newReleaseTag}`,
-    execGit,
-  });
+  for (const { tag, message } of targets) {
+    if (!tagAtCommit({ core, tag, commit: rcSha, message, execGit })) return;
+  }
+
   core.setOutput("pushed", "true");
-  core.info(`✅ Created new release tag ${newReleaseTag} from ${rcTag} (${rcSha.substring(0, 7)})`);
 }
