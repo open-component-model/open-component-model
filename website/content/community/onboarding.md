@@ -83,9 +83,8 @@ graph TD
 {{<callout context="caution" title="Legacy repositories" icon="outline/alert-triangle">}}
 The [ocm](https://github.com/open-component-model/ocm) and
 [ocm-controller](https://github.com/open-component-model/ocm-controller) repositories are the previous generation of
-OCM tooling. They are no longer actively developed. All new work targets the mono-repo above. Read the
-[OCM v2 announcement]({{< relref "blog/ocm_v2_announcement.md" >}}) for background on why the project was completely
-rewritten.
+OCM tooling. They are maintained but no longer receive new features. All new development targets the mono-repo above.
+Read the [OCM v2 announcement]({{< relref "blog/ocm_v2_announcement.md" >}}) for background on the rewrite.
 {{</callout>}}
 
 ## Technical Layers
