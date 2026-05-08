@@ -55,7 +55,8 @@
 //
 // The graph supports typed credentials and identity → credential compatibility validation.
 // Each binding can define typed credential structs and register them with a [runtime.Scheme].
-// The graph receives these registries through dedicated interfaces configured in [Options]:
+// The graph receives these type registries through dedicated interfaces
+// configured in [Options]:
 //
 //   - [Options.CredentialTypeSchemeProvider] — provides a scheme for typed credential objects
 //   - [Options.IdentityTypeRegistry] — provides identity types and their accepted credential types
@@ -63,8 +64,8 @@
 // During ingestion, when an identity type has accepted credential types registered in the
 // [IdentityTypeRegistry], the graph validates that configured credential types are compatible.
 // Incompatible pairs produce warnings, not errors — credentials are still stored and ingestion
-// continues. This is deliberate: not all types may be registered up front, and plugins loaded
-// after ingestion may introduce types unknown at ingestion time.
+// continues. This is deliberate: during migration, not all types may be registered, and plugins
+// loaded after ingestion may introduce types unknown at ingestion time.
 //
 // To resolve typed credentials, use [Graph.ResolveTyped]:
 //
@@ -229,14 +230,14 @@
 //
 // # Usage
 //
-// Basic usage:
+// Basic usage with typed credential resolution:
 //
 //	config := &Config{...} // alternatively parse from yaml via serialization
 //	opts := Options{
-//	    CredentialPluginProvider:     myCredPluginProvider,     // optional: needed for custom credential types (e.g. Vault)
-//	    RepositoryPluginProvider:     myRepoPluginProvider,     // optional: needed for repository fallbacks
-//	    CredentialTypeSchemeProvider: myCredTypeSchemeProvider, // optional: enables typed credential deserialization
-//	    IdentityTypeRegistry:         myIdentityTypeRegistry,   // optional: enables identity ↔ credential validation
+//	    CredentialPluginProvider:       myCredPluginProvider,       // optional: needed for custom credential types (e.g. Vault)
+//	    RepositoryPluginProvider:       myRepoPluginProvider,       // optional: needed for repository fallbacks
+//	    CredentialTypeSchemeProvider:   myCredTypeSchemeProvider,   // optional: enables typed credential deserialization
+//	    IdentityTypeRegistry:          myIdentityTypeRegistry,      // optional: enables identity ↔ credential validation
 //	}
 //	graph, err := ToGraph(ctx, config, opts)
 //	if err != nil {
@@ -246,15 +247,15 @@
 //	// Typed resolution (returns runtime.Typed)
 //	typed, err := graph.ResolveTyped(ctx, identity)
 //
-//	// Map-based resolution (returns map[string]string)
+//	// Legacy resolution (deprecated, returns map[string]string)
 //	creds, err := graph.Resolve(ctx, identity)
 //
 // The package is designed to be thread-safe and can be used concurrently from
 // multiple goroutines. The DAG used in this package includes synchronization primitives
 // to ensure safe concurrent access.
 //
-// Both [Graph.Resolve] and [Graph.ResolveTyped] accept a [runtime.Identity] and return the
-// resolved credentials or an error.
+// The entrypoints to the graph are [Graph.ResolveTyped] (preferred) and [Graph.Resolve] (deprecated).
+// Both return the resolved credentials or an error.
 //
 // Error Handling:
 //   - [ErrNotFound]: Returned when no credentials could be found for the given identity
