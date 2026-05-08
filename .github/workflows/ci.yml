@@ -55,7 +55,7 @@ jobs:
               - '.github/workflows/ci.yml'
       - name: Discover Go Modules
         id: discover
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const { execSync } = require('child_process');
@@ -95,7 +95,7 @@ jobs:
           filters: ${{ steps.discover.outputs.filters }}
       - name: Filter JSONs Based on Changes
         id: filtered
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
           CHANGE_JSON: ${{ steps.changes.outputs.changes }}
@@ -134,7 +134,7 @@ jobs:
             }
       - name: Filter based on Testability
         id: filtered_test
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           MODULES_JSON: ${{ steps.filtered.outputs.modules_json }}
         with:
@@ -170,7 +170,7 @@ jobs:
             core.setOutput('unit_test_modules_json', JSON.stringify(unitTestModules));
             core.setOutput('integration_test_modules_json', JSON.stringify(integrationTestModules));
       - name: Generate Job Summary
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
           FILTERED_JSON: ${{ steps.filtered.outputs.modules_json }}
