@@ -1,4 +1,4 @@
-package handler
+package internal
 
 import (
 	"os"
@@ -12,16 +12,16 @@ func TestHasEnvKey(t *testing.T) {
 	t.Setenv("SIGSTORE_ID_TOKEN", "some-token")
 	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ghs_fakeRunnerToken")
 	env := os.Environ()
-	r.True(hasEnvKey(env, "SIGSTORE_ID_TOKEN"))
-	r.True(hasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN"))
+	r.True(HasEnvKey(env, "SIGSTORE_ID_TOKEN"))
+	r.True(HasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN"))
 }
 
 func TestHasEnvKey_EmptyValueTreatedAsAbsent(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 	env := []string{"SIGSTORE_ID_TOKEN=", "OTHER_KEY=value"}
-	r.False(hasEnvKey(env, "SIGSTORE_ID_TOKEN"))
-	r.True(hasEnvKey(env, "OTHER_KEY"))
+	r.False(HasEnvKey(env, "SIGSTORE_ID_TOKEN"))
+	r.True(HasEnvKey(env, "OTHER_KEY"))
 }
 
 func TestParseCosignVersionOutput(t *testing.T) {

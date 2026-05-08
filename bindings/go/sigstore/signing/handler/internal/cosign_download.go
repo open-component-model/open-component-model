@@ -1,4 +1,4 @@
-package handler
+package internal
 
 import (
 	"bufio"
@@ -240,13 +240,12 @@ func downloadAndVerifyWith(ctx context.Context, client *http.Client, url, destPa
 	hasher := sha256.New()
 	writer := io.MultiWriter(tmpFile, hasher)
 
-	if _, err := io.CopyN(writer, resp.Body, maxBinaryDownloadSize); err != nil && !errors.Is(err, io.EOF) {
+	n, err := io.CopyN(writer, resp.Body, maxBinaryDownloadSize+1)
+	if err != nil && !errors.Is(err, io.EOF) {
 		_ = tmpFile.Close()
 		return fmt.Errorf("download cosign binary: %w", err)
 	}
-
-	var probe [1]byte
-	if n, _ := resp.Body.Read(probe[:]); n > 0 {
+	if n > maxBinaryDownloadSize {
 		_ = tmpFile.Close()
 		return fmt.Errorf("cosign binary download exceeded size limit of %d bytes", maxBinaryDownloadSize)
 	}

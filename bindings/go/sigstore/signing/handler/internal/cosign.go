@@ -1,4 +1,4 @@
-package handler
+package internal
 
 import (
 	"bytes"
@@ -22,49 +22,70 @@ const (
 	cosignMinimumVersion    = "v3.0.4"
 )
 
-// cosignRunner is the internal seam between Handler and the cosign binary.
-// sign and verify correspond to the cosign sign-blob and verify-blob subcommands.
-// extraArgs are config-driven flags (e.g. --signing-config, --trusted-root).
-// env is the full environment passed to the subprocess.
-type cosignRunner interface {
-	sign(ctx context.Context, dataPath, bundlePath string, extraArgs, env []string) error
-	verify(ctx context.Context, dataPath, bundlePath string, extraArgs, env []string) error
-}
-
-// cosignBinary resolves and invokes the cosign binary.
+// CosignBinary resolves and invokes the cosign binary.
 // Resolution is attempted on every call until it succeeds once; after that the
 // resolved path is reused without locking. This makes resolution safe to retry
 // in controller reconcile loops where transient failures must not be permanent.
-type cosignBinary struct {
+type CosignBinary struct {
 	mu               sync.Mutex
 	binaryPath       string // non-empty after first successful resolution
-	httpClient       *http.Client
-	operationTimeout time.Duration // zero means use defaultOperationTimeout
+	HttpClient       *http.Client
+	OperationTimeout time.Duration // zero means use defaultOperationTimeout
+	ExecCosign       func(ctx context.Context, binaryPath string, args, env []string) error
+	LookPath         func(file string) (string, error)
 }
 
-func newCosignBinary(httpClient *http.Client) *cosignBinary {
-	b := &cosignBinary{httpClient: httpClient}
-	if b.httpClient == nil {
-		b.httpClient = &http.Client{Timeout: defaultOperationTimeout}
+func NewCosignBinary(httpClient *http.Client) *CosignBinary {
+	b := &CosignBinary{HttpClient: httpClient}
+	if b.HttpClient == nil {
+		b.HttpClient = &http.Client{Timeout: defaultOperationTimeout}
 	}
+	b.ExecCosign = b.execCosign
+	b.LookPath = exec.LookPath
 	return b
 }
 
-func (b *cosignBinary) resolveBinary(ctx context.Context) (string, error) {
+// Sign invokes "cosign sign-blob" on dataPath and writes the resulting Sigstore bundle to bundlePath.
+// Resolution of the cosign binary is attempted lazily and cached after first success.
+func (b *CosignBinary) Sign(ctx context.Context, dataPath, bundlePath string, extraArgs, env []string) error {
+	path, err := b.resolveBinary(ctx)
+	if err != nil {
+		return fmt.Errorf("resolve cosign binary: %w", err)
+	}
+	args := make([]string, 0, 5+len(extraArgs))
+	args = append(args, "sign-blob", dataPath, "--bundle", bundlePath, "--yes")
+	args = append(args, extraArgs...)
+	return b.ExecCosign(ctx, path, args, env)
+}
+
+// Verify invokes "cosign verify-blob" on dataPath using the Sigstore bundle at bundlePath.
+// Identity and issuer constraints are passed via extraArgs by the caller.
+func (b *CosignBinary) Verify(ctx context.Context, dataPath, bundlePath string, extraArgs, env []string) error {
+	path, err := b.resolveBinary(ctx)
+	if err != nil {
+		return fmt.Errorf("resolve cosign binary: %w", err)
+	}
+	args := make([]string, 0, 4+len(extraArgs))
+	args = append(args, "verify-blob", dataPath, "--bundle", bundlePath)
+	args = append(args, extraArgs...)
+	return b.ExecCosign(ctx, path, args, env)
+}
+
+func (b *CosignBinary) resolveBinary(ctx context.Context) (string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.binaryPath != "" {
 		return b.binaryPath, nil
 	}
-	path, err := exec.LookPath("cosign")
+	path, err := b.LookPath("cosign")
 	if err == nil {
-		if verr := b.checkVersion(ctx, path); verr != nil {
+		if verr := b.ensureMinimumVersion(ctx, path); verr != nil {
 			return "", verr
 		}
 		b.binaryPath = path
 		return path, nil
 	}
-	path, dlErr := ensureOrDownloadCosign(ctx, b.httpClient)
+	path, dlErr := ensureOrDownloadCosign(ctx, b.HttpClient)
 	if dlErr != nil {
 		return "", fmt.Errorf(
 			"cosign binary not found on PATH and auto-download failed: %w "+
@@ -75,30 +96,8 @@ func (b *cosignBinary) resolveBinary(ctx context.Context) (string, error) {
 	return path, nil
 }
 
-func (b *cosignBinary) sign(ctx context.Context, dataPath, bundlePath string, extraArgs, env []string) error {
-	path, err := b.resolveBinary(ctx)
-	if err != nil {
-		return err
-	}
-	args := make([]string, 0, 5+len(extraArgs))
-	args = append(args, "sign-blob", dataPath, "--bundle", bundlePath, "--yes")
-	args = append(args, extraArgs...)
-	return b.execCosign(ctx, path, args, env)
-}
-
-func (b *cosignBinary) verify(ctx context.Context, dataPath, bundlePath string, extraArgs, env []string) error {
-	path, err := b.resolveBinary(ctx)
-	if err != nil {
-		return err
-	}
-	args := make([]string, 0, 4+len(extraArgs))
-	args = append(args, "verify-blob", dataPath, "--bundle", bundlePath)
-	args = append(args, extraArgs...)
-	return b.execCosign(ctx, path, args, env)
-}
-
-func (b *cosignBinary) execCosign(ctx context.Context, binaryPath string, args, env []string) error {
-	timeout := b.operationTimeout
+func (b *CosignBinary) execCosign(ctx context.Context, binaryPath string, args, env []string) error {
+	timeout := b.OperationTimeout
 	if timeout == 0 {
 		timeout = defaultOperationTimeout
 	}
@@ -129,7 +128,7 @@ func (b *cosignBinary) execCosign(ctx context.Context, binaryPath string, args, 
 	return nil
 }
 
-func (b *cosignBinary) checkVersion(ctx context.Context, binaryPath string) error {
+func (b *CosignBinary) ensureMinimumVersion(ctx context.Context, binaryPath string) error {
 	detected, err := detectCosignVersion(ctx, binaryPath)
 	if err != nil {
 		slog.WarnContext(ctx, "could not determine cosign version on PATH; if signing fails, "+
@@ -190,7 +189,7 @@ func parseCosignVersionOutput(output string) (string, error) {
 	return "", errors.New("could not parse cosign version from output")
 }
 
-func hasEnvKey(env []string, key string) bool {
+func HasEnvKey(env []string, key string) bool {
 	prefix := key + "="
 	for _, kv := range env {
 		if strings.HasPrefix(kv, prefix) && len(kv) > len(prefix) {
