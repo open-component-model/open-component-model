@@ -163,7 +163,7 @@ jobs:
     steps:
       - name: Generate App Token
         id: get_token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
@@ -174,7 +174,9 @@ jobs:
           ref: ${{ github.ref_name }}
           token: ${{ steps.get_token.outputs.token }}
           fetch-tags: true
-          persist-credentials: false
+          # persist-credentials kept (intentionally) — create-tag.js does
+          # `git push origin refs/tags/...` which needs the app token persisted
+          # in .git/config to authenticate. Zizmor flags this; accepted.
 
       - name: Setup git config
         env:
@@ -405,7 +407,7 @@ jobs:
 
       - name: Generate App Token
         id: get_token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
@@ -417,7 +419,9 @@ jobs:
           ref: ${{ github.ref_name }}
           token: ${{ steps.get_token.outputs.token }}
           fetch-tags: true
-          persist-credentials: false
+          # persist-credentials kept (intentionally) — create-tag.js does
+          # `git push origin refs/tags/...` which needs the app token persisted
+          # in .git/config to authenticate. Zizmor flags this; accepted.
 
       - name: Setup git config
         env:
