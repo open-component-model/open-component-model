@@ -30,12 +30,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Find latest stable release
+      - name: Find latest stable CLI release
         id: find
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const { extractHighestPreviousReleaseVersion } = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
+            const tagPrefix = 'cli/v';
 
             const releases = (await github.rest.repos.listReleases({
               owner: context.repo.owner,
@@ -43,14 +44,14 @@ jobs:
               per_page: 100,
             })).data;
 
-            const version = extractHighestPreviousReleaseVersion(releases);
+            const version = extractHighestPreviousReleaseVersion(releases, tagPrefix);
             if (!version) {
-              core.setFailed('No stable release found');
+              core.setFailed('No stable CLI release found');
               return;
             }
 
             core.setOutput('version', version);
-            core.info(`Resolved latest stable release: v${version}`);
+            core.info(`Resolved latest stable CLI release: ${tagPrefix}${version}`);
 
   install:
     needs: resolve

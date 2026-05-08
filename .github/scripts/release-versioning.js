@@ -51,6 +51,8 @@ export default async function computeRcVersion({ core }) {
 
     const rcTag = `v${rcVersion}`;
     const promotionTag = `v${baseVersion}`;
+    const cliModuleRcTag = `cli/${rcTag}`;
+    const cliModulePromotionTag = `cli/${promotionTag}`;
     const controllerModuleRcTag = `kubernetes/controller/${rcTag}`;
     const controllerModulePromotionTag = `kubernetes/controller/${promotionTag}`;
 
@@ -69,6 +71,8 @@ export default async function computeRcVersion({ core }) {
     core.setOutput("new_version", rcVersion);
     core.setOutput("base_version", baseVersion);
     core.setOutput("promotion_tag", promotionTag);
+    core.setOutput("cli_module_rc_tag", cliModuleRcTag);
+    core.setOutput("cli_module_promotion_tag", cliModulePromotionTag);
     core.setOutput("controller_module_rc_tag", controllerModuleRcTag);
     core.setOutput("controller_module_promotion_tag", controllerModulePromotionTag);
     core.setOutput("changelog_range", changelogRange);
@@ -83,6 +87,8 @@ export default async function computeRcVersion({ core }) {
             ["Release Branch", releaseBranch],
             ["Next RC Tag", rcTag],
             ["Next Release Tag", promotionTag],
+            ["CLI Module RC Tag", cliModuleRcTag],
+            ["CLI Module Release Tag", cliModulePromotionTag],
             ["Controller Module RC Tag", controllerModuleRcTag],
             ["Controller Module Release Tag", controllerModulePromotionTag],
             ["Previous Release Tag", previousTag || "(none — first release)"],
@@ -272,7 +278,10 @@ export async function determineLatestRelease({ core, github, context }) {
         return;
     }
 
-    const highestPreviousReleaseVersion = extractHighestPreviousReleaseVersion(releases);
+    // Look at canonical `v*` releases — that's where the unified-flow GitHub
+    // release lives. Old `cli/v*` releases are ignored on purpose; they predate
+    // the unified flow and shouldn't influence the set_latest decision.
+    const highestPreviousReleaseVersion = extractHighestPreviousReleaseVersion(releases, 'v');
     const setLatest = shouldSetLatest(newReleaseVersion, highestPreviousReleaseVersion);
 
     core.setOutput('set_latest', setLatest ? 'true' : 'false');
@@ -294,33 +303,21 @@ export async function determineLatestRelease({ core, github, context }) {
 }
 
 /**
- * Extract the highest non-prerelease canonical version (vX.Y.Z) from releases.
+ * Extract the highest non-prerelease version from releases matching `tagPrefix`.
  *
- * Prefers canonical `v*` tags (the unified release scheme). Falls back to
- * legacy `cli/v*` tags if no canonical tags exist, so consumers keep working
- * during the cutover from per-component to unified releases.
- *
- * TODO(unified-release-cutover): remove the cli/v* fallback once the first
- * canonical v0.X.Y release has shipped upstream. Affected consumers:
- *   - website-live-test-install-script.yml::resolve
- *   - release.yml::prepare::Determine if release should be latest
+ * @param {Array<{prerelease: boolean, tag_name: string}>} releases
+ * @param {string} tagPrefix - e.g. "cli/v" to find releases like "cli/v0.5.0",
+ *   or "v" to find canonical releases like "v0.5.0".
+ * @returns {string} Highest version (e.g. "0.5.0") or "" if none.
  */
-export function extractHighestPreviousReleaseVersion(releases) {
-    const canonical = filterAndExtractVersions(releases, /^v\d+\.\d+\.\d+$/, /^v/);
-    if (canonical.length) return pickHighest(canonical);
-    const legacy = filterAndExtractVersions(releases, /^cli\/v\d+\.\d+\.\d+$/, /^cli\/v/);
-    if (!legacy.length) return '';
-    return pickHighest(legacy);
-}
-
-function filterAndExtractVersions(releases, tagRegex, prefixRegex) {
-    return releases
+export function extractHighestPreviousReleaseVersion(releases, tagPrefix) {
+    const escapedPrefix = tagPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const tagRegex = new RegExp(`^${escapedPrefix}\\d+\\.\\d+\\.\\d+$`);
+    const versions = releases
         .filter(r => !r.prerelease && tagRegex.test(r.tag_name))
-        .map(r => r.tag_name.replace(prefixRegex, ''))
+        .map(r => r.tag_name.replace(new RegExp(`^${escapedPrefix}`), ''))
         .filter(v => /^\d+\.\d+\.\d+$/.test(v));
-}
-
-function pickHighest(versions) {
+    if (!versions.length) return '';
     return versions.sort((a, b) => {
         if (isStableNewer(`v${a}`, `v${b}`)) return 1;
         if (isStableNewer(`v${b}`, `v${a}`)) return -1;

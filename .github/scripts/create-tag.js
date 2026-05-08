@@ -117,29 +117,45 @@ function tagAtCommit({ core, tag, commit, message, execGit }) {
 }
 
 // --------------------------
-// RC tags entrypoint (canonical + Go-module side tags)
+// Helpers
 // --------------------------
 
 /**
- * Create RC tags for the unified release: the canonical v0.X.Y-rc.N and the
- * kubernetes/controller/v0.X.Y-rc.N Go-module side tag. Both point at HEAD.
+ * Parse a comma-separated list of tags into an array, trimming whitespace and
+ * dropping empty entries. Returns [] for empty/missing input.
+ */
+function parseModuleTagList(raw) {
+  if (!raw) return [];
+  return raw.split(",").map(s => s.trim()).filter(Boolean);
+}
+
+// --------------------------
+// RC tags entrypoint (canonical + side tags)
+// --------------------------
+
+/**
+ * Create RC tags for the unified release: the canonical v0.X.Y-rc.N tag and
+ * any number of side tags (cli/v0.X.Y-rc.N, kubernetes/controller/v0.X.Y-rc.N,
+ * etc.) all pointing at HEAD.
  *
- * Expects env vars: CANONICAL_TAG, MODULE_TAG (optional).
+ * Expects env vars:
+ *   CANONICAL_TAG  Required. The user-facing release tag (e.g. "v0.7.0-rc.1").
+ *   MODULE_TAGS    Optional. Comma-separated list of side tags to emit on the
+ *                  same commit (e.g. "cli/v0.7.0-rc.1,kubernetes/controller/v0.7.0-rc.1").
  */
 export async function createRcTags({ core, execGit = defaultExecGit }) {
-  const { CANONICAL_TAG: canonicalTag, MODULE_TAG: moduleTag } = process.env;
+  const { CANONICAL_TAG: canonicalTag, MODULE_TAGS: moduleTagsRaw } = process.env;
 
   if (!canonicalTag) {
     core.setFailed("Missing CANONICAL_TAG environment variable");
     return;
   }
 
+  const moduleTags = parseModuleTagList(moduleTagsRaw);
   const targets = [
     { tag: canonicalTag, message: `Release candidate ${canonicalTag}` },
+    ...moduleTags.map(tag => ({ tag, message: `Side tag for ${canonicalTag}` })),
   ];
-  if (moduleTag) {
-    targets.push({ tag: moduleTag, message: `Go-module side tag for ${canonicalTag}` });
-  }
 
   for (const { tag, message } of targets) {
     if (!tagAtHead({ core, tag, message, execGit })) return;
@@ -149,20 +165,24 @@ export async function createRcTags({ core, execGit = defaultExecGit }) {
 }
 
 // --------------------------
-// Final release tags entrypoint (canonical + Go-module side tags)
+// Final release tags entrypoint (canonical + side tags)
 // --------------------------
 
 /**
- * Promote RC commit to final release tags: v0.X.Y and
- * kubernetes/controller/v0.X.Y. Both point at the RC tag's commit.
+ * Promote RC commit to final release tags: the canonical v0.X.Y plus any side
+ * tags supplied. All point at the RC tag's commit.
  *
- * Expects env vars: RC_TAG, NEW_RELEASE_TAG, CONTROLLER_MODULE_PROMOTION_TAG (optional).
+ * Expects env vars:
+ *   RC_TAG               Required. Source RC tag to resolve a commit from.
+ *   NEW_RELEASE_TAG      Required. The user-facing final tag (e.g. "v0.7.0").
+ *   MODULE_TAGS          Optional. Comma-separated list of side tags to emit
+ *                        at the same commit as NEW_RELEASE_TAG.
  */
 export async function createNewReleaseTags({ core, execGit = defaultExecGit }) {
   const {
     RC_TAG: rcTag,
     NEW_RELEASE_TAG: newReleaseTag,
-    CONTROLLER_MODULE_PROMOTION_TAG: moduleTag,
+    MODULE_TAGS: moduleTagsRaw,
   } = process.env;
 
   if (!rcTag || !newReleaseTag) {
@@ -178,12 +198,11 @@ export async function createNewReleaseTags({ core, execGit = defaultExecGit }) {
     return;
   }
 
+  const moduleTags = parseModuleTagList(moduleTagsRaw);
   const targets = [
     { tag: newReleaseTag, message: `Promote ${rcTag} to ${newReleaseTag}` },
+    ...moduleTags.map(tag => ({ tag, message: `Side tag for ${newReleaseTag}` })),
   ];
-  if (moduleTag) {
-    targets.push({ tag: moduleTag, message: `Go-module side tag for ${newReleaseTag}` });
-  }
 
   for (const { tag, message } of targets) {
     if (!tagAtCommit({ core, tag, commit: rcSha, message, execGit })) return;

@@ -131,58 +131,45 @@ assert.ok(
 // extractHighestPreviousReleaseVersion tests
 // ----------------------------------------------------------
 const mockReleases = [
-    { prerelease: false, tag_name: "v0.1.0" },
-    { prerelease: true, tag_name: "v0.1.1-rc.1" },
-    { prerelease: false, tag_name: "v0.1.2" },
-    { prerelease: false, tag_name: "v0.2.0" },
-    { prerelease: false, tag_name: "kubernetes/controller/v1.0.0" }, // side tag, ignored
-    { prerelease: true, tag_name: "v0.3.0-rc.1" },
+    { prerelease: false, tag_name: "cli/v0.1.0" },
+    { prerelease: true, tag_name: "cli/v0.1.1-rc.1" },
+    { prerelease: false, tag_name: "cli/v0.1.2" },
+    { prerelease: false, tag_name: "cli/v0.2.0" },
+    { prerelease: false, tag_name: "v1.0.0" },
+    { prerelease: true, tag_name: "cli/v0.3.0-rc.1" },
 ];
 
 assert.strictEqual(
-    extractHighestPreviousReleaseVersion(mockReleases),
+    extractHighestPreviousReleaseVersion(mockReleases, "cli/v"),
     "0.2.0",
-    "Should return highest non-prerelease canonical version"
+    "Should return highest non-prerelease cli/v* version"
 );
 
 assert.strictEqual(
-    extractHighestPreviousReleaseVersion([]),
+    extractHighestPreviousReleaseVersion(mockReleases, "v"),
+    "1.0.0",
+    "Should filter by tag prefix"
+);
+
+assert.strictEqual(
+    extractHighestPreviousReleaseVersion([], "cli/v"),
     "",
     "Should return empty string for no releases"
 );
 
 assert.strictEqual(
-    extractHighestPreviousReleaseVersion([{ prerelease: true, tag_name: "v0.1.0-rc.1" }]),
+    extractHighestPreviousReleaseVersion([{ prerelease: true, tag_name: "cli/v0.1.0-rc.1" }], "cli/v"),
     "",
     "Should return empty string if only prereleases exist"
 );
 
 assert.strictEqual(
-    extractHighestPreviousReleaseVersion([{ prerelease: false, tag_name: "kubernetes/controller/v0.5.0" }]),
+    extractHighestPreviousReleaseVersion(
+        [{ prerelease: false, tag_name: "kubernetes/controller/v0.5.0" }],
+        "v"
+    ),
     "",
-    "Should ignore prefixed Go-module side tags"
-);
-
-// Legacy fallback: when no canonical v* tags exist, fall back to cli/v* tags.
-// TODO(unified-release-cutover): drop these tests when the fallback is removed.
-assert.strictEqual(
-    extractHighestPreviousReleaseVersion([
-        { prerelease: false, tag_name: "cli/v0.6.1" },
-        { prerelease: false, tag_name: "cli/v0.6.2" },
-        { prerelease: true, tag_name: "cli/v0.7.0-rc.1" },
-    ]),
-    "0.6.2",
-    "Should fall back to legacy cli/v* tags when no canonical v* exist"
-);
-
-// Canonical takes precedence over legacy when both exist.
-assert.strictEqual(
-    extractHighestPreviousReleaseVersion([
-        { prerelease: false, tag_name: "cli/v0.6.2" },
-        { prerelease: false, tag_name: "v0.7.0" },
-    ]),
-    "0.7.0",
-    "Canonical v* should take precedence over legacy cli/v*"
+    "Should not match prefixed tags when looking for canonical v*"
 );
 
 // ----------------------------------------------------------
