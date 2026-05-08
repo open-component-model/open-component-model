@@ -127,7 +127,7 @@ commit signing yet, follow the [GitHub signing guide](https://docs.github.com/en
 - **Discuss large changes** - If you are planning significant or potentially controversial changes, please discuss them
   with the maintainers first - either in a GitHub issue, on
   [Slack](https://kubernetes.slack.com/archives/C05UWBE8R1D), or in the
-  [community call](/community/engagement#community-calls).
+  [community call](/community/#community-calls).
 {{< /step >}}
 
 {{< step >}}
@@ -201,7 +201,7 @@ AI-generated code or content can be contributed to this project if the following
 
 ## Getting Help
 
-See the [Community Engagement]({{< relref "community.md" >}}) page for communication channels, community calls, and
+See the [Community Engagement]({{< relref "_index.md" >}}) page for communication channels, community calls, and
 how to reach the team.
 
 ## Reporting Security Vulnerabilities

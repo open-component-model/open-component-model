@@ -1,7 +1,7 @@
 ---
 title: "How We Work"
 description: >-
-  Development rituals, meeting cadence, and decision-making processes
+  Meetings, rituals, project boards, and decision-making processes
   in the Open Component Model project.
 slug: "how-we-work"
 toc: true
@@ -67,7 +67,7 @@ We are working on making all meeting links publicly discoverable. In the meantim
 | Retrospective | Biweekly (Monday) | Reflect on what went well and what to improve (invited members only to maintain a safe space for feedback) |
 | Refinement | Weekly (Thursday) | Discuss items in "Needs Refinement" on the [Next Sprint](https://github.com/orgs/open-component-model/projects/10/views/21) view, clarify scope, and story-point |
 | Warroom | Every workday | Synchronous coordination on tasks or open topics |
-| [Community Call]({{< relref "community.md" >}}) | First Wednesday of the month | Project updates, demos, and open Q&A with the broader community |
+| [Community Call]({{< relref "_index.md" >}}) | First Wednesday of the month | Project updates, demos, and open Q&A with the broader community |
 | TSC Meeting | First Monday of the month | Governance decisions, SIG approvals ([meeting notes](https://github.com/open-component-model/open-component-model/tree/main/docs/steering/meeting-notes)) |
 
 ## Decision-Making
@@ -88,4 +88,4 @@ For full governance details, see the [Governance]({{< relref "governance/_index.
 ## Communication Channels
 
 For communication channels and how to reach the team, see the
-[Community Engagement]({{< relref "community.md" >}}) page.
+[Community Engagement]({{< relref "_index.md" >}}) page.

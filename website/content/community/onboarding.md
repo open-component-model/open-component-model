@@ -1,8 +1,8 @@
 ---
 title: "Developer Onboarding"
 description: >-
-  A guided introduction to the Open Component Model for new developers -
-  architecture, key concepts, and learning paths.
+  New to the project? Understand what OCM is, how the repo is structured,
+  and where to start.
 slug: "onboarding"
 toc: true
 hasMermaid: true
@@ -170,7 +170,7 @@ planning, and decision-making - see [How We Work]({{< relref "how-we-work.md" >}
 
 Ready to contribute or connect with the community?
 
-- **[Community Engagement]({{< relref "community.md" >}})** - Communication channels (Slack, Zulip), community calls,
+- **[Community Engagement]({{< relref "_index.md" >}})** - Communication channels (Slack, Zulip), community calls,
   and how to reach the team.
 - **[Contributing Guide]({{< relref "contributing.md" >}})** - Fork-and-pull workflow, pull request process, DCO
   sign-off, and guidelines for AI-generated code. This covers the general process for all repositories and links to
