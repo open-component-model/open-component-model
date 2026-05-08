@@ -316,6 +316,7 @@ hashers
 hashicorp
 hashicorpvault
 hasmermaid
+hidechildren
 heil
 helloworld
 helmchart
