@@ -46,7 +46,7 @@ Stay up to date with the latest OCM blog posts and announcements by subscribing 
 We hold regular community calls open to everyone:
 
 - **Frequency**: Every first Wednesday of the month
-- **Time**: 16:00-17:00 UTC (17:00-18:00 CET, 11:00-12:00 EST, 08:00-09:00 PST)
+- **Time**: 17:00-18:00 (Europe/Berlin)
 - **Duration**: 1 hour
 - **Location**: [Zoom Link](https://zoom-lfx.platform.linuxfoundation.org/meeting/97987153840?password=fe2c3bf0-6a99-4e75-b62d-f1918154254e)
 
