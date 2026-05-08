@@ -54,6 +54,7 @@ jobs:
       - name: Verify artifacts
         env:
           CONSTRUCTOR_FILE: ${{ github.workspace }}/constructor/component-constructor.yaml
+          BUILD_ARTIFACT_NAME: ${{ inputs.build_artifact_name }}
         shell: bash
         run: |
           set -euo pipefail
@@ -61,7 +62,7 @@ jobs:
           echo "Verifying artifacts..."
           test -f "${CONSTRUCTOR_FILE}" || (echo "❌ component-constructor missing: ${CONSTRUCTOR_FILE}" && exit 1)
 
-          if [ -n "${{ inputs.build_artifact_name }}" ]; then
+          if [ -n "${BUILD_ARTIFACT_NAME}" ]; then
             test -d "${GITHUB_WORKSPACE}/constructor/resources/bin" || (echo "❌ bin directory missing after artifact download" && exit 1)
           fi
 
@@ -133,7 +134,7 @@ jobs:
         run: npm ci --prefix repo/.github/scripts
 
       - name: Summarize published component version
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           OCM_REPOSITORY: ${{ inputs.ocm_repository }}
           CONSTRUCTOR_FILE: ${{ github.workspace }}/constructor/component-constructor.yaml
