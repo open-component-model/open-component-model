@@ -21,6 +21,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
+	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal"
 	sigcredentials "ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal/credentials"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 )
@@ -39,7 +40,7 @@ const (
 // Handler implements signing.Handler by delegating to the cosign CLI.
 // Safe for concurrent use. Binary resolution happens lazily on first Sign or Verify call.
 type Handler struct {
-	runner  cosignRunner
+	runner  *internal.CosignBinary
 	tempDir string
 }
 
@@ -59,9 +60,7 @@ func WithTempDir(dir string) HandlerOption {
 // timeout is used.
 func WithHTTPClient(c *http.Client) HandlerOption {
 	return func(h *Handler) {
-		if b, ok := h.runner.(*cosignBinary); ok {
-			b.httpClient = c
-		}
+		h.runner.HttpClient = c
 	}
 }
 
@@ -69,30 +68,27 @@ func WithHTTPClient(c *http.Client) HandlerOption {
 // The timeout is applied via context.WithTimeout before exec. If not set, defaults to 3 minutes.
 func WithOperationTimeout(d time.Duration) HandlerOption {
 	return func(h *Handler) {
-		if b, ok := h.runner.(*cosignBinary); ok {
-			b.operationTimeout = d
-		}
+		h.runner.OperationTimeout = d
+	}
+}
+
+// WithExecCosign overrides the function used to execute cosign subprocesses.
+func WithExecCosign(fn func(ctx context.Context, binaryPath string, args, env []string) error) HandlerOption {
+	return func(h *Handler) {
+		h.runner.ExecCosign = fn
+	}
+}
+
+// WithLookPath overrides the function used to locate the cosign binary on PATH.
+func WithLookPath(fn func(string) (string, error)) HandlerOption {
+	return func(h *Handler) {
+		h.runner.LookPath = fn
 	}
 }
 
 // New creates a Handler. Binary resolution happens lazily on first Sign or Verify call.
 func New(opts ...HandlerOption) *Handler {
-	h := &Handler{runner: newCosignBinary(nil)}
-	for _, opt := range opts {
-		opt(h)
-	}
-	if h.tempDir == "" {
-		h.tempDir = os.TempDir()
-	}
-	return h
-}
-
-//nolint:unused // used in handler_test.go (same package); linter has tests:false
-func newWithRunner(r cosignRunner, opts ...HandlerOption) *Handler {
-	if r == nil {
-		panic("newWithRunner: runner must not be nil")
-	}
-	h := &Handler{runner: r}
+	h := &Handler{runner: internal.NewCosignBinary(nil)}
 	for _, opt := range opts {
 		opt(h)
 	}
@@ -131,7 +127,7 @@ func (h *Handler) Sign(
 	}
 
 	env := os.Environ()
-	if !hasEnvKey(env, "SIGSTORE_ID_TOKEN") && !hasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN") {
+	if !internal.HasEnvKey(env, "SIGSTORE_ID_TOKEN") && !internal.HasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN") {
 		token := strings.TrimSpace(creds[CredentialKeyOIDCToken])
 		if token == "" {
 			return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required: " +
@@ -171,7 +167,7 @@ func (h *Handler) Sign(
 		extraArgs = append(extraArgs, "--trusted-root", trustedRootPath)
 	}
 
-	if err := h.runner.sign(ctx, dataPath, bundlePath, extraArgs, env); err != nil {
+	if err := h.runner.Sign(ctx, dataPath, bundlePath, extraArgs, env); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("cosign sign: %w", err)
 	}
 
@@ -293,7 +289,7 @@ func (h *Handler) Verify(
 		extraArgs = append(extraArgs, "--private-infrastructure")
 	}
 
-	if err := h.runner.verify(ctx, dataPath, bundlePath, extraArgs, os.Environ()); err != nil {
+	if err := h.runner.Verify(ctx, dataPath, bundlePath, extraArgs, os.Environ()); err != nil {
 		return err
 	}
 
