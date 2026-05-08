@@ -302,7 +302,11 @@ export function extractHighestPreviousReleaseVersion(releases) {
         .map(r => r.tag_name.replace(/^v/, ''))
         .filter(v => /^\d+\.\d+\.\d+$/.test(v));
     if (!versions.length) return '';
-    return versions.sort((a, b) => isStableNewer(`v${a}`, `v${b}`) ? 1 : -1).pop();
+    return versions.sort((a, b) => {
+        if (isStableNewer(`v${a}`, `v${b}`)) return 1;
+        if (isStableNewer(`v${b}`, `v${a}`)) return -1;
+        return 0;
+    }).pop();
 }
 
 export function shouldSetLatest(newReleaseVersion, highestPreviousReleaseVersion) {

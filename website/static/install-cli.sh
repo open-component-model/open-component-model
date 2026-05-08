@@ -10,7 +10,9 @@ set -euo pipefail
 DEFAULT_BIN_DIR="${HOME}/.local/bin"
 BIN_DIR=${1:-"${DEFAULT_BIN_DIR}"}
 GITHUB_REPO="open-component-model/open-component-model"
-TAG_PREFIX="cli/"
+# Empty: matches canonical product release tags (vX.Y.Z). Old per-component
+# tags (cli/vX.Y.Z) are not matched and not downloaded by this script.
+TAG_PREFIX=""
 
 usage() {
     cat <<EOF

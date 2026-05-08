@@ -120,7 +120,7 @@ function mockCore() {
   const oversize = "## [v0.7.0-rc.1] - 2026-05-08\n\n" + "x".repeat(130000);
   const dir = tmpDir({ "huge.md": oversize });
   const result = prepareReleaseNotes(path.join(dir, "huge.md"), "v0.7.0-rc.1", "v0.7.0");
-  assert.ok(result.length <= 125000, `Expected length <= 125000, got: ${result.length}`);
+  assert.strictEqual(result.length, 120000, `Expected exact MAX_RELEASE_BODY_LENGTH (120000), got: ${result.length}`)
   assert.ok(result.endsWith("complete history.*"), "Expected truncation notice as suffix");
   assert.ok(result.startsWith("## [v0.7.0]"), "Expected rewritten header to remain intact");
 }

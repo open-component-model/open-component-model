@@ -21,23 +21,21 @@ permissions:
 jobs:
   resolve:
     runs-on: ubuntu-latest
-    name: Resolve latest stable CLI release
+    name: Resolve latest stable release
     outputs:
       version: ${{ steps.find.outputs.version }}
-      tag: ${{ steps.find.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
 
-      - name: Find latest stable CLI release
+      - name: Find latest stable release
         id: find
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const { extractHighestPreviousReleaseVersion } = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
-            const tagPrefix = 'cli/v';
 
             const releases = (await github.rest.repos.listReleases({
               owner: context.repo.owner,
@@ -45,15 +43,14 @@ jobs:
               per_page: 100,
             })).data;
 
-            const version = extractHighestPreviousReleaseVersion(releases, tagPrefix);
+            const version = extractHighestPreviousReleaseVersion(releases);
             if (!version) {
-              core.setFailed('No stable CLI release found');
+              core.setFailed('No stable release found');
               return;
             }
 
             core.setOutput('version', version);
-            core.setOutput('tag', `${tagPrefix}${version}`);
-            core.info(`Resolved latest stable CLI release: ${tagPrefix}${version}`);
+            core.info(`Resolved latest stable release: v${version}`);
 
   install:
     needs: resolve

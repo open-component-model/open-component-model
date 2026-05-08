@@ -1,8 +1,8 @@
 # git-cliff ~ configuration file
 # https://git-cliff.org/docs/configuration
 #
-# A unofied cliff.toml. Replaces the per-component configs at cli/cliff.toml
-# and kubernetes/controller/cliff.toml. I copied over whatever was revelvant
+# A unified cliff.toml. Replaces the per-component configs at cli/cliff.toml
+# and kubernetes/controller/cliff.toml. I copied over whatever was relevant
 # since both are now included in the release.
 
 [changelog]
@@ -38,7 +38,7 @@ curl -sfL https://ocm.software/install-cli.sh | bash
 You can also run the OCM CLI in a container without installing it:
 
 ```bash
-docker run -t ghcr.io/open-component-model/cli:latest --help
+docker run --rm -t ghcr.io/open-component-model/cli:latest --help
 ```
 
 See the [container image guide](https://ocm.software/docs/how-to/how-to-use-the-ocm-cli-container-image/) for more details.
