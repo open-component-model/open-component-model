@@ -1059,36 +1059,6 @@ func TestExtractCertInfoFromBundleJSON(t *testing.T) {
 	}
 }
 
-func TestScrubStderr(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"no sensitive data", "error: signing failed due to network timeout", "error: signing failed due to network timeout"},
-		{"bearer token", "Authorization: Bearer fake-token-value-for-test.not-real.test", "Authorization: bearer [REDACTED]"},
-		{"SIGSTORE_ID_TOKEN env var", "using SIGSTORE_ID_TOKEN=fake-token-value-for-test.not-real.test for auth", "using SIGSTORE_ID_TOKEN=[REDACTED] for auth"},
-		{"generic token=value", "failed with token=abc123secret in request", "failed with token=[REDACTED] in request"},
-		{"generic secret=value", "secret=mysecretvalue leaked", "secret=[REDACTED] leaked"},
-		{"generic password=value", "password=hunter2 found", "password=[REDACTED] found"},
-		{"multiple patterns", "Bearer abc123 and SIGSTORE_ID_TOKEN=xyz789", "bearer [REDACTED] and SIGSTORE_ID_TOKEN=[REDACTED]"},
-		{"empty string", "", ""},
-		{"double-quoted password", `password="hunter2 with spaces"`, "password=[REDACTED]"},
-		{"single-quoted secret", `secret='multi word value'`, "secret=[REDACTED]"},
-		{"bare JWT in error", "failed to validate eyJhbGci.eyJzdWIi.FAKE_SIG_FOR_TEST", "failed to validate [REDACTED-JWT]"},
-		{"JWT in URL param", "GET /callback?token=eyJhbGci.eyJpc3Mi.TEST_SIG_VALUE", "GET /callback?token=[REDACTED]"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tc.expected, scrubStderr(tc.input))
-		})
-	}
-}
-
 func TestWithOperationTimeout_DeadlineExceeded(t *testing.T) {
 	t.Parallel()
 

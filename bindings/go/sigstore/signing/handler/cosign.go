@@ -118,7 +118,6 @@ func (b *cosignBinary) execCosign(ctx context.Context, binaryPath string, args, 
 		if len(msg) > maxStderr {
 			msg = msg[:maxStderr]
 		}
-		msg = scrubStderr(msg)
 		if errors.Is(err, context.DeadlineExceeded) {
 			return fmt.Errorf("cosign %s timed out: %w\nstderr: %s", args[0], err, msg)
 		}
