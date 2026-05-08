@@ -1,48 +1,30 @@
 package runtime
 
 import (
-	"encoding/json"
 	"fmt"
 )
 
-// TypedToIdentity projects any Typed value (concrete struct, in-process plugin
-// type, or Raw bytes from an out-of-process plugin) into the canonical
-// matchable Identity map view.
-//
-// The projection round-trips the value through JSON, so it is uniformly
-// available to any Typed regardless of whether the host has the concrete Go
-// type registered. This is what allows Raw values produced by external
-// (possibly non-Go) plugins to participate in identity matching alongside
-// native typed structs.
-//
-// The projection is intentionally strict: a Typed whose JSON form is not a
-// flat object of string-valued fields returns an error. Non-string scalars,
-// arrays, and nested objects all surface as a contract violation rather than
-// silently mismatching at compare time.
-//
-// TypedToIdentity is the only bridge needed for matching. It is not a
-// general-purpose serialization API; use json.Marshal for that.
+var scheme = NewScheme(WithAllowUnknown())
+
+// TypedToIdentity projects a Typed to its matchable Identity view via JSON,
+// so native structs and Raw values from external plugins match uniformly.
+// Errors if the JSON form is not a flat object of string fields.
 func TypedToIdentity(t Typed) (Identity, error) {
 	if t == nil {
 		return nil, fmt.Errorf("cannot project nil Typed to Identity")
 	}
-	data, err := json.Marshal(t)
-	if err != nil {
-		return nil, fmt.Errorf("could not marshal typed value to JSON: %w", err)
+	if id, ok := t.(Identity); ok {
+		return id, nil
+	}
+	raw := Raw{}
+	if err := scheme.Convert(t, &raw); err != nil {
+		return nil, fmt.Errorf("could not convert Typed to Raw: %w", err)
 	}
 
-	raw := map[string]json.RawMessage{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("typed value does not project to a flat object: %w", err)
+	identity := Identity{}
+	if err := scheme.Convert(&raw, &identity); err != nil {
+		return nil, fmt.Errorf("could not convert Raw to Identity: %w", err)
 	}
 
-	identity := make(Identity, len(raw))
-	for key, value := range raw {
-		var s string
-		if err := json.Unmarshal(value, &s); err != nil {
-			return nil, fmt.Errorf("typed value field %q is not a string: %w", key, err)
-		}
-		identity[key] = s
-	}
 	return identity, nil
 }
