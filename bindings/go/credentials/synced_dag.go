@@ -86,18 +86,8 @@ func nodeID(typed runtime.Typed) string {
 	return fmt.Sprintf("%v", typed)
 }
 
-// typedMatch checks whether identity a matches identity b.
-// Both sides are projected to the canonical Identity view via
-// runtime.TypedToIdentity, allowing native typed structs, in-process plugin
-// types, and Raw values from out-of-process or non-Go plugins to participate
-// uniformly. A projection failure on either side returns false rather than
-// panicking, preserving graph-walk liveness for opaque values.
-func typedMatch(a, b runtime.Typed) bool {
-	return runtime.TypedMatch(a, b)
-}
-
 // matchAnyNode attempts to locate the graph vertex corresponding to the provided identity.
-// If an exact match is not found, it falls back to a wildcard search using typedMatch.
+// If an exact match is not found, it falls back to a wildcard search using untime.TypedMatch.
 // This wildcard search is the reason there can be undiscovered cycles at runtime.
 func (g *syncedDag) matchAnyNode(identity runtime.Typed) (*dag.Vertex[string], error) {
 	g.dagMu.RLock()
@@ -111,7 +101,7 @@ func (g *syncedDag) matchAnyNode(identity runtime.Typed) (*dag.Vertex[string], e
 		if !ok {
 			continue
 		}
-		if typedMatch(identity, existing) {
+		if runtime.TypedMatch(identity, existing) {
 			return vertex, nil
 		}
 	}
@@ -141,14 +131,14 @@ func (g *syncedDag) addIdentity(identity runtime.Typed) error {
 		if !ok {
 			continue
 		}
-		if typedMatch(identity, existing) {
+		if runtime.TypedMatch(identity, existing) {
 			if err := g.dag.AddEdge(vertex.ID, node, map[string]any{
 				"kind": "cyclic-only",
 			}); err != nil {
 				return err
 			}
 		}
-		if typedMatch(existing, identity) {
+		if runtime.TypedMatch(existing, identity) {
 			if err := g.dag.AddEdge(node, vertex.ID, map[string]any{
 				"kind": "cyclic-only",
 			}); err != nil {
