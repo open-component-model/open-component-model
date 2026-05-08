@@ -38,7 +38,7 @@ OCM Controller environments for more details.
 ### Community & Contributors
 
 This release we had a total of **{{ github.contributors | length }}** contributors!
-If you want to engage with us, check our [community page](https://ocm.software/community/engagement/)!
+If you want to engage with us, check our [community page](https://ocm.software/community/)!
 {% endif %}
 """
 
