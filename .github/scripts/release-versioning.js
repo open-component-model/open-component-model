@@ -295,13 +295,32 @@ export async function determineLatestRelease({ core, github, context }) {
 
 /**
  * Extract the highest non-prerelease canonical version (vX.Y.Z) from releases.
+ *
+ * Prefers canonical `v*` tags (the unified release scheme). Falls back to
+ * legacy `cli/v*` tags if no canonical tags exist, so consumers keep working
+ * during the cutover from per-component to unified releases.
+ *
+ * TODO(unified-release-cutover): remove the cli/v* fallback once the first
+ * canonical v0.X.Y release has shipped upstream. Affected consumers:
+ *   - website-live-test-install-script.yml::resolve
+ *   - release.yml::prepare::Determine if release should be latest
  */
 export function extractHighestPreviousReleaseVersion(releases) {
-    const versions = releases
-        .filter(r => !r.prerelease && /^v\d+\.\d+\.\d+$/.test(r.tag_name))
-        .map(r => r.tag_name.replace(/^v/, ''))
+    const canonical = filterAndExtractVersions(releases, /^v\d+\.\d+\.\d+$/, /^v/);
+    if (canonical.length) return pickHighest(canonical);
+    const legacy = filterAndExtractVersions(releases, /^cli\/v\d+\.\d+\.\d+$/, /^cli\/v/);
+    if (!legacy.length) return '';
+    return pickHighest(legacy);
+}
+
+function filterAndExtractVersions(releases, tagRegex, prefixRegex) {
+    return releases
+        .filter(r => !r.prerelease && tagRegex.test(r.tag_name))
+        .map(r => r.tag_name.replace(prefixRegex, ''))
         .filter(v => /^\d+\.\d+\.\d+$/.test(v));
-    if (!versions.length) return '';
+}
+
+function pickHighest(versions) {
     return versions.sort((a, b) => {
         if (isStableNewer(`v${a}`, `v${b}`)) return 1;
         if (isStableNewer(`v${b}`, `v${a}`)) return -1;

@@ -524,6 +524,8 @@ jobs:
           #     If a future change ships a tag-only pin (no @<digest>), this regex would
           #     clear the whole string and could mask real drift between RC and final.
           for dir in "$work/rc" "$work/final"; do
+            grep -q '@sha256:' "$dir/values.yaml" \
+              || { echo "::error::$dir/values.yaml is not digest-pinned"; exit 1; }          
             yq -i 'del(.version, .appVersion)' "$dir/Chart.yaml"
             yq -i '.manager.image.tag |= sub("^[^@]*", "")' "$dir/values.yaml"
           done
