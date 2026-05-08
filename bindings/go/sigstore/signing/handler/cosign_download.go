@@ -32,7 +32,7 @@ var platformBinaryName = cosignBinaryName(runtime.GOOS, runtime.GOARCH)
 var pinnedDownloadURL = cosignDownloadURL(cosignVersion, runtime.GOOS, runtime.GOARCH)
 
 // pinnedChecksumsURL is the resolved checksums URL for the pinned cosign version.
-var pinnedChecksumsURL = cosignChecksumsURL(cosignVersion)
+var pinnedChecksumsURL = fmt.Sprintf(cosignChecksumsURLFmt, cosignVersion)
 
 func parseCosignVersion() string {
 	for _, line := range strings.Split(envFile, "\n") {
@@ -43,15 +43,12 @@ func parseCosignVersion() string {
 	panic("COSIGN_VERSION not found in .env")
 }
 
+const cosignChecksumsURLFmt = "https://github.com/sigstore/cosign/releases/download/%s/cosign_checksums.txt"
+
 // cosignDownloadURL returns the GitHub release download URL for the given
 // cosign version and platform.
 func cosignDownloadURL(version, goos, goarch string) string {
 	return fmt.Sprintf("https://github.com/sigstore/cosign/releases/download/%s/%s", version, cosignBinaryName(goos, goarch))
-}
-
-// cosignChecksumsURL returns the URL for the checksums file of the given version.
-func cosignChecksumsURL(version string) string {
-	return fmt.Sprintf("https://github.com/sigstore/cosign/releases/download/%s/cosign_checksums.txt", version)
 }
 
 // cosignBinaryName returns the platform-specific binary name.
