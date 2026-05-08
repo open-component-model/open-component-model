@@ -1,0 +1,343 @@
+name: Pipeline
+
+# This is a reusable release building block. It has a lot of triggers because
+# this pipeline is responsible for running builds, verifications, e2e tests
+# and the conformance test.
+#
+# It has the following stages: build_cli, build_controller (these are executed in parallel)
+# from here, if success, goes on to conformance and then finally, if required, publish_*.
+# Conformance is _ALWAYS_ a gate to pushing: if it failed there will be nothing in GHCR.
+
+on:
+  push:
+    branches:
+      - main
+      - 'releases/v**'
+    paths:
+      - 'cli/**'
+      - 'kubernetes/controller/**'
+      - 'conformance/**'
+      - '.github/workflows/cli.yml'
+      - '.github/workflows/kubernetes-controller.yml'
+      - '.github/workflows/conformance.yml'
+      - '.github/workflows/pipeline.yml'
+      - '.env'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'cli/**'
+      - 'kubernetes/controller/**'
+      - 'conformance/**'
+      - '.github/workflows/cli.yml'
+      - '.github/workflows/kubernetes-controller.yml'
+      - '.github/workflows/conformance.yml'
+      - '.github/workflows/pipeline.yml'
+      - '.env'
+  workflow_call:
+    inputs:
+      ref:
+        description: "Ref to build (branch, tag, or sha). Defaults to caller's ref."
+        type: string
+        required: false
+      build_version:
+        description: "Override version embedded in the CLI binary via ldflags. Used by release.yml to embed the base version (e.g. v0.5.0) in RC builds."
+        type: string
+        required: false
+    outputs:
+      cli_artifact_name:
+        description: "CLI artifact name (binaries + OCI layout) from the build job."
+        value: ${{ jobs.build_cli.outputs.artifact_name }}
+      cli_version:
+        description: "Version computed/embedded for the CLI build."
+        value: ${{ jobs.build_cli.outputs.version }}
+      cli_image_digest:
+        description: "Digest of the pushed CLI OCI image (when published)."
+        value: ${{ jobs.publish_cli.outputs.image_digest }}
+      controller_version:
+        description: "Version computed for the controller build."
+        value: ${{ jobs.build_controller.outputs.version }}
+      controller_chart_artifact_name:
+        description: "Name of the chart artifact (with digest) produced by publish."
+        value: ${{ jobs.publish_controller.outputs.chart_artifact_name }}
+      controller_image_digest:
+        description: "Digest of the pushed controller image."
+        value: ${{ jobs.publish_controller.outputs.image_digest }}
+      controller_chart_digest:
+        description: "Digest of the pushed Helm chart."
+        value: ${{ jobs.publish_controller.outputs.chart_digest }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # === This is new: workflow_call wiring ===
+  build_cli:
+    name: CLI
+    uses: ./.github/workflows/cli.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    with:
+      ref: ${{ inputs.ref }}
+      build_version: ${{ inputs.build_version }}
+
+  build_controller:
+    name: Controller
+    uses: ./.github/workflows/kubernetes-controller.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      ref: ${{ inputs.ref }}
+  # === workflow_call end ===
+
+  # === This is new, but it replaces conformance and conformance-pr/published in cli.yml + kubernetes-controller.yml ===
+  conformance:
+    name: Conformance
+    needs: [build_cli, build_controller]
+    uses: ./.github/workflows/conformance.yml
+    with:
+      cli_artifact: ${{ needs.build_cli.outputs.artifact_name }}
+      cli_version: ${{ needs.build_cli.outputs.version }}
+      toolkit_image_artifact: ${{ needs.build_controller.outputs.artifact_name }}
+      toolkit_chart_artifact: ${{ needs.build_controller.outputs.chart_pr_artifact }}
+      toolkit_version: ${{ needs.build_controller.outputs.version }}
+  # === end replace ===
+
+  # === New this part is a copy from cli.yml::build::branch-check + kubernetes-controller.yml::build::branch-check ===
+  # Changes include things for the modified tag regex.
+  decide_publish:
+    name: Decide Publish
+    needs: conformance
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      publish: ${{ steps.check.outputs.publish }}
+      ref: ${{ steps.check.outputs.ref }}
+    steps:
+      - name: Decide
+        id: check
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+        with:
+          script: |
+            const ref = process.env.INPUT_REF || process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
+            core.setOutput('ref', ref);
+            if (context.eventName === 'pull_request') {
+              core.setOutput('publish', 'false');
+              return;
+            }
+            const defaultBranch = context.payload.repository?.default_branch || 'main';
+            const eligible = ref === defaultBranch || /^v\d+\.\d+(\.\d+)?(-.*)?$/.test(ref);
+            core.setOutput('publish', eligible ? 'true' : 'false');
+  # === cli.yml::build::branch-check + kubernetes-controller.yml::build::branch-check ===
+
+  # === This is from cli.yml::publish verbatim a date on conformance ===
+  publish_cli:
+    name: Publish CLI
+    needs: [build_cli, conformance, decide_publish]
+    if: ${{ needs.decide_publish.outputs.publish == 'true' }}
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      image_digest: ${{ steps.digest.outputs.digest }}
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Download CLI artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ needs.build_cli.outputs.artifact_name }}
+
+      - name: Set LAYOUT
+        env:
+          LAYOUT: ${{ github.workspace }}/oci/cli.tar
+        run: |
+          test -e "$LAYOUT" || exit 1
+          echo "LAYOUT=$LAYOUT" >> "$GITHUB_ENV"
+
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
+
+      - name: Discover tag from layout
+        run: |
+          TAG=$(oras repo tags --oci-layout ${LAYOUT} | head -n 1)
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set TARGET_REPO
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: echo "TARGET_REPO=${REGISTRY}/${OWNER,,}/cli" >> "$GITHUB_ENV"
+
+      - name: Push OCI image
+        run: oras cp --from-oci-layout "${LAYOUT}:${TAG}" "${TARGET_REPO}:${TAG}"
+
+      - name: Resolve digest
+        id: digest
+        run: echo "digest=$(oras resolve ${TARGET_REPO}:${TAG})" >> "$GITHUB_OUTPUT"
+
+      - name: Attest OCI image
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          subject-name: ${{ env.TARGET_REPO }}
+          push-to-registry: true
+  # === cli.yml::publish ===
+
+  # === Same as above but for Kubernetes publish. ===
+  publish_controller:
+    name: Publish Controller
+    needs: [build_controller, conformance, decide_publish]
+    if: ${{ needs.decide_publish.outputs.publish == 'true' }}
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      image_digest: ${{ steps.image-digest.outputs.digest }}
+      chart_digest: ${{ steps.chart-digest.outputs.digest }}
+      chart_artifact_name: controller-chart-${{ needs.build_controller.outputs.version }}
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    env:
+      LOCATION: kubernetes/controller
+      REF: ${{ needs.decide_publish.outputs.ref }}
+    steps:
+      - name: Compute image refs (lowercase owner)
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          OWNER="${OWNER,,}"
+          {
+            echo "IMAGE_NAME=ghcr.io/$OWNER/kubernetes/controller"
+            echo "CHART_REPO=ghcr.io/$OWNER/kubernetes/controller/chart"
+          } >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ inputs.ref || github.head_ref || github.ref_name }}
+          sparse-checkout: |
+            ${{ env.LOCATION }}
+            Taskfile.yml
+            .env
+          persist-credentials: false
+
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: 3.x
+
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
+
+      - name: Install Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v4.1.3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download controller image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ needs.build_controller.outputs.artifact_name }}
+          path: ${{ env.LOCATION }}/tmp/oci
+
+      - name: Extract OCI layout
+        working-directory: ${{ env.LOCATION }}
+        run: task oci/extract TAR_PATH=tmp/oci/controller.tar OUTPUT_DIR=tmp/oci-dir
+
+      - name: Push image from OCI layout
+        working-directory: ${{ env.LOCATION }}
+        env:
+          VERSION: ${{ needs.build_controller.outputs.version }}
+        run: oras cp --from-oci-layout tmp/oci-dir:${VERSION} ${IMAGE_NAME}:${VERSION}
+
+      - name: Tag image with main floating tag
+        if: ${{ env.REF == 'main' }}
+        env:
+          VERSION: ${{ needs.build_controller.outputs.version }}
+        run: oras tag "${IMAGE_NAME}:${VERSION}" "main"
+
+      - name: Resolve image digest
+        id: image-digest
+        env:
+          VERSION: ${{ needs.build_controller.outputs.version }}
+        run: echo "digest=$(oras resolve ${IMAGE_NAME}:${VERSION})" >> "$GITHUB_OUTPUT"
+
+      - name: Attest image
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          subject-digest: ${{ steps.image-digest.outputs.digest }}
+          subject-name: ${{ env.IMAGE_NAME }}
+          push-to-registry: true
+
+      - name: Package and push chart with digest
+        working-directory: ${{ env.LOCATION }}
+        env:
+          VERSION: ${{ needs.build_controller.outputs.version }}
+          IMAGE_DIGEST: ${{ steps.image-digest.outputs.digest }}
+        run: |
+          task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_DIGEST="${IMAGE_DIGEST}" IMAGE_REPOSITORY="${IMAGE_NAME}"
+          task helm/push VERSION="${VERSION}" REGISTRY="${IMAGE_NAME}"
+
+      - name: Tag chart with main floating tag
+        if: ${{ env.REF == 'main' }}
+        env:
+          VERSION: ${{ needs.build_controller.outputs.version }}
+        run: oras tag "${CHART_REPO}:${VERSION}" "main"
+
+      - name: Resolve chart digest
+        id: chart-digest
+        env:
+          VERSION: ${{ needs.build_controller.outputs.version }}
+        run: echo "digest=$(oras resolve ${CHART_REPO}:${VERSION})" >> "$GITHUB_OUTPUT"
+
+      - name: Attest chart
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          subject-digest: ${{ steps.chart-digest.outputs.digest }}
+          subject-name: ${{ env.CHART_REPO }}
+          push-to-registry: true
+
+      - name: Upload chart artifact (with digest)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: controller-chart-${{ needs.build_controller.outputs.version }}
+          retention-days: 1
+          path: ${{ env.LOCATION }}/dist/chart-*.tgz
+          if-no-files-found: error
+  # === end ===

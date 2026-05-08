@@ -1,24 +1,9 @@
 name: Kubernetes Controller
 
 on:
-  # Trigger workflow on pushes to main or release branches, and on PRs targeting main.
-  # Pushes on 'releases/v**' don't automatically publish,
-  # they just run the build and e2e test to validate the release branch.
-  push:
-    branches:
-      - main
-      - 'releases/v**'
-    paths:
-      - kubernetes/controller/**/*
-      - .github/workflows/kubernetes-controller.yml
-      - .env
-  pull_request:
-    branches:
-      - main
-    paths:
-      - kubernetes/controller/**/*
-      - .github/workflows/kubernetes-controller.yml
-      - .env
+  # Reusable build step. Invoked by pipeline.yml. Runs verify-chart, build,
+  # and E2E. Publishing has been moved to pipeline.yml so that conformance
+  # can gate it.
   workflow_call:
     inputs:
       artifact_name:
@@ -31,20 +16,17 @@ on:
         required: false
     outputs:
       artifact_name:
-        description: "The artifact name that was built."
+        description: "The OCI image artifact name."
         value: ${{ jobs.build.outputs.artifact_name }}
       artifact_id:
-        description: "The artifact id that was built."
+        description: "The OCI image artifact id."
         value: ${{ jobs.build.outputs.artifact_id }}
-      image_digest:
-        description: "The digest of the pushed controller image (sha256:...)."
-        value: ${{ jobs.publish.outputs.image_digest }}
-      chart_digest:
-        description: "The digest of the pushed Helm chart (sha256:...)."
-        value: ${{ jobs.publish.outputs.chart_digest }}
-      chart_artifact_name:
-        description: "The artifact name containing the packaged Helm chart."
-        value: ${{ jobs.publish.outputs.chart_artifact_name }}
+      version:
+        description: "Version computed for this build."
+        value: ${{ jobs.build.outputs.version }}
+      chart_pr_artifact:
+        description: "Name of the chart artifact (without digest) used for conformance."
+        value: controller-chart-pr
 
 env:
   LOCATION: "kubernetes/controller"
@@ -56,9 +38,10 @@ env:
 permissions:
   contents: read # for actions/checkout to fetch code
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+# No concurrency block: this workflow is workflow_call-only. The caller
+# (pipeline.yml) controls concurrency for the whole chain. Declaring our own
+# would deadlock on `Pipeline-<ref>` because github.workflow inherits the
+# caller's name in workflow_call context.
 
 jobs:
   verify-chart:
@@ -104,8 +87,12 @@ jobs:
       artifact_name: ${{ env.ARTIFACT_NAME }}
       artifact_id: ${{ steps.upload-artifacts.outputs.artifact-id }}
       version: ${{ steps.version.outputs.version }}
-      should_publish: ${{ steps.branch-check.outputs.should_publish }}
     steps:
+      - name: Compute image refs (lowercase owner)
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: echo "IMAGE_NAME=${REGISTRY}/${OWNER,,}/kubernetes/controller" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -143,7 +130,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           REF: ${{ env.REF }}
-          TAG_PREFIX: "kubernetes/controller/v"
+          TAG_PREFIX: "v"
           # Kubernetes label values must be ≤63 chars (RFC 1123). We need to ensure the version fits within this limit
           # to be used as a label value in the Helm chart. helm.sh/chart is "<chart-name>-<version>"
           # Current chart name is "chart" = 6 chars including hyphen; 63 - 6 = 57 max version length.
@@ -154,28 +141,10 @@ jobs:
             const script = await import('${{ github.workspace }}/.github/scripts/compute-version.js');
             await script.default({ core });
 
-      - name: Determine publish eligibility
-        id: branch-check
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        env:
-          REF: ${{ env.REF }}
-        with:
-          script: |
-            const ref = process.env.REF;
-            const defaultBranch = context.payload.repository?.default_branch || 'main';
-            // Publish for: main or release tags.
-            // Release branches (releases/v*) only build+test.
-            core.setOutput(
-              'should_publish',
-              ref === defaultBranch ||
-              /^kubernetes\/controller\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(ref)
-            );
-
       - name: Build Multi-Arch Image to OCI Layout
         working-directory: ${{ env.LOCATION }}
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
         run: |
           task docker-build/multi-arch \
             CONTROLLER_IMG="${IMAGE_NAME}:${VERSION}" \
@@ -186,7 +155,6 @@ jobs:
         working-directory: ${{ env.LOCATION }}
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
         run: |
           task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_REPOSITORY="${IMAGE_NAME}"
 
@@ -223,6 +191,11 @@ jobs:
       contents: read
       actions: read
     steps:
+      - name: Compute image refs (lowercase owner)
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: echo "IMAGE_NAME=${REGISTRY}/${OWNER,,}/kubernetes/controller" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -281,7 +254,6 @@ jobs:
         working-directory: ${{ env.LOCATION }}
         env:
           VERSION: ${{ needs.build.outputs.version }}
-          IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
         run: |
           mkdir -p tmp/docker
           skopeo --override-arch ${{ matrix.arch }} --override-os linux copy \
@@ -314,156 +286,3 @@ jobs:
           echo "::group::Helm release"
           helm list -n ocm-k8s-toolkit-system
           echo "::endgroup::"
-
-  # Run conformance tests against the built image before publishing
-  conformance:
-    name: Conformance
-    needs: build
-    uses: ./.github/workflows/conformance.yml
-    with:
-      toolkit_chart_artifact: controller-chart-pr
-      toolkit_image_artifact: ${{ needs.build.outputs.artifact_name }}
-      toolkit_version: ${{ needs.build.outputs.version }}
-
-  publish:
-    name: Publish and Attest Image & Chart
-    runs-on: ubuntu-24.04-arm
-    needs: [build, E2E, conformance]
-    if: ${{ needs.build.outputs.should_publish == 'true' }}
-    outputs:
-      image_digest: ${{ steps.image-digest.outputs.digest }}
-      chart_digest: ${{ steps.chart-digest.outputs.digest }}
-      chart_artifact_name: controller-chart-${{ needs.build.outputs.version }}
-      chart_version: ${{ needs.build.outputs.version }}
-    permissions:
-      contents: read
-      actions: read
-      packages: write
-      id-token: write
-      attestations: write
-      artifact-metadata: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          repository: ${{ env.CHECKOUT_REPO }}
-          ref: ${{ env.REF }}
-          sparse-checkout: |
-            ${{ env.LOCATION }}
-            Taskfile.yml
-            .env
-          persist-credentials: false
-
-      - name: Install Task
-        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          version: 3.x
-
-      - name: Setup ORAS
-        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
-
-      - name: Install Helm
-        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
-        with:
-          version: v4.1.3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: ${{ needs.build.outputs.artifact_name }}
-          path: ${{ env.LOCATION }}/tmp/oci
-
-      - name: Extract OCI layout from tar
-        working-directory: ${{ env.LOCATION }}
-        run: task oci/extract TAR_PATH=tmp/oci/controller.tar OUTPUT_DIR=tmp/oci-dir
-
-      - name: Push image from OCI layout
-        working-directory: ${{ env.LOCATION }}
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-          IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
-        run: |
-          oras cp --from-oci-layout tmp/oci-dir:${VERSION} ${IMAGE_NAME}:${VERSION}
-
-      - name: Tag image with main floating tag
-        if: ${{ env.REF == 'main' }}
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-          IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
-        run: |
-          oras tag "${IMAGE_NAME}:${VERSION}" "main"
-
-      - name: Resolve image digest
-        id: image-digest
-        env:
-          IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          DIGEST=$(oras resolve "${IMAGE_NAME}:${VERSION}")
-          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-
-      - name: Attest image
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          subject-digest: ${{ steps.image-digest.outputs.digest }}
-          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
-          push-to-registry: true
-
-      - name: Package and push Helm chart
-        working-directory: ${{ env.LOCATION }}
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-          IMAGE_DIGEST: ${{ steps.image-digest.outputs.digest }}
-          IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller
-        run: |
-          task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_DIGEST="${IMAGE_DIGEST}" IMAGE_REPOSITORY="${IMAGE_NAME}"
-          task helm/push VERSION="${VERSION}" REGISTRY="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller"
-
-      - name: Tag chart with main floating tag
-        if: ${{ env.REF == 'main' }}
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-          CHART_REPO: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart
-        run: |
-          oras tag "${CHART_REPO}:${VERSION}" "main"
-
-      - name: Resolve chart digest
-        id: chart-digest
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          CHART_REPO="${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart"
-          echo "digest=$(oras resolve ${CHART_REPO}:${VERSION})" >> "$GITHUB_OUTPUT"
-
-      - name: Attest chart
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          subject-digest: ${{ steps.chart-digest.outputs.digest }}
-          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes/controller/chart
-          push-to-registry: true
-
-      - name: Upload chart artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: controller-chart-${{ needs.build.outputs.version }}
-          retention-days: 1
-          path: ${{ env.LOCATION }}/dist/chart-*.tgz
-          if-no-files-found: error
-
-  # Run conformance tests against the published image on main branch or release branches/tags
-  conformance-published:
-    name: Conformance (published)
-    needs: publish
-    uses: ./.github/workflows/conformance.yml
-    with:
-      toolkit_image: "oci://ghcr.io/${{ github.repository_owner }}/kubernetes/controller/chart:${{ needs.publish.outputs.chart_version }}"
