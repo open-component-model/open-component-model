@@ -38,10 +38,6 @@ on:
         type: string
         required: false
         default: ""
-    secrets:
-      GITHUB_TOKEN:
-        description: "GitHub token for setup-task repo-token"
-        required: false
   push:
     branches:
       - main

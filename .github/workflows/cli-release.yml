@@ -116,8 +116,6 @@ jobs:
       attestations: write      # Allows storing provenance attestation
       artifact-metadata: write # Needed for github artifact metadata publishing for oci
     uses: ./.github/workflows/cli.yml
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     with:
       ref: ${{ needs.prepare.outputs.new_tag }}
       build_version: ${{ needs.prepare.outputs.base_version }}

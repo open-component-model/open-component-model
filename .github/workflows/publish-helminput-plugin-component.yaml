@@ -21,10 +21,6 @@ on:
         description: "The ref to build on (branch or tag). Defaults to the current ref."
         type: string
         required: false
-    secrets:
-      GITHUB_TOKEN:
-        description: "GitHub token"
-        required: false
 
 permissions:
   contents: read
