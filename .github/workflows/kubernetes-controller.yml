@@ -269,7 +269,7 @@ jobs:
           task ${{ env.LOCATION }}:test/e2e
 
       - name: Debug cluster state
-        if: failure() || inputs.debug == true
+        if: failure()
         run: |
           echo "::group::Controller pods"
           kubectl -n ocm-k8s-toolkit-system get pods -o wide

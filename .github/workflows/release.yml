@@ -171,6 +171,7 @@ jobs:
           ref: ${{ github.ref_name }}
           token: ${{ steps.get_token.outputs.token }}
           fetch-tags: true
+          persist-credentials: false
 
       - name: Setup git config
         env:
@@ -411,6 +412,7 @@ jobs:
           ref: ${{ github.ref_name }}
           token: ${{ steps.get_token.outputs.token }}
           fetch-tags: true
+          persist-credentials: false
 
       - name: Setup git config
         env:
@@ -514,6 +516,13 @@ jobs:
           tar -xzf "$work/chart-${RC_VERSION}.tgz" -C "$work/rc" --strip-components=1
           tar -xzf "dist/chart-${VERSION}.tgz" -C "$work/final" --strip-components=1
 
+          # Normalize version-dependent fields so RC and final become byte-comparable.
+          #   - Chart.yaml: drop version + appVersion (always differ between RC and final).
+          #   - values.yaml: strip the tag portion before "@" in manager.image.tag, leaving
+          #     the @<digest> intact. Contract: the chart MUST pin the manager image by
+          #     digest (image:tag@sha256:...) for this normalization to be meaningful.
+          #     If a future change ships a tag-only pin (no @<digest>), this regex would
+          #     clear the whole string and could mask real drift between RC and final.
           for dir in "$work/rc" "$work/final"; do
             yq -i 'del(.version, .appVersion)' "$dir/Chart.yaml"
             yq -i '.manager.image.tag |= sub("^[^@]*", "")' "$dir/values.yaml"

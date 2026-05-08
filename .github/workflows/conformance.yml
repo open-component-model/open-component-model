@@ -47,9 +47,10 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: conformance-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+# No concurrency block: this workflow is workflow_call-only. The caller
+# (pipeline.yml) controls concurrency for the whole chain. Declaring our own
+# would collide with siblings because github.workflow inherits the caller's
+# name in workflow_call context. Same pattern as kubernetes-controller.yml.
 
 env:
   REGISTRY: ghcr.io
@@ -74,7 +75,7 @@ jobs:
           OWNER="${OWNER,,}"
           {
             echo "CLI_IMAGE_NAME=${REGISTRY}/$OWNER/cli"
-            echo "CONTROLLER_IMAGE_NAME=$OWNER/kubernetes/controller"
+            echo "CONTROLLER_IMAGE_NAME=${REGISTRY}/$OWNER/kubernetes/controller"
           } >> "$GITHUB_ENV"
 
       - name: Checkout
@@ -142,7 +143,7 @@ jobs:
         if: ${{ inputs.toolkit_image_artifact != '' }}
         env:
           TOOLKIT_VERSION: ${{ inputs.toolkit_version }}
-          IMAGE_NAME: ${{ env.REGISTRY }}/${{ env.CONTROLLER_IMAGE_NAME }}
+          IMAGE_NAME: ${{ env.CONTROLLER_IMAGE_NAME }}
         run: |
           mkdir -p tmp/controller-oci-dir
           tar -xf tmp/controller-artifact/controller.tar -C tmp/controller-oci-dir
@@ -179,7 +180,6 @@ jobs:
           INPUT_TOOLKIT_IMAGE: ${{ inputs.toolkit_image }}
 
       - name: Validate required image references
-        if: ${{ github.event_name == 'workflow_call' }}
         run: |
           if [ -z "$CLI_IMAGE" ] && [ -z "$TOOLKIT_IMAGE" ]; then
             echo "::error::Neither CLI_IMAGE nor TOOLKIT_IMAGE is set. At least one must be provided via inputs or artifacts."

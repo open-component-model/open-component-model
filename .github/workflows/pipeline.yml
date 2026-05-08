@@ -172,11 +172,6 @@ jobs:
       - name: Setup ORAS
         uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
 
-      - name: Discover tag from layout
-        run: |
-          TAG=$(oras repo tags --oci-layout ${LAYOUT} | head -n 1)
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
-
       - name: Log in to GHCR
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
         with:
@@ -190,11 +185,21 @@ jobs:
         run: echo "TARGET_REPO=${REGISTRY}/${OWNER,,}/cli" >> "$GITHUB_ENV"
 
       - name: Push OCI image
-        run: oras cp --from-oci-layout "${LAYOUT}:${TAG}" "${TARGET_REPO}:${TAG}"
+        env:
+          VERSION: ${{ needs.build_cli.outputs.version }}
+        run: oras cp --from-oci-layout "${LAYOUT}:${VERSION}" "${TARGET_REPO}:${VERSION}"
+
+      - name: Tag image with main floating tag
+        if: ${{ needs.decide_publish.outputs.ref == 'main' }}
+        env:
+          VERSION: ${{ needs.build_cli.outputs.version }}
+        run: oras tag "${TARGET_REPO}:${VERSION}" "main"
 
       - name: Resolve digest
         id: digest
-        run: echo "digest=$(oras resolve ${TARGET_REPO}:${TAG})" >> "$GITHUB_OUTPUT"
+        env:
+          VERSION: ${{ needs.build_cli.outputs.version }}
+        run: echo "digest=$(oras resolve ${TARGET_REPO}:${VERSION})" >> "$GITHUB_OUTPUT"
 
       - name: Attest OCI image
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4

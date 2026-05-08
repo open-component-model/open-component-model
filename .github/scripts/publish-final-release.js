@@ -9,8 +9,9 @@ import path from "path";
 // more than 200 commits (or whatever number is configured).
 // Now, this is fine, it's not really complexity, but I'm willing to drop this if we think it's just overkill.
 // I ran into this while testing the entire flow and had too many releases and went over the 125Kb limit.
-const MAX_RELEASE_BODY_LENGTH = 120000;
-const TRUNCATION_NOTICE = "\n\n---\n\n*Release notes truncated to fit GitHub's 125000-character body limit. See the source changelog or `git log` for the complete history.*";
+const GITHUB_RELEASE_BODY_LIMIT = 125000;
+const MAX_RELEASE_BODY_LENGTH = GITHUB_RELEASE_BODY_LIMIT - 5000; // safety buffer
+const TRUNCATION_NOTICE = `\n\n---\n\n*Release notes truncated to fit GitHub's ${GITHUB_RELEASE_BODY_LIMIT}-character body limit. See the source changelog or \`git log\`for the complete history.*`;
 
 // --------------------------
 // Helpers
@@ -52,8 +53,8 @@ export function prepareReleaseNotes(notesFile, rcTag, newReleaseTag) {
 
   if (rcHeaderPattern.test(notes)) {
     notes = notes.replace(
-      rcHeaderPattern,
-      `## [${newReleaseTag}] - promoted from [${rcTag}] on ${today}`,
+        rcHeaderPattern,
+        `## [${newReleaseTag}] - promoted from [${rcTag}] on ${today}`,
     );
   } else {
     // No RC header found — prepend a final header instead of failing.
@@ -64,7 +65,10 @@ export function prepareReleaseNotes(notesFile, rcTag, newReleaseTag) {
   // GitHub rejects release bodies > 125000 chars. Truncate with a notice if
   // the content (typical for first-release-on-fresh-stream changelogs) tips over.
   if (notes.length > MAX_RELEASE_BODY_LENGTH) {
-    const safeLength = MAX_RELEASE_BODY_LENGTH - TRUNCATION_NOTICE.length;
+    let safeLength = MAX_RELEASE_BODY_LENGTH - TRUNCATION_NOTICE.length;
+    // Avoid splitting a UTF-16 surrogate pair.
+    const code = notes.charCodeAt(safeLength - 1);
+    if (code >= 0xd800 && code <= 0xdbff) safeLength -= 1;
     notes = notes.substring(0, safeLength) + TRUNCATION_NOTICE;
   }
 
