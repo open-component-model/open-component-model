@@ -87,22 +87,13 @@ func nodeID(typed runtime.Typed) string {
 }
 
 // typedMatch checks whether identity a matches identity b.
-// Currently delegates to runtime.Identity.Match when both sides are Identity maps.
-// Returns false for non-Identity types until matching is generalized.
-//
-// This will only work with runtime.Identity/map identities.
-// A panic will be thrown if runtime.Typed is something else.
-// See the tracking issue https://github.com/open-component-model/ocm-project/issues/1041
+// Both sides are projected to the canonical Identity view via
+// runtime.TypedToIdentity, allowing native typed structs, in-process plugin
+// types, and Raw values from out-of-process or non-Go plugins to participate
+// uniformly. A projection failure on either side returns false rather than
+// panicking, preserving graph-walk liveness for opaque values.
 func typedMatch(a, b runtime.Typed) bool {
-	idA, okA := a.(runtime.Identity)
-	if !okA {
-		panic("a must be of type runtime.Identity")
-	}
-	idB, okB := b.(runtime.Identity)
-	if !okB {
-		panic("b must be of type runtime.Identity")
-	}
-	return idA.Match(idB)
+	return runtime.TypedMatch(a, b)
 }
 
 // matchAnyNode attempts to locate the graph vertex corresponding to the provided identity.

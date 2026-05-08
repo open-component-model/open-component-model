@@ -61,19 +61,29 @@ func Test_typedMatch_IdentityNoMatch(t *testing.T) {
 	assert.False(t, typedMatch(a, b))
 }
 
-func Test_typedMatch_NonIdentity_Panics(t *testing.T) {
-	a := &runtime.Raw{Type: runtime.NewVersionedType("Foo", "v1")}
-	b := &runtime.Raw{Type: runtime.NewVersionedType("Foo", "v1")}
-	assert.PanicsWithValue(t, "a must be of type runtime.Identity", func() { typedMatch(a, b) })
+func Test_typedMatch_RawAgainstRaw(t *testing.T) {
+	a := &runtime.Raw{}
+	b := &runtime.Raw{}
+	require.NoError(t, a.UnmarshalJSON([]byte(`{"type":"OCIRegistry/v1","hostname":"docker.io"}`)))
+	require.NoError(t, b.UnmarshalJSON([]byte(`{"type":"OCIRegistry/v1","hostname":"docker.io"}`)))
+	assert.True(t, typedMatch(a, b))
 }
 
-func Test_typedMatch_MixedTypes_Panics(t *testing.T) {
-	id := runtime.Identity{"type": "OCIRegistry", "hostname": "docker.io"}
-	raw := &runtime.Raw{Type: runtime.NewVersionedType("OCIRegistry", "v1")}
-	// a is non-Identity → panics on a
-	assert.PanicsWithValue(t, "a must be of type runtime.Identity", func() { typedMatch(raw, id) })
-	// a is Identity but b is non-Identity → panics on b
-	assert.PanicsWithValue(t, "b must be of type runtime.Identity", func() { typedMatch(id, raw) })
+func Test_typedMatch_RawAgainstIdentity(t *testing.T) {
+	id := runtime.Identity{"type": "OCIRegistry/v1", "hostname": "docker.io"}
+	raw := &runtime.Raw{}
+	require.NoError(t, raw.UnmarshalJSON([]byte(`{"type":"OCIRegistry/v1","hostname":"docker.io"}`)))
+	assert.True(t, typedMatch(id, raw))
+	assert.True(t, typedMatch(raw, id))
+}
+
+func Test_typedMatch_UnprojectableReturnsFalse(t *testing.T) {
+	// A Raw without a JSON payload cannot be projected to Identity. The
+	// matcher must surface this as a non-match rather than a panic so that
+	// graph walks remain live.
+	a := &runtime.Raw{Type: runtime.NewVersionedType("Foo", "v1")}
+	b := &runtime.Raw{Type: runtime.NewVersionedType("Foo", "v1")}
+	assert.NotPanics(t, func() { assert.False(t, typedMatch(a, b)) })
 }
 
 func Test_matchAnyNode_ExactMatch(t *testing.T) {
