@@ -48,8 +48,8 @@ jobs:
   # Changes vs the original:
   #   removed the `component_path` input since it's not per component anymore.
   #   cliff config path change: `${component_path}/cliff.toml` → `cliff.toml` (root).
-  #   tag change: cli/v* -> v*
-  #   Outputs added: `controller_module_rc_tag`, `controller_module_promotion_tag`.
+  #   canonical tag added: v* alongside the existing per-component tags.
+  #   Outputs added: `cli_module_*_tag` and `controller_module_*_tag` (RC + promotion).
   prepare:
     name: Prepare Release Metadata
     runs-on: ubuntu-24.04-arm
@@ -58,6 +58,8 @@ jobs:
       new_version: ${{ steps.compute.outputs.new_version }}
       base_version: ${{ steps.compute.outputs.base_version }}
       promotion_tag: ${{ steps.compute.outputs.promotion_tag }}
+      cli_module_rc_tag: ${{ steps.compute.outputs.cli_module_rc_tag }}
+      cli_module_promotion_tag: ${{ steps.compute.outputs.cli_module_promotion_tag }}
       controller_module_rc_tag: ${{ steps.compute.outputs.controller_module_rc_tag }}
       controller_module_promotion_tag: ${{ steps.compute.outputs.controller_module_promotion_tag }}
       changelog_artifact: changelog-${{ steps.compute.outputs.new_version }}
@@ -147,7 +149,8 @@ jobs:
   # === Copied from controller-release.yml::tag_rc ===
   # Changes vs the original:
   #   calls `createRcTags` (plural) instead of `createRcTag`
-  #   passes both CANONICAL_TAG and MODULE_TAG env vars
+  #   passes both CANONICAL_TAG and a comma-separated MODULE_TAGS list
+  #   so cli/v* and kubernetes/controller/v* are emitted on the same commit
   tag_rc:
     name: Create and Push RC Tags
     runs-on: ubuntu-24.04-arm
@@ -188,12 +191,12 @@ jobs:
           git_user_signingkey: true
           git_tag_gpgsign: true
 
-      - name: Create RC tags (canonical + controller-module)
+      - name: Create RC tags (canonical + cli + controller side tags)
         id: tag
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           CANONICAL_TAG: ${{ needs.prepare.outputs.new_tag }}
-          MODULE_TAG: ${{ needs.prepare.outputs.controller_module_rc_tag }}
+          MODULE_TAGS: ${{ needs.prepare.outputs.cli_module_rc_tag }},${{ needs.prepare.outputs.controller_module_rc_tag }}
         with:
           github-token: ${{ steps.get_token.outputs.token }}
           script: |
@@ -271,6 +274,7 @@ jobs:
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+          CLI_MODULE_RC_TAG: ${{ needs.prepare.outputs.cli_module_rc_tag }}
           CONTROLLER_MODULE_RC_TAG: ${{ needs.prepare.outputs.controller_module_rc_tag }}
           IMAGE_DIGEST: ${{ needs.build_and_test.outputs.controller_image_digest }}
           CHART_DIGEST: ${{ needs.build_and_test.outputs.controller_chart_digest }}
@@ -290,6 +294,7 @@ jobs:
               .addTable([
                 [{ data: 'Field', header: true }, { data: 'Value', header: true }],
                 ['RC Tag', process.env.RC_TAG],
+                ['CLI Module RC Tag', process.env.CLI_MODULE_RC_TAG],
                 ['Controller Module RC Tag', process.env.CONTROLLER_MODULE_RC_TAG],
                 ['Version', process.env.RC_VERSION],
                 ['CLI Image Digest', (process.env.CLI_IMAGE_DIGEST || 'N/A').substring(0, 19) + '...'],
@@ -429,12 +434,12 @@ jobs:
           git_user_signingkey: true
           git_tag_gpgsign: true
 
-      - name: Create final tags (canonical + controller-module)
+      - name: Create final tags (canonical + cli + controller side tags)
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
-          CONTROLLER_MODULE_PROMOTION_TAG: ${{ needs.prepare.outputs.controller_module_promotion_tag }}
+          MODULE_TAGS: ${{ needs.prepare.outputs.cli_module_promotion_tag }},${{ needs.prepare.outputs.controller_module_promotion_tag }}
         with:
           github-token: ${{ steps.get_token.outputs.token }}
           script: |
