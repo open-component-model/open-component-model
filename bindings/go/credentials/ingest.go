@@ -256,7 +256,7 @@ func validateConsumerIdentityTypes(ctx context.Context, g *Graph, config *cfgRun
 				continue
 			}
 
-			if !g.identityTypeRegistry.GetIdentityTypeScheme().IsRegistered(identityType) {
+			if !g.identityTypeRegistry.IsRegistered(identityType) {
 				slog.WarnContext(ctx, "consumer identity type not registered in scheme",
 					"type", identityType.String(),
 					"identity", identity.String(),

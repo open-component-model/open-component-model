@@ -240,7 +240,6 @@ func Test_validateConsumerIdentityTypes_CredentialNotAccepted(t *testing.T) {
 
 	registry := NewIdentityTypeRegistry()
 	require.NoError(t, registry.RegisterWithAcceptedCredentials(
-		&runtime.Raw{},
 		[]runtime.Type{identityType},
 		[]runtime.Type{acceptedCredType},
 	))
@@ -284,7 +283,6 @@ func Test_validateConsumerIdentityTypes_AcceptedCredential_NoWarning(t *testing.
 
 	registry := NewIdentityTypeRegistry()
 	require.NoError(t, registry.RegisterWithAcceptedCredentials(
-		&runtime.Raw{},
 		[]runtime.Type{identityType},
 		[]runtime.Type{acceptedCredType},
 	))

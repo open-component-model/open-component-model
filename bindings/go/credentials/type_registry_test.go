@@ -13,9 +13,8 @@ func TestIdentityTypeRegistry_Register(t *testing.T) {
 	registry := NewIdentityTypeRegistry()
 	typ := runtime.NewVersionedType("OCIRegistry", "v1")
 
-	err := registry.Register(&runtime.Raw{}, typ)
-	require.NoError(t, err)
-	assert.True(t, registry.GetIdentityTypeScheme().IsRegistered(typ))
+	require.NoError(t, registry.Register(typ))
+	assert.True(t, registry.IsRegistered(typ))
 }
 
 func TestIdentityTypeRegistry_RegisterWithAcceptedCredentials(t *testing.T) {
@@ -25,15 +24,14 @@ func TestIdentityTypeRegistry_RegisterWithAcceptedCredentials(t *testing.T) {
 	credType := runtime.NewVersionedType("HelmHTTPCredentials", "v1")
 
 	err := registry.RegisterWithAcceptedCredentials(
-		&runtime.Raw{},
 		[]runtime.Type{identityType, identityAlias},
 		[]runtime.Type{credType},
 	)
 	require.NoError(t, err)
 
-	// Both default and alias are registered in the scheme.
-	assert.True(t, registry.GetIdentityTypeScheme().IsRegistered(identityType))
-	assert.True(t, registry.GetIdentityTypeScheme().IsRegistered(identityAlias))
+	// Both default and alias are registered.
+	assert.True(t, registry.IsRegistered(identityType))
+	assert.True(t, registry.IsRegistered(identityAlias))
 
 	// Accepted credential types are queryable by default type.
 	accepted, ok := registry.AcceptedCredentialTypes(identityType)
@@ -48,7 +46,6 @@ func TestIdentityTypeRegistry_AcceptedCredentialTypes_AliasResolution(t *testing
 	credType := runtime.NewVersionedType("HelmHTTPCredentials", "v1")
 
 	err := registry.RegisterWithAcceptedCredentials(
-		&runtime.Raw{},
 		[]runtime.Type{identityType, identityAlias},
 		[]runtime.Type{credType},
 	)
@@ -74,31 +71,40 @@ func TestIdentityTypeRegistry_RegisterWithoutAcceptedCredentials(t *testing.T) {
 	typ := runtime.NewVersionedType("OCIRegistry", "v1")
 
 	err := registry.RegisterWithAcceptedCredentials(
-		&runtime.Raw{},
 		[]runtime.Type{typ},
 		nil, // no accepted credential types
 	)
 	require.NoError(t, err)
 
-	// Type is registered in scheme.
-	assert.True(t, registry.GetIdentityTypeScheme().IsRegistered(typ))
+	assert.True(t, registry.IsRegistered(typ))
 
 	// No accepted credential types stored.
 	_, ok := registry.AcceptedCredentialTypes(typ)
 	assert.False(t, ok)
 }
 
-func TestIdentityTypeRegistry_GetIdentityTypeScheme(t *testing.T) {
+func TestIdentityTypeRegistry_DuplicateAliasError(t *testing.T) {
 	registry := NewIdentityTypeRegistry()
-	assert.NotNil(t, registry.GetIdentityTypeScheme())
-}
+	canonicalA := runtime.NewVersionedType("OCIRegistry", "v1")
+	canonicalB := runtime.NewVersionedType("Other", "v1")
+	alias := runtime.NewUnversionedType("OCIRegistry")
 
-func TestIdentityTypeRegistry_DuplicateRegistration(t *testing.T) {
-	registry := NewIdentityTypeRegistry()
-	typ := runtime.NewVersionedType("OCIRegistry", "v1")
+	require.NoError(t, registry.Register(canonicalA, alias))
 
-	require.NoError(t, registry.Register(&runtime.Raw{}, typ))
-	err := registry.Register(&runtime.Raw{}, typ)
+	// Reusing the same alias for a different canonical must fail.
+	err := registry.Register(canonicalB, alias)
 	require.Error(t, err)
 	assert.True(t, runtime.IsTypeAlreadyRegisteredError(err))
+}
+
+func TestIdentityTypeRegistry_IdempotentRegistration(t *testing.T) {
+	registry := NewIdentityTypeRegistry()
+	typ := runtime.NewVersionedType("OCIRegistry", "v1")
+	alias := runtime.NewUnversionedType("OCIRegistry")
+
+	require.NoError(t, registry.Register(typ, alias))
+	// Registering the same canonical/alias pair again is a no-op.
+	require.NoError(t, registry.Register(typ, alias))
+	assert.True(t, registry.IsRegistered(typ))
+	assert.True(t, registry.IsRegistered(alias))
 }
