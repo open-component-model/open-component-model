@@ -38,12 +38,12 @@ func (g *syncedDag) getVertex(id string) (v *dag.Vertex[string], ok bool) {
 	return v, ok
 }
 
-func (g *syncedDag) getIdentity(id string) (runtime.Typed, bool) {
+func (g *syncedDag) getIdentity(id string) (runtime.Identity, bool) {
 	v, ok := g.getVertex(id)
 	if !ok {
 		return nil, false
 	}
-	identity, ok := v.Attributes[attributeIdentity].(runtime.Typed)
+	identity, ok := v.Attributes[attributeIdentity].(runtime.Identity)
 	return identity, ok
 }
 
@@ -72,55 +72,23 @@ func (g *syncedDag) addEdge(from, to string, attributes ...map[string]any) error
 	return g.dag.AddEdge(from, to, attributes...)
 }
 
-// nodeID returns a stable string identifier for a runtime.Typed identity.
-// Used as the DAG vertex key and cache key throughout the graph.
-//
-// Typed identity structs MUST implement fmt.Stringer to produce stable, deterministic
-// node IDs. The fallback fmt.Sprintf("%v", typed) is not guaranteed to be stable
-// (e.g. pointer addresses for pointer fields). runtime.Identity satisfies this
-// via sorted key=value pairs.
-func nodeID(typed runtime.Typed) string {
-	if s, ok := typed.(fmt.Stringer); ok {
-		return s.String()
-	}
-	return fmt.Sprintf("%v", typed)
-}
-
-// typedMatch checks whether identity a matches identity b.
-// Currently delegates to runtime.Identity.Match when both sides are Identity maps.
-// Returns false for non-Identity types until matching is generalized.
-//
-// This will only work with runtime.Identity/map identities.
-// A panic will be thrown if runtime.Typed is something else.
-// See the tracking issue https://github.com/open-component-model/ocm-project/issues/1041
-func typedMatch(a, b runtime.Typed) bool {
-	idA, okA := a.(runtime.Identity)
-	if !okA {
-		panic("a must be of type runtime.Identity")
-	}
-	idB, okB := b.(runtime.Identity)
-	if !okB {
-		panic("b must be of type runtime.Identity")
-	}
-	return idA.Match(idB)
-}
-
-// matchAnyNode attempts to locate the graph vertex corresponding to the provided identity.
-// If an exact match is not found, it falls back to a wildcard search using typedMatch.
+// matchAnyNode attempts to locate the graph vertex corresponding to the provided node ID.
+// If an exact match is not found, it falls back to a wildcard search by comparing identities
+// using the Identity.Match method.
 // This wildcard search is the reason there can be undiscovered cycles at runtime.
-func (g *syncedDag) matchAnyNode(identity runtime.Typed) (*dag.Vertex[string], error) {
+func (g *syncedDag) matchAnyNode(identity runtime.Identity) (*dag.Vertex[string], error) {
 	g.dagMu.RLock()
 	defer g.dagMu.RUnlock()
-	node := nodeID(identity)
+	node := identity.String()
 	if vertex, ok := g.dag.Vertices[node]; ok {
 		return vertex, nil
 	}
 	for _, vertex := range g.dag.Vertices {
-		existing, ok := vertex.Attributes[attributeIdentity].(runtime.Typed)
+		existing, ok := vertex.Attributes[attributeIdentity].(runtime.Identity)
 		if !ok {
 			continue
 		}
-		if typedMatch(identity, existing) {
+		if identity.Match(existing) {
 			return vertex, nil
 		}
 	}
@@ -129,11 +97,11 @@ func (g *syncedDag) matchAnyNode(identity runtime.Typed) (*dag.Vertex[string], e
 
 // addIdentity ensures that a given identity is represented as a vertex in the graph.
 // It also establishes edges between the new node and any existing nodes that match with each other.
-func (g *syncedDag) addIdentity(identity runtime.Typed) error {
+func (g *syncedDag) addIdentity(identity runtime.Identity) error {
 	g.dagMu.Lock()
 	defer g.dagMu.Unlock()
 
-	node := nodeID(identity)
+	node := identity.String()
 	if g.dag.Contains(node) {
 		return nil
 	}
@@ -146,18 +114,18 @@ func (g *syncedDag) addIdentity(identity runtime.Typed) error {
 		if vertex.ID == node {
 			continue
 		}
-		existing, ok := vertex.Attributes[attributeIdentity].(runtime.Typed)
+		existing, ok := vertex.Attributes[attributeIdentity].(runtime.Identity)
 		if !ok {
 			continue
 		}
-		if typedMatch(identity, existing) {
+		if identity.Match(existing) {
 			if err := g.dag.AddEdge(vertex.ID, node, map[string]any{
 				"kind": "cyclic-only",
 			}); err != nil {
 				return err
 			}
 		}
-		if typedMatch(existing, identity) {
+		if existing.Match(identity) {
 			if err := g.dag.AddEdge(node, vertex.ID, map[string]any{
 				"kind": "cyclic-only",
 			}); err != nil {
