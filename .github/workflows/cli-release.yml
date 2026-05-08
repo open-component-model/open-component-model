@@ -89,7 +89,7 @@ jobs:
 
       - name: Create ${{ needs.prepare.outputs.new_tag }}
         id: tag
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           TAG: ${{ needs.prepare.outputs.new_tag }}
         with:
@@ -159,7 +159,7 @@ jobs:
             "${{ runner.temp }}/rc-build-assets/oci/"*
 
       - name: Summarize RC release
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           RC_VERSION: ${{ needs.prepare.outputs.new_version }}
@@ -276,7 +276,7 @@ jobs:
           git_tag_gpgsign: true
 
       - name: Create new release tag
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
@@ -344,7 +344,7 @@ jobs:
             --dir "${{ runner.temp }}/assets"
 
       - name: Publish final release
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
