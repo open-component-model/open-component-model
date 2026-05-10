@@ -12,21 +12,21 @@ import (
 )
 
 type sigstoreStack struct {
-	OIDCToken        string
-	SigningConfig     string
-	TrustedRoot      string
-	OIDCIssuer       string
-	OIDCIdentity     string
+	OIDCToken     string
+	SigningConfig string
+	TrustedRoot   string
+	OIDCIssuer    string
+	OIDCIdentity  string
 }
 
 func loadSigstoreStack(t *testing.T) sigstoreStack {
 	t.Helper()
 	stack := sigstoreStack{
-		OIDCToken:    os.Getenv("SIGSTORE_OIDC_TOKEN"),
+		OIDCToken:     os.Getenv("SIGSTORE_OIDC_TOKEN"),
 		SigningConfig: os.Getenv("SIGSTORE_SIGNING_CONFIG"),
-		TrustedRoot:  os.Getenv("SIGSTORE_TRUSTED_ROOT"),
-		OIDCIssuer:   os.Getenv("SIGSTORE_OIDC_ISSUER"),
-		OIDCIdentity: os.Getenv("SIGSTORE_OIDC_IDENTITY"),
+		TrustedRoot:   os.Getenv("SIGSTORE_TRUSTED_ROOT"),
+		OIDCIssuer:    os.Getenv("SIGSTORE_OIDC_ISSUER"),
+		OIDCIdentity:  os.Getenv("SIGSTORE_OIDC_IDENTITY"),
 	}
 	if stack.OIDCToken == "" || stack.SigningConfig == "" || stack.TrustedRoot == "" || stack.OIDCIssuer == "" || stack.OIDCIdentity == "" {
 		t.Skip("sigstore scaffolding env vars not set (SIGSTORE_OIDC_TOKEN, SIGSTORE_SIGNING_CONFIG, SIGSTORE_TRUSTED_ROOT, SIGSTORE_OIDC_ISSUER, SIGSTORE_OIDC_IDENTITY)")
@@ -108,12 +108,17 @@ configurations:
 	cfgPath := filepath.Join(dir, "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(ocmconfig), 0o600))
 
+	signRef := func(t *testing.T) {
+		t.Helper()
+		signCMD := cmd.New()
+		signCMD.SetArgs([]string{"sign", "cv", ref, "--config", cfgPath, "--signer-spec", signerSpecPath})
+		require.NoError(t, signCMD.ExecuteContext(t.Context()))
+	}
+
 	t.Run("sign and verify", func(t *testing.T) {
 		r := require.New(t)
 
-		signCMD := cmd.New()
-		signCMD.SetArgs([]string{"sign", "cv", ref, "--config", cfgPath, "--signer-spec", signerSpecPath})
-		r.NoError(signCMD.ExecuteContext(t.Context()))
+		signRef(t)
 
 		verifyCMD := cmd.New()
 		verifyCMD.SetArgs([]string{"verify", "cv", ref, "--config", cfgPath, "--verifier-spec", verifierSpecPath})
@@ -122,6 +127,7 @@ configurations:
 
 	t.Run("verify fails with wrong issuer", func(t *testing.T) {
 		r := require.New(t)
+		signRef(t)
 
 		wrongSpec := fmt.Sprintf(`type: SigstoreVerificationConfiguration/v1alpha1
 certificateOIDCIssuer: https://wrong-issuer.example.com
@@ -138,6 +144,7 @@ trustedRoot: %s
 
 	t.Run("verify fails with wrong identity", func(t *testing.T) {
 		r := require.New(t)
+		signRef(t)
 
 		wrongSpec := fmt.Sprintf(`type: SigstoreVerificationConfiguration/v1alpha1
 certificateOIDCIssuer: %s
@@ -175,6 +182,7 @@ configurations:
 
 	t.Run("verify with private infrastructure", func(t *testing.T) {
 		r := require.New(t)
+		signRef(t)
 
 		privateSpec := fmt.Sprintf(`type: SigstoreVerificationConfiguration/v1alpha1
 certificateOIDCIssuer: %s
