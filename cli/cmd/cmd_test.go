@@ -1541,10 +1541,7 @@ signatureAlgorithm: RSASSA-PSS
 	r.NoError(err, "failed to verify component version")
 }
 
-// Test_Sign_And_Verify_Component_Version_DefaultSpec guards the default sign/verify path
-// (no --signer-spec / --verifier-spec). Today the default is RSASSA-PSS; if the default
-// ever changes (e.g. to Sigstore), this test will fail explicitly and signal that the
-// credential config below must be updated to match the new default.
+// Test_Sign_And_Verify_Component_Version_DefaultSpec guards the default sign/verify path without --signer-spec/--verifier-spec; acts as a canary if the default algorithm changes.
 func Test_Sign_And_Verify_Component_Version_DefaultSpec(t *testing.T) {
 	r := require.New(t)
 	tmp := t.TempDir()
@@ -1617,7 +1614,7 @@ configurations:
 	r.NoError(err, "failed to verify with default spec")
 }
 
-
+// Test_Add_Component_Version_Docker_Credentials tests the use of docker credentials in the add cv command
 func Test_Add_Component_Version_Docker_Credentials(t *testing.T) {
 	tmp := t.TempDir()
 
