@@ -36,7 +36,7 @@ Verify component version(s) inside an OCM repository based on signatures.
 - Without --signature: verify all signatures  
 - Fail fast on first invalid signature  
 - Default verifier: RSASSA-PSS plugin  
-  - Uses public key from discovered credentials (config-less)
+  - Supports config-less verification: public key is resolved from discovered credentials (no --verifier-spec required)
 - For Sigstore keyless verification, pass --verifier-spec with a SigstoreVerificationConfiguration/v1alpha1 config
   - Identity constraints (certificateOIDCIssuer + certificateIdentity, or regexp variants) are REQUIRED
   - Without them, verification cannot assert who produced the signature
