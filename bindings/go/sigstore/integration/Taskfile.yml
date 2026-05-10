@@ -3,12 +3,10 @@ version: '3'
 includes:
   reuse: ../../../../reuse.Taskfile.yml
 
-dotenv:
-  - .env
-  - '{{.ROOT_DIR}}/.env'
-
 vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
+  SCAFFOLDING_VERSION:
+    sh: . ./.env && echo "$SCAFFOLDING_VERSION"
   SIGSTORE_ENV_FILE: 'tmp/sigstore-env.sh'
   SCAFFOLDING_URL: 'https://github.com/sigstore/scaffolding/releases/download/{{.SCAFFOLDING_VERSION}}'
 
