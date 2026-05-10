@@ -1617,7 +1617,7 @@ configurations:
 	r.NoError(err, "failed to verify with default spec")
 }
 
-// Test_Add_Component_Version_Docker_Credentials tests the use of docker credentials in the add cv command
+
 func Test_Add_Component_Version_Docker_Credentials(t *testing.T) {
 	tmp := t.TempDir()
 
