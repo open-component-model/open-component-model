@@ -1,6 +1,6 @@
 package annotations
 
-// Ownership referrer annotation keys. See docs/adr/0015_ownership_annotations.md.
+// Ownership referrer annotation keys. See docs/adr/0016_ownership_annotations.md.
 //
 // An ownership referrer is a minimal OCI manifest whose subject points to a
 // resource manifest and whose annotations record the owning component version

@@ -26,7 +26,7 @@ import (
 )
 
 // Test_Integration_AssetToOwner verifies the asset-to-owner scenario
-// end-to-end (ADR 0015): a by-value OCI resource uploaded through the OCM
+// end-to-end (ADR 0016): a by-value OCI resource uploaded through the OCM
 // OCI binding must be discoverable as an ownership referrer via the OCI
 // Distribution Referrers API.
 //

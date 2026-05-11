@@ -64,7 +64,7 @@ type RepositoryOptions struct {
 	GlobalAccessPolicy GlobalAccessPolicy
 
 	// OwnershipReferrerPolicy controls whether an asset-to-owner OCI referrer
-	// (ADR 0015) is pushed alongside each by-value resource upload. By default
+	// (ADR 0016) is pushed alongside each by-value resource upload. By default
 	// (zero value), no referrer is pushed; opt in via
 	// OwnershipReferrerPolicyEnabled when the consumer needs reverse lookup
 	// from an OCI artifact to its owning component version.
@@ -94,7 +94,7 @@ const (
 )
 
 // OwnershipReferrerPolicy controls asset-to-owner referrer creation
-// (docs/adr/0015_ownership_annotations.md). It is opt-in because not every
+// (docs/adr/0016_ownership_annotations.md). It is opt-in because not every
 // OCM consumer wants the additional OCI artifacts that come with the feature.
 type OwnershipReferrerPolicy int
 
@@ -191,7 +191,7 @@ func WithGlobalAccessPolicy(policy GlobalAccessPolicy) RepositoryOption {
 }
 
 // WithOwnershipReferrerPolicy enables or disables asset-to-owner OCI referrer
-// creation on by-value resource uploads (ADR 0015). The default is
+// creation on by-value resource uploads (ADR 0016). The default is
 // OwnershipReferrerPolicyNone (disabled).
 func WithOwnershipReferrerPolicy(policy OwnershipReferrerPolicy) RepositoryOption {
 	return func(o *RepositoryOptions) {

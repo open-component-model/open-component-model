@@ -95,7 +95,7 @@ type Repository struct {
 	globalAccessPolicy GlobalAccessPolicy
 
 	// ownershipReferrerPolicy controls asset-to-owner referrer creation on
-	// by-value resource uploads (ADR 0015). Default (zero value) is None.
+	// by-value resource uploads (ADR 0016). Default (zero value) is None.
 	ownershipReferrerPolicy OwnershipReferrerPolicy
 }
 
@@ -221,7 +221,7 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 // (artifactType "application/vnd.ocm.software.ownership.v1+json") whose subject points
 // at the packed resource and whose annotations carry the owning component
 // name, version, and resource identity per
-// docs/adr/0015_ownership_annotations.md. Raw-blob resources (plain layers,
+// docs/adr/0016_ownership_annotations.md. Raw-blob resources (plain layers,
 // non-OCI media types) do not produce a referrer. Sources are not covered by
 // ownership referrers.
 func (repo *Repository) AddLocalResource(

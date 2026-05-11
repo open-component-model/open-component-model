@@ -104,7 +104,7 @@
 //   - WithCreator: Component version creator identification
 //   - WithReferrerTrackingPolicy: OCI referrer tracking policy
 //   - WithGlobalAccessPolicy: Global access policy for local blobs
-//   - WithOwnershipReferrerPolicy: Asset-to-owner referrer creation (opt-in, ADR 0015)
+//   - WithOwnershipReferrerPolicy: Asset-to-owner referrer creation (opt-in, ADR 0016)
 //
 // Media Types:
 //

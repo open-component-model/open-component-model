@@ -70,7 +70,7 @@ func OwnershipReferrer(artifact descriptor.Artifact, component string, version s
 }
 
 // marshalArtifactAnnotation serialises the {identity, kind} value stored under
-// [annotations.ArtifactAnnotationKey] on an ownership referrer (ADR 0015).
+// [annotations.ArtifactAnnotationKey] on an ownership referrer (ADR 0016).
 // Output is JCS-canonical (RFC 8785) for this schema: encoding/json sorts
 // map[string]string keys, the struct fields are already alphabetical, leaves
 // are strings (no number-formatting concerns), and HTML escaping is explicitly
