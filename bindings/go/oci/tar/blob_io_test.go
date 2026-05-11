@@ -219,20 +219,21 @@ func buildSingleLayerOCILayout(t *testing.T) (layoutBytes []byte, root, layer oc
 	return buf.Bytes(), root, layer
 }
 
-// TestCopyOCILayoutWithIndex_Attachments verifies the Attachments hook: the
-// callback's descriptors land in dst alongside the artifact, and a referrer's
-// Subject back-reference to root does not cause CopyGraph to loop back.
-func TestCopyOCILayoutWithIndex_Attachments(t *testing.T) {
+// TestCopyOCILayoutWithIndex_ReferrersFunc verifies the ReferrersFunc hook:
+// the callback's descriptors land in dst alongside the artifact, and a
+// referrer's Subject back-reference to root does not cause CopyGraph to loop
+// back.
+func TestCopyOCILayoutWithIndex_ReferrersFunc(t *testing.T) {
 	layoutBytes, rootDesc, layerDesc := buildSingleLayerOCILayout(t)
 
-	var receivedRoot, attachmentDesc ociImageSpecV1.Descriptor
-	attachments := func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]Referrer, error) {
+	var receivedRoot, referrerDesc ociImageSpecV1.Descriptor
+	referrerFn := func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]Referrer, error) {
 		receivedRoot = top
 		emptyDesc := ociImageSpecV1.DescriptorEmptyJSON
 		body, err := json.Marshal(ociImageSpecV1.Manifest{
 			Versioned:    specs.Versioned{SchemaVersion: 2},
 			MediaType:    ociImageSpecV1.MediaTypeImageManifest,
-			ArtifactType: "application/test.attachment.v1+json",
+			ArtifactType: "application/test.referrer.v1+json",
 			Config:       emptyDesc,
 			Layers:       []ociImageSpecV1.Descriptor{emptyDesc},
 			Subject:      &top,
@@ -240,14 +241,14 @@ func TestCopyOCILayoutWithIndex_Attachments(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		attachmentDesc = ociImageSpecV1.Descriptor{
+		referrerDesc = ociImageSpecV1.Descriptor{
 			MediaType:    ociImageSpecV1.MediaTypeImageManifest,
-			ArtifactType: "application/test.attachment.v1+json",
+			ArtifactType: "application/test.referrer.v1+json",
 			Digest:       digest.FromBytes(body),
 			Size:         int64(len(body)),
 		}
 		return []Referrer{
-			{Descriptor: attachmentDesc, Raw: body},
+			{Descriptor: referrerDesc, Raw: body},
 			{Descriptor: emptyDesc, Raw: []byte("{}")},
 		}, nil
 	}
@@ -255,13 +256,13 @@ func TestCopyOCILayoutWithIndex_Attachments(t *testing.T) {
 	dst := memory.New()
 	returnedTop, err := CopyOCILayoutWithIndex(t.Context(), dst, &testReadOnlyBlob{data: layoutBytes}, CopyOCILayoutWithIndexOptions{
 		MutateParentFunc: func(d *ociImageSpecV1.Descriptor) error { return nil },
-		ReferrersFunc:    []ReferrersFunc{attachments},
+		ReferrersFunc:    []ReferrersFunc{referrerFn},
 	})
 	require.NoError(t, err)
 
 	assert.Equal(t, rootDesc.Digest, receivedRoot.Digest)
 
-	for _, d := range []ociImageSpecV1.Descriptor{returnedTop, layerDesc, attachmentDesc} {
+	for _, d := range []ociImageSpecV1.Descriptor{returnedTop, layerDesc, referrerDesc} {
 		ok, err := dst.Exists(t.Context(), d)
 		require.NoError(t, err)
 		assert.Truef(t, ok, "%s must be in dst", d.Digest)
@@ -270,12 +271,12 @@ func TestCopyOCILayoutWithIndex_Attachments(t *testing.T) {
 	predecessors, err := dst.Predecessors(t.Context(), returnedTop)
 	require.NoError(t, err)
 	require.Len(t, predecessors, 1, "subject back-reference must yield exactly one referrer")
-	assert.Equal(t, attachmentDesc.Digest, predecessors[0].Digest)
+	assert.Equal(t, referrerDesc.Digest, predecessors[0].Digest)
 }
 
-// TestCopyOCILayoutWithIndex_NilAttachments verifies that a nil callback
-// leaves the pre-Attachments behaviour intact: only the artifact lands.
-func TestCopyOCILayoutWithIndex_NilAttachments(t *testing.T) {
+// TestCopyOCILayoutWithIndex_NilReferrersFunc verifies that a nil callback
+// leaves the pre-ReferrersFunc behaviour intact: only the artifact lands.
+func TestCopyOCILayoutWithIndex_NilReferrersFunc(t *testing.T) {
 	layoutBytes, rootDesc, _ := buildSingleLayerOCILayout(t)
 
 	dst := memory.New()

@@ -78,8 +78,8 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 		resourceName     = "backend-image"
 	)
 
-	// Shared state between the two nested sub-tests: step 1 populates,
-	// step 2 reads. Using local vars keeps the dependency explicit.
+	// Shared state across the nested sub-tests: the first one populates,
+	// the rest read. Using local vars keeps the dependency explicit.
 	var resourceDigest digest.Digest
 
 	t.Run("create component version directly in OCI", func(t *testing.T) {

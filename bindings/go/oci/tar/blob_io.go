@@ -81,7 +81,10 @@ func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyStora
 	}
 }
 
-// Referrer pairs a descriptor with its raw content bytes — any extra content [ReferrersFunc] supplies that the source OCI layout store does not already hold (typically an OCI referrer manifest plus the blobs it references).
+// Referrer pairs a descriptor with its raw content bytes — extra content the
+// caller wants pushed alongside the artifact root that the source OCI layout
+// store does not already hold (typically an OCI referrer manifest plus the
+// blobs it references).
 type Referrer struct {
 	Descriptor ociImageSpecV1.Descriptor
 	Raw        []byte
@@ -239,7 +242,10 @@ func resolveReferrers(ctx context.Context, funcs []ReferrersFunc, topLevelDesc o
 	return referrers, referrerDescriptors, nil
 }
 
-// findSuccessorsForRoot returns a CopyGraph FindSuccessors that injects referrer descriptors as additional children of topLevelDesc.
+// findSuccessorsForRoot returns a CopyGraph FindSuccessors that returns the
+// pre-computed rootChildren when called on topLevelDesc and falls back to
+// [successorsWithoutSubject] for every other descriptor — so referrers whose
+// Subject points back to topLevelDesc are not re-traversed.
 func findSuccessorsForRoot(topLevelDesc ociImageSpecV1.Descriptor, rootChildren []ociImageSpecV1.Descriptor) func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
 	return func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
 		if content.Equal(desc, topLevelDesc) {
@@ -252,8 +258,10 @@ func findSuccessorsForRoot(topLevelDesc ociImageSpecV1.Descriptor, rootChildren 
 // mediaTypeOCIArtifactManifest is the deprecated OCI artifact manifest (image-spec v1.1.0-rc1/rc2); the oras-go constant lives in an internal package.
 const mediaTypeOCIArtifactManifest = "application/vnd.oci.artifact.manifest.v1+json"
 
-// successorsWithoutSubject works like [content.Successors] but never returns the Subject field.
-// Manifest types without a Subject pass straight through.
+// successorsWithoutSubject works like [content.Successors] but never returns
+// the Subject of an OCI image manifest, image index, or (deprecated) artifact
+// manifest. Other descriptor types fall through to [content.Successors] since
+// they have no Subject field in their schema.
 func successorsWithoutSubject(ctx context.Context, fetcher content.Fetcher, node ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
 	switch node.MediaType {
 	case ociImageSpecV1.MediaTypeImageManifest:

@@ -49,7 +49,10 @@ type Options struct {
 	// Set policy.GlobalAccessPolicyAuto to auto-detect based on whether the storage backend is globally reachable.
 	GlobalAccessPolicy policy.GlobalAccessPolicy
 
-	// Referrers produce extra descriptors and bytes copied alongside the artifact root in the same oras.CopyGraph traversal — e.g. OCI referrers.
+	// Referrers is a list of callbacks that yield extra descriptors and bytes
+	// to be copied alongside the artifact root in the same oras.CopyGraph
+	// traversal — e.g. OCI referrer manifests, which CopyGraph does not follow
+	// via the subject field by default.
 	Referrers []tar.ReferrersFunc
 }
 
