@@ -1,172 +1,139 @@
-# Streaming Resource Content: Eliminating Tar Materialization in Transfer
+# Streaming Resource Content: Replacing Tar with oras Storage Abstraction
 
 * **Status**: proposed
 * **Deciders**: Fabian Burth, Jakob Moeller
 * **Date**: 2026-05-11
 
-Technical Story: Replace the `blob.ReadOnlyBlob` return type in the resource
-repository download path with a lazy `ResourceContent` handle that allows
-direct streaming between compatible backends, eliminating the intermediate
-tar materialization that causes OOM kills on large (30+ GiB) AI model images.
+Technical Story: Today, downloading a resource produces a tar file containing
+the full OCI artifact. This causes out-of-memory crashes on large AI model
+images (30+ GiB). We want to replace this with a streaming approach built on
+oras-go's existing `content.ReadOnlyGraphStorage` interface.
 
 ## Context and Problem Statement
 
-The current `ResourceRepository.DownloadResource()` returns a
-`blob.ReadOnlyBlob` — a fully materialized binary blob. Because OCI artifacts
-consist of multiple blobs (manifest + N layers), the only way to pack them into
-a single `ReadOnlyBlob` is to serialize them into a tar archive (OCI Layout
-format). This tar is written to a temporary file (or held in memory on
-tmpfs-backed `/tmp`), creating several problems:
+When you download a resource, the repository currently returns a single binary
+blob (`blob.ReadOnlyBlob`). Since an OCI artifact is made up of many blobs
+(one manifest, multiple layers), the system packs them all into a tar file to
+fit the single-blob interface. This tar is written to a temp file before the
+upload even starts.
 
-1. **OOM on large artifacts**: Hosts with tmpfs-backed `/tmp` materialize
-   multi-GiB images entirely in RAM before upload begins. 30+ GiB model images
-   cause silent OOM kills.
-2. **Redundant downloads**: Even when the destination already has every blob
-   (e.g. re-transfer), the source is fully downloaded and serialized before
-   any HEAD check occurs.
-3. **Unnecessary serialization round-trip**: Download serializes to tar, upload
-   deserializes from tar — for no reason when both ends are OCI registries.
-4. **CTF targets also suffer**: Writing to a CTF (OCI Layout on disk) unpacks
-   the tar back into individual files — the tar step adds pure overhead.
+Problems:
 
-An external contributor independently implemented a `TransferOCIArtifact`
-transformer that fuses the Get+Add pair into a single direct-streaming node
-(see `fix/oci-direct-streaming-transfer`). While effective, it introduces a
-`Transfer` method on the repository and requires special-casing in the graph
-builder. This ADR proposes a cleaner abstraction at the repository interface
-level.
+1. **Out-of-memory kills**: On systems where `/tmp` lives in RAM, a 30 GiB
+   model image fills all available memory before upload begins.
+2. **Wasted bandwidth**: Even if the destination already has most layers,
+   everything gets downloaded first. No deduplication happens until after the
+   full tar is built.
+3. **Pointless round-trip**: Download packs blobs into tar. Upload unpacks tar
+   back into blobs. The tar format adds nothing when both sides speak OCI.
+4. **CTF also suffers**: CTF is just files on disk. It unpacks the tar right
+   back into individual files — the tar step is pure overhead.
+
+### What prompted this
+
+An external contributor built a `TransferOCIArtifact` transformer that streams
+directly between OCI registries. Their approach works but adds a `Transfer`
+method to the repository and requires the graph builder to detect compatible
+endpoints. We can do better by changing the underlying abstraction.
 
 ## Decision Drivers
 
-* Zero-copy transfer between compatible backends (OCI→OCI, S3→S3)
-* No new public API surface on `ResourceRepository` beyond the existing contract
-* Backwards-compatible: existing consumers of `blob.ReadOnlyBlob` continue to work
-* Transformers must not need repository access for transfer orchestration
-* CTF and other filesystem targets benefit equally (no tar round-trip)
-* Extensible to future backend-to-backend optimizations without new transformer types
+* Stream content blob-by-blob — never hold the full artifact in memory or disk
+* Reuse oras-go interfaces we already depend on instead of inventing new ones
+* Keep backwards compatibility for transformers that need `blob.ReadOnlyBlob`
+* No special-casing in the graph builder for specific backend pairs
+* CTF and OCI targets both benefit equally
 
 ## Considered Options
 
-1. **[Option 1](#option-1-fused-transfer-transformer)**: Fused Transfer
-   Transformer (external branch approach)
-2. **[Option 2](#option-2-lazy-resourcecontent-with-direct-transfer-negotiation)**:
-   Lazy ResourceContent with Direct Transfer Negotiation
-3. **[Option 3](#option-3-streaming-pipe-between-get-and-add)**: Streaming
-   Pipe between Get and Add transformers
+1. **Fused Transfer Transformer** — single transformer node for OCI→OCI
+2. **oras Storage as Resource Content** — return `content.ReadOnlyGraphStorage`
+   instead of a blob
+3. **Streaming Pipe** — connect Get and Add transformers with an io.Pipe
 
 ## Decision Outcome
 
-Chosen [Option 2](#option-2-lazy-resourcecontent-with-direct-transfer-negotiation):
-"Lazy ResourceContent with Direct Transfer Negotiation".
+Chosen Option 2: **oras Storage as Resource Content**.
 
-Justification:
+We already depend on `oras.land/oras-go/v2`. Its interface hierarchy provides
+exactly what we need: per-blob streaming, existence checks, and graph traversal.
+Instead of inventing our own abstraction, we use what oras already defines.
 
-* Eliminates tar at the interface level, not just for OCI→OCI
-* No new public methods on repository — optimization is internal to the content handle
-* Graph builder needs no special-casing — same graph works for all targets
-* Extensible: any backend pair can implement `DirectTransferable` independently
-* CTF targets benefit immediately by consuming layers individually
+## The Core Idea
 
-### Option 2
-
-#### Description
-
-Replace `blob.ReadOnlyBlob` as the return type of resource download operations
-with a new `ResourceContent` interface. This interface provides lazy access to
-the underlying data: individual layers can be streamed, the content can be
-materialized to a blob on demand, or — when source and target are compatible —
-transferred directly without any local I/O.
-
-#### High-level Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Transfer Graph                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  GetResource(src)          PutResource(dst, content)            │
-│       │                          ▲                              │
-│       ▼                          │                              │
-│  ResourceContent ────────────────┘                              │
-│       │                                                         │
-│       ├── TransferTo(dst) ──→ direct copy (oras.CopyGraph)      │
-│       │                       [OCI→OCI: zero local I/O]         │
-│       │                                                         │
-│       ├── Layers() ──→ individual blob streaming                │
-│       │                 [CTF: write blobs directly to dir]       │
-│       │                                                         │
-│       └── Materialize() ──→ blob.ReadOnlyBlob (tar)             │
-│                              [legacy fallback only]              │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-#### Contract
+oras-go defines these interfaces (simplified):
 
 ```go
-package repository
-
-import (
-    "context"
-    "io"
-
-    "ocm.software/open-component-model/bindings/go/blob"
-    ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-    "github.com/opencontainers/go-digest"
-)
-
-// ResourceContent is a lazy handle to resource data returned by GetResource.
-// No I/O occurs until a consumption method is called.
-type ResourceContent interface {
-    // Descriptor returns the root OCI descriptor for the content.
-    Descriptor() ocispec.Descriptor
-
-    // Layers returns handles to individual content blobs.
-    // Each layer can be streamed independently without materializing the whole.
-    Layers(ctx context.Context) ([]LayerContent, error)
-
-    // Materialize serializes the full content into a ReadOnlyBlob.
-    // This is the legacy path — only called when no better consumption method
-    // is available. Implementations MAY produce a tar-based OCI layout here.
-    Materialize(ctx context.Context) (blob.ReadOnlyBlob, error)
+// content.ReadOnlyStorage — can fetch individual blobs
+type ReadOnlyStorage interface {
+    Fetch(ctx context.Context, desc ocispec.Descriptor) (io.ReadCloser, error)
+    Exists(ctx context.Context, desc ocispec.Descriptor) (bool, error)
 }
 
-// LayerContent provides streaming access to a single blob/layer.
-type LayerContent interface {
-    Digest() digest.Digest
-    Size() int64
-    MediaType() string
-    Open(ctx context.Context) (io.ReadCloser, error)
+// content.ReadOnlyGraphStorage — adds graph traversal
+type ReadOnlyGraphStorage interface {
+    ReadOnlyStorage
+    Predecessors(ctx context.Context, node ocispec.Descriptor) ([]ocispec.Descriptor, error)
 }
 
-// DirectTransferable is optionally implemented by ResourceContent when the
-// source can push content directly to a compatible target repository without
-// local materialization.
-type DirectTransferable interface {
-    // TransferTo performs a direct backend-to-backend transfer.
-    // Returns ErrNotSupported if the target is not compatible.
-    TransferTo(ctx context.Context, target ResourceRepository, creds map[string]string) error
+// content.Storage — can also push blobs
+type Storage interface {
+    ReadOnlyStorage
+    Push(ctx context.Context, expected ocispec.Descriptor, content io.Reader) error
 }
 ```
 
-Updated repository interface:
+`oras.CopyGraph` already accepts these:
+
+```go
+func CopyGraph(ctx context.Context,
+    src content.ReadOnlyStorage,
+    dst content.Storage,
+    root ocispec.Descriptor,
+    opts CopyGraphOptions) error
+```
+
+It streams blob-by-blob, does HEAD checks to skip existing content, and never
+creates a tar file. **We already use this internally.** The problem is that
+our repository interface hides it behind a tar-producing `ReadOnlyBlob` return.
+
+## Proposed Design
+
+### GetResource returns an oras store + root descriptor
 
 ```go
 type ResourceRepository interface {
-    // GetResource returns a lazy content handle. No download occurs yet.
+    // GetResource returns a store handle and root descriptor.
+    // No data is downloaded yet — content streams on demand.
     GetResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (ResourceContent, error)
 
-    // PutResource accepts a ResourceContent and writes it to the repository.
-    // Implementations SHOULD consume via Layers() when possible,
-    // falling back to Materialize() only when necessary.
+    // PutResource writes content from a ResourceContent into this repository.
     PutResource(ctx context.Context, resource *descriptor.Resource, content ResourceContent, credentials map[string]string) (*descriptor.Resource, error)
-
-    // PutBlob preserves backwards compatibility for pre-materialized blobs.
-    PutBlob(ctx context.Context, resource *descriptor.Resource, data blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error)
 }
 ```
 
-Transfer orchestration:
+`ResourceContent` wraps oras interfaces:
+
+```go
+// ResourceContent is a lazy handle to a resource's OCI content.
+// It implements content.ReadOnlyGraphStorage so it can be passed
+// directly to oras.CopyGraph or consumed blob-by-blob.
+type ResourceContent interface {
+    content.ReadOnlyGraphStorage
+
+    // Root returns the top-level descriptor (manifest or index).
+    Root() ocispec.Descriptor
+
+    // Materialize produces a ReadOnlyBlob for legacy consumers.
+    // This is the only path that creates a tar file.
+    Materialize(ctx context.Context) (blob.ReadOnlyBlob, error)
+}
+```
+
+That's it. `ResourceContent` **is** an oras store. Any code that knows how to
+work with oras can use it directly.
+
+### How transfer works
 
 ```go
 func transferResource(ctx context.Context, src, dst ResourceRepository, res *descriptor.Resource, creds Credentials) error {
@@ -174,143 +141,183 @@ func transferResource(ctx context.Context, src, dst ResourceRepository, res *des
     if err != nil {
         return err
     }
-
-    // Fast path: direct backend-to-backend transfer
-    if dt, ok := content.(DirectTransferable); ok {
-        err := dt.TransferTo(ctx, dst, creds.Target)
-        if err == nil {
-            return nil
-        }
-        if !errors.Is(err, ErrNotSupported) {
-            return err
-        }
-        // Fall through to standard path
-    }
-
-    // Standard path: let target consume content optimally
     return dst.PutResource(ctx, res, content, creds.Target)
 }
 ```
+
+Inside `PutResource`, the OCI repository implementation does:
+
+```go
+func (r *OCIRepository) PutResource(ctx context.Context, res *descriptor.Resource, content ResourceContent, creds map[string]string) (*descriptor.Resource, error) {
+    dstStore := r.storeFor(creds)
+
+    // Direct streaming — blob by blob, skips existing content
+    err := oras.CopyGraph(ctx, content, dstStore, content.Root(), r.copyOpts)
+    if err != nil {
+        return nil, err
+    }
+
+    return r.tagAndDescribe(ctx, res, content.Root())
+}
+```
+
+For CTF (filesystem) targets:
+
+```go
+func (c *CTFRepository) PutResource(ctx context.Context, res *descriptor.Resource, content ResourceContent, creds map[string]string) (*descriptor.Resource, error) {
+    // CTF's internal store also implements content.Storage
+    // oras.CopyGraph writes blobs as individual files — no tar
+    err := oras.CopyGraph(ctx, content, c.layoutStore, content.Root(), oras.DefaultCopyGraphOptions)
+    if err != nil {
+        return nil, err
+    }
+
+    return c.updateIndex(ctx, res, content.Root())
+}
+```
+
+Both paths use the same mechanism. No special cases. No tar.
+
+### OCI implementation of ResourceContent
+
+```go
+type ociResourceContent struct {
+    store content.ReadOnlyGraphStorage  // remote registry handle
+    root  ocispec.Descriptor            // resolved manifest descriptor
+}
+
+func (c *ociResourceContent) Fetch(ctx context.Context, desc ocispec.Descriptor) (io.ReadCloser, error) {
+    return c.store.Fetch(ctx, desc)
+}
+
+func (c *ociResourceContent) Exists(ctx context.Context, desc ocispec.Descriptor) (bool, error) {
+    return c.store.Exists(ctx, desc)
+}
+
+func (c *ociResourceContent) Predecessors(ctx context.Context, node ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+    return c.store.Predecessors(ctx, node)
+}
+
+func (c *ociResourceContent) Root() ocispec.Descriptor {
+    return c.root
+}
+
+func (c *ociResourceContent) Materialize(ctx context.Context) (blob.ReadOnlyBlob, error) {
+    // Legacy fallback: build tar only when explicitly asked
+    return tar.CopyToOCILayoutInMemory(ctx, c.store, c.root, nil)
+}
+```
+
+`GetResource` just resolves the reference — zero bytes downloaded:
+
+```go
+func (r *OCIRepository) GetResource(ctx context.Context, res *descriptor.Resource, creds map[string]string) (ResourceContent, error) {
+    store := r.storeFor(creds)
+    ref := r.referenceFor(res)
+
+    // Resolve tag/digest to descriptor — one HEAD request
+    root, err := store.Resolve(ctx, ref)
+    if err != nil {
+        return nil, err
+    }
+
+    return &ociResourceContent{store: store, root: root}, nil
+}
+```
+
+### Backwards compatibility for transformers
+
+Transformers that need `blob.ReadOnlyBlob` call `Materialize()`:
+
+```go
+func (t *SomeTransformer) Transform(ctx context.Context, content ResourceContent) (blob.ReadOnlyBlob, error) {
+    // Only this path creates a tar — and only when truly needed
+    return content.Materialize(ctx)
+}
+```
+
+Over time, transformers can be updated to work directly with `ResourceContent`
+(which is just an oras store) and avoid tar entirely.
 
 ## Pros and Cons of the Options
 
 ### [Option 1] Fused Transfer Transformer
 
-The approach from `fix/oci-direct-streaming-transfer`: add a
-`TransferOCIArtifact` transformer that combines Get+Add into a single graph
-node when both endpoints are OCI registries.
+Combine Get+Add into one transformer for compatible backends.
 
 Pros:
 
-* Works today — minimal changes to existing interfaces
-* Isolated to transformer layer — repository interface untouched
-* Graph builder can optimize node count
+* Works now with minimal changes
+* Existing interfaces stay the same
 
 Cons:
 
-* Exposes `Transfer` method as public API on repository
-* Graph builder needs special-case detection for compatible endpoints
-* Each new backend pair (S3→S3, GCS→GCS) requires a new fused transformer
-* CTF targets don't benefit — still get tar path
-* Transformers need repository access, violating their current contract
-* Type checks not clean — runtime interface assertion required
+* Adds `Transfer` method to repository public API
+* Graph builder must detect compatible endpoint pairs
+* Need a new fused transformer for each backend pair
+* CTF still gets tar
+* Transformers gain repository access (breaks their contract)
 
-### [Option 2] Lazy ResourceContent with Direct Transfer Negotiation
+### [Option 2] oras Storage as Resource Content
 
-Replace `ReadOnlyBlob` return with lazy `ResourceContent` handle.
+Return an oras `content.ReadOnlyGraphStorage` from GetResource.
 
 Pros:
 
-* Tar eliminated at the interface level for all paths
-* No new public API on repository — optimization lives in content handle
-* Same transfer graph works for all target types
-* CTF can consume layers directly without tar round-trip
-* Extensible: any backend pair implements `DirectTransferable` independently
-* `Materialize()` provides clean backwards compatibility
-* Blob dedup (HEAD checks) happens naturally via `oras.CopyGraph`
+* Built on oras interfaces we already use — no new abstractions
+* `oras.CopyGraph` does all the heavy lifting (streaming, dedup, HEAD checks)
+* Works identically for OCI→OCI, OCI→CTF, any→any
+* Graph builder needs zero special cases
+* `Materialize()` keeps full backwards compatibility
+* One line of transfer code regardless of backends
 
 Cons:
 
-* Breaking change to `ResourceRepository` interface (mitigated by `PutBlob` compat)
-* All repository implementations must be updated
-* `BlobTransformer` (ADR 0007) operates on `blob.ReadOnlyBlob` — needs adapter
-* More complex interface than single `ReadOnlyBlob`
+* Breaking change to `ResourceRepository` interface
+* All repository implementations need updating
+* `BlobTransformer` consumers need to call `Materialize()` (trivial adapter)
+* Slightly larger interface surface than a single `ReadOnlyBlob`
 
-### [Option 3] Streaming Pipe between Get and Add Transformers
+### [Option 3] Streaming Pipe
 
-Keep the two-node graph (Get + Add) but replace the File spec intermediary
-with an in-process pipe/channel that streams data between them.
+Connect Get and Add with an io.Pipe for streaming.
 
 Pros:
 
-* No interface changes — only internal transformer changes
-* Memory bounded by pipe buffer size
-* Works within existing graph execution model
+* No interface changes
+* Bounded memory usage
 
 Cons:
 
-* Requires concurrent execution of Get and Add nodes (graph must support it)
-* Still serializes/deserializes OCI format through the pipe
-* No blob-level dedup — entire artifact streams regardless of what target has
-* Doesn't help CTF — still receives serialized stream
-* Pipe backpressure complexity
-
-## Interaction with Existing ADRs
-
-### ADR 0003 (Transfer Specification)
-
-The transfer specification and transformation pipeline remain unchanged. The
-`ResourceContent` handle is consumed by transformers via `Materialize()` when
-they need `blob.ReadOnlyBlob` semantics. The direct transfer path is
-transparent to the graph — it's an optimization within `PutResource`.
-
-### ADR 0005 (Transformation)
-
-Transformers that operate on `blob.ReadOnlyBlob` (e.g. localization,
-format conversion) continue to work by calling `content.Materialize()`.
-Future transformers may accept `ResourceContent` directly for streaming
-transformations.
-
-### ADR 0007 (Resource Download / BlobTransformer)
-
-The `BlobTransformer` interface operates on `blob.ReadOnlyBlob`. An adapter
-bridges `ResourceContent` to `BlobTransformer`:
-
-```go
-func adaptForTransformer(ctx context.Context, content ResourceContent) (blob.ReadOnlyBlob, error) {
-    return content.Materialize(ctx)
-}
-```
-
-This preserves full compatibility while allowing the download path to defer
-materialization until a transformer actually needs it.
+* Requires concurrent graph node execution
+* Still serializes full artifact through the pipe
+* No per-blob dedup — downloads everything regardless
+* CTF doesn't benefit
+* Backpressure adds complexity
 
 ## Migration Path
 
-1. **Phase 1**: Introduce `ResourceContent` interface alongside existing
-   `DownloadResource`. Add `GetResource` as new method returning
-   `ResourceContent`. Implement for OCI repository.
-2. **Phase 2**: Update transfer graph to use `GetResource` + `PutResource`.
-   Existing transformers use `Materialize()` adapter.
-3. **Phase 3**: Update CTF repository to consume `Layers()` directly.
-   Deprecate `DownloadResource`.
-4. **Phase 4**: Remove tar intermediary from all standard paths.
-   `Materialize()` becomes legacy-only fallback.
+| Phase | What changes | Risk |
+|-------|-------------|------|
+| 1 | Add `GetResource` returning `ResourceContent` alongside existing `DownloadResource` in OCI repo | None — additive |
+| 2 | Transfer graph calls `GetResource` + `PutResource`. Transformers use `Materialize()` | Low — same behavior via Materialize |
+| 3 | CTF `PutResource` uses `oras.CopyGraph` directly against content store | Medium — new write path |
+| 4 | Deprecate `DownloadResource`. Remove tar from default paths | Cleanup only |
 
-## Discovery and Distribution
+## Interaction with Existing ADRs
 
-* Implementation starts in `bindings/go/repository` with new interface types
-* OCI repository (`bindings/go/oci`) implements `ResourceContent` + `DirectTransferable`
-* CTF repository implements `PutResource` consuming `Layers()` directly
-* Transfer graph updated to call negotiation logic
-* Existing tests adapted incrementally per phase
+* **ADR 0003 (Transfer)**: Transfer spec and graph structure unchanged.
+  Optimization is inside `PutResource`, transparent to the graph.
+* **ADR 0005 (Transformation)**: Transformers call `Materialize()` when they
+  need bytes. Future transformers can accept `ResourceContent` directly.
+* **ADR 0007 (BlobTransformer)**: `BlobTransformer` still works on
+  `blob.ReadOnlyBlob`. Bridge: `content.Materialize(ctx)`.
 
 ## Conclusion
 
-By replacing `blob.ReadOnlyBlob` with a lazy `ResourceContent` handle at the
-repository interface level, tar materialization is eliminated as an
-architectural constraint rather than worked around per-backend. The
-`DirectTransferable` negotiation pattern provides zero-copy transfer between
-compatible backends without polluting the repository API or requiring
-graph builder special-cases. The approach is backwards-compatible via
-`Materialize()` and incrementally adoptable across repository implementations.
+The tar file was never a deliberate design choice — it was a consequence of
+returning a single `ReadOnlyBlob` for multi-blob OCI content. By returning an
+oras `content.ReadOnlyGraphStorage` instead, we let `oras.CopyGraph` do what it
+already does: stream blobs one at a time, skip what the destination has, and
+never buffer the full artifact. No new abstractions needed — just exposing the
+oras store that already exists inside our repository implementations.
