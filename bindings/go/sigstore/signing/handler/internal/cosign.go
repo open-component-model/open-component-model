@@ -31,9 +31,9 @@ type CosignBinary struct {
 	mu               sync.Mutex
 	binaryPath       string // non-empty after first successful resolution
 	HttpClient       *http.Client
-	OperationTimeout time.Duration // zero means use defaultOperationTimeout
-	ExecCosign       func(ctx context.Context, binaryPath string, args, env []string) error
-	LookPath         func(file string) (string, error)
+	OperationTimeout time.Duration                                                          // zero means use defaultOperationTimeout
+	ExecCosign       func(ctx context.Context, binaryPath string, args, env []string) error // runs a cosign subcommand; args[0] is the subcommand name
+	LookPath         func(file string) (string, error)                                      // locates the cosign binary on PATH
 }
 
 func NewCosignBinary() *CosignBinary {
