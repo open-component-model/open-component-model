@@ -1,7 +1,7 @@
 # Streaming Resource Content: Replacing Tar with oras Storage Abstraction
 
 * **Status**: proposed
-* **Deciders**: Fabian Burth, Jakob Moeller
+* **Deciders**: OCM Technical Steering Committee
 * **Date**: 2026-05-11
 
 Technical Story: Today, downloading a resource produces a tar file containing
