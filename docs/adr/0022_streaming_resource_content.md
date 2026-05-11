@@ -99,26 +99,26 @@ our repository interface hides it behind a tar-producing `ReadOnlyBlob` return.
 
 ## Proposed Design
 
-### DownloadResourceContent returns an oras store + root descriptor
+### DownloadResourceStream returns an oras store + root descriptor
 
 ```go
 type ResourceRepository interface {
-    // DownloadResourceContent returns a store handle and root descriptor.
+    // DownloadResourceStream returns a store handle and root descriptor.
     // No data is downloaded yet — content streams on demand.
-    DownloadResourceContent(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (ResourceContent, error)
+    DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (ResourceStream, error)
 
-    // UploadResourceContent writes content from a ResourceContent into this repository.
-    UploadResourceContent(ctx context.Context, resource *descriptor.Resource, content ResourceContent, credentials map[string]string) (*descriptor.Resource, error)
+    // UploadResourceStream writes content from a ResourceStream into this repository.
+    UploadResourceStream(ctx context.Context, resource *descriptor.Resource, content ResourceStream, credentials map[string]string) (*descriptor.Resource, error)
 }
 ```
 
-`ResourceContent` wraps oras interfaces:
+`ResourceStream` wraps oras interfaces:
 
 ```go
-// ResourceContent is a lazy handle to a resource's OCI content.
+// ResourceStream is a lazy handle to a resource's OCI content.
 // It implements content.ReadOnlyGraphStorage so it can be passed
 // directly to oras.CopyGraph or consumed blob-by-blob.
-type ResourceContent interface {
+type ResourceStream interface {
     content.ReadOnlyGraphStorage
 
     // Root returns the top-level descriptor (manifest or index).
@@ -130,25 +130,25 @@ type ResourceContent interface {
 }
 ```
 
-That's it. `ResourceContent` **is** an oras store. Any code that knows how to
+That's it. `ResourceStream` **is** an oras store. Any code that knows how to
 work with oras can use it directly.
 
 ### How transfer works
 
 ```go
 func transferResource(ctx context.Context, src, dst ResourceRepository, res *descriptor.Resource, creds Credentials) error {
-    content, err := src.DownloadResourceContent(ctx, res, creds.Source)
+    content, err := src.DownloadResourceStream(ctx, res, creds.Source)
     if err != nil {
         return err
     }
-    return dst.UploadResourceContent(ctx, res, content, creds.Target)
+    return dst.UploadResourceStream(ctx, res, content, creds.Target)
 }
 ```
 
-Inside `UploadResourceContent`, the OCI repository implementation does:
+Inside `UploadResourceStream`, the OCI repository implementation does:
 
 ```go
-func (r *OCIRepository) UploadResourceContent(ctx context.Context, res *descriptor.Resource, content ResourceContent, creds map[string]string) (*descriptor.Resource, error) {
+func (r *OCIRepository) UploadResourceStream(ctx context.Context, res *descriptor.Resource, content ResourceStream, creds map[string]string) (*descriptor.Resource, error) {
     dstStore := r.storeFor(creds)
 
     // Direct streaming — blob by blob, skips existing content
@@ -164,7 +164,7 @@ func (r *OCIRepository) UploadResourceContent(ctx context.Context, res *descript
 For CTF (filesystem) targets:
 
 ```go
-func (c *CTFRepository) UploadResourceContent(ctx context.Context, res *descriptor.Resource, content ResourceContent, creds map[string]string) (*descriptor.Resource, error) {
+func (c *CTFRepository) UploadResourceStream(ctx context.Context, res *descriptor.Resource, content ResourceStream, creds map[string]string) (*descriptor.Resource, error) {
     // CTF's internal store also implements content.Storage
     // oras.CopyGraph writes blobs as individual files — no tar
     err := oras.CopyGraph(ctx, content, c.layoutStore, content.Root(), oras.DefaultCopyGraphOptions)
@@ -178,40 +178,40 @@ func (c *CTFRepository) UploadResourceContent(ctx context.Context, res *descript
 
 Both paths use the same mechanism. No special cases. No tar.
 
-### OCI implementation of ResourceContent
+### OCI implementation of ResourceStream
 
 ```go
-type ociResourceContent struct {
+type ociResourceStream struct {
     store content.ReadOnlyGraphStorage  // remote registry handle
     root  ocispec.Descriptor            // resolved manifest descriptor
 }
 
-func (c *ociResourceContent) Fetch(ctx context.Context, desc ocispec.Descriptor) (io.ReadCloser, error) {
+func (c *ociResourceStream) Fetch(ctx context.Context, desc ocispec.Descriptor) (io.ReadCloser, error) {
     return c.store.Fetch(ctx, desc)
 }
 
-func (c *ociResourceContent) Exists(ctx context.Context, desc ocispec.Descriptor) (bool, error) {
+func (c *ociResourceStream) Exists(ctx context.Context, desc ocispec.Descriptor) (bool, error) {
     return c.store.Exists(ctx, desc)
 }
 
-func (c *ociResourceContent) Predecessors(ctx context.Context, node ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+func (c *ociResourceStream) Predecessors(ctx context.Context, node ocispec.Descriptor) ([]ocispec.Descriptor, error) {
     return c.store.Predecessors(ctx, node)
 }
 
-func (c *ociResourceContent) Root() ocispec.Descriptor {
+func (c *ociResourceStream) Root() ocispec.Descriptor {
     return c.root
 }
 
-func (c *ociResourceContent) Materialize(ctx context.Context) (blob.ReadOnlyBlob, error) {
+func (c *ociResourceStream) Materialize(ctx context.Context) (blob.ReadOnlyBlob, error) {
     // Legacy fallback: build tar only when explicitly asked
     return tar.CopyToOCILayoutInMemory(ctx, c.store, c.root, nil)
 }
 ```
 
-`DownloadResourceContent` just resolves the reference — zero bytes downloaded:
+`DownloadResourceStream` just resolves the reference — zero bytes downloaded:
 
 ```go
-func (r *OCIRepository) DownloadResourceContent(ctx context.Context, res *descriptor.Resource, creds map[string]string) (ResourceContent, error) {
+func (r *OCIRepository) DownloadResourceStream(ctx context.Context, res *descriptor.Resource, creds map[string]string) (ResourceStream, error) {
     store := r.storeFor(creds)
     ref := r.referenceFor(res)
 
@@ -221,7 +221,7 @@ func (r *OCIRepository) DownloadResourceContent(ctx context.Context, res *descri
         return nil, err
     }
 
-    return &ociResourceContent{store: store, root: root}, nil
+    return &ociResourceStream{store: store, root: root}, nil
 }
 ```
 
@@ -230,13 +230,13 @@ func (r *OCIRepository) DownloadResourceContent(ctx context.Context, res *descri
 Transformers that need `blob.ReadOnlyBlob` call `Materialize()`:
 
 ```go
-func (t *SomeTransformer) Transform(ctx context.Context, content ResourceContent) (blob.ReadOnlyBlob, error) {
+func (t *SomeTransformer) Transform(ctx context.Context, content ResourceStream) (blob.ReadOnlyBlob, error) {
     // Only this path creates a tar — and only when truly needed
     return content.Materialize(ctx)
 }
 ```
 
-Over time, transformers can be updated to work directly with `ResourceContent`
+Over time, transformers can be updated to work directly with `ResourceStream`
 (which is just an oras store) and avoid tar entirely.
 
 ## Pros and Cons of the Options
@@ -260,7 +260,7 @@ Cons:
 
 ### [Option 2] oras Storage as Resource Content
 
-Return an oras `content.ReadOnlyGraphStorage` from DownloadResourceContent.
+Return an oras `content.ReadOnlyGraphStorage` from DownloadResourceStream.
 
 Pros:
 
@@ -299,17 +299,17 @@ Cons:
 
 | Phase | What changes | Risk |
 |-------|-------------|------|
-| 1 | Add `DownloadResourceContent` returning `ResourceContent` alongside existing `DownloadResource` in OCI repo | None — additive |
-| 2 | Transfer graph calls `DownloadResourceContent` + `UploadResourceContent`. Transformers use `Materialize()` | Low — same behavior via Materialize |
-| 3 | CTF `UploadResourceContent` uses `oras.CopyGraph` directly against content store | Medium — new write path |
+| 1 | Add `DownloadResourceStream` returning `ResourceStream` alongside existing `DownloadResource` in OCI repo | None — additive |
+| 2 | Transfer graph calls `DownloadResourceStream` + `UploadResourceStream`. Transformers use `Materialize()` | Low — same behavior via Materialize |
+| 3 | CTF `UploadResourceStream` uses `oras.CopyGraph` directly against content store | Medium — new write path |
 | 4 | Deprecate `DownloadResource`. Remove tar from default paths | Cleanup only |
 
 ## Interaction with Existing ADRs
 
 * **ADR 0003 (Transfer)**: Transfer spec and graph structure unchanged.
-  Optimization is inside `UploadResourceContent`, transparent to the graph.
+  Optimization is inside `UploadResourceStream`, transparent to the graph.
 * **ADR 0005 (Transformation)**: Transformers call `Materialize()` when they
-  need bytes. Future transformers can accept `ResourceContent` directly.
+  need bytes. Future transformers can accept `ResourceStream` directly.
 * **ADR 0007 (BlobTransformer)**: `BlobTransformer` still works on
   `blob.ReadOnlyBlob`. Bridge: `content.Materialize(ctx)`.
 
