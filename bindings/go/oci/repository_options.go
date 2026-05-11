@@ -94,18 +94,13 @@ const (
 )
 
 // OwnershipReferrerPolicy controls asset-to-owner referrer creation
-// (docs/adr/0016_ownership_annotations.md). It is opt-in because not every
-// OCM consumer wants the additional OCI artifacts that come with the feature.
+// (docs/adr/0016_ownership_annotations.md).
 type OwnershipReferrerPolicy int
 
 const (
-	// OwnershipReferrerPolicyNone disables ownership referrer creation. This
-	// is the default (zero value) — by-value resource uploads behave as if
-	// the asset-to-owner feature did not exist.
-	OwnershipReferrerPolicyNone OwnershipReferrerPolicy = iota
-	// OwnershipReferrerPolicyEnabled pushes one ownership referrer manifest
-	// per by-value resource upload, linking the resource manifest back to
-	// its owning component version via the OCI Distribution Referrers API.
+	// OwnershipReferrerPolicyDisabled is the zero value — no referrer is pushed.
+	OwnershipReferrerPolicyDisabled OwnershipReferrerPolicy = iota
+	// OwnershipReferrerPolicyEnabled pushes one ownership referrer per by-value resource upload (ADR 0016).
 	OwnershipReferrerPolicyEnabled
 )
 
@@ -192,7 +187,7 @@ func WithGlobalAccessPolicy(policy GlobalAccessPolicy) RepositoryOption {
 
 // WithOwnershipReferrerPolicy enables or disables asset-to-owner OCI referrer
 // creation on by-value resource uploads (ADR 0016). The default is
-// OwnershipReferrerPolicyNone (disabled).
+// OwnershipReferrerPolicyDisabled (disabled).
 func WithOwnershipReferrerPolicy(policy OwnershipReferrerPolicy) RepositoryOption {
 	return func(o *RepositoryOptions) {
 		o.OwnershipReferrerPolicy = policy

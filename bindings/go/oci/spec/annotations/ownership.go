@@ -20,3 +20,8 @@ const (
 	// stay queryable as plain key/value without parsing.
 	OwnershipComponentVersion = "software.ocm.component.version"
 )
+
+// OwnershipArtifactType is the OCI artifactType set on ownership referrer
+// manifests. It enables filtering via the Referrers API
+// (GET /v2/<name>/referrers/<digest>?artifactType=...).
+const OwnershipArtifactType = "application/vnd.ocm.software.ownership.v1+json"

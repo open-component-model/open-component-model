@@ -161,7 +161,13 @@ OCI Distribution Spec v1.1 introduced the [Referrers API](https://github.com/ope
     "digest": "sha256:44136fa355b311bfa706...",
     "size": 2
   },
-  "layers": [],
+  "layers": [
+    {
+      "mediaType": "application/vnd.oci.empty.v1+json",
+      "digest": "sha256:44136fa355b3678a1146...",
+      "size": 2
+    }
+  ],
   "subject": {
     "mediaType": "application/vnd.oci.image.manifest.v1+json",
     "digest": "sha256:abc123...",

@@ -19,21 +19,16 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// OwnershipArtifactType is the OCI artifactType set on ownership referrer
-// manifests. It enables filtering via the Referrers API
-// (GET /v2/<name>/referrers/<digest>?artifactType=...).
-const OwnershipArtifactType = "application/vnd.ocm.software.ownership.v1+json"
-
-// OwnershipReferrer returns a [tar.ReferrersFunc] that links the packed artifact back to its owning component and version (ADR 0016). Subjects that are not OCI manifests produce no referrer.
+// OwnershipReferrer returns a [tar.ReferrersFunc] linking the packed
+// artifact to its owning component version (ADR 0016). Subjects that
+// are not OCI manifests are skipped with a debug log.
 func OwnershipReferrer(artifact descriptor.Artifact, component string, version string) tar.ReferrersFunc {
 	return func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]tar.Referrer, error) {
 		if !introspection.IsOCICompliantManifest(top) {
 			slog.DebugContext(ctx, "skipping ownership referrer: subject is not an OCI manifest", "mediaType", top.MediaType, "digest", top.Digest.String())
 			return nil, nil
 		}
-		if _, ok := artifact.(*descriptor.Resource); !ok {
-			return nil, fmt.Errorf("unsupported artifact type %T for ownership referrer", artifact)
-		}
+
 		meta := artifact.GetElementMeta()
 		artifactValue, err := marshalArtifactAnnotation(meta.ToIdentity(), annotations.ArtifactKindResource)
 		if err != nil {
@@ -44,7 +39,7 @@ func OwnershipReferrer(artifact descriptor.Artifact, component string, version s
 		manifest := ociImageSpecV1.Manifest{
 			Versioned:    specs.Versioned{SchemaVersion: 2},
 			MediaType:    ociImageSpecV1.MediaTypeImageManifest,
-			ArtifactType: OwnershipArtifactType,
+			ArtifactType: annotations.OwnershipArtifactType,
 			Config:       emptyDesc,
 			Layers:       []ociImageSpecV1.Descriptor{emptyDesc},
 			Subject:      &top,
@@ -61,7 +56,7 @@ func OwnershipReferrer(artifact descriptor.Artifact, component string, version s
 
 		desc := ociImageSpecV1.Descriptor{
 			MediaType:    ociImageSpecV1.MediaTypeImageManifest,
-			ArtifactType: OwnershipArtifactType,
+			ArtifactType: annotations.OwnershipArtifactType,
 			Digest:       digest.FromBytes(body),
 			Size:         int64(len(body)),
 		}

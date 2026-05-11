@@ -76,14 +76,15 @@ func TestPushOwnershipReferrer(t *testing.T) {
 		m := fetchManifest(t, ctx, store, predecessors[0])
 
 		t.Run("artifactType matches constant", func(t *testing.T) {
-			assert.Equal(t, OwnershipArtifactType, m.ArtifactType)
+			assert.Equal(t, annotations.OwnershipArtifactType, m.ArtifactType)
 		})
 
-		t.Run("subject digest matches input descriptor", func(t *testing.T) {
+		t.Run("subject matches input descriptor", func(t *testing.T) {
 			r := require.New(t)
 			r.NotNil(m.Subject)
 			assert.Equal(t, subject.Digest, m.Subject.Digest)
 			assert.Equal(t, subject.MediaType, m.Subject.MediaType)
+			assert.Equal(t, subject.Size, m.Subject.Size)
 		})
 
 		t.Run("annotations carry component identity and full artifact identity with kind", func(t *testing.T) {
@@ -163,25 +164,6 @@ func TestPushOwnershipReferrer(t *testing.T) {
 		predecessors, err := store.Predecessors(ctx, subject)
 		r.NoError(err)
 		assert.Empty(t, predecessors, "no referrer must be written when the subject is not an OCI manifest")
-	})
-
-	t.Run("non-resource artifact returns an error", func(t *testing.T) {
-		// Only resources may carry an ownership referrer; sources (and any
-		// future Artifact implementer) must error rather than silently
-		// produce a mis-labelled "kind: resource" referrer.
-		subject := ociImageSpecV1.Descriptor{
-			MediaType: ociImageSpecV1.MediaTypeImageManifest,
-			Digest:    digest.FromBytes([]byte("subject")),
-			Size:      7,
-		}
-		source := &descriptor.Source{
-			ElementMeta: descriptor.ElementMeta{
-				ObjectMeta: descriptor.ObjectMeta{Name: "my-source", Version: "1.0.0"},
-			},
-		}
-		_, err := OwnershipReferrer(source, "c", "1.0.0")(t.Context(), subject)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "unsupported artifact type")
 	})
 }
 

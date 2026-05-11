@@ -95,7 +95,7 @@ type Repository struct {
 	globalAccessPolicy GlobalAccessPolicy
 
 	// ownershipReferrerPolicy controls asset-to-owner referrer creation on
-	// by-value resource uploads (ADR 0016). Default (zero value) is None.
+	// by-value resource uploads (ADR 0016). Default (zero value) is Disabled.
 	ownershipReferrerPolicy OwnershipReferrerPolicy
 }
 
@@ -213,16 +213,10 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 	return desc, err
 }
 
-// AddLocalResource adds a local resource to the repository.
-//
-// When [Repository.ownershipReferrerPolicy] is [OwnershipReferrerPolicyEnabled]
-// and the packed resource is an OCI-compliant manifest (image manifest or
-// index), the method also pushes an ownership referrer manifest
-// (artifactType "application/vnd.ocm.software.ownership.v1+json") whose subject points
-// at the packed resource and whose annotations carry the owning component
-// name, version, and resource identity per
-// docs/adr/0016_ownership_annotations.md. Raw-blob resources (plain layers,
-// non-OCI media types) do not produce a referrer.
+// AddLocalResource adds a local resource to the repository. When the
+// repository has [OwnershipReferrerPolicyEnabled] and the resource is an
+// OCI-compliant manifest, an ownership referrer is pushed alongside it
+// (ADR 0016).
 func (repo *Repository) AddLocalResource(
 	ctx context.Context,
 	component, version string,
@@ -240,7 +234,7 @@ func (repo *Repository) AddLocalResource(
 
 	resource = resource.DeepCopy()
 
-	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, resource, b); err != nil {
+	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, resource, b, repo.ownershipReferrerPolicy); err != nil {
 		return nil, err
 	}
 
@@ -259,7 +253,7 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 
 	source = source.DeepCopy()
 
-	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, source, content); err != nil {
+	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, source, content, OwnershipReferrerPolicyDisabled); err != nil {
 		return nil, err
 	}
 
@@ -448,6 +442,7 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 	version string,
 	artifact descriptor.Artifact,
 	b blob.ReadOnlyBlob,
+	ownershipReferrerPolicy OwnershipReferrerPolicy,
 ) error {
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
@@ -469,8 +464,7 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 		BaseReference:      reference,
 		GlobalAccessPolicy: repo.globalAccessPolicy,
 	}
-	// Ownership referrers (ADR 0016) only apply to resources.
-	if _, ok := artifact.(*descriptor.Resource); ok && repo.ownershipReferrerPolicy == OwnershipReferrerPolicyEnabled {
+	if ownershipReferrerPolicy == OwnershipReferrerPolicyEnabled {
 		packOptions.Referrers = []tar.ReferrersFunc{pack.OwnershipReferrer(artifact, component, version)}
 	}
 	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, packOptions)

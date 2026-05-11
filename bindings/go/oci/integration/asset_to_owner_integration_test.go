@@ -18,7 +18,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
-	"ocm.software/open-component-model/bindings/go/oci/internal/pack"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
@@ -126,7 +125,7 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 		subject, err := store.Resolve(ctx, resourceDigest.String())
 		r.NoError(err)
 
-		referrers, err := orasregistry.Referrers(ctx, graphStore, subject, pack.OwnershipArtifactType)
+		referrers, err := orasregistry.Referrers(ctx, graphStore, subject, annotations.OwnershipArtifactType)
 		r.NoError(err)
 		r.Len(referrers, 1, "exactly one ownership referrer should be discoverable via the Referrers API")
 
@@ -188,7 +187,7 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 		subject, err := store.Resolve(ctx, resourceDigest.String())
 		r.NoError(err)
 
-		referrers, err := orasregistry.Referrers(ctx, graphStore, subject, pack.OwnershipArtifactType)
+		referrers, err := orasregistry.Referrers(ctx, graphStore, subject, annotations.OwnershipArtifactType)
 		r.NoError(err)
 		assert.Lenf(t, referrers, 1,
 			"identical re-uploads must converge on a single referrer; got %d distinct manifests", len(referrers))
