@@ -19,7 +19,7 @@ Sign a component version to certify its authenticity and enable downstream verif
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
-- [Signing credentials configured]({{< relref "docs/how-to/configure-signing-credentials.md" >}})
+- [Signing credentials configured]({{< relref "configure-signing-credentials.md" >}})
 - A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}})) in this guide, but you can use any component version you have.
 
 ## Steps
