@@ -22,9 +22,6 @@ type Options struct {
 	RepositoryPluginProvider
 	CredentialPluginProvider
 	CredentialRepositoryTypeScheme *runtime.Scheme
-	// IdentityTypeRegistry provides access to known consumer identity types (e.g. OCIRegistry/v1)
-	// and their accepted credential types for validation during ingestion.
-	IdentityTypeRegistry *IdentityTypeRegistry
 	// CredentialTypeSchemeProvider provides access to known credential types (e.g. HelmHTTPCredentials/v1).
 	CredentialTypeSchemeProvider CredentialTypeSchemeProvider
 }
@@ -36,7 +33,6 @@ func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (*Gra
 		syncedDag:                    newSyncedDag(),
 		credentialPluginProvider:     opts.CredentialPluginProvider,
 		repositoryPluginProvider:     opts.RepositoryPluginProvider,
-		identityTypeRegistry:         opts.IdentityTypeRegistry,
 		credentialTypeSchemeProvider: opts.CredentialTypeSchemeProvider,
 	}
 
@@ -58,7 +54,6 @@ type Graph struct {
 
 	repositoryPluginProvider     RepositoryPluginProvider     // injection for resolving custom repository types
 	credentialPluginProvider     CredentialPluginProvider     // injection for resolving custom credential types
-	identityTypeRegistry         *IdentityTypeRegistry        // validates consumer identity types and accepted credentials
 	credentialTypeSchemeProvider CredentialTypeSchemeProvider // optional: enables typed credential ingestion
 }
 
