@@ -16,19 +16,32 @@ import (
 )
 
 const (
-	VersionCheckFlag        = "version-check"
-	VersionCheckAuto        = "auto"
-	VersionCheckDisable     = "disable"
-	VersionCheckEnvVar      = "OCM_DISABLE_VERSION_CHECK"
+	// VersionCheckFlag is the name of the persistent flag controlling the version check.
+	VersionCheckFlag = "version-check"
+	// VersionCheckAuto enables the version check (default behavior).
+	VersionCheckAuto = "auto"
+	// VersionCheckDisable disables the version check entirely.
+	VersionCheckDisable = "disable"
+	// VersionCheckEnvVar is the environment variable that disables the version check when set to a truthy value.
+	VersionCheckEnvVar = "OCM_DISABLE_VERSION_CHECK"
+	// versionCheckWaitTimeout is how long cobra.OnFinalize waits for the async check to complete.
+	// If the GitHub API hasn't responded by then, the warning is silently skipped.
 	versionCheckWaitTimeout = 2 * time.Second
 )
 
+// RegisterVersionCheckFlag adds the --version-check persistent flag to the root command.
 func RegisterVersionCheckFlag(cmd *cobra.Command) {
 	enum.Var(cmd.PersistentFlags(), VersionCheckFlag,
 		[]string{VersionCheckAuto, VersionCheckDisable},
 		"control automatic version update checks")
 }
 
+// VersionCheck starts an asynchronous version check and registers a cobra.OnFinalize callback
+// to print the upgrade warning (if applicable) after command execution completes.
+//
+// The check is skipped entirely when any opt-out mechanism is active or the binary has no
+// build version set. This function is called from PersistentPreRunE, so it runs before
+// every command.
 func VersionCheck(cmd *cobra.Command, currentVersion string) {
 	if isVersionCheckDisabled(cmd, currentVersion) {
 		return
@@ -40,12 +53,14 @@ func VersionCheck(cmd *cobra.Command, currentVersion string) {
 		return
 	}
 
+	// Skip early if we already warned the user recently — avoids spawning a goroutine.
 	cache, _ := versioncheck.ReadCache(cacheDir)
 	if cache != nil && !cache.ShouldWarn(time.Now()) {
 		slog.Debug("version check skipped: warned recently")
 		return
 	}
 
+	// Run the actual check in a background goroutine so it doesn't block command execution.
 	ch := make(chan *versioncheck.Result, 1)
 	go func() {
 		result := versioncheck.Check(cmd.Context(), versioncheck.Options{
@@ -55,6 +70,7 @@ func VersionCheck(cmd *cobra.Command, currentVersion string) {
 		ch <- result
 	}()
 
+	// Print the warning after the command finishes, so it doesn't interleave with command output.
 	cobra.OnFinalize(func() {
 		select {
 		case result := <-ch:
@@ -68,12 +84,15 @@ func VersionCheck(cmd *cobra.Command, currentVersion string) {
 	})
 }
 
+// isVersionCheckDisabled evaluates all opt-out mechanisms in priority order.
 func isVersionCheckDisabled(cmd *cobra.Command, currentVersion string) bool {
+	// Dev builds have no meaningful version to compare.
 	if currentVersion == "" || currentVersion == "n/a" {
 		slog.Debug("version check skipped: no build version set")
 		return true
 	}
 
+	// Don't show an upgrade warning alongside version output — redundant.
 	if cmd.Name() == "version" {
 		return true
 	}
@@ -96,6 +115,7 @@ func isVersionCheckDisabled(cmd *cobra.Command, currentVersion string) bool {
 	return false
 }
 
+// envDisabled checks the OCM_DISABLE_VERSION_CHECK environment variable.
 func envDisabled() bool {
 	val := os.Getenv(VersionCheckEnvVar)
 	switch strings.ToLower(val) {
@@ -105,6 +125,7 @@ func envDisabled() bool {
 	return false
 }
 
+// flagDisabled checks the --version-check flag on the current command or root command.
 func flagDisabled(cmd *cobra.Command) bool {
 	val, err := enum.Get(cmd.Flags(), VersionCheckFlag)
 	if err != nil {
@@ -119,6 +140,7 @@ func flagDisabled(cmd *cobra.Command) bool {
 	return val == VersionCheckDisable
 }
 
+// configDisabled checks the OCM config file for a versioncheck configuration entry.
 func configDisabled(cmd *cobra.Command) bool {
 	ctx := ocmctx.FromContext(cmd.Context())
 	if ctx == nil {
@@ -136,6 +158,7 @@ func configDisabled(cmd *cobra.Command) bool {
 	return vcCfg.Disabled
 }
 
+// printWarning writes the upgrade notification to the given writer (typically stderr).
 func printWarning(w io.Writer, result *versioncheck.Result) {
 	fmt.Fprintf(w, "\nA newer version of ocm is available: v%s (current: v%s)\n", result.LatestVersion, result.CurrentVersion)
 	fmt.Fprintf(w, "See: https://github.com/%s/%s/releases/tag/%sv%s\n",

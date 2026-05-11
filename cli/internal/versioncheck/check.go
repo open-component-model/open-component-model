@@ -13,21 +13,37 @@ import (
 )
 
 const (
+	// DefaultGitHubOwner is the GitHub organization that owns the OCM repository.
 	DefaultGitHubOwner = "open-component-model"
-	DefaultGitHubRepo  = "open-component-model"
-	DefaultTagPrefix   = "cli/v"
+	// DefaultGitHubRepo is the GitHub repository name (monorepo containing CLI, controller, etc.).
+	DefaultGitHubRepo = "open-component-model"
+	// DefaultTagPrefix identifies CLI releases within the monorepo's release tags.
+	DefaultTagPrefix = "cli/v"
+	// DefaultHTTPTimeout is the maximum duration for the GitHub API request.
+	// Kept short to avoid delaying CLI commands in degraded network conditions.
 	DefaultHTTPTimeout = 5 * time.Second
-	releasesPerPage    = 20
+	// releasesPerPage is the number of releases to fetch in a single API call.
+	// Since releases are ordered by creation date descending, the latest stable
+	// CLI release is typically within the first page.
+	releasesPerPage = 20
 )
 
+// Options configures the version check behavior.
 type Options struct {
+	// CurrentVersion is the semantic version of the running binary (set via ldflags at build time).
 	CurrentVersion string
-	CacheDir       string
-	GitHubOwner    string
-	GitHubRepo     string
-	TagPrefix      string
-	HTTPClient     *http.Client
-	BaseURL        string
+	// CacheDir overrides the default cache directory. If empty, CacheDir() is used.
+	CacheDir string
+	// GitHubOwner is the repository owner. Defaults to DefaultGitHubOwner.
+	GitHubOwner string
+	// GitHubRepo is the repository name. Defaults to DefaultGitHubRepo.
+	GitHubRepo string
+	// TagPrefix filters release tags. Only tags starting with this prefix are considered.
+	TagPrefix string
+	// HTTPClient allows injecting a custom HTTP client (useful for testing).
+	HTTPClient *http.Client
+	// BaseURL overrides the GitHub API base URL (useful for testing with httptest).
+	BaseURL string
 }
 
 func (o *Options) defaults() {
@@ -48,12 +64,19 @@ func (o *Options) defaults() {
 	}
 }
 
+// Result holds the outcome of a version comparison.
 type Result struct {
+	// CurrentVersion is the parsed version of the running binary.
 	CurrentVersion string
-	LatestVersion  string
+	// LatestVersion is the highest stable release found on GitHub.
+	LatestVersion string
+	// UpdateAvailable is true when LatestVersion is newer than CurrentVersion.
 	UpdateAvailable bool
 }
 
+// Check performs a version check, using the local cache when possible.
+// Returns nil on any error (network failure, parse error, etc.) to ensure silent failure.
+// The caller should treat a nil result as "no update information available".
 func Check(ctx context.Context, opts Options) *Result {
 	opts.defaults()
 
@@ -72,16 +95,19 @@ func Check(ctx context.Context, opts Options) *Result {
 
 	now := time.Now()
 
+	// Use cached result if the last check was recent enough.
 	cache, _ := ReadCache(cacheDir)
 	if cache != nil && cache.IsFresh(now) {
 		return compareVersions(current, cache.LatestVersion)
 	}
 
+	// Cache is stale or missing — fetch from GitHub.
 	latest, err := fetchLatestVersion(ctx, opts)
 	if err != nil {
 		return nil
 	}
 
+	// Persist the new result, preserving the previous WarnedAt timestamp.
 	entry := &CacheEntry{
 		LatestVersion: latest,
 		CheckedAt:     now,
@@ -94,6 +120,8 @@ func Check(ctx context.Context, opts Options) *Result {
 	return compareVersions(current, latest)
 }
 
+// MarkWarned updates the cache to record that an upgrade warning was just shown.
+// This prevents the warning from appearing again until warnInterval has elapsed.
 func MarkWarned(cacheDir string) {
 	cache, _ := ReadCache(cacheDir)
 	if cache == nil {
@@ -103,6 +131,8 @@ func MarkWarned(cacheDir string) {
 	_ = WriteCache(cacheDir, cache)
 }
 
+// compareVersions returns a Result comparing the current version against a latest version string.
+// Returns nil if the latest version string cannot be parsed.
 func compareVersions(current *semver.Version, latestStr string) *Result {
 	latest, err := semver.NewVersion(latestStr)
 	if err != nil {
@@ -115,12 +145,15 @@ func compareVersions(current *semver.Version, latestStr string) *Result {
 	}
 }
 
+// githubRelease is a minimal representation of the GitHub Releases API response.
 type githubRelease struct {
 	TagName    string `json:"tag_name"`
 	Draft      bool   `json:"draft"`
 	Prerelease bool   `json:"prerelease"`
 }
 
+// fetchLatestVersion queries the GitHub Releases API and returns the highest stable CLI version.
+// It filters out drafts, pre-releases, non-CLI tags, and semver pre-release versions.
 func fetchLatestVersion(ctx context.Context, opts Options) (string, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d",
 		opts.BaseURL, opts.GitHubOwner, opts.GitHubRepo, releasesPerPage)
@@ -141,6 +174,7 @@ func fetchLatestVersion(ctx context.Context, opts Options) (string, error) {
 		return "", fmt.Errorf("github api returned %d", resp.StatusCode)
 	}
 
+	// Limit response body to 1MB to prevent excessive memory use on unexpected responses.
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return "", err
@@ -164,6 +198,7 @@ func fetchLatestVersion(ctx context.Context, opts Options) (string, error) {
 		if err != nil {
 			continue
 		}
+		// Double-check: exclude semver pre-releases that GitHub may not flag.
 		if v.Prerelease() != "" {
 			continue
 		}
