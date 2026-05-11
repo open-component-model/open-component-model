@@ -139,7 +139,7 @@ cosign verify-blob-attestation \
   --type slsaprovenance1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp \
-    '^https://github.com/open-component-model/open-component-model/' \
+    '^https://github\.com/open-component-model/open-component-model/\.github/workflows/cli\.yml@refs/(heads/(main|releases/v[0-9]+\.[0-9]+)|tags/cli/v[0-9]+\.[0-9]+\.[0-9]+)' \
   $(which ocm)
 ```
 
@@ -159,7 +159,7 @@ DIGEST="sha256:$(sha256sum $(which ocm) | cut -d' ' -f1)"
 curl -sfL \
   "https://api.github.com/repos/open-component-model/open-component-model/attestations/${DIGEST}" \
   | jq -r '.attestations[0].bundle.dsseEnvelope.payload' \
-  | base64 -d | jq '.subject[] | "\(.digest.sha256)  \(.name)"'
+  | base64 --decode | jq '.subject[] | "\(.digest.sha256)  \(.name)"'
 ```
 
 If your binary's digest appears in the output, it matches the attested build artifact.

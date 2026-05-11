@@ -224,7 +224,7 @@ print_verify_instructions() {
       --type slsaprovenance1 \\
       --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
       --certificate-identity-regexp \\
-        '^https://github.com/${GITHUB_REPO}/' \\
+        '^https://github\\.com/${GITHUB_REPO}/\\.github/workflows/cli\\.yml@refs/(heads/(main|releases/v[0-9]+\\.[0-9]+)|tags/cli/v[0-9]+\\.[0-9]+\\.[0-9]+)' \\
       ${BIN_DIR}/ocm
 
 COSIGN_EOF
@@ -236,7 +236,7 @@ COSIGN_EOF
     curl -sfL \\
       "https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}" \\
       | jq -r '.attestations[0].bundle.dsseEnvelope.payload' \\
-      | base64 -d | jq '.subject[] | "\(.digest.sha256)  \(.name)"'
+      | base64 --decode | jq '.subject[] | "\(.digest.sha256)  \(.name)"'
     # Compare the listed hash with: ${hash_cmd} ${BIN_DIR}/ocm
 
 HASH_EOF
