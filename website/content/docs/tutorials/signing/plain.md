@@ -132,7 +132,7 @@ ls -la ./keys/*.pem
 Never commit it to version control or share it.
 {{< /callout >}}
 
-For more details, see [How-to: Generate Signing Keys]({{< relref "docs/how-to/generate-signing-keys.md" >}}).
+For more details, see [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}).
 {{< /step >}}
 
 {{< step >}}
@@ -142,7 +142,7 @@ For more details, see [How-to: Generate Signing Keys]({{< relref "docs/how-to/ge
 Create a new `.ocmconfig` in the current directory and copy the content below to it, to tell OCM where to find your keys.
 If you already have a `$HOME/.ocmconfig` file you can skip creating a new one and just add the credential configuration to your existing file.
 
-A detailed How-To guide is available here: [How-to: Configure Signing Credentials]({{< relref "docs/how-to/configure-signing-credentials.md" >}}).
+A detailed How-To guide is available here: [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}).
 
 ```bash
 touch .ocmconfig
@@ -166,7 +166,7 @@ EOF
 
 > 👉 The `signature: default` name is used when you don't specify `--signature` on the command line.
 
-For more details, see [How-to: Configure Signing Credentials]({{< relref "docs/how-to/configure-signing-credentials.md" >}}).
+For more details, see [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}).
 {{< /step >}}
 
 {{< step >}}
@@ -312,8 +312,8 @@ rm -rf /tmp/ocm-signing-tutorial
 
 ## Next Steps
 
-- [How-to: Generate Signing Keys]({{< relref "docs/how-to/generate-signing-keys.md" >}}) - Step-by-step creating RSA key pairs.
-- [How-to: Configure Signing Credentials]({{< relref "docs/how-to/configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification.
+- [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) - Step-by-step creating RSA key pairs.
+- [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification.
 
 ## Related Documentation
 

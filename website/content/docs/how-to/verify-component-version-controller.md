@@ -19,10 +19,10 @@ Configure the OCM Kubernetes controller to automatically verify component versio
 ## Prerequisites
 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) set up
-- A [signed component version]({{< relref "docs/how-to/sign-component-version.md" >}}) in a local CTF
+- A [signed component version]({{< relref "sign-component-version.md" >}}) in a local CTF
   archive
 - The public key file at `/tmp/keys/public-key.pem`
-  (from [Generate Signing Keys]({{< relref "docs/how-to/generate-signing-keys.md" >}}))
+  (from [Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}))
 - Access to an OCI registry
   (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
 
@@ -344,7 +344,7 @@ data:
 
 - [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) -
   Understand how OCM signing works
-- [How-To: Verify Component Versions (CLI)]({{< relref "docs/how-to/verify-component-version.md" >}}) -
+- [How-To: Verify Component Versions (CLI)]({{< relref "verify-component-version.md" >}}) -
   Verify signatures using the CLI
 - [How-To: Configure Credentials for OCM Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}) -
   Set up registry credentials for the controller

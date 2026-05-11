@@ -15,7 +15,7 @@ toc: true
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
-- [Verification credentials configured]({{< relref "docs/how-to/configure-signing-credentials.md" >}}) with the public key
+- [Verification credentials configured]({{< relref "configure-signing-credentials.md" >}}) with the public key
 - A signed component version to verify in your current directory, here we use the `helloworld` component version from the [getting started guide]({{< relref "create-component-version.md" >}}) that you've signed in the [How-To: Sign Component Versions]({{< relref "sign-component-version.md" >}}) guide.
 
 ## Steps
@@ -109,7 +109,7 @@ ocm verify cv --signature <name> /tmp/helloworld/transport-archive//github.com/a
 
 **Fix:** Ensure your `.ocmconfig` has a consumer entry with the matching `signature` name and `public_key_pem_file` path.
 
-See [Configure Signing Credentials]({{< relref "docs/how-to/configure-signing-credentials.md" >}}).
+See [Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}).
 
 ### Symptom: "invalid key format"
 
