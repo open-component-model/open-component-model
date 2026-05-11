@@ -36,10 +36,9 @@ type CosignBinary struct {
 	LookPath         func(file string) (string, error)
 }
 
-func NewCosignBinary(httpClient *http.Client) *CosignBinary {
-	b := &CosignBinary{HttpClient: httpClient}
-	if b.HttpClient == nil {
-		b.HttpClient = &http.Client{Timeout: defaultHTTPClientTimeout}
+func NewCosignBinary() *CosignBinary {
+	b := &CosignBinary{
+		HttpClient: &http.Client{Timeout: defaultHTTPClientTimeout},
 	}
 	b.ExecCosign = b.execCosign
 	b.LookPath = exec.LookPath
