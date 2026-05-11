@@ -18,8 +18,8 @@ var ErrNoIndirectCredentials = errors.New("no indirect credentials found in grap
 
 // resolveFromRepository is invoked when the DAG does not yield direct credentials.
 // The method ensures that successful resolutions are cached for subsequent calls.
-func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Typed) (runtime.Typed, error) {
-	node := nodeID(identity)
+func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
+	node := identity.String()
 
 	if credentials, cached := g.getCredentials(node); cached {
 		return credentials, nil
@@ -30,18 +30,10 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Type
 		// in case of an error, we try to resolve the credentials using the AnyConsumerIdentityType
 		// this is a fallback resolution mechanism intended for plugins that do not mind which
 		// consumer identity type is used.
-		//
-		// Deprecated: toIdentity is migration scaffolding — GetRepositoryPlugin still accepts
-		// runtime.Typed, but the fallback needs to construct a new Identity with AnyConsumerIdentityType.
-		// Phase 3 will remove this when plugin interfaces migrate to runtime.Typed.
-		fallbackID, idErr := toIdentity(identity)
-		if idErr != nil {
-			return nil, errors.Join(err, idErr, ErrNoIndirectCredentials)
-		}
-		fallbackID = fallbackID.DeepCopy()
-		fallbackID.SetType(AnyConsumerIdentityType)
+		fallback := identity.DeepCopy()
+		fallback.SetType(AnyConsumerIdentityType)
 		var anyErr error
-		plugin, anyErr = g.repositoryPluginProvider.GetRepositoryPlugin(ctx, fallbackID)
+		plugin, anyErr = g.repositoryPluginProvider.GetRepositoryPlugin(ctx, fallback)
 		// Independently of the actual error, we return ErrNoIndirectCredentials because, in fact, we cannot provide
 		// indirect credentials. The caller should decide how to handle the error.
 		if anyErr != nil {
@@ -61,16 +53,6 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Type
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Deprecated: toIdentity is migration scaffolding — RepositoryPlugin.Resolve still accepts
-	// runtime.Identity. Phase 3 will remove this when plugin interfaces migrate to runtime.Typed.
-	pluginIdentity, err := toIdentity(identity)
-	if err != nil {
-		return nil, errors.Join(
-			ErrUnknown,
-			fmt.Errorf("failed to convert typed identity for repository resolution: %w", err),
-		)
-	}
-
 	resolve := func(plugin RepositoryPlugin, cfg runtime.Typed) {
 		defer wg.Done()
 
@@ -86,7 +68,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Type
 			}
 		}
 		slog.DebugContext(ctx, "Resolving credentials via repository", "identity", identity, "config", cfg)
-		credentials, err := plugin.Resolve(ctx, cfg, pluginIdentity, credentials)
+		credentials, err := plugin.Resolve(ctx, cfg, identity, credentials)
 
 		mu.Lock()
 		defer mu.Unlock()
