@@ -626,6 +626,26 @@ By default, `globalAccess` is not populated. To opt in, use the two-step transfe
 
 This is an experimental feature carried over from OCM v1 for backwards compatibility. Its future availability is being evaluated by the community.
 
+With `globalAccessPolicy: auto`, the descriptor looks like this after transfer:
+
+```yaml
+resources:
+  - access:
+      localReference: sha256:abc123...
+      mediaType: application/vnd.oci.image.index.v1+json
+      referenceName: stefanprodan/podinfo:6.9.1
+      type: LocalBlob/v1
+      globalAccess:
+        imageReference: <your-registry>/component-descriptors/github.com/acme.org/native-oci-demo@sha256:abc123...
+        type: ociArtifact
+    name: app-image
+    relation: external
+    type: ociArtifact
+    version: 1.0.0
+```
+
+The `globalAccess.imageReference` provides a direct pullable reference. Note that this reference becomes stale if the component is mirrored to another registry.
+
 Without `globalAccess`, you can still access native OCI artifacts directly using the `localReference` digest and the component version's repository path in the registry.
 {{< /details >}}
 
