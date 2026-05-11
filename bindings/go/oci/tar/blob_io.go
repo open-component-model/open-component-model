@@ -198,7 +198,7 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		// own config + layers, plus the referrers the caller wants attached. CopyGraph's default
 		// successor traversal would re-fetch the (now-stale) manifest bytes from the source store
 		// and miss the injected referrers — supplying the children explicitly avoids both.
-		rootChildren := slices.Concat([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers, referrerDescriptors)
+		rootChildren := append(append([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers...), referrerDescriptors...)
 		opts.FindSuccessors = findSuccessorsForRoot(topLevelDesc, rootChildren)
 	case ociImageSpecV1.MediaTypeImageIndex:
 		var index ociImageSpecV1.Index
@@ -208,7 +208,7 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		if err := opts.MutateParentFunc(&topLevelDesc); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate index descriptor before copy: %w", err)
 		}
-		rootChildren := append(index.Manifests, referrerDescriptors...)
+		rootChildren := append(append([]ociImageSpecV1.Descriptor{}, index.Manifests...), referrerDescriptors...)
 		opts.FindSuccessors = findSuccessorsForRoot(topLevelDesc, rootChildren)
 	}
 
