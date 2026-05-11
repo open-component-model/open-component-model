@@ -59,6 +59,9 @@ func (h *Handler) GetSigningHandlerScheme() *runtime.Scheme {
 	return v1alpha1.Scheme
 }
 
+// Sign performs keyless signing via cosign sign-blob: resolves an OIDC token,
+// invokes Fulcio for a short-lived certificate, signs the digest, records in Rekor,
+// and returns the base64-encoded Sigstore bundle with extracted issuer/identity.
 func (h *Handler) Sign(
 	ctx context.Context,
 	unsigned descruntime.Digest,
@@ -150,6 +153,9 @@ func (h *Handler) Sign(
 	}, nil
 }
 
+// Verify checks a Sigstore bundle via cosign verify-blob: decodes the bundle and digest,
+// validates the Fulcio certificate chain and Rekor inclusion proof, and confirms the
+// signed content matches the digest using the configured identity/issuer constraints.
 func (h *Handler) Verify(
 	ctx context.Context,
 	signed descruntime.Signature,

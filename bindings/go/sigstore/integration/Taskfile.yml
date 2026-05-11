@@ -5,6 +5,8 @@ includes:
 
 vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
+  COSIGN_VERSION:
+    sh: . ../signing/handler/internal/.env && echo "$COSIGN_VERSION"
   SCAFFOLDING_VERSION:
     sh: . ./.env && echo "$SCAFFOLDING_VERSION"
   SIGSTORE_ENV_FILE: 'tmp/sigstore-env.sh'
@@ -116,12 +118,31 @@ tasks:
       - task: scaffolding:env
       - echo "Token refreshed. Source the env with:\n  source {{.SIGSTORE_ENV_FILE}}"
 
+  cosign:install:
+    desc: "Install cosign at the version pinned in signing/handler/internal/.env"
+    requires:
+      vars: [COSIGN_VERSION]
+    vars:
+      BIN: '{{.ROOT_DIR}}/tmp/bin/cosign'
+    status:
+      - 'cosign version 2>&1 | grep -qF "{{.COSIGN_VERSION}}"'
+    cmds:
+      - |
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+        case "$ARCH" in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; esac
+        URL="https://github.com/sigstore/cosign/releases/download/{{.COSIGN_VERSION}}/cosign-${OS}-${ARCH}"
+        mkdir -p "{{.ROOT_DIR}}/tmp/bin"
+        curl -fsSL "$URL" -o "{{.BIN}}"
+        chmod +x "{{.BIN}}"
+
   test/integration:
     desc: "Run sigstore integration tests against scaffolding cluster"
-    deps: [scaffolding:env]
+    deps: [scaffolding:env, cosign:install]
     set: [errexit]
     cmds:
       - |
+        export PATH="{{.ROOT_DIR}}/tmp/bin:$PATH"
         . {{.SIGSTORE_ENV_FILE}}
         go test -count=1 -run "{{.INTEGRATION_TEST_IDENTIFIER}}" -timeout 180s ./...
 
