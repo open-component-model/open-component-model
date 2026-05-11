@@ -3,7 +3,7 @@ module ocm.software/open-component-model/bindings/go/cel
 go 1.26.1
 
 require (
-	github.com/google/cel-go v0.27.0
+	github.com/google/cel-go v0.28.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
 )
