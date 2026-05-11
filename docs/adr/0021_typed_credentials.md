@@ -74,15 +74,15 @@ interface (`TypedResolver[T any]`) was also tested; it does not work because the
 ```go
 // Pseudocode — updated Resolver interface
 type Resolver interface {
-    Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)  // deprecated
-    ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) // new
+Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) // deprecated
+ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) // new
 }
 
 // Pseudocode — consumer usage (Phase 2+)
 identity := runtime.Identity{
-    "type":     "HelmChartRepository/v1",
-    "hostname": "charts.example.com",
-    "path":     "/stable",
+"type":     "HelmChartRepository/v1",
+"hostname": "charts.example.com",
+"path":     "/stable",
 }
 typed, err := resolver.ResolveTyped(ctx, identity)
 creds := typed.(*HelmHTTPCredentials) // type-safe access
@@ -123,7 +123,7 @@ self-registration pattern used by all other plugin types (OCI, signing, etc.):
 ```go
 // Pseudocode — builtin Helm registration
 func Register(credentialTypeScheme *runtime.Scheme) {
-    credentialTypeScheme.MustRegisterWithAlias(&HelmHTTPCredentials{}, HelmHTTPCredentialsVersionedType, HelmHTTPCredentialsType)
+credentialTypeScheme.MustRegisterWithAlias(&HelmHTTPCredentials{}, HelmHTTPCredentialsVersionedType, HelmHTTPCredentialsType)
 }
 ```
 
@@ -149,7 +149,7 @@ flowchart LR
     Bindings["Bindings<br/>(Helm, OCI, ...)"] -->|Register| CTR
     Plugins["Plugin Discovery"] -->|RegisterFromPlugin<br/>from capability specs| CTR
 
-    CTR -->|GetCredentialTypeScheme()| Graph["Credential Graph"]
+    CTR -->|"GetCredentialTypeScheme()"| Graph["Credential Graph"]
 ```
 
 The scheme serves a fundamentally different purpose than the credential plugins. The `CredentialPlugin` interface
@@ -222,7 +222,7 @@ module boundaries. Without `go.work`, modules resolve from the proxy — so chan
 ### Phase 1: Foundation
 
 Add `ResolveTyped(ctx, runtime.Identity)` to `Resolver` and `CredentialTypeSchemeProvider` for graph consumption.
-The graph stores credentials as `runtime.Typed` internally; identities continue to be `runtime.Identity`. 
+The graph stores credentials as `runtime.Typed` internally; identities continue to be `runtime.Identity`.
 No downstream breakage — all existing code continues to work.
 
 ### Phase 2: Binding migration (parallelizable)
@@ -269,8 +269,9 @@ development blocking while transitioning the multi-module monorepo.
 - **`ResolveTyped` reverted to `runtime.Identity`** (from `runtime.Typed`). Identity lookup in the graph relies on
   `runtime.Identity.Match` for glob, path, and URL semantics (e.g. `ghcr.io/my-org/*`). There is no equivalent
   matching model for arbitrary typed identity structs yet, and no current consumer of typed identities, so the
-  parameter type stays as `runtime.Identity` until a typed matching design exists. Credential values remain typed
-  (`runtime.Typed` return type) — only the identity side is rolled back.
+  parameter type stays as `runtime.Identity` until
+  a [typed matching design exists](https://github.com/open-component-model/ocm-project/issues/800).
+  Credential values remain typed (`runtime.Typed` return type) — only the identity side is rolled back.
 - **`IdentityTypeRegistry` dropped from the credential graph.** `Options.IdentityTypeRegistry`, the graph's
   `identityTypeRegistry` field, and `validateConsumerIdentityTypes` are removed. With typed identities rolled back,
   the registry no longer has a job to do in the graph: it existed to validate that a typed identity's declared
@@ -284,7 +285,8 @@ development blocking while transitioning the multi-module monorepo.
 - **`ResolveTyped` accepts `runtime.Typed`**, not `runtime.Identity`. The graph internally works with `runtime.Typed`
   throughout. `runtime.Identity` is only accepted at the deprecated `Resolve` method boundary. Typed identity structs
   can be passed directly to `ResolveTyped`.
-- **`runtime.Scheme.ResolveCanonicalType`** added — resolves alias types to their canonical default type. Used by `isAccepted`
+- **`runtime.Scheme.ResolveCanonicalType`** added — resolves alias types to their canonical default type. Used by
+  `isAccepted`
   for identity → credential type validation, replacing the previous `reflect.TypeOf` + `NewObject` comparison.
 - **`CredentialAcceptor` interface replaced by `IdentityTypeRegistry`**. The accepted credential types mapping is now
   declarative (stored at registration time via `RegisterWithAcceptedCredentials`) rather than behavioral (implemented
