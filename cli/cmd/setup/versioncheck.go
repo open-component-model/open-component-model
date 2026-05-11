@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/versioncheck"
 )
@@ -87,6 +88,11 @@ func isVersionCheckDisabled(cmd *cobra.Command, currentVersion string) bool {
 		return true
 	}
 
+	if configDisabled(cmd) {
+		slog.Debug("version check disabled via config")
+		return true
+	}
+
 	return false
 }
 
@@ -111,6 +117,23 @@ func flagDisabled(cmd *cobra.Command) bool {
 		}
 	}
 	return val == VersionCheckDisable
+}
+
+func configDisabled(cmd *cobra.Command) bool {
+	ctx := ocmctx.FromContext(cmd.Context())
+	if ctx == nil {
+		return false
+	}
+	cfg := ctx.Configuration()
+	if cfg == nil {
+		return false
+	}
+	vcCfg, err := versioncheck.LookupConfig(cfg)
+	if err != nil {
+		slog.Debug("version check config lookup failed", slog.String("error", err.Error()))
+		return false
+	}
+	return vcCfg.Disabled
 }
 
 func printWarning(w io.Writer, result *versioncheck.Result) {
