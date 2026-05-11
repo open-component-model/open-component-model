@@ -359,14 +359,6 @@ func validateTrustedRootPath(p string) error {
 	return nil
 }
 
-func isPermissivePattern(pattern string) bool {
-	switch pattern {
-	case ".*", ".+", "^.*$", "^.+$":
-		return true
-	}
-	return false
-}
-
 var (
 	sigstoreIssuerV1OID = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57264, 1, 1}
 	sigstoreIssuerV2OID = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57264, 1, 8}
