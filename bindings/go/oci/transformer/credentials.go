@@ -15,7 +15,7 @@ import (
 // resolveCredentialsMap calls ResolveTyped and converts the result to map[string]string
 // for downstream interfaces that haven't migrated to runtime.Typed yet (Phase 4).
 // Returns nil, nil if no credentials are found.
-func resolveCredentialsMap(ctx context.Context, resolver credentials.Resolver, identity runtime.Typed) (map[string]string, error) {
+func resolveCredentialsMap(ctx context.Context, resolver credentials.Resolver, identity runtime.Identity) (map[string]string, error) {
 	typed, err := resolver.ResolveTyped(ctx, identity)
 	if err != nil {
 		if errors.Is(err, credentials.ErrNotFound) {
