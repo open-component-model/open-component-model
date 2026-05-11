@@ -68,7 +68,7 @@ jobs:
       matrix:
         arch: [arm64]
     steps:
-      - name: Compute image refs (lowercase owner)
+      - name: Compute image refs
         env:
           OWNER: ${{ github.repository_owner }}
         run: |

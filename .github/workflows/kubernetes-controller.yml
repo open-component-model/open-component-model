@@ -88,7 +88,7 @@ jobs:
       artifact_id: ${{ steps.upload-artifacts.outputs.artifact-id }}
       version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Compute image refs (lowercase owner)
+      - name: Compute image refs
         env:
           OWNER: ${{ github.repository_owner }}
         run: echo "IMAGE_NAME=${REGISTRY}/${OWNER,,}/kubernetes/controller" >> "$GITHUB_ENV"
@@ -191,7 +191,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - name: Compute image refs (lowercase owner)
+      - name: Compute image refs
         env:
           OWNER: ${{ github.repository_owner }}
         run: echo "IMAGE_NAME=${REGISTRY}/${OWNER,,}/kubernetes/controller" >> "$GITHUB_ENV"
