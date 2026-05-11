@@ -22,8 +22,6 @@ import (
 // - Direct credentials are stored on their respective identity nodes inside the vertex
 // - Repository configurations are stored in the Graph for later use
 func ingest(ctx context.Context, g *Graph, config *cfgRuntime.Config, repoTypeScheme *runtime.Scheme) error {
-	validateConsumerIdentityTypes(ctx, g, config)
-
 	consumers, err := processDirectCredentials(ctx, g, config)
 	if err != nil {
 		return fmt.Errorf("failed to process direct credentials: %w", err)
@@ -237,86 +235,4 @@ func extractResolvable(ctx context.Context, g *Graph, creds []runtime.Typed) (ru
 	}
 
 	return resolved, remaining, nil
-}
-
-// validateConsumerIdentityTypes checks that all consumer identity types in the config
-// are registered in the IdentityTypeRegistry and that credential types are
-// compatible with the identity type. Unknown types produce warnings — they are not
-// rejected because plugins loaded later may introduce new types.
-func validateConsumerIdentityTypes(ctx context.Context, g *Graph, config *cfgRuntime.Config) {
-	if g.identityTypeRegistry == nil {
-		return
-	}
-	for _, consumer := range config.Consumers {
-		for _, identity := range consumer.Identities {
-			identityType, err := identity.ParseType()
-			if err != nil {
-				slog.WarnContext(ctx, "consumer identity has unparseable type",
-					"identity", identity.String(), "error", err)
-				continue
-			}
-
-			if !g.identityTypeRegistry.GetIdentityTypeScheme().IsRegistered(identityType) {
-				slog.WarnContext(ctx, "consumer identity type not registered in scheme",
-					"type", identityType.String(),
-					"identity", identity.String(),
-				)
-				continue
-			}
-
-			// Check accepted credential types from the registry.
-			// This does not fail on purpose - credentials should still be passed as the user configured them.
-			accepted, hasAccepted := g.identityTypeRegistry.AcceptedCredentialTypes(identityType)
-			if !hasAccepted {
-				continue
-			}
-
-			for _, cred := range consumer.Credentials {
-				credType := cred.GetType()
-				if credType.IsEmpty() || scheme.IsRegistered(credType) {
-					// DirectCredentials/Credentials are always accepted
-					continue
-				}
-				if !isAccepted(g.credentialTypeScheme(), credType, accepted) {
-					slog.WarnContext(ctx, "credential type not accepted by identity type",
-						"credentialType", credType.String(),
-						"identityType", identityType.String(),
-						"acceptedTypes", accepted,
-					)
-				}
-			}
-		}
-	}
-}
-
-// isAccepted checks whether a credential type is in the list of accepted types.
-// It first tries exact matching, then falls back to alias resolution through the
-// scheme — so that e.g. "HelmHTTPCredentials" (unversioned alias) matches
-// "HelmHTTPCredentials/v1" (default type) and vice versa.
-func isAccepted(credentialTypeScheme *runtime.Scheme, credType runtime.Type, accepted []runtime.Type) bool {
-	for _, a := range accepted {
-		if a.Equal(credType) {
-			return true
-		}
-	}
-
-	if credentialTypeScheme == nil {
-		return false
-	}
-	resolved, ok := credentialTypeScheme.ResolveCanonicalType(credType)
-	if !ok {
-		slog.Debug("credential type is not registered in credential type scheme",
-			"credentialType", credType.String(),
-		)
-		return false
-	}
-
-	for _, a := range accepted {
-		if canonical, o := credentialTypeScheme.ResolveCanonicalType(a); o && canonical.Equal(resolved) {
-			return true
-		}
-	}
-
-	slog.Debug("credential type is not accepted by identity type")
-	return false
 }

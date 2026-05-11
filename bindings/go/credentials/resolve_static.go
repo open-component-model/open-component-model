@@ -34,8 +34,8 @@ func (s *StaticCredentialsResolver) Resolve(_ context.Context, identity runtime.
 	return maps.Clone(creds), nil
 }
 
-func (s *StaticCredentialsResolver) ResolveTyped(_ context.Context, identity runtime.Typed) (runtime.Typed, error) {
-	creds, ok := s.staticCredentialsStore[nodeID(identity)]
+func (s *StaticCredentialsResolver) ResolveTyped(_ context.Context, identity runtime.Identity) (runtime.Typed, error) {
+	creds, ok := s.staticCredentialsStore[identity.String()]
 	if !ok {
 		return nil, ErrNotFound
 	}
