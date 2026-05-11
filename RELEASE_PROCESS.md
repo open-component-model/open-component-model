@@ -1,370 +1,104 @@
 # Release Process
 
-This guide is for OCM release managers.
+For OCM release managers. CLI and Kubernetes Controller ship together in lockstep from a single workflow.
 
-Scope: **CLI and Kubernetes Controller are released together in version lockstep** (RC and final).
+## How it works
 
----
+* Development happens on `main`. Releases are cut from `releases/vX.Y` branches.
+* Minor and patch releases only (no majors).
+* One workflow run produces three tags on the same commit:
+  * `v0.X.Y` (canonical, the GitHub release)
+  * `cli/v0.X.Y` (website install scripts)
+  * `kubernetes/controller/v0.X.Y` (Go module side tag)
+* Cadence: one release per sprint (two weeks). RC at sprint start, promote previous RC at the next sprint start.
 
-## General Information
+## Release responsible
 
-### Context and scope
+Rotates each sprint. Decides if a release is needed, runs the workflows, approves the gate, handles patches.
 
-Development in the [Open Component Model monorepo](https://github.com/open-component-model/open-component-model)
-happens on `main`, while releases are prepared and promoted from release branches (`releases/vX.Y`).
-For the time being, we will only ship minor releases (e.g., `v0.17.0`, `v0.18.0`) and patch releases (e.g., `v0.17.1`),
-without any major releases.
-This repository follows a lockstep release model for multiple components — currently the
-[CLI](https://github.com/open-component-model/open-component-model/tree/main/cli) and the
-[Kubernetes Controller](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller).
-
-### Release cadence
-
-The default cadence is sprint-based: one release every two weeks. At the start of each sprint,
-create a new release branch and a new Release Candidate (RC). After one sprint of testing, promote the previous RC to a final release.
-At the end of each sprint (typically Friday), assign the next release responsible.
-
-Patch releases are handled out-of-band and created on demand for critical fixes.
-A scheduled release can be skipped if the branch is not ready or there are no meaningful changes.
-
-### Release Responsible
-
-The release responsible coordinates and executes the release flow.
-This role rotates each sprint and involves:
-
-- Agreeing with the team, if a new release is needed for the past sprint
-- Triggering and supervising release branch creation
-- Creating release candidates for all lockstep components
-- Agreeing with the team, if the new release is ready for promotion
-- Promoting release candidates to final releases
-- Coordinating patch releases when needed
-- Keeping this guide accurate and up to date
-
-**Quick links:**
-[Create release branch](#1-create-the-release-branch) ·
-[Create RC](#2-create-a-release-candidate-cli--controller) ·
-[Promote to Final](#3-promote-rc-to-final-release-cli--controller) ·
-[Patch release](#4-create-a-patch-release-if-needed)
-
-### Release Checklist
-
-Copy this checklist to your "Sprint Responsible" issue:
+## Sprint checklist
 
 ```markdown
-- [ ] New release branch created (e.g `releases/v0.4`)
-- [ ] CLI RC created and verified (`v0.4.0-rc.1`)
-- [ ] Controller RC created and verified (`v0.4.0-rc.1`)
-- [ ] CLI Final promoted from last RC (`v0.3.0-rc.1` --> `v0.3.0`)
-- [ ] Controller Final promoted from last RC (`v0.3.0-rc.1` --> `v0.3.0`)
-- [ ] Both releases visible on GitHub Releases page (`v0.3.0`)
+* [ ] Release branch created (e.g. `releases/v0.7`)
+* [ ] RC released and verified (`v0.7.0-rc.1`)
+* [ ] Previous RC promoted to final (`v0.6.0-rc.N` -> `v0.6.0`)
+* [ ] Final release visible on GitHub Releases (`v0.6.0`)
 ```
 
-### Timeline
+## 1. Create the release branch
 
-| When | Action |
-|------|--------|
-| Sprint Start | Create new release branch and RCs for both components |
-| During sprint | Issue patch releases or increment RCs if required (Security issues, bugs, ..) |
-| Sprint End | Assign next release responsible |
-| Next Sprint Start | Promote previous RCs to Final |
-
----
-
-## Release Workflow Diagram
-
-The following diagram illustrates a typical release cycle with an initial release (`v0.17.0`)
-and a subsequent patch release (`v0.17.1`):
-
-```mermaid
-gitGraph TB:
-    commit id: "VERSION 0.17.0-dev"
-    commit id: "feat: some feature"
-    branch "releases/v0.17"
-    commit tag: "v0.17.0-rc.1" type: REVERSE
-    checkout main
-    commit id: "fix: hotfix bug" type: HIGHLIGHT
-    checkout releases/v0.17
-    cherry-pick id: "fix: hotfix bug"
-    commit tag: "v0.17.0-rc.2"
-    branch "tag/v0.17.0"
-    checkout "tag/v0.17.0"
-    commit id: "VERSION 0.17.0" tag:"v0.17.0"
-    checkout main
-    commit id: "VERSION 0.18.0-dev"
-    commit id: "fix: another hotfix" type: HIGHLIGHT
-    checkout releases/v0.17
-    cherry-pick id: "fix: another hotfix"
-    commit tag: "v0.17.1-rc.1"
-    branch "tag/v0.17.1"
-    checkout "tag/v0.17.1"
-    commit id: "VERSION 0.17.1" tag:"v0.17.1"
-    checkout main
-    commit id: "feat: another feature"
-    branch "releases/v0.18"
-    commit tag: "v0.18.0-rc.1"
-```
-
----
-
-## What to do
-
-### 1) Create the release branch
-
-A new release branch marks the cut-off point for that minor release line.
-Once created, only bug fixes and documentation changes are allowed.
-
-1. Run workflow **[Create OCM Release Branch](https://github.com/open-component-model/open-component-model/actions/workflows/release-branch.yml)**.
-2. Set target branch to `releases/vX.Y`.
-3. Confirm the branch was created successfully.
-
-<details>
-<summary>What happens in the background?</summary>
-
-- Validate `target_branch` against regex pattern `releases/v0.[0-9]+` (for the time being, we only allow minor releases)
-- Check if `target_branch` already exists; if yes, skip creation and report success
-- Check out the repository and identify the latest commit on `source_branch` (default: `main`)
-- Create a new branch `refs/heads/<target_branch>` pointing to this commit
-- Publish workflow summary with source branch, target branch, and commit SHA
-
-</details>
-
-> [!CAUTION] 
-> **Cut-off policy for this release branch**
->
->- No feature or breaking-change work is accepted.
->- Non-bugfix and non-documentation changes require release responsible approval.
->- Any change that is not a bug fix or a documentation change require release responsible approval.
->- Any bug fix that is not deemed critical must be approved by the release manager.
->- Fixes must be merged to `main` first, then cherry-picked to this branch.
-
-### 2) Create a Release Candidate (CLI + Controller)
-
-Release candidates are created for both components sequentially, in lock-step.
-
-1. Run workflow **[CLI Release](https://github.com/open-component-model/open-component-model/actions/workflows/cli-release.yml)** with:
-   - **"Use workflow from"** set to the release branch created in step 1 (e.g., `releases/v0.17`)
-   - `dry_run = true` first to validate
-   - `dry_run = false` for actual release
-2. Run workflow **[Controller Release](https://github.com/open-component-model/open-component-model/actions/workflows/controller-release.yml)** with equivalent inputs.
-3. Verify both pre-releases were created successfully on the GitHub Releases page.
-   - CLI assets: platform binaries (`ocm-*`) and OCI tarballs
-   - Controller assets: Helm chart (`.tgz`)
+Run [Create OCM Release Branch](https://github.com/open-component-model/open-component-model/actions/workflows/release-branch.yml) with `target_branch=releases/vX.Y`.
 
 > [!CAUTION]
-> **Always do a dry-run first** before the actual release.
-> CLI and Controller are released together. Do not release only one of them.
+> Once the branch exists, only bugfixes and docs land on it. Everything else needs release-responsible approval. Fix on `main` first, cherry-pick.
 
-<details>
-<summary>Understanding the Dry-Run Summary</summary>
+## 2. Cut a release candidate
 
-Dry-run mode validates the release workflow without creating any tags, releases, or artifacts.
-The workflow summary shows exactly what **would** happen:
+Run [Release](https://github.com/open-component-model/open-component-model/actions/workflows/release.yml):
 
-| Field | Description |
-|-------|-------------|
-| RC Version | The RC version that would be created (e.g., `0.17.1-rc.1`) |
-| Base Version | The final version after promotion (e.g., `0.17.1`) |
-| Set Latest | Whether `latest` tag would be applied to OCI images |
-| Highest Final Version | The current highest released version |
+1. Set **"Use workflow from"** to the release branch.
+2. `dry_run=true` first. Check the prepare summary: next RC version, next final version, set-latest decision.
+3. `dry_run=false` to actually cut the RC.
 
-**Important for Patch Releases:**
-
-When releasing a patch for an older version line (e.g., `v0.16.1` when `v0.17.0` already exists),
-the dry-run summary will show:
-
-```text
-Set Latest: false
-Highest Final Version: 0.17.0
-```
-
-This means the patch release will **not** be marked as the GitHub "Latest Release"
-and the `latest` OCI tag will **not** be updated. This is expected behavior to prevent
-users from accidentally downgrading when pulling `latest`.
-
-</details>
-
-<details>
-<summary>What happens in the background?</summary>
-
-- **CLI path (`cli-release.yml`)**
-  - `prepare`: compute next RC metadata + changelog.
-  - `tag_rc`: create/push RC tag (skipped on dry-run).
-  - `build`: call `cli.yml` to build binaries and OCI artifacts.
-  - `release_rc`: publish GitHub pre-release with binary and OCI tarball assets.
-- **Controller path (`controller-release.yml`)**
-  - `prepare`: compute next RC metadata + changelog (shared `release-candidate-version.yml`).
-  - `tag_rc`: create/push RC tag via `release` environment gate (skipped on dry-run).
-  - `build`: call `kubernetes-controller.yml` to build the controller image and Helm chart.
-  - `release_rc`: publish GitHub pre-release with Helm chart `.tgz` as asset.
-- If one component fails, do not proceed to final promotion.
-
-</details>
-
-### 3) Promote RC to Final Release (CLI + Controller)
-
-Final promotion takes an existing RC and promotes it to a stable release.
-The workflow verifies attestations before creating any final artifacts.
-
-The final promotion is triggered automatically after the RC phase completes
-and the respective environment gate is approved.
-
-1. Wait for the RC to be tested (typically 1 sprint).
-2. Go to the **[CLI Release](https://github.com/open-component-model/open-component-model/actions/workflows/cli-release.yml)** workflow run in GitHub Actions.
-3. Approve the `release` environment gate (requires reviewer approval + wait timer).
-4. The CLI workflow will automatically:
-   - Verify binary and OCI image attestations
-   - Create final tag from RC commit
-   - Promote OCI image tags
-   - Publish final GitHub release with binaries
-5. Go to the **[Controller Release](https://github.com/open-component-model/open-component-model/actions/workflows/controller-release.yml)** workflow run.
-6. Approve the `release` environment gate (requires reviewer approval).
-7. The Controller workflow will automatically:
-   - Verify image and Helm chart attestations
-   - Create final tag from RC commit
-   - Promote controller image tags
-   - Re-package the Helm chart with the final version, push it to OCI, and attest it
-   - Publish final GitHub release with the final Helm chart
-8. Verify both final releases are published on the GitHub Releases page.
+The workflow builds CLI + controller, runs conformance, then publishes the RC as a GitHub pre-release with all assets attached.
 
 > [!IMPORTANT]
-> 🔐 **Security:** Both workflows automatically verify all attestations from their
-> respective RC releases before proceeding. If verification fails, the promotion is aborted.
+> Always dry-run first. When patching an older minor (e.g. `v0.6.1` while `v0.7.0` exists), `set_latest=false` is expected. That prevents `latest` from rolling backwards.
 
-<details>
-<summary>What happens in the background?</summary>
+## 3. Promote RC to final
 
-- **CLI path (`cli-release.yml`)**
-  - `verify_attestations`: verify binary and OCI image attestations (gated by `release` environment).
-  - `promote_final`: create final tag from RC commit, promote OCI image tags.
-  - `release_final`: publish final GitHub release with assets from RC.
-- **Controller path (`controller-release.yml`)**
-  - `verify_attestations`: verify controller image and Helm chart attestations (gated by `release` environment).
-  - `promote_and_release_final` (single combined job):
-    - Create final tag from RC commit.
-    - Promote controller image tags via ORAS.
-    - Re-package Helm chart with final version strings (`Chart.yaml`, `values.yaml`), push to OCI registry, and create build-provenance attestation.
-    - Run `helm/verify-promote` to validate RC-to-Final chart consistency.
-    - Publish final GitHub release with the re-packaged Helm chart.
-  - Due to Helm specifics, the chart cannot simply be re-tagged from RC to Final — it must be re-packaged and re-attested because it embeds version strings.
-- Final is only valid when both components are promoted in the same cycle.
+Same workflow, same run. After conformance passes, the run pauses on the `release` environment gate.
 
-</details>
+1. Wait for the RC
+2. Open the workflow run, approve the environment gate.
+3. The workflow verifies all attestations, re-packages the chart with final version strings, pushes everything, and publishes the GitHub release.
 
-### 4) Create a patch release (if needed)
+If attestation verification fails the run aborts. Cut a fresh RC.
 
-Patch releases address critical fixes for an already-released version.
-The fix must always land on `main` first, then be cherry-picked to the release branch.
+## 4. Patch release
 
-> [!IMPORTANT]
-> ⚠️ **Older version lines:** When creating a patch for an older release line
-> (e.g., `v0.16.1` when `v0.17.0` exists), the release will NOT be marked as "latest"
-> on GitHub and the `latest` OCI tags will remain on the newer version.
-> This is intentional — use dry-run first to verify this behavior in the summary.
-
-1. Ensure the fix was merged to `main` first.
-2. Cherry-pick the fix to the correct release branch, e.g. `releases/v0.17` for a patch to `v0.17.1`.
-3. Create a PR with the cherry-picked commit to the release branch.
-4. Create and test RCs for **both** CLI and Controller.
-5. Promote both components to final.
-
-<details>
-<summary>Patch PR naming and cherry-pick flow</summary>
+Critical fix needs to land on an older minor:
 
 ```bash
-# Check out the target release branch
 git checkout releases/vX.Y
-
-# Cherry-pick the commit from main
-git cherry-pick <commit-hash>
-
-# Create a PR to the release branch
-gh pr create \
-   --title "[releases/vX.Y] cherry-pick: <Original PR or Commit>" \
-   --body "Cherry-pick of <Original PR or Commit> from main to releases/vX.Y" \
-   --base releases/vX.Y \
-   --draft
+git cherry-pick <commit-from-main>
+gh pr create --base releases/vX.Y \
+  --title "[releases/vX.Y] cherry-pick: <original PR>"
 ```
 
-Merge the PR, then follow the RC and Final promotion steps as usual.
-
-</details>
-
----
+After merge, run the Release workflow on that branch. Same RC + promote flow as above.
 
 ## Release notes
 
-Release notes are generated automatically by the release workflows using [git-cliff](https://git-cliff.org).
-The release responsible does not need to manually compose notes for normal RC or final runs—the
-changelog is derived from conventional commit messages.
-
----
+Generated by [git-cliff](https://git-cliff.org) from conventional commits. No manual editing for normal runs.
 
 ## Troubleshooting
 
-If something goes wrong during a release, check the following common issues:
+| Symptom | Action |
+|---------|--------|
+| Workflow failed before tag push | Re-run with `dry_run=true`, then `dry_run=false`. |
+| Promotion fails: attestation verify | Cut a fresh RC (attestations are built per-RC). |
+| CLI and controller diverged | Stop. Start a fresh RC cycle on the release branch. |
+| Conformance failed | Treat as a blocker. Fix on `main`, cherry-pick, new RC. |
 
-**RC was not created**
+### Retract a release
 
-- Check if the workflow run failed before tag creation.
-- Rerun as dry-run first, then rerun with `dry_run=false`.
-
-**Final promotion fails with "no RC found"**
-
-- Verify that the latest RC tag exists on the release branch.
-- Create a new RC for both components, then promote again.
-
-**CLI and Controller versions diverged**
-
-- Ensure both workflows were run for the same release branch in the same cycle.
-- Stop promotion and align on a fresh RC cycle in lockstep.
-
-**Final release exists for one component but not the other**
-
-- Check the status of both workflow runs and the release pages.
-- Complete or rerun the missing component release immediately.
-
-**Attestation verification failed**
-
-- Verify that the RC release binaries have valid build provenance attestations.
-- Check that the OCI image was pushed to GHCR with attestation metadata.
-- Use `gh attestation verify <file> --repo <repo>` to manually verify CLI binaries.
-- Use `gh attestation verify oci://<image>@<digest> --repo <repo>` to verify OCI images.
-- For the controller, also verify the Helm chart OCI artifact:
-  `gh attestation verify oci://<chart-repo>@<chart-digest> --repo <repo>`
-- If attestations are missing, create a new RC (attestations are generated during build).
-
-**Retracting a release**
-
-If a release needs to be retracted due to critical bugs or security issues:
-
-1. Edit the GitHub Release and mark it as "Pre-release" to hide it from the latest release view.
-2. Prepend a deprecation notice to the release notes:
+1. Mark the GitHub release as pre-release.
+2. Prepend a retraction notice to the body:
    ```markdown
-   > ⚠️ **RETRACTED**: This release has been retracted due to [reason].
-   > Please upgrade to vX.Y.Z instead.
+   > **RETRACTED**: superseded by vX.Y.Z due to <reason>.
    ```
-3. Create a new patch release with the fix as soon as possible.
-4. If security-related, consider filing a security advisory via GitHub's Security tab.
+3. Ship a patch release with the fix. File a security advisory if relevant.
 
-The OCI image tags remain available in GHCR for users who have pinned to the specific version,
-but the retraction notice guides new users to the replacement release.
+OCI tags stay live in GHCR for users already pinned to the version.
 
 ## Verifying release tags
 
-All release tags are GPG-signed. To verify a tag:
+All release tags are GPG-signed.
 
-1. Import the public signing key:
-   ```bash
-   gpg --import website/static/gpg/OCM-RELEASES-PUBLIC-CURRENT.gpg
-   ```
-   Or fetch it directly from the repository:
-   ```bash
-   curl -sSL https://raw.githubusercontent.com/open-component-model/open-component-model/main/website/static/gpg/OCM-RELEASES-PUBLIC-CURRENT.gpg | gpg --import
-   ```
+```bash
+curl -sSL https://raw.githubusercontent.com/open-component-model/open-component-model/main/website/static/gpg/OCM-RELEASES-PUBLIC-CURRENT.gpg | gpg --import
+git tag -v v0.7.0
+```
 
-2. Verify a tag:
-   ```bash
-   git tag -v cli/v0.1.0
-   ```
-
-The signing key fingerprint is `36BDEEDF40C1A3077DE4A9D9F11241A047C49B13`.
+Key fingerprint: `36BDEEDF40C1A3077DE4A9D9F11241A047C49B13`.
