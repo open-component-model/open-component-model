@@ -60,7 +60,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := rsa.Register(manager.SigningRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register RSA signing plugin: %w", err)
 	}
-	if err := oidc.Register(manager.SigningRegistry); err != nil {
+	if err := oidc.Register(manager.SigningRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register Sigstore signing plugin: %w", err)
 	}
 	if err := oidc.RegisterCredentialPlugin(manager.CredentialPluginRegistry); err != nil {
