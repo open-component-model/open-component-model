@@ -186,28 +186,81 @@ download_binary() {
     download "${TMP_BIN}" "${BIN_URL}"
 }
 
-# Verify the downloaded binary using GitHub attestations
-# Requires the GitHub CLI (gh) to be installed
+# Print manual verification instructions when automatic verification is unavailable
+print_verify_instructions() {
+    local reason="$1"
+
+    local hash_cmd="sha256sum"
+    if ! command -v sha256sum &> /dev/null; then
+        hash_cmd="shasum -a 256"
+    fi
+
+    warn ""
+    warn "══════════════════════════════════════════════════════════════════════"
+    warn "  BINARY NOT CRYPTOGRAPHICALLY VERIFIED"
+    warn "══════════════════════════════════════════════════════════════════════"
+    warn ""
+    warn "  Reason: ${reason}"
+    warn ""
+    warn "  After installation completes, verify the binary at:"
+    warn "    ${BIN_DIR}/ocm"
+    warn ""
+    warn "  Option A — Verify with GitHub CLI (recommended):"
+    warn "    1. Install gh: https://cli.github.com/"
+    warn "    2. Authenticate against GitHub.com: gh auth login --hostname github.com"
+    warn "    3. Verify the installed binary:"
+    warn "       gh attestation verify ${BIN_DIR}/ocm --repo ${GITHUB_REPO}"
+    warn ""
+    warn "  Option B — Verify with cosign (no GitHub auth needed):"
+    cat >&2 <<COSIGN_EOF
+
+    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/ocm | cut -d' ' -f1)"
+    curl -sfL \\
+      "https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}" \\
+      | jq -r '.attestations[0].bundle' > attestation.jsonl
+    cosign verify-blob-attestation \\
+      --bundle attestation.jsonl \\
+      --new-bundle-format \\
+      --type slsaprovenance1 \\
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
+      --certificate-identity-regexp \\
+        '^https://github\\.com/${GITHUB_REPO}/\\.github/workflows/cli\\.yml@refs/(heads/(main|releases/v[0-9]+\\.[0-9]+)|tags/cli/v[0-9]+\\.[0-9]+\\.[0-9]+)' \\
+      ${BIN_DIR}/ocm
+
+COSIGN_EOF
+    warn ""
+    warn "  Option C — Manual SHA-256 hash check (integrity only):"
+    cat >&2 <<HASH_EOF
+
+    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/ocm | cut -d' ' -f1)"
+    curl -sfL \\
+      "https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}" \\
+      | jq -r '.attestations[0].bundle.dsseEnvelope.payload' \\
+      | base64 --decode | jq '.subject[] | "\(.digest.sha256)  \(.name)"'
+    # Compare the listed hash with: ${hash_cmd} ${BIN_DIR}/ocm
+
+HASH_EOF
+    warn ""
+    warn "  To suppress this warning: OCM_SKIP_VERIFY=true"
+    warn "══════════════════════════════════════════════════════════════════════"
+    warn ""
+}
+
+# Verify the downloaded binary using GitHub attestations.
+# Falls back to detailed manual verification instructions when gh is unavailable.
 verify_binary() {
-    # Skip verification if explicitly disabled
     if [[ "${OCM_SKIP_VERIFY:-}" == "true" ]]; then
         warn "Skipping attestation verification (OCM_SKIP_VERIFY=true)"
         return 0
     fi
 
-    # Check if gh CLI is available
     if ! command -v gh &> /dev/null; then
-        warn "GitHub CLI (gh) not found. Skipping attestation verification."
-        warn "To verify the binary, install gh: https://cli.github.com/"
-        warn "Or set OCM_SKIP_VERIFY=true to suppress this warning."
+        print_verify_instructions "GitHub CLI (gh) not found"
         return 0
     fi
 
-    # Check if gh CLI is authenticated to github.com
     if ! gh auth status --hostname github.com &> /dev/null; then
-        warn "GitHub CLI is not authenticated. Skipping attestation verification."
-        warn "To verify the binary, run: gh auth login"
-        warn "Or set OCM_SKIP_VERIFY=true to suppress this warning."
+        print_verify_instructions "GitHub CLI is not authenticated"
         return 0
     fi
 
