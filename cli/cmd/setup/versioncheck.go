@@ -2,7 +2,6 @@ package setup
 
 import (
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -75,7 +74,7 @@ func VersionCheck(cmd *cobra.Command, currentVersion string) {
 		select {
 		case result := <-ch:
 			if result != nil && result.UpdateAvailable {
-				printWarning(cmd.ErrOrStderr(), result)
+				printWarning(result)
 				versioncheck.MarkWarned(cacheDir)
 			}
 		case <-time.After(versionCheckWaitTimeout):
@@ -158,10 +157,13 @@ func configDisabled(cmd *cobra.Command) bool {
 	return vcCfg.Disabled
 }
 
-// printWarning writes the upgrade notification to the given writer (typically stderr).
-func printWarning(w io.Writer, result *versioncheck.Result) {
-	fmt.Fprintf(w, "\nA newer version of ocm is available: v%s (current: v%s)\n", result.LatestVersion, result.CurrentVersion)
-	fmt.Fprintf(w, "See: https://github.com/%s/%s/releases/tag/%sv%s\n",
-		versioncheck.DefaultGitHubOwner, versioncheck.DefaultGitHubRepo,
-		versioncheck.DefaultTagPrefix, result.LatestVersion)
+// printWarning logs the upgrade notification using the structured logging stack.
+func printWarning(result *versioncheck.Result) {
+	slog.Warn("A newer version of ocm is available",
+		slog.String("current", "v"+result.CurrentVersion),
+		slog.String("available", "v"+result.LatestVersion),
+		slog.String("url", fmt.Sprintf("https://github.com/%s/%s/releases/tag/%sv%s",
+			versioncheck.DefaultGitHubOwner, versioncheck.DefaultGitHubRepo,
+			versioncheck.DefaultTagPrefix, result.LatestVersion)),
+	)
 }
