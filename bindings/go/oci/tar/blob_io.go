@@ -229,17 +229,55 @@ func findSuccessorsForRoot(topLevelDesc ociImageSpecV1.Descriptor, rootChildren 
 		if content.Equal(desc, topLevelDesc) {
 			return rootChildren, nil
 		}
-		successors, err := content.Successors(ctx, fetcher, desc)
+		successors, err := successorsWithoutSubject(ctx, fetcher, desc)
 		if err != nil {
 			return nil, fmt.Errorf("failed to find successors: %w", err)
 		}
-		if desc.ArtifactType != "" {
-			return slices.DeleteFunc(successors, func(d ociImageSpecV1.Descriptor) bool {
-				return d.Digest == topLevelDesc.Digest
-			}), nil
-		}
 		return successors, nil
 	}
+}
+
+// mediaTypeOCIArtifactManifest is the deprecated OCI artifact manifest (image-spec v1.1.0-rc1/rc2); the oras-go constant lives in an internal package.
+const mediaTypeOCIArtifactManifest = "application/vnd.oci.artifact.manifest.v1+json"
+
+// successorsWithoutSubject works like [content.Successors] but never returns the Subject field.
+// Manifest types without a Subject pass straight through.
+func successorsWithoutSubject(ctx context.Context, fetcher content.Fetcher, node ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+	switch node.MediaType {
+	case ociImageSpecV1.MediaTypeImageManifest:
+		raw, err := content.FetchAll(ctx, fetcher, node)
+		if err != nil {
+			return nil, err
+		}
+		var manifest ociImageSpecV1.Manifest
+		if err := json.Unmarshal(raw, &manifest); err != nil {
+			return nil, err
+		}
+		return append([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers...), nil
+	case ociImageSpecV1.MediaTypeImageIndex:
+		raw, err := content.FetchAll(ctx, fetcher, node)
+		if err != nil {
+			return nil, err
+		}
+		var index ociImageSpecV1.Index
+		if err := json.Unmarshal(raw, &index); err != nil {
+			return nil, err
+		}
+		return index.Manifests, nil
+	case mediaTypeOCIArtifactManifest:
+		raw, err := content.FetchAll(ctx, fetcher, node)
+		if err != nil {
+			return nil, err
+		}
+		var manifest struct {
+			Blobs []ociImageSpecV1.Descriptor `json:"blobs,omitempty"`
+		}
+		if err := json.Unmarshal(raw, &manifest); err != nil {
+			return nil, err
+		}
+		return manifest.Blobs, nil
+	}
+	return content.Successors(ctx, fetcher, node)
 }
 
 type descriptorStoreProxy struct {
