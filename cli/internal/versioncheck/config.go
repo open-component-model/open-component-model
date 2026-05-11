@@ -36,10 +36,7 @@ func LookupConfig(cfg *generic.Config) (*Config, error) {
 	}
 
 	filtered, err := generic.Filter(cfg, &generic.FilterOptions{
-		ConfigTypes: []runtime.Type{
-			runtime.NewVersionedType(ConfigType, ConfigVersion),
-			runtime.NewUnversionedType(ConfigType),
-		},
+		ConfigTypes: []runtime.Type{runtime.NewVersionedType(ConfigType, ConfigVersion)},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter versioncheck config: %w", err)
