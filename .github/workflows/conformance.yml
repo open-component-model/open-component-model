@@ -9,12 +9,12 @@ on:
   workflow_call:
     inputs:
       cli_image:
-        description: "CLI Docker image reference (artifact mode is preferred)"
+        description: "Fallback. Published CLI image ref pulled from a registry. Prefer cli_artifact to test pre publish builds."
         type: string
         required: false
         default: ""
       toolkit_image:
-        description: "OCI reference to the controller Helm chart (artifact mode is preferred)"
+        description: "Fallback. Published controller Helm chart OCI ref pulled from a registry. Prefer toolkit_chart_artifact to test pre publish builds."
         type: string
         required: false
         default: ""

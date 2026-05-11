@@ -137,6 +137,7 @@ jobs:
               return;
             }
             const defaultBranch = context.payload.repository?.default_branch || 'main';
+            // Matches version refs like: v1.2, v1.2.3, v1.2.3-rc.1, v0.7.0-alpha, v10.0.0-beta.2+build5
             const eligible = ref === defaultBranch || /^v\d+\.\d+(\.\d+)?(-.*)?$/.test(ref);
             core.setOutput('publish', eligible ? 'true' : 'false');
   # === cli.yml::build::branch-check + kubernetes-controller.yml::build::branch-check ===

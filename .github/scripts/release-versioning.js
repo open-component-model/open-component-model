@@ -9,9 +9,7 @@ import { execFileSync } from "child_process";
 // tag scheme is:
 //   v0.X.Y                          canonical release tag (user-facing)
 //   kubernetes/controller/v0.X.Y    Go-module side tag, same commit
-//
-// The cli/v* prefix is intentionally not emitted: the CLI is not consumed
-// as a Go module by anyone.
+//   cli/v0.X.Y                      CLI tags for consumption on from the website
 //
 // noinspection JSUnusedGlobalSymbols
 /** @param {import('@actions/github-script').AsyncFunctionArguments} args */
@@ -120,6 +118,13 @@ export function run(core, executable, args) {
   }
 }
 
+/**
+ * Extract the base version prefix from a release branch name.
+ *
+ * @param {string} branch Release branch (e.g. "releases/v0.7").
+ * @returns {string} The base prefix (e.g. "0.7").
+ * @throws {Error} If the branch does not match the expected pattern.
+ */
 export function parseBranch(branch) {
   const match = /^releases\/v(0\.\d+)/.exec(branch);
   if (!match) throw new Error(`Invalid branch format: ${branch}`);
@@ -196,6 +201,14 @@ export function computeNextVersions(basePrefix, latestStableTag, latestRcTag, bu
     };
 }
 
+/**
+ * Determine whether the latest stable tag is newer than the latest RC tag.
+ * Returns false when both share the same base version (RC continues that base).
+ *
+ * @param {string} stable Stable tag (e.g. "v0.1.2" or "cli/v0.1.2"). Empty means none.
+ * @param {string} rc RC tag (e.g. "v0.1.3-rc.2"). Empty means none.
+ * @returns {boolean}
+ */
 export function isStableNewer(stable, rc) {
     if (!stable) return false;
     if (!rc) return true;
@@ -229,8 +242,8 @@ export function parseVersion(tag) {
 /**
  * Find the most recent stable canonical tag (vX.Y.Z) excluding RCs.
  *
- * @param {string[]} tags - Tags returned by `git tag --list "v*" --sort=-version:refname`.
- * @param {string} newTag - The tag about to be created (excluded from results).
+ * @param {string[]} tags Tags returned by `git tag --list "v*" --sort=-version:refname`.
+ * @param {string} newTag The tag about to be created (excluded from results).
  * @returns {string} The previous canonical tag, or empty string if none.
  */
 export function findPreviousTag(tags, newTag) {
@@ -306,7 +319,7 @@ export async function determineLatestRelease({ core, github, context }) {
  * Extract the highest non-prerelease version from releases matching `tagPrefix`.
  *
  * @param {Array<{prerelease: boolean, tag_name: string}>} releases
- * @param {string} tagPrefix - e.g. "cli/v" to find releases like "cli/v0.5.0",
+ * @param {string} tagPrefix e.g. "cli/v" to find releases like "cli/v0.5.0",
  *   or "v" to find canonical releases like "v0.5.0".
  * @returns {string} Highest version (e.g. "0.5.0") or "" if none.
  */
@@ -325,6 +338,15 @@ export function extractHighestPreviousReleaseVersion(releases, tagPrefix) {
     }).pop();
 }
 
+/**
+ * Decide whether the new release should be marked as :latest. True when no
+ * prior release exists or the new release is at least as new as the highest
+ * previous one. False only when shipping a back-patch to an older minor.
+ *
+ * @param {string} newReleaseVersion The new release version (e.g. "0.7.0").
+ * @param {string} highestPreviousReleaseVersion Highest prior release version, or "" if none.
+ * @returns {boolean}
+ */
 export function shouldSetLatest(newReleaseVersion, highestPreviousReleaseVersion) {
     return !highestPreviousReleaseVersion ||
         !isStableNewer(`v${highestPreviousReleaseVersion}`, `v${newReleaseVersion}`);
