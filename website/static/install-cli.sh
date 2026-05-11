@@ -186,28 +186,63 @@ download_binary() {
     download "${TMP_BIN}" "${BIN_URL}"
 }
 
-# Verify the downloaded binary using GitHub attestations
-# Requires the GitHub CLI (gh) to be installed
+# Print manual verification instructions when automatic verification is unavailable
+print_verify_instructions() {
+    local reason="$1"
+    warn ""
+    warn "══════════════════════════════════════════════════════════════════════"
+    warn "  BINARY NOT CRYPTOGRAPHICALLY VERIFIED"
+    warn "══════════════════════════════════════════════════════════════════════"
+    warn ""
+    warn "  Reason: ${reason}"
+    warn ""
+    warn "  Option A — Verify with GitHub CLI (recommended):"
+    warn "    1. Install gh: https://cli.github.com/"
+    warn "    2. Authenticate: gh auth login"
+    warn "    3. Verify the installed binary:"
+    warn "       gh attestation verify \$(which ocm) --repo ${GITHUB_REPO}"
+    warn ""
+    warn "  Option B — Verify with cosign (no GitHub auth needed):"
+    warn "    DIGEST=\"sha256:\$(sha256sum ocm-${OS}-${ARCH} | cut -d' ' -f1)\""
+    warn "    curl -sfL \\"
+    warn "      \"https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}\" \\"
+    warn "      | jq -r '.attestations[0].bundle' > attestation.jsonl"
+    warn "    cosign verify-blob-attestation \\"
+    warn "      --bundle attestation.jsonl \\"
+    warn "      --new-bundle-format \\"
+    warn "      --certificate-oidc-issuer https://token.actions.githubusercontent.com \\"
+    warn "      --certificate-identity-regexp \\"
+    warn "        '^https://github.com/${GITHUB_REPO}/' \\"
+    warn "      ocm-${OS}-${ARCH}"
+    warn ""
+    warn "  Option C — Manual SHA-256 hash check (integrity only):"
+    warn "    DIGEST=\"sha256:\$(sha256sum ocm-${OS}-${ARCH} | cut -d' ' -f1)\""
+    warn "    curl -sfL \\"
+    warn "      \"https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}\" \\"
+    warn "      | jq -r '.attestations[0].bundle.dsseEnvelope.payload' \\"
+    warn "      | base64 -d | jq '.subject[] | \"\\(.digest.sha256)  \\(.name)\"'"
+    warn "    # Compare the listed hash with: sha256sum ocm-${OS}-${ARCH}"
+    warn ""
+    warn "  To suppress this warning: OCM_SKIP_VERIFY=true"
+    warn "══════════════════════════════════════════════════════════════════════"
+    warn ""
+}
+
+# Verify the downloaded binary using GitHub attestations.
+# Falls back to detailed manual verification instructions when gh is unavailable.
 verify_binary() {
-    # Skip verification if explicitly disabled
     if [[ "${OCM_SKIP_VERIFY:-}" == "true" ]]; then
         warn "Skipping attestation verification (OCM_SKIP_VERIFY=true)"
         return 0
     fi
 
-    # Check if gh CLI is available
     if ! command -v gh &> /dev/null; then
-        warn "GitHub CLI (gh) not found. Skipping attestation verification."
-        warn "To verify the binary, install gh: https://cli.github.com/"
-        warn "Or set OCM_SKIP_VERIFY=true to suppress this warning."
+        print_verify_instructions "GitHub CLI (gh) not found"
         return 0
     fi
 
-    # Check if gh CLI is authenticated to github.com
     if ! gh auth status --hostname github.com &> /dev/null; then
-        warn "GitHub CLI is not authenticated. Skipping attestation verification."
-        warn "To verify the binary, run: gh auth login"
-        warn "Or set OCM_SKIP_VERIFY=true to suppress this warning."
+        print_verify_instructions "GitHub CLI is not authenticated"
         return 0
     fi
 
