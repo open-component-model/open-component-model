@@ -31,23 +31,8 @@ different languages and are equally welcome.
 
 ## What is OCM?
 
-Imagine you ship a product that consists of a container image, a Helm chart, two config files, and a monitoring
-dashboard. Today, these artifacts live in registries in different locations, are versioned independently, and have no
-formal link between them. When you need to deliver the whole product to a customer - especially one running in a
-restricted network with no internet access - you must assemble everything manually, hoping nothing is missing or
-mismatched.
-
-The Open Component Model solves this. Think of it as a **delivery receipt** for software: a signed document that lists
-exactly what is in the package, where each piece came from, and who verified it. OCM calls this a **Software Bill of
-Delivery** (SBoD) - similar to how a shipping manifest lists the contents of a container, an SBoD lists the contents of
-a software delivery.
-
-Concretely, OCM is a standard and toolkit for describing, signing, transporting, and deploying software artifacts as a
-single unit. Its core concept is the **component version** - a manifest that groups all artifacts belonging to a
-delivery, assigns them a shared identity and version, and enables cryptographic signing and transport across
-environments (including networks without internet access).
-
-To learn more about the model itself, start with these overview pages:
+OCM is a standard and toolkit for describing, signing, transporting, and deploying software artifacts as a single,
+versioned unit. These overview pages explain the model in depth:
 
 {{< card-grid >}}
 {{< link-card title="How OCM Works" href="/docs/overview/how-ocm-works/" description="The Pack-Sign-Transport-Deploy lifecycle." >}}
@@ -153,30 +138,23 @@ Once you are comfortable with the basics, explore these concept pages for a deep
 
 OCM is an open standard contributed to the [Linux Foundation](https://www.linuxfoundation.org/) under the
 [NeoNephos Foundation](https://neonephos.org/). A Technical Steering Committee (TSC) provides technical oversight,
-sets project direction, and coordinates across working groups. The TSC meets monthly in public and publishes
-[meeting notes](https://github.com/open-component-model/open-component-model/tree/main/docs/steering/meeting-notes).
+sets project direction, and coordinates across working groups. Specific technical areas are owned by Special Interest
+Groups (SIGs). Currently, **SIG Runtime** maintains the Go bindings, CLI, and Kubernetes controllers.
 
-Specific technical areas are owned by Special Interest Groups (SIGs). Currently, **SIG Runtime** maintains the Go
-bindings, CLI, and Kubernetes controllers. SIGs are open to new members - see the
-[SIG Handbook](https://github.com/open-component-model/open-component-model/blob/main/docs/community/SIGs/SIG-Handbook.md)
-for how to join or propose a new SIG.
-
-For full details on governance, TSC membership, and the project charter, see the
-[Governance]({{< relref "governance/_index.md" >}}) page. To learn how the team works day-to-day - meetings,
-planning, and decision-making - see [How We Work]({{< relref "how-we-work.md" >}}).
+{{< card-grid >}}
+{{< link-card title="Governance" href="/governance/" description="TSC membership, project charter, and SIG framework." >}}
+{{< link-card title="How We Work" href="/community/how-we-work/" description="Meetings, planning rituals, project boards, and decision-making." >}}
+{{< link-card title="SIG Handbook" href="https://github.com/open-component-model/open-component-model/blob/main/docs/community/SIGs/SIG-Handbook.md" description="How to join or propose a new Special Interest Group." >}}
+{{< link-card title="TSC Meeting Notes" href="https://github.com/open-component-model/open-component-model/tree/main/docs/steering/meeting-notes" description="Public monthly meeting notes from the Technical Steering Committee." >}}
+{{< /card-grid >}}
 
 ## Contributing and Engaging
 
-Ready to contribute or connect with the community?
-
-- **[Community Engagement]({{< relref "_index.md" >}})** - Communication channels (Slack, Zulip), community calls,
-  and how to reach the team.
-- **[Contributing Guide]({{< relref "contributing.md" >}})** - Fork-and-pull workflow, pull request process, DCO
-  sign-off, and guidelines for AI-generated code. This covers the general process for all repositories and links to
-  repository-specific build and test instructions.
-
-If you are looking for something to work on, check the
+Ready to contribute or connect with the community? If you are looking for something to work on, check the
 [`kind/good-first-issue`](https://github.com/search?q=org%3Aopen-component-model+label%3A%22kind%2Fgood-first-issue%22+state%3Aopen&type=issues)
-label across our repositories, or join the discussion on
-[Slack](https://kubernetes.slack.com/archives/C05UWBE8R1D) or
-[Zulip](https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support).
+label across our repositories.
+
+{{< card-grid >}}
+{{< link-card title="Contributing Guide" href="/community/contributing/" description="Fork-and-pull workflow, pull request process, DCO sign-off, and AI-generated code guidelines." >}}
+{{< link-card title="Community Engagement" href="/community/" description="Communication channels (Slack, Zulip), community calls, and how to reach the team." >}}
+{{< /card-grid >}}
