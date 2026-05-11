@@ -31,6 +31,9 @@ func OwnershipReferrer(artifact descriptor.Artifact, component string, version s
 			slog.DebugContext(ctx, "skipping ownership referrer: subject is not an OCI manifest", "mediaType", top.MediaType, "digest", top.Digest.String())
 			return nil, nil
 		}
+		if _, ok := artifact.(*descriptor.Resource); !ok {
+			return nil, fmt.Errorf("unsupported artifact type %T for ownership referrer", artifact)
+		}
 		meta := artifact.GetElementMeta()
 		artifactValue, err := marshalArtifactAnnotation(meta.ToIdentity(), annotations.ArtifactKindResource)
 		if err != nil {

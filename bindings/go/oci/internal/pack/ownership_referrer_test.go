@@ -32,9 +32,9 @@ func fetchManifest(t *testing.T, ctx context.Context, store *memory.Store, desc 
 // materializeOwnershipReferrer calls OwnershipReferrer and pushes every
 // returned referrer's raw bytes directly into dst, mirroring what the
 // OCI-layout copy proxy does during artifact upload.
-func materializeOwnershipReferrer(t *testing.T, ctx context.Context, dst *memory.Store, subject ociImageSpecV1.Descriptor, resource *descriptor.Resource, component, version string) error {
+func materializeOwnershipReferrer(t *testing.T, ctx context.Context, dst *memory.Store, subject ociImageSpecV1.Descriptor, artifact descriptor.Artifact, component, version string) error {
 	t.Helper()
-	referrers, err := OwnershipReferrer(resource, component, version)(ctx, subject)
+	referrers, err := OwnershipReferrer(artifact, component, version)(ctx, subject)
 	if err != nil {
 		return err
 	}
@@ -163,6 +163,25 @@ func TestPushOwnershipReferrer(t *testing.T) {
 		predecessors, err := store.Predecessors(ctx, subject)
 		r.NoError(err)
 		assert.Empty(t, predecessors, "no referrer must be written when the subject is not an OCI manifest")
+	})
+
+	t.Run("non-resource artifact returns an error", func(t *testing.T) {
+		// Only resources may carry an ownership referrer; sources (and any
+		// future Artifact implementer) must error rather than silently
+		// produce a mis-labelled "kind: resource" referrer.
+		subject := ociImageSpecV1.Descriptor{
+			MediaType: ociImageSpecV1.MediaTypeImageManifest,
+			Digest:    digest.FromBytes([]byte("subject")),
+			Size:      7,
+		}
+		source := &descriptor.Source{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: "my-source", Version: "1.0.0"},
+			},
+		}
+		_, err := OwnershipReferrer(source, "c", "1.0.0")(t.Context(), subject)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported artifact type")
 	})
 }
 

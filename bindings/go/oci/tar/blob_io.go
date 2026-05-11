@@ -183,7 +183,7 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		if err := opts.MutateParentFunc(&topLevelDesc); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate index descriptor before copy: %w", err)
 		}
-		rootChildren := slices.Concat(index.Manifests, referrerDescriptors)
+		rootChildren := append(index.Manifests, referrerDescriptors...)
 		opts.FindSuccessors = findSuccessorsForRoot(topLevelDesc, rootChildren)
 	}
 

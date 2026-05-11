@@ -222,8 +222,7 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 // at the packed resource and whose annotations carry the owning component
 // name, version, and resource identity per
 // docs/adr/0016_ownership_annotations.md. Raw-blob resources (plain layers,
-// non-OCI media types) do not produce a referrer. Sources are not covered by
-// ownership referrers.
+// non-OCI media types) do not produce a referrer.
 func (repo *Repository) AddLocalResource(
 	ctx context.Context,
 	component, version string,
@@ -470,7 +469,8 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 		BaseReference:      reference,
 		GlobalAccessPolicy: repo.globalAccessPolicy,
 	}
-	if repo.ownershipReferrerPolicy == OwnershipReferrerPolicyEnabled {
+	// Ownership referrers (ADR 0016) only apply to resources.
+	if _, ok := artifact.(*descriptor.Resource); ok && repo.ownershipReferrerPolicy == OwnershipReferrerPolicyEnabled {
 		packOptions.Referrers = []tar.ReferrersFunc{pack.OwnershipReferrer(artifact, component, version)}
 	}
 	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, packOptions)
