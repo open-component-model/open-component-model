@@ -28,8 +28,12 @@ func OwnershipReferrer(artifact descriptor.Artifact, component string, version s
 			return nil, nil
 		}
 
+		kind, err := artifactKind(artifact)
+		if err != nil {
+			return nil, err
+		}
 		meta := artifact.GetElementMeta()
-		artifactValue, err := marshalArtifactAnnotation(meta.ToIdentity(), annotations.ArtifactKindResource)
+		artifactValue, err := marshalArtifactAnnotation(meta.ToIdentity(), kind)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build ownership artifact annotation: %w", err)
 		}
@@ -65,6 +69,14 @@ func OwnershipReferrer(artifact descriptor.Artifact, component string, version s
 			{Descriptor: ociImageSpecV1.DescriptorEmptyJSON, Raw: ociImageSpecV1.DescriptorEmptyJSON.Data},
 		}, nil
 	}
+}
+
+// artifactKind reports the [annotations.ArtifactKind] for the given artifact.
+func artifactKind(artifact descriptor.Artifact) (annotations.ArtifactKind, error) {
+	if _, ok := artifact.(*descriptor.Resource); !ok {
+		return "", fmt.Errorf("unsupported artifact type: %T", artifact)
+	}
+	return annotations.ArtifactKindResource, nil
 }
 
 // marshalArtifactAnnotation serialises the {identity, kind} value stored under
