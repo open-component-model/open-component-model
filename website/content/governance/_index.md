@@ -49,4 +49,4 @@ The SIG participates in the monthly OCM community call and can be reached via th
 - **Curious?** Start with the [SIG Handbook](https://github.com/open-component-model/open-component-model/blob/main/docs/community/SIGs/SIG-Handbook.md).
 - **Have a topic in mind?** Follow the handbook's steps to **propose a SIG** and gather interested contributors.
 - **Prefer to join later?** Keep an eye on this page -- we'll announce and list new SIGs here.
-- **Want to connect with others?** Visit the [Community]({{< relref "community/community.md" >}}) page for community calls, and more.
+- **Want to connect with others?** Visit the [Community]({{< relref "community/_index.md" >}}) page for community calls, and more.

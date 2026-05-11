@@ -196,6 +196,7 @@ directorytree
 dirs
 dirtree
 Discoverability
+discoverable
 distroless
 dl
 dn
@@ -310,6 +311,7 @@ hashers
 hashicorp
 hashicorpvault
 hasmermaid
+hidechildren
 heil
 helloworld
 helmchart
@@ -703,6 +705,7 @@ srcrefs
 sre
 sres
 stackit
+standup
 stateful
 statefulset
 stderr
