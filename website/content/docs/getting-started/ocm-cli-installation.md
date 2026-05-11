@@ -119,7 +119,7 @@ gh attestation verify $(which ocm) --repo open-component-model/open-component-mo
 {{< /tab >}}
 {{< tab "Cosign (no GitHub auth)" >}}
 
-Uses [Sigstore cosign](https://docs.sigstore.dev/cosign/overview/) to cryptographically verify the binary's provenance.
+Uses [Sigstore cosign](https://docs.sigstore.dev/cosign/signing/overview/) to cryptographically verify the binary's provenance.
 No GitHub authentication required — the attestation API is public.
 
 ```shell
