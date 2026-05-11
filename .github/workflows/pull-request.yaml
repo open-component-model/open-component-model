@@ -1,6 +1,8 @@
 name: Pull Request
+# pull_request_target is required to allow labeling on fork PRs (needs write access).
+# No PR code is executed — only the base repository's labeler config is read.
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] intentional: no PR code executed, only base repo config read
     # make sure that when the PR changes, we also update
     types:
       - opened
@@ -19,7 +21,7 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           TYPE_TO_LABEL: |
             {
@@ -121,7 +123,8 @@ jobs:
         with:
           sparse-checkout: |
             .github/config/labeler.yml
-      - uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b # v6
+          persist-credentials: false
+      - uses: actions/labeler@f27b608878404679385c85cfa523b85ccb86e213 # v6
         with:
           configuration-path: .github/config/labeler.yml
   size-labeler:
@@ -153,14 +156,8 @@ jobs:
           # files_to_ignore: ''
   verify-labels:
     needs: [labeler, size-labeler, conventional-commit-labeler]
-    name: verify labels
-    # docker://agilepathway/pull-request-label-checker is an amd64-only image.
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/verify-labels.yaml
     permissions:
       pull-requests: read
-    steps:
-      - name: PRs should have at least one qualifying label
-        uses: docker://agilepathway/pull-request-label-checker:latest@sha256:14f5f3dfda922496d07d53494e2d2b42885165f90677a1c03d600059b7706a61
-        with:
-          any_of: kind/chore,kind/bugfix,kind/feature,kind/dependency,kind/refactor
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      any_of: kind/chore,kind/bugfix,kind/feature,kind/dependency,kind/refactor

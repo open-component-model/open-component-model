@@ -27,21 +27,9 @@ const (
 	CredentialKeyAccessToken = credentialsv1.CredentialKeyAccessToken
 	// CredentialKeyRefreshToken is the key for OAuth2 refresh tokens.
 	CredentialKeyRefreshToken = credentialsv1.CredentialKeyRefreshToken
-	// LegacyCredentialKeyAccessToken is the legacy snake_case key for access tokens.
-	//
-	// Deprecated: Use CredentialKeyAccessToken instead.
-	//nolint:staticcheck // will be removed in the future
-	LegacyCredentialKeyAccessToken = credentialsv1.LegacyCredentialKeyAccessToken
-	// LegacyCredentialKeyRefreshToken is the legacy snake_case key for refresh tokens.
-	//
-	// Deprecated: Use CredentialKeyRefreshToken instead.
-	//nolint:staticcheck // will be removed in the future
-	LegacyCredentialKeyRefreshToken = credentialsv1.LegacyCredentialKeyRefreshToken
 )
 
 // CredentialFromMap converts a credential map to an auth.Credential.
-// It supports both canonical camelCase keys and legacy snake_case keys for token fields,
-// with camelCase taking precedence.
 func CredentialFromMap(credentials map[string]string) auth.Credential {
 	cred := auth.Credential{}
 	if v, ok := credentials[CredentialKeyUsername]; ok {
@@ -52,12 +40,8 @@ func CredentialFromMap(credentials map[string]string) auth.Credential {
 	}
 	if v, ok := credentials[CredentialKeyAccessToken]; ok {
 		cred.AccessToken = v
-	} else if v, ok := credentials[LegacyCredentialKeyAccessToken]; ok {
-		cred.AccessToken = v
 	}
 	if v, ok := credentials[CredentialKeyRefreshToken]; ok {
-		cred.RefreshToken = v
-	} else if v, ok := credentials[LegacyCredentialKeyRefreshToken]; ok {
 		cred.RefreshToken = v
 	}
 	return cred

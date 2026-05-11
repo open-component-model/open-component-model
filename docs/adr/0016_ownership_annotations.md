@@ -1,4 +1,4 @@
-# ADR 0015: Ownership Annotations for OCI Image Resources (Asset-to-Owner)
+# Ownership Annotations for OCI Image Resources (Asset-to-Owner)
 
 * **Status**: proposed
 * **Deciders**: OCM Technical Steering Committee

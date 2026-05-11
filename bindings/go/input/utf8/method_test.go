@@ -387,8 +387,22 @@ func TestGetV1UTF8Blob(t *testing.T) {
 	}
 }
 
-func TestScheme_ResolvesUpperCamelCase_UTF8(t *testing.T) {
-	obj, err := utf8.Scheme.NewObject(runtime.NewVersionedType(v1.Type, v1.Version))
-	require.NoError(t, err, "Scheme must resolve UpperCamelCase type UTF8/v1")
-	require.IsType(t, &v1.UTF8{}, obj, "expected *v1.UTF8 from Scheme")
+func TestScheme_ResolvesAllUTF8InputAliases(t *testing.T) {
+	tests := []struct {
+		name string
+		typ  runtime.Type
+	}{
+		{"versioned", runtime.NewVersionedType(v1.Type, v1.Version)},
+		{"unversioned", runtime.NewUnversionedType(v1.Type)},
+		{"legacy versioned", runtime.NewVersionedType(v1.LegacyType, v1.Version)},
+		{"legacy unversioned", runtime.NewUnversionedType(v1.LegacyType)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obj, err := utf8.Scheme.NewObject(tt.typ)
+			require.NoError(t, err)
+			require.IsType(t, &v1.UTF8{}, obj)
+		})
+	}
 }

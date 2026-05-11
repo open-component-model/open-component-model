@@ -18,7 +18,9 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: DavidAnson/markdownlint-cli2-action@6b51ade7a9e4a75a7ad929842dd298a3804ebe8b # v23
+        with:
+          persist-credentials: false
+      - uses: DavidAnson/markdownlint-cli2-action@ded1f9488f68a970bc66ea5619e13e9b52e601cd # v23
         with:
           globs: |
             website/**/*.md
@@ -33,6 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
       - name: Spellcheck
         uses: rojopolis/spellcheck-github-actions@e3cd8e9aec4587ec73bc0e60745aafd45c37aa2e # v0
         with:
@@ -51,6 +55,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 2
+          persist-credentials: false
       - name: Run linkspector
         uses: umbrelladocs/action-linkspector@963b6264d7de32c904942a70b488d3407453049e # v1
         with:
@@ -72,6 +77,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 2
+          persist-credentials: false
 
       - name: Check for website changes
         id: check_changes
@@ -173,6 +179,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
       - name: Read tool versions
         id: versions
@@ -180,4 +188,6 @@ jobs:
           source .env
           echo "markdownlint_cli2=${MARKDOWNLINT_CLI2_VERSION}" >> $GITHUB_OUTPUT
       - name: Run linter
-        run: npx markdownlint-cli2@${{ steps.versions.outputs.markdownlint_cli2 }} --config .github/config/.markdownlint-cli2.yaml "**/*.md"
+        env:
+          MARKDOWNLINT_VERSION: ${{ steps.versions.outputs.markdownlint_cli2 }}
+        run: npx "markdownlint-cli2@${MARKDOWNLINT_VERSION}" --config .github/config/.markdownlint-cli2.yaml "**/*.md"

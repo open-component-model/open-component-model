@@ -1,11 +1,13 @@
 # Trigger central Black Duck scan workflow for the Open Component Model project.
+# pull_request_target is required to allow scanning fork PRs (passes secrets to called workflow).
+# No PR code is executed — this workflow only dispatches to the central scan workflow.
 name: Trigger Blackduck Scan
-on: 
+on:
   push:
     paths-ignore:
     - '.github/workflows/**'
     branches: [ "main" ]
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] intentional: no PR code executed, dispatches to central scan workflow
     paths-ignore:
     - '.github/workflows/**'
     branches: [ "main" ]
@@ -23,4 +25,4 @@ jobs:
       # required to be able to differentiate between PRs and pushes in the called workflow (rapid or full scan)
       event_type: ${{ github.event_name }}
       detector_search_depth: 3
-    secrets: inherit
+    secrets: inherit # zizmor: ignore[secrets-inherit] external org workflow requires all secrets

@@ -47,20 +47,29 @@ jobs:
           sparse-checkout: |
             .github/scripts
             .github/config
+          persist-credentials: false
 
       - name: Extract plugin details
         id: plugin
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CLIENT_PLUGIN_NAME: ${{ github.event.client_payload.plugin_name }}
+          CLIENT_PLUGIN_VERSION: ${{ github.event.client_payload.plugin_version }}
+          CLIENT_PLUGIN_COMPONENT: ${{ github.event.client_payload.plugin_component }}
+          INPUT_PLUGIN_NAME: ${{ inputs.plugin_name }}
+          INPUT_PLUGIN_VERSION: ${{ inputs.plugin_version }}
+          INPUT_PLUGIN_COMPONENT: ${{ inputs.plugin_component }}
         shell: bash
         run: |
           # Handle both repository_dispatch and workflow_dispatch
-          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            PLUGIN_NAME="${{ github.event.client_payload.plugin_name }}"
-            PLUGIN_VERSION="${{ github.event.client_payload.plugin_version }}"
-            PLUGIN_COMPONENT="${{ github.event.client_payload.plugin_component }}"
+          if [ "${EVENT_NAME}" = "repository_dispatch" ]; then
+            PLUGIN_NAME="${CLIENT_PLUGIN_NAME}"
+            PLUGIN_VERSION="${CLIENT_PLUGIN_VERSION}"
+            PLUGIN_COMPONENT="${CLIENT_PLUGIN_COMPONENT}"
           else
-            PLUGIN_NAME="${{ inputs.plugin_name }}"
-            PLUGIN_VERSION="${{ inputs.plugin_version }}"
-            PLUGIN_COMPONENT="${{ inputs.plugin_component }}"
+            PLUGIN_NAME="${INPUT_PLUGIN_NAME}"
+            PLUGIN_VERSION="${INPUT_PLUGIN_VERSION}"
+            PLUGIN_COMPONENT="${INPUT_PLUGIN_COMPONENT}"
           fi
 
           echo "plugin_name=${PLUGIN_NAME}" >> "$GITHUB_OUTPUT"
@@ -96,7 +105,7 @@ jobs:
           PLUGIN_NAME: ${{ steps.plugin.outputs.plugin_name }}
           PLUGIN_COMPONENT: ${{ steps.plugin.outputs.plugin_component }}
           PLUGIN_VERSION: ${{ steps.plugin.outputs.plugin_version }}
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/prepare-registry-constructor.js');
