@@ -8,7 +8,7 @@ import path from "path";
 // user will not know that it was cut off.
 const GITHUB_RELEASE_BODY_LIMIT = 125000;
 const MAX_RELEASE_BODY_LENGTH = GITHUB_RELEASE_BODY_LIMIT - 5000; // safety buffer
-const TRUNCATION_NOTICE = `\n\n---\n\n*Release notes truncated to fit GitHub's ${GITHUB_RELEASE_BODY_LIMIT}-character body limit. See the source changelog or \`git log\`for the complete history.*`;
+const TRUNCATION_NOTICE = `\n\n---\n\n*Release notes truncated to fit GitHub's ${GITHUB_RELEASE_BODY_LIMIT}-character body limit. See the source changelog or \`git log\` for the complete history.*`;
 
 // --------------------------
 // Helpers
