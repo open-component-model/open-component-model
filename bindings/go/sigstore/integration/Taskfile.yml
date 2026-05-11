@@ -51,6 +51,7 @@ tasks:
 
   scaffolding:setup:
     desc: "Create kind cluster and deploy sigstore scaffolding (~5 min, skips if already running)"
+    run: once
     deps: [scaffolding:hosts]
     requires:
       vars: [SCAFFOLDING_VERSION]
