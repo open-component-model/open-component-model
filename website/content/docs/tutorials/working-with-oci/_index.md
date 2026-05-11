@@ -644,7 +644,7 @@ resources:
     version: 1.0.0
 ```
 
-The `globalAccess.imageReference` provides a direct pullable reference. Note that this reference becomes stale if the component is mirrored to another registry.
+The `globalAccess.imageReference` provides a direct pullable reference. Note that this reference may become stale if the component is transferred to another registry using tooling that does not update the `globalAccess` field.
 
 Without `globalAccess`, you can still access native OCI artifacts directly using the `localReference` digest and the component version's repository path in the registry.
 {{< /details >}}
