@@ -359,6 +359,13 @@ func validateTrustedRootPath(p string) error {
 	return nil
 }
 
+// Fulcio embeds the OIDC issuer URL in Sigstore bundle certificates as proprietary X.509
+// extensions under the Sigstore PEN (Private Enterprise Number 57264).
+// See https://github.com/sigstore/fulcio/blob/main/docs/oid-info.md for the full OID registry.
+//
+// V1 (OID .1): issuer stored as raw UTF-8 bytes directly in the extension value.
+// V2 (OID .8): issuer stored as an ASN.1 DER-encoded UTF8String (requires asn1.Unmarshal).
+// We prefer V2 and fall back to V1 for compatibility with older Fulcio deployments.
 var (
 	sigstoreIssuerV1OID = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57264, 1, 1}
 	sigstoreIssuerV2OID = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57264, 1, 8}
