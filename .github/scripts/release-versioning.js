@@ -126,7 +126,7 @@ export function run(core, executable, args) {
  * @throws {Error} If the branch does not match the expected pattern.
  */
 export function parseBranch(branch) {
-  const match = /^releases\/v(0\.\d+)/.exec(branch);
+  const match = /^releases\/v(0\.\d+)$/.exec(branch);
   if (!match) throw new Error(`Invalid branch format: ${branch}`);
   return match[1];
 }
