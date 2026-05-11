@@ -196,6 +196,7 @@ directorytree
 dirs
 dirtree
 Discoverability
+discoverable
 distroless
 dl
 dn

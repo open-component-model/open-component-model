@@ -144,8 +144,10 @@ Groups (SIGs). Currently, **SIG Runtime** maintains the Go bindings, CLI, and Ku
 {{< card-grid >}}
 {{< link-card title="Governance" href="/governance/" description="TSC membership, project charter, and SIG framework." >}}
 {{< link-card title="How We Work" href="/community/how-we-work/" description="Meetings, planning rituals, project boards, and decision-making." >}}
+<!-- markdownlint-disable MD034 -- bare URLs are expected in shortcode href attributes -->
 {{< link-card title="SIG Handbook" href="https://github.com/open-component-model/open-component-model/blob/main/docs/community/SIGs/SIG-Handbook.md" description="How to join or propose a new Special Interest Group." >}}
 {{< link-card title="TSC Meeting Notes" href="https://github.com/open-component-model/open-component-model/tree/main/docs/steering/meeting-notes" description="Public monthly meeting notes from the Technical Steering Committee." >}}
+<!-- markdownlint-enable MD034 -->
 {{< /card-grid >}}
 
 ## Contributing and Engaging
