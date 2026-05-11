@@ -56,7 +56,7 @@ func WithTempDir(dir string) HandlerOption {
 }
 
 // WithHTTPClient sets the HTTP client used for cosign binary auto-downloads.
-// Only relevant when cosign is not already on PATH. If not set, a default client with a 2-minute
+// Only relevant when cosign is not already on PATH. If not set, a default client with a 5-minute
 // timeout is used.
 func WithHTTPClient(c *http.Client) HandlerOption {
 	return func(h *Handler) {

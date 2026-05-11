@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	defaultOperationTimeout = 3 * time.Minute
-	cosignMinimumVersion    = "v3.0.4"
+	defaultOperationTimeout  = 3 * time.Minute
+	defaultHTTPClientTimeout = 5 * time.Minute
+	cosignMinimumVersion     = "v3.0.4"
 )
 
 // CosignBinary resolves and invokes the cosign binary.
@@ -38,7 +39,7 @@ type CosignBinary struct {
 func NewCosignBinary(httpClient *http.Client) *CosignBinary {
 	b := &CosignBinary{HttpClient: httpClient}
 	if b.HttpClient == nil {
-		b.HttpClient = &http.Client{Timeout: defaultOperationTimeout}
+		b.HttpClient = &http.Client{Timeout: defaultHTTPClientTimeout}
 	}
 	b.ExecCosign = b.execCosign
 	b.LookPath = exec.LookPath
