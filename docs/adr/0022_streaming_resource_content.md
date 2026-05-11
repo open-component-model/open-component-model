@@ -99,10 +99,25 @@ our repository interface hides it behind a tar-producing `ReadOnlyBlob` return.
 
 ## Proposed Design
 
-### DownloadResourceStream returns an oras store + root descriptor
+### OCI-specific streaming interface
+
+The streaming API lives in the OCI package (`bindings/go/oci`), not in the
+generic `repository.ResourceRepository` interface. It is specific to OCI-based
+repositories because it exposes oras storage semantics that only make sense for
+OCI content (manifests, layers, descriptors).
+
+The generic `ResourceRepository` interface remains unchanged — it still uses
+`blob.ReadOnlyBlob`. Repositories that support streaming expose the additional
+interface alongside it:
 
 ```go
-type ResourceRepository interface {
+package oci
+
+// StreamingResourceRepository extends the generic ResourceRepository with
+// OCI-native streaming. Only implemented by OCI-backed repositories.
+type StreamingResourceRepository interface {
+    repository.ResourceRepository
+
     // DownloadResourceStream returns a store handle and root descriptor.
     // No data is downloaded yet — content streams on demand.
     DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (ResourceStream, error)
@@ -112,12 +127,16 @@ type ResourceRepository interface {
 }
 ```
 
-`ResourceStream` wraps oras interfaces:
+`ResourceStream` wraps oras interfaces — also in the OCI package:
 
 ```go
-// ResourceStream is a lazy handle to a resource's OCI content.
+package oci
+
+// ResourceStream is a lazy handle to OCI content.
 // It implements content.ReadOnlyGraphStorage so it can be passed
 // directly to oras.CopyGraph or consumed blob-by-blob.
+// This interface is OCI-specific — it only makes sense for content
+// that consists of manifests and layers addressed by descriptor.
 type ResourceStream interface {
     content.ReadOnlyGraphStorage
 
@@ -130,18 +149,39 @@ type ResourceStream interface {
 }
 ```
 
-That's it. `ResourceStream` **is** an oras store. Any code that knows how to
-work with oras can use it directly.
+`ResourceStream` **is** an oras store. Any code that knows how to work with
+oras can use it directly. The generic `ResourceRepository` interface stays
+untouched — callers that don't need streaming keep using `DownloadResource` /
+`UploadResource` with `blob.ReadOnlyBlob` as before.
 
 ### How transfer works
 
+The transfer logic checks if both source and target support streaming. If they
+do, it uses the fast path. Otherwise it falls back to `DownloadResource` /
+`UploadResource` with `blob.ReadOnlyBlob`:
+
 ```go
-func transferResource(ctx context.Context, src, dst ResourceRepository, res *descriptor.Resource, creds Credentials) error {
-    content, err := src.DownloadResourceStream(ctx, res, creds.Source)
+func transferResource(ctx context.Context, src, dst repository.ResourceRepository, res *descriptor.Resource, creds Credentials) error {
+    // Try streaming path if both sides support it
+    srcStream, srcOK := src.(oci.StreamingResourceRepository)
+    dstStream, dstOK := dst.(oci.StreamingResourceRepository)
+
+    if srcOK && dstOK {
+        stream, err := srcStream.DownloadResourceStream(ctx, res, creds.Source)
+        if err != nil {
+            return err
+        }
+        _, err = dstStream.UploadResourceStream(ctx, res, stream, creds.Target)
+        return err
+    }
+
+    // Fallback: legacy blob path
+    blob, err := src.DownloadResource(ctx, res, creds.Source)
     if err != nil {
         return err
     }
-    return dst.UploadResourceStream(ctx, res, content, creds.Target)
+    _, err = dst.UploadResource(ctx, res, blob, creds.Target)
+    return err
 }
 ```
 
