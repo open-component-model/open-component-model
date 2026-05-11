@@ -50,21 +50,15 @@ func (p CredentialPlugin) GetConsumerIdentity(_ context.Context, typed runtime.T
 	return identity, nil
 }
 
-func (p CredentialPlugin) ResolveTyped(ctx context.Context, identity runtime.Typed, credentials runtime.Typed) (runtime.Typed, error) {
-	id, ok := identity.(runtime.Identity)
-	if !ok {
-		// this is for now a developer error and needs to crash to prevent wrong introductions of non map identities
-		// TODO(matthiasbruns): https://github.com/open-component-model/ocm-project/issues/1041
-		panic(fmt.Sprintf("unexpected type for credential consumer identity: %T", identity))
-	}
+func (p CredentialPlugin) ResolveTyped(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 	var credMap map[string]string
 	if dc, ok := credentials.(*v1.DirectCredentials); ok && credentials != nil {
 		credMap = dc.Properties
 	}
 	if p.CredentialFunc == nil {
-		return nil, fmt.Errorf("no credential function for %v", id)
+		return nil, fmt.Errorf("no credential function for %v", identity)
 	}
-	result, err := p.CredentialFunc(ctx, id, credMap)
+	result, err := p.CredentialFunc(ctx, identity, credMap)
 	if err != nil {
 		return nil, err
 	}
@@ -373,8 +367,8 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 				ConsumerIdentityTypeAttributes: map[runtime.Type]map[string]func(v any) (string, string){
 					runtime.NewUnversionedType("HashiCorpVault"): {
 						"serverURL": func(v any) (string, string) {
-							url, _ := url.Parse(v.(string))
-							return runtime.IdentityAttributeHostname, url.Hostname()
+							parsedURL, _ := url.Parse(v.(string))
+							return runtime.IdentityAttributeHostname, parsedURL.Hostname()
 						},
 					},
 				},
