@@ -112,7 +112,7 @@ If automatic verification is unavailable, you can verify manually using one of t
 The simplest method — requires the [GitHub CLI](https://cli.github.com/) with authentication.
 
 ```shell
-gh auth login
+gh auth login --hostname github.com
 gh attestation verify $(which ocm) --repo open-component-model/open-component-model
 ```
 
@@ -136,6 +136,7 @@ curl -sfL \
 cosign verify-blob-attestation \
   --bundle attestation.jsonl \
   --new-bundle-format \
+  --type slsaprovenance1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp \
     '^https://github.com/open-component-model/open-component-model/' \

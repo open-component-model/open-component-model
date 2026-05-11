@@ -207,30 +207,39 @@ print_verify_instructions() {
     warn ""
     warn "  Option A — Verify with GitHub CLI (recommended):"
     warn "    1. Install gh: https://cli.github.com/"
-    warn "    2. Authenticate: gh auth login"
+    warn "    2. Authenticate against GitHub.com: gh auth login --hostname github.com"
     warn "    3. Verify the installed binary:"
     warn "       gh attestation verify ${BIN_DIR}/ocm --repo ${GITHUB_REPO}"
     warn ""
     warn "  Option B — Verify with cosign (no GitHub auth needed):"
-    warn "    DIGEST=\"sha256:\$(${hash_cmd} ${BIN_DIR}/ocm | cut -d' ' -f1)\""
-    warn "    curl -sfL \\"
-    warn "      \"https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}\" \\"
-    warn "      | jq -r '.attestations[0].bundle' > attestation.jsonl"
-    warn "    cosign verify-blob-attestation \\"
-    warn "      --bundle attestation.jsonl \\"
-    warn "      --new-bundle-format \\"
-    warn "      --certificate-oidc-issuer https://token.actions.githubusercontent.com \\"
-    warn "      --certificate-identity-regexp \\"
-    warn "        '^https://github.com/${GITHUB_REPO}/' \\"
-    warn "      ${BIN_DIR}/ocm"
+    cat >&2 <<COSIGN_EOF
+
+    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/ocm | cut -d' ' -f1)"
+    curl -sfL \\
+      "https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}" \\
+      | jq -r '.attestations[0].bundle' > attestation.jsonl
+    cosign verify-blob-attestation \\
+      --bundle attestation.jsonl \\
+      --new-bundle-format \\
+      --type slsaprovenance1 \\
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
+      --certificate-identity-regexp \\
+        '^https://github.com/${GITHUB_REPO}/' \\
+      ${BIN_DIR}/ocm
+
+COSIGN_EOF
     warn ""
     warn "  Option C — Manual SHA-256 hash check (integrity only):"
-    warn "    DIGEST=\"sha256:\$(${hash_cmd} ${BIN_DIR}/ocm | cut -d' ' -f1)\""
-    warn "    curl -sfL \\"
-    warn "      \"https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}\" \\"
-    warn "      | jq -r '.attestations[0].bundle.dsseEnvelope.payload' \\"
-    warn "      | base64 -d | jq '.subject[] | \"\\(.digest.sha256)  \\(.name)\"'"
-    warn "    # Compare the listed hash with: ${hash_cmd} ${BIN_DIR}/ocm"
+    cat >&2 <<HASH_EOF
+
+    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/ocm | cut -d' ' -f1)"
+    curl -sfL \\
+      "https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}" \\
+      | jq -r '.attestations[0].bundle.dsseEnvelope.payload' \\
+      | base64 -d | jq '.subject[] | "\(.digest.sha256)  \(.name)"'
+    # Compare the listed hash with: ${hash_cmd} ${BIN_DIR}/ocm
+
+HASH_EOF
     warn ""
     warn "  To suppress this warning: OCM_SKIP_VERIFY=true"
     warn "══════════════════════════════════════════════════════════════════════"
