@@ -81,8 +81,7 @@ func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyStora
 	}
 }
 
-// Referrer pairs a descriptor with its raw content bytes. Raw is required because
-// referrers are generated on-the-fly and never exist in the source OCI layout store.
+// Referrer pairs a descriptor with its raw content bytes — any extra content [ReferrersFunc] supplies that the source OCI layout store does not already hold (typically an OCI referrer manifest plus the blobs it references).
 type Referrer struct {
 	Descriptor ociImageSpecV1.Descriptor
 	Raw        []byte
@@ -218,22 +217,13 @@ func resolveReferrers(ctx context.Context, funcs []ReferrersFunc, topLevelDesc o
 	return referrers, referrerDescriptors, nil
 }
 
-// findSuccessorsForRoot returns a CopyGraph FindSuccessors that injects
-// referrer descriptors as additional children of topLevelDesc, and drops any
-// back-edge to topLevelDesc from a non-root successor's manifest — typically
-// a referrer's Subject pointer, which would otherwise deadlock CopyGraph
-// (CopyGraph copies children before their parent, so a child waiting on the
-// parent's done-signal creates a circular wait via the in-flight tracker).
+// findSuccessorsForRoot returns a CopyGraph FindSuccessors that injects referrer descriptors as additional children of topLevelDesc.
 func findSuccessorsForRoot(topLevelDesc ociImageSpecV1.Descriptor, rootChildren []ociImageSpecV1.Descriptor) func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
 	return func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
 		if content.Equal(desc, topLevelDesc) {
 			return rootChildren, nil
 		}
-		successors, err := successorsWithoutSubject(ctx, fetcher, desc)
-		if err != nil {
-			return nil, fmt.Errorf("failed to find successors: %w", err)
-		}
-		return successors, nil
+		return successorsWithoutSubject(ctx, fetcher, desc)
 	}
 }
 

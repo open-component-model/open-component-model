@@ -4,8 +4,7 @@ package annotations
 //
 // An ownership referrer is a minimal OCI manifest whose subject points to a
 // resource manifest and whose annotations record the owning component version
-// and the artifact identity. The artifactType constant lives in the
-// spec/ownership package.
+// and the artifact identity.
 const (
 	// OwnershipComponentName is an annotation that records the plain component
 	// name on an ownership referrer manifest.

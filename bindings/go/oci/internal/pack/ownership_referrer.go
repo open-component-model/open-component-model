@@ -24,6 +24,7 @@ import (
 // (GET /v2/<name>/referrers/<digest>?artifactType=...).
 const OwnershipArtifactType = "application/vnd.ocm.software.ownership.v1+json"
 
+// OwnershipReferrer returns a [tar.ReferrersFunc] that links the packed artifact back to its owning component and version (ADR 0016). Subjects that are not OCI manifests produce no referrer.
 func OwnershipReferrer(artifact descriptor.Artifact, component string, version string) tar.ReferrersFunc {
 	return func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]tar.Referrer, error) {
 		if !introspection.IsOCICompliantManifest(top) {

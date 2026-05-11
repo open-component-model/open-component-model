@@ -175,7 +175,7 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 				LocalReference: digest.FromBytes(data).String(),
 			},
 		}
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			_, err := repo.AddLocalResource(ctx, componentName, componentVersion, res, inmemory.New(bytes.NewReader(data)))
 			r.NoErrorf(err, "re-upload attempt %d must not fail", i+1)
 		}
