@@ -13,7 +13,7 @@ import (
 
 // resolveFromGraph resolves credentials for a given identity by traversing the graph.
 // Returns a runtime.Typed credential stored on the matching node.
-func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Typed) (runtime.Typed, error) {
+func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
 	// Check for cancellation to exit early
 	select {
 	case <-ctx.Done():
@@ -32,32 +32,26 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Typed) (r
 		return creds, nil
 	}
 
-	node := nodeID(identity)
+	node := identity.String()
 
 	// Non–leaf node: recursively resolve each child and merge the results.
 	result := make(map[string]string)
 	for edgeID := range vertex.Edges {
-		childTyped, ok := g.getIdentity(edgeID)
+		childID, ok := g.getIdentity(edgeID)
 		if !ok {
 			return nil, fmt.Errorf("no credentials for node %q available: child node %q not found", vertex.ID, edgeID)
 		}
-		childCredentials, err := g.resolveFromGraph(ctx, childTyped)
+		childCredentials, err := g.resolveFromGraph(ctx, childID)
 		if err != nil {
 			return nil, err
 		}
-		plugin, err := g.credentialPluginProvider.GetCredentialPlugin(ctx, childTyped)
+		plugin, err := g.credentialPluginProvider.GetCredentialPlugin(ctx, childID)
 		if err != nil {
 			return nil, fmt.Errorf("could not get credential plugin for node %q: %w", edgeID, err)
 		}
 
-		// Extract map from child credentials for plugin resolution.
+		// Plugin interface still uses map[string]string — extract from the child's typed credential.
 		childMap := typedToMap(childCredentials)
-
-		// Plugin interfaces still use runtime.Identity — convert for the call.
-		childID, err := toIdentity(childTyped)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert child identity %q: %w", edgeID, err)
-		}
 
 		// Let the plugin resolve the child's credentials.
 		credentials, err := plugin.Resolve(ctx, childID, childMap)
@@ -82,11 +76,11 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Typed) (r
 }
 
 // typedToMap extracts map[string]string from a runtime.Typed credential.
-// Used internally for plugin interfaces that still work with maps.
 // For DirectCredentials, it returns the Properties map directly.
 // For other typed credentials (e.g. HelmHTTPCredentials), it falls back to a JSON
 // round-trip, extracting only string-valued fields (excluding the "type" field).
-// TODO(matthiasbruns): Remove once plugin interfaces migrate to runtime.Typed https://github.com/open-component-model/ocm-project/issues/980
+// This bridge exists because plugin interfaces and the legacy Resolve method work
+// with map[string]string, while ResolveTyped returns runtime.Typed.
 func typedToMap(cred runtime.Typed) map[string]string {
 	if cred == nil {
 		return nil
@@ -96,8 +90,6 @@ func typedToMap(cred runtime.Typed) map[string]string {
 	}
 
 	// Fallback: JSON round-trip for any typed credential.
-	// This allows Resolve() (backward-compat map interface) to return usable
-	// credentials even when the graph stores typed credential structs.
 	data, err := json.Marshal(cred)
 	if err != nil {
 		return nil
