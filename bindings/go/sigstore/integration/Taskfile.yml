@@ -104,12 +104,12 @@ tasks:
 
   scaffolding:env:
     desc: "Extract sigstore env vars from running cluster into tmp/sigstore-env.sh"
-    deps: [scaffolding:setup, scaffolding:bridge]
+    deps: [scaffolding:setup, scaffolding:bridge, cosign:install]
     cmds:
       - mkdir -p tmp
-      - cmd: SIGSTORE_BRIDGE_PORT=8080 bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
+      - cmd: PATH="{{.ROOT_DIR}}/tmp/bin:$PATH" SIGSTORE_BRIDGE_PORT=8080 bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
         platforms: [darwin]
-      - cmd: bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
+      - cmd: PATH="{{.ROOT_DIR}}/tmp/bin:$PATH" bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
         platforms: [linux]
 
   scaffolding:refresh:
