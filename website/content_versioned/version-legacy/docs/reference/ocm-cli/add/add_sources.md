@@ -164,6 +164,9 @@ There are several templaters that can be selected by the <code>--templater</code
 The resource specification supports the following blob input types, specified
 with the field <code>type</code> in the <code>input</code> field:
 
+UpperCamelCase type names (e.g. <code>Helm</code>) are aliases for the corresponding
+lowercase types (e.g. <code>helm</code>). See the lowercase entry for full documentation.
+
 - Input type <code>binary</code>
 
   This blob type is used to provide base64 encoded binary content. The

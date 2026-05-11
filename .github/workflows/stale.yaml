@@ -14,5 +14,5 @@ jobs:
       issues: write
       pull-requests: write
       contents: read
-    uses: open-component-model/.github/.github/workflows/stale.yml@c878408ef4362b719549404c49c47833dba69e5a # main
+    uses: open-component-model/.github/.github/workflows/stale.yml@d532b6400ca2d9574c4214f0701421fffb60052d # main
     secrets: inherit
