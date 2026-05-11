@@ -130,8 +130,13 @@ jobs:
         env:
           INSTALL_LOG: ${{ runner.temp }}/install.log
         run: |
-          if ! grep -q "GitHub CLI is not authenticated. Skipping attestation verification." "${INSTALL_LOG}"; then
-            echo "::error::Expected unauthenticated skip message not found"
+          if ! grep -q "BINARY NOT CRYPTOGRAPHICALLY VERIFIED" "${INSTALL_LOG}"; then
+            echo "::error::Expected manual verification instructions not found"
+            cat "${INSTALL_LOG}"
+            exit 1
+          fi
+          if ! grep -q "Reason: GitHub CLI is not authenticated" "${INSTALL_LOG}"; then
+            echo "::error::Expected unauthenticated reason not found"
             cat "${INSTALL_LOG}"
             exit 1
           fi
