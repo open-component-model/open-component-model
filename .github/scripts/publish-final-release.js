@@ -2,13 +2,10 @@
 import fs from "fs";
 import path from "path";
 
-// What is this and why is it here? GitHub has a hard limit on the length of the changelog.
+// GitHub has a hard limit on the length of the changelog.
 // We could use git-cliff's [limit_commits](https://git-cliff.org/docs/configuration/git#limit_commits) setting, however,
-// that is a _hard_ limit. What does that mean? It will basically cut off at a preconfiugred number.
-// Meaning, the user will have no idea that there are supposed to be more commits if a release genuinely has
-// more than 200 commits (or whatever number is configured).
-// Now, this is fine, it's not really complexity, but I'm willing to drop this if we think it's just overkill.
-// I ran into this while testing the entire flow and had too many releases and went over the 125Kb limit.
+// that is a _hard_ limit. It will basically cut off at a preconfiugred number. Meaning if we have too many commits, the
+// user will not know that it was cut off.
 const GITHUB_RELEASE_BODY_LIMIT = 125000;
 const MAX_RELEASE_BODY_LENGTH = GITHUB_RELEASE_BODY_LIMIT - 5000; // safety buffer
 const TRUNCATION_NOTICE = `\n\n---\n\n*Release notes truncated to fit GitHub's ${GITHUB_RELEASE_BODY_LIMIT}-character body limit. See the source changelog or \`git log\`for the complete history.*`;

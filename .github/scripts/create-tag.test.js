@@ -122,7 +122,7 @@ function mockCore() {
 // Missing CANONICAL_TAG → setFailed
 {
   const core = mockCore();
-  await withEnv({ CANONICAL_TAG: undefined, MODULE_TAGS: undefined }, async () => {
+  await withEnv({ CANONICAL_TAG: undefined, ADDITIONAL_TAGS: undefined }, async () => {
     await createRcTags({ core });
     assert.ok(core._state.failed?.includes("Missing"), `Expected setFailed, got: ${core._state.failed}`);
   });
@@ -133,7 +133,7 @@ function mockCore() {
   const core = mockCore();
   await withEnv({
     CANONICAL_TAG: "v0.1.0-rc.1",
-    MODULE_TAGS: "cli/v0.1.0-rc.1,kubernetes/controller/v0.1.0-rc.1",
+    ADDITIONAL_TAGS: "cli/v0.1.0-rc.1,kubernetes/controller/v0.1.0-rc.1",
   }, async () => {
     const git = mockExecGit({
       "rev-parse refs/tags/v0.1.0-rc.1": new Error("not found"),
@@ -148,10 +148,10 @@ function mockCore() {
   });
 }
 
-// Canonical-only when MODULE_TAGS missing
+// Canonical-only when ADDITIONAL_TAGS missing
 {
   const core = mockCore();
-  await withEnv({ CANONICAL_TAG: "v0.1.0-rc.1", MODULE_TAGS: undefined }, async () => {
+  await withEnv({ CANONICAL_TAG: "v0.1.0-rc.1", ADDITIONAL_TAGS: undefined }, async () => {
     const git = mockExecGit({
       "rev-parse refs/tags/v0.1.0-rc.1": new Error("not found"),
     });
@@ -163,12 +163,12 @@ function mockCore() {
   });
 }
 
-// Whitespace and empty entries in MODULE_TAGS are tolerated
+// Whitespace and empty entries in ADDITIONAL_TAGS are tolerated
 {
   const core = mockCore();
   await withEnv({
     CANONICAL_TAG: "v0.1.0-rc.1",
-    MODULE_TAGS: " cli/v0.1.0-rc.1 ,, kubernetes/controller/v0.1.0-rc.1 ",
+    ADDITIONAL_TAGS: " cli/v0.1.0-rc.1 ,, kubernetes/controller/v0.1.0-rc.1 ",
   }, async () => {
     const git = mockExecGit({
       "rev-parse refs/tags/v0.1.0-rc.1": new Error("not found"),
@@ -185,7 +185,7 @@ function mockCore() {
 // Existing tag at HEAD is idempotent
 {
   const core = mockCore();
-  await withEnv({ CANONICAL_TAG: "v0.1.0-rc.1", MODULE_TAGS: undefined }, async () => {
+  await withEnv({ CANONICAL_TAG: "v0.1.0-rc.1", ADDITIONAL_TAGS: undefined }, async () => {
     const git = mockExecGit({
       "refs/tags/v0.1.0-rc.1": "abc123",
       "rc.1^{commit}": "abc123",
@@ -205,7 +205,7 @@ function mockCore() {
 // Missing required env vars → setFailed
 {
   const core = mockCore();
-  await withEnv({ RC_TAG: undefined, NEW_RELEASE_TAG: undefined, MODULE_TAGS: undefined }, async () => {
+  await withEnv({ RC_TAG: undefined, NEW_RELEASE_TAG: undefined, ADDITIONAL_TAGS: undefined }, async () => {
     await createNewReleaseTags({ core });
     assert.ok(core._state.failed?.includes("Missing"));
   });
@@ -214,7 +214,7 @@ function mockCore() {
 // RC tag cannot be resolved → setFailed
 {
   const core = mockCore();
-  await withEnv({ RC_TAG: "v0.1.0-rc.1", NEW_RELEASE_TAG: "v0.1.0", MODULE_TAGS: undefined }, async () => {
+  await withEnv({ RC_TAG: "v0.1.0-rc.1", NEW_RELEASE_TAG: "v0.1.0", ADDITIONAL_TAGS: undefined }, async () => {
     const git = mockExecGit({ "rc.1^{commit}": new Error("not found") });
     await createNewReleaseTags({ core, execGit: git });
     assert.ok(core._state.failed !== null, "Expected setFailed on unresolvable RC tag");
@@ -227,7 +227,7 @@ function mockCore() {
   await withEnv({
     RC_TAG: "v0.1.0-rc.1",
     NEW_RELEASE_TAG: "v0.1.0",
-    MODULE_TAGS: "cli/v0.1.0,kubernetes/controller/v0.1.0",
+    ADDITIONAL_TAGS: "cli/v0.1.0,kubernetes/controller/v0.1.0",
   }, async () => {
     const calls = [];
     const git = (args) => {
@@ -255,7 +255,7 @@ function mockCore() {
   await withEnv({
     RC_TAG: "v0.1.0-rc.1",
     NEW_RELEASE_TAG: "v0.1.0",
-    MODULE_TAGS: undefined,
+    ADDITIONAL_TAGS: undefined,
   }, async () => {
     const git = mockExecGit({
       "rc.1^{commit}": "abc1234567890",

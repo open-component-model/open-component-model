@@ -117,19 +117,6 @@ function tagAtCommit({ core, tag, commit, message, execGit }) {
 }
 
 // --------------------------
-// Helpers
-// --------------------------
-
-/**
- * Parse a comma-separated list of tags into an array, trimming whitespace and
- * dropping empty entries. Returns [] for empty/missing input.
- */
-function parseModuleTagList(raw) {
-  if (!raw) return [];
-  return raw.split(",").map(s => s.trim()).filter(Boolean);
-}
-
-// --------------------------
 // RC tags entrypoint (canonical + side tags)
 // --------------------------
 
@@ -139,19 +126,19 @@ function parseModuleTagList(raw) {
  * etc.) all pointing at HEAD.
  *
  * Expects env vars:
- *   CANONICAL_TAG  Required. The user-facing release tag (e.g. "v0.7.0-rc.1").
- *   MODULE_TAGS    Optional. Comma-separated list of side tags to emit on the
+ *   CANONICAL_TAG Required. The user-facing release tag (e.g. "v0.7.0-rc.1").
+ *   ADDITIONAL_TAGS Optional. Comma-separated list of side tags to emit on the
  *                  same commit (e.g. "cli/v0.7.0-rc.1,kubernetes/controller/v0.7.0-rc.1").
  */
 export async function createRcTags({ core, execGit = defaultExecGit }) {
-  const { CANONICAL_TAG: canonicalTag, MODULE_TAGS: moduleTagsRaw } = process.env;
+  const { CANONICAL_TAG: canonicalTag, ADDITIONAL_TAGS: moduleTagsRaw } = process.env;
 
   if (!canonicalTag) {
     core.setFailed("Missing CANONICAL_TAG environment variable");
     return;
   }
 
-  const moduleTags = parseModuleTagList(moduleTagsRaw);
+  const moduleTags = (moduleTagsRaw || "").split(",").map(s => s.trim()).filter(Boolean);
   const targets = [
     { tag: canonicalTag, message: `Release candidate ${canonicalTag}` },
     ...moduleTags.map(tag => ({ tag, message: `Side tag for ${canonicalTag}` })),
@@ -175,14 +162,14 @@ export async function createRcTags({ core, execGit = defaultExecGit }) {
  * Expects env vars:
  *   RC_TAG               Required. Source RC tag to resolve a commit from.
  *   NEW_RELEASE_TAG      Required. The user-facing final tag (e.g. "v0.7.0").
- *   MODULE_TAGS          Optional. Comma-separated list of side tags to emit
+ *   ADDITIONAL_TAGS          Optional. Comma-separated list of side tags to emit
  *                        at the same commit as NEW_RELEASE_TAG.
  */
 export async function createNewReleaseTags({ core, execGit = defaultExecGit }) {
   const {
     RC_TAG: rcTag,
     NEW_RELEASE_TAG: newReleaseTag,
-    MODULE_TAGS: moduleTagsRaw,
+    ADDITIONAL_TAGS: moduleTagsRaw,
   } = process.env;
 
   if (!rcTag || !newReleaseTag) {
@@ -198,7 +185,7 @@ export async function createNewReleaseTags({ core, execGit = defaultExecGit }) {
     return;
   }
 
-  const moduleTags = parseModuleTagList(moduleTagsRaw);
+  const moduleTags = (moduleTagsRaw || "").split(",").map(s => s.trim()).filter(Boolean);
   const targets = [
     { tag: newReleaseTag, message: `Promote ${rcTag} to ${newReleaseTag}` },
     ...moduleTags.map(tag => ({ tag, message: `Side tag for ${newReleaseTag}` })),
