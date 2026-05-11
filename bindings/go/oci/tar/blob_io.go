@@ -98,6 +98,24 @@ type CopyOCILayoutWithIndexOptions struct {
 	ReferrersFunc    []ReferrersFunc
 }
 
+// CopyOCILayoutWithIndex reads an OCI layout tarball from src, picks the
+// layout's single top-level manifest or index (or the one tagged via
+// `org.opencontainers.image.ref.name` when multiple are present), and copies
+// its full graph into dst via [oras.CopyGraph].
+//
+// Two hooks let the caller adjust the copy:
+//
+//   - [CopyOCILayoutWithIndexOptions.MutateParentFunc] runs once against the
+//     top-level descriptor before copy. Typical use: inject annotations onto
+//     the root manifest/index. Required.
+//   - [CopyOCILayoutWithIndexOptions.ReferrersFunc] returns extra [Referrer]s
+//     to be pushed alongside the artifact in the same traversal — e.g. OCI
+//     referrer manifests, which [oras.CopyGraph]'s default `FindSuccessors`
+//     does not follow via the `subject` field. Each returned referrer is
+//     served from an in-memory proxy and injected as an additional child of
+//     the root.
+//
+// Returns the descriptor of the root that was copied.
 func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.ReadOnlyBlob, opts CopyOCILayoutWithIndexOptions) (top ociImageSpecV1.Descriptor, err error) {
 	ociStore, err := ReadOCILayout(ctx, src)
 	if err != nil {
@@ -173,6 +191,10 @@ func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore 
 		if err := opts.MutateParentFunc(&topLevelDesc); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate manifest descriptor before copy: %w", err)
 		}
+		// rootChildren are what FindSuccessors returns for the (mutated) root: the manifest's
+		// own config + layers, plus the referrers the caller wants attached. CopyGraph's default
+		// successor traversal would re-fetch the (now-stale) manifest bytes from the source store
+		// and miss the injected referrers — supplying the children explicitly avoids both.
 		rootChildren := slices.Concat([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers, referrerDescriptors)
 		opts.FindSuccessors = findSuccessorsForRoot(topLevelDesc, rootChildren)
 	case ociImageSpecV1.MediaTypeImageIndex:
