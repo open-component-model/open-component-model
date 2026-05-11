@@ -509,19 +509,46 @@ ocm transfer cv \
 
 {{< step >}}
 
-### Pull natively
+### Inspect the transferred component version
 
-After transfer, inspect the component version in the registry to find the `localReference` digest:
+After transfer, inspect the component version in the registry:
 
 ```bash
 ocm get cv <your-registry>//github.com/acme.org/fetched-oci-demo:1.0.0 -o yaml
 ```
 
-Use the `localReference` digest to pull the artifact with standard OCI tooling:
+The resource access now shows a local blob reference:
+
+```yaml
+resources:
+  - access:
+      localReference: sha256:abc123...
+      mediaType: application/vnd.oci.image.index.v1+json
+      referenceName: stefanprodan/podinfo:6.9.1
+      type: LocalBlob/v1
+    name: app-image
+    relation: external
+    type: ociArtifact
+    version: 1.0.0
+```
+
+Key observations:
+
+- `localReference` contains the digest of the stored image manifest/index — this is the value you need for native access
+- `mediaType` is `application/vnd.oci.image.index.v1+json` (multi-platform) or `application/vnd.oci.image.manifest.v1+json` (single-platform)
+- `referenceName` preserves the original image reference for traceability
+
+{{< /step >}}
+
+{{< step >}}
+
+### Pull natively
+
+Use the `localReference` digest from the previous step to pull the artifact with standard OCI tooling:
 
 ```bash
 # Pull using the localReference digest
-oras pull <your-registry>/component-descriptors/github.com/acme.org/fetched-oci-demo@sha256:...
+oras pull <your-registry>/component-descriptors/github.com/acme.org/fetched-oci-demo@sha256:abc123...
 ```
 
 The image is stored as a first-class OCI manifest in the registry. No OCM tooling is required to access it — any OCI-compliant client works.
