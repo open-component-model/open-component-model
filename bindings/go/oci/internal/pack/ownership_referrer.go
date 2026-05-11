@@ -1,13 +1,12 @@
 package pack
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -70,22 +69,19 @@ func OwnershipReferrer(artifact descriptor.Artifact, component string, version s
 
 // marshalArtifactAnnotation serialises the {identity, kind} value stored under
 // [annotations.ArtifactAnnotationKey] on an ownership referrer (ADR 0016).
-// Output is JCS-canonical (RFC 8785) for this schema: encoding/json sorts
-// map[string]string keys, the struct fields are already alphabetical, leaves
-// are strings (no number-formatting concerns), and HTML escaping is explicitly
-// disabled so '<', '>', '&', U+2028 and U+2029 are emitted verbatim rather
-// than \u-encoded — which RFC 8785 requires but encoding/json does not do by
-// default.
+// The result is JCS-canonical (RFC 8785).
 func marshalArtifactAnnotation(identity runtime.Identity, kind annotations.ArtifactKind) (string, error) {
 	payload := struct {
 		Identity runtime.Identity         `json:"identity"`
 		Kind     annotations.ArtifactKind `json:"kind"`
 	}{Identity: identity, Kind: kind}
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(payload); err != nil {
+	raw, err := json.Marshal(payload)
+	if err != nil {
 		return "", fmt.Errorf("failed to marshal artifact annotation: %w", err)
 	}
-	return strings.TrimSuffix(buf.String(), "\n"), nil
+	canonical, err := jsoncanonicalizer.Transform(raw)
+	if err != nil {
+		return "", fmt.Errorf("failed to canonicalize artifact annotation: %w", err)
+	}
+	return string(canonical), nil
 }
