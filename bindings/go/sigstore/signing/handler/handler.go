@@ -224,13 +224,6 @@ func (h *Handler) Verify(
 		slog.WarnContext(ctx, "CertificateOIDCIssuer uses HTTP (non-TLS); this is insecure outside of test environments")
 	}
 
-	if isPermissivePattern(cfg.CertificateOIDCIssuerRegexp) && isPermissivePattern(cfg.CertificateIdentityRegexp) {
-		slog.WarnContext(ctx, "verification uses trivially permissive identity patterns — "+
-			"any valid Sigstore signature will pass regardless of signer identity",
-			"issuerRegexp", cfg.CertificateOIDCIssuerRegexp,
-			"identityRegexp", cfg.CertificateIdentityRegexp)
-	}
-
 	bundleJSON, err := base64.StdEncoding.DecodeString(signed.Signature.Value)
 	if err != nil {
 		return fmt.Errorf("decode bundle base64: %w", err)
