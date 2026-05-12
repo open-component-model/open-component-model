@@ -7,6 +7,8 @@ import (
 	"io"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -197,6 +199,96 @@ func TestCopyToOCILayoutInMemory_ErrorCases(t *testing.T) {
 	rc, err = b.ReadCloser()
 	assert.Error(t, err)
 	assert.Nil(t, rc)
+}
+
+// buildSingleLayerOCILayout produces an OCI layout (one layer + one manifest)
+// for tests that need a real artifact to feed into CopyOCILayoutWithIndex.
+func buildSingleLayerOCILayout(t *testing.T) (layoutBytes []byte, root, layer ociImageSpecV1.Descriptor) {
+	t.Helper()
+	layerData := []byte("layer content")
+	layer = content.NewDescriptorFromBytes("application/octet-stream", layerData)
+	var buf bytes.Buffer
+	w, err := NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, w.Push(t.Context(), layer, bytes.NewReader(layerData)))
+	root, err = oras.PackManifest(t.Context(), w, oras.PackManifestVersion1_1, "application/artifact", oras.PackManifestOptions{
+		Layers: []ociImageSpecV1.Descriptor{layer},
+	})
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	return buf.Bytes(), root, layer
+}
+
+// TestCopyOCILayoutWithIndex_ReferrersFunc verifies the ReferrersFunc hook:
+// the callback's descriptors land in dst alongside the artifact, and a
+// referrer's Subject back-reference to root does not cause CopyGraph to loop
+// back.
+func TestCopyOCILayoutWithIndex_ReferrersFunc(t *testing.T) {
+	layoutBytes, rootDesc, layerDesc := buildSingleLayerOCILayout(t)
+
+	var receivedRoot, referrerDesc ociImageSpecV1.Descriptor
+	referrerFn := func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]Referrer, error) {
+		receivedRoot = top
+		emptyDesc := ociImageSpecV1.DescriptorEmptyJSON
+		body, err := json.Marshal(ociImageSpecV1.Manifest{
+			Versioned:    specs.Versioned{SchemaVersion: 2},
+			MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+			ArtifactType: "application/test.referrer.v1+json",
+			Config:       emptyDesc,
+			Layers:       []ociImageSpecV1.Descriptor{emptyDesc},
+			Subject:      &top,
+		})
+		if err != nil {
+			return nil, err
+		}
+		referrerDesc = ociImageSpecV1.Descriptor{
+			MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+			ArtifactType: "application/test.referrer.v1+json",
+			Digest:       digest.FromBytes(body),
+			Size:         int64(len(body)),
+		}
+		return []Referrer{
+			{Descriptor: referrerDesc, Raw: body},
+			{Descriptor: emptyDesc, Raw: []byte("{}")},
+		}, nil
+	}
+
+	dst := memory.New()
+	returnedTop, err := CopyOCILayoutWithIndex(t.Context(), dst, &testReadOnlyBlob{data: layoutBytes}, CopyOCILayoutWithIndexOptions{
+		MutateParentFunc: func(d *ociImageSpecV1.Descriptor) error { return nil },
+		ReferrersFunc:    []ReferrersFunc{referrerFn},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, rootDesc.Digest, receivedRoot.Digest)
+
+	for _, d := range []ociImageSpecV1.Descriptor{returnedTop, layerDesc, referrerDesc} {
+		ok, err := dst.Exists(t.Context(), d)
+		require.NoError(t, err)
+		assert.Truef(t, ok, "%s must be in dst", d.Digest)
+	}
+
+	predecessors, err := dst.Predecessors(t.Context(), returnedTop)
+	require.NoError(t, err)
+	require.Len(t, predecessors, 1, "subject back-reference must yield exactly one referrer")
+	assert.Equal(t, referrerDesc.Digest, predecessors[0].Digest)
+}
+
+// TestCopyOCILayoutWithIndex_NilReferrersFunc verifies that a nil callback
+// leaves the pre-ReferrersFunc behaviour intact: only the artifact lands.
+func TestCopyOCILayoutWithIndex_NilReferrersFunc(t *testing.T) {
+	layoutBytes, rootDesc, _ := buildSingleLayerOCILayout(t)
+
+	dst := memory.New()
+	returnedTop, err := CopyOCILayoutWithIndex(t.Context(), dst, &testReadOnlyBlob{data: layoutBytes}, CopyOCILayoutWithIndexOptions{
+		MutateParentFunc: func(d *ociImageSpecV1.Descriptor) error { return nil },
+	})
+	require.NoError(t, err)
+	assert.Equal(t, rootDesc.Digest, returnedTop.Digest)
+
+	predecessors, err := dst.Predecessors(t.Context(), returnedTop)
+	require.NoError(t, err)
+	assert.Empty(t, predecessors)
 }
 
 func TestCopyOCILayoutWithIndex_ErrorCases(t *testing.T) {
