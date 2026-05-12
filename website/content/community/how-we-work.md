@@ -56,8 +56,8 @@ Anyone can propose work for an upcoming sprint. The process is:
 
 {{<callout context="note" title="Joining meetings" icon="outline/info-circle">}}
 We are working on making all meeting links publicly discoverable. In the meantime, reach out on
-[Zulip](https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support) or
-[Slack](https://kubernetes.slack.com/archives/C05UWBE8R1D) to receive a calendar invite.
+[Zulip](/community/#zulip) or
+[Slack](/community/#slack) to receive a calendar invite.
 {{</callout>}}
 
 | Meeting | Cadence | Purpose |
@@ -78,7 +78,7 @@ decisions that affect multiple areas or establish a precedent, the team uses
 
 Larger decisions that affect project direction are escalated to the TSC. The process is:
 
-1. Discuss in a GitHub issue, SIG meeting, or on Slack/Zulip
+1. Discuss in a GitHub issue, SIG meeting, or on [Slack](/community/#slack)/[Zulip](/community/#zulip)
 2. If consensus is not reached, bring it to the TSC agenda
 3. The TSC decides by majority vote (quorum: 50% of voting members)
 
