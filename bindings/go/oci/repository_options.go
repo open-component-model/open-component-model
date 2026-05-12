@@ -62,6 +62,13 @@ type RepositoryOptions struct {
 	// to discourage reliance on global access references.
 	// Set to GlobalAccessPolicyAuto to auto-detect based on the storage backend.
 	GlobalAccessPolicy GlobalAccessPolicy
+
+	// OwnershipReferrerPolicy controls whether an asset-to-owner OCI referrer
+	// (ADR 0016) is pushed alongside each by-value resource upload. By default
+	// (zero value), no referrer is pushed; opt in via
+	// OwnershipReferrerPolicyEnabled when the consumer needs reverse lookup
+	// from an OCI artifact to its owning component version.
+	OwnershipReferrerPolicy OwnershipReferrerPolicy
 }
 
 // ReferrerTrackingPolicy defines how OCI referrers are used in the repository.
@@ -84,6 +91,17 @@ const (
 	// see https://github.com/opencontainers/distribution-spec/blob/main/spec.md#backwards-compatibility
 	// for details on backwards-compatibility and behavior.
 	ReferrerTrackingPolicyByIndexAndSubject ReferrerTrackingPolicy = iota
+)
+
+// OwnershipReferrerPolicy controls asset-to-owner referrer creation
+// (docs/adr/0016_ownership_annotations.md).
+type OwnershipReferrerPolicy int
+
+const (
+	// OwnershipReferrerPolicyDisabled is the zero value — no referrer is pushed.
+	OwnershipReferrerPolicyDisabled OwnershipReferrerPolicy = iota
+	// OwnershipReferrerPolicyEnabled pushes one ownership referrer per by-value resource upload (ADR 0016).
+	OwnershipReferrerPolicyEnabled
 )
 
 // GlobalAccessPolicy is an alias for [policy.GlobalAccessPolicy].
@@ -167,6 +185,15 @@ func WithGlobalAccessPolicy(policy GlobalAccessPolicy) RepositoryOption {
 	}
 }
 
+// WithOwnershipReferrerPolicy enables or disables asset-to-owner OCI referrer
+// creation on by-value resource uploads (ADR 0016). The default is
+// OwnershipReferrerPolicyDisabled (disabled).
+func WithOwnershipReferrerPolicy(policy OwnershipReferrerPolicy) RepositoryOption {
+	return func(o *RepositoryOptions) {
+		o.OwnershipReferrerPolicy = policy
+	}
+}
+
 // NewRepository creates a new Repository instance with the given options.
 func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	options := &RepositoryOptions{}
@@ -229,5 +256,6 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		unmarshalDescriptorFunc:     options.DescriptorUnmarshalFunc,
 		tempDir:                     options.TempDir,
 		globalAccessPolicy:          options.GlobalAccessPolicy,
+		ownershipReferrerPolicy:     options.OwnershipReferrerPolicy,
 	}, nil
 }

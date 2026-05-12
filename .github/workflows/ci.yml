@@ -295,11 +295,18 @@ jobs:
   run_integration_tests:
     name: "Integration Tests"
     needs: discover_modules
-    runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     if: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json) }}
+        runner: [ubuntu-24.04-arm]
+        exclude:
+          - module: bindings/go/sigstore/integration
+            runner: ubuntu-24.04-arm
+        include:
+          - module: bindings/go/sigstore/integration
+            runner: ubuntu-latest
     env:
       TESTCONTAINER_DOCKER_NETWORK: integration-testcontainers
     steps:

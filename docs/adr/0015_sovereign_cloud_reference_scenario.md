@@ -83,13 +83,13 @@ Both are packaged as OCM components, signed, transferred through an air-gap via 
 
 ### 1.2 Integration Landscape
 
-| Integration         | Role                                                        | Status                                 |
-|---------------------|-------------------------------------------------------------|----------------------------------------|
-| **OCM CLI**         | Build, sign, verify, transfer components                    | Implemented (containerized via Docker) |
-| **OCM K8s Toolkit** | Reconcile Repository/Component/Resource/Deployer CRs        | Implemented                            |
-| **kro**             | ResourceGraphDefinition controller                          | Implemented                            |
-| **FluxCD**          | Helm chart deployment (source-controller + helm-controller) | Implemented                            |
-| **kind**            | Local air-gapped Kubernetes cluster                         | Implemented                            |
+| Integration                           | Role                                                        | Status                                 |
+|---------------------------------------|-------------------------------------------------------------|----------------------------------------|
+| **OCM CLI**                           | Build, sign, verify, transfer components                    | Implemented (containerized via Docker) |
+| **OCM Kubernetes Controller Toolkit** | Reconcile Repository/Component/Resource/Deployer CRs        | Implemented                            |
+| **kro**                               | ResourceGraphDefinition controller                          | Implemented                            |
+| **FluxCD**                            | Helm chart deployment (source-controller + helm-controller) | Implemented                            |
+| **kind**                              | Local air-gapped Kubernetes cluster                         | Implemented                            |
 
 ### 1.3 Prerequisites
 
