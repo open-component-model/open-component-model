@@ -37,6 +37,9 @@ func PreRunEWithConfig(cmd *cobra.Command, cfg Config) error {
 	// Apply filesystem config
 	setup.FilesystemConfig(cmd, cfg.FilesystemConfigOptions)
 
+	// Apply ownership referrer config
+	setup.OwnershipConfig(cmd)
+
 	// Remaining setup
 	if err := setup.PluginManager(cmd); err != nil {
 		return fmt.Errorf("setup plugin manager: %w", err)

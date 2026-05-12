@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	ownershipv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/ownership/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
@@ -24,9 +25,14 @@ func Register(
 	blobTransformerRegistry *blobtransformer.Registry,
 	compListRegistry *componentlister.ComponentListerRegistry,
 	filesystemConfig *filesystemv1alpha1.Config,
+	ownershipConfig *ownershipv1alpha1.Config,
 	logger *slog.Logger,
 ) error {
-	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithUserAgent(creator), provider.WithTempDir(filesystemConfig.TempFolder))
+	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider(
+		provider.WithUserAgent(creator),
+		provider.WithTempDir(filesystemConfig.TempFolder),
+		provider.WithOwnershipConfig(ownershipConfig),
+	)
 
 	resourceRepoPlugin := ocires.NewResourceRepository(filesystemConfig, ocires.WithUserAgent(creator))
 	ociBlobTransformerPlugin := transformer.New(logger)

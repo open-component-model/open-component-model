@@ -8,6 +8,7 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	ownershipv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/ownership/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/cli/internal/subsystem"
@@ -54,6 +55,11 @@ type Context struct {
 	// that can be used by plugins and other components.
 	filesystemConfig *filesystemv1alpha1.Config
 
+	// ownershipConfig is the resolved ownership referrer configuration for OCM.
+	// It controls whether resource uploads emit the asset-to-owner OCI referrer
+	// defined in ADR 0016.
+	ownershipConfig *ownershipv1alpha1.Config
+
 	// subsystemRegistry is the registry containing all registered subsystems.
 	// Subsystems are logical groupings of OCM types that provide runtime scheme
 	// information for type introspection and documentation.
@@ -79,6 +85,17 @@ func WithFilesystemConfig(ctx context.Context, cfg *filesystemv1alpha1.Config) c
 	ocmctx.mu.Lock()
 	defer ocmctx.mu.Unlock()
 	ocmctx.filesystemConfig = cfg
+	return ctx
+}
+
+// WithOwnershipConfig creates a new context with the given ownership configuration.
+// After this function is called, the ownership configuration can be retrieved from the
+// context using [FromContext] and [Context.OwnershipConfig].
+func WithOwnershipConfig(ctx context.Context, cfg *ownershipv1alpha1.Config) context.Context {
+	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
+	ocmctx.mu.Lock()
+	defer ocmctx.mu.Unlock()
+	ocmctx.ownershipConfig = cfg
 	return ctx
 }
 
@@ -158,6 +175,15 @@ func (ctx *Context) FilesystemConfig() *filesystemv1alpha1.Config {
 	ctx.mu.RLock()
 	defer ctx.mu.RUnlock()
 	return ctx.filesystemConfig
+}
+
+func (ctx *Context) OwnershipConfig() *ownershipv1alpha1.Config {
+	if ctx == nil {
+		return nil
+	}
+	ctx.mu.RLock()
+	defer ctx.mu.RUnlock()
+	return ctx.ownershipConfig
 }
 
 func (ctx *Context) SubsystemRegistry() *subsystem.Registry {
