@@ -197,6 +197,9 @@ func fetchLatestVersion(ctx context.Context, opts Options) (string, error) {
 
 	var best *semver.Version
 	for _, r := range releases {
+		// GitHub API does not support server-side filtering by draft/prerelease status
+		// for the list endpoint. The /releases/latest endpoint excludes these but doesn't
+		// support tag prefix filtering needed for monorepo releases.
 		if r.Draft || r.Prerelease {
 			continue
 		}

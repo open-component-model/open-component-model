@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -60,7 +60,7 @@ func VersionCheck(cmd *cobra.Command, currentVersion string) {
 		select {
 		case result := <-ch:
 			if result != nil && result.UpdateAvailable {
-				printWarning(result)
+				printUpgradeWarning(result)
 				versioncheck.MarkWarned(cacheDir)
 			}
 		case <-time.After(versionCheckWaitTimeout):
@@ -99,11 +99,16 @@ func isVersionCheckDisabled(cmd *cobra.Command, currentVersion string) bool {
 // envDisabled checks the OCM_DISABLE_VERSION_CHECK environment variable.
 func envDisabled() bool {
 	val := os.Getenv(VersionCheckEnvVar)
-	switch strings.ToLower(val) {
-	case "1", "true", "yes":
+	if val == "" {
+		return false
+	}
+	disabled, err := strconv.ParseBool(val)
+	if err != nil {
+		slog.Debug("version check: invalid env var value, treating as disabled",
+			slog.String("var", VersionCheckEnvVar), slog.String("value", val))
 		return true
 	}
-	return false
+	return disabled
 }
 
 // configDisabled checks the OCM config file for a versioncheck policy.
@@ -124,8 +129,8 @@ func configDisabled(cmd *cobra.Command) bool {
 	return vcCfg.Policy == versioncheck.PolicyDisable
 }
 
-// printWarning logs the upgrade notification using the structured logging stack.
-func printWarning(result *versioncheck.Result) {
+// printUpgradeWarning logs the upgrade notification using the structured logging stack.
+func printUpgradeWarning(result *versioncheck.Result) {
 	slog.Warn("A newer version of ocm is available",
 		slog.String("current", "v"+result.CurrentVersion),
 		slog.String("available", "v"+result.LatestVersion),
