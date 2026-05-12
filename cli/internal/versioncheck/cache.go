@@ -77,5 +77,5 @@ func WriteCache(dir string, entry *CacheEntry) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(CacheFilePath(dir), data, 0o644)
+	return os.WriteFile(CacheFilePath(dir), data, 0o600)
 }

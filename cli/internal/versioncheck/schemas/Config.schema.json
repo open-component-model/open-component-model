@@ -4,10 +4,11 @@
   "$id": "ocm.software/open-component-model/cli/internal/versioncheck/schemas/Config.schema.json",
   "title": "Config",
   "type": "object",
-  "description": "Config configures behavior for version checking",
+  "description": "Config configures behavior for version checking.\nUsers can place this in their OCM config file to persistently disable the check:\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: versioncheck.cli.config.ocm.software/v1alpha1\ndisabled: true",
   "properties": {
     "disabled": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "Disabled, when true, suppresses all version check activity (no network calls, no warnings)."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
