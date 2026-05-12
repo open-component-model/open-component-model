@@ -135,18 +135,13 @@ repository (e.g., `DockerConfig/v1` reading `~/.docker/config.json`) concurrentl
 ### Typed Identity Structs
 
 Typed identity structs are `runtime.Typed` objects that represent consumer identities with structured fields instead of
-untyped maps. Consumers pass them directly to `ResolveTyped` — the graph handles matching internally.
+quntyped maps. Consumers pass them in their shallow `map[string]string` representation as `runtime.Identity` to `ResolveTyped` — the graph handles matching internally.
 
 ```go
-// Consumer usage — pass typed identity directly
+// Consumer usage — pass typed identity as runtime.Identity 
 identity := &HelmChartRepositoryIdentity{Hostname: "charts.example.com"}
-typed, err := resolver.ResolveTyped(ctx, identity)
+typed, err := resolver.ResolveTyped(ctx, ToIdentity(identity))
 ```
-
-The graph internally works with `runtime.Typed` for identities throughout. The only place where `runtime.Identity` is
-still used is at the boundary to `CredentialPlugin` and `RepositoryPlugin` interfaces, which still accept
-`runtime.Identity` in their signatures. This conversion is migration scaffolding that Phase 3 removes when those
-plugin interfaces migrate to `runtime.Typed`.
 
 ### Type Registries and Graph Independence
 
@@ -233,7 +228,6 @@ This means:
   fallback path fails because generic `scheme.Convert` cannot do this lift (the JSON shapes differ: nested `properties`
   map vs flat fields). This is not enforced by a framework interface, but every binding that supports legacy configs
   needs it for the `DirectCredentials` → typed struct conversion at the consumer level.
-- Unversioned identity types work through `runtime.Scheme` alias resolution
 
 ### External Plugin Integration
 
