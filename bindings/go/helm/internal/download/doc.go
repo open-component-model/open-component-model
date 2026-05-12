@@ -26,11 +26,18 @@
 //	}
 //	chartData, err := download.NewReadOnlyChartFromRemote(ctx, chartURL, download.WithCredentials(creds))
 //
-// For OCI-backed Helm repositories the password may instead be supplied as a bearer/OAuth2
-// access token via [WithOCICredentials] using typed [ocicredsv1.OCICredentials]. When the
-// helm HTTP password is empty, the OCI access token is used as the basic-auth password.
-// The username, when needed, is always taken from the helm HTTP credentials. Basic auth is
-// only applied when both username and (resolved) password are non-empty.
+// For OCI-backed Helm repositories, credentials may additionally be supplied via
+// [WithOCICredentials] using typed [ocicredsv1.OCICredentials]. Both option sets are
+// then merged into a single basic-auth pair using the following resolution order:
+//
+//   - Username: [helmcredsv1.HelmHTTPCredentials.Username], falling back to
+//     [ocicredsv1.OCICredentials.Username] when empty.
+//   - Password: [helmcredsv1.HelmHTTPCredentials.Password], falling back to
+//     [ocicredsv1.OCICredentials.Password], then to [ocicredsv1.OCICredentials.AccessToken]
+//     (bearer/OAuth2 token) when each is empty.
+//
+// Basic auth is only attached to the request when both the resolved username and
+// password are non-empty.
 //
 //	chartData, err := download.NewReadOnlyChartFromRemote(ctx, chartURL,
 //	    download.WithCredentials(&helmcredsv1.HelmHTTPCredentials{Username: "user"}),
