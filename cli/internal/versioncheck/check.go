@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -115,7 +116,9 @@ func Check(ctx context.Context, opts Options) *Result {
 	if cache != nil {
 		entry.WarnedAt = cache.WarnedAt
 	}
-	_ = WriteCache(cacheDir, entry)
+	if err := WriteCache(cacheDir, entry); err != nil {
+		slog.Debug("version check: failed to write cache", slog.String("error", err.Error()))
+	}
 
 	return compareVersions(current, latest)
 }
@@ -128,7 +131,9 @@ func MarkWarned(cacheDir string) {
 		return
 	}
 	cache.WarnedAt = time.Now()
-	_ = WriteCache(cacheDir, cache)
+	if err := WriteCache(cacheDir, cache); err != nil {
+		slog.Debug("version check: failed to persist warned_at", slog.String("error", err.Error()))
+	}
 }
 
 // compareVersions returns a Result comparing the current version against a latest version string.
