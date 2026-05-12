@@ -115,9 +115,15 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		Keyring:          keyring,
 	}
 
+	// Do not break legacy behaviour, but also support pure OCI based credentials
 	username := opt.Credentials.Username
+	if username == "" {
+		username = opt.OCICredentials.Username
+	}
 	password := opt.Credentials.Password
-
+	if password == "" {
+		password = opt.OCICredentials.Password
+	}
 	if password == "" {
 		password = opt.OCICredentials.AccessToken
 	}
