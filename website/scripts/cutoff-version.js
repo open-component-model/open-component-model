@@ -3,7 +3,7 @@
  * Cut off a new versioned content release (module-import-only model)
  *
  * Usage:
- *   node scripts/cutoff-version.js X.Y.Z
+ *   node scripts/cutoff-version.js X.Y.Z --cli-gomod <path>
  *
  * Behavior:
  * - Accepts SemVer version X.Y.Z, derives minor identifier X.Y
@@ -13,6 +13,7 @@
  */
 
 const fsp = require('node:fs/promises');
+const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 
 // Paths
@@ -112,16 +113,21 @@ function fail(msg) {
 
 // Parse CLI arguments
 function parseArguments(args) {
-    const flags = [];
+    const flags = {};
     const positionals = [];
 
-    for (const arg of args) {
-        if (arg.startsWith('--')) flags.push(arg);
-        else positionals.push(arg.trim());
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === '--cli-gomod') {
+            if (i + 1 >= args.length) throw new Error('--cli-gomod requires a path argument');
+            flags.cliGomod = args[++i];
+        } else if (args[i].startsWith('--')) {
+            throw new Error(`Unknown flag: ${args[i]}`);
+        } else {
+            positionals.push(args[i].trim());
+        }
     }
 
-    if (flags.length) throw new Error(`Unknown flag(s): ${flags.join(', ')}`);
-    if (positionals.length === 0) throw new Error('Missing version. Usage: cutoff-version.js X.Y.Z');
+    if (positionals.length === 0) throw new Error('Missing version. Usage: cutoff-version.js X.Y.Z --cli-gomod <path>');
     if (positionals.length > 1) throw new Error(`Expected exactly one version argument, got ${positionals.length}: ${positionals.join(', ')}`);
 
     const fullVersion = positionals[0];
@@ -135,7 +141,7 @@ function parseArguments(args) {
     const version = `${parts[0]}.${parts[1]}`;
     const patch = Number(parts[2]) > 0;
 
-    return { version, fullVersion, patch };
+    return { version, fullVersion, patch, cliGomod: flags.cliGomod };
 }
 
 function hasAnyImportForVersion(parsed, version) {
@@ -153,10 +159,47 @@ function hasAllImportsForVersion(parsed, version) {
     return expectedPaths.every(p => existingPaths.has(p));
 }
 
-// Build import blocks for a given version (pure, testable)
-function buildModuleBlocks(version, fullVersion) {
+/**
+ * Resolve dependency versions from a go.mod file.
+ * Runs `go mod edit -json <goModPath>` and extracts the version for each requested module path.
+ *
+ * @param {string} goModPath - absolute path to go.mod
+ * @param {string[]} modulePaths - module paths to look up
+ * @returns {Object<string, string>} map of modulePath -> version (e.g. "v0.0.7")
+ */
+function resolveGoModVersions(goModPath, modulePaths) {
+    const absPath = path.resolve(goModPath);
+    const output = execFileSync('go', ['mod', 'edit', '-json', absPath], { encoding: 'utf-8' });
+    const mod = JSON.parse(output);
+
+    const result = {};
+    const requires = mod.Require || [];
+    for (const req of requires) {
+        if (modulePaths.includes(req.Path)) {
+            result[req.Path] = req.Version;
+        }
+    }
+
+    const missing = modulePaths.filter(p => !result[p]);
+    if (missing.length) {
+        fail(`Could not resolve versions for: ${missing.join(', ')} in ${goModPath}`);
+    }
+
+    return result;
+}
+
+// Modules whose versions are derived from the CLI's go.mod
+const CLI_DERIVED_MODULES = [
+    'ocm.software/open-component-model/bindings/go/constructor',
+    'ocm.software/open-component-model/bindings/go/descriptor/v2',
+];
+
+// Build import blocks for a given version (pure when deps are passed, testable)
+function buildModuleBlocks(version, fullVersion, deps) {
+    const constructorVersion = deps?.['ocm.software/open-component-model/bindings/go/constructor'] || 'latest';
+    const descriptorVersion = deps?.['ocm.software/open-component-model/bindings/go/descriptor/v2'] || 'latest';
+
     const imports = [
-        // Hand-written docs
         {
             path: 'ocm.software/open-component-model/website',
             version: `website/v${fullVersion}`,
@@ -167,7 +210,6 @@ function buildModuleBlocks(version, fullVersion) {
                 sites: { matrix: { versions: [version] } }
             }]
         },
-        // CLI reference
         {
             path: 'ocm.software/open-component-model/cli',
             version: `cli/v${fullVersion}`,
@@ -177,27 +219,24 @@ function buildModuleBlocks(version, fullVersion) {
                 sites: { matrix: { versions: [version] } }
             }]
         },
-        // Go constructor schemas (independent release cycle, uses latest)
         {
             path: 'ocm.software/open-component-model/bindings/go/constructor',
-            version: 'latest',
+            version: `bindings/go/constructor/${constructorVersion}`,
             mounts: [{
                 source: 'spec/v1/resources',
                 target: `static/${version}/schemas/bindings/go/constructor`,
                 sites: { matrix: { versions: [version] } }
             }]
         },
-        // Go descriptor schemas (independent release cycle, uses latest)
         {
             path: 'ocm.software/open-component-model/bindings/go/descriptor/v2',
-            version: 'latest',
+            version: `bindings/go/descriptor/v2/${descriptorVersion}`,
             mounts: [{
                 source: 'resources',
                 target: `static/${version}/schemas/bindings/go/descriptor/v2`,
                 sites: { matrix: { versions: [version] } }
             }]
         },
-        // Kubernetes controller CRDs
         {
             path: 'ocm.software/open-component-model/kubernetes/controller',
             version: `kubernetes/controller/v${fullVersion}`,
@@ -239,16 +278,14 @@ function retireOldestVersion(versions) {
  * @param {string} fullVersion - full version (X.Y.Z)
  * @returns {boolean} true if any tags were updated
  */
-function updateImportTags(parsed, version, fullVersion) {
+function updateImportTags(parsed, version, fullVersion, deps) {
     if (!parsed?.imports) return false;
+
     let changed = false;
 
     for (const imp of parsed.imports) {
         const matchesVersion = imp?.mounts?.some(m => m?.sites?.matrix?.versions?.includes(version));
         if (!matchesVersion) continue;
-
-        // Only update versioned imports (not 'latest')
-        if (imp.version === 'latest') continue;
 
         let newTag = null;
         if (imp.path.endsWith('/website')) {
@@ -257,6 +294,10 @@ function updateImportTags(parsed, version, fullVersion) {
             newTag = `cli/v${fullVersion}`;
         } else if (imp.path.endsWith('/kubernetes/controller')) {
             newTag = `kubernetes/controller/v${fullVersion}`;
+        } else if (deps && imp.path.endsWith('/bindings/go/constructor')) {
+            newTag = `bindings/go/constructor/${deps['ocm.software/open-component-model/bindings/go/constructor']}`;
+        } else if (deps && imp.path.endsWith('/bindings/go/descriptor/v2')) {
+            newTag = `bindings/go/descriptor/v2/${deps['ocm.software/open-component-model/bindings/go/descriptor/v2']}`;
         }
 
         if (newTag && imp.version !== newTag) {
@@ -309,7 +350,7 @@ async function updateHugoToml(version) {
 }
 
 // Update module.toml: add import blocks for a new version
-async function updateModuleToml(version, fullVersion, retiredVersion) {
+async function updateModuleToml(version, fullVersion, retiredVersion, cliGomod) {
     const { parse, stringify } = await loadToml();
     const content = await fsp.readFile(MODULE_TOML, 'utf-8').catch(e => fail(`Read module.toml: ${e.message}`));
     const parsed = parse(content);
@@ -322,7 +363,8 @@ async function updateModuleToml(version, fullVersion, retiredVersion) {
     } else if (hasAnyImport) {
         fail(`module.toml: incomplete block for ${version}. Fix manually.`);
     } else {
-        const { imports } = buildModuleBlocks(version, fullVersion);
+        const deps = resolveGoModVersions(cliGomod, CLI_DERIVED_MODULES);
+        const { imports } = buildModuleBlocks(version, fullVersion, deps);
         parsed.imports = parsed.imports || [];
         for (const imp of imports) {
             parsed.imports.push(imp);
@@ -340,7 +382,7 @@ async function updateModuleToml(version, fullVersion, retiredVersion) {
 }
 
 // Update module.toml in patch mode: update tags for existing version
-async function updateModuleTomlPatch(version, fullVersion) {
+async function updateModuleTomlPatch(version, fullVersion, cliGomod) {
     const { parse, stringify } = await loadToml();
     const content = await fsp.readFile(MODULE_TOML, 'utf-8').catch(e => fail(`Read module.toml: ${e.message}`));
     const parsed = parse(content);
@@ -349,7 +391,8 @@ async function updateModuleTomlPatch(version, fullVersion) {
         fail(`module.toml: no imports found for version '${version}'. Cannot patch.`);
     }
 
-    const changed = updateImportTags(parsed, version, fullVersion);
+    const deps = resolveGoModVersions(cliGomod, CLI_DERIVED_MODULES);
+    const changed = updateImportTags(parsed, version, fullVersion, deps);
     if (changed) {
         await fsp.writeFile(MODULE_TOML, MODULE_HEADER + stringify(parsed), 'utf-8');
         console.log(`module.toml: updated import tags for version ${version} to ${fullVersion}.`);
@@ -360,7 +403,11 @@ async function updateModuleTomlPatch(version, fullVersion) {
 
 // Main
 async function main() {
-    const { version, fullVersion, patch } = parseArguments(process.argv.slice(2));
+    const { version, fullVersion, patch, cliGomod } = parseArguments(process.argv.slice(2));
+
+    if (!cliGomod) {
+        fail('--cli-gomod <path> is required. Provide the path to the CLI go.mod for the release being versioned.');
+    }
 
     if (patch) {
         // Patch release (Z > 0): verify version exists in hugo.toml, update tags only
@@ -370,10 +417,10 @@ async function main() {
         if (!parsed.versions || !parsed.versions[version]) {
             fail(`Version '${version}' does not exist in hugo.toml. Cannot patch a version that hasn't been created yet.`);
         }
-        await updateModuleTomlPatch(version, fullVersion);
+        await updateModuleTomlPatch(version, fullVersion, cliGomod);
     } else {
         const retired = await updateHugoToml(version);
-        await updateModuleToml(version, fullVersion, retired);
+        await updateModuleToml(version, fullVersion, retired, cliGomod);
     }
 
     console.log('Cutoff completed.');
@@ -386,4 +433,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags };
+module.exports = { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, resolveGoModVersions, CLI_DERIVED_MODULES };

@@ -13,6 +13,7 @@ test('parseArguments: valid version derives X.Y', () => {
     assert.equal(result.version, '1.2');
     assert.equal(result.fullVersion, '1.2.0');
     assert.equal(result.patch, false);
+    assert.equal(result.cliGomod, undefined);
 });
 
 test('parseArguments: patch is deduced when Z > 0', () => {
@@ -23,6 +24,15 @@ test('parseArguments: patch is deduced when Z > 0', () => {
 
     const result2 = parseArguments(['0.3.0']);
     assert.equal(result2.patch, false);
+});
+
+test('parseArguments: --cli-gomod is parsed', () => {
+    const result = parseArguments(['1.2.0', '--cli-gomod', '/tmp/go.mod']);
+    assert.equal(result.cliGomod, '/tmp/go.mod');
+});
+
+test('parseArguments: --cli-gomod without value throws', () => {
+    assert.throws(() => parseArguments(['1.2.0', '--cli-gomod']), /requires a path/);
 });
 
 test('parseArguments: missing version throws', () => {
@@ -122,12 +132,24 @@ test('buildModuleBlocks: controller import has correct tag format', () => {
     assert.deepEqual(controller.mounts[0].sites.matrix.versions, ['0.3']);
 });
 
-test('buildModuleBlocks: bindings use latest', () => {
+test('buildModuleBlocks: bindings use fallback tag when no deps provided', () => {
     const { imports } = buildModuleBlocks('0.3', '0.3.0');
     const constructor = imports.find(i => i.path.endsWith('/bindings/go/constructor'));
     const descriptor = imports.find(i => i.path.endsWith('/bindings/go/descriptor/v2'));
-    assert.equal(constructor.version, 'latest');
-    assert.equal(descriptor.version, 'latest');
+    assert.equal(constructor.version, 'bindings/go/constructor/latest');
+    assert.equal(descriptor.version, 'bindings/go/descriptor/v2/latest');
+});
+
+test('buildModuleBlocks: bindings use resolved versions when deps provided', () => {
+    const deps = {
+        'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.7',
+        'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.3-alpha3',
+    };
+    const { imports } = buildModuleBlocks('0.3', '0.3.0', deps);
+    const constructor = imports.find(i => i.path.endsWith('/bindings/go/constructor'));
+    const descriptor = imports.find(i => i.path.endsWith('/bindings/go/descriptor/v2'));
+    assert.equal(constructor.version, 'bindings/go/constructor/v0.0.7');
+    assert.equal(descriptor.version, 'bindings/go/descriptor/v2/v2.0.3-alpha3');
 });
 
 test('buildModuleBlocks: version matrix uses X.Y not X.Y.Z', () => {
@@ -388,6 +410,10 @@ test('retireOldestVersion: correctly identifies oldest by semver', () => {
 // --- updateImportTags ---
 
 test('updateImportTags: updates versioned tags for matching version', () => {
+    const deps = {
+        'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.8',
+        'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.4',
+    };
     const parsed = {
         imports: [
             {
@@ -402,12 +428,12 @@ test('updateImportTags: updates versioned tags for matching version', () => {
             },
             {
                 path: 'ocm.software/open-component-model/bindings/go/constructor',
-                version: 'latest',
+                version: 'bindings/go/constructor/v0.0.7',
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
             },
             {
                 path: 'ocm.software/open-component-model/bindings/go/descriptor/v2',
-                version: 'latest',
+                version: 'bindings/go/descriptor/v2/v2.0.3',
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
             },
             {
@@ -418,13 +444,29 @@ test('updateImportTags: updates versioned tags for matching version', () => {
         ]
     };
 
-    const changed = updateImportTags(parsed, '0.3', '0.3.1');
+    const changed = updateImportTags(parsed, '0.3', '0.3.1', deps);
     assert.equal(changed, true);
     assert.equal(parsed.imports[0].version, 'website/v0.3.1');
     assert.equal(parsed.imports[1].version, 'cli/v0.3.1');
-    assert.equal(parsed.imports[2].version, 'latest'); // unchanged
-    assert.equal(parsed.imports[3].version, 'latest'); // unchanged
+    assert.equal(parsed.imports[2].version, 'bindings/go/constructor/v0.0.8');
+    assert.equal(parsed.imports[3].version, 'bindings/go/descriptor/v2/v2.0.4');
     assert.equal(parsed.imports[4].version, 'kubernetes/controller/v0.3.1');
+});
+
+test('updateImportTags: does not update bindings when no deps provided', () => {
+    const parsed = {
+        imports: [
+            {
+                path: 'ocm.software/open-component-model/bindings/go/constructor',
+                version: 'bindings/go/constructor/v0.0.7',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+        ]
+    };
+
+    const changed = updateImportTags(parsed, '0.3', '0.3.1');
+    assert.equal(changed, false);
+    assert.equal(parsed.imports[0].version, 'bindings/go/constructor/v0.0.7');
 });
 
 test('updateImportTags: does not change imports for other versions', () => {
