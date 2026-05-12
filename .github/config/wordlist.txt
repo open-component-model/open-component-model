@@ -61,8 +61,8 @@ bool
 boolean
 braun
 brautigam
-bruns
 bräutigam
+bruns
 buildDate
 buildx
 burth
@@ -75,6 +75,8 @@ cas
 ccwienk
 cel
 centos
+certificateIdentity
+certificateOIDCIssuer
 cest
 cet
 CGO
@@ -311,7 +313,6 @@ hashers
 hashicorp
 hashicorpvault
 hasmermaid
-hidechildren
 heil
 helloworld
 helmchart
@@ -322,6 +323,7 @@ helminput
 helminstaller
 helmrelease
 helmrepository
+hidechildren
 hoc
 homebrew
 hostname
@@ -446,19 +448,21 @@ mimetype
 mimetypes
 mirza
 misattributed
-Misconfiguration
 misconfiguration
+Misconfiguration
 misconfigured
-Mitigations
 mitigations
+Mitigations
 mm
 modularity
 moeller
 moldenhauer
+möller
 monorepo
 morri
 morrison
 mpas
+müller
 multiarch
 mutationconfig
 mutationobject
@@ -468,8 +472,6 @@ mutex
 mvn
 mvnrepository
 myprivateregistry
-möller
-müller
 namespace
 namespaced
 namespaces
@@ -558,6 +560,7 @@ performant
 pflag
 philipp
 pipelinespec
+PKCE
 pkcs
 pkgs
 pki
@@ -684,6 +687,8 @@ signingserver
 sigs
 sigstore
 sigstores
+SigstoreSigningConfiguration
+SigstoreVerificationConfiguration
 simplemapmerge
 simplier
 singleflight
