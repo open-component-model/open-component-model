@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -17,7 +18,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/rsa"
 )
 
-func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, logger *slog.Logger) error {
+func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, ocmConfig *genericv1.Config, logger *slog.Logger) error {
 	if err := ocicredentialplugin.Register(manager.CredentialRepositoryRegistry); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt credential plugin: %w", err)
 	}
@@ -29,6 +30,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.BlobTransformerRegistry,
 		manager.ComponentListerRegistry,
 		filesystemConfig,
+		ocmConfig,
 		logger,
 	); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt plugin: %w", err)
