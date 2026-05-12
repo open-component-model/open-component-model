@@ -18,7 +18,7 @@ editPage = false
 lastMod = false
 
 defaultContentVersionInSubdir = false
-defaultContentVersion = "latest"
+defaultContentVersion = "main"
 
 [pagination]
   pagerSize = 10
@@ -94,10 +94,8 @@ defaultContentVersion = "latest"
 [versions]
   [versions."main"]
     weight = 1
-  [versions."latest"]
-    weight = 2
   [versions."legacy"]
-    weight = 3
+    weight = 2
 
 [services]
   [services.rss]

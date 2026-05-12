@@ -101,8 +101,7 @@
 ## per-version imports of reference docs using module imports
 ### legacy: no import (uses embedded reference docs in content folder)
 ### main: tracks HEAD via sibling-path mounts (monorepo-local, no module import)
-### latest: uses module imports pinned to 'latest' tag of each ref docs module
-### x.y.z: uses version x.y.z of ref docs module
+### x.y: uses module imports pinned to release tags
 
 # Shared blog content (single source of truth across all site versions)
 [[mounts]]
@@ -149,47 +148,3 @@
   target = "static/main/schemas/kubernetes/controller"
   [mounts.sites.matrix]
     versions = ["main"]
-
-# latest (tracks latest released module tags — unchanged)
-[[mounts]]
-  files = ["**", "!blog/**"]
-  source = "content"
-  target = "content"
-  [mounts.sites.matrix]
-    versions = ["latest"]
-
-[[imports]]
-  path = "ocm.software/open-component-model/cli"
-  version = "latest"
-  [[imports.mounts]]
-  source = "docs/reference"
-  target = "content/docs/reference/ocm-cli"
-  [imports.mounts.sites.matrix]
-    versions = ["latest"]
-
-[[imports]]
-  path = "ocm.software/open-component-model/bindings/go/constructor"
-  version = "latest"
-  [[imports.mounts]]
-  source = "spec/v1/resources"
-  target = "static/latest/schemas/bindings/go/constructor"
-  [imports.mounts.sites.matrix]
-    versions = ["latest"]
-
-[[imports]]
-  path = "ocm.software/open-component-model/bindings/go/descriptor/v2"
-  version = "latest"
-  [[imports.mounts]]
-  source = "resources"
-  target = "static/latest/schemas/bindings/go/descriptor/v2"
-  [imports.mounts.sites.matrix]
-    versions = ["latest"]
-
-[[imports]]
-  path = "ocm.software/open-component-model/kubernetes/controller"
-  version = "latest"
-  [[imports.mounts]]
-  source = "config/crd/bases"
-  target = "static/latest/schemas/kubernetes/controller"
-  [imports.mounts.sites.matrix]
-    versions = ["latest"]
