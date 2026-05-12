@@ -23,11 +23,10 @@
 //
 // # Opt-Out
 //
-// Users can disable the version check through three mechanisms (checked in priority order):
+// Users can disable the version check through two mechanisms (checked in priority order):
 //
 //  1. Environment variable: OCM_DISABLE_VERSION_CHECK=1 (also accepts "true" or "yes")
-//  2. CLI flag: --version-check=disable (persistent flag on the root command)
-//  3. OCM config file: a versioncheck.cli.config.ocm.software/v1alpha1 entry with disabled: true
+//  2. OCM config file: a versioncheck.cli.config.ocm.software/v1alpha1 entry with policy: disable
 //
 // # Cache Location
 //

@@ -10,30 +10,16 @@ import (
 	"github.com/spf13/cobra"
 
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
-	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/versioncheck"
 )
 
 const (
-	// VersionCheckFlag is the name of the persistent flag controlling the version check.
-	VersionCheckFlag = "version-check"
-	// VersionCheckAuto enables the version check (default behavior).
-	VersionCheckAuto = "auto"
-	// VersionCheckDisable disables the version check entirely.
-	VersionCheckDisable = "disable"
 	// VersionCheckEnvVar is the environment variable that disables the version check when set to a truthy value.
 	VersionCheckEnvVar = "OCM_DISABLE_VERSION_CHECK"
 	// versionCheckWaitTimeout is how long cobra.OnFinalize waits for the async check to complete.
 	// If the GitHub API hasn't responded by then, the warning is silently skipped.
 	versionCheckWaitTimeout = 2 * time.Second
 )
-
-// RegisterVersionCheckFlag adds the --version-check persistent flag to the root command.
-func RegisterVersionCheckFlag(cmd *cobra.Command) {
-	enum.Var(cmd.PersistentFlags(), VersionCheckFlag,
-		[]string{VersionCheckAuto, VersionCheckDisable},
-		"control automatic version update checks")
-}
 
 // VersionCheck starts an asynchronous version check and registers a cobra.OnFinalize callback
 // to print the upgrade warning (if applicable) after command execution completes.
@@ -83,8 +69,8 @@ func VersionCheck(cmd *cobra.Command, currentVersion string) {
 	})
 }
 
-// isVersionCheckDisabled evaluates all opt-out mechanisms.
-// Precedence: env var > CLI flag (if explicitly changed) > config policy.
+// isVersionCheckDisabled evaluates opt-out mechanisms.
+// Precedence: env var > config policy.
 func isVersionCheckDisabled(cmd *cobra.Command, currentVersion string) bool {
 	// Dev builds have no meaningful version to compare.
 	if currentVersion == "" || currentVersion == "n/a" {
@@ -100,16 +86,6 @@ func isVersionCheckDisabled(cmd *cobra.Command, currentVersion string) bool {
 	if envDisabled() {
 		slog.Debug("version check disabled via environment variable")
 		return true
-	}
-
-	// CLI flag takes priority over config when explicitly set by the user.
-	if flagChanged, flagVal := flagPolicy(cmd); flagChanged {
-		if flagVal == VersionCheckDisable {
-			slog.Debug("version check disabled via flag")
-			return true
-		}
-		// Flag explicitly set to "auto" — override any config disable.
-		return false
 	}
 
 	if configDisabled(cmd) {
@@ -128,21 +104,6 @@ func envDisabled() bool {
 		return true
 	}
 	return false
-}
-
-// flagPolicy checks whether the --version-check flag was explicitly set by the user.
-// Returns (true, value) if the flag was changed, (false, "") if it was left at default.
-func flagPolicy(cmd *cobra.Command) (changed bool, value string) {
-	flag := cmd.Flags().Lookup(VersionCheckFlag)
-	if flag == nil {
-		if root := cmd.Root(); root != nil {
-			flag = root.PersistentFlags().Lookup(VersionCheckFlag)
-		}
-	}
-	if flag == nil || !flag.Changed {
-		return false, ""
-	}
-	return true, flag.Value.String()
 }
 
 // configDisabled checks the OCM config file for a versioncheck policy.

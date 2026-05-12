@@ -78,24 +78,6 @@ func Test_Integration_VersionCheck_DisabledByEnvVar(t *testing.T) {
 	r.Empty(stderr.String(), "no warning should appear when version check is disabled")
 }
 
-func Test_Integration_VersionCheck_DisabledByFlag(t *testing.T) {
-	r := require.New(t)
-	t.Parallel()
-
-	origVersion := version.BuildVersion
-	version.BuildVersion = "0.0.1"
-	t.Cleanup(func() { version.BuildVersion = origVersion })
-
-	stderr := &bytes.Buffer{}
-	rootCmd := cmd.New()
-	rootCmd.SetErr(stderr)
-	rootCmd.SetOut(&bytes.Buffer{})
-	rootCmd.SetArgs([]string{"--version-check", "disable", "--help"})
-
-	r.NoError(rootCmd.Execute())
-	r.Empty(stderr.String(), "no warning should appear when version check flag is disable")
-}
-
 func Test_Integration_VersionCheck_CachesResult(t *testing.T) {
 	r := require.New(t)
 	t.Parallel()
