@@ -28,6 +28,14 @@ func IdentityFromOCIRepository(repository *oci.Repository) (runtime.Identity, er
 	return identity, nil
 }
 
+func OCIRegistryIdentityFromOCIRepository(repository *oci.Repository) (*OCIRegistryIdentity, error) {
+	identity, err := runtime.ParseURLToIdentity(repository.BaseUrl)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse OCI repository URL: %w", err)
+	}
+	return FromIdentity(identity), nil
+}
+
 func IdentityFromCTFRepository(repository *ctf.Repository) (runtime.Identity, error) {
 	identity := runtime.Identity{
 		runtime.IdentityAttributePath: repository.FilePath,

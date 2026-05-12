@@ -8,14 +8,15 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 
 	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestCredentialFunc(t *testing.T) {
 	tests := []struct {
 		name        string
-		identity    runtime.Identity
-		credentials map[string]string
+		identity    *identityv1.OCIRegistryIdentity
+		credentials *credentialsv1.OCICredentials
 		hostport    string
 		wantErr     bool
 		wantEmpty   bool
@@ -23,13 +24,13 @@ func TestCredentialFunc(t *testing.T) {
 	}{
 		{
 			name: "matching host and port",
-			identity: runtime.Identity{
-				runtime.IdentityAttributeHostname: "example.com",
-				runtime.IdentityAttributePort:     "443",
+			identity: &identityv1.OCIRegistryIdentity{
+				Hostname: "example.com",
+				Port:     "443",
 			},
-			credentials: map[string]string{
-				"username": "testuser",
-				"password": "testpass",
+			credentials: &credentialsv1.OCICredentials{
+				Username: "testuser",
+				Password: "testpass",
 			},
 			hostport:  "example.com:443",
 			wantErr:   false,
@@ -37,13 +38,13 @@ func TestCredentialFunc(t *testing.T) {
 		},
 		{
 			name: "mismatching host",
-			identity: runtime.Identity{
-				runtime.IdentityAttributeHostname: "example.com",
-				runtime.IdentityAttributePort:     "443",
+			identity: &identityv1.OCIRegistryIdentity{
+				Hostname: "example.com",
+				Port:     "443",
 			},
-			credentials: map[string]string{
-				"username": "testuser",
-				"password": "testpass",
+			credentials: &credentialsv1.OCICredentials{
+				Username: "testuser",
+				Password: "testpass",
 			},
 			hostport:  "wrong.com:443",
 			wantErr:   false,
@@ -51,13 +52,13 @@ func TestCredentialFunc(t *testing.T) {
 		},
 		{
 			name: "mismatching port",
-			identity: runtime.Identity{
-				runtime.IdentityAttributeHostname: "example.com",
-				runtime.IdentityAttributePort:     "443",
+			identity: &identityv1.OCIRegistryIdentity{
+				Hostname: "example.com",
+				Port:     "443",
 			},
-			credentials: map[string]string{
-				"username": "testuser",
-				"password": "testpass",
+			credentials: &credentialsv1.OCICredentials{
+				Username: "testuser",
+				Password: "testpass",
 			},
 			hostport:  "example.com:80",
 			wantErr:   false,
@@ -65,11 +66,11 @@ func TestCredentialFunc(t *testing.T) {
 		},
 		{
 			name: "hostport without port",
-			identity: runtime.Identity{
-				runtime.IdentityAttributeHostname: "example.com",
+			identity: &identityv1.OCIRegistryIdentity{
+				Hostname: "example.com",
 			},
-			credentials: map[string]string{
-				"username": "testuser",
+			credentials: &credentialsv1.OCICredentials{
+				Username: "testuser",
 			},
 			hostport:  "example.com",
 			wantErr:   false,
@@ -77,14 +78,14 @@ func TestCredentialFunc(t *testing.T) {
 		},
 		{
 			name: "all credential types",
-			identity: runtime.Identity{
-				runtime.IdentityAttributeHostname: "example.com",
+			identity: &identityv1.OCIRegistryIdentity{
+				Hostname: "example.com",
 			},
-			credentials: map[string]string{
-				"username":     "testuser",
-				"password":     "testpass",
-				"accessToken":  "testtoken",
-				"refreshToken": "refreshtoken",
+			credentials: &credentialsv1.OCICredentials{
+				Username:     "testuser",
+				Password:     "testpass",
+				AccessToken:  "testtoken",
+				RefreshToken: "refreshtoken",
 			},
 			hostport:  "example.com:443",
 			wantErr:   false,
@@ -113,18 +114,10 @@ func TestCredentialFunc(t *testing.T) {
 				return
 			}
 
-			if username, ok := tt.credentials["username"]; ok {
-				assert.Equal(t, username, cred.Username)
-			}
-			if password, ok := tt.credentials["password"]; ok {
-				assert.Equal(t, password, cred.Password)
-			}
-			if token, ok := tt.credentials["accessToken"]; ok {
-				assert.Equal(t, token, cred.AccessToken)
-			}
-			if refreshToken, ok := tt.credentials["refreshToken"]; ok {
-				assert.Equal(t, refreshToken, cred.RefreshToken)
-			}
+			assert.Equal(t, tt.credentials.Username, cred.Username)
+			assert.Equal(t, tt.credentials.Password, cred.Password)
+			assert.Equal(t, tt.credentials.AccessToken, cred.AccessToken)
+			assert.Equal(t, tt.credentials.RefreshToken, cred.RefreshToken)
 		})
 	}
 }

@@ -14,6 +14,7 @@ import (
 	remotecredentials "oras.land/oras-go/v2/registry/remote/credentials"
 
 	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -30,6 +31,8 @@ const (
 )
 
 // CredentialFromMap converts a credential map to an auth.Credential.
+//
+// Deprecated: Use CredentialFromTyped instead.
 func CredentialFromMap(credentials map[string]string) auth.Credential {
 	cred := auth.Credential{}
 	if v, ok := credentials[CredentialKeyUsername]; ok {
@@ -47,8 +50,17 @@ func CredentialFromMap(credentials map[string]string) auth.Credential {
 	return cred
 }
 
+func CredentialFromTyped(credentials *credentialsv1.OCICredentials) auth.Credential {
+	cred := auth.Credential{}
+	cred.Username = credentials.Username
+	cred.Password = credentials.Password
+	cred.AccessToken = credentials.AccessToken
+	cred.RefreshToken = credentials.RefreshToken
+	return cred
+}
+
 // CredentialFunc creates a function that returns credentials based on host and port matching.
-// It takes an identity map and a credentials map as input and returns a function that can be
+// It takes an identity map and [credentialsv1.OCICredentials] as input and returns a function that can be
 // used with the ORAS client for authentication.
 //
 // The returned function will:
@@ -62,19 +74,19 @@ func CredentialFromMap(credentials map[string]string) auth.Credential {
 //		runtime.IdentityAttributeHostname: "example.com",
 //		runtime.IdentityAttributePort:     "443",
 //	}
-//	credentials := map[string]string{
-//		CredentialKeyUsername: "user",
-//		CredentialKeyPassword: "pass",
+//	credentials := &credentialsv1.OCICredentials{
+//		Username: "user",
+//		Password: "pass",
 //	}
 //	credFunc := CredentialFunc(identity, credentials)
 //
 // This will create a function that checks if the host and port match "example.com:443",
 // and returns the provided credentials if they do. If the host and port don't match,
 // it will return empty credentials.
-func CredentialFunc(identity runtime.Identity, credentials map[string]string) auth.CredentialFunc {
-	credential := CredentialFromMap(credentials)
-	registeredHostname, hostInIdentity := identity[runtime.IdentityAttributeHostname]
-	registeredPort, portInIdentity := identity[runtime.IdentityAttributePort]
+func CredentialFunc(identity *identityv1.OCIRegistryIdentity, credentials *credentialsv1.OCICredentials) auth.CredentialFunc {
+	credential := CredentialFromTyped(credentials)
+	hasHost := identity != nil && identity.Hostname != ""
+	hasPort := identity != nil && identity.Port != ""
 
 	return func(ctx context.Context, hostport string) (auth.Credential, error) {
 		actualHost, actualPort, err := net.SplitHostPort(hostport)
@@ -87,8 +99,8 @@ func CredentialFunc(identity runtime.Identity, credentials map[string]string) au
 			}
 			actualHost = hostport
 		}
-		hostMismatch := hostInIdentity && registeredHostname != actualHost
-		portMismatch := portInIdentity && registeredPort != actualPort
+		hostMismatch := hasHost && identity.Hostname != actualHost
+		portMismatch := hasPort && identity.Port != actualPort
 		if hostMismatch || portMismatch {
 			return auth.EmptyCredential, nil
 		}
@@ -115,13 +127,14 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 		return nil, fmt.Errorf("failed to retrieve credentials store: %w", err)
 	}
 
-	hostname := identity[runtime.IdentityAttributeHostname]
-	if hostname == "" {
+	oci := identityv1.FromIdentity(identity)
+	if oci == nil || oci.Hostname == "" {
 		slog.DebugContext(ctx, "no hostname provided, skipping credential resolution, since docker configs"+
 			"cannot resolve without hostname", "identity", identity)
 		return nil, nil
 	}
 
+	hostname := oci.Hostname
 	// this is a special case
 	// The Docker CLI expects that the credentials of
 	// the registry 'docker.io' will be added under the key "https://index.docker.io/v1/".
@@ -138,18 +151,16 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 	if err != nil {
 		return nil, fmt.Errorf("failed to get credentials for %q: %w", hostname, err)
 	}
-	if cred == auth.EmptyCredential {
+	if cred == auth.EmptyCredential && oci.Port != "" {
 		// because ORAS stores docker credentials including its port if defined, we'll try
 		// once more including the port with the hostname. (For ghcr.io no port is there, but we
 		// default the port to 443 so trying it with that in the first time would fail that's why
 		// this is a fallback try).
-		if port, ok := identity[runtime.IdentityAttributePort]; ok {
-			hostname = fmt.Sprintf("%s:%s", hostname, port)
-			logger.DebugContext(ctx, "attempting secondary credentials lookup via hostname:port")
-			cred, err = credStore.Get(ctx, hostname)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get credentials for %q with port: %w", hostname, err)
-			}
+		hostname = fmt.Sprintf("%s:%s", hostname, oci.Port)
+		logger.DebugContext(ctx, "attempting secondary credentials lookup via hostname:port")
+		cred, err = credStore.Get(ctx, hostname)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get credentials for %q with port: %w", hostname, err)
 		}
 	}
 	if cred == auth.EmptyCredential {
