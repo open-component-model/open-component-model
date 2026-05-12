@@ -122,9 +122,9 @@ func CredentialFromTyped(credentials *credentialsv1.OCICredentials) auth.Credent
 //
 // Example:
 //
-//	identity := runtime.Identity{
-//		runtime.IdentityAttributeHostname: "example.com",
-//		runtime.IdentityAttributePort:     "443",
+//	identity := &identityv1.OCIRegistryIdentity{
+//		Hostname: "example.com",
+//		Port:     "443",
 //	}
 //	credentials := &credentialsv1.OCICredentials{
 //		Username: "user",
