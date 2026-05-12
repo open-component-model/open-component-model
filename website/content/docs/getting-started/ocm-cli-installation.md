@@ -100,6 +100,77 @@ Expected output:
 {"major":"0","minor":"1","patch":"0","gitVersion":"0.1.0","goVersion":"go1.26.0","compiler":"gc","platform":"darwin/arm64"}
 ```
 
+## Verify Binary Authenticity
+
+The install script automatically verifies binaries using [GitHub attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds) when the [GitHub CLI](https://cli.github.com/) is authenticated.
+If automatic verification is unavailable, you can verify manually using one of the methods below.
+
+{{< tabs "verification-methods" >}}
+
+{{< tab "GitHub CLI" >}}
+
+The simplest method — requires the [GitHub CLI](https://cli.github.com/) with authentication.
+
+```shell
+gh auth login --hostname github.com
+gh attestation verify $(which ocm) --repo open-component-model/open-component-model
+```
+
+{{< /tab >}}
+{{< tab "Cosign (no GitHub auth)" >}}
+
+Uses [Sigstore cosign](https://docs.sigstore.dev/cosign/signing/overview/) to cryptographically verify the binary's provenance.
+No GitHub authentication required — the attestation API is public.
+
+```shell
+# Compute the binary's SHA-256 digest
+DIGEST="sha256:$(sha256sum $(which ocm) | cut -d' ' -f1)"
+# On macOS, use: DIGEST="sha256:$(shasum -a 256 $(which ocm) | cut -d' ' -f1)"
+
+# Download the Sigstore attestation bundle from the public GitHub API
+curl -sfL \
+  "https://api.github.com/repos/open-component-model/open-component-model/attestations/${DIGEST}" \
+  | jq -r '.attestations[0].bundle' > attestation.jsonl
+
+# Verify with cosign
+cosign verify-blob-attestation \
+  --bundle attestation.jsonl \
+  --new-bundle-format \
+  --type slsaprovenance1 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp \
+    '^https://github\.com/open-component-model/open-component-model/\.github/workflows/cli\.yml@refs/(heads/(main|releases/v[0-9]+\.[0-9]+)|tags/cli/v[0-9]+\.[0-9]+\.[0-9]+)' \
+  $(which ocm)
+```
+
+A successful verification proves the binary was built by the project's GitHub Actions workflow and signed via Sigstore OIDC.
+
+{{< /tab >}}
+{{< tab "Manual SHA-256" >}}
+
+Verify integrity by comparing your binary's hash against the digests recorded in the attestation (no extra tools needed beyond `curl` and `jq`).
+
+```shell
+# Compute the binary's SHA-256 digest
+DIGEST="sha256:$(sha256sum $(which ocm) | cut -d' ' -f1)"
+# On macOS, use: DIGEST="sha256:$(shasum -a 256 $(which ocm) | cut -d' ' -f1)"
+
+# Fetch expected digests from the attestation
+curl -sfL \
+  "https://api.github.com/repos/open-component-model/open-component-model/attestations/${DIGEST}" \
+  | jq -r '.attestations[0].bundle.dsseEnvelope.payload' \
+  | base64 --decode | jq '.subject[] | "\(.digest.sha256)  \(.name)"'
+```
+
+If your binary's digest appears in the output, it matches the attested build artifact.
+
+{{< callout title="Note" icon="outline/info-circle" >}}
+This verifies integrity (the file hasn't been corrupted) but not authenticity (it could theoretically be replaced along with the attestation by an attacker who compromises GitHub infrastructure). For full cryptographic proof, use the cosign method above.
+{{< /callout >}}
+
+{{< /tab >}}
+{{< /tabs >}}
+
 ## CLI Reference
 
 For detailed command documentation, see the [OCM CLI Reference]({{< relref "/docs/reference/ocm-cli/_index.md" >}}).

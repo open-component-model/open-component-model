@@ -192,7 +192,7 @@ The [SIG Runtime](https://github.com/open-component-model/open-component-model/b
 
 ### How to Get Involved
 
-There are multiple ways to participate in the OCM community (see our [community engagement page](/community/engagement/) for the full overview):
+There are multiple ways to participate in the OCM community (see our [community engagement page](/community/) for the full overview):
 
 - **Zulip Channel:** [neonephos-ocm-support](https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support) — primary communication channel
 - **Mailing list:** [open-component-model-sig-runtime@lists.neonephos.org](mailto:open-component-model-sig-runtime@lists.neonephos.org)

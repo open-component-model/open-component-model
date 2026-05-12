@@ -1,0 +1,161 @@
+version: '3'
+
+includes:
+  reuse: ../../../../reuse.Taskfile.yml
+
+vars:
+  INTEGRATION_TEST_IDENTIFIER: 'Integration'
+  COSIGN_VERSION:
+    sh: . ../signing/handler/internal/.env && echo "$COSIGN_VERSION"
+  SCAFFOLDING_VERSION:
+    sh: . ./.env && echo "$SCAFFOLDING_VERSION"
+  SIGSTORE_ENV_FILE: 'tmp/sigstore-env.sh'
+  SCAFFOLDING_URL: 'https://github.com/sigstore/scaffolding/releases/download/{{.SCAFFOLDING_VERSION}}'
+
+  # sslip.io is a free public DNS service that maps hostnames like <svc>.<ns>.<ip>.sslip.io
+  # to the embedded IP address. Sigstore scaffolding (and other projects like Knative, Rancher, Coolify) use it
+  # to give each in-cluster service a unique hostname routable via a single ingress IP.
+  # On Linux, Docker host-network mode resolves sslip.io natively via public DNS.
+  # On macOS, /etc/hosts must map these to 127.0.0.1 because kubectl port-forward
+  # bypasses real DNS resolution. The scaffolding:hosts task automates this.
+  SSLIP_HOSTS: |
+    127.0.0.1 fulcio.fulcio-system.172.18.255.1.sslip.io
+    127.0.0.1 rekor.rekor-system.172.18.255.1.sslip.io
+    127.0.0.1 ctlog.ctlog-system.172.18.255.1.sslip.io
+    127.0.0.1 tsa.tsa-system.172.18.255.1.sslip.io
+    127.0.0.1 tuf.tuf-system.172.18.255.1.sslip.io
+    127.0.0.1 gettoken.default.172.18.255.1.sslip.io
+    127.0.0.1 registry.local
+
+tasks:
+  scaffolding:hosts:
+    desc: "Ensure /etc/hosts has sslip.io entries for scaffolding services (macOS only)"
+    internal: true
+    platforms: [darwin]
+    status:
+      - grep -q "fulcio.fulcio-system.172.18.255.1.sslip.io" /etc/hosts
+      - grep -q "registry.local" /etc/hosts
+    cmds:
+      - |
+        echo "Adding sslip.io entries to /etc/hosts (requires sudo)..."
+        echo '{{.SSLIP_HOSTS}}' | grep -v '^$' | while IFS= read -r line; do
+          grep -qF "$line" /etc/hosts || echo "$line" | sudo tee -a /etc/hosts
+        done
+
+  scaffolding:hosts:clean:
+    desc: "Remove sslip.io entries from /etc/hosts (optional, requires sudo)"
+    platforms: [darwin]
+    cmds:
+      - |
+        echo "Removing sslip.io scaffolding entries from /etc/hosts..."
+        sudo sed -i '' '/\.172\.18\.255\.1\.sslip\.io/d' /etc/hosts
+        sudo sed -i '' '/registry\.local/d' /etc/hosts
+
+  scaffolding:setup:
+    desc: "Create kind cluster and deploy sigstore scaffolding (~5 min, skips if already running)"
+    run: once
+    deps: [scaffolding:hosts]
+    requires:
+      vars: [SCAFFOLDING_VERSION]
+    preconditions:
+      - sh: '! docker ps -a --format "{{`{{.Names}}`}}" 2>/dev/null | grep -q "^registry.local$" || kind get clusters 2>/dev/null | grep -q "^kind$"'
+        msg: |
+          Orphaned 'registry.local' container found without a cluster. Clean up first:
+            task scaffolding:teardown
+    status:
+      - kubectl -n fulcio-system get ksvc fulcio -ojsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"
+      - kubectl -n rekor-system get ksvc rekor -ojsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"
+      - kubectl -n ctlog-system get ksvc ctlog -ojsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"
+      - kubectl -n tsa-system get ksvc tsa -ojsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"
+      - kubectl -n default get ksvc gettoken -ojsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"
+    cmds:
+      - cmd: |
+          if kind get clusters 2>/dev/null | grep -q "^kind$"; then
+            echo "Existing cluster is unhealthy, tearing down..."
+            kind export kubeconfig 2>/dev/null || true
+            task scaffolding:teardown
+          fi
+      - |
+        curl -fLo /tmp/setup-kind.sh "{{.SCAFFOLDING_URL}}/setup-kind.sh"
+        chmod u+x /tmp/setup-kind.sh
+        cd /tmp && ./setup-kind.sh
+      - |
+        curl -fLo /tmp/setup-scaffolding-from-release.sh "{{.SCAFFOLDING_URL}}/setup-scaffolding-from-release.sh"
+        chmod u+x /tmp/setup-scaffolding-from-release.sh
+        cd /tmp && ./setup-scaffolding-from-release.sh --release-version {{.SCAFFOLDING_VERSION}}
+      - |
+        curl -fL "{{.SCAFFOLDING_URL}}/testrelease.yaml" | kubectl create -f -
+        kubectl -n default wait --timeout 2m --for=condition=Ready ksvc gettoken
+
+  scaffolding:bridge:
+    desc: "Port-forward Kourier ingress to localhost:8080 (macOS only)"
+    platforms: [darwin]
+    deps: [scaffolding:setup]
+    status:
+      - lsof -ti :8080 >/dev/null 2>&1
+    cmds:
+      - |
+        kubectl -n kourier-system port-forward service/kourier-internal 8080:80 &
+        for i in $(seq 1 20); do
+          lsof -ti :8080 >/dev/null 2>&1 && break
+          sleep 0.5
+        done
+        lsof -ti :8080 >/dev/null 2>&1 || { echo "port-forward failed to start" >&2; exit 1; }
+
+  scaffolding:env:
+    desc: "Extract sigstore env vars from running cluster into tmp/sigstore-env.sh"
+    deps: [scaffolding:setup, scaffolding:bridge, cosign:install]
+    cmds:
+      - mkdir -p tmp
+      - cmd: PATH="{{.ROOT_DIR}}/tmp/bin:$PATH" SIGSTORE_BRIDGE_PORT=8080 bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
+        platforms: [darwin]
+      - cmd: PATH="{{.ROOT_DIR}}/tmp/bin:$PATH" bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
+        platforms: [linux]
+
+  scaffolding:refresh:
+    desc: "Re-fetch OIDC token and env vars (use when token has expired between test runs or for manual CLI testing)"
+    cmds:
+      - task: scaffolding:env
+      - echo "Token refreshed. Source the env with:\n  source {{.SIGSTORE_ENV_FILE}}"
+
+  cosign:install:
+    desc: "Install cosign at the version pinned in signing/handler/internal/.env"
+    requires:
+      vars: [COSIGN_VERSION]
+    vars:
+      BIN: '{{.ROOT_DIR}}/tmp/bin/cosign'
+    status:
+      - 'cosign version 2>&1 | grep -qF "{{.COSIGN_VERSION}}"'
+    cmds:
+      - |
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+        case "$ARCH" in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; esac
+        URL="https://github.com/sigstore/cosign/releases/download/{{.COSIGN_VERSION}}/cosign-${OS}-${ARCH}"
+        mkdir -p "{{.ROOT_DIR}}/tmp/bin"
+        curl -fsSL "$URL" -o "{{.BIN}}"
+        chmod +x "{{.BIN}}"
+
+  test/integration:
+    desc: "Run sigstore integration tests against scaffolding cluster"
+    deps: [scaffolding:env, cosign:install]
+    set: [errexit]
+    cmds:
+      - |
+        export PATH="{{.ROOT_DIR}}/tmp/bin:$PATH"
+        . {{.SIGSTORE_ENV_FILE}}
+        go test -count=1 -run "{{.INTEGRATION_TEST_IDENTIFIER}}" -timeout 180s ./...
+
+  scaffolding:teardown:
+    desc: "Delete kind cluster and clean up"
+    cmds:
+      - cmd: "lsof -ti :8080 | xargs kill"
+        platforms: [darwin]
+        ignore_error: true
+      - cmd: kind delete cluster
+        ignore_error: true
+      - cmd: docker network disconnect kind registry.local
+        ignore_error: true
+      - cmd: docker rm -f registry.local
+        ignore_error: true
+      - rm -rf tmp

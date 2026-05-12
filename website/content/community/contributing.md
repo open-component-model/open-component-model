@@ -3,7 +3,7 @@ title: "Contributing to OCM"
 description: "How to contribute to the Open Component Model project"
 slug: "contributing"
 toc: true
-weight: 2
+weight: 3
 ---
 
 ## Welcome
@@ -115,7 +115,10 @@ commit signing yet, follow the [GitHub signing guide](https://docs.github.com/en
 #### Before you push
 
 - **Read the repository's `CONTRIBUTING.md`** - It contains project-specific requirements such as coding style,
-  required tools, and testing instructions.
+  required tools, and testing instructions. For the mono-repo, see the
+  [root CONTRIBUTING.md](https://github.com/open-component-model/open-component-model/blob/main/CONTRIBUTING.md)
+  and the [website CONTRIBUTING.md](https://github.com/open-component-model/open-component-model/blob/main/website/CONTRIBUTING.md)
+  for website changes.
 - **Run tests and linters locally** - Most repositories enforce these in CI. Running them locally first saves you a
   round-trip. Every repository has its own setup and configuration in its `Taskfile` or `Makefile` - use those
   commands rather than running tools directly, as they incorporate the correct versions and settings.
@@ -124,7 +127,7 @@ commit signing yet, follow the [GitHub signing guide](https://docs.github.com/en
 - **Discuss large changes** - If you are planning significant or potentially controversial changes, please discuss them
   with the maintainers first - either in a GitHub issue, on
   [Slack](https://kubernetes.slack.com/archives/C05UWBE8R1D), or in the
-  [community call](/community/engagement#community-calls).
+  [community call](/community/#community-calls).
 {{< /step >}}
 
 {{< step >}}
@@ -173,7 +176,7 @@ When using AI-generated code contributions in OSS Projects, their usage needs to
 and legal requirements. We have established these essential guidelines to help contributors navigate the complexities of
 using AI tools while maintaining compliance with open-source licenses and the broader Open-Source Definition.
 
-AI-generated code or content can be contributed to SAP Open Source Software projects if the following conditions are met:
+AI-generated code or content can be contributed to this project if the following conditions are met:
 
 1. **Compliance with AI Tool Terms and Conditions:** Contributors must ensure that the AI tool's terms and conditions
    do not impose any restrictions on the tool's output that conflict with the project's open-source license or
@@ -198,12 +201,8 @@ AI-generated code or content can be contributed to SAP Open Source Software proj
 
 ## Getting Help
 
-- **Slack** - Join [#open-component-model](https://kubernetes.slack.com/archives/C05UWBE8R1D) in the Kubernetes
-  Slack workspace ([Request an invitation](https://slack.k8s.io) if you are not yet a member).
-- **Community calls** - We hold regular calls on the first Wednesday of each month. See the
-  [community page](/community/engagement#community-calls) for details.
-- **Issues** - Browse existing [issues](https://github.com/open-component-model/ocm-project/issues) or
-  open a new one.
+See the [Community Engagement]({{< relref "_index.md" >}}) page for communication channels, community calls, and
+how to reach the team.
 
 ## Reporting Security Vulnerabilities
 
