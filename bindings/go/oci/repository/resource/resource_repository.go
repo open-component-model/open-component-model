@@ -17,6 +17,7 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -109,7 +110,7 @@ func (p *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 
 		repo, err := p.getRepository(&ociv1.Repository{
 			BaseUrl: baseURL,
-		}, credentials)
+		}, ocicredsv1.FromDirectCredentials(credentials))
 		if err != nil {
 			return nil, fmt.Errorf("error creating repository: %w", err)
 		}
@@ -164,7 +165,7 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 		repo, err := p.getRepository(&ociv1.Repository{
 			BaseUrl: baseURL,
-		}, credentials)
+		}, ocicredsv1.FromDirectCredentials(credentials))
 		if err != nil {
 			return nil, fmt.Errorf("error creating repository: %w", err)
 		}
@@ -198,7 +199,7 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 
 		repo, err := p.getRepository(&ociv1.Repository{
 			BaseUrl: baseURL,
-		}, credentials)
+		}, ocicredsv1.FromDirectCredentials(credentials))
 		if err != nil {
 			return nil, fmt.Errorf("error creating repository: %w", err)
 		}
@@ -214,8 +215,8 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 	}
 }
 
-func (p *ResourceRepository) getRepository(spec *ociv1.Repository, creds map[string]string) (*oci.Repository, error) {
-	repo, err := createRepository(spec, creds, p.filesystemConfig, p.userAgent)
+func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *ocicredsv1.OCICredentials) (*oci.Repository, error) {
+	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -234,7 +235,7 @@ func ociImageAccessToBaseURL(access *v1.OCIImage) (string, error) {
 
 func createRepository(
 	spec *ociv1.Repository,
-	credentials map[string]string,
+	credentials *ocicredsv1.OCICredentials,
 	filesystemConfig *filesystemv1alpha1.Config,
 	userAgent string,
 ) (*oci.Repository, error) {
@@ -251,7 +252,7 @@ func createRepository(
 			Header: map[string][]string{
 				"User-Agent": {userAgent},
 			},
-			Credential: auth.StaticCredential(url.Host, ocicredentials.CredentialFromMap(credentials)),
+			Credential: auth.StaticCredential(url.Host, ocicredentials.CredentialFromTyped(credentials)),
 		}))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create URL resolver: %w", err)
