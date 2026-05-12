@@ -34,7 +34,7 @@ The diagram below provides an overview of the architecture of the OCM Kubernetes
 
 ## Installation
 
-Take a look at our [installation guide](docs/getting-started/setup.md#install-the-ocm-kubernetes-controller-toolkit) to get started.
+Take a look at our [installation guide](https://ocm.software/docs/getting-started/set-up-controller-environments/#install-the-ocm-controllers) to get started.
 
 > [!IMPORTANT]
 > While the OCM Kubernetes Controller Toolkit technically can be used standalone, it requires kro and a deployer,
@@ -47,10 +47,10 @@ Take a look at our [installation guide](docs/getting-started/setup.md#install-th
 
 ## Getting Started
 
-- [Setup your (test) environment with kind, kro, and FluxCD](docs/getting-started/setup.md)
-- [Deploying a Helm chart using a `ResourceGraphDefinition` with FluxCD](docs/getting-started/deploy-helm-chart.md)
-- [Deploying a Helm chart using a `ResourceGraphDefinition` inside the OCM component version (bootstrap) with FluxCD](docs/getting-started/deploy-helm-chart-bootstrap.md)
-- [Configuring credentials for OCM Kubernetes Controller Toolkit resources to access private OCM repositories](docs/getting-started/credentials.md)
+- [Setup your (test) environment with kind, kro, and FluxCD](https://ocm.software/docs/getting-started/set-up-controller-environments/)
+- [Deploying a Helm chart using a `ResourceGraphDefinition` with FluxCD](https://ocm.software/docs/getting-started/deploy-helm-charts/)
+- [Deploying a Helm chart using a `ResourceGraphDefinition` inside the OCM component version (bootstrap) with FluxCD](https://ocm.software/docs/tutorials/deploy-helm-charts-with-bootstrap-setup/)
+- [Configuring credentials for OCM Kubernetes Controller Toolkit resources to access private OCM repositories](https://ocm.software/docs/how-to/configure-credentials-for-ocm-controllers/)
 
 ## Contributing
 
