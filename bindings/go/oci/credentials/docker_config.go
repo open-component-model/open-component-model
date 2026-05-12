@@ -50,6 +50,7 @@ func CredentialFromMap(credentials map[string]string) auth.Credential {
 	return cred
 }
 
+// CredentialFromTyped converts a [credentialsv1.OCICredentials] to an auth.Credential.
 func CredentialFromTyped(credentials *credentialsv1.OCICredentials) auth.Credential {
 	cred := auth.Credential{}
 	cred.Username = credentials.Username

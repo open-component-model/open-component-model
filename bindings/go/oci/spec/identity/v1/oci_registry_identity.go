@@ -6,14 +6,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// OCI consumer-identity attribute keys.
-const (
-	IdentityAttributeHostname = runtime.IdentityAttributeHostname
-	IdentityAttributeScheme   = runtime.IdentityAttributeScheme
-	IdentityAttributePort     = runtime.IdentityAttributePort
-	IdentityAttributePath     = runtime.IdentityAttributePath
-)
-
 // OCIRegistryIdentity is the typed consumer identity for OCI container registries.
 // It describes the target registry by hostname, scheme, port, and path.
 //
@@ -45,16 +37,16 @@ func ToIdentity(identity *OCIRegistryIdentity) runtime.Identity {
 	}
 	id.SetType(typ)
 	if identity.Hostname != "" {
-		id[IdentityAttributeHostname] = identity.Hostname
+		id[runtime.IdentityAttributeHostname] = identity.Hostname
 	}
 	if identity.Scheme != "" {
-		id[IdentityAttributeScheme] = identity.Scheme
+		id[runtime.IdentityAttributeScheme] = identity.Scheme
 	}
 	if identity.Port != "" {
-		id[IdentityAttributePort] = identity.Port
+		id[runtime.IdentityAttributePort] = identity.Port
 	}
 	if identity.Path != "" {
-		id[IdentityAttributePath] = identity.Path
+		id[runtime.IdentityAttributePath] = identity.Path
 	}
 	return id
 }
@@ -67,10 +59,10 @@ func FromIdentity(id runtime.Identity) *OCIRegistryIdentity {
 		return nil
 	}
 	out := &OCIRegistryIdentity{
-		Hostname: id[IdentityAttributeHostname],
-		Scheme:   id[IdentityAttributeScheme],
-		Port:     id[IdentityAttributePort],
-		Path:     id[IdentityAttributePath],
+		Hostname: id[runtime.IdentityAttributeHostname],
+		Scheme:   id[runtime.IdentityAttributeScheme],
+		Port:     id[runtime.IdentityAttributePort],
+		Path:     id[runtime.IdentityAttributePath],
 	}
 
 	typ, err := id.ParseType()
