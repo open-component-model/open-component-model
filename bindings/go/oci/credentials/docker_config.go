@@ -102,7 +102,11 @@ func CredentialFunc(identity runtime.Identity, credentials map[string]string) au
 }
 
 // CredentialFromTyped converts a [credentialsv1.OCICredentials] to an auth.Credential.
+// A nil input yields an empty [auth.Credential].
 func CredentialFromTyped(credentials *credentialsv1.OCICredentials) auth.Credential {
+	if credentials == nil {
+		return auth.Credential{}
+	}
 	cred := auth.Credential{}
 	cred.Username = credentials.Username
 	cred.Password = credentials.Password
@@ -130,7 +134,7 @@ func CredentialFromTyped(credentials *credentialsv1.OCICredentials) auth.Credent
 //		Username: "user",
 //		Password: "pass",
 //	}
-//	credFunc := CredentialFunc(identity, credentials)
+//	credFunc := CredentialFuncTyped(identity, credentials)
 //
 // This will create a function that checks if the host and port match "example.com:443",
 // and returns the provided credentials if they do. If the host and port don't match,
