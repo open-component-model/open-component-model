@@ -32,12 +32,12 @@ require (
 	ocm.software/open-component-model/bindings/go/input/file v0.0.4
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/oci v0.0.40
-	ocm.software/open-component-model/bindings/go/plugin v0.0.14
+	ocm.software/open-component-model/bindings/go/plugin v0.0.15
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260505072254-1c17fcd5c971
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0
+	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260512065613-cf62896253b9
 	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260505072254-1c17fcd5c971
 	sigs.k8s.io/yaml v1.6.0
@@ -149,6 +149,3 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 )
-
-// TODO: remove replace once bindings/go/sigstore is published (#2344).
-replace ocm.software/open-component-model/bindings/go/sigstore => ../bindings/go/sigstore
