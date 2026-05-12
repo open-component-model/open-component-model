@@ -135,7 +135,9 @@ repository (e.g., `DockerConfig/v1` reading `~/.docker/config.json`) concurrentl
 ### Typed Identity Structs
 
 Typed identity structs are `runtime.Typed` objects that represent consumer identities with structured fields instead of
-quntyped maps. Consumers pass them in their shallow `map[string]string` representation as `runtime.Identity` to `ResolveTyped` — the graph handles matching internally.
+untyped maps. Consumers pass them in their shallow `map[string]string` representation as `runtime.Identity` to `ResolveTyped` — the graph handles matching internally.
+Due to the nature of `runtime.Identity.Match` (glob/path/URL semantics for e.g. `ghcr.io/my-org/*`), there is no equivalent matching model for arbitrary typed identity structs yet, 
+so the identity parameter stays as `runtime.Identity`.
 
 ```go
 // Consumer usage — pass typed identity as runtime.Identity 
