@@ -16,6 +16,7 @@ import (
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -108,6 +109,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 	opts := []helmdownload.Option{
 		helmdownload.WithCredentials(helmcredsv1.FromDirectCredentials(credentials)),
+		helmdownload.WithOCICredentials(ocicredsv1.FromDirectCredentials(credentials)),
 		helmdownload.WithAlwaysDownloadProv(true),
 	}
 
