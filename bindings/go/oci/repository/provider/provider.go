@@ -145,7 +145,7 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		return ocirepository.NewFromOCIRepoV1(ctx, obj, &auth.Client{
 			Client:     b.httpClient,
 			Cache:      auth.NewCache(),
-			Credential: credentials.CredentialFunc(identity, typedCreds),
+			Credential: credentials.CredentialFuncTyped(identity, typedCreds),
 			Header: map[string][]string{
 				"User-Agent": {b.creator},
 			},
