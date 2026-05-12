@@ -107,16 +107,12 @@ func (s RepositoryPlugin) ConsumerIdentityForConfig(_ context.Context, config ru
 	return s.RepositoryIdentityFunc(config)
 }
 
-func (s RepositoryPlugin) ResolveTyped(ctx context.Context, cfg runtime.Typed, identity runtime.Typed, credentials runtime.Typed) (runtime.Typed, error) {
-	id, ok := identity.(runtime.Identity)
-	if !ok {
-		return nil, fmt.Errorf("expected runtime.Identity, got %T", identity)
-	}
+func (s RepositoryPlugin) ResolveTyped(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 	var credMap map[string]string
 	if dc, ok := credentials.(*v1.DirectCredentials); ok && credentials != nil {
 		credMap = dc.Properties
 	}
-	result, err := s.ResolveFunc(ctx, cfg, id, credMap)
+	result, err := s.ResolveFunc(ctx, cfg, identity, credMap)
 	if err != nil {
 		return nil, err
 	}
