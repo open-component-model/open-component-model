@@ -5,7 +5,7 @@
 # shipped with the Helm chart does not include kro.run permissions,
 # so we add them here.
 #
-# See also: kubernetes/controller/docs/getting-started/custom-rbac.md
+# See also: https://ocm.software/docs/how-to/configure-custom-rbac-for-deployers/
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

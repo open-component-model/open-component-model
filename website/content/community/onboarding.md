@@ -40,6 +40,27 @@ versioned unit. These overview pages explain the model in depth:
 {{< link-card title="The OCM Core Model" href="/docs/overview/the-ocm-core-model/" description="Components, resources, sources, references, and identity." >}}
 {{< /card-grid >}}
 
+## Getting Started
+
+The getting-started guides walk you through the full workflow - from installing the CLI to deploying with Kubernetes
+controllers. The first two guides (CLI installation and creating a component version) require no Kubernetes knowledge.
+
+{{< card-grid >}}
+{{< link-card title="Getting Started" href="/docs/getting-started/" description="Install the CLI, create your first component version, set up controllers, and deploy." >}}
+{{< /card-grid >}}
+
+## Advanced Topics
+
+Once you are comfortable with the basics, explore these concept pages for a deeper technical understanding:
+
+{{< card-grid >}}
+{{< link-card title="Component Identity" href="/docs/concepts/component-identity/" description="Naming, versioning, and coordinate notation." >}}
+{{< link-card title="Signing and Verification" href="/docs/concepts/signing-and-verification/" description="Digest calculation, normalization, and trust models." >}}
+{{< link-card title="Transfer and Transport" href="/docs/concepts/transfer-and-transport/" description="Moving components between registries and air-gapped environments." >}}
+{{< link-card title="Kubernetes Controllers" href="/docs/concepts/kubernetes-controllers/" description="Reconciliation chain and controller architecture." >}}
+{{< link-card title="Plugin System" href="/docs/concepts/plugin-system/" description="Extending OCM with custom repository types, credentials, and signing handlers." >}}
+{{< /card-grid >}}
+
 ## The Mono-Repository
 
 All active OCM development happens in a single repository:
@@ -52,7 +73,7 @@ graph TD
     Root["open-component-model/"]
     Bindings["bindings/\nLanguage bindings (currently Go)"]
     CLI["cli/\nOCM CLI"]
-    K8s["kubernetes/controller/\nOCM K8s Toolkit"]
+    K8s["kubernetes/controller/\nOCM Kubernetes Controller Toolkit"]
     Website["website/\nProject website"]
     Conformance["conformance/\nConformance tests"]
     Docs["docs/\nCommunity docs & governance"]
@@ -81,7 +102,7 @@ flowchart TD
     Spec["OCM Specification\n(defines the model)"]
     Go["Go Bindings\n(bindings/go/)"]
     CLI["OCM CLI\n(cli/)"]
-    Controllers["OCM K8s Toolkit\n(kubernetes/controller/)"]
+    Controllers["OCM Kubernetes Controller Toolkit\n(kubernetes/controller/)"]
     ODG["Open Delivery Gear\n(separate repository, Python)"]
 
     Spec --> Go
@@ -90,49 +111,70 @@ flowchart TD
     Go --> Controllers
 ```
 
-**OCM Specification** - The formal standard that defines how components, resources, and signatures are represented. It
-is technology-agnostic and lives in its own repository:
-[ocm-spec](https://github.com/open-component-model/ocm-spec).
+<!-- markdownlint-disable MD034 -- bare URLs are expected in shortcode href attributes -->
 
-**Go Bindings** (`bindings/go/`) - The reference implementation of the specification in Go. The `bindings/` directory is
-structured to welcome implementations in other languages in the future. This library provides the core types and
-operations (creating, signing, resolving, transferring component versions) that the CLI and controllers build on.
+### OCM Specification
 
-**OCM CLI** (`cli/`) - A command-line tool for the Pack-Sign-Transport workflow. Built on the Go bindings,
-it is designed for interactive use and CI/CD pipelines. Start with
+The formal standard that defines how components, resources, and signatures are represented. It is technology-agnostic
+and lives in its [own repository](https://github.com/open-component-model/ocm-spec).
+
+{{< card-grid >}}
+{{< link-card title="Specification Document" href="https://github.com/open-component-model/ocm-spec#specification" description="Table of contents for the full spec: model, processing, persistence, extensions, and guidelines." >}}
+{{< link-card title="Glossary" href="https://github.com/open-component-model/ocm-spec/blob/main/doc/glossary.md" description="Definitions of key terms used throughout the specification." >}}
+{{< /card-grid >}}
+
+### Go Bindings
+
+The reference implementation of the specification in Go, located in
+[`bindings/go/`](https://github.com/open-component-model/open-component-model/tree/main/bindings/go). The `bindings/`
+directory is structured to welcome implementations in other languages in the future. This library provides the core
+types and operations (creating, signing, resolving, transferring component versions) that the CLI and controllers build
+on.
+
+{{< card-grid >}}
+{{< link-card title="Module Overview" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/README.md" description="Available modules, their purpose, and how to import them." >}}
+{{< link-card title="Guided Tour (Examples)" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/examples/README.md" description="Progressive learning path with runnable Go tests." >}}
+{{< link-card title="Contributing to Go Bindings" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/CONTRIBUTING.md" description="Workspace setup, testing, module lifecycle, and releases." >}}
+{{< /card-grid >}}
+
+### OCM CLI
+
+A command-line tool for the Pack-Sign-Transport workflow, located in
+[`cli/`](https://github.com/open-component-model/open-component-model/tree/main/cli). Built on the Go bindings, it is
+designed for interactive use and CI/CD pipelines. Start with
 [Install the OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}).
 
-**OCM K8s toolkit** (`kubernetes/controller/`) - A set of controllers that handle deployment and verification of
-OCM component versions in Kubernetes clusters. They use a dependency chain of custom resources: Repository, Component,
-Resource, and Deployer. Read more in the [Kubernetes Controllers]({{< relref "docs/concepts/ocm-controllers.md" >}})
-concept page.
-
-**Open Delivery Gear (ODG)** - A compliance automation engine that subscribes to OCM component versions and
-continuously scans delivery artifacts for security and compliance issues. ODG tracks findings against configurable SLAs,
-supports assisted rescoring, and provides a Delivery Dashboard UI for both platform operators and application teams. It
-is designed for public and sovereign cloud scenarios where trust-but-verify assurance is required. ODG lives in its own
-repository: [open-delivery-gear](https://github.com/open-component-model/open-delivery-gear).
-
-## Getting Started
-
-The getting-started guides walk you through the full workflow - from installing the CLI to deploying with Kubernetes
-controllers. The first two guides (CLI installation and creating a component version) require no Kubernetes knowledge.
-
 {{< card-grid >}}
-{{< link-card title="Getting Started" href="/docs/getting-started/" description="Install the CLI, create your first component version, set up controllers, and deploy." >}}
+{{< link-card title="CLI README" href="https://github.com/open-component-model/open-component-model/blob/main/cli/README.md" description="Installation from source, quick start, and plugin system." >}}
+{{< link-card title="Command Reference" href="/docs/reference/ocm-cli/ocm/" description="Full reference for all OCM CLI commands." >}}
+{{< link-card title="Contributing to the CLI" href="https://github.com/open-component-model/open-component-model/blob/main/cli/CONTRIBUTING.md" description="CLI-specific development workflow and conventions." >}}
 {{< /card-grid >}}
 
-## Advanced Topics
+### OCM Kubernetes Controller Toolkit
 
-Once you are comfortable with the basics, explore these concept pages for a deeper technical understanding:
+A set of controllers that handle deployment and verification of OCM component versions in Kubernetes clusters, located
+in [`kubernetes/controller/`](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller).
+They use a dependency chain of custom resources: Repository, Component, Resource, and Deployer.
 
 {{< card-grid >}}
-{{< link-card title="Component Identity" href="/docs/concepts/component-identity/" description="Naming, versioning, and coordinate notation." >}}
-{{< link-card title="Signing and Verification" href="/docs/concepts/signing-and-verification/" description="Digest calculation, normalization, and trust models." >}}
-{{< link-card title="Transfer and Transport" href="/docs/concepts/transfer-and-transport/" description="Moving components between registries and air-gapped environments." >}}
-{{< link-card title="Kubernetes Controllers" href="/docs/concepts/kubernetes-controllers/" description="Reconciliation chain and controller architecture." >}}
-{{< link-card title="Plugin System" href="/docs/concepts/plugin-system/" description="Extending OCM with custom repository types, credentials, and signing handlers." >}}
+{{< link-card title="Deploy Helm Charts" href="/docs/getting-started/deploy-helm-charts/" description="Tutorial: deploy a Helm chart from an OCM component version with controllers, kro, and Flux." >}}
+{{< link-card title="Deployment Examples" href="https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller/examples/" description="Deployment examples: Helm, Kustomize, signing, nested deployments." >}}
+{{< link-card title="Contributing to Controllers" href="https://github.com/open-component-model/open-component-model/blob/main/kubernetes/controller/CONTRIBUTING.md" description="Controller development, testing, and CRD conventions." >}}
 {{< /card-grid >}}
+
+### Open Delivery Gear
+
+A compliance automation engine that subscribes to OCM component versions and continuously scans delivery artifacts for
+security and compliance issues, located in its
+[own repository](https://github.com/open-component-model/open-delivery-gear). ODG tracks findings against configurable
+SLAs, supports assisted rescoring, and provides a Delivery Dashboard UI for both platform operators and application
+teams. It is designed for public and sovereign cloud scenarios where trust-but-verify assurance is required.
+
+{{< card-grid >}}
+{{< link-card title="ODG Documentation" href="https://open-component-model.github.io/delivery-service/" description="Getting started, data model, extensions, and HTTP API reference." >}}
+{{< /card-grid >}}
+
+<!-- markdownlint-enable MD034 -->
 
 ## Project Organization
 
@@ -160,3 +202,10 @@ label across our repositories.
 {{< link-card title="Contributing Guide" href="/community/contributing/" description="Fork-and-pull workflow, pull request process, DCO sign-off, and AI-generated code guidelines." >}}
 {{< link-card title="Community Engagement" href="/community/" description="Communication channels (Slack, Zulip), community calls, and how to reach the team." >}}
 {{< /card-grid >}}
+
+{{<callout context="tip" title="Say Hello" icon="outline/heart-handshake">}}
+The easiest way to get started is to say hello. Join our monthly
+[community call](/community/#community-calls) or ask for an invite to the
+[daily standup](/community/how-we-work/#meetings) - it is a casual sync, not mandatory, and not necessarily work-related.
+You can reach us on [Slack](/community/#slack) or [Zulip](/community/#zulip) anytime.
+{{</callout>}}
