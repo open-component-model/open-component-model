@@ -83,7 +83,8 @@ func VersionCheck(cmd *cobra.Command, currentVersion string) {
 	})
 }
 
-// isVersionCheckDisabled evaluates all opt-out mechanisms in priority order.
+// isVersionCheckDisabled evaluates all opt-out mechanisms.
+// Precedence: env var > CLI flag (if explicitly changed) > config policy.
 func isVersionCheckDisabled(cmd *cobra.Command, currentVersion string) bool {
 	// Dev builds have no meaningful version to compare.
 	if currentVersion == "" || currentVersion == "n/a" {
@@ -101,13 +102,18 @@ func isVersionCheckDisabled(cmd *cobra.Command, currentVersion string) bool {
 		return true
 	}
 
-	if flagDisabled(cmd) {
-		slog.Debug("version check disabled via flag")
-		return true
+	// CLI flag takes priority over config when explicitly set by the user.
+	if flagChanged, flagVal := flagPolicy(cmd); flagChanged {
+		if flagVal == VersionCheckDisable {
+			slog.Debug("version check disabled via flag")
+			return true
+		}
+		// Flag explicitly set to "auto" — override any config disable.
+		return false
 	}
 
 	if configDisabled(cmd) {
-		slog.Debug("version check disabled via config")
+		slog.Debug("version check disabled via config policy")
 		return true
 	}
 
@@ -124,22 +130,22 @@ func envDisabled() bool {
 	return false
 }
 
-// flagDisabled checks the --version-check flag on the current command or root command.
-func flagDisabled(cmd *cobra.Command) bool {
-	val, err := enum.Get(cmd.Flags(), VersionCheckFlag)
-	if err != nil {
-		root := cmd.Root()
-		if root != nil {
-			val, err = enum.Get(root.PersistentFlags(), VersionCheckFlag)
-		}
-		if err != nil {
-			return false
+// flagPolicy checks whether the --version-check flag was explicitly set by the user.
+// Returns (true, value) if the flag was changed, (false, "") if it was left at default.
+func flagPolicy(cmd *cobra.Command) (changed bool, value string) {
+	flag := cmd.Flags().Lookup(VersionCheckFlag)
+	if flag == nil {
+		if root := cmd.Root(); root != nil {
+			flag = root.PersistentFlags().Lookup(VersionCheckFlag)
 		}
 	}
-	return val == VersionCheckDisable
+	if flag == nil || !flag.Changed {
+		return false, ""
+	}
+	return true, flag.Value.String()
 }
 
-// configDisabled checks the OCM config file for a versioncheck configuration entry.
+// configDisabled checks the OCM config file for a versioncheck policy.
 func configDisabled(cmd *cobra.Command) bool {
 	ctx := ocmctx.FromContext(cmd.Context())
 	if ctx == nil {
@@ -154,7 +160,7 @@ func configDisabled(cmd *cobra.Command) bool {
 		slog.Debug("version check config lookup failed", slog.String("error", err.Error()))
 		return false
 	}
-	return vcCfg.Disabled
+	return vcCfg.Policy == versioncheck.PolicyDisable
 }
 
 // printWarning logs the upgrade notification using the structured logging stack.

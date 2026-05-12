@@ -12,8 +12,8 @@ func TestLookupConfig_Nil(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Disabled {
-		t.Error("expected Disabled = false for nil config")
+	if cfg.Policy != PolicyAuto {
+		t.Errorf("expected Policy = %q, got %q", PolicyAuto, cfg.Policy)
 	}
 }
 
@@ -22,15 +22,15 @@ func TestLookupConfig_Empty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Disabled {
-		t.Error("expected Disabled = false for empty config")
+	if cfg.Policy != PolicyAuto {
+		t.Errorf("expected Policy = %q, got %q", PolicyAuto, cfg.Policy)
 	}
 }
 
-func TestLookupConfig_Disabled(t *testing.T) {
+func TestLookupConfig_PolicyDisable(t *testing.T) {
 	raw := &runtime.Raw{
 		Type: runtime.NewVersionedType(ConfigType, ConfigVersion),
-		Data: []byte(`{"type":"versioncheck.config.ocm.software/v1alpha1","disabled":true}`),
+		Data: []byte(`{"type":"versioncheck.cli.config.ocm.software/v1alpha1","policy":"disable"}`),
 	}
 
 	cfg, err := LookupConfig(&generic.Config{
@@ -39,15 +39,15 @@ func TestLookupConfig_Disabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !cfg.Disabled {
-		t.Error("expected Disabled = true")
+	if cfg.Policy != PolicyDisable {
+		t.Errorf("expected Policy = %q, got %q", PolicyDisable, cfg.Policy)
 	}
 }
 
-func TestLookupConfig_NotDisabled(t *testing.T) {
+func TestLookupConfig_PolicyAuto(t *testing.T) {
 	raw := &runtime.Raw{
 		Type: runtime.NewVersionedType(ConfigType, ConfigVersion),
-		Data: []byte(`{"type":"versioncheck.config.ocm.software/v1alpha1","disabled":false}`),
+		Data: []byte(`{"type":"versioncheck.cli.config.ocm.software/v1alpha1","policy":"auto"}`),
 	}
 
 	cfg, err := LookupConfig(&generic.Config{
@@ -56,8 +56,8 @@ func TestLookupConfig_NotDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Disabled {
-		t.Error("expected Disabled = false")
+	if cfg.Policy != PolicyAuto {
+		t.Errorf("expected Policy = %q, got %q", PolicyAuto, cfg.Policy)
 	}
 }
 
@@ -72,15 +72,15 @@ func TestConfig_GetSetType(t *testing.T) {
 
 func TestConfig_DeepCopy(t *testing.T) {
 	c := &Config{
-		Type:     runtime.NewVersionedType(ConfigType, ConfigVersion),
-		Disabled: true,
+		Type:   runtime.NewVersionedType(ConfigType, ConfigVersion),
+		Policy: PolicyDisable,
 	}
 	cpy := c.DeepCopy()
 	if cpy == c {
 		t.Error("DeepCopy should return a new pointer")
 	}
-	if cpy.Disabled != c.Disabled {
-		t.Error("DeepCopy should preserve Disabled field")
+	if cpy.Policy != c.Policy {
+		t.Error("DeepCopy should preserve Policy field")
 	}
 }
 
@@ -93,8 +93,8 @@ func TestConfig_DeepCopy_Nil(t *testing.T) {
 
 func TestConfig_DeepCopyTyped(t *testing.T) {
 	c := &Config{
-		Type:     runtime.NewVersionedType(ConfigType, ConfigVersion),
-		Disabled: true,
+		Type:   runtime.NewVersionedType(ConfigType, ConfigVersion),
+		Policy: PolicyDisable,
 	}
 	typed := c.DeepCopyTyped()
 	if typed == nil {
