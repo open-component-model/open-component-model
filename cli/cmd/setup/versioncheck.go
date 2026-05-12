@@ -105,7 +105,7 @@ func envDisabled() bool {
 	disabled, err := strconv.ParseBool(val)
 	if err != nil {
 		slog.Debug("version check: invalid env var value, treating as disabled",
-			slog.String("var", VersionCheckEnvVar), slog.String("value", val))
+			slog.String("var", VersionCheckEnvVar), slog.String("error", err.Error()))
 		return true
 	}
 	return disabled
