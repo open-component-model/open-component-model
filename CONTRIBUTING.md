@@ -106,5 +106,5 @@ an ADR first.
 
 - Check existing issues in the [project](https://github.com/open-component-model/ocm-project/issues) or
   [repository](https://github.com/open-component-model/open-component-model/issues)
-- See [how to engage](https://ocm.software/community/engagement/) with the community
+- See [how to engage](https://ocm.software/community/) with the community
 - Review the [NeoNephos Code of Conduct](https://github.com/neonephos/.github/blob/main/CODE_OF_CONDUCT.md)
