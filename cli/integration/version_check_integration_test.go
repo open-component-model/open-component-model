@@ -12,6 +12,9 @@ import (
 )
 
 func Test_Integration_VersionCheck_FetchesLatestFromGitHub(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping GitHub API integration test in short mode")
+	}
 	r := require.New(t)
 	t.Parallel()
 
@@ -26,6 +29,9 @@ func Test_Integration_VersionCheck_FetchesLatestFromGitHub(t *testing.T) {
 }
 
 func Test_Integration_VersionCheck_CurrentVersionIsLatest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping GitHub API integration test in short mode")
+	}
 	r := require.New(t)
 	t.Parallel()
 
@@ -38,7 +44,7 @@ func Test_Integration_VersionCheck_CurrentVersionIsLatest(t *testing.T) {
 	r.False(result.UpdateAvailable, "999.999.999 should not trigger update notification")
 }
 
-func Test_Integration_VersionCheck_PrintsWarningToStderr(t *testing.T) {
+func Test_Integration_VersionCheck_DoesNotErrorWithOldVersion(t *testing.T) {
 	r := require.New(t)
 	t.Parallel()
 
@@ -46,17 +52,12 @@ func Test_Integration_VersionCheck_PrintsWarningToStderr(t *testing.T) {
 	version.BuildVersion = "0.0.1"
 	t.Cleanup(func() { version.BuildVersion = origVersion })
 
-	stderr := &bytes.Buffer{}
 	rootCmd := cmd.New()
-	rootCmd.SetErr(stderr)
+	rootCmd.SetErr(&bytes.Buffer{})
 	rootCmd.SetOut(&bytes.Buffer{})
 	rootCmd.SetArgs([]string{"--help"})
 
 	r.NoError(rootCmd.Execute())
-
-	// OnFinalize runs after Execute returns — version check is async
-	// so we verify it at least didn't error; the warning may or may not appear
-	// depending on timing, but the check itself must not fail
 }
 
 func Test_Integration_VersionCheck_DisabledByEnvVar(t *testing.T) {
@@ -79,6 +80,9 @@ func Test_Integration_VersionCheck_DisabledByEnvVar(t *testing.T) {
 }
 
 func Test_Integration_VersionCheck_CachesResult(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping GitHub API integration test in short mode")
+	}
 	r := require.New(t)
 	t.Parallel()
 

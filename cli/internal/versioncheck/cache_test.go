@@ -8,28 +8,25 @@ import (
 )
 
 func TestCacheEntry_IsFresh(t *testing.T) {
+	now := time.Date(2026, 5, 12, 12, 0, 0, 0, time.UTC)
 	tests := []struct {
 		name      string
 		checkedAt time.Time
-		now       time.Time
 		want      bool
 	}{
 		{
 			name:      "fresh cache",
-			checkedAt: time.Now().Add(-1 * time.Hour),
-			now:       time.Now(),
+			checkedAt: now.Add(-1 * time.Hour),
 			want:      true,
 		},
 		{
 			name:      "stale cache",
-			checkedAt: time.Now().Add(-25 * time.Hour),
-			now:       time.Now(),
+			checkedAt: now.Add(-25 * time.Hour),
 			want:      false,
 		},
 		{
 			name:      "exactly at boundary",
-			checkedAt: time.Now().Add(-24 * time.Hour),
-			now:       time.Now(),
+			checkedAt: now.Add(-24 * time.Hour),
 			want:      false,
 		},
 	}
@@ -37,7 +34,7 @@ func TestCacheEntry_IsFresh(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			entry := &CacheEntry{CheckedAt: tt.checkedAt}
-			if got := entry.IsFresh(tt.now); got != tt.want {
+			if got := entry.IsFresh(now); got != tt.want {
 				t.Errorf("IsFresh() = %v, want %v", got, tt.want)
 			}
 		})
@@ -45,28 +42,25 @@ func TestCacheEntry_IsFresh(t *testing.T) {
 }
 
 func TestCacheEntry_ShouldWarn(t *testing.T) {
+	now := time.Date(2026, 5, 12, 12, 0, 0, 0, time.UTC)
 	tests := []struct {
-		name    string
+		name     string
 		warnedAt time.Time
-		now      time.Time
 		want     bool
 	}{
 		{
 			name:     "never warned",
 			warnedAt: time.Time{},
-			now:      time.Now(),
 			want:     true,
 		},
 		{
 			name:     "warned recently",
-			warnedAt: time.Now().Add(-1 * time.Hour),
-			now:      time.Now(),
+			warnedAt: now.Add(-1 * time.Hour),
 			want:     false,
 		},
 		{
 			name:     "warned long ago",
-			warnedAt: time.Now().Add(-25 * time.Hour),
-			now:      time.Now(),
+			warnedAt: now.Add(-25 * time.Hour),
 			want:     true,
 		},
 	}
@@ -74,7 +68,7 @@ func TestCacheEntry_ShouldWarn(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			entry := &CacheEntry{WarnedAt: tt.warnedAt}
-			if got := entry.ShouldWarn(tt.now); got != tt.want {
+			if got := entry.ShouldWarn(now); got != tt.want {
 				t.Errorf("ShouldWarn() = %v, want %v", got, tt.want)
 			}
 		})

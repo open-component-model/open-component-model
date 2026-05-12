@@ -71,6 +71,9 @@ func LookupConfig(cfg *generic.Config) (*Config, error) {
 			return nil, fmt.Errorf("failed to decode versioncheck config: %w", err)
 		}
 		if config.Policy != "" {
+			if config.Policy != PolicyAuto && config.Policy != PolicyDisable {
+				return nil, fmt.Errorf("invalid versioncheck policy %q: must be %q or %q", config.Policy, PolicyAuto, PolicyDisable)
+			}
 			return &config, nil
 		}
 	}

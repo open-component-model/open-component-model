@@ -61,6 +61,20 @@ func TestLookupConfig_PolicyAuto(t *testing.T) {
 	}
 }
 
+func TestLookupConfig_InvalidPolicy(t *testing.T) {
+	raw := &runtime.Raw{
+		Type: runtime.NewVersionedType(ConfigType, ConfigVersion),
+		Data: []byte(`{"type":"versioncheck.cli.config.ocm.software/v1alpha1","policy":"invalid"}`),
+	}
+
+	_, err := LookupConfig(&generic.Config{
+		Configurations: []*runtime.Raw{raw},
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid policy value")
+	}
+}
+
 func TestConfig_GetSetType(t *testing.T) {
 	c := &Config{}
 	typ := runtime.NewVersionedType(ConfigType, ConfigVersion)

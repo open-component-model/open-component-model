@@ -3,10 +3,12 @@ package versioncheck
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -97,7 +99,10 @@ func Check(ctx context.Context, opts Options) *Result {
 	now := time.Now()
 
 	// Use cached result if the last check was recent enough.
-	cache, _ := ReadCache(cacheDir)
+	cache, err := ReadCache(cacheDir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		slog.Debug("version check: cache read failed", slog.String("error", err.Error()))
+	}
 	if cache != nil && cache.IsFresh(now) {
 		return compareVersions(current, cache.LatestVersion)
 	}
