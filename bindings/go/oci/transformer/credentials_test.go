@@ -11,6 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -23,7 +24,7 @@ func (s *stubResolver) Resolve(_ context.Context, _ runtime.Identity) (map[strin
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (s *stubResolver) ResolveTyped(_ context.Context, _ runtime.Typed) (runtime.Typed, error) {
+func (s *stubResolver) ResolveTyped(_ context.Context, _ runtime.Identity) (runtime.Typed, error) {
 	return s.typed, s.err
 }
 
@@ -37,7 +38,7 @@ func TestResolveCredentialsMap_OCICredentials(t *testing.T) {
 		},
 	}
 
-	creds, err := resolveCredentialsMap(t.Context(), resolver, runtime.Identity{"type": "OCIRegistry"})
+	creds, err := resolveCredentialsMap(t.Context(), resolver, &v1.OCIRegistryIdentity{Type: v1.VersionedType})
 	require.NoError(t, err)
 	assert.Equal(t, "user", creds[ocicredsv1.CredentialKeyUsername])
 	assert.Equal(t, "pass", creds[ocicredsv1.CredentialKeyPassword])
@@ -52,7 +53,7 @@ func TestResolveCredentialsMap_OCICredentials_SkipsEmptyFields(t *testing.T) {
 		},
 	}
 
-	creds, err := resolveCredentialsMap(t.Context(), resolver, runtime.Identity{"type": "OCIRegistry"})
+	creds, err := resolveCredentialsMap(t.Context(), resolver, &v1.OCIRegistryIdentity{Type: v1.VersionedType})
 	require.NoError(t, err)
 	assert.Equal(t, "user", creds[ocicredsv1.CredentialKeyUsername])
 	_, hasPassword := creds[ocicredsv1.CredentialKeyPassword]
@@ -70,7 +71,7 @@ func TestResolveCredentialsMap_DirectCredentials(t *testing.T) {
 		},
 	}
 
-	creds, err := resolveCredentialsMap(t.Context(), resolver, runtime.Identity{"type": "OCIRegistry"})
+	creds, err := resolveCredentialsMap(t.Context(), resolver, &v1.OCIRegistryIdentity{Type: v1.VersionedType})
 	require.NoError(t, err)
 	assert.Equal(t, "direct-user", creds["username"])
 	assert.Equal(t, "direct-pass", creds["password"])
@@ -79,7 +80,7 @@ func TestResolveCredentialsMap_DirectCredentials(t *testing.T) {
 func TestResolveCredentialsMap_NotFound(t *testing.T) {
 	resolver := &stubResolver{err: credentials.ErrNotFound}
 
-	creds, err := resolveCredentialsMap(t.Context(), resolver, runtime.Identity{"type": "OCIRegistry"})
+	creds, err := resolveCredentialsMap(t.Context(), resolver, &v1.OCIRegistryIdentity{Type: v1.VersionedType})
 	require.NoError(t, err)
 	assert.Nil(t, creds)
 }
@@ -87,7 +88,7 @@ func TestResolveCredentialsMap_NotFound(t *testing.T) {
 func TestResolveCredentialsMap_Error(t *testing.T) {
 	resolver := &stubResolver{err: fmt.Errorf("vault unavailable")}
 
-	creds, err := resolveCredentialsMap(t.Context(), resolver, runtime.Identity{"type": "OCIRegistry"})
+	creds, err := resolveCredentialsMap(t.Context(), resolver, &v1.OCIRegistryIdentity{Type: v1.VersionedType})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "vault unavailable")
 	assert.Nil(t, creds)
@@ -96,7 +97,7 @@ func TestResolveCredentialsMap_Error(t *testing.T) {
 func TestResolveCredentialsMap_UnknownType(t *testing.T) {
 	resolver := &stubResolver{typed: &runtime.Raw{}}
 
-	creds, err := resolveCredentialsMap(t.Context(), resolver, runtime.Identity{"type": "OCIRegistry"})
+	creds, err := resolveCredentialsMap(t.Context(), resolver, &v1.OCIRegistryIdentity{Type: v1.VersionedType})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported credential type")
 	assert.Nil(t, creds)

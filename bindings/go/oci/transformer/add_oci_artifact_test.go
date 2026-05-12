@@ -71,7 +71,7 @@ func (m *mockCredentialResolver) Resolve(_ context.Context, _ runtime.Identity) 
 	return nil, errors.New("unexpected legacy Resolve call")
 }
 
-func (m *mockCredentialResolver) ResolveTyped(_ context.Context, _ runtime.Typed) (runtime.Typed, error) {
+func (m *mockCredentialResolver) ResolveTyped(_ context.Context, _ runtime.Identity) (runtime.Typed, error) {
 	return &ocicredsv1.OCICredentials{
 		Username: "test-user",
 	}, nil
@@ -84,7 +84,7 @@ func TestAddOCIArtifact_Transform(t *testing.T) {
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test-artifact.tar")
 	testBlobData := []byte("test artifact content")
-	err := os.WriteFile(testFile, testBlobData, 0644)
+	err := os.WriteFile(testFile, testBlobData, 0o644)
 	require.NoError(t, err)
 
 	mockRepo := &mockResourceRepositoryForAddOCI{}
