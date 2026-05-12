@@ -28,7 +28,7 @@ const (
 	configKeyAudience           = "audience"
 	credentialKeyToken          = "token"
 
-	flowTokenExchange    = "token-exchange"
+	flowTokenExchange     = "token-exchange"
 	flowAuthorizationCode = "authorization-code"
 )
 
