@@ -97,6 +97,8 @@ func isVersionCheckDisabled(cmd *cobra.Command, currentVersion string) bool {
 }
 
 // envDisabled checks the OCM_DISABLE_VERSION_CHECK environment variable.
+// Recognizes strconv.ParseBool values (1/t/true/0/f/false). Unrecognized non-empty
+// values are treated as "disabled" for safety.
 func envDisabled() bool {
 	val := os.Getenv(VersionCheckEnvVar)
 	if val == "" {
@@ -104,8 +106,6 @@ func envDisabled() bool {
 	}
 	disabled, err := strconv.ParseBool(val)
 	if err != nil {
-		slog.Debug("version check: invalid env var value, treating as disabled",
-			slog.String("var", VersionCheckEnvVar), slog.String("error", err.Error()))
 		return true
 	}
 	return disabled
