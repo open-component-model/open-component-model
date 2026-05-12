@@ -1,11 +1,11 @@
 ---
 title: Configure Custom RBAC for Deployers
-description: "How to grant the OCM K8s Toolkit controller additional RBAC permissions required by your deployer targets (e.g. kro ResourceGraphDefinitions)."
+description: "How to grant the OCM Kubernetes Controller Toolkit additional RBAC permissions required by your deployer targets (e.g. kro ResourceGraphDefinitions)."
 weight: 115
 toc: true
 ---
 
-The OCM K8s Toolkit controller, ships with the minimum RBAC permissions needed to manage its own custom resources
+The OCM Kubernetes Controller Toolkit ships with the minimum RBAC permissions needed to manage its own custom resources
 (`Repository`, `Component`, `Resource`, `Deployer`). It does **not** include permissions for third-party resources
 that your deployers may create or manage.
 

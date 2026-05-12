@@ -73,7 +73,7 @@ graph TD
     Root["open-component-model/"]
     Bindings["bindings/\nLanguage bindings (currently Go)"]
     CLI["cli/\nOCM CLI"]
-    K8s["kubernetes/controller/\nOCM K8s Toolkit"]
+    K8s["kubernetes/controller/\nOCM Kubernetes Controller Toolkit"]
     Website["website/\nProject website"]
     Conformance["conformance/\nConformance tests"]
     Docs["docs/\nCommunity docs & governance"]
@@ -102,7 +102,7 @@ flowchart TD
     Spec["OCM Specification\n(defines the model)"]
     Go["Go Bindings\n(bindings/go/)"]
     CLI["OCM CLI\n(cli/)"]
-    Controllers["OCM K8s Toolkit\n(kubernetes/controller/)"]
+    Controllers["OCM Kubernetes Controller Toolkit\n(kubernetes/controller/)"]
     ODG["Open Delivery Gear\n(separate repository, Python)"]
 
     Spec --> Go
@@ -150,7 +150,7 @@ designed for interactive use and CI/CD pipelines. Start with
 {{< link-card title="Contributing to the CLI" href="https://github.com/open-component-model/open-component-model/blob/main/cli/CONTRIBUTING.md" description="CLI-specific development workflow and conventions." >}}
 {{< /card-grid >}}
 
-### OCM K8s Toolkit
+### OCM Kubernetes Controller Toolkit
 
 A set of controllers that handle deployment and verification of OCM component versions in Kubernetes clusters, located
 in [`kubernetes/controller/`](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller).

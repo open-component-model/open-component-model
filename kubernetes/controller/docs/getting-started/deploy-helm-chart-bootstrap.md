@@ -20,7 +20,7 @@ can also be delivered securely through OCM and the operator does not need to kno
 
 In such a case, we need to bootstrap the `ResourceGraphDefinition` from the OCM component and apply it to the cluster.
 
-To do so, we use the OCM K8s Toolkit resource `Deployer`. By referencing the `Resource` containing the
+To do so, we use the OCM Kubernetes Controller Toolkit resource `Deployer`. By referencing the `Resource` containing the
 `ResourceGraphDefinition` by name, the deployer will download the content from the OCM component and apply it to the
 cluster.
 
@@ -80,7 +80,7 @@ flowchart TB
         end
 
         subgraph k8sCluster[Kubernetes Cluster]
-            subgraph bootstrap[OCM K8s Toolkit]
+            subgraph bootstrap[OCM Kubernetes Controller Toolkit]
                 k8sRepo[OCMRepository]
                 k8sComponent[Component]
                 k8sResourceRGD[Resource: RGD]
@@ -95,7 +95,7 @@ flowchart TB
                 end
                 crdBootstrap[CRD: Bootstrap]
                 subgraph instanceBootstrap[Instance: Bootstrap]
-                    subgraph ocmK8sToolkit[OCM K8s Toolkit]
+                    subgraph ocmK8sToolkit[OCM Kubernetes Controller Toolkit]
                         k8sResourceHelm[Resource: HelmChart]
                         k8sResourceImage[Resource: Image]
                     end
@@ -136,17 +136,20 @@ As the diagram shows, we will start by creating an OCM component that contains t
 - An OCM Resource containing the `ResourceGraphDefinition` (RGD) that will deploy the Helm chart and configure the
 localization.
 
-To enable the bootstrap of the `ResourceGraphDefinition`, we will create the respective OCM K8s Toolkit resources that
-point to the OCM repository ("Repository"), the OCM component version ("Component"), and the OCM Resource
-("Resource: RGD") that contains the `ResourceGraphDefinition`. The OCM K8s Toolkit resource "Deployer" will refer to the
-aforementioned "Resource: RGD", download the `ResourceGraphDefinition`, and apply it to the cluster.
+To enable the bootstrap of the `ResourceGraphDefinition`, we will create the respective OCM Kubernetes Controller
+Toolkit resources that point to the OCM repository ("Repository"), the OCM component version ("Component"), and the
+OCM Resource ("Resource: RGD") that contains the `ResourceGraphDefinition`. The OCM Kubernetes Controller Toolkit
+resource "Deployer" will refer to the aforementioned "Resource: RGD", download the `ResourceGraphDefinition`, and
+apply it to the cluster.
 
 After applying the `ResourceGraphDefinition`, kro will reconcile it and create a Custom Resource Definition
 ("CRD: Bootstrap"). By creating an instance of that CRD, we will deploy the resources as defined in the
 `ResourceGraphDefinition`:
 
-- An OCM K8s Toolkit resource "HelmChart" of type `Resource` that contains the location of the Helm chart in its status.
-- An OCM K8s Toolkit resource "Image" of type `Resource` that contains the localized image reference in its status.
+- An OCM Kubernetes Controller Toolkit resource "HelmChart" of type `Resource` that contains the location of the Helm
+  chart in its status.
+- An OCM Kubernetes Controller Toolkit resource "Image" of type `Resource` that contains the localized image reference
+  in its status.
 - A FluxCD resource of type `OCIRepository` that points to the location of the Helm chart retrieved from the status of
   the resource "HelmChart".
 - A FluxCD resource of type `HelmRelease` that points to FluxCDs `OCIRepository`, gets the Helm chart, and replaces
@@ -314,10 +317,11 @@ spec:
 
 > [!NOTE]
 > If you plan to push your OCM component version to a private registry, you need to provide credentials for the OCM
-> K8s Toolkit and FluxCDs `OCIRepository` (if the Helm chart is also stored in a private registry). Accordingly, you
-> have to specify the `ocmConfig` field in the `Resource` resources and the `secretRef` field in the `OCIRepository`.
+> Kubernetes Controller Toolkit and FluxCDs `OCIRepository` (if the Helm chart is also stored in a private registry).
+> Accordingly, you have to specify the `ocmConfig` field in the `Resource` resources and the `secretRef` field in the
+> `OCIRepository`.
 >
-> If you want to use the same credentials for FluxCD and for the OCM K8s Toolkit resources, create a
+> If you want to use the same credentials for FluxCD and for the OCM Kubernetes Controller Toolkit resources, create a
 > [Kubernetes secret of type `dockerconfigjson`](credentials.md#create-a-kubernetes-secret-of-type-dockerconfigjson-to-access-private-ocm-repositories)
 > and keep all the resources in the same namespace.
 
@@ -328,9 +332,10 @@ ocm add componentversion --create --file ./ctf component-constructor.yaml
 ```
 
 This will create a local CTF (Component Transfer Format) directory `./ctf` containing the OCM component version. Since
-the OCM component version must be accessible for the OCM K8s Toolkit controllers, we will transfer the CTF to a
-registry. For this example, we will use GitHub's container registry, but you can use any OCI registry. Additionally,
-we will use the flag `--copy-resources` to make sure that all referential resources, for instance the Helm chart, will
+the OCM component version must be accessible for the OCM Kubernetes Controller Toolkit controllers, we will transfer
+the CTF to a registry. For this example, we will use GitHub's container registry, but you can use any OCI registry.
+Additionally, we will use the flag `--copy-resources` to make sure that all referential resources, for instance the
+Helm chart, will
 be localized in the first step - so, the image reference is updated to the new registry location:
 
 ```bash
@@ -387,8 +392,8 @@ Resource Definition (CRD) which will deploy the Helm chart and configure the loc
 
 ### Bootstrapping
 
-The bootstrap process consists of creating the OCM K8s Toolkits resources that will download and apply the
-`ResourceGraphDefinition`.
+The bootstrap process consists of creating the OCM Kubernetes Controller Toolkit resources that will download and apply
+the `ResourceGraphDefinition`.
 First, we will create a `Repository` and `Component` resource that point to the OCM component in the registry
 (the `Component` resource is reused in the `ResourceGraphDefinition` (see above) as reference for the `Resource`
 resources).
@@ -461,10 +466,10 @@ spec:
 ```
 
 > [!NOTE]
-> Again, if your OCM component version is stored in a private registry, you need to provide credentials for the OCM K8s
-> Toolkit resources to access the OCM repository. You can do so by specifying the `ocmConfig` field in the `Repository`,
-> `Component`, `Resource`, and `Deployer` resources. For more information on how to set up credentials, please refer to
-> the [OCM K8s Toolkit credentials guide](credentials.md).
+> Again, if your OCM component version is stored in a private registry, you need to provide credentials for the OCM
+> Kubernetes Controller Toolkit resources to access the OCM repository. You can do so by specifying the `ocmConfig`
+> field in the `Repository`, `Component`, `Resource`, and `Deployer` resources. For more information on how to set up
+> credentials, please refer to the [OCM Kubernetes Controller Toolkit credentials guide](credentials.md).
 
 Afterwards, apply the `bootstrap.yaml` to the cluster:
 
@@ -542,9 +547,9 @@ bootstrap   ACTIVE   True     3m23s
 ```
 
 If the instance is in the `ACTIVE` state, the resources defined in the `ResourceGraphDefinition` were created and
-reconciled. This includes the OCM K8s Toolkit resources for the Helm chart and the image, as well as FluxCDs
-resources for the OCI repository and the Helm release. Accordingly, you should see the following deployment in the
-cluster. To see, if the deployment was successful, you can use the following command:
+reconciled. This includes the OCM Kubernetes Controller Toolkit resources for the Helm chart and the image, as well as
+FluxCDs resources for the OCI repository and the Helm release. Accordingly, you should see the following deployment in
+the cluster. To see, if the deployment was successful, you can use the following command:
 
 ```bash
 kubectl get deployments
@@ -571,7 +576,7 @@ You now have successfully created an OCM component containing a Helm chart, the 
 By creating the required bootstrap-resources you bootstrapped the `ResourceGraphDefinition` from the OCM component
 and created the resulting CRD.
 Finally, you created an instance of the CRD which deployed the Helm chart and configured the localization using the OCM
-K8s Toolkit, kro, and FluxCD.
+Kubernetes Controller Toolkit, kro, and FluxCD.
 
 [ocm-doc]: https://ocm.software/docs/getting-started/create-component-version/
 [ocm-credentials]: https://ocm.software/docs/tutorials/creds-in-ocmconfig/

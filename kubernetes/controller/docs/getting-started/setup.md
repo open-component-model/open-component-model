@@ -81,9 +81,9 @@ kro                  kro-86d5b5b5bd-6gmvr                         1/1     Runnin
 ...
 ```
 
-## Install the OCM K8s Toolkit
+## Install the OCM Kubernetes Controller Toolkit
 
-To install the OCM K8s Toolkit, you can use the Helm chart:
+To install the OCM Kubernetes Controller Toolkit, you can use the Helm chart:
 
 ```bash
 helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/controller/chart:<pre-release> \
@@ -102,8 +102,8 @@ cd kubernetes/controller
 task helm/install
 ```
 
-If the OCM K8s Toolkit controllers are installed correctly, you should see some similar output when running the
-following command:
+If the OCM Kubernetes Controller Toolkit controllers are installed correctly, you should see some similar output when
+running the following command:
 
 ```bash
 kubectl get pods --all-namespaces
@@ -125,13 +125,14 @@ ocm-k8s-toolkit-system   ocm-k8s-toolkit-controller-manager-788f58d4bd-ntbx8   1
 
 ## Access to a registry
 
-As all examples and guides will create an OCM component version that will be consumed by the OCM K8s Toolkit, you will
-need access to a registry. You can either choose a public registry like [ghcr.io][ghcr.io] or deploy a registry (like
-[`registry`][registry], [`zot`][zot], ...) into your Kubernetes cluster.
+As all examples and guides will create an OCM component version that will be consumed by the OCM Kubernetes Controller
+Toolkit, you will need access to a registry. You can either choose a public registry like [ghcr.io][ghcr.io] or deploy
+a registry (like [`registry`][registry], [`zot`][zot], ...) into your Kubernetes cluster.
 
 > [!IMPORTANT]
 > If you choose to deploy a registry into your Kubernetes cluster, you have to make sure it is accessible from outside
-> the cluster (for `ocm transfer` to work) and inside the cluster (for the OCM K8s Toolkit controllers to work).
+> the cluster (for `ocm transfer` to work) and inside the cluster (for the OCM Kubernetes Controller Toolkit
+> controllers to work).
 >
 > We **strongly** recommend to use a registry that is publicly accessible, like [ghcr.io][ghcr.io].
 > (Deploying your own registry requires a lot of additional configuration. Especially, if you want to try out the

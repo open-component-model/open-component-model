@@ -1,6 +1,6 @@
 ---
 title: Deploying a Helm Chart
-description: "Demonstrates how to deploy a Helm Chart from an OCM component version using OCM K8s Toolkit, kro, and FluxCD."
+description: "Demonstrates how to deploy a Helm Chart from an OCM component version using OCM Kubernetes Controller Toolkit, kro, and FluxCD."
 icon: ":motor_boat:"
 weight:
 toc: true
@@ -8,9 +8,10 @@ toc: true
 
 # Deploying a Helm Chart
 
-This guide demonstrates how to deploy a Helm Chart from an OCM component version using OCM K8s Toolkit, kro, and FluxCD.
-It is a rather basic example, in which it is assumed that a developer created an application, packaged it as a Helm
-chart, and publishes it as OCM component version in an OCI registry. Then, an operator who wants to deploy the
+This guide demonstrates how to deploy a Helm Chart from an OCM component version using OCM Kubernetes Controller
+Toolkit, kro, and FluxCD. It is a rather basic example, in which it is assumed that a developer created an
+application, packaged it as a Helm chart, and publishes it as OCM component version in an OCI registry. Then, an
+operator who wants to deploy the
 application via Helm chart in a Kubernetes cluster, creates a `ResourceGraphDefinition` with resources that point to
 this OCM component version. Using CEL expressions inside the `ResourceGraphDefinition`, the information about the
 resource location will be passed to FluxCD, which will then configure the Helm chart and deploy it into the Kubernetes
@@ -49,8 +50,8 @@ ocm add componentversion --create --file ./ctf component-constructor.yaml
 ```
 
 This will create a local CTF (Component Transfer Format) directory `./ctf` containing the OCM component version. Since
-the OCM component version must be accessible for the OCM K8s Toolkit controllers, we will transfer the CTF to a
-registry. For this example, we will use GitHub's container registry, but you can use any OCI registry:
+the OCM component version must be accessible for the OCM Kubernetes Controller Toolkit controllers, we will transfer
+the CTF to a registry. For this example, we will use GitHub's container registry, but you can use any OCI registry:
 
 ```bash
 ocm transfer ctf ./ctf ghcr.io/<your-namespace>
@@ -199,15 +200,16 @@ spec:
 ```
 
 > [!NOTE]
-> If you pushed the OCM component version to a private registry, you need to set up the credentials for the OCM K8s
-> Toolkit resources. You can do this by uncommenting the `ocmConfig` fields in the `Repository`, `Component`, and
-> `Resource` resources and providing the necessary credentials. For more information on how to set up and pass the
-> credentials, please check out the guide [configure credentials for OCM K8s Toolkit resources](credentials.md).
+> If you pushed the OCM component version to a private registry, you need to set up the credentials for the OCM
+> Kubernetes Controller Toolkit resources. You can do this by uncommenting the `ocmConfig` fields in the
+> `Repository`, `Component`, and `Resource` resources and providing the necessary credentials. For more information
+> on how to set up and pass the credentials, please check out the guide
+> [configure credentials for OCM Kubernetes Controller Toolkit resources](credentials.md).
 >
 > Be aware that FluxCD's `OCIRepository` also needs access to the OCI registry that contains the Helm chart. However,
 > `OCIRepository` only accepts
 > [`imagePullSecrets`](https://fluxcd.io/flux/components/source/ocirepositories/#secret-reference) in the same namespace.
-> If you want to use the same credentials for FluxCD and for the OCM K8s Toolkit resources, create a
+> If you want to use the same credentials for FluxCD and for the OCM Kubernetes Controller Toolkit resources, create a
 > [Kubernetes secret of type `dockerconfigjson`](credentials.md#create-a-kubernetes-secret-of-type-dockerconfigjson-to-access-private-ocm-repositories)
 > and keep all the resources in the same namespace.
 
@@ -289,7 +291,7 @@ bar
 ```
 
 You now have successfully created an OCM component version containing a Helm chart and deployed as well as configured it
-using the OCM K8s Toolkit, kro, and FluxCD.
+using the OCM Kubernetes Controller Toolkit, kro, and FluxCD.
 
 #### Troubleshooting
 
