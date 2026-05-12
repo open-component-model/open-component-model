@@ -104,6 +104,47 @@ sequenceDiagram
     C->>C: type-assert fields<br/>(CertFile, KeyFile, Keyring)
 ```
 
+### Credential Resolution: Direct, Indirect, and Repository Fallback
+
+The credential graph resolves credentials through three paths, tried in order on every lookup. The path for
+each consumer entry is decided at ingestion time; the repository fallback is consulted at lookup time when
+neither of the first two yields a result.
+
+**Direct credentials** apply when a consumer's credential entry is a `Credentials/v1` (plain `properties` map) or a typed
+credential registered in the `CredentialTypeScheme` (e.g., `HelmHTTPCredentials/v1`). The graph stores these as
+`runtime.Typed` directly on the identity node at ingestion time; `ResolveTyped` returns them immediately as a leaf
+lookup with no plugin call.
+
+**Indirect credentials** apply when the credential type requires a plugin (e.g., `AWSSecretsManager`,
+`HashiCorpVault`). The plugin is looked up via the `CredentialPluginProvider`.
+It is used at ingestion time to call `GetConsumerIdentity`, which tells the graph what identity the plugin
+itself needs credentials for; the graph then creates a DAG edge from the consumer identity to that credential identity.
+At resolution time the `CredentialPluginProvider` is used again to call `Resolve` with the credentials that were
+recursively resolved for the credential identity.
+
+This enables transitive chains of arbitrary depth. See
+[Credential Graph Example / Recursive Traversal](0002_credentials.md#credential-graph-example--recursive-traversal)
+in ADR-0002 for a worked example with a `OCIRegistry → HashiCorpVault → DirectCredentials` chain. Resolution is
+bottom-up: each plugin is called with the credentials produced by resolving its child. Cycles are detected at
+ingestion time and rejected.
+
+**Repository fallback** is consulted only when the DAG yields no match for the queried identity and a
+`RepositoryPluginProvider` is wired into the graph. The graph hands the identity to every configured credential
+repository (e.g., `DockerConfig/v1` reading `~/.docker/config.json`) concurrently — first success wins.
+
+### Typed Identity Structs
+
+Typed identity structs are `runtime.Typed` objects that represent consumer identities with structured fields instead of
+untyped maps. Consumers pass them in their shallow `map[string]string` representation as `runtime.Identity` to `ResolveTyped` — the graph handles matching internally.
+Due to the nature of `runtime.Identity.Match` (glob/path/URL semantics for e.g. `ghcr.io/my-org/*`), there is no equivalent matching model for arbitrary typed identity structs yet, 
+so the identity parameter stays as `runtime.Identity`.
+
+```go
+// Consumer usage — pass typed identity as runtime.Identity 
+identity := &HelmChartRepositoryIdentity{Hostname: "charts.example.com"}
+typed, err := resolver.ResolveTyped(ctx, ToIdentity(identity))
+```
+
 ### Type Registries and Graph Independence
 
 The credential graph must remain independent of binding-specific types. It receives a single registry via its
@@ -189,7 +230,6 @@ This means:
   fallback path fails because generic `scheme.Convert` cannot do this lift (the JSON shapes differ: nested `properties`
   map vs flat fields). This is not enforced by a framework interface, but every binding that supports legacy configs
   needs it for the `DirectCredentials` → typed struct conversion at the consumer level.
-- Unversioned identity types work through `runtime.Scheme` alias resolution
 
 ### External Plugin Integration
 
@@ -279,6 +319,17 @@ development blocking while transitioning the multi-module monorepo.
   for now. `CredentialTypeSchemeProvider` stays — typed credential deserialization is still useful.
 - **`toIdentity` bridge function removed** — no longer needed once `ResolveTyped` accepts `runtime.Identity` directly.
 - **`isAccepted` helper removed** — was only called by `validateConsumerIdentityTypes`.
+
+### 2026-05-05 — Credential resolution mechanics documented
+
+- **Three resolution paths** clarified. Direct credentials (`Credentials/v1` or typed credentials registered in
+  the `CredentialTypeScheme`) are stored as leaf nodes and returned immediately. Indirect credentials (plugin-backed
+  types such as `AWSSecretsManager` or `HashiCorpVault`) create DAG edges at ingestion time; at resolution time the
+  graph traverses edges depth-first, calling each plugin with the credentials resolved for its own consumer identity.
+  Chains of arbitrary depth are supported; cycles are rejected at ingestion. Repository plugins (e.g., `DockerConfig`)
+  serve as a flat, parallel fallback when no DAG node matches the queried identity — first success wins. By design,
+  repository-to-repository recursion is not supported, and credentials backing an indirect entry are not eligible for
+  repository fallback.
 
 ### 2026-04-25 — Phase 1 implementation refinements
 
