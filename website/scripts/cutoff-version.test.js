@@ -4,19 +4,25 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseArguments, hasMountForVersion, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, pinLatestContentMount } = require('./cutoff-version');
+const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags } = require('./cutoff-version');
 
-// Test parseArguments
-test('parseArguments: valid version', () => {
-    const result = parseArguments(['1.2.3']);
-    assert.equal(result.version, '1.2.3');
-    assert.equal(result.keepDefault, false);
+// --- parseArguments ---
+
+test('parseArguments: valid version derives X.Y', () => {
+    const result = parseArguments(['1.2.0']);
+    assert.equal(result.version, '1.2');
+    assert.equal(result.fullVersion, '1.2.0');
+    assert.equal(result.patch, false);
 });
 
-test('parseArguments: with --keepDefault', () => {
-    const result = parseArguments(['1.2.3', '--keepDefault']);
-    assert.equal(result.version, '1.2.3');
-    assert.equal(result.keepDefault, true);
+test('parseArguments: patch is deduced when Z > 0', () => {
+    const result = parseArguments(['1.2.3']);
+    assert.equal(result.version, '1.2');
+    assert.equal(result.fullVersion, '1.2.3');
+    assert.equal(result.patch, true);
+
+    const result2 = parseArguments(['0.3.0']);
+    assert.equal(result2.patch, false);
 });
 
 test('parseArguments: missing version throws', () => {
@@ -26,105 +32,126 @@ test('parseArguments: missing version throws', () => {
 test('parseArguments: invalid version throws', () => {
     assert.throws(() => parseArguments(['v1.2.3']), /Invalid version/);
     assert.throws(() => parseArguments(['1.2']), /Invalid version/);
-    assert.throws(() => parseArguments(['--keepDefault', 'test', '1.2.3']), /Invalid version/);
 });
 
 test('parseArguments: unknown flag throws', () => {
     assert.throws(() => parseArguments(['1.2.3', '--unknown']), /Unknown flag/);
 });
 
-// Test hasMountForVersion
-test('hasMountForVersion: returns true/false correctly', () => {
-    const parsed = { mounts: [{ sites: { matrix: { versions: ['1.0.0'] } } }] };
-    assert.equal(hasMountForVersion(parsed, '1.0.0'), true);
-    assert.equal(hasMountForVersion(parsed, '2.0.0'), false);
-    assert.equal(hasMountForVersion(null, '1.0.0'), false);
-    assert.equal(hasMountForVersion({}, '1.0.0'), false);
+test('parseArguments: --keepDefault is rejected as unknown', () => {
+    assert.throws(() => parseArguments(['1.2.3', '--keepDefault']), /Unknown flag/);
 });
 
-// Test hasAnyImportForVersion
+test('parseArguments: --patch is rejected as unknown', () => {
+    assert.throws(() => parseArguments(['1.2.3', '--patch']), /Unknown flag/);
+});
+
+// --- hasAnyImportForVersion ---
+
 test('hasAnyImportForVersion: returns true/false correctly', () => {
-    const parsed = { imports: [{ mounts: [{ sites: { matrix: { versions: ['1.0.0'] } } }] }] };
-    assert.equal(hasAnyImportForVersion(parsed, '1.0.0'), true);
-    assert.equal(hasAnyImportForVersion(parsed, '2.0.0'), false);
-    assert.equal(hasAnyImportForVersion(null, '1.0.0'), false);
-    assert.equal(hasAnyImportForVersion({}, '1.0.0'), false);
+    const parsed = { imports: [{ mounts: [{ sites: { matrix: { versions: ['0.3'] } } }] }] };
+    assert.equal(hasAnyImportForVersion(parsed, '0.3'), true);
+    assert.equal(hasAnyImportForVersion(parsed, '0.4'), false);
+    assert.equal(hasAnyImportForVersion(null, '0.3'), false);
+    assert.equal(hasAnyImportForVersion({}, '0.3'), false);
 });
 
-// Test hasAllImportsForVersion
-test('hasAllImportsForVersion: returns true when all 4 imports exist', () => {
-    const { imports } = buildModuleBlocks('1.0.0');
+// --- hasAllImportsForVersion ---
+
+test('hasAllImportsForVersion: returns true when all 5 imports exist', () => {
+    const { imports } = buildModuleBlocks('0.3', '0.3.0');
     const parsed = { imports };
-    assert.equal(hasAllImportsForVersion(parsed, '1.0.0'), true);
+    assert.equal(hasAllImportsForVersion(parsed, '0.3'), true);
 });
 
 test('hasAllImportsForVersion: returns false when only a subset of imports exist', () => {
-    const { imports } = buildModuleBlocks('1.0.0');
-    // Keep only the CLI import (1 of 4)
+    const { imports } = buildModuleBlocks('0.3', '0.3.0');
+    // Keep only the first import (1 of 5)
     const parsed = { imports: [imports[0]] };
-    assert.equal(hasAllImportsForVersion(parsed, '1.0.0'), false);
+    assert.equal(hasAllImportsForVersion(parsed, '0.3'), false);
 });
 
 test('hasAllImportsForVersion: returns false when no imports exist', () => {
-    assert.equal(hasAllImportsForVersion({}, '1.0.0'), false);
-    assert.equal(hasAllImportsForVersion(null, '1.0.0'), false);
+    assert.equal(hasAllImportsForVersion({}, '0.3'), false);
+    assert.equal(hasAllImportsForVersion(null, '0.3'), false);
 });
 
 test('hasAllImportsForVersion: returns false for wrong version', () => {
-    const { imports } = buildModuleBlocks('1.0.0');
+    const { imports } = buildModuleBlocks('0.3', '0.3.0');
     const parsed = { imports };
-    assert.equal(hasAllImportsForVersion(parsed, '2.0.0'), false);
+    assert.equal(hasAllImportsForVersion(parsed, '0.4'), false);
 });
 
-// Test buildModuleBlocks
-test('buildModuleBlocks: returns correct mount', () => {
-    const { mount } = buildModuleBlocks('1.2.3');
-    assert.deepEqual(mount.files, ['**', '!blog/**']);
-    assert.equal(mount.source, 'content_versioned/version-1.2.3');
-    assert.equal(mount.target, 'content');
-    assert.deepEqual(mount.sites.matrix.versions, ['1.2.3']);
+// --- buildModuleBlocks ---
+
+test('buildModuleBlocks: returns 5 imports (website + CLI + 2 bindings + controller)', () => {
+    const { imports } = buildModuleBlocks('0.3', '0.3.0');
+    assert.equal(imports.length, 5);
 });
 
-test('buildModuleBlocks: returns 4 imports (CLI + 3 schema)', () => {
-    const { imports } = buildModuleBlocks('1.2.3');
-    assert.equal(imports.length, 4);
+test('buildModuleBlocks: does not return a mount field', () => {
+    const result = buildModuleBlocks('0.3', '0.3.0');
+    assert.equal(result.mount, undefined);
 });
 
-test('buildModuleBlocks: CLI import is correct', () => {
-    const { imports } = buildModuleBlocks('1.2.3');
+test('buildModuleBlocks: website import has correct tag format', () => {
+    const { imports } = buildModuleBlocks('0.3', '0.3.0');
+    const website = imports.find(i => i.path.endsWith('/website'));
+    assert.ok(website, 'website import should exist');
+    assert.equal(website.version, 'website/v0.3.0');
+    assert.deepEqual(website.mounts[0].files, ['**', '!blog/**']);
+    assert.equal(website.mounts[0].source, 'content/');
+    assert.equal(website.mounts[0].target, 'content');
+    assert.deepEqual(website.mounts[0].sites.matrix.versions, ['0.3']);
+});
+
+test('buildModuleBlocks: CLI import has correct tag format', () => {
+    const { imports } = buildModuleBlocks('0.3', '0.3.5');
     const cli = imports.find(i => i.path.endsWith('/cli'));
     assert.ok(cli, 'CLI import should exist');
-    assert.equal(cli.version, 'v1.2.3');
+    assert.equal(cli.version, 'cli/v0.3.5');
     assert.equal(cli.mounts[0].target, 'content/docs/reference/ocm-cli');
-    assert.deepEqual(cli.mounts[0].sites.matrix.versions, ['1.2.3']);
+    assert.deepEqual(cli.mounts[0].sites.matrix.versions, ['0.3']);
 });
 
-test('buildModuleBlocks: schema imports have correct targets', () => {
-    const { imports } = buildModuleBlocks('2.0.0');
-    const targets = imports.map(i => i.mounts[0].target).sort();
-    assert.deepEqual(targets, [
-        'content/docs/reference/ocm-cli',
-        'static/2.0.0/schemas/bindings/go/constructor',
-        'static/2.0.0/schemas/bindings/go/descriptor/v2',
-        'static/2.0.0/schemas/kubernetes/controller',
-    ]);
-});
-
-test('buildModuleBlocks: CLI and controller use versioned tag, bindings use latest', () => {
-    const { imports } = buildModuleBlocks('3.1.4');
-    const cli = imports.find(i => i.path.endsWith('/cli'));
+test('buildModuleBlocks: controller import has correct tag format', () => {
+    const { imports } = buildModuleBlocks('0.3', '0.3.2');
     const controller = imports.find(i => i.path.endsWith('/kubernetes/controller'));
+    assert.ok(controller, 'controller import should exist');
+    assert.equal(controller.version, 'kubernetes/controller/v0.3.2');
+    assert.deepEqual(controller.mounts[0].sites.matrix.versions, ['0.3']);
+});
+
+test('buildModuleBlocks: bindings use latest', () => {
+    const { imports } = buildModuleBlocks('0.3', '0.3.0');
     const constructor = imports.find(i => i.path.endsWith('/bindings/go/constructor'));
     const descriptor = imports.find(i => i.path.endsWith('/bindings/go/descriptor/v2'));
-    assert.equal(cli.version, 'v3.1.4');
-    assert.equal(controller.version, 'v3.1.4');
     assert.equal(constructor.version, 'latest');
     assert.equal(descriptor.version, 'latest');
 });
 
+test('buildModuleBlocks: version matrix uses X.Y not X.Y.Z', () => {
+    const { imports } = buildModuleBlocks('1.5', '1.5.3');
+    for (const imp of imports) {
+        assert.deepEqual(imp.mounts[0].sites.matrix.versions, ['1.5']);
+    }
+});
+
+test('buildModuleBlocks: schema imports have correct targets with version prefix', () => {
+    const { imports } = buildModuleBlocks('2.0', '2.0.0');
+    const targets = imports.map(i => i.mounts[0].target).sort();
+    assert.deepEqual(targets, [
+        'content',
+        'content/docs/reference/ocm-cli',
+        'static/2.0/schemas/bindings/go/constructor',
+        'static/2.0/schemas/bindings/go/descriptor/v2',
+        'static/2.0/schemas/kubernetes/controller',
+    ]);
+});
+
 test('buildModuleBlocks: schema imports have correct sources', () => {
-    const { imports } = buildModuleBlocks('1.0.0');
-    const schemaImports = imports.filter(i => !i.path.endsWith('/cli'));
+    const { imports } = buildModuleBlocks('0.3', '0.3.0');
+    const schemaImports = imports.filter(i => !i.path.endsWith('/cli') && !i.path.endsWith('/website'));
     const sources = schemaImports.map(i => i.mounts[0].source).sort();
     assert.deepEqual(sources, [
         'config/crd/bases',
@@ -133,20 +160,22 @@ test('buildModuleBlocks: schema imports have correct sources', () => {
     ]);
 });
 
-// Test compareSemver
+// --- compareSemver ---
+
 test('compareSemver: equal versions return 0', () => {
+    assert.equal(compareSemver('1.2', '1.2'), 0);
     assert.equal(compareSemver('1.2.3', '1.2.3'), 0);
-    assert.equal(compareSemver('0.0.0', '0.0.0'), 0);
+    assert.equal(compareSemver('0.0', '0.0'), 0);
 });
 
 test('compareSemver: major version difference', () => {
-    assert.ok(compareSemver('2.0.0', '1.0.0') > 0);
-    assert.ok(compareSemver('1.0.0', '2.0.0') < 0);
+    assert.ok(compareSemver('2.0', '1.0') > 0);
+    assert.ok(compareSemver('1.0', '2.0') < 0);
 });
 
 test('compareSemver: minor version difference', () => {
-    assert.ok(compareSemver('1.2.0', '1.1.0') > 0);
-    assert.ok(compareSemver('1.1.0', '1.2.0') < 0);
+    assert.ok(compareSemver('1.2', '1.1') > 0);
+    assert.ok(compareSemver('1.1', '1.2') < 0);
 });
 
 test('compareSemver: patch version difference', () => {
@@ -155,261 +184,285 @@ test('compareSemver: patch version difference', () => {
 });
 
 test('compareSemver: complex ordering', () => {
-    assert.ok(compareSemver('0.22.0', '0.21.0') > 0);
-    assert.ok(compareSemver('1.0.0', '0.99.99') > 0);
+    assert.ok(compareSemver('0.22', '0.21') > 0);
+    assert.ok(compareSemver('1.0', '0.99') > 0);
 });
 
-// Test assignVersionWeights
-test('assignVersionWeights: first cutoff (latest + legacy -> add version)', () => {
+test('compareSemver: mixed lengths (X.Y vs X.Y.Z) treated as missing=0', () => {
+    assert.equal(compareSemver('1.2', '1.2.0'), 0);
+    assert.ok(compareSemver('1.2.1', '1.2') > 0);
+});
+
+// --- assignVersionWeights ---
+
+test('assignVersionWeights: first cutoff (main + legacy -> add version)', () => {
     const existing = {
-        latest: { weight: 1 },
+        main: { weight: 1 },
         legacy: { weight: 2 }
     };
-    const result = assignVersionWeights(existing, '0.21.0');
+    const result = assignVersionWeights(existing, '0.21');
     assert.deepEqual(result, {
-        latest: { weight: 1 },
-        '0.21.0': { weight: 2 },
+        main: { weight: 1 },
+        '0.21': { weight: 2 },
         legacy: { weight: 3 }
     });
 });
 
 test('assignVersionWeights: second cutoff adds newer version before older', () => {
     const existing = {
-        latest: { weight: 1 },
-        '0.21.0': { weight: 2 },
+        main: { weight: 1 },
+        '0.21': { weight: 2 },
         legacy: { weight: 3 }
     };
-    const result = assignVersionWeights(existing, '0.22.0');
+    const result = assignVersionWeights(existing, '0.22');
     assert.deepEqual(result, {
-        latest: { weight: 1 },
-        '0.22.0': { weight: 2 },
-        '0.21.0': { weight: 3 },
+        main: { weight: 1 },
+        '0.22': { weight: 2 },
+        '0.21': { weight: 3 },
         legacy: { weight: 4 }
     });
 });
 
 test('assignVersionWeights: adding older version sorts correctly', () => {
     const existing = {
-        latest: { weight: 1 },
-        '0.22.0': { weight: 2 },
+        main: { weight: 1 },
+        '0.22': { weight: 2 },
         legacy: { weight: 3 }
     };
-    const result = assignVersionWeights(existing, '0.20.0');
+    const result = assignVersionWeights(existing, '0.20');
     assert.deepEqual(result, {
-        latest: { weight: 1 },
-        '0.22.0': { weight: 2 },
-        '0.20.0': { weight: 3 },
+        main: { weight: 1 },
+        '0.22': { weight: 2 },
+        '0.20': { weight: 3 },
         legacy: { weight: 4 }
     });
 });
 
-test('assignVersionWeights: duplicate version throws', () => {
+test('assignVersionWeights: duplicate version is idempotent', () => {
     const existing = {
-        latest: { weight: 1 },
-        '0.21.0': { weight: 2 },
+        main: { weight: 1 },
+        '0.21': { weight: 2 },
         legacy: { weight: 3 }
     };
-    assert.throws(() => assignVersionWeights(existing, '0.21.0'), /already exists/);
+    const result = assignVersionWeights(existing, '0.21');
+    assert.deepEqual(result, {
+        main: { weight: 1 },
+        '0.21': { weight: 2 },
+        legacy: { weight: 3 }
+    });
 });
 
 test('assignVersionWeights: no legacy present', () => {
     const existing = {
-        latest: { weight: 1 }
+        main: { weight: 1 }
     };
-    const result = assignVersionWeights(existing, '1.0.0');
+    const result = assignVersionWeights(existing, '1.0');
     assert.deepEqual(result, {
-        latest: { weight: 1 },
-        '1.0.0': { weight: 2 }
+        main: { weight: 1 },
+        '1.0': { weight: 2 }
     });
 });
 
-test('assignVersionWeights: no latest present', () => {
+test('assignVersionWeights: no main present', () => {
     const existing = {
-        '0.21.0': { weight: 1 },
+        '0.21': { weight: 1 },
         legacy: { weight: 2 }
     };
-    const result = assignVersionWeights(existing, '0.22.0');
+    const result = assignVersionWeights(existing, '0.22');
     assert.deepEqual(result, {
-        '0.22.0': { weight: 1 },
-        '0.21.0': { weight: 2 },
+        '0.22': { weight: 1 },
+        '0.21': { weight: 2 },
         legacy: { weight: 3 }
     });
 });
 
 test('assignVersionWeights: multiple existing versions re-sorted correctly', () => {
     const existing = {
-        latest: { weight: 1 },
-        '0.20.0': { weight: 4 },
-        '0.22.0': { weight: 2 },
-        '0.21.0': { weight: 3 },
+        main: { weight: 1 },
+        '0.20': { weight: 4 },
+        '0.22': { weight: 2 },
+        '0.21': { weight: 3 },
         legacy: { weight: 5 }
     };
-    const result = assignVersionWeights(existing, '0.23.0');
+    const result = assignVersionWeights(existing, '0.23');
     assert.deepEqual(result, {
-        latest: { weight: 1 },
-        '0.23.0': { weight: 2 },
-        '0.22.0': { weight: 3 },
-        '0.21.0': { weight: 4 },
-        '0.20.0': { weight: 5 },
+        main: { weight: 1 },
+        '0.23': { weight: 2 },
+        '0.22': { weight: 3 },
+        '0.21': { weight: 4 },
+        '0.20': { weight: 5 },
         legacy: { weight: 6 }
     });
 });
 
-test('assignVersionWeights: works with "main" as default key', () => {
-    const existing = {
-        main: { weight: 1 },
-        legacy: { weight: 2 }
-    };
-    const result = assignVersionWeights(existing, '1.0.0');
-    assert.deepEqual(result, {
-        main: { weight: 1 },
-        '1.0.0': { weight: 2 },
-        legacy: { weight: 3 }
-    });
-});
-
-test('assignVersionWeights: main and latest coexist (main first)', () => {
-    const existing = {
-        main: { weight: 1 },
-        latest: { weight: 2 },
-        legacy: { weight: 3 }
-    };
-    const result = assignVersionWeights(existing, '1.0.0');
-    assert.deepEqual(result, {
-        main: { weight: 1 },
-        latest: { weight: 2 },
-        '1.0.0': { weight: 3 },
-        legacy: { weight: 4 }
-    });
-});
-
-test('assignVersionWeights: main and latest coexist without legacy', () => {
-    const existing = {
-        main: { weight: 1 },
-        latest: { weight: 2 }
-    };
-    const result = assignVersionWeights(existing, '2.0.0');
-    assert.deepEqual(result, {
-        main: { weight: 1 },
-        latest: { weight: 2 },
-        '2.0.0': { weight: 3 }
-    });
-});
-
-test('assignVersionWeights: main and latest coexist with existing semvers', () => {
-    const existing = {
-        main: { weight: 1 },
-        latest: { weight: 2 },
-        '0.21.0': { weight: 3 },
-        legacy: { weight: 4 }
-    };
-    const result = assignVersionWeights(existing, '0.22.0');
-    assert.deepEqual(result, {
-        main: { weight: 1 },
-        latest: { weight: 2 },
-        '0.22.0': { weight: 3 },
-        '0.21.0': { weight: 4 },
-        legacy: { weight: 5 }
-    });
-});
-
 test('assignVersionWeights: empty existing versions', () => {
-    const result = assignVersionWeights({}, '1.0.0');
+    const result = assignVersionWeights({}, '1.0');
     assert.deepEqual(result, {
-        '1.0.0': { weight: 1 }
+        '1.0': { weight: 1 }
     });
 });
 
 test('assignVersionWeights: null existing versions', () => {
-    const result = assignVersionWeights(null, '1.0.0');
+    const result = assignVersionWeights(null, '1.0');
     assert.deepEqual(result, {
-        '1.0.0': { weight: 1 }
+        '1.0': { weight: 1 }
     });
 });
 
-// Test pinLatestContentMount
-test('pinLatestContentMount: rewrites live content mount to snapshot', () => {
-    const parsed = {
-        mounts: [
-            { source: 'content', target: 'content', sites: { matrix: { versions: ['latest'] } } },
-        ],
+test('assignVersionWeights: no "latest" handling (latest is not special)', () => {
+    // 'latest' is no longer a special version, it would be treated as semver-like
+    // but since it's not in SPECIAL_VERSIONS, passing it as a key should just be treated as a semver key
+    const existing = {
+        main: { weight: 1 },
+        legacy: { weight: 2 }
     };
-    const changed = pinLatestContentMount(parsed, '1.0.0');
+    const result = assignVersionWeights(existing, '0.3');
+    // No 'latest' anywhere
+    assert.equal(result.latest, undefined);
+    assert.deepEqual(result, {
+        main: { weight: 1 },
+        '0.3': { weight: 2 },
+        legacy: { weight: 3 }
+    });
+});
+
+// --- retireOldestVersion ---
+
+test('retireOldestVersion: no retirement when under limit', () => {
+    const versions = {
+        main: { weight: 1 },
+        '0.1': { weight: 2 },
+        '0.2': { weight: 3 },
+        legacy: { weight: 4 }
+    };
+    const retired = retireOldestVersion(versions);
+    assert.equal(retired, null);
+    assert.ok(versions['0.1']); // still there
+    assert.ok(versions['0.2']); // still there
+});
+
+test('retireOldestVersion: no retirement at exactly 10 versions', () => {
+    const versions = { main: { weight: 1 } };
+    for (let i = 1; i <= 10; i++) {
+        versions[`0.${i}`] = { weight: i + 1 };
+    }
+    versions.legacy = { weight: 12 };
+    const retired = retireOldestVersion(versions);
+    assert.equal(retired, null);
+});
+
+test('retireOldestVersion: retires oldest when over 10 versions', () => {
+    const versions = { main: { weight: 1 } };
+    for (let i = 1; i <= 11; i++) {
+        versions[`0.${i}`] = { weight: i + 1 };
+    }
+    versions.legacy = { weight: 13 };
+    const retired = retireOldestVersion(versions);
+    assert.equal(retired, '0.1');
+    assert.equal(versions['0.1'], undefined); // removed
+    assert.ok(versions['0.2']); // still there
+    assert.ok(versions['0.11']); // still there
+});
+
+test('retireOldestVersion: does not retire main or legacy', () => {
+    const versions = { main: { weight: 1 }, legacy: { weight: 13 } };
+    for (let i = 1; i <= 11; i++) {
+        versions[`0.${i}`] = { weight: i + 1 };
+    }
+    const retired = retireOldestVersion(versions);
+    assert.equal(retired, '0.1');
+    assert.ok(versions.main);
+    assert.ok(versions.legacy);
+});
+
+test('retireOldestVersion: correctly identifies oldest by semver', () => {
+    const versions = {};
+    // Add versions out of order
+    for (let i = 11; i >= 1; i--) {
+        versions[`1.${i}`] = { weight: 12 - i };
+    }
+    const retired = retireOldestVersion(versions);
+    assert.equal(retired, '1.1');
+});
+
+// --- updateImportTags ---
+
+test('updateImportTags: updates versioned tags for matching version', () => {
+    const parsed = {
+        imports: [
+            {
+                path: 'ocm.software/open-component-model/website',
+                version: 'website/v0.3.0',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+            {
+                path: 'ocm.software/open-component-model/cli',
+                version: 'cli/v0.3.0',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+            {
+                path: 'ocm.software/open-component-model/bindings/go/constructor',
+                version: 'latest',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+            {
+                path: 'ocm.software/open-component-model/bindings/go/descriptor/v2',
+                version: 'latest',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+            {
+                path: 'ocm.software/open-component-model/kubernetes/controller',
+                version: 'kubernetes/controller/v0.3.0',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+        ]
+    };
+
+    const changed = updateImportTags(parsed, '0.3', '0.3.1');
     assert.equal(changed, true);
-    assert.equal(parsed.mounts[0].source, 'content_versioned/version-1.0.0');
+    assert.equal(parsed.imports[0].version, 'website/v0.3.1');
+    assert.equal(parsed.imports[1].version, 'cli/v0.3.1');
+    assert.equal(parsed.imports[2].version, 'latest'); // unchanged
+    assert.equal(parsed.imports[3].version, 'latest'); // unchanged
+    assert.equal(parsed.imports[4].version, 'kubernetes/controller/v0.3.1');
 });
 
-test('pinLatestContentMount: leaves main content mount alone', () => {
+test('updateImportTags: does not change imports for other versions', () => {
     const parsed = {
-        mounts: [
-            { source: 'content', target: 'content', sites: { matrix: { versions: ['main'] } } },
-            { source: 'content', target: 'content', sites: { matrix: { versions: ['latest'] } } },
-        ],
+        imports: [
+            {
+                path: 'ocm.software/open-component-model/cli',
+                version: 'cli/v0.2.0',
+                mounts: [{ sites: { matrix: { versions: ['0.2'] } } }]
+            },
+            {
+                path: 'ocm.software/open-component-model/cli',
+                version: 'cli/v0.3.0',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+        ]
     };
-    pinLatestContentMount(parsed, '2.0.0');
-    assert.equal(parsed.mounts[0].source, 'content');
-    assert.equal(parsed.mounts[1].source, 'content_versioned/version-2.0.0');
+
+    updateImportTags(parsed, '0.3', '0.3.1');
+    assert.equal(parsed.imports[0].version, 'cli/v0.2.0'); // unchanged
+    assert.equal(parsed.imports[1].version, 'cli/v0.3.1'); // updated
 });
 
-test('pinLatestContentMount: does not touch non-content targets on latest', () => {
+test('updateImportTags: returns false when already up to date', () => {
     const parsed = {
-        mounts: [
-            { source: 'something/else', target: 'static/latest/schemas/foo',
-              sites: { matrix: { versions: ['latest'] } } },
-        ],
+        imports: [
+            {
+                path: 'ocm.software/open-component-model/cli',
+                version: 'cli/v0.3.1',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+        ]
     };
-    const changed = pinLatestContentMount(parsed, '1.0.0');
-    assert.equal(changed, false);
-    assert.equal(parsed.mounts[0].source, 'something/else');
-});
-
-test('pinLatestContentMount: updates existing snapshot mount to newer version', () => {
-    const parsed = {
-        mounts: [
-            { source: 'content_versioned/version-1.0.0', target: 'content',
-              sites: { matrix: { versions: ['latest'] } } },
-        ],
-    };
-    const changed = pinLatestContentMount(parsed, '2.0.0');
-    assert.equal(changed, true);
-    assert.equal(parsed.mounts[0].source, 'content_versioned/version-2.0.0');
-});
-
-test('pinLatestContentMount: no-op when latest already pinned to that version', () => {
-    const parsed = {
-        mounts: [
-            { source: 'content_versioned/version-1.0.0', target: 'content',
-              sites: { matrix: { versions: ['latest'] } } },
-        ],
-    };
-    const changed = pinLatestContentMount(parsed, '1.0.0');
+    const changed = updateImportTags(parsed, '0.3', '0.3.1');
     assert.equal(changed, false);
 });
 
-test('pinLatestContentMount: no-op when no latest mount present', () => {
-    const parsed = {
-        mounts: [
-            { source: 'content', target: 'content', sites: { matrix: { versions: ['main'] } } },
-        ],
-    };
-    const changed = pinLatestContentMount(parsed, '1.0.0');
-    assert.equal(changed, false);
-});
-
-test('pinLatestContentMount: skips mounts that target multiple versions', () => {
-    const parsed = {
-        mounts: [
-            { source: 'content', target: 'content',
-              sites: { matrix: { versions: ['latest', 'main'] } } },
-        ],
-    };
-    const changed = pinLatestContentMount(parsed, '1.0.0');
-    assert.equal(changed, false);
-    assert.equal(parsed.mounts[0].source, 'content');
-});
-
-test('pinLatestContentMount: handles null/empty mounts', () => {
-    assert.equal(pinLatestContentMount(null, '1.0.0'), false);
-    assert.equal(pinLatestContentMount({}, '1.0.0'), false);
-    assert.equal(pinLatestContentMount({ mounts: [] }, '1.0.0'), false);
+test('updateImportTags: returns false on null/empty parsed', () => {
+    assert.equal(updateImportTags(null, '0.3', '0.3.1'), false);
+    assert.equal(updateImportTags({}, '0.3', '0.3.1'), false);
 });
