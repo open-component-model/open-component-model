@@ -6,6 +6,7 @@ import (
 	"helm.sh/helm/v4/pkg/getter"
 
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
 
 const (
@@ -57,6 +58,10 @@ type option struct {
 	// when downloading charts from remote repositories.
 	Credentials *helmcredsv1.HelmHTTPCredentials
 
+	// OCICredentials contains credentials for direct OCI access instead of going through the Helm registry client.
+	// This is used for OCI-based Helm repositories and allows for more direct control over OCI interactions.
+	OCICredentials *ocicredsv1.OCICredentials
+
 	// AlwaysDownloadProv indicates whether to always download the provenance file for the chart.
 	// In cases where a Keyring is present in the credentials, Helm will attempt to download the provenance file to verify the chart's integrity.
 	AlwaysDownloadProv bool `json:"alwaysDownloadProv,omitempty"`
@@ -99,6 +104,13 @@ func WithCACertFile(caCertFile string) Option {
 func WithCredentials(credentials *helmcredsv1.HelmHTTPCredentials) Option {
 	return func(t *option) {
 		t.Credentials = credentials
+	}
+}
+
+// WithOCICredentials sets the typed Helm credentials used for authentication against an OCI registry.
+func WithOCICredentials(credentials *ocicredsv1.OCICredentials) Option {
+	return func(t *option) {
+		t.OCICredentials = credentials
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	v2 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -84,7 +85,10 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		i.TempFolder = temp
 	}
 
-	helmBlob, chart, err := GetV1HelmBlob(ctx, helm, i.TempFolder, WithCredentials(credsv1.FromDirectCredentials(credentials)))
+	helmBlob, chart, err := GetV1HelmBlob(ctx, helm, i.TempFolder,
+		WithCredentials(credsv1.FromDirectCredentials(credentials)),
+		WithOCICredentials(v2.FromDirectCredentials(credentials)),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("error getting helm blob based on resource input specification: %w", err)
 	}

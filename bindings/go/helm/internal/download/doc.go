@@ -26,6 +26,17 @@
 //	}
 //	chartData, err := download.NewReadOnlyChartFromRemote(ctx, chartURL, download.WithCredentials(creds))
 //
+// For OCI-backed Helm repositories the password may instead be supplied as a bearer/OAuth2
+// access token via [WithOCICredentials] using typed [ocicredsv1.OCICredentials]. When the
+// helm HTTP password is empty, the OCI access token is used as the basic-auth password.
+// The username, when needed, is always taken from the helm HTTP credentials. Basic auth is
+// only applied when both username and (resolved) password are non-empty.
+//
+//	chartData, err := download.NewReadOnlyChartFromRemote(ctx, chartURL,
+//	    download.WithCredentials(&helmcredsv1.HelmHTTPCredentials{Username: "user"}),
+//	    download.WithOCICredentials(&ocicredsv1.OCICredentials{AccessToken: "token"}),
+//	)
+//
 // # TLS Configuration
 //
 // Client certificates and CA certificates can be configured either inline or via file paths

@@ -18,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
 
 // NewReadOnlyChartFromRemote downloads a Helm chart from a remote repository and returns it as [helm.ChartData].
@@ -39,6 +40,9 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 
 	if opt.Credentials == nil {
 		opt.Credentials = &helmcredsv1.HelmHTTPCredentials{}
+	}
+	if opt.OCICredentials == nil {
+		opt.OCICredentials = &ocicredsv1.OCICredentials{}
 	}
 
 	chartDir, err := os.MkdirTemp(targetDir, "helmRemoteChart*")
@@ -113,6 +117,10 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 
 	username := opt.Credentials.Username
 	password := opt.Credentials.Password
+
+	if password == "" {
+		password = opt.OCICredentials.AccessToken
+	}
 
 	if username != "" && password != "" {
 		dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
