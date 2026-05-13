@@ -1,8 +1,9 @@
-name: Pipeline
+name: monorepo shared build & publish
 
-# This is a reusable release building block. It has a lot of triggers because
-# this pipeline is responsible for running builds, verifications, e2e tests
-# and the conformance test.
+# Reusable build & publish chain for the whole monorepo. Owns the dependency
+# order across CLI and controller: build (in parallel) → conformance gate →
+# publish to GHCR. Drives daily CI on main/release branches and is reused by
+# release.yml for tagged releases.
 #
 # It has the following stages: build_cli, build_controller (these are executed in parallel)
 # from here, if success, goes on to conformance and then finally, if required, publish_*.
@@ -80,7 +81,6 @@ env:
 jobs:
   # === This is new: workflow_call wiring ===
   build_cli:
-    name: CLI
     uses: ./.github/workflows/cli.yml
     permissions:
       contents: read
@@ -91,7 +91,6 @@ jobs:
       build_version: ${{ inputs.build_version }}
 
   build_controller:
-    name: Controller
     uses: ./.github/workflows/kubernetes-controller.yml
     permissions:
       contents: read

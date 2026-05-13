@@ -1,8 +1,9 @@
-name: CLI
+name: cli build & test
 
 on:
-  # Reusable build step. Invoked by pipeline.yml (which runs daily CI on
-  # push/PR and is also called by release.yml for tagged releases).
+  # Reusable build step for the CLI. Invoked by the monorepo shared build &
+  # publish pipeline (pipeline.yml), which runs daily CI on push/PR and is
+  # also called by release.yml for tagged releases.
   workflow_call:
     inputs:
       artifact_name:
