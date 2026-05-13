@@ -66,7 +66,7 @@ type RepositoryOptions struct {
 	// OwnershipReferrerPolicy controls whether an asset-to-owner OCI referrer
 	// (ADR 0016) is pushed alongside each by-value resource upload. By default
 	// (zero value), no referrer is pushed; opt in via
-	// OwnershipReferrerPolicyEnabled when the consumer needs reverse lookup
+	// OwnershipReferrerPolicyAuto when the consumer needs reverse lookup
 	// from an OCI artifact to its owning component version.
 	OwnershipReferrerPolicy OwnershipReferrerPolicy
 }
@@ -93,15 +93,14 @@ const (
 	ReferrerTrackingPolicyByIndexAndSubject ReferrerTrackingPolicy = iota
 )
 
-// OwnershipReferrerPolicy controls asset-to-owner referrer creation
-// (docs/adr/0016_ownership_annotations.md).
+// OwnershipReferrerPolicy controls asset-to-owner referrer creation.
 type OwnershipReferrerPolicy int
 
 const (
 	// OwnershipReferrerPolicyDisabled is the zero value — no referrer is pushed.
 	OwnershipReferrerPolicyDisabled OwnershipReferrerPolicy = iota
-	// OwnershipReferrerPolicyEnabled pushes one ownership referrer per by-value resource upload (ADR 0016).
-	OwnershipReferrerPolicyEnabled
+	// OwnershipReferrerPolicyAuto pushes one referrer per by-value resource upload.
+	OwnershipReferrerPolicyAuto
 )
 
 // GlobalAccessPolicy is an alias for [policy.GlobalAccessPolicy].

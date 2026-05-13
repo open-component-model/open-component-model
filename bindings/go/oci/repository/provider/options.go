@@ -1,6 +1,9 @@
 package provider
 
-import "ocm.software/open-component-model/bindings/go/runtime"
+import (
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/runtime"
+)
 
 // Options holds configuration options for the OCI repository provider.
 type Options struct {
@@ -14,6 +17,10 @@ type Options struct {
 
 	// Scheme is the runtime scheme used by the repositories.
 	Scheme *runtime.Scheme
+
+	// Config is the merged generic OCM configuration. Nil keeps every
+	// repository-level toggle at its zero-value default.
+	Config *genericv1.Config
 }
 
 type Option func(*Options)
@@ -35,5 +42,12 @@ func WithUserAgent(userAgent string) Option {
 func WithScheme(scheme *runtime.Scheme) Option {
 	return func(o *Options) {
 		o.Scheme = scheme
+	}
+}
+
+// WithConfig wires the merged generic OCM configuration into the provider.
+func WithConfig(cfg *genericv1.Config) Option {
+	return func(o *Options) {
+		o.Config = cfg
 	}
 }

@@ -2010,13 +2010,13 @@ func TestRepositoryHealthCheck(t *testing.T) {
 	})
 }
 
-// TestRepository_AddLocalSource_OwnershipPolicyEnabled_OCILayoutBody pins the
-// regression that enabling OwnershipReferrerPolicyEnabled must not affect
-// AddLocalSource for any OCI-packed source body. uploadAndUpdateLocalArtifact
-// is shared with AddLocalResource; AddLocalSource hardcodes the policy to
-// OwnershipReferrerPolicyDisabled so OwnershipReferrer is never invoked for
-// sources, regardless of the repository's configured policy.
-func TestRepository_AddLocalSource_OwnershipPolicyEnabled_OCILayoutBody(t *testing.T) {
+// TestRepository_AddLocalSource_OwnershipPolicyAuto_OCILayoutBody pins
+// the regression that enabling OwnershipReferrerPolicyAuto must not
+// affect AddLocalSource for any OCI-packed source body.
+// uploadAndUpdateLocalArtifact is shared with AddLocalResource; AddLocalSource
+// hardcodes the policy to OwnershipReferrerPolicyDisabled so OwnershipReferrer
+// is never invoked for sources, regardless of the repository's configured policy.
+func TestRepository_AddLocalSource_OwnershipPolicyAuto_OCILayoutBody(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
 
@@ -2025,7 +2025,7 @@ func TestRepository_AddLocalSource_OwnershipPolicyEnabled_OCILayoutBody(t *testi
 	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
 	repo := Repository(t,
 		ocictf.WithCTF(store),
-		oci.WithOwnershipReferrerPolicy(oci.OwnershipReferrerPolicyEnabled),
+		oci.WithOwnershipReferrerPolicy(oci.OwnershipReferrerPolicyAuto),
 	)
 
 	// Build an OCI-layout source body (single layer + manifest, tagged). The

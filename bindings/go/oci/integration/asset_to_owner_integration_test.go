@@ -17,12 +17,16 @@ import (
 	orasregistry "oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	ocmv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -66,12 +70,12 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 	)
 	r.NoError(err)
 
-	repo, err := oci.NewRepository(
-		oci.WithResolver(resolver),
-		oci.WithTempDir(t.TempDir()),
-		oci.WithOwnershipReferrerPolicy(oci.OwnershipReferrerPolicyEnabled),
-	)
-	r.NoError(err)
+	// The test registry runs on plain HTTP; the `http://` scheme tells
+	// [ocirepository.NewFromOCIRepoV1] to flip the resolver to plain HTTP
+	// (otherwise it would try HTTPS and fail with "server gave HTTP response").
+	repoSpec := &ocirepospecv1.Repository{BaseUrl: "http://" + registryAddress}
+	creds := map[string]string{"username": testUsername, "password": password}
+	repo := newRepoFromConfig(t, ctx, repoSpec, creds, ocmv1.OwnershipReferrerPolicyAuto)
 
 	const (
 		componentName    = "ocm.software/asset-to-owner-test"
@@ -155,17 +159,10 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 			"identical re-uploads must converge on a single referrer; got %d distinct manifests", len(referrers))
 	})
 
-	t.Run("policy disabled: resource uploads without an ownership referrer", func(t *testing.T) {
-		// Locks in the opt-out contract: a repository constructed without
-		// [oci.WithOwnershipReferrerPolicy] (the default
-		// [oci.OwnershipReferrerPolicyDisabled]) must accept a by-value
-		// resource and leave the Referrers API empty for that subject.
-		r := require.New(t)
-		disabledRepo, err := oci.NewRepository(
-			oci.WithResolver(resolver),
-			oci.WithTempDir(t.TempDir()),
-		)
-		r.NoError(err)
+	t.Run("policy disabled via OCM config: no ownership referrer pushed", func(t *testing.T) {
+		// Mirror image of the parent setup: an explicit `Disabled` in the OCM
+		// config must leave the Referrers API empty for uploaded subjects.
+		disabledRepo := newRepoFromConfig(t, ctx, repoSpec, creds, ocmv1.OwnershipReferrerPolicyDisabled)
 
 		const (
 			disabledComponent = "ocm.software/asset-to-owner-test-disabled"
@@ -175,8 +172,49 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 
 		referrers := listOwnershipReferrers(t, ctx, resolver, disabledComponent, componentVersion, resourceDigest)
 		assert.Emptyf(t, referrers,
-			"policy disabled must not push any ownership referrer; found %d", len(referrers))
+			"config-driven Disabled must not push any ownership referrer; found %d", len(referrers))
 	})
+}
+
+// newRepoFromConfig constructs an OCI component-version repository through the
+// provider with the given ownershipReferrerPolicy expressed as the user-facing
+// OCM config string — the exact path the CLI takes for `.ocmconfig` files.
+func newRepoFromConfig(
+	t *testing.T,
+	ctx context.Context,
+	repoSpec *ocirepospecv1.Repository,
+	creds map[string]string,
+	policy ocmv1.OwnershipReferrerPolicy,
+) *oci.Repository {
+	t.Helper()
+	r := require.New(t)
+	prov := provider.NewComponentVersionRepositoryProvider(
+		provider.WithUserAgent(userAgent),
+		provider.WithTempDir(t.TempDir()),
+		provider.WithConfig(buildOcmConfigWithReferrerPolicy(t, policy)),
+	)
+	cvRepo, err := prov.GetComponentVersionRepository(ctx, repoSpec, creds)
+	r.NoError(err)
+	repo, ok := cvRepo.(*oci.Repository)
+	r.Truef(ok, "expected *oci.Repository, got %T", cvRepo)
+	return repo
+}
+
+// buildGenericConfigWithPolicy returns a generic v1 config carrying a single
+// ocm.config.ocm.software/v1 entry with the requested policy value, matching
+// the shape a user's .ocmconfig file would produce.
+func buildOcmConfigWithReferrerPolicy(t *testing.T, policy ocmv1.OwnershipReferrerPolicy) *genericv1.Config {
+	t.Helper()
+	specCfg := &ocmv1.Config{
+		Type:                    ocmruntime.NewVersionedType(ocmv1.ConfigType, ocmv1.Version),
+		OwnershipReferrerPolicy: policy,
+	}
+	raw := &ocmruntime.Raw{}
+	require.NoError(t, ocmv1.Scheme.Convert(specCfg, raw))
+	return &genericv1.Config{
+		Type:           ocmruntime.NewVersionedType(genericv1.ConfigType, genericv1.Version),
+		Configurations: []*ocmruntime.Raw{raw},
+	}
 }
 
 // uploadResource pushes a one-layer OCI image as a local resource through repo

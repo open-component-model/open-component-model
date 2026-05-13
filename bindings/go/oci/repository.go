@@ -214,7 +214,7 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 }
 
 // AddLocalResource adds a local resource to the repository. When the
-// repository has [OwnershipReferrerPolicyEnabled] and the resource is an
+// repository has [OwnershipReferrerPolicyAuto] and the resource is an
 // OCI-compliant manifest, an ownership referrer is pushed alongside it
 // (ADR 0016).
 func (repo *Repository) AddLocalResource(
@@ -464,7 +464,7 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 		BaseReference:      reference,
 		GlobalAccessPolicy: repo.globalAccessPolicy,
 	}
-	if ownershipReferrerPolicy == OwnershipReferrerPolicyEnabled {
+	if ownershipReferrerPolicy == OwnershipReferrerPolicyAuto {
 		packOptions.Referrers = []tar.ReferrersFunc{pack.OwnershipReferrer(artifact, component, version)}
 	}
 	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, packOptions)

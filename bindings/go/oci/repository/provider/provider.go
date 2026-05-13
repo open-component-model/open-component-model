@@ -9,6 +9,8 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	ocmv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/credentials"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
@@ -52,6 +54,9 @@ type CachingComponentVersionRepositoryProvider struct {
 	// (such as the extracted directory representation of a tar
 	// or tar.gz ctf archive).
 	tempDir string
+
+	// config is the merged OCM configuration.
+	config *genericv1.Config
 }
 
 var _ repository.ComponentVersionRepositoryProvider = (*CachingComponentVersionRepositoryProvider)(nil)
@@ -78,6 +83,7 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		storeCache: &storeCache{store: make(map[string]*ocictf.Store)},
 		httpClient: retry.DefaultClient,
 		tempDir:    options.TempDir,
+		config:     options.Config,
 	}
 
 	return provider
@@ -129,9 +135,15 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		return nil, err
 	}
 
+	ownershipReferrerPolicy, err := resolveOwnershipReferrerPolicy(b.config)
+	if err != nil {
+		return nil, err
+	}
+
 	opts := []oci.RepositoryOption{
 		oci.WithTempDir(b.tempDir),
 		oci.WithCreator(b.creator),
+		oci.WithOwnershipReferrerPolicy(ownershipReferrerPolicy),
 	}
 
 	typedCreds := v2.FromDirectCredentials(creds)
@@ -171,6 +183,24 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		return repo, nil
 	default:
 		return nil, fmt.Errorf("unsupported repository specification type %T", obj)
+	}
+}
+
+// resolveOwnershipReferrerPolicy returns the [oci.OwnershipReferrerPolicy]
+// for cfg, defaulting to [oci.OwnershipReferrerPolicyDisabled].
+func resolveOwnershipReferrerPolicy(cfg *genericv1.Config) (oci.OwnershipReferrerPolicy, error) {
+	specCfg, err := ocmv1.Lookup(cfg)
+	if err != nil || specCfg == nil {
+		return oci.OwnershipReferrerPolicyDisabled, err
+	}
+	switch specCfg.OwnershipReferrerPolicy {
+	case "", ocmv1.OwnershipReferrerPolicyDisabled:
+		return oci.OwnershipReferrerPolicyDisabled, nil
+	case ocmv1.OwnershipReferrerPolicyAuto:
+		return oci.OwnershipReferrerPolicyAuto, nil
+	default:
+		return oci.OwnershipReferrerPolicyDisabled,
+			fmt.Errorf("unsupported ownershipReferrerPolicy %q", specCfg.OwnershipReferrerPolicy)
 	}
 }
 
