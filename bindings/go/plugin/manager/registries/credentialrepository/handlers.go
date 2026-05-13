@@ -35,27 +35,17 @@ func ConsumerIdentityForConfigHandlerFunc[T runtime.Typed](f func(ctx context.Co
 	}
 }
 
-// credentialsFromHeader extracts credentials from the Authorization header as runtime.Typed.
-// Returns nil, true when the header is absent (no credentials). Returns nil, false on parse error.
-func credentialsFromHeader(w http.ResponseWriter, h http.Header) (runtime.Typed, bool) {
-	authHeader := h.Get("Authorization")
-	if authHeader == "" || authHeader == "null" {
-		return nil, true
-	}
-	raw := &runtime.Raw{}
-	if err := json.Unmarshal([]byte(authHeader), raw); err != nil {
-		plugins.NewError(fmt.Errorf("failed to parse credentials header: %w", err), http.StatusUnauthorized).Write(w)
-		return nil, false
-	}
-	return raw, true
-}
-
 // ResolveTypedHandlerFunc is a wrapper around calling the typed ResolveTyped method for the plugin.
 func ResolveTypedHandlerFunc[T runtime.Typed](f func(ctx context.Context, cfg v1.ResolveRequest[T], credentials runtime.Typed) (runtime.Typed, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		credentials, ok := credentialsFromHeader(writer, request.Header)
-		if !ok {
-			return
+		var credentials runtime.Typed
+		if authHeader := request.Header.Get("Authorization"); authHeader != "" && authHeader != "null" {
+			raw := &runtime.Raw{}
+			if err := json.Unmarshal([]byte(authHeader), raw); err != nil {
+				plugins.NewError(fmt.Errorf("failed to parse credentials header: %w", err), http.StatusUnauthorized).Write(writer)
+				return
+			}
+			credentials = raw
 		}
 
 		body, err := plugins.DecodeJSONRequestBody[v1.ResolveRequest[T]](writer, request)
@@ -80,29 +70,22 @@ func ResolveTypedHandlerFunc[T runtime.Typed](f func(ctx context.Context, cfg v1
 // ResolveHandlerFunc is a deprecated wrapper for the map-based Resolve method.
 // Deprecated: Use ResolveTypedHandlerFunc.
 func ResolveHandlerFunc[T runtime.Typed](f func(ctx context.Context, cfg v1.ResolveRequest[T], credentials map[string]string) (map[string]string, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
-	return func(writer http.ResponseWriter, request *http.Request) {
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := map[string]string{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
-			return
+	typedF := func(ctx context.Context, cfg v1.ResolveRequest[T], credentials runtime.Typed) (runtime.Typed, error) {
+		var credMap map[string]string
+		if credentials != nil {
+			data, err := json.Marshal(credentials)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal credentials header: %w", err)
+			}
+			if err := json.Unmarshal(data, &credMap); err != nil {
+				return nil, fmt.Errorf("incorrect authentication header format: %w", err)
+			}
 		}
-
-		body, err := plugins.DecodeJSONRequestBody[v1.ResolveRequest[T]](writer, request)
+		result, err := f(ctx, cfg, credMap)
 		if err != nil {
-			plugins.NewError(fmt.Errorf("failed to decode request body: %w", err), http.StatusBadRequest).Write(writer)
-			return
+			return nil, err
 		}
-
-		resolvedCredentials, err := f(request.Context(), *body, credentials)
-		if err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
-
-		if err := json.NewEncoder(writer).Encode(resolvedCredentials); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		return mapToTyped(result), nil
 	}
+	return ResolveTypedHandlerFunc(typedF, scheme, typ)
 }

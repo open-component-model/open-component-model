@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	v2 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
@@ -24,7 +25,9 @@ func (m *mockCredentialPlugin[T]) ConsumerIdentityForConfig(ctx context.Context,
 }
 
 func (m *mockCredentialPlugin[T]) ResolveTyped(ctx context.Context, cfg v1.ResolveRequest[T], credentials runtime.Typed) (runtime.Typed, error) {
-	return &runtime.Raw{}, nil
+	return &v2.DirectCredentials{
+		Properties: map[string]string{"resolved": "mock-credentials"},
+	}, nil
 }
 
 // Resolve is a deprecated shim.
