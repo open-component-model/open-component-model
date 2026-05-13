@@ -382,6 +382,7 @@ jobs:
               - '**/*.go'
               - '**/go.mod'
               - '**/go.sum'
+              - '.github/workflows/ci.yml'
 
   analyze-go:
     name: "Analyze Go"
