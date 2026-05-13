@@ -30,7 +30,7 @@ env:
   CONTROLLER_PATH: kubernetes/controller
   GH_REPO: ${{ github.repository }}
   # Image refs (CLI_IMAGE, CONTROLLER_IMAGE, CONTROLLER_CHART) are set per-job
-  # via a "Compute image refs" step that lowercases github.repository_ownerk.
+  # via a "Compute image refs" step that lowercases github.repository_owner.
   # GHRC does not like uppercase names for repositories.
 
 concurrency:
@@ -79,15 +79,12 @@ jobs:
         env:
           BRANCH: ${{ github.ref_name }}
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
-            await script.default({ core, github, context });
+            await script.default({ core });
 
       - name: Generate changelog with git-cliff
         uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4
-        env:
-          CHANGELOG_RANGE: ${{ steps.compute.outputs.changelog_range }}
         with:
           version: 'v2.12.0'
           github_token: ${{ secrets.GITHUB_TOKEN }}

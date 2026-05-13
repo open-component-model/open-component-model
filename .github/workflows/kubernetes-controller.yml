@@ -1,7 +1,8 @@
-name: Kubernetes Controller
+name: controller build & test
 
 on:
-  # Reusable build step. Invoked by pipeline.yml. Runs verify-chart, build,
+  # Reusable build step for the Kubernetes controller. Invoked by the monorepo
+  # shared build & publish pipeline (pipeline.yml). Runs verify-chart, build,
   # and E2E. Publishing has been moved to pipeline.yml so that conformance
   # can gate it.
   workflow_call:
@@ -39,9 +40,9 @@ permissions:
   contents: read # for actions/checkout to fetch code
 
 # No concurrency block: this workflow is workflow_call-only. The caller
-# (pipeline.yml) controls concurrency for the whole chain. Declaring our own
-# would deadlock on `Pipeline-<ref>` because github.workflow inherits the
-# caller's name in workflow_call context.
+# (pipeline.yml, "monorepo shared build & publish") controls concurrency for
+# the whole chain. Declaring our own would deadlock because github.workflow
+# inherits the caller's name in workflow_call context.
 
 jobs:
   verify-chart:

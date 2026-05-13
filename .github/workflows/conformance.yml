@@ -48,9 +48,10 @@ permissions:
   contents: read
 
 # No concurrency block: this workflow is workflow_call-only. The caller
-# (pipeline.yml) controls concurrency for the whole chain. Declaring our own
-# would collide with siblings because github.workflow inherits the caller's
-# name in workflow_call context. Same pattern as kubernetes-controller.yml.
+# (pipeline.yml, "monorepo shared build & publish") controls concurrency for
+# the whole chain. Declaring our own would collide with siblings because
+# github.workflow inherits the caller's name in workflow_call context.
+# Same pattern as kubernetes-controller.yml.
 
 env:
   REGISTRY: ghcr.io
@@ -143,13 +144,12 @@ jobs:
         if: ${{ inputs.toolkit_image_artifact != '' }}
         env:
           TOOLKIT_VERSION: ${{ inputs.toolkit_version }}
-          IMAGE_NAME: ${{ env.CONTROLLER_IMAGE_NAME }}
         run: |
           mkdir -p tmp/controller-oci-dir
           tar -xf tmp/controller-artifact/controller.tar -C tmp/controller-oci-dir
           skopeo --override-arch ${{ matrix.arch }} --override-os linux copy \
             oci:tmp/controller-oci-dir:${TOOLKIT_VERSION} \
-            docker-archive:tmp/controller-docker.tar:${IMAGE_NAME}:${TOOLKIT_VERSION}
+            docker-archive:tmp/controller-docker.tar:${CONTROLLER_IMAGE_NAME}:${TOOLKIT_VERSION}
           echo "PRELOAD_IMAGES=${{ github.workspace }}/tmp/controller-docker.tar" >> "$GITHUB_ENV"
 
       - name: Download chart artifact
