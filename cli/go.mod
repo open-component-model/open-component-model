@@ -37,7 +37,7 @@ require (
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260505072254-1c17fcd5c971
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260512065613-cf62896253b9
+	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260513141344-885b2f674661
 	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260505072254-1c17fcd5c971
 	sigs.k8s.io/yaml v1.6.0
