@@ -27,6 +27,19 @@ func init() {
 	)
 }
 
+// OwnershipReferrerPolicy controls whether an asset-to-owner OCI referrer
+// (ADR 0016) is pushed alongside each by-value resource upload.
+type OwnershipReferrerPolicy string
+
+const (
+	// OwnershipReferrerPolicyDisabled disables asset-to-owner referrer creation.
+	// This is the default when the field is omitted.
+	OwnershipReferrerPolicyDisabled OwnershipReferrerPolicy = "disabled"
+	// OwnershipReferrerPolicyAuto pushes one ownership referrer per
+	// by-value resource upload. Sources are not annotated.
+	OwnershipReferrerPolicyAuto OwnershipReferrerPolicy = "auto"
+)
+
 // Config is the OCM configuration type for configuring legacy fallback
 // resolvers.
 //
@@ -53,6 +66,14 @@ type Config struct {
 	// +ocm:jsonschema-gen:enum=ocm.config.ocm.software/v1
 	// +ocm:jsonschema-gen:enum:deprecated=ocm.config.ocm.software
 	Type runtime.Type `json:"type"`
+
+	// OwnershipReferrerPolicy controls whether an asset-to-owner OCI referrer
+	// (ADR 0016) is pushed alongside each by-value resource upload. Defaults
+	// to Disabled when omitted.
+	//
+	// +ocm:jsonschema-gen:enum=auto
+	// +ocm:jsonschema-gen:enum=disabled
+	OwnershipReferrerPolicy OwnershipReferrerPolicy `json:"ownershipReferrerPolicy,omitempty"`
 
 	//nolint:gocritic // Deprecated field is okay
 	// With aliases repository alias names can be mapped to a repository specification.
@@ -107,10 +128,6 @@ type Resolver struct {
 }
 
 // Lookup creates a new Config from a central V1 config.
-//
-// Deprecated: Resolvers are deprecated and are only added for backwards
-// compatibility.
-// New concepts will likely be introduced in the future (contributions welcome!).
 func Lookup(cfg *genericv1.Config) (*Config, error) {
 	if cfg == nil {
 		return nil, nil
@@ -166,6 +183,10 @@ func Merge(configs ...*Config) *Config {
 		}
 
 		merged.Resolvers = append(merged.Resolvers, cfg.Resolvers...)
+
+		if cfg.OwnershipReferrerPolicy != "" {
+			merged.OwnershipReferrerPolicy = cfg.OwnershipReferrerPolicy
+		}
 	}
 
 	return merged
