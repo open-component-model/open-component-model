@@ -54,10 +54,6 @@ const (
 //	    filePath: ./ocm/primary-transport-archive
 //	    priority: 10
 //
-// Deprecated: Resolvers are deprecated and are only added for backwards
-// compatibility.
-// New concepts will likely be introduced in the future (contributions welcome!).
-//
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
@@ -81,6 +77,10 @@ type Config struct {
 	// Deprecated: Aliases are deprecated and are ignored with a warning message.
 	Aliases map[string]*runtime.Raw `json:"aliases,omitempty"`
 
+	// Deprecated: Resolvers are deprecated and are only added for backwards
+	// compatibility.
+	// New concepts will likely be introduced in the future (contributions welcome!).
+	//
 	// Resolvers define a list of OCM repository specifications to be used to resolve
 	// dedicated component versions.
 	// All matching entries are tried to lookup a component version in the following
@@ -128,6 +128,10 @@ type Resolver struct {
 }
 
 // Lookup creates a new Config from a central V1 config.
+//
+// Deprecated: Resolvers are deprecated and are only added for backwards
+// compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
 func Lookup(cfg *genericv1.Config) (*Config, error) {
 	if cfg == nil {
 		return nil, nil
