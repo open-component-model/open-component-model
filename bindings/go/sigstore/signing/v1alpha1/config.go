@@ -56,6 +56,18 @@ type SignConfig struct {
 	// this file instead of TUF auto-discovery.
 	// Maps to cosign --signing-config.
 	SigningConfig string `json:"signingConfig,omitempty"`
+
+	// Issuer is the OIDC issuer URL used for token acquisition.
+	// When set, it is emitted into the credential consumer identity so that
+	// .ocmconfig entries for enterprise Sigstore stacks can be distinguished
+	// from the public-good default.
+	// If empty, the OIDC plugin defaults to https://oauth2.sigstore.dev/auth.
+	Issuer string `json:"issuer,omitempty"`
+
+	// ClientID is the OAuth2 client ID used for OIDC token acquisition.
+	// When set, it is emitted into the credential consumer identity alongside Issuer.
+	// If empty, the OIDC plugin defaults to "sigstore".
+	ClientID string `json:"clientID,omitempty"`
 }
 
 // VerifyConfig defines configuration for Sigstore-based keyless verification via the cosign CLI.
@@ -112,6 +124,11 @@ type VerifyConfig struct {
 
 // Validate checks that SignConfig fields are well-formed.
 func (c *SignConfig) Validate() error {
+	if c.Issuer != "" {
+		if err := validateURL("Issuer", c.Issuer); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

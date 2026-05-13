@@ -16,6 +16,9 @@ func TestSignConfig_Validate(t *testing.T) {
 	}{
 		{"valid empty", SignConfig{}, ""},
 		{"valid signingConfig only", SignConfig{SigningConfig: "/path/to/config.json"}, ""},
+		{"valid with issuer and clientID", SignConfig{Issuer: "https://keycloak.corp.example.com/realms/sigstore", ClientID: "corp-sigstore"}, ""},
+		{"valid issuer only", SignConfig{Issuer: "https://dex.example.com"}, ""},
+		{"invalid issuer URL", SignConfig{Issuer: "not-a-url"}, "Issuer"},
 	}
 
 	for _, tc := range tests {

@@ -897,54 +897,107 @@ func TestResolveTrustedRootPath(t *testing.T) {
 
 func TestGetSigningCredentialConsumerIdentity(t *testing.T) {
 	t.Parallel()
-	r := require.New(t)
 
-	h := newWithRunner(&execRecorder{})
-	cfg := testSignConfig()
+	tests := []struct {
+		name         string
+		cfg          *v1alpha1.SignConfig
+		wantLen      int
+		wantIssuer   string
+		wantClientID string
+	}{
+		{
+			name:    "minimal (public sigstore)",
+			cfg:     testSignConfig(),
+			wantLen: 2,
+		},
+		{
+			name: "enterprise with issuer and clientID",
+			cfg: func() *v1alpha1.SignConfig {
+				c := &v1alpha1.SignConfig{
+					Issuer:   "https://keycloak.corp.example.com/realms/sigstore",
+					ClientID: "corp-sigstore",
+				}
+				c.SetType(runtime.NewVersionedType(v1alpha1.SignConfigType, v1alpha1.Version))
+				return c
+			}(),
+			wantLen:      4,
+			wantIssuer:   "https://keycloak.corp.example.com/realms/sigstore",
+			wantClientID: "corp-sigstore",
+		},
+		{
+			name: "issuer only",
+			cfg: func() *v1alpha1.SignConfig {
+				c := &v1alpha1.SignConfig{Issuer: "https://dex.example.com"}
+				c.SetType(runtime.NewVersionedType(v1alpha1.SignConfigType, v1alpha1.Version))
+				return c
+			}(),
+			wantLen:    3,
+			wantIssuer: "https://dex.example.com",
+		},
+	}
 
-	id, err := h.GetSigningCredentialConsumerIdentity(t.Context(), "my-sig", testDigest(), cfg)
-	r.NoError(err)
-	r.Equal(v1alpha1.AlgorithmSigstore, id[IdentityAttributeAlgorithm])
-	r.Equal("my-sig", id[IdentityAttributeSignature])
-	r.Equal(sigcredentials.IdentityTypeSigstoreSigner, id.GetType())
-	r.Len(id, 3)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+
+			h := newWithRunner(&execRecorder{})
+			id, err := h.GetSigningCredentialConsumerIdentity(t.Context(), "my-sig", testDigest(), tc.cfg)
+			r.NoError(err)
+			r.Equal(sigcredentials.IdentityTypeSigstoreSigner, id.GetType())
+			r.Equal("my-sig", id[IdentityAttributeSignature])
+			r.Len(id, tc.wantLen)
+			if tc.wantIssuer != "" {
+				r.Equal(tc.wantIssuer, id[IdentityAttributeIssuer])
+			}
+			if tc.wantClientID != "" {
+				r.Equal(tc.wantClientID, id[IdentityAttributeClientID])
+			}
+		})
+	}
 }
 
 func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 	t.Parallel()
-	r := require.New(t)
 
-	h := newWithRunner(&execRecorder{})
-	signed := descruntime.Signature{
-		Name: "my-sig",
-		Signature: descruntime.SignatureInfo{
-			MediaType: v1alpha1.MediaTypeSigstoreBundle,
+	tests := []struct {
+		name      string
+		mediaType string
+		wantErr   string
+	}{
+		{
+			name:      "valid sigstore bundle",
+			mediaType: v1alpha1.MediaTypeSigstoreBundle,
+		},
+		{
+			name:      "unsupported media type",
+			mediaType: "application/pgp-signature",
+			wantErr:   "unsupported media type",
 		},
 	}
 
-	id, err := h.GetVerifyingCredentialConsumerIdentity(t.Context(), signed, nil)
-	r.NoError(err)
-	r.Equal(v1alpha1.AlgorithmSigstore, id[IdentityAttributeAlgorithm])
-	r.Equal("my-sig", id[IdentityAttributeSignature])
-	r.Equal(sigcredentials.IdentityTypeSigstoreVerifier, id.GetType())
-	r.Len(id, 3)
-}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
 
-func TestGetVerifyingCredentialConsumerIdentity_WrongMediaType(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
+			h := newWithRunner(&execRecorder{})
+			signed := descruntime.Signature{
+				Name: "my-sig",
+				Signature: descruntime.SignatureInfo{MediaType: tc.mediaType},
+			}
 
-	h := newWithRunner(&execRecorder{})
-	signed := descruntime.Signature{
-		Name: "my-sig",
-		Signature: descruntime.SignatureInfo{
-			MediaType: "application/pgp-signature",
-		},
+			id, err := h.GetVerifyingCredentialConsumerIdentity(t.Context(), signed, nil)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(sigcredentials.IdentityTypeSigstoreVerifier, id.GetType())
+			r.Equal("my-sig", id[IdentityAttributeSignature])
+			r.Len(id, 2)
+		})
 	}
-
-	_, err := h.GetVerifyingCredentialConsumerIdentity(t.Context(), signed, nil)
-	r.Error(err)
-	r.Contains(err.Error(), "unsupported media type")
 }
 
 // --- ExtractCertInfoFromBundleJSON Tests ---
