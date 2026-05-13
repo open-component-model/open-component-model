@@ -3,6 +3,7 @@ package credentials
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
@@ -47,6 +48,7 @@ func (p *OCICredentialRepository) ResolveTyped(ctx context.Context, cfg runtime.
 		return nil, err
 	}
 	if resolved == nil {
+		slog.DebugContext(ctx, "no credentials resolved for config and identity")
 		return nil, nil
 	}
 	return credentialsv1.FromDirectCredentials(resolved), nil
