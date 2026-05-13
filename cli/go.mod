@@ -19,7 +19,7 @@ require (
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/configuration v0.0.13
 	ocm.software/open-component-model/bindings/go/constructor v0.0.7
-	ocm.software/open-component-model/bindings/go/credentials v0.0.10
+	ocm.software/open-component-model/bindings/go/credentials v0.0.11
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260505072254-1c17fcd5c971
@@ -146,3 +146,7 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
 )
+
+replace ocm.software/open-component-model/bindings/go/configuration => github.com/piotrjanik/open-component-model/bindings/go/configuration v0.0.0-20260513084559-66367a5dd9c9
+
+replace ocm.software/open-component-model/bindings/go/oci => github.com/piotrjanik/open-component-model/bindings/go/oci v0.0.0-20260513084559-96b3c21bd555

@@ -204,6 +204,9 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/peterbourgon/diskv v2.0.1+incompatible h1:UBdAOUP5p4RWqPBg048CAvpKN+vxiaj6gdUUzhl4XmI=
 github.com/peterbourgon/diskv v2.0.1+incompatible/go.mod h1:uqqh8zWWbv1HBMNONnaR/tNboyR3/BZd58JJSHlUSCU=
+github.com/piotrjanik/open-component-model/bindings/go/configuration v0.0.0-20260513084559-66367a5dd9c9 h1:7heJYpcANllVo1WYpN60rzw+V8VpdG/WNUKBnMxZXtg=
+github.com/piotrjanik/open-component-model/bindings/go/configuration v0.0.0-20260513084559-66367a5dd9c9/go.mod h1:ka3RZJFXEI6BG844x9ckU/QsE1wRJmPL55uog3Fa4OQ=
+github.com/piotrjanik/open-component-model/bindings/go/oci v0.0.0-20260513084559-96b3c21bd555/go.mod h1:iUWo+p86fFKM1rbu7H4+EYIPZ1UrKrFAZx3UNlkrtwA=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
@@ -383,12 +386,11 @@ ocm.software/open-component-model/bindings/go/blob v0.0.12 h1:5YOFDxERzF6w+rPWYu
 ocm.software/open-component-model/bindings/go/blob v0.0.12/go.mod h1:YswKfR/kxhdHHK7bN98S2O73ZZlPLsHfHO2Bjsr6Zww=
 ocm.software/open-component-model/bindings/go/cel v0.0.0-20260505072254-1c17fcd5c971 h1:Pmr7DFX19yYt1HgVXzw8EL790JHYi3fpJ41J0yPh4M0=
 ocm.software/open-component-model/bindings/go/cel v0.0.0-20260505072254-1c17fcd5c971/go.mod h1:GHZfvK+e1mgGf3V15w3ZgTVDxuFSqxxOoSRqIMUtNSA=
-ocm.software/open-component-model/bindings/go/configuration v0.0.13 h1:fARaCEkyBvuZ8/3nUDMb0LZF3YuohBbJXCTkOqqUmkw=
-ocm.software/open-component-model/bindings/go/configuration v0.0.13/go.mod h1:B8rEZoPPL4bAYhsi5I4IZJ8EJSOwMupd95Lw/N0TBRA=
 ocm.software/open-component-model/bindings/go/constructor v0.0.7 h1:w1VB//QLrbC6r+lB8FHqcu4dK43wQD0MgULTsxFc0hA=
 ocm.software/open-component-model/bindings/go/constructor v0.0.7/go.mod h1:Aont6PV4Tm4ZU6ESOZdnnhJ+YV7LBeKM98+PSaMX+wA=
 ocm.software/open-component-model/bindings/go/credentials v0.0.10 h1:yPxsz8RsXULC/xskWt7UrggaXMK59GedFtUeo6xzMG8=
 ocm.software/open-component-model/bindings/go/credentials v0.0.10/go.mod h1:RJ/pYi7SwCjzuTDvlMksRjJgRwaUwuziIv+ApxqCv0U=
+ocm.software/open-component-model/bindings/go/credentials v0.0.11/go.mod h1:RJ/pYi7SwCjzuTDvlMksRjJgRwaUwuziIv+ApxqCv0U=
 ocm.software/open-component-model/bindings/go/ctf v0.4.0 h1:E2kDGJk/ZR2wMK6fk3yFr2Uv6AhfLdMmvdvQ7Y64/2s=
 ocm.software/open-component-model/bindings/go/ctf v0.4.0/go.mod h1:XaVTQK/STJ64pq8vClsT+onD0kEs7P+Wzsq1k2tp9h4=
 ocm.software/open-component-model/bindings/go/dag v0.0.6 h1:To76QJAmFD88C101oB/HgYvtomp8mm0270ewDLcVncw=
