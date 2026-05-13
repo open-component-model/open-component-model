@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -39,7 +38,7 @@ func (p *OCICredentialRepository) Resolve(ctx context.Context, cfg runtime.Typed
 	return ResolveV1DockerConfigCredentials(ctx, dockerConfig, identity)
 }
 
-// ResolveTyped resolves credentials and returns them as a runtime.Typed DirectCredentials.
+// ResolveTyped resolves credentials and returns them as typed *credentialsv1.OCICredentials.
 // The credentials parameter is unused: docker configs are read from the host and do not require
 // authentication themselves.
 func (p *OCICredentialRepository) ResolveTyped(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, _ runtime.Typed) (runtime.Typed, error) {
@@ -50,10 +49,7 @@ func (p *OCICredentialRepository) ResolveTyped(ctx context.Context, cfg runtime.
 	if resolved == nil {
 		return nil, nil
 	}
-	return &credconfigv1.DirectCredentials{
-		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
-		Properties: resolved,
-	}, nil
+	return credentialsv1.FromDirectCredentials(resolved), nil
 }
 
 // ConsumerIdentityForConfig is not supported for Docker config files as they are

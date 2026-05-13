@@ -145,9 +145,12 @@ func TestResolveHandlerFunc(t *testing.T) {
 					}
 				}`))
 
+				header := http.Header{}
+				header.Add("Authorization", "not-json")
 				return &http.Request{
 					Method: "POST",
 					URL:    parse,
+					Header: header,
 					Body:   io.NopCloser(body),
 				}
 			},
