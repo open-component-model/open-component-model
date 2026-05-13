@@ -182,7 +182,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.3 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.4 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260505072254-1c17fcd5c971 // indirect
-	ocm.software/open-component-model/bindings/go/plugin v0.0.14 // indirect
+	ocm.software/open-component-model/bindings/go/plugin v0.0.15 // indirect
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260505072254-1c17fcd5c971 // indirect
 	ocm.software/open-component-model/bindings/go/sigstore v0.0.0 // indirect
 	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260505072254-1c17fcd5c971 // indirect
