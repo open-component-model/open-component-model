@@ -199,6 +199,28 @@ AI-generated code or content can be contributed to this project if the following
    must also adhere to their employer's policies. This ensures that all contributions are made with proper authorization
    and respect for relevant corporate guidelines.
 
+### Human Ownership of Contributions
+
+LLMs are useful. For sketching code, exploring an unfamiliar API, or untangling a tricky bug, they can save real
+time, and we are not against them. What we care about is that whatever lands in a pull request or an issue came
+from a person who actually thought about it.
+
+OCM is a _community_ before it is a codebase. Reviews, design discussions and bug reports are conversations between
+people, and a pull request is the start of one. When you contribute:
+
+- Read what the model produced. Make sure it works, fits the patterns already in the code, and says something you
+  actually want to say.
+- Trim the boilerplate. Generic explanations, over-formal language, and comments that restate the obvious are
+  tells, and they make review harder for everyone.
+- Add your own context. _Why_ you did it the way you did. Don't rely on the automated tools summary for this.
+
+The same applies to issues. Using an LLM in the background to think through a bug or shape a feature request is
+fine. But the issue itself, and especially the replies in the thread, should come from you. A discussion full of
+generated comments stops being a discussion between people.
+
+Quality and engagement. Not volume. If a contribution reads as slop, a reviewer will say so. That
+is part of how the community stays a community.
+
 ## Getting Help
 
 See the [Community Engagement]({{< relref "_index.md" >}}) page for communication channels, community calls, and

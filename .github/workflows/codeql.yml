@@ -1,0 +1,46 @@
+# CodeQL SAST Analysis
+#
+# Runs on a daily schedule and manual dispatch instead of per-PR/push.
+# This is sufficient because:
+# 1. golangci-lint (with gosec) already runs per-PR and catches pattern-based
+#    security issues with fast feedback on ARM runners.
+# 2. CodeQL's deeper data-flow/taint analysis is expensive (x86-only, ~20min+)
+#    and rarely surfaces issues that golangci-lint misses in day-to-day changes.
+# 3. Running daily on the default branch ensures new findings surface within 24h
+#    of merge — acceptable latency for the deeper analysis tier.
+# 4. workflow_dispatch allows on-demand runs for security-sensitive changes.
+name: "CodeQL"
+
+on:
+  schedule:
+    - cron: '27 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze-go:
+    name: "Analyze Go"
+    # CodeQL bundles (codeql-action, codeql-cli-binaries) ship linux64 only - no ARM64 binary.
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      actions: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
+        with:
+          languages: go
+          queries: security-extended
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
+        with:
+          category: "/language:go"

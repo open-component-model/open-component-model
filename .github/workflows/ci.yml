@@ -362,45 +362,6 @@ jobs:
           MODULE: ${{ matrix.module }}
         run: task "${MODULE}:test"
 
-  analyze-go:
-    name: "Analyze Go Modules"
-    needs: discover_modules
-    # CodeQL bundles (codeql-action, codeql-cli-binaries) ship linux64 only - no ARM64 binary.
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-    permissions:
-      actions: read
-      # Automatically downgraded to read-only for pull requests from forks
-      # https://github.blog/changelog/2021-04-20-github-actions-control-permissions-for-github_token/#setting-permissions-in-the-workflow
-      # but are kept for runs on main or on pull requests on branches in the repo (renovate).
-      security-events: write
-    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
-    strategy:
-      fail-fast: false
-      matrix:
-        project: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          # we have a self reference here because CodeQL does introspection on the step
-          sparse-checkout: |
-            .github/workflows/ci.yml
-            ${{ matrix.project }}
-          persist-credentials: false
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
-        with:
-          languages: go
-          queries: security-extended
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
-        with:
-          category: "/language:go"
-
   generate:
     runs-on: ubuntu-24.04-arm
     name: "Code Generation"
@@ -441,7 +402,6 @@ jobs:
     needs:
       - discover_modules
       - generate
-      - analyze-go
       - run_unit_tests
       - run_integration_tests
       - golangci_lint
