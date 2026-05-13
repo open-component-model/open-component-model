@@ -110,6 +110,16 @@ func Check(ctx context.Context, opts Options) *Result {
 	// Cache is stale or missing — fetch from GitHub.
 	latest, err := fetchLatestVersion(ctx, opts)
 	if err != nil {
+		slog.Debug("version check: fetch failed", slog.String("error", err.Error()))
+		// Cache the failure so we don't retry on every CLI invocation (respects cacheTTL).
+		failEntry := &CacheEntry{CheckedAt: now}
+		if cache != nil {
+			failEntry.LatestVersion = cache.LatestVersion
+			failEntry.WarnedAt = cache.WarnedAt
+		}
+		if writeErr := WriteCache(cacheDir, failEntry); writeErr != nil {
+			slog.Debug("version check: failed to write cache", slog.String("error", writeErr.Error()))
+		}
 		return nil
 	}
 

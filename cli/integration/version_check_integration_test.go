@@ -48,14 +48,13 @@ func Test_Integration_VersionCheck_CurrentVersionIsLatest(t *testing.T) {
 
 func Test_Integration_VersionCheck_DoesNotErrorWithOldVersion(t *testing.T) {
 	r := require.New(t)
-	t.Parallel()
 
 	origVersion := version.BuildVersion
 	version.BuildVersion = "0.0.1"
 	t.Cleanup(func() { version.BuildVersion = origVersion })
 
-	// Use "version" subcommand which triggers PersistentPreRunE (unlike --help).
-	// Pass empty config to avoid loading user's local OCM config.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
 	cfgPath := writeEmptyConfig(t)
 	rootCmd := cmd.New()
 	rootCmd.SetOut(&bytes.Buffer{})
@@ -69,12 +68,12 @@ func Test_Integration_VersionCheck_DisabledByEnvVar(t *testing.T) {
 	r := require.New(t)
 
 	t.Setenv("OCM_DISABLE_VERSION_CHECK", "1")
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 
 	origVersion := version.BuildVersion
 	version.BuildVersion = "0.0.1"
 	t.Cleanup(func() { version.BuildVersion = origVersion })
 
-	// Use "version" subcommand to trigger PersistentPreRunE.
 	cfgPath := writeEmptyConfig(t)
 	rootCmd := cmd.New()
 	rootCmd.SetOut(&bytes.Buffer{})
@@ -103,13 +102,19 @@ func Test_Integration_VersionCheck_CachesResult(t *testing.T) {
 	r.NoError(err)
 	r.NotEmpty(cache.LatestVersion)
 	r.False(cache.CheckedAt.IsZero())
+	firstCheckedAt := cache.CheckedAt
 
+	// Second call should use the cache (not re-fetch).
 	result2 := versioncheck.Check(t.Context(), versioncheck.Options{
 		CurrentVersion: "0.0.1",
 		CacheDir:       cacheDir,
 	})
 	r.NotNil(result2)
 	r.Equal(result1.LatestVersion, result2.LatestVersion, "second call should use cache")
+
+	cache2, err := versioncheck.ReadCache(cacheDir)
+	r.NoError(err)
+	r.Equal(firstCheckedAt, cache2.CheckedAt, "cache timestamp should not change on cache hit")
 }
 
 func writeEmptyConfig(t *testing.T) string {
