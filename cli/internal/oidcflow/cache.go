@@ -20,17 +20,15 @@ type cachedToken struct {
 	IDToken      string `json:"id_token"`
 }
 
-// userCacheDir is the function used to determine the base cache directory.
-// Tests override this to use t.TempDir().
-var userCacheDir = os.UserCacheDir
+var userHomeDir = os.UserHomeDir
 
 func cacheFilePath(issuer, clientID string) (string, error) {
-	cacheDir, err := userCacheDir()
+	home, err := userHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("determine user cache directory: %w", err)
+		return "", fmt.Errorf("determine home directory: %w", err)
 	}
 	h := sha256.Sum256([]byte(issuer + "\x00" + clientID))
-	return filepath.Join(cacheDir, "ocm", "oidc", hex.EncodeToString(h[:])+".json"), nil
+	return filepath.Join(home, ".ocm", "cache", "oidc", hex.EncodeToString(h[:])+".json"), nil
 }
 
 func persistCachedToken(issuer, clientID string, tok *oauth2.Token, idToken string) error {

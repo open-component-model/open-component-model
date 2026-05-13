@@ -15,9 +15,9 @@ import (
 func overrideCacheDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	orig := userCacheDir
-	userCacheDir = func() (string, error) { return dir, nil }
-	t.Cleanup(func() { userCacheDir = orig })
+	orig := userHomeDir
+	userHomeDir = func() (string, error) { return dir, nil }
+	t.Cleanup(func() { userHomeDir = orig })
 	return dir
 }
 
@@ -59,7 +59,7 @@ func TestCache(t *testing.T) {
 		dir := overrideCacheDir(t)
 
 		h := sha256.Sum256([]byte("https://issuer.example.com" + "\x00" + "corrupt-client"))
-		path := filepath.Join(dir, "ocm", "oidc", hex.EncodeToString(h[:])+".json")
+		path := filepath.Join(dir, ".ocm", "cache", "oidc", hex.EncodeToString(h[:])+".json")
 		r.NoError(os.MkdirAll(filepath.Dir(path), 0o700))
 		r.NoError(os.WriteFile(path, []byte("not json{{{"), 0o600))
 
@@ -73,7 +73,7 @@ func TestCache(t *testing.T) {
 		dir := overrideCacheDir(t)
 
 		h := sha256.Sum256([]byte("https://issuer.example.com" + "\x00" + "no-refresh"))
-		path := filepath.Join(dir, "ocm", "oidc", hex.EncodeToString(h[:])+".json")
+		path := filepath.Join(dir, ".ocm", "cache", "oidc", hex.EncodeToString(h[:])+".json")
 		r.NoError(os.MkdirAll(filepath.Dir(path), 0o700))
 
 		ct := cachedToken{AccessToken: "access", TokenType: "Bearer"}
@@ -99,7 +99,7 @@ func TestCache(t *testing.T) {
 		r.NoError(err)
 
 		h := sha256.Sum256([]byte("https://issuer.example.com" + "\x00" + "perm-client"))
-		path := filepath.Join(dir, "ocm", "oidc", hex.EncodeToString(h[:])+".json")
+		path := filepath.Join(dir, ".ocm", "cache", "oidc", hex.EncodeToString(h[:])+".json")
 
 		info, err := os.Stat(path)
 		r.NoError(err)
@@ -120,7 +120,7 @@ func TestCache(t *testing.T) {
 		r.NoError(err)
 
 		h := sha256.Sum256([]byte("https://issuer.example.com" + "\x00" + "remove-client"))
-		path := filepath.Join(dir, "ocm", "oidc", hex.EncodeToString(h[:])+".json")
+		path := filepath.Join(dir, ".ocm", "cache", "oidc", hex.EncodeToString(h[:])+".json")
 
 		_, err = os.Stat(path)
 		r.NoError(err)
@@ -141,6 +141,6 @@ func TestCache(t *testing.T) {
 		h := sha256.Sum256([]byte("https://issuer.example.com" + "\x00" + "my-client"))
 		expected := hex.EncodeToString(h[:]) + ".json"
 		r.Equal(expected, filepath.Base(path))
-		r.Contains(path, filepath.Join("ocm", "oidc"))
+		r.Contains(path, filepath.Join(".ocm", "cache", "oidc"))
 	})
 }
