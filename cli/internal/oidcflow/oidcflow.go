@@ -35,10 +35,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"os/exec"
 	"runtime"
 	"time"
@@ -174,7 +174,7 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 	}
 
 	if err := persistCachedToken(opts.Issuer, opts.ClientID, token, rawIDToken); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not cache OIDC token: %v\n", err)
+		slog.WarnContext(ctx, "could not cache OIDC token for future use", "error", err)
 	}
 
 	return &Token{RawToken: rawIDToken}, nil
