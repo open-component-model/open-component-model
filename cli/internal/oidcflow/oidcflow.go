@@ -14,9 +14,9 @@
 // code interception to same-machine processes which PKCE fully mitigates per
 // RFC 8252 §7.1, (3) the acquired ID token is used immediately for a single
 // signing operation. When offline_access is supported, the refresh token is
-// cached locally so subsequent operations can silently refresh without opening
-// a browser. The cache is stored in the user's OS cache directory with
-// restricted permissions (0o600).
+// cached locally under ~/.ocm/cache/oidc/ so subsequent operations can silently
+// refresh without opening a browser. Cache files use restricted permissions
+// (directory 0o700, files 0o600).
 //
 // The flow does not send prompt=consent or prompt=login; the provider's default
 // session behavior applies, giving users seamless re-authentication for repeated
@@ -38,6 +38,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"runtime"
 	"time"
@@ -88,8 +89,12 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 	}
 
 	if cached, err := loadCachedToken(opts.Issuer, opts.ClientID); err == nil {
-		if tok, err := refreshCachedToken(ctx, opts.Issuer, provider, oauthCfg, cached); err == nil {
+		tok, refreshErr := refreshCachedToken(ctx, opts.Issuer, provider, oauthCfg, cached)
+		if refreshErr == nil {
 			return tok, nil
+		}
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("token refresh aborted: %w", refreshErr)
 		}
 	}
 
@@ -168,7 +173,9 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 		return nil, errors.New("nonce mismatch in id token")
 	}
 
-	persistCachedToken(opts.Issuer, opts.ClientID, token, rawIDToken) //nolint:errcheck // best-effort cache
+	if err := persistCachedToken(opts.Issuer, opts.ClientID, token, rawIDToken); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not cache OIDC token: %v\n", err)
+	}
 
 	return &Token{RawToken: rawIDToken}, nil
 }

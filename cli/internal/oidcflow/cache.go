@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -88,6 +89,7 @@ func refreshCachedToken(ctx context.Context, issuer string, provider *oidc.Provi
 		AccessToken:  ct.AccessToken,
 		RefreshToken: ct.RefreshToken,
 		TokenType:    ct.TokenType,
+		Expiry:       time.Now().Add(-time.Minute), // force refresh
 	}
 
 	src := cfg.TokenSource(ctx, tok)
@@ -98,8 +100,16 @@ func refreshCachedToken(ctx context.Context, issuer string, provider *oidc.Provi
 	}
 
 	// Prefer id_token from refresh response; fall back to cached one.
-	// Dex does not include id_token in refresh responses.
-	rawIDToken, _ := newTok.Extra("id_token").(string)
+	// Some providers (notably Dex/dexidp) omit id_token from refresh responses.
+	var rawIDToken string
+	if v := newTok.Extra("id_token"); v != nil {
+		var ok bool
+		rawIDToken, ok = v.(string)
+		if !ok {
+			removeCacheFile(issuer, cfg.ClientID)
+			return nil, fmt.Errorf("refresh response id_token has unexpected type %T", v)
+		}
+	}
 	if rawIDToken == "" {
 		rawIDToken = ct.IDToken
 	}
