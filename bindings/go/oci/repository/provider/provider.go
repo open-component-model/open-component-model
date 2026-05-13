@@ -9,6 +9,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
+	ownershipv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/ownership/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/credentials"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
@@ -52,6 +53,9 @@ type CachingComponentVersionRepositoryProvider struct {
 	// (such as the extracted directory representation of a tar
 	// or tar.gz ctf archive).
 	tempDir string
+
+	// ownershipConfig is the resolved ownership referrer configuration.
+	ownershipConfig *ownershipv1alpha1.Config
 }
 
 var _ repository.ComponentVersionRepositoryProvider = (*CachingComponentVersionRepositoryProvider)(nil)
@@ -73,11 +77,12 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 	}
 
 	provider := &CachingComponentVersionRepositoryProvider{
-		creator:    options.UserAgent,
-		scheme:     options.Scheme,
-		storeCache: &storeCache{store: make(map[string]*ocictf.Store)},
-		httpClient: retry.DefaultClient,
-		tempDir:    options.TempDir,
+		creator:         options.UserAgent,
+		scheme:          options.Scheme,
+		storeCache:      &storeCache{store: make(map[string]*ocictf.Store)},
+		httpClient:      retry.DefaultClient,
+		tempDir:         options.TempDir,
+		ownershipConfig: options.OwnershipConfig,
 	}
 
 	return provider
@@ -136,6 +141,12 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 
 	switch obj := obj.(type) {
 	case *ocirepospecv1.Repository:
+		ownershipReferrerPolicy, err := ResolveOwnershipReferrerPolicy(b.scheme, b.ownershipConfig, obj)
+		if err != nil {
+			return nil, fmt.Errorf("resolving ownership referrer policy failed: %w", err)
+		}
+		opts = append(opts, oci.WithOwnershipReferrerPolicy(ownershipReferrerPolicy))
+
 		identity, err := v1.OCIRegistryIdentityFromOCIRepository(obj)
 		if err != nil {
 			return nil, err
@@ -179,6 +190,111 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 	default:
 		return nil, fmt.Errorf("unsupported repository specification type %T", obj)
 	}
+}
+
+// ResolveOwnershipReferrerPolicy returns the [oci.OwnershipReferrerPolicy]
+// for the target repository, derived from the ownership configuration.
+// Lookup order:
+//
+//  1. The most specific repository entry whose identity is a subset of the
+//     target's wins — specificity is the number of identity attributes
+//     pinned, so an exact match outranks any partial one (see
+//     matchOwnershipPolicy).
+//  2. Otherwise the top-level cfg.Policy applies, defaulting to
+//     [oci.OwnershipReferrerPolicyNever].
+//
+// Both the top-level policy and any matching entry policy are validated, so a
+// malformed value is reported regardless of which one ends up applying.
+func ResolveOwnershipReferrerPolicy(scheme *runtime.Scheme, cfg *ownershipv1alpha1.Config, target runtime.Typed) (oci.OwnershipReferrerPolicy, error) {
+	if cfg == nil {
+		return oci.OwnershipReferrerPolicyNever, nil
+	}
+
+	// Validate the top-level policy up front so a malformed value is reported
+	// even when a repository entry override ends up taking precedence.
+	if _, err := ociOwnershipReferrerPolicy(cfg.Policy); err != nil {
+		return oci.OwnershipReferrerPolicyNever, err
+	}
+
+	policy := cfg.Policy
+	if len(cfg.Repositories) > 0 {
+		match, err := matchOwnershipPolicy(scheme, target, cfg.Repositories)
+		if err != nil {
+			return oci.OwnershipReferrerPolicyNever, err
+		}
+		if match != nil {
+			policy = match.Policy
+		}
+	}
+
+	return ociOwnershipReferrerPolicy(policy)
+}
+
+// ociOwnershipReferrerPolicy maps an ownership configuration policy onto the
+// oci binding's [oci.OwnershipReferrerPolicy]. An empty policy defaults to
+// Never; an unrecognised value is rejected.
+func ociOwnershipReferrerPolicy(policy ownershipv1alpha1.Policy) (oci.OwnershipReferrerPolicy, error) {
+	switch policy {
+	case "", ownershipv1alpha1.PolicyNever:
+		return oci.OwnershipReferrerPolicyNever, nil
+	case ownershipv1alpha1.PolicyAddIfSupported:
+		return oci.OwnershipReferrerPolicyAddIfSupported, nil
+	default:
+		return oci.OwnershipReferrerPolicyNever, fmt.Errorf("unsupported ownership policy %q", policy)
+	}
+}
+
+// matchOwnershipPolicy returns the repository policy that applies to target,
+// or nil if none apply. The most specific match wins.
+func matchOwnershipPolicy(scheme *runtime.Scheme, target runtime.Typed, repos []*ownershipv1alpha1.RepositoryPolicy) (*ownershipv1alpha1.RepositoryPolicy, error) {
+	targetRepo, err := convertToOCIRepository(scheme, target)
+	if err != nil {
+		return nil, fmt.Errorf("invalid target repository spec: %w", err)
+	}
+	targetRepoIdentity, err := v1.IdentityFromOCIRepositoryWithSubPath(targetRepo)
+	if err != nil {
+		return nil, fmt.Errorf("invalid target repository spec: %w", err)
+	}
+
+	var match *ownershipv1alpha1.RepositoryPolicy
+	bestScore := -1
+	for _, rp := range repos {
+		if rp == nil || rp.Repository == nil {
+			continue
+		}
+		// Skip non-OCI repository policies — they can't match an OCI target.
+		ociRepo, err := convertToOCIRepository(scheme, rp.Repository)
+		if err != nil {
+			continue
+		}
+		identity, err := v1.IdentityFromOCIRepositoryWithSubPath(ociRepo)
+		if err != nil {
+			return nil, fmt.Errorf("invalid ownership repository policy: %w", err)
+		}
+		if !runtime.IdentitySubset(identity, targetRepoIdentity) {
+			continue
+		}
+		// More attributes means more specific; if two are equally specific, the later one wins.
+		if score := len(identity); score >= bestScore {
+			bestScore, match = score, rp
+		}
+	}
+	return match, nil
+}
+
+func convertToOCIRepository(scheme *runtime.Scheme, spec runtime.Typed) (*ocirepospecv1.Repository, error) {
+	if repo, ok := spec.(*ocirepospecv1.Repository); ok {
+		return repo, nil
+	}
+	obj, err := getConvertedTypedSpec(scheme, spec)
+	if err != nil {
+		return nil, err
+	}
+	repo, ok := obj.(*ocirepospecv1.Repository)
+	if !ok {
+		return nil, fmt.Errorf("unsupported repository specification type %T", obj)
+	}
+	return repo, nil
 }
 
 // getConvertedTypedSpec is a helper function that converts any runtime.Typed specification

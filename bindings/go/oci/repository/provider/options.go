@@ -1,6 +1,9 @@
 package provider
 
-import "ocm.software/open-component-model/bindings/go/runtime"
+import (
+	ownershipv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/ownership/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/runtime"
+)
 
 // Options holds configuration options for the OCI repository provider.
 type Options struct {
@@ -14,6 +17,10 @@ type Options struct {
 
 	// Scheme is the runtime scheme used by the repositories.
 	Scheme *runtime.Scheme
+
+	// OwnershipConfig is the resolved ownership referrer configuration. Nil
+	// disables ownership referrers for every repository.
+	OwnershipConfig *ownershipv1alpha1.Config
 }
 
 type Option func(*Options)
@@ -35,5 +42,12 @@ func WithUserAgent(userAgent string) Option {
 func WithScheme(scheme *runtime.Scheme) Option {
 	return func(o *Options) {
 		o.Scheme = scheme
+	}
+}
+
+// WithOwnershipConfig sets the ownership referrer configuration (ADR 0016).
+func WithOwnershipConfig(cfg *ownershipv1alpha1.Config) Option {
+	return func(o *Options) {
+		o.OwnershipConfig = cfg
 	}
 }

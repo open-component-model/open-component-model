@@ -1,15 +1,21 @@
 package provider_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
+
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	ownershipv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/ownership/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	repoSpec "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -23,8 +29,8 @@ func Test_Provider_Smoke(t *testing.T) {
 	prov := provider.NewComponentVersionRepositoryProvider()
 
 	r := require.New(t)
-	repoSpec := &ctfrepospecv1.Repository{FilePath: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
-	_, err = prov.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
+	ctfSpec := &ctfrepospecv1.Repository{FilePath: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
+	_, err = prov.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), ctfSpec)
 	r.Error(err)
 
 	t.Run("access provider concurrently", func(t *testing.T) {
@@ -47,7 +53,7 @@ func Test_Provider_Smoke(t *testing.T) {
 				eg.Go(func() error {
 					d := desc
 					d.Component.Version = fmt.Sprintf("v1.0.%d", i)
-					repo, err := prov.GetComponentVersionRepository(ctx, repoSpec, nil)
+					repo, err := prov.GetComponentVersionRepository(ctx, ctfSpec, nil)
 					if err != nil {
 						return fmt.Errorf("failed to get component version repository: %v", err)
 					}
@@ -85,7 +91,7 @@ func Test_Provider_Smoke(t *testing.T) {
 			d.Component.Version = "v1.0.0"
 			for i := 0; i < 10; i++ {
 				eg.Go(func() error {
-					repo, err := prov.GetComponentVersionRepository(ctx, repoSpec, nil)
+					repo, err := prov.GetComponentVersionRepository(ctx, ctfSpec, nil)
 					if err != nil {
 						return fmt.Errorf("failed to get component version repository: %v", err)
 					}
@@ -153,6 +159,276 @@ func Test_JSON_Schema_For_Repository_Specification(t *testing.T) {
 			}
 			r.NotEmpty(t, schema, "schema should not be empty for type %s", tc.inputType.String())
 			r.Equal(tc.expectedJSONSchema, schema, "schema does not match expected for type %s", tc.inputType.String())
+		})
+	}
+}
+
+func TestResolveOwnershipReferrerPolicy(t *testing.T) {
+	rawSpec := func(t *testing.T, jsonStr string) *runtime.Raw {
+		t.Helper()
+		raw := &runtime.Raw{}
+		require.NoError(t, json.Unmarshal([]byte(jsonStr), raw))
+		return raw
+	}
+
+	makeCfg := func(t *testing.T, policy ownershipv1alpha1.Policy, repos ...*ownershipv1alpha1.RepositoryPolicy) *ownershipv1alpha1.Config {
+		t.Helper()
+		return &ownershipv1alpha1.Config{Policy: policy, Repositories: repos}
+	}
+
+	targetOCIGhcrMyOrg := rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io","subPath":"my-org/components"}`)
+	targetOCIGhcrEmbeddedPath := rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io/my-org/components"}`)
+	targetUnknownType := rawSpec(t, `{"type":"UnregisteredRepository/v1"}`)
+
+	tests := []struct {
+		name    string
+		cfg     *ownershipv1alpha1.Config
+		target  *runtime.Raw
+		want    oci.OwnershipReferrerPolicy
+		wantErr bool
+	}{
+		{
+			name:   "nil config → never",
+			cfg:    nil,
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyNever,
+		},
+		{
+			name:   "empty config → never",
+			cfg:    &ownershipv1alpha1.Config{},
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyNever,
+		},
+		{
+			name:   "top-level AddIfSupported, no overrides",
+			cfg:    makeCfg(t, ownershipv1alpha1.PolicyAddIfSupported),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyAddIfSupported,
+		},
+		{
+			name:   "top-level Never, no overrides",
+			cfg:    makeCfg(t, ownershipv1alpha1.PolicyNever),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyNever,
+		},
+		{
+			name:    "unsupported top-level policy → error",
+			cfg:     makeCfg(t, "Bogus"),
+			target:  targetOCIGhcrMyOrg,
+			wantErr: true,
+		},
+		{
+			name: "type-only override matches any spec of same type",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever, &ownershipv1alpha1.RepositoryPolicy{
+				Repository: rawSpec(t, `{"type":"OCIRepository/v1"}`),
+				Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+			}),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyAddIfSupported,
+		},
+		{
+			name: "specific override beats top-level fallback",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever, &ownershipv1alpha1.RepositoryPolicy{
+				Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io","subPath":"my-org/components"}`),
+				Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+			}),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyAddIfSupported,
+		},
+		{
+			name: "exact match wins over wildcard (exact listed first)",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever,
+				&ownershipv1alpha1.RepositoryPolicy{
+					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io","subPath":"my-org/components"}`),
+					Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+				},
+				&ownershipv1alpha1.RepositoryPolicy{
+					Repository: rawSpec(t, `{"type":"OCIRepository/v1"}`),
+					Policy:     ownershipv1alpha1.PolicyNever,
+				},
+			),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyAddIfSupported,
+		},
+		{
+			name: "exact match wins over wildcard (exact listed last)",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever,
+				&ownershipv1alpha1.RepositoryPolicy{
+					Repository: rawSpec(t, `{"type":"OCIRepository/v1"}`),
+					Policy:     ownershipv1alpha1.PolicyNever,
+				},
+				&ownershipv1alpha1.RepositoryPolicy{
+					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
+					Policy:     ownershipv1alpha1.PolicyNever,
+				},
+				&ownershipv1alpha1.RepositoryPolicy{
+					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io","subPath":"my-org/components"}`),
+					Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+				},
+			),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyAddIfSupported,
+		},
+		{
+			// Regression guard for most-specific-wins: a more specific entry
+			// must win even when a broader entry is declared before it.
+			name: "most specific entry wins when broader entry is declared first",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever,
+				&ownershipv1alpha1.RepositoryPolicy{
+					Repository: rawSpec(t, `{"type":"OCIRepository/v1"}`),
+					Policy:     ownershipv1alpha1.PolicyNever,
+				},
+				&ownershipv1alpha1.RepositoryPolicy{
+					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
+					Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+				},
+			),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyAddIfSupported,
+		},
+		{
+			// ...and when the broader entry is declared after it.
+			name: "most specific entry wins when broader entry is declared last",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever,
+				&ownershipv1alpha1.RepositoryPolicy{
+					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
+					Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+				},
+				&ownershipv1alpha1.RepositoryPolicy{
+					Repository: rawSpec(t, `{"type":"OCIRepository/v1"}`),
+					Policy:     ownershipv1alpha1.PolicyNever,
+				},
+			),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyAddIfSupported,
+		},
+		{
+			// Equally specific entries resolve last-wins, matching Merge's
+			// precedence for the top-level policy.
+			name: "equally specific entries resolve last-wins",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever,
+				&ownershipv1alpha1.RepositoryPolicy{
+					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
+					Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+				},
+				&ownershipv1alpha1.RepositoryPolicy{
+					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
+					Policy:     ownershipv1alpha1.PolicyNever,
+				},
+			),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyNever,
+		},
+		{
+			name: "non-matching override falls through to top-level",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyAddIfSupported, &ownershipv1alpha1.RepositoryPolicy{
+				Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"docker.io"}`),
+				Policy:     ownershipv1alpha1.PolicyNever,
+			}),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyAddIfSupported,
+		},
+		{
+			name: "different type never matches",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever, &ownershipv1alpha1.RepositoryPolicy{
+				Repository: rawSpec(t, `{"type":"S3/v1","baseUrl":"s3.aws"}`),
+				Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+			}),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyNever,
+		},
+		{
+			name: "baseUrl with embedded path matches split baseUrl+subPath form",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever, &ownershipv1alpha1.RepositoryPolicy{
+				Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io","subPath":"my-org/components"}`),
+				Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+			}),
+			target: targetOCIGhcrEmbeddedPath,
+			want:   oci.OwnershipReferrerPolicyAddIfSupported,
+		},
+		{
+			name: "empty top-level policy with matching entry applies entry policy",
+			cfg: makeCfg(t, "", &ownershipv1alpha1.RepositoryPolicy{
+				Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
+				Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+			}),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyAddIfSupported,
+		},
+		{
+			name: "empty top-level policy with no matching entry → never",
+			cfg: makeCfg(t, "", &ownershipv1alpha1.RepositoryPolicy{
+				Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"docker.io"}`),
+				Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+			}),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyNever,
+		},
+		{
+			name: "nil entries in repositories list are skipped",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever,
+				nil,
+				&ownershipv1alpha1.RepositoryPolicy{Repository: nil, Policy: ownershipv1alpha1.PolicyAddIfSupported},
+				&ownershipv1alpha1.RepositoryPolicy{
+					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
+					Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+				},
+			),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyAddIfSupported,
+		},
+		{
+			name: "unsupported entry policy → error after matching",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever, &ownershipv1alpha1.RepositoryPolicy{
+				Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
+				Policy:     "Bogus",
+			}),
+			target:  targetOCIGhcrMyOrg,
+			wantErr: true,
+		},
+		{
+			name:   "unknown target type with no entries skips identity extraction",
+			cfg:    makeCfg(t, ownershipv1alpha1.PolicyAddIfSupported),
+			target: targetUnknownType,
+			want:   oci.OwnershipReferrerPolicyAddIfSupported,
+		},
+		{
+			name: "unknown target type with entries fails identity extraction",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever, &ownershipv1alpha1.RepositoryPolicy{
+				Repository: rawSpec(t, `{"type":"UnregisteredRepository/v1"}`),
+				Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+			}),
+			target:  targetUnknownType,
+			wantErr: true,
+		},
+		{
+			name: "registered type alias on entry still matches canonical target type",
+			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever, &ownershipv1alpha1.RepositoryPolicy{
+				Repository: rawSpec(t, `{"type":"OCI","baseUrl":"ghcr.io"}`),
+				Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+			}),
+			target: targetOCIGhcrMyOrg,
+			want:   oci.OwnershipReferrerPolicyAddIfSupported,
+		},
+		{
+			name: "invalid top-level policy is rejected even when an entry matches",
+			cfg: makeCfg(t, "Bogus", &ownershipv1alpha1.RepositoryPolicy{
+				Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
+				Policy:     ownershipv1alpha1.PolicyAddIfSupported,
+			}),
+			target:  targetOCIGhcrMyOrg,
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := provider.ResolveOwnershipReferrerPolicy(repoSpec.Scheme, tc.cfg, tc.target)
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
 		})
 	}
 }
