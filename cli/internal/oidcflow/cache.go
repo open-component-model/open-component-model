@@ -45,7 +45,7 @@ func persistCachedToken(issuer, clientID string, tok *oauth2.Token, idToken stri
 		IDToken:      idToken,
 	}
 
-	data, err := json.Marshal(ct)
+	data, err := json.Marshal(ct) //nolint:gosec // G117 - intentionally persisting token to 0600 cache file
 	if err != nil {
 		return fmt.Errorf("marshal cached token: %w", err)
 	}
