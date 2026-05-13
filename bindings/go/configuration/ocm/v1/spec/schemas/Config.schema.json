@@ -4,8 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec/schemas/Config.schema.json",
   "title": "Config",
   "type": "object",
-  "deprecated": true,
-  "description": "Config is the OCM configuration type for configuring legacy fallback\nresolvers.\n\ntype: ocm.config.ocm.software\nresolvers:\n- repository:\ntype: CommonTransportFormat/v1\nfilePath: ./ocm/primary-transport-archive\npriority: 100\n- repository:\ntype: CommonTransportFormat/v1\nfilePath: ./ocm/primary-transport-archive\npriority: 10\n\nDeprecated: Resolvers are deprecated and are only added for backwards\ncompatibility.\nNew concepts will likely be introduced in the future (contributions welcome!).",
+  "description": "Config is the OCM configuration type for configuring legacy fallback\nresolvers.\n\ntype: ocm.config.ocm.software\nresolvers:\n- repository:\ntype: CommonTransportFormat/v1\nfilePath: ./ocm/primary-transport-archive\npriority: 100\n- repository:\ntype: CommonTransportFormat/v1\nfilePath: ./ocm/primary-transport-archive\npriority: 10",
   "properties": {
     "aliases": {
       "type": "object",
@@ -29,7 +28,8 @@
     },
     "resolvers": {
       "type": "array",
-      "description": "Resolvers define a list of OCM repository specifications to be used to resolve\ndedicated component versions.\nAll matching entries are tried to lookup a component version in the following\norder:\n- highest priority first\n\nThe default priority is spec.DefaultLookupPriority (10).\n\nRepositories with a specified prefix are only even tried if the prefix\nmatches the component name.\n\nIf resolvers are defined, it is possible to use component version names on the\ncommand line without a repository. The names are resolved with the specified\nresolution rule.\n\nThey are also used as default lookup repositories to lookup component references\nfor recursive operations on component versions («--lookup» option).",
+      "deprecated": true,
+      "description": "Deprecated: Resolvers are deprecated and are only added for backwards\ncompatibility.\nNew concepts will likely be introduced in the future (contributions welcome!).\n\nResolvers define a list of OCM repository specifications to be used to resolve\ndedicated component versions.\nAll matching entries are tried to lookup a component version in the following\norder:\n- highest priority first\n\nThe default priority is spec.DefaultLookupPriority (10).\n\nRepositories with a specified prefix are only even tried if the prefix\nmatches the component name.\n\nIf resolvers are defined, it is possible to use component version names on the\ncommand line without a repository. The names are resolved with the specified\nresolution rule.\n\nThey are also used as default lookup repositories to lookup component references\nfor recursive operations on component versions («--lookup» option).",
       "items": {
         "oneOf": [
           {
