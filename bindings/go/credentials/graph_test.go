@@ -275,6 +275,9 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 					if credentials["roleid"] != "my-role-id" {
 						return nil, fmt.Errorf("failed access")
 					}
+					if identity[runtime.IdentityAttributeHostname] != "myvault.example.com" {
+						return nil, fmt.Errorf("no secret for consumer: %v", identity)
+					}
 					return map[string]string{
 						"role_id":   "myvault.example.com-role",
 						"secret_id": "myvault.example.com-secret",
@@ -311,10 +314,12 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 					switch vaultHost {
 					// this is the vault instance we are connected to, that's why we use a closure
 					case "myvault.example.com":
-						// in here, we'd have to check for the identity
 						roleid, secret := credentials["role_id"], credentials["secret_id"]
 						if roleid != "myvault.example.com-role" || secret != "myvault.example.com-secret" {
 							return nil, fmt.Errorf("failed access")
+						}
+						if identity[runtime.IdentityAttributeHostname] != "other.vault.com" {
+							return nil, fmt.Errorf("no secret for consumer: %v", identity)
 						}
 						return map[string]string{
 							"role_id":   "other.vault.com-role",
@@ -324,6 +329,9 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 						roleid, secret := credentials["role_id"], credentials["secret_id"]
 						if roleid != "other.vault.com-role" || secret != "other.vault.com-secret" {
 							return nil, fmt.Errorf("failed access")
+						}
+						if identity[runtime.IdentityAttributeHostname] != "docker.io" {
+							return nil, fmt.Errorf("no secret for consumer: %v", identity)
 						}
 						return map[string]string{
 							"username": "foo",
