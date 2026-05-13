@@ -4,9 +4,6 @@ go 1.26.3
 
 replace ocm.software/open-component-model/cli => ../
 
-// TODO: remove replace once bindings/go/sigstore is published (#2344).
-replace ocm.software/open-component-model/bindings/go/sigstore => ../../bindings/go/sigstore
-
 require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
@@ -184,7 +181,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260505072254-1c17fcd5c971 // indirect
 	ocm.software/open-component-model/bindings/go/plugin v0.0.15 // indirect
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260505072254-1c17fcd5c971 // indirect
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0 // indirect
+	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260515092758-4a81396fd61d // indirect
 	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260505072254-1c17fcd5c971 // indirect
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260505072254-1c17fcd5c971 // indirect
 	sigs.k8s.io/controller-runtime v0.23.3 // indirect

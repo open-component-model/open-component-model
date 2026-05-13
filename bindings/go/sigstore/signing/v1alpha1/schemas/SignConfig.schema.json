@@ -8,19 +8,11 @@
   "properties": {
     "clientID": {
       "type": "string",
-<<<<<<< HEAD
       "description": "ClientID is the OAuth2 client ID of an enterprise Sigstore deployment.\nLike Issuer, it is not used by this handler directly; it is emitted into\nthe credential consumer identity so .ocmconfig entries can route to an\nenterprise OIDC credential plugin. Leave empty for the default Sigstore client."
     },
     "issuer": {
       "type": "string",
       "description": "Issuer is the OIDC issuer URL of an enterprise Sigstore deployment.\nThis handler does not use it directly to acquire tokens; it is emitted\ninto the credential consumer identity so that .ocmconfig entries can\nroute to an enterprise OIDC credential plugin instead of the public-good\ndefault. The plugin that produces the token reads it from the same\nconsumer identity. Leave empty when targeting public Sigstore."
-=======
-      "description": "ClientID is the OAuth2 client ID used for OIDC token acquisition.\nWhen set, it is emitted into the credential consumer identity alongside Issuer.\nIf empty, the OIDC plugin defaults to \"sigstore\"."
-    },
-    "issuer": {
-      "type": "string",
-      "description": "Issuer is the OIDC issuer URL used for token acquisition.\nWhen set, it is emitted into the credential consumer identity so that\n.ocmconfig entries for enterprise Sigstore stacks can be distinguished\nfrom the public-good default.\nIf empty, the OIDC plugin defaults to https://oauth2.sigstore.dev/auth."
->>>>>>> aaa2194ea (feat(sigstore): add issuer/clientID to SignConfig for enterprise OIDC)
     },
     "signingConfig": {
       "type": "string",

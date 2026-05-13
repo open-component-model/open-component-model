@@ -423,8 +423,8 @@ ocm.software/open-component-model/bindings/go/runtime v0.0.8 h1:NIN8smq0Fs64N10U
 ocm.software/open-component-model/bindings/go/runtime v0.0.8/go.mod h1:sRm+ybi9yjJGAgMSUHr0xdaSobsmeU8DWGP4Xonaso8=
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20260505072254-1c17fcd5c971 h1:nMeK6RHE1qAEO7ZtSX1CU5/BpSzLTJm7wbYnxLIrGUE=
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20260505072254-1c17fcd5c971/go.mod h1:ah2z8Y3/GdjP5sfMHij5V8YLgj4YC2FrcVa55FYHdJE=
-ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260512065613-cf62896253b9 h1:Fd24MJe0Dyq/A2vvrVKiZcdeinnww40uIkVRBiN0rv8=
-ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260512065613-cf62896253b9/go.mod h1:XKpqkb2yZzXMkNiY64v15OVAw8YEL22BwlqHy9mOLR0=
+ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260515092758-4a81396fd61d h1:YAk7ysJXSzIO7/nsdeDFcLll+R2PxkYfqAvHklMXH9U=
+ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260515092758-4a81396fd61d/go.mod h1:XKpqkb2yZzXMkNiY64v15OVAw8YEL22BwlqHy9mOLR0=
 ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260505072254-1c17fcd5c971 h1:KdE/ZOjvNaMtAj36SAPcL0dSAnWw1zh3Ew5ifgv+Jnc=
 ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260505072254-1c17fcd5c971/go.mod h1:z4219PTvws8/Lmyu61rN+52KkhoXW0dhOi5LhRQESEA=
 ocm.software/open-component-model/bindings/go/transform v0.0.0-20260505072254-1c17fcd5c971 h1:BrdByk5MoKWFF1xJ6h4SBHSzh4BcmmidOxNTzc4zXcU=

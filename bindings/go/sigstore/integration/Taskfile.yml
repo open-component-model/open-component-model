@@ -114,17 +114,12 @@ tasks:
         platforms: [linux]
 
   scaffolding:refresh:
-<<<<<<< HEAD
     desc: "Re-fetch short-lived OIDC token only (run 'task scaffolding:env' for full re-extraction)"
     deps: [scaffolding:bridge]
-=======
-    desc: "Re-fetch short-lived OIDC token (use when token has expired between manual test runs)"
->>>>>>> aaa2194ea (feat(sigstore): add issuer/clientID to SignConfig for enterprise OIDC)
     preconditions:
       - sh: test -f {{.SIGSTORE_ENV_FILE}}
         msg: "No env file found. Run 'task scaffolding:env' first."
     cmds:
-<<<<<<< HEAD
       - cmd: |
           URL=$(kubectl -n default get ksvc gettoken -ojsonpath='{.status.url}')
           [[ -n "$URL" ]] || { echo "gettoken service not found" >&2; exit 1; }
@@ -142,16 +137,6 @@ tasks:
           sed -i "s|^export SIGSTORE_OIDC_TOKEN=.*|export SIGSTORE_OIDC_TOKEN='${TOKEN}'|" {{.SIGSTORE_ENV_FILE}}
           echo "Token refreshed. Re-source: source {{.SIGSTORE_ENV_FILE}}"
         platforms: [linux]
-=======
-      - |
-        URL=$(kubectl -n default get ksvc gettoken -ojsonpath='{.status.url}')
-        [[ -n "$URL" ]] || { echo "gettoken service not found" >&2; exit 1; }
-        [[ "$(uname)" == "Darwin" ]] && URL="${URL%/}:8080"
-        TOKEN=$(curl -sSf "$URL")
-        [[ -n "$TOKEN" ]] || { echo "empty token from gettoken" >&2; exit 1; }
-        sed -i "s|^export SIGSTORE_OIDC_TOKEN=.*|export SIGSTORE_OIDC_TOKEN='${TOKEN}'|" {{.SIGSTORE_ENV_FILE}}
-        echo "Token refreshed. Re-source: source {{.SIGSTORE_ENV_FILE}}"
->>>>>>> aaa2194ea (feat(sigstore): add issuer/clientID to SignConfig for enterprise OIDC)
 
   cosign:install:
     desc: "Install cosign at the version pinned in signing/handler/internal/.env"
