@@ -1,20 +1,20 @@
+# CodeQL SAST Analysis
+#
+# Runs on a daily schedule and manual dispatch instead of per-PR/push.
+# This is sufficient because:
+# 1. golangci-lint (with gosec) already runs per-PR and catches pattern-based
+#    security issues with fast feedback on ARM runners.
+# 2. CodeQL's deeper data-flow/taint analysis is expensive (x86-only, ~20min+)
+#    and rarely surfaces issues that golangci-lint misses in day-to-day changes.
+# 3. Running daily on the default branch ensures new findings surface within 24h
+#    of merge — acceptable latency for the deeper analysis tier.
+# 4. workflow_dispatch allows on-demand runs for security-sensitive changes.
 name: "CodeQL"
 
 on:
-  pull_request:
-    paths:
-      - '**/*.go'
-      - '**/go.mod'
-      - '**/go.sum'
-      - '.github/workflows/codeql.yml'
-  push:
-    branches:
-      - main
-    paths:
-      - '**/*.go'
-      - '**/go.mod'
-      - '**/go.sum'
-      - '.github/workflows/codeql.yml'
+  schedule:
+    - cron: '27 3 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,9 +27,6 @@ jobs:
     timeout-minutes: 120
     permissions:
       actions: read
-      # Automatically downgraded to read-only for pull requests from forks
-      # https://github.blog/changelog/2021-04-20-github-actions-control-permissions-for-github_token/#setting-permissions-in-the-workflow
-      # but are kept for runs on main or on pull requests on branches in the repo (renovate).
       security-events: write
     steps:
       - name: Checkout repository
