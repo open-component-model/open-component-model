@@ -33,7 +33,7 @@ func cacheFilePath(issuer, clientID string) (string, error) {
 	return filepath.Join(cacheDir, "ocm", "oidc", hex.EncodeToString(h[:])+".json"), nil
 }
 
-func persistToken(issuer, clientID string, tok *oauth2.Token) error {
+func persistCachedToken(issuer, clientID string, tok *oauth2.Token, idToken string) error {
 	path, err := cacheFilePath(issuer, clientID)
 	if err != nil {
 		return err
@@ -43,9 +43,7 @@ func persistToken(issuer, clientID string, tok *oauth2.Token) error {
 		AccessToken:  tok.AccessToken,
 		RefreshToken: tok.RefreshToken,
 		TokenType:    tok.TokenType,
-	}
-	if raw := tok.Extra("id_token"); raw != nil {
-		ct.IDToken, _ = raw.(string)
+		IDToken:      idToken,
 	}
 
 	data, err := json.Marshal(ct)
@@ -101,19 +99,24 @@ func refreshCachedToken(ctx context.Context, issuer string, provider *oidc.Provi
 		return nil, fmt.Errorf("refresh token: %w", err)
 	}
 
-	rawIDToken, ok := newTok.Extra("id_token").(string)
-	if !ok || rawIDToken == "" {
+	// Prefer id_token from refresh response; fall back to cached one.
+	// Dex does not include id_token in refresh responses.
+	rawIDToken, _ := newTok.Extra("id_token").(string)
+	if rawIDToken == "" {
+		rawIDToken = ct.IDToken
+	}
+	if rawIDToken == "" {
 		removeCacheFile(issuer, cfg.ClientID)
-		return nil, fmt.Errorf("refreshed token missing id_token")
+		return nil, fmt.Errorf("no id_token available (not in refresh response or cache)")
 	}
 
 	verifier := provider.Verifier(&oidc.Config{ClientID: cfg.ClientID})
 	if _, err := verifier.Verify(ctx, rawIDToken); err != nil {
 		removeCacheFile(issuer, cfg.ClientID)
-		return nil, fmt.Errorf("verify refreshed id_token: %w", err)
+		return nil, fmt.Errorf("verify id_token: %w", err)
 	}
 
-	if err := persistToken(issuer, cfg.ClientID, newTok); err != nil {
+	if err := persistCachedToken(issuer, cfg.ClientID, newTok, rawIDToken); err != nil {
 		removeCacheFile(issuer, cfg.ClientID)
 		return nil, fmt.Errorf("persist refreshed token: %w", err)
 	}

@@ -34,7 +34,7 @@ func TestCache(t *testing.T) {
 			TokenType:    "Bearer",
 		}
 
-		err := persistToken("https://issuer.example.com", "my-client", tok)
+		err := persistCachedToken("https://issuer.example.com", "my-client", tok, "id-token-value")
 		r.NoError(err)
 
 		ct, err := loadCachedToken("https://issuer.example.com", "my-client")
@@ -42,6 +42,7 @@ func TestCache(t *testing.T) {
 		r.Equal("access", ct.AccessToken)
 		r.Equal("refresh", ct.RefreshToken)
 		r.Equal("Bearer", ct.TokenType)
+		r.Equal("id-token-value", ct.IDToken)
 	})
 
 	t.Run("LoadMissingFile", func(t *testing.T) {
@@ -94,7 +95,7 @@ func TestCache(t *testing.T) {
 			TokenType:    "Bearer",
 		}
 
-		err := persistToken("https://issuer.example.com", "perm-client", tok)
+		err := persistCachedToken("https://issuer.example.com", "perm-client", tok, "")
 		r.NoError(err)
 
 		h := sha256.Sum256([]byte("https://issuer.example.com" + "\x00" + "perm-client"))
@@ -115,7 +116,7 @@ func TestCache(t *testing.T) {
 			TokenType:    "Bearer",
 		}
 
-		err := persistToken("https://issuer.example.com", "remove-client", tok)
+		err := persistCachedToken("https://issuer.example.com", "remove-client", tok, "")
 		r.NoError(err)
 
 		h := sha256.Sum256([]byte("https://issuer.example.com" + "\x00" + "remove-client"))

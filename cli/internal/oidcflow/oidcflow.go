@@ -168,7 +168,7 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 		return nil, errors.New("nonce mismatch in id token")
 	}
 
-	persistToken(opts.Issuer, opts.ClientID, token) // best-effort
+	persistCachedToken(opts.Issuer, opts.ClientID, token, rawIDToken) //nolint:errcheck // best-effort cache
 
 	return &Token{RawToken: rawIDToken}, nil
 }
