@@ -2,6 +2,7 @@ package credentialrepository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -39,17 +40,46 @@ func (c *credentialRepositoryPluginConverter) ConsumerIdentityForConfig(ctx cont
 	return identity, nil
 }
 
-// Resolve converts the internal interface call to the external contract format.
-// It wraps the config and identity in a ResolveRequest and calls the external plugin.
-func (c *credentialRepositoryPluginConverter) Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+// ResolveTyped converts the internal typed interface call to the external contract format.
+func (c *credentialRepositoryPluginConverter) ResolveTyped(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 	request := v1.ResolveRequest[runtime.Typed]{
 		Config:   cfg,
 		Identity: identity,
 	}
-
-	resolvedCredentials, err := c.externalPlugin.Resolve(ctx, request, credentials)
+	result, err := c.externalPlugin.ResolveTyped(ctx, request, credentials)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
+		return nil, fmt.Errorf("failed to resolve typed credentials: %w", err)
 	}
-	return resolvedCredentials, nil
+	return result, nil
+}
+
+// Resolve is a deprecated shim that calls ResolveTyped with map↔typed conversions.
+func (c *credentialRepositoryPluginConverter) Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+	var typedCreds runtime.Typed
+	if len(credentials) > 0 {
+		typedCreds = &runtime.Raw{}
+		data, err := json.Marshal(credentials)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal credentials: %w", err)
+		}
+		if err := json.Unmarshal(data, typedCreds); err != nil {
+			return nil, fmt.Errorf("failed to wrap credentials as Raw: %w", err)
+		}
+	}
+	result, err := c.ResolveTyped(ctx, cfg, identity, typedCreds)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal typed result: %w", err)
+	}
+	var m map[string]string
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("failed to convert typed result to map: %w", err)
+	}
+	return m, nil
 }

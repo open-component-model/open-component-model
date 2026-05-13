@@ -32,6 +32,10 @@ func RegisterCredentialRepository[T runtime.Typed](
 			Location: ConsumerIdentityForConfig,
 		},
 		endpoints.Handler{
+			Handler:  ResolveTypedHandlerFunc(handler.ResolveTyped, c.Scheme, proto),
+			Location: ResolveTyped,
+		},
+		endpoints.Handler{
 			Handler:  ResolveHandlerFunc(handler.Resolve, c.Scheme, proto),
 			Location: Resolve,
 		},

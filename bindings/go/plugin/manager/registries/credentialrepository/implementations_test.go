@@ -267,12 +267,18 @@ func TestPing(t *testing.T) {
 func TestToCredentials(t *testing.T) {
 	tests := []struct {
 		name        string
-		credentials map[string]string
+		credentials runtime.Typed
 		expectErr   bool
 	}{
-		{name: "valid", credentials: map[string]string{"key": "value"}, expectErr: false},
-		{name: "empty", credentials: map[string]string{}, expectErr: false},
-		{name: "multiple_keys", credentials: map[string]string{"key1": "value1", "key2": "value2"}, expectErr: false},
+		{name: "nil", credentials: nil, expectErr: false},
+		{
+			name: "DirectCredentials",
+			credentials: &runtime.Raw{
+				Type: runtime.NewVersionedType("Credentials", "v1"),
+				Data: []byte(`{"type":"Credentials/v1","username":"user","password":"pass"}`),
+			},
+			expectErr: false,
+		},
 	}
 
 	for _, tt := range tests {
