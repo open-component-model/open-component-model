@@ -96,7 +96,7 @@ type Repository struct {
 	globalAccessPolicy GlobalAccessPolicy
 
 	// ownershipReferrerPolicy controls asset-to-owner referrer creation on
-	// by-value resource uploads (ADR 0016). Default (zero value) is Disabled.
+	// by-value resource uploads (ADR 0016). Default (zero value) is Never.
 	ownershipReferrerPolicy OwnershipReferrerPolicy
 }
 
@@ -215,7 +215,7 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 }
 
 // AddLocalResource adds a local resource to the repository. When the
-// repository has [OwnershipReferrerPolicyEnabled] and the resource is an
+// repository has [OwnershipReferrerPolicyAddIfSupported] and the resource is an
 // OCI-compliant manifest, an ownership referrer is pushed alongside it
 // (ADR 0016).
 func (repo *Repository) AddLocalResource(
@@ -254,7 +254,7 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 
 	source = source.DeepCopy()
 
-	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, source, content, OwnershipReferrerPolicyDisabled); err != nil {
+	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, source, content, OwnershipReferrerPolicyNever); err != nil {
 		return nil, err
 	}
 
@@ -465,7 +465,7 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 		BaseReference:      reference,
 		GlobalAccessPolicy: repo.globalAccessPolicy,
 	}
-	if ownershipReferrerPolicy == OwnershipReferrerPolicyEnabled {
+	if ownershipReferrerPolicy == OwnershipReferrerPolicyAddIfSupported {
 		packOptions.Referrers = []tar.ReferrersFunc{pack.OwnershipReferrer(artifact, component, version)}
 	}
 	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, packOptions)

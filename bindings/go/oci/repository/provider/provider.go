@@ -9,6 +9,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
+	ownershipv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/ownership/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/credentials"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
@@ -52,6 +53,9 @@ type CachingComponentVersionRepositoryProvider struct {
 	// (such as the extracted directory representation of a tar
 	// or tar.gz ctf archive).
 	tempDir string
+
+	// ownershipConfig is the resolved ownership referrer configuration.
+	ownershipConfig *ownershipv1alpha1.Config
 }
 
 var _ repository.ComponentVersionRepositoryProvider = (*CachingComponentVersionRepositoryProvider)(nil)
@@ -73,11 +77,12 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 	}
 
 	provider := &CachingComponentVersionRepositoryProvider{
-		creator:    options.UserAgent,
-		scheme:     options.Scheme,
-		storeCache: &storeCache{store: make(map[string]*ocictf.Store)},
-		httpClient: retry.DefaultClient,
-		tempDir:    options.TempDir,
+		creator:         options.UserAgent,
+		scheme:          options.Scheme,
+		storeCache:      &storeCache{store: make(map[string]*ocictf.Store)},
+		httpClient:      retry.DefaultClient,
+		tempDir:         options.TempDir,
+		ownershipConfig: options.OwnershipConfig,
 	}
 
 	return provider
@@ -129,9 +134,20 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		return nil, err
 	}
 
+	// Ownership referrers are an OCI-only concept; CTF archives skip the lookup
+	// and use the zero-value (Never) policy.
+	var ownershipReferrerPolicy oci.OwnershipReferrerPolicy
+	if _, ok := obj.(*ocirepospecv1.Repository); ok {
+		ownershipReferrerPolicy, err = resolveOwnershipReferrerPolicy(b.scheme, b.ownershipConfig, obj)
+		if err != nil {
+			return nil, fmt.Errorf("resolving ownership referrer policy failed: %w", err)
+		}
+	}
+
 	opts := []oci.RepositoryOption{
 		oci.WithTempDir(b.tempDir),
 		oci.WithCreator(b.creator),
+		oci.WithOwnershipReferrerPolicy(ownershipReferrerPolicy),
 	}
 
 	switch obj := obj.(type) {
@@ -176,6 +192,139 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 	default:
 		return nil, fmt.Errorf("unsupported repository specification type %T", obj)
 	}
+}
+
+// resolveOwnershipReferrerPolicy returns the [oci.OwnershipReferrerPolicy]
+// for the target repository, derived from the ownership configuration.
+// Lookup order:
+//
+//  1. An entry whose identity equals the target's exactly wins.
+//  2. Otherwise the first entry whose identity is a subset of the target's
+//     wins (see [runtime.IdentitySubset]).
+//  3. Otherwise the top-level cfg.Policy applies, defaulting to
+//     [oci.OwnershipReferrerPolicyNever].
+//
+// Both the top-level policy and any matching entry policy are validated, so a
+// malformed value is reported regardless of which one ends up applying.
+func resolveOwnershipReferrerPolicy(scheme *runtime.Scheme, cfg *ownershipv1alpha1.Config, target runtime.Typed) (oci.OwnershipReferrerPolicy, error) {
+	if cfg == nil {
+		return oci.OwnershipReferrerPolicyNever, nil
+	}
+
+	// Validate the top-level policy up front so a malformed value is reported
+	// even when a repository entry override ends up taking precedence.
+	if _, err := ociOwnershipReferrerPolicy(cfg.Policy); err != nil {
+		return oci.OwnershipReferrerPolicyNever, err
+	}
+
+	policy := cfg.Policy
+	if len(cfg.Repositories) > 0 {
+		match, err := matchOwnershipPolicy(scheme, target, cfg.Repositories)
+		if err != nil {
+			return oci.OwnershipReferrerPolicyNever, err
+		}
+		if match != nil {
+			policy = match.Policy
+		}
+	}
+
+	return ociOwnershipReferrerPolicy(policy)
+}
+
+// ociOwnershipReferrerPolicy maps an ownership configuration policy onto the
+// oci binding's [oci.OwnershipReferrerPolicy]. An empty policy defaults to
+// Never; an unrecognised value is rejected.
+func ociOwnershipReferrerPolicy(policy ownershipv1alpha1.Policy) (oci.OwnershipReferrerPolicy, error) {
+	switch policy {
+	case "", ownershipv1alpha1.PolicyNever:
+		return oci.OwnershipReferrerPolicyNever, nil
+	case ownershipv1alpha1.PolicyAddIfSupported:
+		return oci.OwnershipReferrerPolicyAddIfSupported, nil
+	default:
+		return oci.OwnershipReferrerPolicyNever, fmt.Errorf("unsupported ownership policy %q", policy)
+	}
+}
+
+// matchOwnershipPolicy returns the entry that applies to target, or nil if
+// none match. An exact identity match wins. Otherwise the first entry whose
+// identity is a subset of the target's wins. Entries that are not OCI
+// repositories (foreign or unregistered types) are skipped.
+func matchOwnershipPolicy(scheme *runtime.Scheme, target runtime.Typed, repos []*ownershipv1alpha1.RepositoryPolicy) (*ownershipv1alpha1.RepositoryPolicy, error) {
+	targetRepo, err := convertToOCIRepository(scheme, target)
+	if err != nil {
+		return nil, fmt.Errorf("invalid target repository spec: %w", err)
+	}
+	targetRepoIdentity, err := ociRepositoryIdentity(targetRepo)
+	if err != nil {
+		return nil, fmt.Errorf("invalid target repository spec: %w", err)
+	}
+
+	var match *ownershipv1alpha1.RepositoryPolicy
+	for _, rp := range repos {
+		if rp == nil || rp.Repository == nil {
+			continue
+		}
+		// Resolve the entry through the scheme so registered aliases and short
+		// forms map to the canonical type. Entries that are not OCI
+		// repositories (foreign or unregistered types) cannot match an OCI
+		// target and are skipped.
+		entryRepo, err := convertToOCIRepository(scheme, rp.Repository)
+		if err != nil {
+			continue
+		}
+		identity, err := ociRepositoryIdentity(entryRepo)
+		if err != nil {
+			return nil, fmt.Errorf("invalid ownership repository policy entry: %w", err)
+		}
+		if identity.Equal(targetRepoIdentity) {
+			return rp, nil
+		}
+		// Subset match: entry has fewer fields than target (e.g. baseUrl
+		// alone matches a baseUrl+subPath target). Take the first one;
+		// keep scanning so a later exact match can still win.
+		if match == nil && identity.Match(targetRepoIdentity, runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
+			match = rp
+		}
+	}
+	return match, nil
+}
+
+// convertToOCIRepository resolves a typed repository specification to a
+// concrete [*ocirepospecv1.Repository] through the scheme, so registered
+// aliases and short forms map to the canonical type. An already-converted
+// spec is returned as-is. It returns an error when the type is unknown or is
+// not an OCI repository.
+func convertToOCIRepository(scheme *runtime.Scheme, spec runtime.Typed) (*ocirepospecv1.Repository, error) {
+	if repo, ok := spec.(*ocirepospecv1.Repository); ok {
+		return repo, nil
+	}
+	obj, err := getConvertedTypedSpec(scheme, spec)
+	if err != nil {
+		return nil, err
+	}
+	repo, ok := obj.(*ocirepospecv1.Repository)
+	if !ok {
+		return nil, fmt.Errorf("unsupported repository specification type %T", obj)
+	}
+	return repo, nil
+}
+
+// ociRepositoryIdentity returns the identity used to match a policy entry
+// against an upload target. The full path — an embedded baseUrl path joined
+// with any explicit subPath — is part of the identity.
+func ociRepositoryIdentity(repo *ocirepospecv1.Repository) (runtime.Identity, error) {
+	id, err := v1.IdentityFromOCIRepository(repo)
+	if err != nil {
+		return nil, fmt.Errorf("deriving identity from OCI repository spec failed: %w", err)
+	}
+	if repo.SubPath != "" {
+		if existing := id[runtime.IdentityAttributePath]; existing != "" {
+			id[runtime.IdentityAttributePath] = existing + "/" + repo.SubPath
+		} else {
+			id[runtime.IdentityAttributePath] = repo.SubPath
+		}
+	}
+	return id, nil
 }
 
 // getConvertedTypedSpec is a helper function that converts any runtime.Typed specification
