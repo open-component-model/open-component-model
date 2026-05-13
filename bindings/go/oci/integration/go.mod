@@ -26,6 +26,8 @@ require (
 // It is irrelevant for us that integration tests cannot be consumed by other modules.
 replace ocm.software/open-component-model/bindings/go/oci => ../
 
+replace ocm.software/open-component-model/bindings/go/configuration => github.com/piotrjanik/open-component-model/bindings/go/configuration v0.0.0-20260513084559-66367a5dd9c9
+
 require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect

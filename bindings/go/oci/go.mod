@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/nlepage/go-tarfs v1.2.1
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
@@ -23,7 +24,6 @@ require (
 )
 
 require (
-	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -35,3 +35,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 )
+
+replace ocm.software/open-component-model/bindings/go/configuration => github.com/piotrjanik/open-component-model/bindings/go/configuration v0.0.0-20260513084559-66367a5dd9c9
