@@ -26,10 +26,8 @@ func init() {
 }
 
 // Config configures the default policy for version checking.
-// The policy field sets the baseline behavior which can be overridden by the
-// --version-check CLI flag. This allows administrators to disable version checks
-// for an entire environment via config, while individual users can still re-enable
-// them via --version-check=auto on the command line.
+// The policy field controls whether the CLI performs automatic update checks.
+// Set to "disable" to suppress all version check activity for an environment.
 //
 // Example config:
 //
@@ -46,7 +44,6 @@ type Config struct {
 	// +ocm:jsonschema-gen:enum=versioncheck.cli.config.ocm.software/v1alpha1
 	Type runtime.Type `json:"type"`
 	// Policy controls version check behavior. Valid values are "auto" (default) and "disable".
-	// This sets the default that can be overridden by the --version-check CLI flag.
 	// +ocm:jsonschema-gen:enum=auto,disable
 	Policy string `json:"policy"`
 }

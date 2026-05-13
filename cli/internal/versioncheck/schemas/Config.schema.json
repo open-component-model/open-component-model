@@ -4,11 +4,11 @@
   "$id": "ocm.software/open-component-model/cli/internal/versioncheck/schemas/Config.schema.json",
   "title": "Config",
   "type": "object",
-  "description": "Config configures the default policy for version checking.\nThe policy field sets the baseline behavior which can be overridden by the\n--version-check CLI flag. This allows administrators to disable version checks\nfor an entire environment via config, while individual users can still re-enable\nthem via --version-check=auto on the command line.\n\nExample config:\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: versioncheck.cli.config.ocm.software/v1alpha1\npolicy: disable",
+  "description": "Config configures the default policy for version checking.\nThe policy field controls whether the CLI performs automatic update checks.\nSet to \"disable\" to suppress all version check activity for an environment.\n\nExample config:\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: versioncheck.cli.config.ocm.software/v1alpha1\npolicy: disable",
   "properties": {
     "policy": {
       "type": "string",
-      "description": "Policy controls version check behavior. Valid values are \"auto\" (default) and \"disable\".\nThis sets the default that can be overridden by the --version-check CLI flag.",
+      "description": "Policy controls version check behavior. Valid values are \"auto\" (default) and \"disable\".",
       "oneOf": [
         {
           "const": "auto"
