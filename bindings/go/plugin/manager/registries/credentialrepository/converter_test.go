@@ -2,6 +2,7 @@ package credentialrepository
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -30,6 +31,26 @@ func (m *mockExternalPlugin) ConsumerIdentityForConfig(ctx context.Context, cfg 
 	return runtime.Identity{"test": "identity"}, nil
 }
 
+func (m *mockExternalPlugin) ResolveTyped(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
+	var credMap map[string]string
+	if credentials != nil {
+		data, _ := json.Marshal(credentials)
+		_ = json.Unmarshal(data, &credMap)
+	}
+	result, err := m.Resolve(ctx, cfg, credMap)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+	data, _ := json.Marshal(result)
+	raw := &runtime.Raw{}
+	_ = json.Unmarshal(data, raw)
+	return raw, nil
+}
+
+// Resolve is a deprecated shim.
 func (m *mockExternalPlugin) Resolve(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials map[string]string) (map[string]string, error) {
 	if m.resolveFunc != nil {
 		return m.resolveFunc(ctx, cfg, credentials)

@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -165,16 +166,18 @@ func (m *mockCredentialProvider) Resolve(ctx context.Context, identity runtime.I
 	return m.credentials[identity.GetType().String()], nil
 }
 
-func (m *mockCredentialProvider) ResolveTyped(ctx context.Context, identity runtime.Typed) (runtime.Typed, error) {
-	id, ok := identity.(runtime.Identity)
-	if !ok {
-		return nil, fmt.Errorf("unsupported identity type")
-	}
-	creds, err := m.Resolve(ctx, id)
+func (m *mockCredentialProvider) ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
+	creds, err := m.Resolve(ctx, identity)
 	if err != nil {
 		return nil, err
 	}
-	return runtime.Identity(creds), nil
+	if creds == nil {
+		return nil, nil
+	}
+	return &credconfigv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
+		Properties: creds,
+	}, nil
 }
 
 // setupTestComponent creates a basic component constructor for testing

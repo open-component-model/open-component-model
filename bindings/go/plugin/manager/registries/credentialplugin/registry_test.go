@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -158,4 +159,15 @@ func (m *mockCredentialPlugin) GetConsumerIdentity(_ context.Context, _ runtime.
 func (m *mockCredentialPlugin) Resolve(_ context.Context, _ runtime.Identity, _ map[string]string) (map[string]string, error) {
 	m.resolveCalled = true
 	return map[string]string{"token": "resolved"}, nil
+}
+
+func (m *mockCredentialPlugin) ResolveTyped(ctx context.Context, identity runtime.Identity, _ runtime.Typed) (runtime.Typed, error) {
+	resolved, err := m.Resolve(ctx, identity, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &credconfigv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
+		Properties: resolved,
+	}, nil
 }

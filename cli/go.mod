@@ -19,7 +19,7 @@ require (
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/configuration v0.0.13
 	ocm.software/open-component-model/bindings/go/constructor v0.0.7
-	ocm.software/open-component-model/bindings/go/credentials v0.0.10
+	ocm.software/open-component-model/bindings/go/credentials v0.0.11
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260505072254-1c17fcd5c971
