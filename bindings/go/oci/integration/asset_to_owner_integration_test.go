@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -17,23 +19,23 @@ import (
 	orasregistry "oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	ownershipv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/ownership/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Test_Integration_AssetToOwner verifies the asset-to-owner scenario
-// end-to-end (ADR 0016): a by-value OCI resource uploaded through the OCM
-// OCI binding must be discoverable as an ownership referrer via the OCI
-// Distribution Referrers API.
-//
-// Verification goes through the ORAS Go SDK (`registry.Referrers`,
-// `store.Fetch`) against a live containerised registry — the same API path
-// that every OCI v1.1 client uses under the covers.
+// Test_Integration_AssetToOwner uploads a by-value OCI resource through OCM
+// to a live containerised registry and checks that the OCI Referrers API
+// returns the expected ownership referrer (ADR 0016).
 func Test_Integration_AssetToOwner(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -59,19 +61,30 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 	registryAddress, err := registryContainer.HostAddress(ctx)
 	r.NoError(err)
 
+	const subPath = "ocm/components"
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddress),
+		urlresolver.WithSubPath(subPath),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(createAuthClient(registryAddress, testUsername, password)),
 	)
 	r.NoError(err)
 
-	repo, err := oci.NewRepository(
-		oci.WithResolver(resolver),
-		oci.WithTempDir(t.TempDir()),
-		oci.WithOwnershipReferrerPolicy(oci.OwnershipReferrerPolicyEnabled),
-	)
-	r.NoError(err)
+	repoSpec := &ocirepospecv1.Repository{
+		BaseUrl: "http://" + registryAddress,
+		SubPath: subPath,
+	}
+	creds := &ocicredsv1.OCICredentials{
+		Type:     ocicredsv1.OCICredentialsVersionedType,
+		Username: testUsername,
+		Password: password,
+	}
+	repo := newRepoFromConfig(t, ctx, repoSpec, creds, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: ownership.config.ocm.software/v1alpha1
+    policy: AddIfSupported
+`)
 
 	const (
 		componentName    = "ocm.software/asset-to-owner-test"
@@ -87,21 +100,16 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 		r.Len(referrers, 1, "exactly one ownership referrer should be discoverable via the Referrers API")
 		ref := referrers[0]
 
-		t.Run("software.ocm.component.name and .version", func(t *testing.T) {
-			assert.Equal(t, componentName, ref.Annotations[annotations.OwnershipComponentName])
-			assert.Equal(t, componentVersion, ref.Annotations[annotations.OwnershipComponentVersion])
-		})
+		// Referrer identifies the owning component by name and version.
+		assert.Equal(t, componentName, ref.Annotations[annotations.OwnershipComponentName])
+		assert.Equal(t, componentVersion, ref.Annotations[annotations.OwnershipComponentVersion])
 
-		t.Run("software.ocm.artifact (identity and kind)", func(t *testing.T) {
-			var payload struct {
-				Identity map[string]string `json:"identity"`
-				Kind     string            `json:"kind"`
-			}
-			require.NoError(t, json.Unmarshal([]byte(ref.Annotations[annotations.ArtifactAnnotationKey]), &payload))
-			assert.Equal(t, "resource", payload.Kind)
-			assert.Equal(t, resourceName, payload.Identity["name"])
-			assert.Equal(t, componentVersion, payload.Identity["version"])
-		})
+		// Referrer identifies the artifact by identity and kind.
+		var payload annotations.ArtifactOCIAnnotation
+		require.NoError(t, json.Unmarshal([]byte(ref.Annotations[annotations.ArtifactAnnotationKey]), &payload))
+		assert.Equal(t, annotations.ArtifactKindResource, payload.Kind)
+		assert.Equal(t, resourceName, payload.Identity["name"])
+		assert.Equal(t, componentVersion, payload.Identity["version"])
 	})
 
 	t.Run("multiple resources in a CV each get their own referrer", func(t *testing.T) {
@@ -128,10 +136,7 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 				referrers := listOwnershipReferrers(t, ctx, resolver, multiComponent, componentVersion, tc.subject)
 				require.Len(t, referrers, 1, "exactly one referrer per asset")
 
-				var payload struct {
-					Identity map[string]string `json:"identity"`
-					Kind     string            `json:"kind"`
-				}
+				var payload annotations.ArtifactOCIAnnotation
 				require.NoError(t, json.Unmarshal([]byte(referrers[0].Annotations[annotations.ArtifactAnnotationKey]), &payload))
 				assert.Equal(t, tc.want, payload.Identity["name"],
 					"%s referrer must point at its own asset, not the sibling", tc.label)
@@ -140,10 +145,6 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 	})
 
 	t.Run("re-uploading the same resource leaves a single referrer", func(t *testing.T) {
-		// The referrer manifest omits org.opencontainers.image.created, so every
-		// re-upload produces an identical manifest digest and the registry returns
-		// the existing one instead of indexing a new referrer. End-to-end proof
-		// of `ocm add cv` idempotency at the referrer layer.
 		var resourceDigest digest.Digest
 		for i := range 3 {
 			resourceDigest = uploadResource(t, ctx, repo, componentName, componentVersion, resourceName, []byte("ownership-payload"))
@@ -155,28 +156,106 @@ func Test_Integration_AssetToOwner(t *testing.T) {
 			"identical re-uploads must converge on a single referrer; got %d distinct manifests", len(referrers))
 	})
 
-	t.Run("policy disabled: resource uploads without an ownership referrer", func(t *testing.T) {
-		// Locks in the opt-out contract: a repository constructed without
-		// [oci.WithOwnershipReferrerPolicy] (the default
-		// [oci.OwnershipReferrerPolicyDisabled]) must accept a by-value
-		// resource and leave the Referrers API empty for that subject.
-		r := require.New(t)
-		disabledRepo, err := oci.NewRepository(
-			oci.WithResolver(resolver),
-			oci.WithTempDir(t.TempDir()),
-		)
-		r.NoError(err)
+	t.Run("ownership policy configuration", func(t *testing.T) {
+		t.Run("global Never", func(t *testing.T) {
+			neverRepo := newRepoFromConfig(t, ctx, repoSpec, creds, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: ownership.config.ocm.software/v1alpha1
+    policy: Never
+`)
 
-		const (
-			disabledComponent = "ocm.software/asset-to-owner-test-disabled"
-			disabledResource  = "backend-image-disabled"
-		)
-		resourceDigest := uploadResource(t, ctx, disabledRepo, disabledComponent, componentVersion, disabledResource, []byte("ownership-payload-disabled"))
+			const (
+				neverComponent = "ocm.software/asset-to-owner-test-never"
+				neverResource  = "backend-image-never"
+			)
+			resourceDigest := uploadResource(t, ctx, neverRepo, neverComponent, componentVersion, neverResource, []byte("ownership-payload-never"))
 
-		referrers := listOwnershipReferrers(t, ctx, resolver, disabledComponent, componentVersion, resourceDigest)
-		assert.Emptyf(t, referrers,
-			"policy disabled must not push any ownership referrer; found %d", len(referrers))
+			referrers := listOwnershipReferrers(t, ctx, resolver, neverComponent, componentVersion, resourceDigest)
+			assert.Emptyf(t, referrers,
+				"config-driven Never must not push any ownership referrer; found %d", len(referrers))
+		})
+
+		t.Run("global Never, per-repo AddIfSupported", func(t *testing.T) {
+			// Per-repo override opts one repo in even when the global default is Never.
+			overrideRepo := newRepoFromConfig(t, ctx, repoSpec, creds, fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+  - type: ownership.config.ocm.software/v1alpha1
+    policy: Never
+    repositories:
+      - repository:
+          type: OCIRepository/v1
+          baseUrl: %s
+          subPath: %s
+        policy: AddIfSupported
+`, repoSpec.BaseUrl, repoSpec.SubPath))
+
+			const (
+				overrideComponent = "ocm.software/asset-to-owner-test-override-add-if-supported"
+				overrideResource  = "backend-image-override-add-if-supported"
+			)
+			resourceDigest := uploadResource(t, ctx, overrideRepo, overrideComponent, componentVersion, overrideResource, []byte("ownership-payload-override-add-if-supported"))
+
+			referrers := listOwnershipReferrers(t, ctx, resolver, overrideComponent, componentVersion, resourceDigest)
+			assert.Lenf(t, referrers, 1,
+				"per-repo AddIfSupported override must push an ownership referrer even when global is Never; found %d", len(referrers))
+		})
+
+		t.Run("global AddIfSupported, per-repo Never", func(t *testing.T) {
+			// Per-repo Never override must beat the top-level AddIfSupported fallback.
+			overrideRepo := newRepoFromConfig(t, ctx, repoSpec, creds, fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+  - type: ownership.config.ocm.software/v1alpha1
+    policy: AddIfSupported
+    repositories:
+      - repository:
+          type: OCIRepository/v1
+          baseUrl: %s
+          subPath: %s
+        policy: Never
+`, repoSpec.BaseUrl, repoSpec.SubPath))
+
+			const (
+				overrideComponent = "ocm.software/asset-to-owner-test-override-never"
+				overrideResource  = "backend-image-override-never"
+			)
+			resourceDigest := uploadResource(t, ctx, overrideRepo, overrideComponent, componentVersion, overrideResource, []byte("ownership-payload-override-never"))
+
+			referrers := listOwnershipReferrers(t, ctx, resolver, overrideComponent, componentVersion, resourceDigest)
+			assert.Emptyf(t, referrers,
+				"per-repo Never override must suppress ownership referrer even when global is AddIfSupported; found %d", len(referrers))
+		})
 	})
+}
+
+// newRepoFromConfig constructs an OCI component-version repository through
+// the provider, parsing the given OCM YAML config — the same shape a user
+// would write to `.ocmconfig`.
+func newRepoFromConfig(
+	t *testing.T,
+	ctx context.Context,
+	repoSpec *ocirepospecv1.Repository,
+	creds *ocicredsv1.OCICredentials,
+	ocmConfigYAML string,
+) *oci.Repository {
+	t.Helper()
+	r := require.New(t)
+	var cfg genericv1.Config
+	r.NoError(genericv1.Scheme.Decode(strings.NewReader(ocmConfigYAML), &cfg))
+	ownershipConfig, err := ownershipv1alpha1.Lookup(&cfg)
+	r.NoError(err)
+	prov := provider.NewComponentVersionRepositoryProvider(
+		provider.WithUserAgent(userAgent),
+		provider.WithTempDir(t.TempDir()),
+		provider.WithOwnershipConfig(ownershipConfig),
+	)
+	cvRepo, err := prov.GetComponentVersionRepository(ctx, repoSpec, creds)
+	r.NoError(err)
+	repo, ok := cvRepo.(*oci.Repository)
+	r.Truef(ok, "expected *oci.Repository, got %T", cvRepo)
+	return repo
 }
 
 // uploadResource pushes a one-layer OCI image as a local resource through repo

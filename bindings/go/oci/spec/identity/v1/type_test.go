@@ -182,6 +182,130 @@ func TestIdentityFromOCIRepository(t *testing.T) {
 	}
 }
 
+func TestIdentityFromOCIRepositoryWithSubPath(t *testing.T) {
+	tests := []struct {
+		name       string
+		repository oci.Repository
+		want       runtime.Identity
+		wantErr    bool
+	}{
+		{
+			name:       "empty repository → type-only identity",
+			repository: oci.Repository{},
+			want: runtime.Identity{
+				runtime.IdentityAttributeType: Type.String(),
+			},
+		},
+		{
+			name: "baseUrl host only without scheme",
+			repository: oci.Repository{
+				BaseUrl: "ghcr.io",
+			},
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "ghcr.io",
+			},
+		},
+		{
+			name: "baseUrl with scheme and port, no path",
+			repository: oci.Repository{
+				BaseUrl: "https://localhost:5000",
+			},
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "localhost",
+				runtime.IdentityAttributeScheme:   "https",
+				runtime.IdentityAttributePort:     "5000",
+			},
+		},
+		{
+			name: "empty SubPath behaves identically to IdentityFromOCIRepository",
+			repository: oci.Repository{
+				BaseUrl: "https://ghcr.io/my-org/components",
+			},
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributePath:     "my-org/components",
+				runtime.IdentityAttributeScheme:   "https",
+			},
+		},
+		{
+			name: "SubPath only, no path in baseUrl",
+			repository: oci.Repository{
+				BaseUrl: "https://ghcr.io",
+				SubPath: "my-org/components",
+			},
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributePath:     "my-org/components",
+				runtime.IdentityAttributeScheme:   "https",
+			},
+		},
+		{
+			name: "embedded path joined with SubPath",
+			repository: oci.Repository{
+				BaseUrl: "https://ghcr.io/my-org",
+				SubPath: "components",
+			},
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributePath:     "my-org/components",
+				runtime.IdentityAttributeScheme:   "https",
+			},
+		},
+		{
+			name: "trailing slash in baseUrl does not produce double slash",
+			repository: oci.Repository{
+				BaseUrl: "https://ghcr.io/my-org/",
+				SubPath: "components",
+			},
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributePath:     "my-org/components",
+				runtime.IdentityAttributeScheme:   "https",
+			},
+		},
+		{
+			name: "leading slash in SubPath is normalised",
+			repository: oci.Repository{
+				BaseUrl: "https://ghcr.io/my-org",
+				SubPath: "/components",
+			},
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributePath:     "my-org/components",
+				runtime.IdentityAttributeScheme:   "https",
+			},
+		},
+		{
+			name: "invalid URL propagates error",
+			repository: oci.Repository{
+				BaseUrl: "://invalid-url",
+				SubPath: "components",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := IdentityFromOCIRepositoryWithSubPath(&tt.repository)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, Type, got.GetType())
+		})
+	}
+}
+
 func TestIdentityFromCTFRepository(t *testing.T) {
 	tests := []struct {
 		name       string
