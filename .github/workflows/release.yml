@@ -90,6 +90,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           config: cliff.toml
           args: |
+            --include-path "cli/**" \
+            --include-path "kubernetes/controller/**" \
             --tag-pattern "^v\\d+\\.\\d+\\.\\d+(?:[-\\w\\.]+)?$" \
             --ignore-tags "^v\\d+\\.\\d+\\.\\d+-rc\\.\\d+$" \
             --tag "${{ steps.compute.outputs.new_tag }}" \
