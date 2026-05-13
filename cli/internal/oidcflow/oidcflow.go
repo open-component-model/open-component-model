@@ -13,8 +13,10 @@
 // cannot hold a client secret, (2) the loopback redirect URI (127.0.0.1) limits
 // code interception to same-machine processes which PKCE fully mitigates per
 // RFC 8252 §7.1, (3) the acquired ID token is used immediately for a single
-// signing operation and not persisted, removing the need for
-// DPoP (Demonstrating Proof of Possession) or PAR (Pushed Authorization Requests (RFC 9126)).
+// signing operation. When offline_access is supported, the refresh token is
+// cached locally so subsequent operations can silently refresh without opening
+// a browser. The cache is stored in the user's OS cache directory with
+// restricted permissions (0o600).
 //
 // The flow does not send prompt=consent or prompt=login; the provider's default
 // session behavior applies, giving users seamless re-authentication for repeated
@@ -63,8 +65,9 @@ type Options struct {
 	ClientID string
 }
 
-// GetIDToken performs an interactive OIDC authorization code flow with PKCE.
-// It opens the user's browser for authentication and waits for the callback.
+// GetIDToken acquires an OIDC ID token, attempting a cached token refresh first.
+// If no valid cache exists or refresh fails, it falls back to an interactive
+// browser-based authorization code flow with PKCE.
 func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 	if opts.Issuer == "" {
 		opts.Issuer = DefaultIssuer
@@ -76,6 +79,18 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 	provider, err := oidc.NewProvider(ctx, opts.Issuer)
 	if err != nil {
 		return nil, fmt.Errorf("oidc provider discovery: %w", err)
+	}
+
+	oauthCfg := &oauth2.Config{
+		ClientID: opts.ClientID,
+		Endpoint: provider.Endpoint(),
+		Scopes:   []string{oidc.ScopeOpenID, "email", "offline_access"},
+	}
+
+	if cached, err := loadCachedToken(opts.Issuer, opts.ClientID); err == nil {
+		if tok, err := refreshCachedToken(ctx, opts.Issuer, provider, oauthCfg, cached); err == nil {
+			return tok, nil
+		}
 	}
 
 	pkce, err := newPKCE(provider)
@@ -118,18 +133,12 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 	}()
 	defer srv.Shutdown(ctx) //nolint:errcheck // best-effort shutdown
 
-	config := oauth2.Config{
-		ClientID:    opts.ClientID,
-		Endpoint:    provider.Endpoint(),
-		Scopes:      []string{oidc.ScopeOpenID, "email"},
-		RedirectURL: redirectURL,
-	}
-
+	oauthCfg.RedirectURL = redirectURL
 	authOpts := append(pkce.authURLOpts(),
-		oauth2.AccessTypeOnline,
+		oauth2.AccessTypeOffline,
 		oidc.Nonce(nonce),
 	)
-	authURL := config.AuthCodeURL(state, authOpts...)
+	authURL := oauthCfg.AuthCodeURL(state, authOpts...)
 
 	if err := openBrowser(ctx, authURL, errCh); err != nil {
 		return nil, fmt.Errorf("open browser: %w (URL: %s)", err, authURL)
@@ -140,7 +149,7 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 		return nil, fmt.Errorf("receive auth callback: %w", err)
 	}
 
-	token, err := config.Exchange(ctx, code, pkce.tokenURLOpts()...)
+	token, err := oauthCfg.Exchange(ctx, code, pkce.tokenURLOpts()...)
 	if err != nil {
 		return nil, fmt.Errorf("exchange code for token: %w", err)
 	}
@@ -150,7 +159,7 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 		return nil, errors.New("id_token not present in token response")
 	}
 
-	verifier := provider.Verifier(&oidc.Config{ClientID: config.ClientID})
+	verifier := provider.Verifier(&oidc.Config{ClientID: oauthCfg.ClientID})
 	idToken, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {
 		return nil, fmt.Errorf("verify id token: %w", err)
@@ -158,6 +167,8 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 	if idToken.Nonce != nonce {
 		return nil, errors.New("nonce mismatch in id token")
 	}
+
+	persistToken(opts.Issuer, opts.ClientID, token) // best-effort
 
 	return &Token{RawToken: rawIDToken}, nil
 }
