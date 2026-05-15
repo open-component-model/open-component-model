@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -39,13 +40,15 @@ func TestExample_StaticCredentialResolver(t *testing.T) {
 	resolver := credentials.NewStaticCredentialsResolver(credMap)
 
 	// Resolve credentials for a matching identity.
-	creds, err := resolver.Resolve(ctx, runtime.Identity{
+	typed, err := resolver.ResolveTyped(ctx, runtime.Identity{
 		"type":     "OCIRegistry",
 		"hostname": "registry.example.com",
 	})
 	r.NoError(err)
-	r.Equal("test-user", creds["username"])
-	r.Equal("test-password", creds["password"])
+	dc, ok := typed.(*credconfigv1.DirectCredentials)
+	r.True(ok, "expected *credconfigv1.DirectCredentials, got %T", typed)
+	r.Equal("test-user", dc.Properties["username"])
+	r.Equal("test-password", dc.Properties["password"])
 }
 
 // TestExample_CredentialResolutionNotFound shows how credential resolution
@@ -56,7 +59,7 @@ func TestExample_CredentialResolutionNotFound(t *testing.T) {
 
 	resolver := credentials.NewStaticCredentialsResolver(map[string]map[string]string{})
 
-	_, err := resolver.Resolve(ctx, runtime.Identity{
+	_, err := resolver.ResolveTyped(ctx, runtime.Identity{
 		"type":     "OCIRegistry",
 		"hostname": "unknown.registry.io",
 	})

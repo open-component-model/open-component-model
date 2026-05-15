@@ -11,6 +11,7 @@ import (
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
@@ -55,12 +56,15 @@ func (p *pathMatcherResolver) getRepository(ctx context.Context, specification r
 	consumerIdentity, err := p.repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, specification)
 	if err == nil {
 		if p.graph != nil {
-			if credMap, err = p.graph.Resolve(ctx, consumerIdentity); err != nil { //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
-				if errors.Is(err, credentials.ErrNotFound) {
-					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, err.Error()))
+			typed, resolveErr := p.graph.ResolveTyped(ctx, consumerIdentity)
+			if resolveErr != nil {
+				if errors.Is(resolveErr, credentials.ErrNotFound) {
+					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, resolveErr.Error()))
 				} else {
-					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", specification, err)
+					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", specification, resolveErr)
 				}
+			} else if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
+				credMap = dc.Properties
 			}
 		}
 	} else {
