@@ -2,6 +2,7 @@ package transformation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -11,6 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access"
@@ -124,7 +126,14 @@ func (t *GetHelmChart) resolveCredentials(ctx context.Context, targetResource *d
 	if consumerId == nil {
 		return nil, nil
 	}
-	return resolveCredentialsMap(ctx, t.CredentialProvider, consumerId)
+	typed, err := t.CredentialProvider.ResolveTyped(ctx, consumerId)
+	if err != nil && !errors.Is(err, credentials.ErrNotFound) {
+		return nil, fmt.Errorf("failed resolving credentials: %w", err)
+	}
+	if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
+		return dc.Properties, nil
+	}
+	return nil, nil
 }
 
 // writeChartAndProvFiles buffers the chart archive and, if present, the provenance file

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -34,7 +35,10 @@ func (m *mockExternalPlugin) Resolve(ctx context.Context, cfg v1.ResolveRequest[
 	if m.resolveFunc != nil {
 		return m.resolveFunc(ctx, cfg, credentials)
 	}
-	return runtime.Identity{"resolved": "credentials"}, nil
+	return &credconfigv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
+		Properties: map[string]string{"resolved": "credentials"},
+	}, nil
 }
 
 func TestCredentialRepositoryPluginConverter_ConsumerIdentityForConfig(t *testing.T) {
@@ -46,7 +50,6 @@ func TestCredentialRepositoryPluginConverter_ConsumerIdentityForConfig(t *testin
 	}
 	converter := NewCredentialRepositoryPluginConverter(mockPlugin)
 
-	// Create a mock typed config
 	mockConfig := &runtime.Unstructured{}
 
 	identity, err := converter.ConsumerIdentityForConfig(context.Background(), mockConfig)
@@ -66,36 +69,34 @@ func TestCredentialRepositoryPluginConverter_ConsumerIdentityForConfig(t *testin
 }
 
 func TestCredentialRepositoryPluginConverter_Resolve(t *testing.T) {
-	expectedCredentials := runtime.Identity{"username": "testuser", "password": "testpass"}
+	expected := &credconfigv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
+		Properties: map[string]string{"username": "testuser", "password": "testpass"},
+	}
 	mockPlugin := &mockExternalPlugin{
 		resolveFunc: func(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
-			return expectedCredentials, nil
+			return expected, nil
 		},
 	}
 	converter := NewCredentialRepositoryPluginConverter(mockPlugin)
 
-	// Create a mock typed config and identity
 	mockConfig := &runtime.Unstructured{}
 	mockIdentity := runtime.Identity{"consumer": "test"}
 	inputCredentials := runtime.Identity{"existing": "cred"}
 
-	resolvedTyped, err := converter.Resolve(context.Background(), mockConfig, mockIdentity, inputCredentials)
+	resolved, err := converter.Resolve(context.Background(), mockConfig, mockIdentity, inputCredentials)
 	if err != nil {
-		t.Errorf("Resolve() returned unexpected error: %v", err)
+		t.Errorf("ResolveTyped() returned unexpected error: %v", err)
 	}
 
-	resolvedCredentials, ok := resolvedTyped.(runtime.Identity)
+	dc, ok := resolved.(*credconfigv1.DirectCredentials)
 	if !ok {
-		t.Fatalf("Resolve() returned credentials of type %T, expected runtime.Identity", resolvedTyped)
+		t.Fatalf("ResolveTyped() returned %T, expected *DirectCredentials", resolved)
 	}
 
-	if len(resolvedCredentials) != len(expectedCredentials) {
-		t.Errorf("Resolve() returned credentials with length %d, expected %d", len(resolvedCredentials), len(expectedCredentials))
-	}
-
-	for key, value := range expectedCredentials {
-		if resolvedCredentials[key] != value {
-			t.Errorf("Resolve() returned credentials[%s] = %s, expected %s", key, resolvedCredentials[key], value)
+	for key, value := range expected.Properties {
+		if dc.Properties[key] != value {
+			t.Errorf("ResolveTyped() returned credentials[%s] = %s, expected %s", key, dc.Properties[key], value)
 		}
 	}
 }
@@ -104,6 +105,5 @@ func TestCredentialRepositoryPluginConverter_Interface(t *testing.T) {
 	mockPlugin := &mockExternalPlugin{}
 	converter := NewCredentialRepositoryPluginConverter(mockPlugin)
 
-	// Verify that the converter implements the correct interface
 	var _ credentials.RepositoryPlugin = converter
 }

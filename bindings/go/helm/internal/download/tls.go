@@ -6,14 +6,12 @@ import (
 	"os"
 
 	"helm.sh/helm/v4/pkg/getter"
-
-	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 )
 
 type tlsOptions struct {
 	CaCertFile  string
 	CaCert      string
-	Credentials *helmcredsv1.HelmHTTPCredentials
+	Credentials map[string]string
 }
 
 type tlOptionsFn func(opt *tlsOptions) *tlsOptions
@@ -32,7 +30,7 @@ func withCACert(caCert string) tlOptionsFn {
 	}
 }
 
-func withCredentials(credentials *helmcredsv1.HelmHTTPCredentials) tlOptionsFn {
+func withCredentials(credentials map[string]string) tlOptionsFn {
 	return func(opt *tlsOptions) *tlsOptions {
 		opt.Credentials = credentials
 		return opt
@@ -50,14 +48,15 @@ func constructTLSOptions(targetDir string, opts ...tlOptionsFn) (_ getter.Option
 		o(opt)
 	}
 
-	if opt.Credentials == nil {
-		opt.Credentials = &helmcredsv1.HelmHTTPCredentials{}
-	}
-
 	var (
-		caFile     *os.File
-		caFilePath string
+		caFile                        *os.File
+		caFilePath, certFile, keyFile string
+		credentials                   = opt.Credentials
 	)
+
+	if credentials == nil {
+		credentials = make(map[string]string)
+	}
 
 	if opt.CaCertFile != "" {
 		caFilePath = opt.CaCertFile
@@ -78,24 +77,21 @@ func constructTLSOptions(targetDir string, opts ...tlOptionsFn) (_ getter.Option
 	}
 
 	// set up certFile and keyFile if they are provided in the credentials
-	if opt.Credentials.CertFile != "" {
-		if _, err := os.Stat(opt.Credentials.CertFile); err != nil {
-			if os.IsNotExist(err) {
-				return nil, fmt.Errorf("certFile %q does not exist", opt.Credentials.CertFile)
-			}
-			return nil, fmt.Errorf("certFile %q is not accessible: %w", opt.Credentials.CertFile, err)
+	if v, ok := credentials[CredentialCertFile]; ok {
+		certFile = v
+		if _, err := os.Stat(certFile); err != nil {
+			return nil, fmt.Errorf("certFile %q does not exist", certFile)
 		}
 	}
-	if opt.Credentials.KeyFile != "" {
-		if _, err := os.Stat(opt.Credentials.KeyFile); err != nil {
-			if os.IsNotExist(err) {
-				return nil, fmt.Errorf("keyFile %q does not exist", opt.Credentials.KeyFile)
-			}
-			return nil, fmt.Errorf("keyFile %q is not accessible: %w", opt.Credentials.KeyFile, err)
+
+	if v, ok := credentials[CredentialKeyFile]; ok {
+		keyFile = v
+		if _, err := os.Stat(keyFile); err != nil {
+			return nil, fmt.Errorf("keyFile %q does not exist", keyFile)
 		}
 	}
 
 	// it's safe to always add this option even with empty values
 	// because the default is empty.
-	return getter.WithTLSClientConfig(opt.Credentials.CertFile, opt.Credentials.KeyFile, caFilePath), nil
+	return getter.WithTLSClientConfig(certFile, keyFile, caFilePath), nil
 }

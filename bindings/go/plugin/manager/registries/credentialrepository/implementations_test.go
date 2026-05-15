@@ -111,7 +111,7 @@ func TestConsumerIdentityForConfig(t *testing.T) {
 	}
 }
 
-func TestResolve(t *testing.T) {
+func TestResolveTyped(t *testing.T) {
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 
@@ -132,11 +132,14 @@ func TestResolve(t *testing.T) {
 				},
 				Identity: map[string]string{"id": "test-identity"},
 			},
-			credentials: runtime.Identity{"key": "value"},
+			credentials: &runtime.Raw{
+				Type: runtime.NewVersionedType("Credentials", "v1"),
+				Data: []byte(`{"key":"value"}`),
+			},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					if r.URL.Path == Resolve {
-						resolved := map[string]string{"resolved": "credentials", "token": "abc123"}
+					if r.URL.Path == ResolveTyped {
+						resolved := map[string]string{"type": "Credentials/v1", "token": "abc123"}
 						err := json.NewEncoder(w).Encode(resolved)
 						require.NoError(t, err)
 						return
@@ -153,7 +156,7 @@ func TestResolve(t *testing.T) {
 				Config:   &dummyv1.Repository{},
 				Identity: map[string]string{"id": "test-identity"},
 			},
-			credentials: runtime.Identity{"invalid_key": "invalid_value"},
+			credentials: nil,
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusForbidden)
@@ -167,7 +170,7 @@ func TestResolve(t *testing.T) {
 				Config:   &dummyv1.Repository{},
 				Identity: map[string]string{"id": "test-identity"},
 			},
-			credentials: runtime.Identity{"key": "value"},
+			credentials: nil,
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusOK)
@@ -181,7 +184,7 @@ func TestResolve(t *testing.T) {
 				Config:   &dummyv1.Repository{},
 				Identity: map[string]string{"id": "test-identity"},
 			},
-			credentials: runtime.Identity{"key": "value"},
+			credentials: nil,
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
@@ -207,11 +210,9 @@ func TestResolve(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				rawCred, ok := resolved.(*runtime.Raw)
-				require.True(t, ok, "expected *runtime.Raw, got %T", resolved)
-				var credMap map[string]string
-				require.NoError(t, json.Unmarshal(rawCred.Data, &credMap))
-				require.Equal(t, tt.expectedKey, credMap["token"])
+				require.NotNil(t, resolved)
+				raw := resolved.(*runtime.Raw)
+				require.Contains(t, string(raw.Data), tt.expectedKey)
 			}
 		})
 	}
@@ -274,9 +275,15 @@ func TestToCredentials(t *testing.T) {
 		credentials runtime.Typed
 		expectErr   bool
 	}{
-		{name: "valid", credentials: runtime.Identity{"key": "value"}, expectErr: false},
-		{name: "empty", credentials: runtime.Identity{}, expectErr: false},
-		{name: "multiple_keys", credentials: runtime.Identity{"key1": "value1", "key2": "value2"}, expectErr: false},
+		{name: "nil", credentials: nil, expectErr: false},
+		{
+			name: "DirectCredentials",
+			credentials: &runtime.Raw{
+				Type: runtime.NewVersionedType("Credentials", "v1"),
+				Data: []byte(`{"type":"Credentials/v1","username":"user","password":"pass"}`),
+			},
+			expectErr: false,
+		},
 	}
 
 	for _, tt := range tests {

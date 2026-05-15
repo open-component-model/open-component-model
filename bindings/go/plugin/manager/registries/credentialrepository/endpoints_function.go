@@ -33,7 +33,7 @@ func RegisterCredentialRepository[T runtime.Typed](
 		},
 		endpoints.Handler{
 			Handler:  ResolveHandlerFunc(handler.Resolve, c.Scheme, proto),
-			Location: Resolve,
+			Location: ResolveTyped,
 		},
 	)
 

@@ -46,10 +46,10 @@ func (c *credentialRepositoryPluginConverter) Resolve(ctx context.Context, cfg r
 		Config:   cfg,
 		Identity: identity,
 	}
-
-	resolvedCredentials, err := c.externalPlugin.Resolve(ctx, request, credentials)
+	result, err := c.externalPlugin.Resolve(ctx, request, credentials)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
+		return nil, fmt.Errorf("failed to resolve typed credentials: %w", err)
 	}
-	return resolvedCredentials, nil
+	return result, nil
 }
+

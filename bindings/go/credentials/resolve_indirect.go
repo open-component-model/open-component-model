@@ -67,7 +67,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 			}
 		}
 		slog.DebugContext(ctx, "Resolving credentials via repository", "identity", identity, "config", cfg)
-		credentials, err := plugin.Resolve(ctx, cfg, identity, credentials)
+		credentials, err := plugin.ResolveTyped(ctx, cfg, identity, credentials)
 
 		mu.Lock()
 		defer mu.Unlock()

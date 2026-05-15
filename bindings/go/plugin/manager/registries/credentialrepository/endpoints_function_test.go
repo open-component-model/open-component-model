@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	v2 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
@@ -24,7 +25,9 @@ func (m *mockCredentialPlugin[T]) ConsumerIdentityForConfig(ctx context.Context,
 }
 
 func (m *mockCredentialPlugin[T]) Resolve(ctx context.Context, cfg v1.ResolveRequest[T], credentials runtime.Typed) (runtime.Typed, error) {
-	return runtime.Identity{"resolved": "mock-credentials"}, nil
+	return &v2.DirectCredentials{
+		Properties: map[string]string{"resolved": "mock-credentials"},
+	}, nil
 }
 
 var _ v1.CredentialRepositoryPluginContract[*dummyv1.Repository] = &mockCredentialPlugin[*dummyv1.Repository]{}
@@ -111,7 +114,7 @@ func TestRegisterCredentialRepository(t *testing.T) {
 					found[handler.Location] = true
 				}
 				r.True(found[ConsumerIdentityForConfig], "ConsumerIdentityForConfig endpoint should be registered")
-				r.True(found[Resolve], "Resolve endpoint should be registered")
+				r.True(found[ResolveTyped], "ResolveTyped endpoint should be registered")
 			}
 		})
 	}
