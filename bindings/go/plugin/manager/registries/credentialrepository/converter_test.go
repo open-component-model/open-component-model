@@ -2,10 +2,10 @@ package credentialrepository
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -13,7 +13,7 @@ import (
 // mockExternalPlugin is a test implementation of v1.CredentialRepositoryPluginContract
 type mockExternalPlugin struct {
 	consumerIdentityForConfigFunc func(ctx context.Context, cfg v1.ConsumerIdentityForConfigRequest[runtime.Typed]) (runtime.Identity, error)
-	resolveFunc                   func(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials map[string]string) (map[string]string, error)
+	resolveTypedFunc              func(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error)
 	pingFunc                      func(ctx context.Context) error
 }
 
@@ -32,30 +32,13 @@ func (m *mockExternalPlugin) ConsumerIdentityForConfig(ctx context.Context, cfg 
 }
 
 func (m *mockExternalPlugin) ResolveTyped(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
-	var credMap map[string]string
-	if credentials != nil {
-		data, _ := json.Marshal(credentials)
-		_ = json.Unmarshal(data, &credMap)
+	if m.resolveTypedFunc != nil {
+		return m.resolveTypedFunc(ctx, cfg, credentials)
 	}
-	result, err := m.Resolve(ctx, cfg, credMap)
-	if err != nil {
-		return nil, err
-	}
-	if result == nil {
-		return nil, nil
-	}
-	data, _ := json.Marshal(result)
-	raw := &runtime.Raw{}
-	_ = json.Unmarshal(data, raw)
-	return raw, nil
-}
-
-// Resolve is a deprecated shim.
-func (m *mockExternalPlugin) Resolve(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials map[string]string) (map[string]string, error) {
-	if m.resolveFunc != nil {
-		return m.resolveFunc(ctx, cfg, credentials)
-	}
-	return map[string]string{"resolved": "credentials"}, nil
+	return &credconfigv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
+		Properties: map[string]string{"resolved": "credentials"},
+	}, nil
 }
 
 func TestCredentialRepositoryPluginConverter_ConsumerIdentityForConfig(t *testing.T) {
@@ -67,7 +50,6 @@ func TestCredentialRepositoryPluginConverter_ConsumerIdentityForConfig(t *testin
 	}
 	converter := NewCredentialRepositoryPluginConverter(mockPlugin)
 
-	// Create a mock typed config
 	mockConfig := &runtime.Unstructured{}
 
 	identity, err := converter.ConsumerIdentityForConfig(context.Background(), mockConfig)
@@ -86,32 +68,34 @@ func TestCredentialRepositoryPluginConverter_ConsumerIdentityForConfig(t *testin
 	}
 }
 
-func TestCredentialRepositoryPluginConverter_Resolve(t *testing.T) {
-	expectedCredentials := map[string]string{"username": "testuser", "password": "testpass"}
+func TestCredentialRepositoryPluginConverter_ResolveTyped(t *testing.T) {
+	expected := &credconfigv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
+		Properties: map[string]string{"username": "testuser", "password": "testpass"},
+	}
 	mockPlugin := &mockExternalPlugin{
-		resolveFunc: func(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials map[string]string) (map[string]string, error) {
-			return expectedCredentials, nil
+		resolveTypedFunc: func(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
+			return expected, nil
 		},
 	}
 	converter := NewCredentialRepositoryPluginConverter(mockPlugin)
 
-	// Create a mock typed config and identity
 	mockConfig := &runtime.Unstructured{}
 	mockIdentity := runtime.Identity{"consumer": "test"}
-	inputCredentials := map[string]string{"existing": "cred"}
 
-	resolvedCredentials, err := converter.Resolve(context.Background(), mockConfig, mockIdentity, inputCredentials)
+	resolved, err := converter.ResolveTyped(context.Background(), mockConfig, mockIdentity, nil)
 	if err != nil {
-		t.Errorf("Resolve() returned unexpected error: %v", err)
+		t.Errorf("ResolveTyped() returned unexpected error: %v", err)
 	}
 
-	if len(resolvedCredentials) != len(expectedCredentials) {
-		t.Errorf("Resolve() returned credentials with length %d, expected %d", len(resolvedCredentials), len(expectedCredentials))
+	dc, ok := resolved.(*credconfigv1.DirectCredentials)
+	if !ok {
+		t.Fatalf("ResolveTyped() returned %T, expected *DirectCredentials", resolved)
 	}
 
-	for key, value := range expectedCredentials {
-		if resolvedCredentials[key] != value {
-			t.Errorf("Resolve() returned credentials[%s] = %s, expected %s", key, resolvedCredentials[key], value)
+	for key, value := range expected.Properties {
+		if dc.Properties[key] != value {
+			t.Errorf("ResolveTyped() returned credentials[%s] = %s, expected %s", key, dc.Properties[key], value)
 		}
 	}
 }
@@ -120,6 +104,5 @@ func TestCredentialRepositoryPluginConverter_Interface(t *testing.T) {
 	mockPlugin := &mockExternalPlugin{}
 	converter := NewCredentialRepositoryPluginConverter(mockPlugin)
 
-	// Verify that the converter implements the correct interface
 	var _ credentials.RepositoryPlugin = converter
 }

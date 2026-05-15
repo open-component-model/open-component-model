@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -59,8 +60,12 @@ func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginMana
 		}
 		var creds map[string]string
 		if credIdentity, err := plugin.GetResourceCredentialConsumerIdentity(ctx, res); err == nil {
-			if creds, err = credentialGraph.Resolve(ctx, credIdentity); err != nil && !errors.Is(err, credentials.ErrNotFound) { //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
-				return nil, fmt.Errorf("getting credentials for resource %q failed: %w", res.Name, err)
+			typed, resolveErr := credentialGraph.ResolveTyped(ctx, credIdentity)
+			if resolveErr != nil && !errors.Is(resolveErr, credentials.ErrNotFound) {
+				return nil, fmt.Errorf("getting credentials for resource %q failed: %w", res.Name, resolveErr)
+			}
+			if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
+				creds = dc.Properties
 			}
 		}
 		data, err = plugin.DownloadResource(ctx, res, creds)

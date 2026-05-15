@@ -105,10 +105,17 @@ func TestConsumerIdentityForConfigHandlerFunc(t *testing.T) {
 	}
 }
 
-func TestResolveHandlerFunc(t *testing.T) {
+func TestResolveTypedHandlerFunc(t *testing.T) {
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 	dummyRepo := &dummyv1.Repository{}
+
+	resolveTyped := func(ctx context.Context, cfg v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
+		return &runtime.Raw{
+			Type: runtime.NewVersionedType("Credentials", "v1"),
+			Data: []byte(`{"resolved":"credentials","token":"abc123"}`),
+		}, nil
+	}
 
 	tests := []struct {
 		name         string
@@ -118,13 +125,9 @@ func TestResolveHandlerFunc(t *testing.T) {
 		assertError  func(t *testing.T, err error)
 	}{
 		{
-			name: "ResolveHandlerFunc unauthorized error",
+			name: "ResolveTypedHandlerFunc unauthorized error",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ResolveHandlerFunc(func(ctx context.Context, cfg v1.ResolveRequest[*dummyv1.Repository], credentials map[string]string) (map[string]string, error) {
-					return map[string]string{"resolved": "credentials"}, nil
-				}, scheme, dummyRepo)
-
-				return handler
+				return ResolveTypedHandlerFunc(resolveTyped, scheme, dummyRepo)
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
@@ -156,13 +159,9 @@ func TestResolveHandlerFunc(t *testing.T) {
 			},
 		},
 		{
-			name: "ResolveHandlerFunc missing body error",
+			name: "ResolveTypedHandlerFunc missing body error",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ResolveHandlerFunc(func(ctx context.Context, cfg v1.ResolveRequest[*dummyv1.Repository], credentials map[string]string) (map[string]string, error) {
-					return map[string]string{"resolved": "credentials"}, nil
-				}, scheme, dummyRepo)
-
-				return handler
+				return ResolveTypedHandlerFunc(resolveTyped, scheme, dummyRepo)
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
@@ -172,7 +171,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 			},
 			request: func(base string) *http.Request {
 				header := http.Header{}
-				header.Add("Authorization", `{"access_token": "abc"}`)
+				header.Add("Authorization", `{"type":"Credentials/v1","access_token":"abc"}`)
 				parse, _ := url.Parse(base)
 
 				return &http.Request{
@@ -184,13 +183,9 @@ func TestResolveHandlerFunc(t *testing.T) {
 			},
 		},
 		{
-			name: "ResolveHandlerFunc success",
+			name: "ResolveTypedHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ResolveHandlerFunc(func(ctx context.Context, cfg v1.ResolveRequest[*dummyv1.Repository], credentials map[string]string) (map[string]string, error) {
-					return map[string]string{"resolved": "credentials", "token": "abc123"}, nil
-				}, scheme, dummyRepo)
-
-				return handler
+				return ResolveTypedHandlerFunc(resolveTyped, scheme, dummyRepo)
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				defer resp.Body.Close()
@@ -205,7 +200,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 			},
 			request: func(base string) *http.Request {
 				header := http.Header{}
-				header.Add("Authorization", `{"access_token": "abc"}`)
+				header.Add("Authorization", `{"type":"Credentials/v1","access_token":"abc"}`)
 				parse, _ := url.Parse(base)
 				body := &bytes.Buffer{}
 				body.Write([]byte(`{

@@ -19,9 +19,6 @@ const (
 	ConsumerIdentityForConfig = "/consumer-identity"
 	// ResolveTyped defines the endpoint to resolve typed credentials using the credential graph.
 	ResolveTyped = "/resolve-typed"
-	// Resolve defines the deprecated endpoint to resolve credentials as map[string]string.
-	// Deprecated: Use ResolveTyped.
-	Resolve = "/resolve"
 )
 
 type RepositoryPlugin struct {
@@ -104,28 +101,6 @@ func (r *RepositoryPlugin) ResolveTyped(ctx context.Context, cfg credentialsv1.R
 	return &resolvedCredentials, nil
 }
 
-// Resolve is a deprecated shim that calls ResolveTyped with map↔typed conversions.
-func (r *RepositoryPlugin) Resolve(ctx context.Context, cfg credentialsv1.ResolveRequest[runtime.Typed], credentials map[string]string) (map[string]string, error) {
-	slog.InfoContext(ctx, "Resolving credentials (deprecated)", "id", r.ID)
-
-	credHeader, err := toCredentials(mapToTyped(credentials))
-	if err != nil {
-		return nil, err
-	}
-
-	// We know we only have this single schema for all endpoints which require validation.
-	if err := r.validateEndpoint(cfg.Config); err != nil {
-		return nil, err
-	}
-
-	var resolvedCredentials map[string]string
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Resolve, http.MethodPost, plugins.WithPayload(cfg), plugins.WithHeader(credHeader), plugins.WithResult(&resolvedCredentials)); err != nil {
-		return nil, fmt.Errorf("failed to resolve credentials from plugin %q: %w", r.ID, err)
-	}
-
-	return resolvedCredentials, nil
-}
-
 // validateEndpoint uses the provided JSON schema and the runtime.Typed and, using the JSON schema, validates that the
 // underlying runtime.Type conforms to the provided schema.
 // TODO(fabianburth): this method looks essentially the same for all plugin make it reusable!
@@ -158,14 +133,4 @@ func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
 		return plugins.KV{}, err
 	}
 	return plugins.KV{Key: "Authorization", Value: string(rawCreds)}, nil
-}
-
-func mapToTyped(m map[string]string) runtime.Typed {
-	if len(m) == 0 {
-		return nil
-	}
-	data, _ := json.Marshal(m)
-	raw := &runtime.Raw{}
-	_ = json.Unmarshal(data, raw)
-	return raw
 }

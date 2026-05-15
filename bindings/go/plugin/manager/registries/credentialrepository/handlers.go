@@ -67,25 +67,3 @@ func ResolveTypedHandlerFunc[T runtime.Typed](f func(ctx context.Context, cfg v1
 	}
 }
 
-// ResolveHandlerFunc is a deprecated wrapper for the map-based Resolve method.
-// Deprecated: Use ResolveTypedHandlerFunc.
-func ResolveHandlerFunc[T runtime.Typed](f func(ctx context.Context, cfg v1.ResolveRequest[T], credentials map[string]string) (map[string]string, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
-	typedF := func(ctx context.Context, cfg v1.ResolveRequest[T], credentials runtime.Typed) (runtime.Typed, error) {
-		var credMap map[string]string
-		if credentials != nil {
-			data, err := json.Marshal(credentials)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal credentials header: %w", err)
-			}
-			if err := json.Unmarshal(data, &credMap); err != nil {
-				return nil, fmt.Errorf("incorrect authentication header format: %w", err)
-			}
-		}
-		result, err := f(ctx, cfg, credMap)
-		if err != nil {
-			return nil, err
-		}
-		return mapToTyped(result), nil
-	}
-	return ResolveTypedHandlerFunc(typedF, scheme, typ)
-}

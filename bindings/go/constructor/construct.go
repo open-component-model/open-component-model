@@ -16,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
@@ -779,11 +780,14 @@ func resolveCredentials(ctx context.Context, provider credentials.Resolver, cons
 		return nil, nil
 	}
 
-	creds, err := provider.Resolve(ctx, consumerIdentity) //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
+	typed, err := provider.ResolveTyped(ctx, consumerIdentity)
 	if errors.Is(err, credentials.ErrNotFound) {
 		logger.DebugContext(ctx, "no credentials found for consumer identity, proceeding without credentials")
 		return nil, nil
 	}
 
-	return creds, err
+	if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
+		return dc.Properties, err
+	}
+	return nil, err
 }

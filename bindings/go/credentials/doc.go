@@ -72,9 +72,6 @@
 //	    creds, err := MyFromDirectCredentials(creds)
 //	}
 //
-// The deprecated [Graph.Resolve] method still works and internally delegates to [Graph.ResolveTyped],
-// converting the result back to map[string]string for backward compatibility.
-//
 // The credential type scheme provider is optional (nil-safe) — the graph degrades to
 // [ocm.software/open-component-model/bindings/go/credentials/spec/config/v1.DirectCredentials]
 // behavior when no provider is configured.
@@ -166,9 +163,9 @@
 //
 // Makes use of [runtime.Identity.Match] and [runtime.IdentityMatchesPath] to allow any of the following resolutions:
 //
-//	creds, err := graph.Resolve(ctx, runtime.Identity{"path": "ghcr.io/my-org/testrepo"}) // matches
-//	creds, err := graph.Resolve(ctx, runtime.Identity{"path": "ghcr.io/my-org/some-other"}) // matches
-//	creds, err := graph.Resolve(ctx, runtime.Identity{"path": "ghcr.io/my-other-org/path"}) // does not match
+//	typed, err := graph.ResolveTyped(ctx, runtime.Identity{"path": "ghcr.io/my-org/testrepo"}) // matches
+//	typed, err := graph.ResolveTyped(ctx, runtime.Identity{"path": "ghcr.io/my-org/some-other"}) // matches
+//	typed, err := graph.ResolveTyped(ctx, runtime.Identity{"path": "ghcr.io/my-other-org/path"}) // does not match
 //
 // Note that wildcard matches always get resolved AFTER equivalence matches. This means that if two identities
 // exist, one with a wildcard and one with an exact match, the exact match will always be preferred.
@@ -237,15 +234,12 @@
 //	// Typed resolution (returns runtime.Typed)
 //	typed, err := graph.ResolveTyped(ctx, identity)
 //
-//	// Legacy resolution (deprecated, returns map[string]string)
-//	creds, err := graph.Resolve(ctx, identity)
-//
 // The package is designed to be thread-safe and can be used concurrently from
 // multiple goroutines. The DAG used in this package includes synchronization primitives
 // to ensure safe concurrent access.
 //
-// The entrypoints to the graph are [Graph.ResolveTyped] (preferred) and [Graph.Resolve] (deprecated).
-// Both return the resolved credentials or an error.
+// The entrypoint to the graph is [Graph.ResolveTyped]. It returns the resolved
+// credentials as a [runtime.Typed], or an error.
 //
 // Error Handling:
 //   - [ErrNotFound]: Returned when no credentials could be found for the given identity

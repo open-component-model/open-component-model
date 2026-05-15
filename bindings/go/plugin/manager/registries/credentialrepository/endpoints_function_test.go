@@ -30,11 +30,6 @@ func (m *mockCredentialPlugin[T]) ResolveTyped(ctx context.Context, cfg v1.Resol
 	}, nil
 }
 
-// Resolve is a deprecated shim.
-func (m *mockCredentialPlugin[T]) Resolve(ctx context.Context, cfg v1.ResolveRequest[T], credentials map[string]string) (map[string]string, error) {
-	return map[string]string{"resolved": "mock-credentials"}, nil
-}
-
 var _ v1.CredentialRepositoryPluginContract[*dummyv1.Repository] = &mockCredentialPlugin[*dummyv1.Repository]{}
 
 func TestRegisterCredentialRepository(t *testing.T) {
@@ -58,7 +53,7 @@ func TestRegisterCredentialRepository(t *testing.T) {
 			plugin:           &mockCredentialPlugin[*dummyv1.Repository]{},
 			expectError:      false,
 			expectedTypes:    1,
-			expectedHandlers: 3,
+			expectedHandlers: 2,
 		},
 		{
 			name:             "invalid prototype",
@@ -78,7 +73,7 @@ func TestRegisterCredentialRepository(t *testing.T) {
 			plugin:           &mockCredentialPlugin[*dummyv1.Repository]{},
 			expectError:      false,
 			expectedTypes:    1,
-			expectedHandlers: 3,
+			expectedHandlers: 2,
 		},
 	}
 
@@ -120,7 +115,6 @@ func TestRegisterCredentialRepository(t *testing.T) {
 				}
 				r.True(found[ConsumerIdentityForConfig], "ConsumerIdentityForConfig endpoint should be registered")
 				r.True(found[ResolveTyped], "ResolveTyped endpoint should be registered")
-				r.True(found[Resolve], "Resolve endpoint should be registered")
 			}
 		})
 	}
@@ -141,9 +135,9 @@ func TestRegisterCredentialRepository_MultipleTypes(t *testing.T) {
 	err = RegisterCredentialRepository(secondRepo, &mockCredentialPlugin[*dummyv1.Repository]{}, builder)
 	r.NoError(err)
 
-	// Should have 6 handlers total (3 for each registration)
+	// Should have 4 handlers total (2 for each registration)
 	handlers := builder.GetHandlers()
-	r.Len(handlers, 6)
+	r.Len(handlers, 4)
 
 	// Should have 2 types registered
 	// Validate registered types

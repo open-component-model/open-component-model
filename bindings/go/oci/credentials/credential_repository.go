@@ -25,25 +25,15 @@ func (p *OCICredentialRepository) GetCredentialRepositoryScheme() *runtime.Schem
 	return ocicredentials.Scheme
 }
 
-// Resolve attempts to resolve credentials for a given repository configuration and consumer identity.
-// It converts the provided configuration to a DockerConfig and uses it to resolve credentials.
-// The passed map of pre-resolved credentials is unused in this implementation, because docker configs do not require
-// authentication themselves.
-//
-// Returns a map of credential key-value pairs (username, password, access token, refresh token as per ResolveV1DockerConfigCredentials)
-func (p *OCICredentialRepository) Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, _ map[string]string) (map[string]string, error) {
-	dockerConfig := credentialsv1.DockerConfig{}
-	if err := p.GetCredentialRepositoryScheme().Convert(cfg, &dockerConfig); err != nil {
-		return nil, fmt.Errorf("failed to resolve credentials because config could not be interpreted as docker config: %w", err)
-	}
-	return ResolveV1DockerConfigCredentials(ctx, dockerConfig, identity)
-}
-
 // ResolveTyped resolves credentials and returns them as typed *credentialsv1.OCICredentials.
 // The credentials parameter is unused: docker configs are read from the host and do not require
 // authentication themselves.
 func (p *OCICredentialRepository) ResolveTyped(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, _ runtime.Typed) (runtime.Typed, error) {
-	resolved, err := p.Resolve(ctx, cfg, identity, nil)
+	dockerConfig := credentialsv1.DockerConfig{}
+	if err := p.GetCredentialRepositoryScheme().Convert(cfg, &dockerConfig); err != nil {
+		return nil, fmt.Errorf("failed to resolve credentials because config could not be interpreted as docker config: %w", err)
+	}
+	resolved, err := ResolveV1DockerConfigCredentials(ctx, dockerConfig, identity)
 	if err != nil {
 		return nil, err
 	}

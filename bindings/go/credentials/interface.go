@@ -18,12 +18,6 @@ var ErrUnknown = errors.New("unknown error occurred")
 // In case of an error it will either return ErrNotFound when no credentials could be found
 // or another error indicating the failure reason wrapped by ErrUnknown.
 type Resolver interface {
-	// Resolve resolves credentials for the given identity and returns them as a map.
-	//
-	// TODO(matthiasbruns): Remove once all consumers use ResolveTyped https://github.com/open-component-model/ocm-project/issues/980
-	//
-	// Deprecated: Migrate to ResolveTyped instead for typed credential support.
-	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
 	// ResolveTyped resolves credentials for the given identity and returns them as a runtime.Typed.
 	// The returned value is either a registered typed credential (e.g. *HelmHTTPCredentials) or
 	// a *v1.DirectCredentials fallback for legacy Credentials/v1 configs.

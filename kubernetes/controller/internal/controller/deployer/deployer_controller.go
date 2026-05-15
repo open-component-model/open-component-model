@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -732,12 +733,15 @@ func resolveResourceCredentials(
 		return nil, fmt.Errorf("failed to create credential graph: %w", err)
 	}
 
-	creds, err := credGraph.Resolve(ctx, id) //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
+	typed, err := credGraph.ResolveTyped(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
 	}
 
-	return creds, nil
+	if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
+		return dc.Properties, nil
+	}
+	return nil, nil
 }
 
 // buildResourceCacheKey computes the cache key used to store/retrieve downloaded resource objects.

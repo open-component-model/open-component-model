@@ -78,9 +78,11 @@ func TestRegisterInternalCredentialPlugin(t *testing.T) {
 			require.Equal(t, runtime.Identity{"type": "stub"}, identity)
 			require.True(t, plugin.identityCalled)
 
-			creds, err := got.Resolve(ctx, identity, nil)
+			typed, err := got.ResolveTyped(ctx, identity, nil)
 			require.NoError(t, err)
-			require.Equal(t, map[string]string{"token": "resolved"}, creds)
+			dc, ok := typed.(*credconfigv1.DirectCredentials)
+			require.True(t, ok, "expected *DirectCredentials, got %T", typed)
+			require.Equal(t, map[string]string{"token": "resolved"}, dc.Properties)
 			require.True(t, plugin.resolveCalled)
 
 			plugin.identityCalled = false
@@ -156,18 +158,10 @@ func (m *mockCredentialPlugin) GetConsumerIdentity(_ context.Context, _ runtime.
 	return runtime.Identity{"type": "stub"}, nil
 }
 
-func (m *mockCredentialPlugin) Resolve(_ context.Context, _ runtime.Identity, _ map[string]string) (map[string]string, error) {
+func (m *mockCredentialPlugin) ResolveTyped(_ context.Context, _ runtime.Identity, _ runtime.Typed) (runtime.Typed, error) {
 	m.resolveCalled = true
-	return map[string]string{"token": "resolved"}, nil
-}
-
-func (m *mockCredentialPlugin) ResolveTyped(ctx context.Context, identity runtime.Identity, _ runtime.Typed) (runtime.Typed, error) {
-	resolved, err := m.Resolve(ctx, identity, nil)
-	if err != nil {
-		return nil, err
-	}
 	return &credconfigv1.DirectCredentials{
 		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
-		Properties: resolved,
+		Properties: map[string]string{"token": "resolved"},
 	}, nil
 }

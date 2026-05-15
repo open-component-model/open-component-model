@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -256,12 +257,15 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 
 			var creds map[string]string
 			if consumerID, err := handler.GetVerifyingCredentialConsumerIdentity(egctx, signature, verifierSpec); err == nil {
-				if creds, err = credentialGraph.Resolve(egctx, consumerID); err != nil { //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
-					if errors.Is(err, credentials.ErrNotFound) {
-						logger.DebugContext(egctx, "could not resolve credentials for verification", "error", err.Error())
+				typed, resolveErr := credentialGraph.ResolveTyped(egctx, consumerID)
+				if resolveErr != nil {
+					if errors.Is(resolveErr, credentials.ErrNotFound) {
+						logger.DebugContext(egctx, "could not resolve credentials for verification", "error", resolveErr.Error())
 					} else {
-						return fmt.Errorf("resolving credentials for verification failed: %w", err)
+						return fmt.Errorf("resolving credentials for verification failed: %w", resolveErr)
 					}
+				} else if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
+					creds = dc.Properties
 				}
 			}
 

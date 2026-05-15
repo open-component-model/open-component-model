@@ -20,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -347,15 +348,14 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 	consumerIdentity, err := f.repositoryProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, specification)
 	if err == nil {
 		if f.credentialsResolver != nil {
-			if c, err := f.credentialsResolver.Resolve(ctx, consumerIdentity); err != nil { //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
-				// does not know the credentials package - so we need to check manually
+			if typed, err := f.credentialsResolver.ResolveTyped(ctx, consumerIdentity); err != nil {
 				if errors.Is(err, credentials.ErrNotFound) {
 					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, err.Error()))
 				} else {
 					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", specification, err)
 				}
-			} else {
-				creds = c
+			} else if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
+				creds = dc.Properties
 			}
 		}
 	} else {

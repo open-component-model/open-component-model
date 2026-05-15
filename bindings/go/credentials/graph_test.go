@@ -57,29 +57,6 @@ func (p CredentialPlugin) ResolveTyped(ctx context.Context, identity runtime.Ide
 	return p.CredentialFunc(ctx, identity, credentials)
 }
 
-// Resolve is a deprecated shim that calls ResolveTyped with map↔typed conversions.
-func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
-	var typedCreds runtime.Typed
-	if len(credentials) > 0 {
-		typedCreds = &v1.DirectCredentials{
-			Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
-			Properties: credentials,
-		}
-	}
-	result, err := p.ResolveTyped(ctx, identity, typedCreds)
-	if err != nil {
-		return nil, err
-	}
-	if result == nil {
-		return nil, nil
-	}
-	dc, ok := result.(*v1.DirectCredentials)
-	if !ok {
-		return nil, fmt.Errorf("unexpected credential type %T from ResolveTyped", result)
-	}
-	return dc.Properties, nil
-}
-
 type RepositoryPlugin struct {
 	RepositoryIdentityFunc func(config runtime.Typed) (runtime.Identity, error)
 	ResolveFunc            func(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error)
@@ -95,29 +72,6 @@ func (s RepositoryPlugin) ConsumerIdentityForConfig(_ context.Context, config ru
 
 func (s RepositoryPlugin) ResolveTyped(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 	return s.ResolveFunc(ctx, cfg, identity, credentials)
-}
-
-// Resolve is a deprecated shim that calls ResolveTyped with map↔typed conversions.
-func (s RepositoryPlugin) Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
-	var typedCreds runtime.Typed
-	if len(credentials) > 0 {
-		typedCreds = &v1.DirectCredentials{
-			Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
-			Properties: credentials,
-		}
-	}
-	result, err := s.ResolveTyped(ctx, cfg, identity, typedCreds)
-	if err != nil {
-		return nil, err
-	}
-	if result == nil {
-		return nil, nil
-	}
-	dc, ok := result.(*v1.DirectCredentials)
-	if !ok {
-		return nil, fmt.Errorf("unexpected credential type %T from ResolveTyped", result)
-	}
-	return dc.Properties, nil
 }
 
 const testYAML = `
@@ -525,12 +479,14 @@ func TestResolveCredentials(t *testing.T) {
 			r := require.New(t)
 			graph, err := GetGraph(t, tc.yaml)
 			r.NoError(err)
-			credsByIdentity, err := graph.Resolve(t.Context(), tc.identity)
+			typed, err := graph.ResolveTyped(t.Context(), tc.identity)
 			tc.expectedErr(t, err)
 			if err != nil {
 				return
 			}
-			r.Equal(tc.expected, credsByIdentity)
+			dc, ok := typed.(*v1.DirectCredentials)
+			r.True(ok, "expected *v1.DirectCredentials, got %T", typed)
+			r.Equal(tc.expected, dc.Properties)
 		})
 	}
 }
@@ -596,33 +552,6 @@ func TestResolveTypedCredentials(t *testing.T) {
 			tc.validate(t, typed)
 		})
 	}
-}
-
-// TestResolveDelegatesToResolveTyped verifies that Resolve correctly delegates to ResolveTyped
-// when passing a runtime.Identity (which implements runtime.Typed). This ensures no panic occurs
-// from the type assertion path inside ResolveTyped when called via the legacy Resolve method.
-func TestResolveDelegatesToResolveTyped(t *testing.T) {
-	graph, err := GetGraph(t, testYAML)
-	require.NoError(t, err)
-
-	identity := runtime.Identity{
-		"type":     "OCIRegistry",
-		"hostname": "docker.io",
-	}
-
-	// Resolve (legacy) delegates to ResolveTyped internally.
-	// Both must return equivalent results without panicking.
-	creds, err := graph.Resolve(t.Context(), identity)
-	require.NoError(t, err)
-	require.Equal(t, "foo", creds["username"])
-	require.Equal(t, "bar", creds["password"])
-
-	typed, err := graph.ResolveTyped(t.Context(), identity)
-	require.NoError(t, err)
-	direct, ok := typed.(*v1.DirectCredentials)
-	require.True(t, ok, "expected *v1.DirectCredentials, got %T", typed)
-	require.Equal(t, "foo", direct.Properties["username"])
-	require.Equal(t, "bar", direct.Properties["password"])
 }
 
 func TestGraphRendering(t *testing.T) {
@@ -733,7 +662,7 @@ func TestResolutionErrors(t *testing.T) {
 	r := require.New(t)
 	g, err := credentials.ToGraph(t.Context(), &credentialruntime.Config{}, credentials.Options{})
 	require.NoError(t, err)
-	creds, err := g.Resolve(t.Context(), id)
+	creds, err := g.ResolveTyped(t.Context(), id)
 	r.Empty(creds)
 	r.Error(err)
 	r.ErrorIs(err, credentials.ErrNoDirectCredentials)
@@ -750,7 +679,7 @@ func TestResolutionErrors(t *testing.T) {
 		}),
 	})
 	r.NoError(err)
-	creds, err = g.Resolve(t.Context(), id)
+	creds, err = g.ResolveTyped(t.Context(), id)
 	r.Empty(creds)
 	r.Error(err)
 	r.ErrorIs(err, credentials.ErrNoIndirectCredentials)

@@ -20,10 +20,6 @@ type RepositoryPlugin interface {
 	// This identity is used to look up credentials in the credential graph.
 	ConsumerIdentityForConfig(ctx context.Context, config runtime.Typed) (runtime.Identity, error)
 
-	// Deprecated: Migrate to ResolveTyped for typed credential support.
-	// https://github.com/open-component-model/ocm-project/issues/1047
-	Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
-
 	// ResolveTyped resolves credentials for a given repository configuration and consumer
 	// identity, returning a runtime.Typed credential.
 	// The credentials parameter contains any pre-resolved credentials from the credential
@@ -39,10 +35,6 @@ type CredentialPlugin interface {
 	// GetConsumerIdentity maps a credential to a consumer identity.
 	// This identity is used to look up credentials in the credential graph.
 	GetConsumerIdentity(ctx context.Context, credential runtime.Typed) (runtime.Identity, error)
-
-	// Deprecated: Migrate to ResolveTyped for typed credential support.
-	// https://github.com/open-component-model/ocm-project/issues/1047
-	Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
 
 	// ResolveTyped resolves credentials for a given consumer identity, returning a
 	// runtime.Typed credential. The credentials parameter contains any pre-resolved

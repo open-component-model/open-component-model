@@ -26,14 +26,6 @@ func (r *TypeToUntypedPlugin[T]) ResolveTyped(ctx context.Context, cfg v1.Resolv
 	}, credentials)
 }
 
-// Resolve is a deprecated shim delegating to ResolveTyped.
-func (r *TypeToUntypedPlugin[T]) Resolve(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials map[string]string) (map[string]string, error) {
-	return r.base.Resolve(ctx, v1.ResolveRequest[T]{
-		Config:   cfg.Config.(T),
-		Identity: cfg.Identity,
-	}, credentials)
-}
-
 func (r *TypeToUntypedPlugin[T]) Ping(ctx context.Context) error {
 	return r.base.Ping(ctx)
 }

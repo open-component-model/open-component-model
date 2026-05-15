@@ -21,6 +21,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -145,8 +146,11 @@ configurations:
 	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
 	id, err := resourceRepo.GetResourceCredentialConsumerIdentity(ctx, &resource)
 	r.NoError(err, "should be able to get credential consumer identity for resource")
-	creds, err := credentialResolver.Resolve(ctx, id)
+	typed, err := credentialResolver.ResolveTyped(ctx, id)
 	r.NoError(err, "should be able to resolve credentials for resource")
+	dc, ok := typed.(*credconfigv1.DirectCredentials)
+	r.True(ok, "expected *credconfigv1.DirectCredentials, got %T", typed)
+	creds := dc.Properties
 	blob := inmemory.New(bytes.NewReader(data))
 	newRes, err := resourceRepo.UploadResource(ctx, &resource, blob, creds)
 	r.NoError(err)
@@ -403,9 +407,12 @@ func createRepo(ctx context.Context, repoProvider *provider.CachingComponentVers
 	var creds map[string]string
 	id, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, targetSpec)
 	if err == nil {
-		creds, err = credentialResolver.Resolve(ctx, id)
+		typed, err := credentialResolver.ResolveTyped(ctx, id)
 		if err != nil {
 			return nil, fmt.Errorf("should be able to resolve credentials for target repository: %w", err)
+		}
+		if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
+			creds = dc.Properties
 		}
 	}
 	targetRepo, err := repoProvider.GetComponentVersionRepository(ctx, targetSpec, creds)

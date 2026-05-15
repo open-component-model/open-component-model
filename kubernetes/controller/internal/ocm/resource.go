@@ -8,6 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -48,9 +49,12 @@ func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *de
 			return nil, fmt.Errorf("failed creating credential graph: %w", err)
 		}
 
-		creds, err = credGraph.Resolve(ctx, id) //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
+		typed, err := credGraph.ResolveTyped(ctx, id)
 		if err != nil && !errors.Is(err, credentials.ErrNotFound) {
 			return nil, fmt.Errorf("failed resolving credentials for digest processor: %w", err)
+		}
+		if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
+			creds = dc.Properties
 		}
 	}
 
