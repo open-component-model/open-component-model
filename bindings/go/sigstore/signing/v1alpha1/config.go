@@ -57,16 +57,18 @@ type SignConfig struct {
 	// Maps to cosign --signing-config.
 	SigningConfig string `json:"signingConfig,omitempty"`
 
-	// Issuer is the OIDC issuer URL used for token acquisition.
-	// When set, it is emitted into the credential consumer identity so that
-	// .ocmconfig entries for enterprise Sigstore stacks can be distinguished
-	// from the public-good default.
-	// If empty, the OIDC plugin defaults to https://oauth2.sigstore.dev/auth.
+	// Issuer is the OIDC issuer URL of an enterprise Sigstore deployment.
+	// This handler does not use it directly to acquire tokens; it is emitted
+	// into the credential consumer identity so that .ocmconfig entries can
+	// route to an enterprise OIDC credential plugin instead of the public-good
+	// default. The plugin that produces the token reads it from the same
+	// consumer identity. Leave empty when targeting public Sigstore.
 	Issuer string `json:"issuer,omitempty"`
 
-	// ClientID is the OAuth2 client ID used for OIDC token acquisition.
-	// When set, it is emitted into the credential consumer identity alongside Issuer.
-	// If empty, the OIDC plugin defaults to "sigstore".
+	// ClientID is the OAuth2 client ID of an enterprise Sigstore deployment.
+	// Like Issuer, it is not used by this handler directly; it is emitted into
+	// the credential consumer identity so .ocmconfig entries can route to an
+	// enterprise OIDC credential plugin. Leave empty for the default Sigstore client.
 	ClientID string `json:"clientID,omitempty"`
 }
 
