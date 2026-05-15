@@ -34,19 +34,20 @@
 // Signing (GetSigningCredentialConsumerIdentity):
 //
 //	type:      SigstoreSigner/v1alpha1
-//	algorithm: sigstore
 //	signature: <signature-name>
+//	issuer:    <oidc-issuer>     (optional, from signer spec)
+//	clientID:  <oauth2-client>   (optional, from signer spec)
 //
 // Verification (GetVerifyingCredentialConsumerIdentity):
 //
 //	type:      SigstoreVerifier/v1alpha1
-//	algorithm: sigstore
 //	signature: <signature-name>
 //
-// The "algorithm" and "signature" attributes are mandatory for credential
-// matching (the credential graph uses strict equality on all identity
-// attributes). The .ocmconfig consumer identity must include all three
-// attributes to match.
+// The minimal consumer identity contains only type and signature, which
+// uses the public Sigstore infrastructure with default OIDC settings.
+// For enterprise Sigstore stacks, set issuer and clientID in the signer spec;
+// the handler emits them into the consumer identity so that .ocmconfig entries
+// can distinguish between different Sigstore deployments.
 //
 // # Credential Keys
 //
@@ -74,9 +75,10 @@
 //
 // OIDC token acquisition for keyless signing happens before cosign is invoked.
 // The token must be resolved through the credential graph (configured as a
-// consumer identity of type OIDCIdentityToken/v1alpha1 in .ocmconfig). The
-// handler forwards the resolved token to cosign internally via the
-// SIGSTORE_ID_TOKEN environment variable.
+// consumer identity of type SigstoreSigner/v1alpha1 in .ocmconfig with a
+// credential of type OIDCIdentityTokenProvider/v1alpha1 or Credentials/v1
+// with a "token" property). The handler forwards the resolved token to cosign
+// via the SIGSTORE_ID_TOKEN environment variable.
 //
 // If SIGSTORE_ID_TOKEN or ACTIONS_ID_TOKEN_REQUEST_TOKEN is already set in
 // the process environment, the handler uses the ambient token and skips

@@ -27,8 +27,9 @@ import (
 var _ signing.Handler = (*Handler)(nil)
 
 const (
-	IdentityAttributeAlgorithm = "algorithm"
 	IdentityAttributeSignature = "signature"
+	IdentityAttributeIssuer    = "issuer"
+	IdentityAttributeClientID  = "clientID"
 
 	CredentialKeyOIDCToken           = "token"
 	CredentialKeyTrustedRootJSON     = "trusted_root_json"
@@ -75,6 +76,10 @@ func (h *Handler) Sign(
 
 	if err := cfg.Validate(); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("invalid signing config: %w", err)
+	}
+
+	if strings.HasPrefix(cfg.Issuer, "http://") {
+		slog.WarnContext(ctx, "Issuer uses HTTP (non-TLS); this is insecure outside of test environments")
 	}
 
 	digestBytes, err := hex.DecodeString(unsigned.Value)
@@ -263,6 +268,12 @@ func (*Handler) GetSigningCredentialConsumerIdentity(
 	}
 	id := credentialIdentity(sigcredentials.IdentityTypeSigstoreSigner)
 	id[IdentityAttributeSignature] = name
+	if cfg.Issuer != "" {
+		id[IdentityAttributeIssuer] = cfg.Issuer
+	}
+	if cfg.ClientID != "" {
+		id[IdentityAttributeClientID] = cfg.ClientID
+	}
 	return id, nil
 }
 
@@ -280,7 +291,7 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 }
 
 func credentialIdentity(identityType runtime.Type) runtime.Identity {
-	id := runtime.Identity{IdentityAttributeAlgorithm: v1alpha1.AlgorithmSigstore}
+	id := runtime.Identity{}
 	id.SetType(identityType)
 	return id
 }

@@ -1,7 +1,6 @@
 package credentials
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -112,7 +111,7 @@ func TestMergeTyped_MultipleWithoutSchemeFails(t *testing.T) {
 
 	got, err := mergeTyped([]runtime.Typed{first, second}, nil)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrSchemeRequired), "expected ErrSchemeRequired, got %v", err)
+	assert.ErrorContains(t, err, "scheme is nil", "error should indicate that scheme is required when merging multiple credentials")
 	assert.Nil(t, got)
 }
 

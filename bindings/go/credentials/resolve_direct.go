@@ -10,10 +10,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ErrSchemeRequired is returned when merging multiple typed credentials needs a
-// scheme to serialize them but no CredentialTypeSchemeProvider was configured.
-var ErrSchemeRequired = fmt.Errorf("a CredentialTypeSchemeProvider is required to merge multiple typed credentials")
-
 // resolveFromGraph resolves credentials for a given identity by traversing the graph.
 // Returns a runtime.Typed credential stored on the matching node.
 func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
@@ -74,8 +70,7 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 // ones per field).
 //
 // The scheme must know every input's runtime type so scheme.Convert can
-// serialize it to runtime.Raw. With no scheme, only single-result resolution
-// works; merging returns ErrSchemeRequired.
+// serialize it to runtime.Raw.
 func mergeTyped(creds []runtime.Typed, scheme *runtime.Scheme) (runtime.Typed, error) {
 	switch len(creds) {
 	case 0:
@@ -85,7 +80,7 @@ func mergeTyped(creds []runtime.Typed, scheme *runtime.Scheme) (runtime.Typed, e
 	}
 
 	if scheme == nil {
-		return nil, ErrSchemeRequired
+		return nil, fmt.Errorf("scheme is nil")
 	}
 
 	merged := make(map[string]string)
