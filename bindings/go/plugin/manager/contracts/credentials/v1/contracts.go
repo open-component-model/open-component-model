@@ -8,10 +8,13 @@ import (
 )
 
 // CredentialRepositoryPluginContract provides a contract for credential plugins to implement.
-// This contract holds ConsumerIdentityForConfig, which will return the identity of the credential plugin. And Resolve,
-// which uses the credential graph to resolve any credentials.
+// It exposes ConsumerIdentityForConfig, which returns the consumer identity for a repository
+// configuration, and ResolveTyped, which uses the credential graph to resolve credentials.
 type CredentialRepositoryPluginContract[T runtime.Typed] interface {
 	contracts.PluginBase
 	ConsumerIdentityForConfig(ctx context.Context, cfg ConsumerIdentityForConfigRequest[T]) (runtime.Identity, error)
-	Resolve(ctx context.Context, cfg ResolveRequest[T], credentials map[string]string) (map[string]string, error)
+
+	// ResolveTyped resolves credentials for a given repository configuration and consumer
+	// identity, returning a runtime.Typed credential. credentials may be nil.
+	ResolveTyped(ctx context.Context, cfg ResolveRequest[T], credentials runtime.Typed) (runtime.Typed, error)
 }

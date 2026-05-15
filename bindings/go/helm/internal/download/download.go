@@ -16,9 +16,8 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/helm/internal"
-	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
-	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
 
 // NewReadOnlyChartFromRemote downloads a Helm chart from a remote repository and returns it as [helm.ChartData].
@@ -39,10 +38,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 	}
 
 	if opt.Credentials == nil {
-		opt.Credentials = &helmcredsv1.HelmHTTPCredentials{}
-	}
-	if opt.OCICredentials == nil {
-		opt.OCICredentials = &ocicredsv1.OCICredentials{}
+		opt.Credentials = make(map[string]string)
 	}
 
 	chartDir, err := os.MkdirTemp(targetDir, "helmRemoteChart*")
@@ -73,8 +69,8 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		verify = downloader.VerifyLater
 	}
 
-	if opt.Credentials.Keyring != "" {
-		keyring = opt.Credentials.Keyring
+	if v, ok := opt.Credentials[CredentialKeyring]; ok {
+		keyring = v
 		// We set verifyIfPossible to allow the download to run verify if keyring is defined. Without the keyring
 		// verification would not be possible at all.
 		// https://github.com/open-component-model/ocm/blob/be847549af3d2947a2c8bc2b38d51a20c2a8a9ba/api/tech/helm/downloader.go#L128
@@ -115,17 +111,13 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		Keyring:          keyring,
 	}
 
-	// Do not break legacy behaviour, but also support pure OCI based credentials
-	username := opt.Credentials.Username
-	if username == "" {
-		username = opt.OCICredentials.Username
-	}
-	password := opt.Credentials.Password
+	username := opt.Credentials[ocicredentials.CredentialKeyUsername]
+	password := opt.Credentials[ocicredentials.CredentialKeyPassword]
+
 	if password == "" {
-		password = opt.OCICredentials.Password
-	}
-	if password == "" {
-		password = opt.OCICredentials.AccessToken
+		if token := opt.Credentials[ocicredentials.CredentialKeyAccessToken]; token != "" {
+			password = token
+		}
 	}
 
 	if username != "" && password != "" {
