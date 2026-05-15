@@ -169,8 +169,17 @@ func validateURL(field, rawURL string) error {
 	if err != nil {
 		return fmt.Errorf("%s: invalid URL %q: %w", field, rawURL, err)
 	}
+	if !u.IsAbs() {
+		return fmt.Errorf("%s: URL %q must be absolute (include a scheme)", field, rawURL)
+	}
 	if u.Host == "" {
 		return fmt.Errorf("%s: URL %q has no host", field, rawURL)
+	}
+	if u.RawQuery != "" {
+		return fmt.Errorf("%s: URL %q must not contain a query component", field, rawURL)
+	}
+	if u.Fragment != "" {
+		return fmt.Errorf("%s: URL %q must not contain a fragment component", field, rawURL)
 	}
 	return nil
 }

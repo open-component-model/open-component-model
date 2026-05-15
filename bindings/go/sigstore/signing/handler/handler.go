@@ -78,6 +78,10 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("invalid signing config: %w", err)
 	}
 
+	if strings.HasPrefix(cfg.Issuer, "http://") {
+		slog.WarnContext(ctx, "Issuer uses HTTP (non-TLS); this is insecure outside of test environments")
+	}
+
 	digestBytes, err := hex.DecodeString(unsigned.Value)
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("decode digest hex value: %w", err)
