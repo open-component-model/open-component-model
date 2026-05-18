@@ -29,7 +29,7 @@ configurations:
 ```
 
 The consumer identity type is extensible — any string in `Name` or `Name/Version` format can be used.
-Plugins and integrations can introduce additional types (e.g. `AWSSecretsManager`, `HashiCorpVault`, `MavenRepository`).
+Plugins and integrations can introduce additional types, for example `AWSSecretsManager`, `HashiCorpVault`, or `MavenRepository`.
 The following types are defined by the core OCM modules:
 
 | Identity Type                                    | Used For                                          |
@@ -44,15 +44,7 @@ The following types are defined by the core OCM modules:
 
 Used when OCM accesses an OCI registry — pushing, pulling, or resolving component versions and resources.
 
-### Identity Attributes
-
-| Attribute | Required | Description |
-| --- | --- | --- |
-| `type` | Yes | Must be `OCIRegistry` |
-| `hostname` | Yes | Registry hostname (e.g. `ghcr.io`, `registry.example.com`) |
-| `path` | No | Repository path. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
-| `scheme` | No | URL scheme (`https`, `http`, `oci`). If omitted, matches any scheme. If set, must match exactly. |
-| `port` | No | Port number as string. Default ports are applied when `scheme` is set: `https` and `oci` default to `443`, `http` defaults to `80`. |
+{{< schema-renderer url="/schemas/bindings/go/oci/spec/identity/v1/OCIRegistryIdentity.schema.json" >}}
 
 ### Credential Properties
 
@@ -119,17 +111,9 @@ For detailed matching examples and edge cases, see [Tutorial: Understand Credent
 
 ## HelmChartRepository
 
-Used when OCM accesses a remote Helm chart repository — pulling or resolving Helm charts referenced as resources. The identity is derived from the Helm repository URL using the same URL-based attributes as `OCIRegistry`.
+Used when OCM accesses an HTTP-based Helm chart repository — pulling or resolving Helm charts referenced as resources. OCI-based Helm repositories use the `OCIRegistry` identity type.
 
-### Identity Attributes
-
-| Attribute | Required | Description |
-| --- | --- | --- |
-| `type` | Yes | Must be `HelmChartRepository` |
-| `hostname` | Yes | Repository hostname (e.g. `charts.example.com`, `registry.example.com`) |
-| `path` | No | Repository path (e.g. `stable`). If omitted, matches any path on the hostname. |
-| `scheme` | No | URL scheme (`https`, `http`, `oci`). If omitted, matches any scheme. |
-| `port` | No | Port number as string. If omitted, matches any port. |
+{{< schema-renderer url="/schemas/bindings/go/helm/spec/identity/v1/HelmChartRepositoryIdentity.schema.json" >}}
 
 ### Credential Properties
 
@@ -158,7 +142,7 @@ Used when OCM accesses a remote Helm chart repository — pulling or resolving H
 
 ```yaml
 - identity:
-    type: HelmChartRepository
+    type: OCIRegistry
     hostname: registry.example.com
     scheme: oci
   credentials:
@@ -174,16 +158,10 @@ Used when OCM accesses a remote Helm chart repository — pulling or resolving H
 
 Used when OCM signs or verifies component versions with RSA keys.
 
-### Identity Attributes
-
-| Attribute | Required | Description |
-| --- | --- | --- |
-| `type` | Yes | Must be `RSA/v1alpha1` |
-| `algorithm` | Yes | Signing algorithm. Must be `RSASSA-PSS` (recommended) or `RSASSA-PKCS1-V1_5`. |
-| `signature` | Yes | Logical signature name (e.g. `default`). Must match the `--signature` flag used with `ocm sign cv`. Defaults to `default` if not specified on the CLI. |
+{{< schema-renderer url="/schemas/bindings/go/rsa/spec/identity/v1/RSAIdentity.schema.json" >}}
 
 {{< callout context="caution" >}}
-**All three attributes are required.** When OCM looks up signing credentials, it always constructs a lookup identity with `type`, `algorithm`, and `signature`. If your consumer entry omits `algorithm`, the credential system will not find a match — even though the signing algorithm defaults to `RSASSA-PSS` internally.
+When OCM looks up signing credentials, it constructs a lookup identity with `type`, `algorithm`, and `signature`. If your consumer entry omits `algorithm`, the credential system will not find a match — even though the signing algorithm defaults to `RSASSA-PSS` internally.
 
 If you are unsure which algorithm to use, specify `algorithm: RSASSA-PSS`.
 {{< /callout >}}

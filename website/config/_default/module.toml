@@ -145,6 +145,24 @@
     versions = ["main"]
 
 [[mounts]]
+  source = "../bindings/go/oci/spec/identity/v1/schemas"
+  target = "static/main/schemas/bindings/go/oci/spec/identity/v1"
+  [mounts.sites.matrix]
+    versions = ["main"]
+
+[[mounts]]
+  source = "../bindings/go/helm/spec/identity/v1/schemas"
+  target = "static/main/schemas/bindings/go/helm/spec/identity/v1"
+  [mounts.sites.matrix]
+    versions = ["main"]
+
+[[mounts]]
+  source = "../bindings/go/rsa/spec/identity/v1/schemas"
+  target = "static/main/schemas/bindings/go/rsa/spec/identity/v1"
+  [mounts.sites.matrix]
+    versions = ["main"]
+
+[[mounts]]
   source = "../kubernetes/controller/bin/gen/crd"
   target = "static/main/schemas/kubernetes/controller"
   [mounts.sites.matrix]
@@ -182,6 +200,33 @@
   [[imports.mounts]]
   source = "resources"
   target = "static/latest/schemas/bindings/go/descriptor/v2"
+  [imports.mounts.sites.matrix]
+    versions = ["latest"]
+
+[[imports]]
+  path = "ocm.software/open-component-model/bindings/go/oci"
+  version = "latest"
+  [[imports.mounts]]
+  source = "spec/identity/v1/schemas"
+  target = "static/latest/schemas/bindings/go/oci/spec/identity/v1"
+  [imports.mounts.sites.matrix]
+    versions = ["latest"]
+
+[[imports]]
+  path = "ocm.software/open-component-model/bindings/go/helm"
+  version = "latest"
+  [[imports.mounts]]
+  source = "spec/identity/v1/schemas"
+  target = "static/latest/schemas/bindings/go/helm/spec/identity/v1"
+  [imports.mounts.sites.matrix]
+    versions = ["latest"]
+
+[[imports]]
+  path = "ocm.software/open-component-model/bindings/go/rsa"
+  version = "latest"
+  [[imports.mounts]]
+  source = "spec/identity/v1/schemas"
+  target = "static/latest/schemas/bindings/go/rsa/spec/identity/v1"
   [imports.mounts.sites.matrix]
     versions = ["latest"]
 
