@@ -148,20 +148,26 @@ OCI Distribution Spec v1.1 introduced the [Referrers API](https://github.com/ope
 1. **Pack the resource as-is** — the OCI layout resource is pushed to the registry without annotation injection. The digest recorded in the CD matches the original, unmodified manifest.
 2. **Push an ownership referrer** — a minimal OCI manifest is pushed with:
    - `subject`: a descriptor pointing to the resource's original manifest (digest, mediaType, size).
-   - `artifactType`: a dedicated media type, e.g. `application/vnd.ocm.ownership.v1+json`.
+   - `artifactType`: a dedicated media type, e.g. `application/vnd.ocm.software.ownership.v1+json`.
    - `annotations`: the ownership metadata (`software.ocm.component.name`, `software.ocm.component.version`, `software.ocm.artifact`).
 
 ```json
 {
   "schemaVersion": 2,
   "mediaType": "application/vnd.oci.image.manifest.v1+json",
-  "artifactType": "application/vnd.ocm.ownership.v1+json",
+  "artifactType": "application/vnd.ocm.software.ownership.v1+json",
   "config": {
     "mediaType": "application/vnd.oci.empty.v1+json",
     "digest": "sha256:44136fa355b311bfa706...",
     "size": 2
   },
-  "layers": [],
+  "layers": [
+    {
+      "mediaType": "application/vnd.oci.empty.v1+json",
+      "digest": "sha256:44136fa355b3678a1146...",
+      "size": 2
+    }
+  ],
   "subject": {
     "mediaType": "application/vnd.oci.image.manifest.v1+json",
     "digest": "sha256:abc123...",
@@ -178,7 +184,7 @@ OCI Distribution Spec v1.1 introduced the [Referrers API](https://github.com/ope
 1. **Discovery via Referrers API** — given a resource image reference, a consumer queries:
 
 ```http
-GET /v2/<name>/referrers/sha256:abc123...?artifactType=application/vnd.ocm.ownership.v1+json
+GET /v2/<name>/referrers/sha256:abc123...?artifactType=application/vnd.ocm.software.ownership.v1+json
 ```
 
 The registry returns an OCI Index listing the ownership referrer. The consumer reads the annotations to find the owning component version. No OCM-specific tooling is required — any OCI v1.1 client (e.g. `oras discover`) can perform this lookup.
@@ -194,7 +200,7 @@ Attach ownership annotations as a referrer to an existing resource image:
 # --artifact-type identifies this as OCM ownership metadata.
 # The two --annotation flags carry the component name and version.
 oras attach ghcr.io/piotrjanik/open-component-model/hello-ocm@sha256:e22e4bb2a42521598d0cddaaca53f5a4354e9d4ebb3a55d604591e3cf30e7836 \
-  --artifact-type "application/vnd.ocm.ownership.v1+json" \
+  --artifact-type "application/vnd.ocm.software.ownership.v1+json" \
   --annotation "software.ocm.component.name=acme.org/hello-ocm" \
   --annotation "software.ocm.component.version=1.0.0" \
   --annotation 'software.ocm.artifact={"identity":{"name":"hello-ocm"},"kind":"resource"}'
@@ -205,7 +211,7 @@ Discover ownership metadata starting from the original resource manifest:
 ```bash
 # List all referrers of the resource image, filtered by artifact type.
 oras discover ghcr.io/piotrjanik/open-component-model/hello-ocm@sha256:e22e4bb2a42521598d0cddaaca53f5a4354e9d4ebb3a55d604591e3cf30e7836 \
-  --artifact-type "application/vnd.ocm.ownership.v1+json" \
+  --artifact-type "application/vnd.ocm.software.ownership.v1+json" \
   --format json
 ```
 
@@ -224,7 +230,7 @@ Output:
         "software.ocm.component.version": "1.0.0",
         "software.ocm.artifact": "{\"identity\":{\"name\":\"hello-ocm\"},\"kind\":\"resource\"}"
       },
-      "artifactType": "application/vnd.ocm.ownership.v1+json"
+      "artifactType": "application/vnd.ocm.software.ownership.v1+json"
     }
   ]
 }
@@ -236,7 +242,7 @@ The annotations in the referrer list directly reveal the owning component versio
 {
   "schemaVersion": 2,
   "mediaType": "application/vnd.oci.image.manifest.v1+json",
-  "artifactType": "application/vnd.ocm.ownership.v1+json",
+  "artifactType": "application/vnd.ocm.software.ownership.v1+json",
   "config": {
     "mediaType": "application/vnd.oci.empty.v1+json",
     "digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
@@ -273,7 +279,7 @@ IMAGE_REF=$(ocm get component-version ghcr.io/piotrjanik/open-component-model//o
 
 # Discover ownership referrers
 oras discover "$IMAGE_REF" \
-  --artifact-type "application/vnd.ocm.ownership.v1+json" \
+  --artifact-type "application/vnd.ocm.software.ownership.v1+json" \
   --format json | jq '.referrers[0].annotations'
 # {
 #   "software.ocm.component.name": "ocm.software/my-component",
@@ -302,11 +308,11 @@ If both digests match, the referrer is authentic. Unlike Option 1, the resource 
 
 After a resource is uploaded to the registry, push a second OCI manifest (the ownership referrer) into the **same repository**.
 
-1. **[`annotations.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/spec/annotations/annotations.go)** — add constants for the ownership annotation keys and the artifact type `application/vnd.ocm.ownership.v1+json`. The artifact type follows the [OCI artifact type convention](https://github.com/opencontainers/image-spec/blob/v1.1.0/manifest.md#guidelines-for-artifact-usage) and enables filtering via the Referrers API (`?artifactType=...`), distinguishing ownership referrers from other attached artifacts (cosign signatures, SBOMs, etc.).
+1. **[`annotations.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/spec/annotations/annotations.go)** — add constants for the ownership annotation keys and the artifact type `application/vnd.ocm.software.ownership.v1+json`. The artifact type follows the [OCI artifact type convention](https://github.com/opencontainers/image-spec/blob/v1.1.0/manifest.md#guidelines-for-artifact-usage) and enables filtering via the Referrers API (`?artifactType=...`), distinguishing ownership referrers from other attached artifacts (cosign signatures, SBOMs, etc.).
 2. **[`repository.go`](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/oci/repository.go) `uploadAndUpdateLocalArtifact`** — after `pack.ArtifactBlob` returns the resource descriptor (`desc`), build and push the referrer manifest. The `component` and `version` parameters are already available in this function.
-3. **Build the `application/vnd.ocm.ownership.v1+json` referrer manifest** — a minimal `ocispec.Manifest` with:
+3. **Build the `application/vnd.ocm.software.ownership.v1+json` referrer manifest** — a minimal `ocispec.Manifest` with:
    - `Subject`: descriptor of the resource (`desc.MediaType`, `desc.Digest`, `desc.Size`)
-   - `ArtifactType`: `application/vnd.ocm.ownership.v1+json`
+   - `ArtifactType`: `application/vnd.ocm.software.ownership.v1+json`
    - `Config`: `ocispec.DescriptorEmptyJSON` (standard empty `{}`)
    - `Layers`: single `ocispec.DescriptorEmptyJSON` entry (required by the [OCI artifact guidance](https://github.com/opencontainers/image-spec/blob/v1.1.0/manifest.md#guidelines-for-artifact-usage))
    - `Annotations`: `software.ocm.component.name`, `software.ocm.component.version`, and `software.ocm.artifact`
@@ -325,7 +331,7 @@ Two strategies to handle referrers during transfer:
 
 ```go
 // Discover ownership referrers for a resource descriptor
-const ownershipArtifactType = "application/vnd.ocm.ownership.v1+json"
+const ownershipArtifactType = "application/vnd.ocm.software.ownership.v1+json"
 
 referrers, err := registry.Referrers(ctx, sourceStore, resourceDesc, ownershipArtifactType)
 if err != nil {
@@ -348,14 +354,14 @@ for _, ref := range referrers {
 
 #### Consuming Ownership Referrers from External Tools
 
-Once OCM tooling pushes ownership referrers (`application/vnd.ocm.ownership.v1+json`) alongside resource images, any OCI v1.1-compatible tool can discover and consume them **without OCM-specific libraries**. This section describes how external tools — image replicators, vulnerability scanners, admission controllers, GitOps operators, and platform dashboards — can integrate with ownership referrers.
+Once OCM tooling pushes ownership referrers (`application/vnd.ocm.software.ownership.v1+json`) alongside resource images, any OCI v1.1-compatible tool can discover and consume them **without OCM-specific libraries**. This section describes how external tools — image replicators, vulnerability scanners, admission controllers, GitOps operators, and platform dashboards — can integrate with ownership referrers.
 
 ##### Discovery
 
 Given a resource image digest, query the registry's Referrers API filtered by artifact type:
 
 ```http
-GET /v2/<name>/referrers/<digest>?artifactType=application/vnd.ocm.ownership.v1+json
+GET /v2/<name>/referrers/<digest>?artifactType=application/vnd.ocm.software.ownership.v1+json
 ```
 
 The response is an OCI Index whose `manifests` array contains descriptors for each matching referrer. The ownership annotations (`software.ocm.component.name`, `software.ocm.component.version`, `software.ocm.artifact`) are inlined in each descriptor's `annotations` field — no need to fetch the referrer manifest separately.
@@ -364,7 +370,7 @@ With standard tooling:
 
 ```bash
 oras discover <registry>/<repo>@<digest> \
-  --artifact-type "application/vnd.ocm.ownership.v1+json" \
+  --artifact-type "application/vnd.ocm.software.ownership.v1+json" \
   --format json | jq '.referrers[0].annotations'
 # {
 #   "software.ocm.component.name": "github.com/acme/myapp",
@@ -377,7 +383,7 @@ oras discover <registry>/<repo>@<digest> \
 
 Tools that replicate OCI images between registries (e.g. image mirrors, air-gapped transfer pipelines, component transport tools) must be extended to copy ownership referrers alongside the resource image:
 
-1. **Discover** — after uploading the resource image to the target registry, query the **source** registry's Referrers API for the resource's digest, filtered by `artifactType=application/vnd.ocm.ownership.v1+json`.
+1. **Discover** — after uploading the resource image to the target registry, query the **source** registry's Referrers API for the resource's digest, filtered by `artifactType=application/vnd.ocm.software.ownership.v1+json`.
 
 2. **Fetch** — for each referrer descriptor returned, fetch its full manifest from the source registry. An ownership referrer manifest is a standard OCI manifest with an empty config (`application/vnd.oci.empty.v1+json`, `{}`) and an empty layers array — there are no blobs to transfer beyond the manifest itself.
 
@@ -397,7 +403,7 @@ After transfer, consumers can verify that the ownership referrer correctly point
 
    ```bash
    oras discover <target-registry>/<repo>@<resource-digest> \
-     --artifact-type "application/vnd.ocm.ownership.v1+json" \
+     --artifact-type "application/vnd.ocm.software.ownership.v1+json" \
      --format json | jq '.referrers[0].annotations'
    ```
 
@@ -458,7 +464,7 @@ Ownership annotations are a new feature. New features are developed in the new O
 
 ### Steps
 
-1. **Implement referrer creation** — after a resource is uploaded to the registry, push an ownership referrer artifact (`application/vnd.ocm.ownership.v1+json`) with `subject` pointing to the resource's original manifest. The referrer carries `software.ocm.component.name`, `software.ocm.component.version`, and `software.ocm.artifact` in its annotations. ORAS handles Referrers API vs tag fallback automatically.
+1. **Implement referrer creation** — after a resource is uploaded to the registry, push an ownership referrer artifact (`application/vnd.ocm.software.ownership.v1+json`) with `subject` pointing to the resource's original manifest. The referrer carries `software.ocm.component.name`, `software.ocm.component.version`, and `software.ocm.artifact` in its annotations. ORAS handles Referrers API vs tag fallback automatically.
 
 2. **Implement referrer transfer** — ensure `ocm transfer` copies ownership referrers alongside resources. Either re-create referrers on upload (simplest) or discover and copy them from the source registry.
 

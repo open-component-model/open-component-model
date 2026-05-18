@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 )
 
@@ -35,9 +36,9 @@ func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 			spec := &ociv1.Repository{
 				BaseUrl: "localhost:5000",
 			}
-			credentials := map[string]string{}
+			credentials := ocicredsv1.OCICredentials{}
 
-			repo, err := createRepository(spec, credentials, tt.filesystemConfig, "test")
+			repo, err := createRepository(spec, &credentials, tt.filesystemConfig, "test")
 
 			if tt.expectError {
 				r.Error(err, "expected error")

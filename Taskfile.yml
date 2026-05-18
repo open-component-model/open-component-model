@@ -100,6 +100,14 @@ includes:
     optional: true
     taskfile: ./bindings/go/signing/Taskfile.yml
     dir: ./bindings/go/signing
+  bindings/go/sigstore:
+    optional: true
+    taskfile: ./bindings/go/sigstore/Taskfile.yml
+    dir: ./bindings/go/sigstore
+  bindings/go/sigstore/integration:
+    optional: true
+    taskfile: ./bindings/go/sigstore/integration/Taskfile.yml
+    dir: ./bindings/go/sigstore/integration
   bindings/go/transfer:
     optional: true
     taskfile: ./bindings/go/transfer/Taskfile.yml

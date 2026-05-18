@@ -1,12 +1,16 @@
 package download
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
 
 func TestGetVersion(t *testing.T) {
@@ -146,8 +150,8 @@ func TestConstructTLSOptions(t *testing.T) {
 	})
 
 	t.Run("certFile credential that does not exist returns error", func(t *testing.T) {
-		_, err := constructTLSOptions(t.TempDir(), withCredentials(map[string]string{
-			CredentialCertFile: "/nonexistent/cert.pem",
+		_, err := constructTLSOptions(t.TempDir(), withCredentials(&helmcredsv1.HelmHTTPCredentials{
+			CertFile: "/nonexistent/cert.pem",
 		}))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "certFile")
@@ -155,8 +159,8 @@ func TestConstructTLSOptions(t *testing.T) {
 	})
 
 	t.Run("keyFile credential that does not exist returns error", func(t *testing.T) {
-		_, err := constructTLSOptions(t.TempDir(), withCredentials(map[string]string{
-			CredentialKeyFile: "/nonexistent/key.pem",
+		_, err := constructTLSOptions(t.TempDir(), withCredentials(&helmcredsv1.HelmHTTPCredentials{
+			KeyFile: "/nonexistent/key.pem",
 		}))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "keyFile")
@@ -170,11 +174,124 @@ func TestConstructTLSOptions(t *testing.T) {
 		require.NoError(t, os.WriteFile(certFile, []byte("fake-cert"), 0o600))
 		require.NoError(t, os.WriteFile(keyFile, []byte("fake-key"), 0o600))
 
-		tlsOpt, err := constructTLSOptions(tmpDir, withCredentials(map[string]string{
-			CredentialCertFile: certFile,
-			CredentialKeyFile:  keyFile,
+		tlsOpt, err := constructTLSOptions(tmpDir, withCredentials(&helmcredsv1.HelmHTTPCredentials{
+			CertFile: certFile,
+			KeyFile:  keyFile,
 		}))
 		require.NoError(t, err)
 		assert.NotNil(t, tlsOpt)
 	})
+}
+
+func TestWithOCICredentials(t *testing.T) {
+	t.Run("assigns OCI credentials to option", func(t *testing.T) {
+		opt := &option{}
+		creds := &ocicredsv1.OCICredentials{AccessToken: "tok-xyz"}
+		WithOCICredentials(creds)(opt)
+		assert.Same(t, creds, opt.OCICredentials)
+	})
+
+	t.Run("nil credentials are allowed and overwrite previous value", func(t *testing.T) {
+		opt := &option{OCICredentials: &ocicredsv1.OCICredentials{AccessToken: "stale"}}
+		WithOCICredentials(nil)(opt)
+		assert.Nil(t, opt.OCICredentials)
+	})
+}
+
+// TestNewReadOnlyChartFromRemote_BasicAuthAccessTokenFallback exercises the special
+// credential resolution in [NewReadOnlyChartFromRemote]: when the helm HTTP credentials
+// do not carry a password, the password is sourced from the OCI access token instead.
+// The username is always sourced from the helm HTTP credentials and basic auth is only
+// applied when both username and (resolved) password are non-empty.
+func TestNewReadOnlyChartFromRemote_BasicAuthAccessTokenFallback(t *testing.T) {
+	workDir, err := os.Getwd()
+	require.NoError(t, err)
+	testDataDir := filepath.Join(workDir, "..", "..", "testdata")
+
+	tests := []struct {
+		name       string
+		helmCreds  *helmcredsv1.HelmHTTPCredentials
+		ociCreds   *ocicredsv1.OCICredentials
+		serverUser string
+		serverPass string
+		wantErr    bool
+	}{
+		{
+			name:       "helm password is used when set",
+			helmCreds:  &helmcredsv1.HelmHTTPCredentials{Username: "user1", Password: "pw1"},
+			serverUser: "user1",
+			serverPass: "pw1",
+		},
+		{
+			name:       "OCI access token is used as password when helm password is empty",
+			helmCreds:  &helmcredsv1.HelmHTTPCredentials{Username: "user1"},
+			ociCreds:   &ocicredsv1.OCICredentials{AccessToken: "tok-123"},
+			serverUser: "user1",
+			serverPass: "tok-123",
+		},
+		{
+			name:       "helm password takes precedence over OCI access token",
+			helmCreds:  &helmcredsv1.HelmHTTPCredentials{Username: "user1", Password: "pw1"},
+			ociCreds:   &ocicredsv1.OCICredentials{AccessToken: "ignored"},
+			serverUser: "user1",
+			serverPass: "pw1",
+		},
+		{
+			name:       "missing username skips basic auth even when access token is set",
+			helmCreds:  &helmcredsv1.HelmHTTPCredentials{},
+			ociCreds:   &ocicredsv1.OCICredentials{AccessToken: "tok-123"},
+			serverUser: "user1",
+			serverPass: "tok-123",
+			wantErr:    true,
+		},
+		{
+			name:       "no credentials at all -> unauthorized",
+			serverUser: "user1",
+			serverPass: "pw1",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := newBasicAuthChartServer(t, testDataDir, tt.serverUser, tt.serverPass)
+			chartURL := srv.URL + "/mychart-0.1.0.tgz"
+
+			var opts []Option
+			if tt.helmCreds != nil {
+				opts = append(opts, WithCredentials(tt.helmCreds))
+			}
+			if tt.ociCreds != nil {
+				opts = append(opts, WithOCICredentials(tt.ociCreds))
+			}
+
+			chart, err := NewReadOnlyChartFromRemote(t.Context(), chartURL, t.TempDir(), opts...)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, chart)
+			assert.Equal(t, "mychart", chart.Name)
+			assert.Equal(t, "0.1.0", chart.Version)
+		})
+	}
+}
+
+// newBasicAuthChartServer returns an httptest server that serves files from dir
+// only when the request carries matching HTTP Basic Auth credentials.
+func newBasicAuthChartServer(t *testing.T, dir, user, pass string) *httptest.Server {
+	t.Helper()
+	fs := http.FileServer(http.Dir(dir))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		if !ok || u != user || p != pass {
+			w.Header().Set("WWW-Authenticate", `Basic realm="test"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		fs.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }

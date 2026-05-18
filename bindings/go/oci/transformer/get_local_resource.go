@@ -7,6 +7,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -74,7 +75,7 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	var creds map[string]string
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec); err == nil {
-			if creds, err = resolveCredentialsMap(ctx, t.CredentialProvider, consumerId); err != nil {
+			if creds, err = resolveCredentialsMap(ctx, t.CredentialProvider, v1.FromIdentity(consumerId)); err != nil {
 				return nil, fmt.Errorf("failed resolving credentials: %w", err)
 			}
 		}

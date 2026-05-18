@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/credentials"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
+	v2 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	repoSpec "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -133,16 +134,18 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		oci.WithCreator(b.creator),
 	}
 
+	typedCreds := v2.FromDirectCredentials(creds)
+
 	switch obj := obj.(type) {
 	case *ocirepospecv1.Repository:
-		identity, err := v1.IdentityFromOCIRepository(obj)
+		identity, err := v1.OCIRegistryIdentityFromOCIRepository(obj)
 		if err != nil {
 			return nil, err
 		}
 		return ocirepository.NewFromOCIRepoV1(ctx, obj, &auth.Client{
 			Client:     b.httpClient,
 			Cache:      auth.NewCache(),
-			Credential: credentials.CredentialFunc(identity, creds),
+			Credential: credentials.CredentialFuncTyped(identity, typedCreds),
 			Header: map[string][]string{
 				"User-Agent": {b.creator},
 			},

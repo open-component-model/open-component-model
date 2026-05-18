@@ -8,6 +8,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -50,7 +51,7 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	var creds map[string]string
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
-			if creds, err = resolveCredentialsMap(ctx, t.CredentialProvider, consumerId); err != nil {
+			if creds, err = resolveCredentialsMap(ctx, t.CredentialProvider, v1.FromIdentity(consumerId)); err != nil {
 				return nil, fmt.Errorf("failed resolving credentials: %w", err)
 			}
 		}

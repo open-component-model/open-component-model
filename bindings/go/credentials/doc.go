@@ -11,7 +11,6 @@
 //
 //   - Direct credential resolution through the graph
 //   - Typed credential resolution via [Graph.ResolveTyped]
-//   - Identity → credential type validation via [IdentityTypeRegistry]
 //   - Plugin-based credential resolution for extensibility
 //   - Support for repository-specific credential handling
 //   - Thread-safe operations with synchronized DAG implementation
@@ -51,21 +50,13 @@
 // This is ingested into the graph via [ToGraph]. Note that a graph configuration may need to be converted from
 // its serialization format to the internal runtime representation.
 //
-// # Typed Credentials and Identity Validation
+// # Typed Credentials
 //
-// The graph supports typed credentials and identity → credential compatibility validation.
-// Each binding can define typed credential structs and register them with a [runtime.Scheme].
-// The graph receives these type registries through dedicated interfaces
-// configured in [Options]:
-//
-//   - [Options.CredentialTypeSchemeProvider] — provides a scheme for typed credential objects
-//   - [Options.IdentityTypeRegistry] — provides identity types and their accepted credential types
-//
-// During ingestion, when an identity type has accepted credential types registered in the
-// [IdentityTypeRegistry], the graph validates that configured credential types are compatible.
-// Incompatible pairs produce warnings, not errors — credentials are still stored and ingestion
-// continues. This is deliberate: during migration, not all types may be registered, and plugins
-// loaded after ingestion may introduce types unknown at ingestion time.
+// The graph supports typed credentials. Each binding can define typed credential structs and
+// register them with a [runtime.Scheme]. The graph receives the credential type scheme through
+// [Options.CredentialTypeSchemeProvider] — when configured, typed credentials in the config are
+// deserialized into their registered Go structs; otherwise the graph falls back to
+// [ocm.software/open-component-model/bindings/go/credentials/spec/config/v1.DirectCredentials].
 //
 // To resolve typed credentials, use [Graph.ResolveTyped]:
 //
@@ -84,7 +75,7 @@
 // The deprecated [Graph.Resolve] method still works and internally delegates to [Graph.ResolveTyped],
 // converting the result back to map[string]string for backward compatibility.
 //
-// Both scheme providers are optional (nil-safe) — the graph degrades to
+// The credential type scheme provider is optional (nil-safe) — the graph degrades to
 // [ocm.software/open-component-model/bindings/go/credentials/spec/config/v1.DirectCredentials]
 // behavior when no provider is configured.
 //
@@ -237,14 +228,13 @@
 //	    CredentialPluginProvider:       myCredPluginProvider,       // optional: needed for custom credential types (e.g. Vault)
 //	    RepositoryPluginProvider:       myRepoPluginProvider,       // optional: needed for repository fallbacks
 //	    CredentialTypeSchemeProvider:   myCredTypeSchemeProvider,   // optional: enables typed credential deserialization
-//	    IdentityTypeRegistry:          myIdentityTypeRegistry,      // optional: enables identity ↔ credential validation
 //	}
 //	graph, err := ToGraph(ctx, config, opts)
 //	if err != nil {
 //	    // handle error
 //	}
 //
-//	// Typed resolution (preferred)
+//	// Typed resolution (returns runtime.Typed)
 //	typed, err := graph.ResolveTyped(ctx, identity)
 //
 //	// Legacy resolution (deprecated, returns map[string]string)
@@ -255,8 +245,6 @@
 // to ensure safe concurrent access.
 //
 // The entrypoints to the graph are [Graph.ResolveTyped] (preferred) and [Graph.Resolve] (deprecated).
-// [Graph.ResolveTyped] accepts any [runtime.Typed] (typically a [runtime.Identity] map or a typed
-// identity). [Graph.Resolve] accepts [runtime.Identity].
 // Both return the resolved credentials or an error.
 //
 // Error Handling:

@@ -22,9 +22,6 @@ type Options struct {
 	RepositoryPluginProvider
 	CredentialPluginProvider
 	CredentialRepositoryTypeScheme *runtime.Scheme
-	// IdentityTypeRegistry provides access to known consumer identity types (e.g. OCIRegistry/v1)
-	// and their accepted credential types for validation during ingestion.
-	IdentityTypeRegistry *IdentityTypeRegistry
 	// CredentialTypeSchemeProvider provides access to known credential types (e.g. HelmHTTPCredentials/v1).
 	CredentialTypeSchemeProvider CredentialTypeSchemeProvider
 }
@@ -36,7 +33,6 @@ func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (*Gra
 		syncedDag:                    newSyncedDag(),
 		credentialPluginProvider:     opts.CredentialPluginProvider,
 		repositoryPluginProvider:     opts.RepositoryPluginProvider,
-		identityTypeRegistry:         opts.IdentityTypeRegistry,
 		credentialTypeSchemeProvider: opts.CredentialTypeSchemeProvider,
 	}
 
@@ -58,12 +54,11 @@ type Graph struct {
 
 	repositoryPluginProvider     RepositoryPluginProvider     // injection for resolving custom repository types
 	credentialPluginProvider     CredentialPluginProvider     // injection for resolving custom credential types
-	identityTypeRegistry         *IdentityTypeRegistry        // validates consumer identity types and accepted credentials
-	credentialTypeSchemeProvider CredentialTypeSchemeProvider // validates credential types from config
+	credentialTypeSchemeProvider CredentialTypeSchemeProvider // optional: enables typed credential ingestion
 }
 
 // credentialTypeScheme returns the underlying scheme from the credential type
-// registry, or nil if no registry is configured.
+// provider, or nil if no provider is configured.
 func (g *Graph) credentialTypeScheme() *runtime.Scheme {
 	if g.credentialTypeSchemeProvider == nil {
 		return nil
@@ -76,6 +71,8 @@ var _ Resolver = (*Graph)(nil)
 
 // Resolve implements Resolver. It returns credentials as map[string]string for backward compatibility.
 // Consumers that need typed credentials should use ResolveTyped instead.
+//
+// Deprecated: Migrate to ResolveTyped instead for typed credential support.
 func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
 	typed, err := g.ResolveTyped(ctx, identity)
 	if err != nil {
@@ -85,17 +82,13 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[str
 }
 
 // ResolveTyped resolves credentials for the given identity and returns them as a runtime.Typed.
-// The identity parameter accepts any runtime.Typed — typically a runtime.Identity map.
-// The returned type depends on what was configured — currently *DirectCredentials for
-// inline Credentials/v1 configs, but will be the actual typed credential (e.g. *HelmCredentials)
-// when configs specify typed credential types.
-func (g *Graph) ResolveTyped(ctx context.Context, identity runtime.Typed) (runtime.Typed, error) {
-	if identity == nil {
-		return nil, fmt.Errorf("to be resolved from the credential graph, a valid identity is required: %w", ErrUnknown)
-	}
-
-	if !hasType(identity) {
-		return nil, fmt.Errorf("to be resolved from the credential graph, a consumer identity type is required: %w", ErrUnknown)
+// The returned type depends on what was configured: a registered typed credential
+// (e.g. *HelmHTTPCredentials) when a CredentialTypeSchemeProvider is configured and the
+// config uses a known typed credential, otherwise *v1.DirectCredentials.
+func (g *Graph) ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
+	if _, err := identity.ParseType(); err != nil {
+		err = errors.Join(ErrUnknown, err)
+		return nil, fmt.Errorf("to be resolved from the credential graph, a consumer identity type is required: %w", err)
 	}
 
 	// Attempt direct resolution via the DAG.
@@ -110,23 +103,12 @@ func (g *Graph) ResolveTyped(ctx context.Context, identity runtime.Typed) (runti
 	if err != nil {
 		if errors.Is(err, ErrNoDirectCredentials) || errors.Is(err, ErrNoIndirectCredentials) {
 			err = errors.Join(ErrNotFound, err)
-			return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity, err)
+			return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
 		}
 
 		err = errors.Join(ErrUnknown, err)
-		return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity, err)
+		return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
 	}
 
 	return creds, nil
-}
-
-// hasType checks whether a runtime.Typed identity has a non-empty type set.
-// For runtime.Identity it uses ParseType (since GetType panics on missing type).
-// For other Typed implementations it uses GetType.
-func hasType(typed runtime.Typed) bool {
-	if id, ok := typed.(runtime.Identity); ok {
-		_, err := id.ParseType()
-		return err == nil
-	}
-	return !typed.GetType().IsEmpty()
 }

@@ -2009,3 +2009,53 @@ func TestRepositoryHealthCheck(t *testing.T) {
 		assert.Contains(t, err.Error(), "failed to ping registry")
 	})
 }
+
+// TestRepository_AddLocalSource_OwnershipPolicyEnabled_OCILayoutBody pins the
+// regression that enabling OwnershipReferrerPolicyEnabled must not affect
+// AddLocalSource for any OCI-packed source body. uploadAndUpdateLocalArtifact
+// is shared with AddLocalResource; AddLocalSource hardcodes the policy to
+// OwnershipReferrerPolicyDisabled so OwnershipReferrer is never invoked for
+// sources, regardless of the repository's configured policy.
+func TestRepository_AddLocalSource_OwnershipPolicyEnabled_OCILayoutBody(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t,
+		ocictf.WithCTF(store),
+		oci.WithOwnershipReferrerPolicy(oci.OwnershipReferrerPolicyEnabled),
+	)
+
+	// Build an OCI-layout source body (single layer + manifest, tagged). The
+	// pack pipeline routes OCI-compliant bodies down the manifest branch,
+	// which is exactly where OwnershipReferrer would have been invoked.
+	buf := bytes.NewBuffer(nil)
+	layoutWriter, err := tar.NewOCILayoutWriterWithTempFile(buf, t.TempDir())
+	r.NoError(err)
+	layerBytes := []byte("source layer content")
+	layerDesc := content.NewDescriptorFromBytes("application/octet-stream", layerBytes)
+	r.NoError(layoutWriter.Push(ctx, layerDesc, bytes.NewReader(layerBytes)))
+	manifestDesc, err := oras.PackManifest(ctx, layoutWriter, oras.PackManifestVersion1_1, "application/custom", oras.PackManifestOptions{
+		Layers: []ociImageSpecV1.Descriptor{layerDesc},
+	})
+	r.NoError(err)
+	r.NoError(layoutWriter.Tag(ctx, manifestDesc, "test-image:latest"))
+	r.NoError(layoutWriter.Close())
+	layoutBytes := buf.Bytes()
+
+	source := &descriptor.Source{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "oci-packed-source", Version: "1.0.0"},
+		},
+		Type: "ociImage",
+		Access: &v2.LocalBlob{
+			LocalReference: digest.FromBytes(layoutBytes).String(),
+			MediaType:      layout.MediaTypeOCIImageLayoutV1 + "+tar+gzip",
+		},
+	}
+
+	_, err = repo.AddLocalSource(ctx, "ocm.software/test-component", "1.0.0", source, inmemory.New(bytes.NewReader(layoutBytes)))
+	r.NoError(err, "AddLocalSource must not invoke OwnershipReferrer for sources, even when the policy is enabled")
+}

@@ -9,14 +9,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
-	"ocm.software/open-component-model/bindings/go/runtime"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 )
 
 // resolveCredentialsMap calls ResolveTyped and converts the result to map[string]string
 // for downstream interfaces that haven't migrated to runtime.Typed yet (Phase 4).
 // Returns nil, nil if no credentials are found.
-func resolveCredentialsMap(ctx context.Context, resolver credentials.Resolver, identity runtime.Typed) (map[string]string, error) {
-	typed, err := resolver.ResolveTyped(ctx, identity)
+func resolveCredentialsMap(ctx context.Context, resolver credentials.Resolver, identity *v1.OCIRegistryIdentity) (map[string]string, error) {
+	typed, err := resolver.ResolveTyped(ctx, v1.ToIdentity(identity))
 	if err != nil {
 		if errors.Is(err, credentials.ErrNotFound) {
 			return nil, nil

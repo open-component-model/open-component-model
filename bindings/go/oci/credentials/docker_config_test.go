@@ -8,6 +8,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 
 	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -129,6 +130,116 @@ func TestCredentialFunc(t *testing.T) {
 	}
 }
 
+func TestCredentialFuncTyped(t *testing.T) {
+	tests := []struct {
+		name        string
+		identity    *identityv1.OCIRegistryIdentity
+		credentials *credentialsv1.OCICredentials
+		hostport    string
+		wantErr     bool
+		wantEmpty   bool
+		wantCred    *auth.Credential // if set, assert exact credential match
+	}{
+		{
+			name: "matching host and port",
+			identity: &identityv1.OCIRegistryIdentity{
+				Hostname: "example.com",
+				Port:     "443",
+			},
+			credentials: &credentialsv1.OCICredentials{
+				Username: "testuser",
+				Password: "testpass",
+			},
+			hostport:  "example.com:443",
+			wantErr:   false,
+			wantEmpty: false,
+		},
+		{
+			name: "mismatching host",
+			identity: &identityv1.OCIRegistryIdentity{
+				Hostname: "example.com",
+				Port:     "443",
+			},
+			credentials: &credentialsv1.OCICredentials{
+				Username: "testuser",
+				Password: "testpass",
+			},
+			hostport:  "wrong.com:443",
+			wantErr:   false,
+			wantEmpty: true,
+		},
+		{
+			name: "mismatching port",
+			identity: &identityv1.OCIRegistryIdentity{
+				Hostname: "example.com",
+				Port:     "443",
+			},
+			credentials: &credentialsv1.OCICredentials{
+				Username: "testuser",
+				Password: "testpass",
+			},
+			hostport:  "example.com:80",
+			wantErr:   false,
+			wantEmpty: true,
+		},
+		{
+			name: "hostport without port",
+			identity: &identityv1.OCIRegistryIdentity{
+				Hostname: "example.com",
+			},
+			credentials: &credentialsv1.OCICredentials{
+				Username: "testuser",
+			},
+			hostport:  "example.com",
+			wantErr:   false,
+			wantEmpty: false,
+		},
+		{
+			name: "all credential types",
+			identity: &identityv1.OCIRegistryIdentity{
+				Hostname: "example.com",
+			},
+			credentials: &credentialsv1.OCICredentials{
+				Username:     "testuser",
+				Password:     "testpass",
+				AccessToken:  "testtoken",
+				RefreshToken: "refreshtoken",
+			},
+			hostport:  "example.com:443",
+			wantErr:   false,
+			wantEmpty: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			credFunc := CredentialFuncTyped(tt.identity, tt.credentials)
+			cred, err := credFunc(t.Context(), tt.hostport)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			if tt.wantEmpty {
+				assert.Equal(t, auth.EmptyCredential, cred)
+				return
+			}
+
+			if tt.wantCred != nil {
+				assert.Equal(t, *tt.wantCred, cred)
+				return
+			}
+
+			assert.Equal(t, tt.credentials.Username, cred.Username)
+			assert.Equal(t, tt.credentials.Password, cred.Password)
+			assert.Equal(t, tt.credentials.AccessToken, cred.AccessToken)
+			assert.Equal(t, tt.credentials.RefreshToken, cred.RefreshToken)
+		})
+	}
+}
+
 func TestCredentialFromMap(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -161,6 +272,61 @@ func TestCredentialFromMap(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := CredentialFromMap(tt.credentials)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCredentialFromTyped(t *testing.T) {
+	tests := []struct {
+		name        string
+		credentials *credentialsv1.OCICredentials
+		expected    auth.Credential
+	}{
+		{
+			name:        "zero-value credentials",
+			credentials: &credentialsv1.OCICredentials{},
+			expected:    auth.Credential{},
+		},
+		{
+			name: "all fields populated",
+			credentials: &credentialsv1.OCICredentials{
+				Username:     "user",
+				Password:     "pass",
+				AccessToken:  "atoken",
+				RefreshToken: "rtoken",
+			},
+			expected: auth.Credential{
+				Username:     "user",
+				Password:     "pass",
+				AccessToken:  "atoken",
+				RefreshToken: "rtoken",
+			},
+		},
+		{
+			name: "only username and password",
+			credentials: &credentialsv1.OCICredentials{
+				Username: "user",
+				Password: "pass",
+			},
+			expected: auth.Credential{
+				Username: "user",
+				Password: "pass",
+			},
+		},
+		{
+			name: "only access token",
+			credentials: &credentialsv1.OCICredentials{
+				AccessToken: "atoken",
+			},
+			expected: auth.Credential{
+				AccessToken: "atoken",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, CredentialFromTyped(tt.credentials))
 		})
 	}
 }
