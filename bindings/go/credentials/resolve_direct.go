@@ -13,6 +13,7 @@ import (
 // resolveFromGraph resolves credentials for a given identity by traversing the graph.
 // Returns a runtime.Typed credential stored on the matching node.
 func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
+	// Check for cancellation to exit early
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -24,6 +25,7 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 		return nil, err
 	}
 
+	// Leaf node: return the credentials directly.
 	creds, cached := g.getCredentials(vertex.ID)
 	if cached {
 		return creds, nil
@@ -31,6 +33,7 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 
 	node := identity.String()
 
+	// Non–leaf node: recursively resolve each child and merge the results.
 	var resolved []runtime.Typed
 	for edgeID := range vertex.Edges {
 		childID, ok := g.getIdentity(edgeID)
@@ -46,6 +49,7 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 			return nil, fmt.Errorf("could not get credential plugin for node %q: %w", edgeID, err)
 		}
 
+		// Let the plugin resolve the child's credentials.
 		credentials, err := plugin.ResolveTyped(ctx, identity, childCredentials)
 		if err != nil {
 			return nil, fmt.Errorf("no credentials for node %q resolved from plugin: %w", edgeID, err)
@@ -55,6 +59,7 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 		}
 	}
 
+	// Merge the resolved credentials into the result
 	merged, err := mergeTyped(resolved, g.credentialTypeScheme())
 	if err != nil {
 		return nil, fmt.Errorf("merging credentials for node %q: %w", node, err)
