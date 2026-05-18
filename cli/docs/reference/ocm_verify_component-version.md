@@ -93,6 +93,13 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
 #
 # Identity constraints are REQUIRED: (certificateOIDCIssuer or certificateOIDCIssuerRegexp)
 # AND (certificateIdentity or certificateIdentityRegexp) must be set.
+#
+# certificateOIDCIssuer must match the issuer that Fulcio recorded in the cert.
+# On public Sigstore (Dex federation), Fulcio passes through the upstream IdP issuer:
+#   - Google login   -> https://accounts.google.com
+#   - GitHub login   -> https://github.com/login/oauth
+#   - Microsoft login -> https://login.microsoftonline.com
+# It is NOT the Dex URL (https://oauth2.sigstore.dev/auth).
 # See https://docs.sigstore.dev/cosign/verifying/verify/
 
     type: SigstoreVerificationConfiguration/v1alpha1
@@ -105,13 +112,32 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
     certificateOIDCIssuerRegexp: https://github.com/.*
     certificateIdentityRegexp: https://github.com/my-org/my-repo/.*
 
-# For private Sigstore infrastructure (skips public transparency log verification):
+# For private Sigstore infrastructure (skips public transparency log verification).
+# The trusted root is NOT a verifier-spec field. It is supplied via credentials
+# under a SigstoreVerifier/v1alpha1 consumer (see Example Credential Config below):
 
     type: SigstoreVerificationConfiguration/v1alpha1
-    certificateOIDCIssuer: https://fulcio.example.com
+    certificateOIDCIssuer: https://login.example.com
     certificateIdentity: ci-user@example.com
-    trustedRoot: /path/to/trusted_root.json
     privateInfrastructure: true
+
+## Example Credential Config (.ocmconfig) — Sigstore trusted root (private deployments)
+#
+# Required for private Sigstore infrastructure (privateInfrastructure: true on the
+# verifier spec). Use trusted_root_json_file (path) or trusted_root_json (inline JSON).
+# Public-good Sigstore does not need this credential.
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: SigstoreVerifier/v1alpha1
+          signature: default
+        credentials:
+        - type: Credentials/v1
+          properties:
+            trusted_root_json_file: /path/to/trusted_root.json
 
 # Verify with Sigstore verifier spec:
 verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./sigstore-verify.yaml
