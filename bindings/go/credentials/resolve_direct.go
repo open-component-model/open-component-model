@@ -104,9 +104,10 @@ func mergeTyped(creds []runtime.Typed, scheme *runtime.Scheme) (runtime.Typed, e
 			if k == "type" {
 				continue
 			}
-			if s, ok := v.(string); ok && s != "" {
-				merged[k] = s
+			if v == nil {
+				continue
 			}
+			merged[k] = fmt.Sprint(v)
 		}
 	}
 
