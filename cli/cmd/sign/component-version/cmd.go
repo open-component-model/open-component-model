@@ -186,6 +186,7 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
       consumers:
       - identity:
           type: SigstoreSigner/v1alpha1
+          algorithm: sigstore
           signature: default
         credentials:
         - type: OIDCIdentityTokenProvider/v1alpha1
