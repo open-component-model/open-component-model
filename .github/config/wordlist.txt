@@ -190,6 +190,7 @@ deserialized
 dest
 dev
 devops
+dex
 diataxis
 digesters
 directorytree
