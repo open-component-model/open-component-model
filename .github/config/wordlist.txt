@@ -172,6 +172,10 @@ debugability
 deduplicated
 deduplicates
 deduplication
+decrypt
+decrypted
+decrypting
+decrypts
 deepcopy
 deepdive
 defs
@@ -225,6 +229,7 @@ elementmeta
 enablement
 entrypoint
 enum
+env
 envtest
 eol
 etcd
@@ -526,8 +531,10 @@ onboarding
 oncefunc
 oo
 openapi
+openbao
 openfluxcd
 openmcp
+openpgp
 OpenSSF
 openssl
 opinionation
@@ -578,6 +585,7 @@ prem
 priyanka
 prodan's
 programmatically
+protonmail
 prototyped
 proxying
 prs
@@ -776,6 +784,7 @@ uis
 uncomment
 uncommenting
 undefine
+unencrypted
 unmarshal
 unmarshalled
 unmarshaller

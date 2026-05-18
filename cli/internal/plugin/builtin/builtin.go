@@ -15,6 +15,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/utf8"
 	ociplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/oci"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/rsa"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin/gpg"
 )
 
 func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, logger *slog.Logger) error {
@@ -58,6 +59,9 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	}
 	if err := rsa.Register(manager.SigningRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register RSA signing plugin: %w", err)
+	}
+	if err := gpg.Register(manager.SigningRegistry, filesystemConfig); err != nil {
+		return fmt.Errorf("could not register GPG signing plugin: %w", err)
 	}
 
 	return nil

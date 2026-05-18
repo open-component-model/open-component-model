@@ -25,6 +25,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
+	ocm.software/open-component-model/bindings/go/gpg v0.0.0-00010101000000-000000000000
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.3
 	ocm.software/open-component-model/bindings/go/input/file v0.0.4
@@ -146,3 +147,5 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
 )
+
+replace ocm.software/open-component-model/bindings/go/gpg => ../bindings/go/gpg
