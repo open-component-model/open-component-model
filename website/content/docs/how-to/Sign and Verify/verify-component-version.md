@@ -2,7 +2,7 @@
 title: "Verify Component Versions"
 description: "Validate component version signatures to ensure authenticity and integrity."
 icon: "🔍"
-weight: 7
+weight: 8
 toc: true
 ---
 

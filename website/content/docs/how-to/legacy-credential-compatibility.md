@@ -2,7 +2,7 @@
 title: "Migrate Legacy Credentials"
 description: "Update your legacy OCM credential configuration to work with the new OCM."
 icon: "🔑"
-weight: 9
+weight: 11
 toc: true
 ---
 
