@@ -134,7 +134,7 @@ func printUpgradeWarning(result *versioncheck.Result) {
 	slog.Warn("A newer version of ocm is available",
 		slog.String("current", "v"+result.CurrentVersion),
 		slog.String("available", "v"+result.LatestVersion),
-		slog.String("url", fmt.Sprintf("https://github.com/%s/%s/releases/tag/%sv%s",
+		slog.String("url", fmt.Sprintf("https://github.com/%s/%s/releases/tag/%s%s",
 			versioncheck.DefaultGitHubOwner, versioncheck.DefaultGitHubRepo,
 			versioncheck.DefaultTagPrefix, result.LatestVersion)),
 	)
