@@ -191,6 +191,7 @@ deserialize
 deserialized
 dest
 dev
+dex
 devops
 diataxis
 digesters
@@ -240,6 +241,7 @@ extensibility
 extraidentity
 fabianburth
 fallbacks
+fapi
 filepath
 filesystem
 filesystems
@@ -535,6 +537,7 @@ oncefunc
 oo
 openapi
 openfluxcd
+openid
 openmcp
 openssf
 openssl
