@@ -10,6 +10,7 @@ vars:
   SCAFFOLDING_VERSION:
     sh: . ./.env && echo "$SCAFFOLDING_VERSION"
   SIGSTORE_ENV_FILE: 'tmp/sigstore-env.sh'
+  SIGSTORE_BRIDGE_PORT: '8080'
   SCAFFOLDING_URL: 'https://github.com/sigstore/scaffolding/releases/download/{{.SCAFFOLDING_VERSION}}'
 
   # sslip.io is a free public DNS service that maps hostnames like <svc>.<ns>.<ip>.sslip.io
@@ -88,35 +89,54 @@ tasks:
         kubectl -n default wait --timeout 2m --for=condition=Ready ksvc gettoken
 
   scaffolding:bridge:
-    desc: "Port-forward Kourier ingress to localhost:8080 (macOS only)"
+    desc: "Port-forward Kourier ingress to localhost:{{.SIGSTORE_BRIDGE_PORT}} (macOS only)"
     platforms: [darwin]
     deps: [scaffolding:setup]
     status:
-      - lsof -ti :8080 >/dev/null 2>&1
+      - lsof -ti :{{.SIGSTORE_BRIDGE_PORT}} >/dev/null 2>&1
     cmds:
       - |
-        kubectl -n kourier-system port-forward service/kourier-internal 8080:80 &
+        kubectl -n kourier-system port-forward service/kourier-internal {{.SIGSTORE_BRIDGE_PORT}}:80 &
         for i in $(seq 1 20); do
-          lsof -ti :8080 >/dev/null 2>&1 && break
+          lsof -ti :{{.SIGSTORE_BRIDGE_PORT}} >/dev/null 2>&1 && break
           sleep 0.5
         done
-        lsof -ti :8080 >/dev/null 2>&1 || { echo "port-forward failed to start" >&2; exit 1; }
+        lsof -ti :{{.SIGSTORE_BRIDGE_PORT}} >/dev/null 2>&1 || { echo "port-forward failed to start" >&2; exit 1; }
 
   scaffolding:env:
     desc: "Extract sigstore env vars from running cluster into tmp/sigstore-env.sh"
     deps: [scaffolding:setup, scaffolding:bridge, cosign:install]
     cmds:
       - mkdir -p tmp
-      - cmd: PATH="{{.ROOT_DIR}}/tmp/bin:$PATH" SIGSTORE_BRIDGE_PORT=8080 bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
+      - cmd: PATH="{{.ROOT_DIR}}/tmp/bin:$PATH" SIGSTORE_BRIDGE_PORT={{.SIGSTORE_BRIDGE_PORT}} bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
         platforms: [darwin]
       - cmd: PATH="{{.ROOT_DIR}}/tmp/bin:$PATH" bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
         platforms: [linux]
 
   scaffolding:refresh:
-    desc: "Re-fetch OIDC token and env vars (use when token has expired between test runs or for manual CLI testing)"
+    desc: "Re-fetch short-lived OIDC token only (run 'task scaffolding:env' for full re-extraction)"
+    deps: [scaffolding:bridge]
+    preconditions:
+      - sh: test -f {{.SIGSTORE_ENV_FILE}}
+        msg: "No env file found. Run 'task scaffolding:env' first."
     cmds:
-      - task: scaffolding:env
-      - echo "Token refreshed. Source the env with:\n  source {{.SIGSTORE_ENV_FILE}}"
+      - cmd: |
+          URL=$(kubectl -n default get ksvc gettoken -ojsonpath='{.status.url}')
+          [[ -n "$URL" ]] || { echo "gettoken service not found" >&2; exit 1; }
+          URL="${URL%/}:{{.SIGSTORE_BRIDGE_PORT}}"
+          TOKEN=$(curl -sSf "$URL")
+          [[ -n "$TOKEN" ]] || { echo "empty token from gettoken" >&2; exit 1; }
+          sed -i '' "s|^export SIGSTORE_OIDC_TOKEN=.*|export SIGSTORE_OIDC_TOKEN='${TOKEN}'|" {{.SIGSTORE_ENV_FILE}}
+          echo "Token refreshed. Re-source: source {{.SIGSTORE_ENV_FILE}}"
+        platforms: [darwin]
+      - cmd: |
+          URL=$(kubectl -n default get ksvc gettoken -ojsonpath='{.status.url}')
+          [[ -n "$URL" ]] || { echo "gettoken service not found" >&2; exit 1; }
+          TOKEN=$(curl -sSf "$URL")
+          [[ -n "$TOKEN" ]] || { echo "empty token from gettoken" >&2; exit 1; }
+          sed -i "s|^export SIGSTORE_OIDC_TOKEN=.*|export SIGSTORE_OIDC_TOKEN='${TOKEN}'|" {{.SIGSTORE_ENV_FILE}}
+          echo "Token refreshed. Re-source: source {{.SIGSTORE_ENV_FILE}}"
+        platforms: [linux]
 
   cosign:install:
     desc: "Install cosign at the version pinned in signing/handler/internal/.env"

@@ -6,6 +6,14 @@
   "type": "object",
   "description": "SignConfig defines configuration for Sigstore-based keyless signing via the cosign CLI.\n\nEndpoint configuration:\n1. SigningConfig — cosign reads a local signing_config.json for endpoint\ndiscovery (Fulcio, Rekor, TSA). Create one with `cosign signing-config create`.\n2. Neither set — cosign's default fetches the signing config from the\npublic-good Sigstore TUF repository.\n\nWhen an OIDC token is available in credentials, it is forwarded to cosign\nvia the SIGSTORE_ID_TOKEN environment variable. A token is required;\nthe handler returns an error if no token credential is resolved.\n\nTrust material (trusted root) is resolved from credentials, not from this\nconfig. See the handler package for resolution order.",
   "properties": {
+    "clientID": {
+      "type": "string",
+      "description": "ClientID is the OAuth2 client ID of an enterprise Sigstore deployment.\nLike Issuer, it is not used by this handler directly; it is emitted into\nthe credential consumer identity so .ocmconfig entries can route to an\nenterprise OIDC credential plugin. Leave empty for the default Sigstore client."
+    },
+    "issuer": {
+      "type": "string",
+      "description": "Issuer is the OIDC issuer URL of an enterprise Sigstore deployment.\nThis handler does not use it directly to acquire tokens; it is emitted\ninto the credential consumer identity so that .ocmconfig entries can\nroute to an enterprise OIDC credential plugin instead of the public-good\ndefault. The plugin that produces the token reads it from the same\nconsumer identity. Leave empty when targeting public Sigstore."
+    },
     "signingConfig": {
       "type": "string",
       "description": "SigningConfig is a filesystem path to a cosign signing configuration file\n(conventionally named signing_config.json).\nWhen set, cosign discovers all service endpoints (Fulcio, Rekor, TSA) from\nthis file instead of TUF auto-discovery.\nMaps to cosign --signing-config."

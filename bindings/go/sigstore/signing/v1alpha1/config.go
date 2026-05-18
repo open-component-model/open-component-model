@@ -56,6 +56,20 @@ type SignConfig struct {
 	// this file instead of TUF auto-discovery.
 	// Maps to cosign --signing-config.
 	SigningConfig string `json:"signingConfig,omitempty"`
+
+	// Issuer is the OIDC issuer URL of an enterprise Sigstore deployment.
+	// This handler does not use it directly to acquire tokens; it is emitted
+	// into the credential consumer identity so that .ocmconfig entries can
+	// route to an enterprise OIDC credential plugin instead of the public-good
+	// default. The plugin that produces the token reads it from the same
+	// consumer identity. Leave empty when targeting public Sigstore.
+	Issuer string `json:"issuer,omitempty"`
+
+	// ClientID is the OAuth2 client ID of an enterprise Sigstore deployment.
+	// Like Issuer, it is not used by this handler directly; it is emitted into
+	// the credential consumer identity so .ocmconfig entries can route to an
+	// enterprise OIDC credential plugin. Leave empty for the default Sigstore client.
+	ClientID string `json:"clientID,omitempty"`
 }
 
 // VerifyConfig defines configuration for Sigstore-based keyless verification via the cosign CLI.
@@ -112,6 +126,11 @@ type VerifyConfig struct {
 
 // Validate checks that SignConfig fields are well-formed.
 func (c *SignConfig) Validate() error {
+	if c.Issuer != "" {
+		if err := validateURL("Issuer", c.Issuer); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -150,8 +169,17 @@ func validateURL(field, rawURL string) error {
 	if err != nil {
 		return fmt.Errorf("%s: invalid URL %q: %w", field, rawURL, err)
 	}
+	if !u.IsAbs() {
+		return fmt.Errorf("%s: URL %q must be absolute (include a scheme)", field, rawURL)
+	}
 	if u.Host == "" {
 		return fmt.Errorf("%s: URL %q has no host", field, rawURL)
+	}
+	if u.RawQuery != "" {
+		return fmt.Errorf("%s: URL %q must not contain a query component", field, rawURL)
+	}
+	if u.Fragment != "" {
+		return fmt.Errorf("%s: URL %q must not contain a fragment component", field, rawURL)
 	}
 	return nil
 }
