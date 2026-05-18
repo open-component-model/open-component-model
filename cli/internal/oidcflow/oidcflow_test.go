@@ -2,15 +2,11 @@ package oidcflow
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,50 +21,6 @@ func Test_randomString(t *testing.T) {
 	s2, err := randomString(32)
 	r.NoError(err)
 	r.NotEqual(s1, s2)
-}
-
-func Test_pkce(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	verifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
-	h := sha256.Sum256([]byte(verifier))
-	challenge := base64.RawURLEncoding.EncodeToString(h[:])
-
-	p := &pkce{challenge: challenge, verifier: verifier}
-	r.Len(p.authURLOpts(), 2)
-	r.Len(p.tokenURLOpts(), 1)
-	r.Len(challenge, 43)
-	r.NotEqual(verifier, challenge)
-}
-
-func Test_newPKCE_UnsupportedMethod(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	var srvURL string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{
-			"issuer": %q,
-			"authorization_endpoint": %q,
-			"token_endpoint": %q,
-			"jwks_uri": %q,
-			"response_types_supported": ["code"],
-			"subject_types_supported": ["public"],
-			"id_token_signing_alg_values_supported": ["RS256"],
-			"code_challenge_methods_supported": ["plain"]
-		}`, srvURL, srvURL+"/auth", srvURL+"/token", srvURL+"/keys")
-	}))
-	defer srv.Close()
-	srvURL = srv.URL
-
-	provider, err := oidc.NewProvider(t.Context(), srv.URL)
-	r.NoError(err)
-
-	_, err = newPKCE(provider)
-	r.Error(err)
-	r.ErrorContains(err, "does not support PKCE S256")
 }
 
 func Test_callbackHandler(t *testing.T) {

@@ -28,7 +28,6 @@ package oidcflow
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
@@ -68,33 +67,29 @@ type Options struct {
 	ClientID string
 }
 
-// GetIDToken performs an interactive OIDC authorization code flow with PKCE.
-// It opens the user's browser for authentication and waits for the callback.
+// GetIDToken performs an interactive OIDC authorization code flow with PKCE
+// and returns the verified raw ID token. The flow is:
+//  1. Discover the OIDC provider and generate PKCE/state/nonce.
+//  2. Start a localhost HTTP server to receive the redirect callback.
+//  3. Open the user's browser to the authorization URL.
+//  4. Wait for the callback (bounded by callbackTimeout).
+//  5. Exchange the code for tokens and verify the ID token (audience + nonce).
+//
+// See the package doc for the security model.
 func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
-	if opts.Issuer == "" {
-		opts.Issuer = DefaultIssuer
-	}
-	if opts.ClientID == "" {
-		opts.ClientID = DefaultClientID
-	}
+	opts.applyDefaults()
 
 	provider, err := oidc.NewProvider(ctx, opts.Issuer)
 	if err != nil {
 		return nil, fmt.Errorf("oidc provider discovery: %w", err)
 	}
-
 	pkce, err := newPKCE(provider)
 	if err != nil {
 		return nil, err
 	}
-
-	state, err := randomString(32)
+	state, nonce, err := newStateAndNonce()
 	if err != nil {
-		return nil, fmt.Errorf("generate state: %w", err)
-	}
-	nonce, err := randomString(32)
-	if err != nil {
-		return nil, fmt.Errorf("generate nonce: %w", err)
+		return nil, err
 	}
 
 	codeCh := make(chan string, 1)
@@ -104,9 +99,7 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 	if err != nil {
 		return nil, fmt.Errorf("start callback listener: %w", err)
 	}
-
-	addr := listener.Addr().(*net.TCPAddr)
-	redirectURL := fmt.Sprintf("http://127.0.0.1:%d%s", addr.Port, callbackPath)
+	redirectURL := fmt.Sprintf("http://127.0.0.1:%d%s", listener.Addr().(*net.TCPAddr).Port, callbackPath)
 
 	srv := &http.Server{
 		ReadHeaderTimeout: 2 * time.Second,
@@ -123,39 +116,12 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 	}()
 	defer srv.Shutdown(ctx) //nolint:errcheck // best-effort shutdown
 
-	config := oauth2.Config{
-		ClientID:    opts.ClientID,
-		Endpoint:    provider.Endpoint(),
-		Scopes:      []string{oidc.ScopeOpenID, "email"},
-		RedirectURL: redirectURL,
-	}
-
-	authOpts := append(pkce.authURLOpts(),
-		oauth2.AccessTypeOnline,
-		oidc.Nonce(nonce),
-	)
-	authURL := config.AuthCodeURL(state, authOpts...)
-
-	if err := openBrowser(ctx, authURL, errCh); err != nil {
-		return nil, fmt.Errorf("open browser: %w (URL: %s)", err, authURL)
-	}
-
-	code, err := waitForCode(ctx, codeCh, errCh)
+	rawIDToken, err := runAuthFlow(ctx, provider, pkce, opts.ClientID, redirectURL, state, nonce, codeCh, errCh)
 	if err != nil {
-		return nil, fmt.Errorf("receive auth callback: %w", err)
+		return nil, err
 	}
 
-	token, err := config.Exchange(ctx, code, pkce.tokenURLOpts()...)
-	if err != nil {
-		return nil, fmt.Errorf("exchange code for token: %w", err)
-	}
-
-	rawIDToken, ok := token.Extra("id_token").(string)
-	if !ok {
-		return nil, errors.New("id_token not present in token response")
-	}
-
-	verifier := provider.Verifier(&oidc.Config{ClientID: config.ClientID})
+	verifier := provider.Verifier(&oidc.Config{ClientID: opts.ClientID})
 	idToken, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {
 		return nil, fmt.Errorf("verify id token: %w", err)
@@ -163,8 +129,57 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 	if idToken.Nonce != nonce {
 		return nil, errors.New("nonce mismatch in id token")
 	}
-
 	return &Token{RawToken: rawIDToken}, nil
+}
+
+func (o *Options) applyDefaults() {
+	if o.Issuer == "" {
+		o.Issuer = DefaultIssuer
+	}
+	if o.ClientID == "" {
+		o.ClientID = DefaultClientID
+	}
+}
+
+func newStateAndNonce() (state, nonce string, err error) {
+	if state, err = randomString(32); err != nil {
+		return "", "", fmt.Errorf("generate state: %w", err)
+	}
+	if nonce, err = randomString(32); err != nil {
+		return "", "", fmt.Errorf("generate nonce: %w", err)
+	}
+	return state, nonce, nil
+}
+
+// runAuthFlow opens the browser, waits for the callback, and exchanges the
+// authorization code for an ID token. The returned token is not yet verified.
+func runAuthFlow(ctx context.Context, provider *oidc.Provider, pkce *pkce, clientID, redirectURL, state, nonce string, codeCh <-chan string, errCh chan error) (string, error) {
+	config := oauth2.Config{
+		ClientID:    clientID,
+		Endpoint:    provider.Endpoint(),
+		Scopes:      []string{oidc.ScopeOpenID, "email"},
+		RedirectURL: redirectURL,
+	}
+	authURL := config.AuthCodeURL(state, append(pkce.authURLOpts(), oauth2.AccessTypeOnline, oidc.Nonce(nonce))...)
+
+	if err := openBrowser(ctx, authURL, errCh); err != nil {
+		return "", fmt.Errorf("open browser: %w (URL: %s)", err, authURL)
+	}
+
+	code, err := waitForCode(ctx, codeCh, errCh)
+	if err != nil {
+		return "", fmt.Errorf("receive auth callback: %w", err)
+	}
+
+	token, err := config.Exchange(ctx, code, pkce.tokenURLOpts()...)
+	if err != nil {
+		return "", fmt.Errorf("exchange code for token: %w", err)
+	}
+	rawIDToken, ok := token.Extra("id_token").(string)
+	if !ok {
+		return "", errors.New("id_token not present in token response")
+	}
+	return rawIDToken, nil
 }
 
 func callbackHandler(expectedState, expectedIssuer string, codeCh chan<- string, errCh chan<- error) http.Handler {
@@ -233,55 +248,6 @@ func waitForCode(ctx context.Context, codeCh <-chan string, errCh <-chan error) 
 		return "", fmt.Errorf("authentication cancelled: %w", ctx.Err())
 	case <-timer.C:
 		return "", errors.New("timed out waiting for authentication callback")
-	}
-}
-
-// pkce implements Proof Key for Code Exchange (RFC 7636).
-type pkce struct {
-	challenge string
-	verifier  string
-}
-
-func newPKCE(provider *oidc.Provider) (*pkce, error) {
-	var claims struct {
-		Methods []string `json:"code_challenge_methods_supported"`
-	}
-	if err := provider.Claims(&claims); err != nil {
-		return nil, fmt.Errorf("parse provider claims: %w", err)
-	}
-
-	supported := false
-	for _, m := range claims.Methods {
-		if m == "S256" {
-			supported = true
-			break
-		}
-	}
-	if !supported {
-		return nil, fmt.Errorf("OIDC provider %s does not support PKCE S256", provider.Endpoint().AuthURL)
-	}
-
-	verifier, err := randomString(64)
-	if err != nil {
-		return nil, fmt.Errorf("generate PKCE verifier: %w", err)
-	}
-
-	h := sha256.Sum256([]byte(verifier))
-	challenge := base64.RawURLEncoding.EncodeToString(h[:])
-
-	return &pkce{challenge: challenge, verifier: verifier}, nil
-}
-
-func (p *pkce) authURLOpts() []oauth2.AuthCodeOption {
-	return []oauth2.AuthCodeOption{
-		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
-		oauth2.SetAuthURLParam("code_challenge", p.challenge),
-	}
-}
-
-func (p *pkce) tokenURLOpts() []oauth2.AuthCodeOption {
-	return []oauth2.AuthCodeOption{
-		oauth2.SetAuthURLParam("code_verifier", p.verifier),
 	}
 }
 
