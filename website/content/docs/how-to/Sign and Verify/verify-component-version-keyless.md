@@ -35,7 +35,7 @@ The signature was made against the public-good Sigstore infrastructure (`fulcio.
 
 {{< step >}}
 
-### Create a Sigstore verifier spec
+### Create a Sigstore verifier spec (Public Sigstore)
 
 Create `sigstore-verify.yaml` with the identity constraints the signature must satisfy. Both an **issuer** and an **identity** constraint are required:
 
@@ -54,6 +54,7 @@ On public Sigstore (`oauth2.sigstore.dev`), the value Fulcio writes into the cer
 | Google | `https://accounts.google.com` |
 | GitHub | `https://github.com/login/oauth` |
 | Microsoft | `https://login.microsoftonline.com` |
+
 {{< /callout >}}
 
 {{< callout context="caution" >}}
@@ -64,7 +65,7 @@ Without identity constraints, verification cannot assert **who** signed the comp
 
 {{< step >}}
 
-### Verify the component version
+### Verify the component version (Public Sigstore)
 
 Run the verify command with the verifier spec:
 
@@ -102,7 +103,7 @@ time=2026-05-18T10:18:42.612+02:00 level=INFO msg="SIGNATURE VERIFICATION SUCCES
 
 {{< step >}}
 
-### Verify a specific signature (optional)
+### Verify a specific signature (Public Sigstore)
 
 If the component carries multiple signatures (e.g. an RSA signature and a Sigstore signature), select one with `--signature`:
 
@@ -154,7 +155,7 @@ Use `trusted_root_json` (inline JSON) if you'd rather not point at a file. The `
 
 {{< step >}}
 
-### Create a Sigstore verifier spec
+### Create a Sigstore verifier spec (Private/Enterprise)
 
 Set `privateInfrastructure: true` and the identity constraints the signature must satisfy:
 
@@ -178,7 +179,7 @@ Without identity constraints, verification cannot assert **who** signed the comp
 
 {{< step >}}
 
-### Verify the component version
+### Verify the component version (Private/Enterprise)
 
 Run the verify command with the verifier spec:
 
@@ -216,7 +217,7 @@ time=2026-05-18T10:18:42.612+02:00 level=INFO msg="SIGNATURE VERIFICATION SUCCES
 
 {{< step >}}
 
-### Verify a specific signature (optional)
+### Verify a specific signature (Private/Enterprise)
 
 If the component carries multiple signatures (e.g. an RSA signature and a Sigstore signature), select one with `--signature`:
 

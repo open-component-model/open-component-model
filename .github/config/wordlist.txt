@@ -193,6 +193,7 @@ dest
 dev
 dex
 devops
+dex
 diataxis
 digesters
 directorytree

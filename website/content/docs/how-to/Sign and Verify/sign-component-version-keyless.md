@@ -66,7 +66,7 @@ configurations:
 
 {{< step >}}
 
-### Create a Sigstore signer spec
+### Create a Sigstore signer spec (Public Sigstore)
 
 Create `sigstore-sign.yaml`. With no extra fields, the handler uses public-good Sigstore TUF discovery (`sigstore.dev`) and the public Sigstore Dex OIDC issuer:
 
@@ -93,7 +93,7 @@ This is what the verifier's `certificateOIDCIssuer` constraint must match (see [
 
 {{< step >}}
 
-### Sign the component version
+### Sign the component version (Public Sigstore)
 
 Run the sign command with the signer spec:
 
@@ -167,7 +167,7 @@ configurations:
 
 {{< step >}}
 
-### Create a Sigstore signer spec
+### Create a Sigstore signer spec (Private/Enterprise)
 
 Point at a local `signing_config.json` that lists your Fulcio/Rekor/TSA endpoints (create one with `cosign signing-config create`). Set `issuer` and `clientID` to the same values used on the consumer identity above:
 
@@ -187,7 +187,7 @@ clientID: ocm-cli
 
 {{< step >}}
 
-### Sign the component version
+### Sign the component version (Private/Enterprise)
 
 Run the sign command with the signer spec:
 
