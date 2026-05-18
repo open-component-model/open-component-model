@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/cli
 
-go 1.26.1
+go 1.26.2
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
