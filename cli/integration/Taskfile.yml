@@ -5,7 +5,6 @@ includes:
 
 vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
-  SIGSTORE_ENV_FILE: '../../bindings/go/sigstore/integration/tmp/sigstore-env.sh'
 
 tasks:
   test/integration:
