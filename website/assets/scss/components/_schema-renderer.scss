@@ -316,7 +316,7 @@ $schema-max-depth: 8;
   font-weight: 600;
   line-height: 1.35;
   white-space: normal;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .sr-const-value--deprecated {
