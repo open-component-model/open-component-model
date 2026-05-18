@@ -32,11 +32,9 @@ Verify component version(s) inside an OCM repository based on signatures.
 
 ## Behavior
 
-- --signature: verify only the named signature  
-- Without --signature: verify all signatures  
-- Fail fast on first invalid signature  
-- Default verifier: RSASSA-PSS plugin  
-  - Uses public key from discovered credentials (config-less)
+- --signature selects a single signature by name; without it, every signature on the descriptor is verified
+- Signatures are verified concurrently (--concurrency-limit); the command exits non-zero on the first failure
+- Default verifier: RSASSA-PSS, resolves the public key from credentials in .ocmconfig
 - For Sigstore keyless verification, pass --verifier-spec with a SigstoreVerificationConfiguration/v1alpha1 config
   - Identity constraints (certificateOIDCIssuer + certificateIdentity, or regexp variants) are REQUIRED
   - Without them, verification cannot assert who produced the signature
@@ -131,7 +129,7 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
       --concurrency-limit int   maximum amount of parallel requests to the repository for resolving component versions (default 4)
   -h, --help                    help for component-version
       --signature string        name of the signature to verify. If not set, all signatures are verified.
-      --verifier-spec string    path to a verifier specification file. If empty, defaults to RSASSA-PSS. For Sigstore keyless verification, use type SigstoreVerificationConfiguration/v1alpha1 (set CertificateOIDCIssuer and CertificateIdentity).
+      --verifier-spec string    path to a verifier specification file. If empty, defaults to RSASSA-PSS.
 ```
 
 ### Options inherited from parent commands
