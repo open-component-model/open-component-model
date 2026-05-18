@@ -156,7 +156,6 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
       consumers:
       - identity:
           type: SigstoreVerifier/v1alpha1
-          algorithm: sigstore
           signature: default
         credentials:
         - type: Credentials/v1
