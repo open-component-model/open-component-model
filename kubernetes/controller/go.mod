@@ -15,10 +15,10 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.20.0
-	k8s.io/api v0.35.3
-	k8s.io/apiextensions-apiserver v0.35.3
-	k8s.io/apimachinery v0.35.3
-	k8s.io/client-go v0.35.3
+	k8s.io/api v0.35.4
+	k8s.io/apiextensions-apiserver v0.35.4
+	k8s.io/apimachinery v0.35.5
+	k8s.io/client-go v0.35.4
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5
 	sigs.k8s.io/controller-runtime v0.23.3
 	sigs.k8s.io/yaml v1.6.0
@@ -43,11 +43,11 @@ require (
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260505072254-1c17fcd5c971
-	sigs.k8s.io/release-utils v0.12.3
+	sigs.k8s.io/release-utils v0.12.4
 )
 
 require (
-	cel.dev/expr v0.25.1 // indirect
+	cel.dev/expr v0.25.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
 	github.com/ProtonMail/go-crypto v1.4.1 // indirect
@@ -155,11 +155,11 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 	helm.sh/helm/v4 v4.1.4 // indirect
-	k8s.io/cli-runtime v0.35.3 // indirect
-	k8s.io/component-base v0.35.3 // indirect
+	k8s.io/cli-runtime v0.35.4 // indirect
+	k8s.io/component-base v0.35.4 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
-	k8s.io/kubectl v0.35.3 // indirect
+	k8s.io/kubectl v0.35.4 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.7 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
