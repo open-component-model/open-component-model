@@ -26,7 +26,7 @@ No public key configuration is needed. Verification is bound to the **identity**
 
 Pick the tab that matches the Sigstore stack the signature was made against. Each tab is a self-contained walkthrough.
 
-{{< tabs >}}
+{{< tabs "verify-keyless-stack" >}}
 {{< tab "Public Sigstore (sigstore.dev)" >}}
 
 The signature was made against the public-good Sigstore infrastructure (`fulcio.sigstore.dev`, `rekor.sigstore.dev`). The trusted root is fetched from the embedded TUF root — no credentials needed.
@@ -69,7 +69,7 @@ Without identity constraints, verification cannot assert **who** signed the comp
 
 Run the verify command with the verifier spec:
 
-{{< tabs >}}
+{{< tabs "verify-keyless-public-target" >}}
 {{< tab "Local CTF Archive" >}}
 
 ```bash
@@ -183,7 +183,7 @@ Without identity constraints, verification cannot assert **who** signed the comp
 
 Run the verify command with the verifier spec:
 
-{{< tabs >}}
+{{< tabs "verify-keyless-private-target" >}}
 {{< tab "Local CTF Archive" >}}
 
 ```bash

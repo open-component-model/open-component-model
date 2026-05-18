@@ -33,7 +33,7 @@ You do **not** need to generate or distribute keys for this flow. Identity is th
 
 Pick the tab that matches your Sigstore stack. Each tab is a self-contained walkthrough.
 
-{{< tabs >}}
+{{< tabs "sign-keyless-stack" >}}
 {{< tab "Public Sigstore (sigstore.dev)" >}}
 
 Sign through the public-good Sigstore infrastructure: Dex federates to Google/GitHub/Microsoft for OIDC, Fulcio issues the certificate, and the entry is recorded in the public Rekor transparency log.
@@ -97,7 +97,7 @@ This is what the verifier's `certificateOIDCIssuer` constraint must match (see [
 
 Run the sign command with the signer spec:
 
-{{< tabs >}}
+{{< tabs "sign-keyless-public-target" >}}
 {{< tab "Local CTF Archive" >}}
 
 ```bash
@@ -191,7 +191,7 @@ clientID: ocm-cli
 
 Run the sign command with the signer spec:
 
-{{< tabs >}}
+{{< tabs "sign-keyless-private-target" >}}
 {{< tab "Local CTF Archive" >}}
 
 ```bash
