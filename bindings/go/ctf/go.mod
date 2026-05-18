@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/ctf
 
-go 1.26.1
+go 1.26.2
 
 require (
 	github.com/nlepage/go-tarfs v1.2.1
