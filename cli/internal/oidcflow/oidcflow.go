@@ -52,8 +52,8 @@ const (
 	DefaultIssuer   = "https://oauth2.sigstore.dev/auth"
 	DefaultClientID = "sigstore"
 
-	callbackPath    = "/auth/callback"
-	callbackTimeout = 120 * time.Second
+	callbackPath           = "/auth/callback"
+	defaultCallbackTimeout = 120 * time.Second
 )
 
 // Token holds the raw OIDC ID token string after a successful flow.
@@ -65,6 +65,10 @@ type Token struct {
 type Options struct {
 	Issuer   string
 	ClientID string
+	// CallbackTimeout bounds how long GetIDToken waits for the OIDC redirect
+	// callback after the browser is opened. Zero applies the package default
+	// (defaultCallbackTimeout).
+	CallbackTimeout time.Duration
 }
 
 // GetIDToken performs an interactive OIDC authorization code flow with PKCE
@@ -108,15 +112,12 @@ func GetIDToken(ctx context.Context, opts Options) (*Token, error) {
 	}
 	go func() {
 		if sErr := srv.Serve(listener); sErr != nil && !errors.Is(sErr, http.ErrServerClosed) {
-			select {
-			case errCh <- sErr:
-			default:
-			}
+			errCh <- sErr
 		}
 	}()
-	defer srv.Shutdown(ctx) //nolint:errcheck // best-effort shutdown
+	defer func() { _ = srv.Shutdown(ctx) }()
 
-	rawIDToken, err := runAuthFlow(ctx, provider, pkce, opts.ClientID, redirectURL, state, nonce, codeCh, errCh)
+	rawIDToken, err := runAuthFlow(ctx, provider, pkce, opts.ClientID, redirectURL, state, nonce, opts.CallbackTimeout, codeCh, errCh)
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +140,9 @@ func (o *Options) applyDefaults() {
 	if o.ClientID == "" {
 		o.ClientID = DefaultClientID
 	}
+	if o.CallbackTimeout == 0 {
+		o.CallbackTimeout = defaultCallbackTimeout
+	}
 }
 
 func newStateAndNonce() (state, nonce string, err error) {
@@ -153,7 +157,7 @@ func newStateAndNonce() (state, nonce string, err error) {
 
 // runAuthFlow opens the browser, waits for the callback, and exchanges the
 // authorization code for an ID token. The returned token is not yet verified.
-func runAuthFlow(ctx context.Context, provider *oidc.Provider, pkce *pkce, clientID, redirectURL, state, nonce string, codeCh <-chan string, errCh chan error) (string, error) {
+func runAuthFlow(ctx context.Context, provider *oidc.Provider, pkce *pkce, clientID, redirectURL, state, nonce string, callbackTimeout time.Duration, codeCh <-chan string, errCh chan error) (string, error) {
 	config := oauth2.Config{
 		ClientID:    clientID,
 		Endpoint:    provider.Endpoint(),
@@ -166,7 +170,7 @@ func runAuthFlow(ctx context.Context, provider *oidc.Provider, pkce *pkce, clien
 		return "", fmt.Errorf("open browser: %w (URL: %s)", err, authURL)
 	}
 
-	code, err := waitForCode(ctx, codeCh, errCh)
+	code, err := waitForCode(ctx, callbackTimeout, codeCh, errCh)
 	if err != nil {
 		return "", fmt.Errorf("receive auth callback: %w", err)
 	}
@@ -182,6 +186,10 @@ func runAuthFlow(ctx context.Context, provider *oidc.Provider, pkce *pkce, clien
 	return rawIDToken, nil
 }
 
+// callbackHandler terminates the OAuth redirect on the loopback listener:
+// validates state (constant-time) and iss (RFC 9207, permissive when absent),
+// then forwards the auth code on codeCh or an error on errCh. Channels are
+// non-blocking; duplicate callbacks get 409.
 func callbackHandler(expectedState, expectedIssuer string, codeCh chan<- string, errCh chan<- error) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
@@ -228,7 +236,7 @@ func callbackHandler(expectedState, expectedIssuer string, codeCh chan<- string,
 		}
 		select {
 		case codeCh <- code:
-			fmt.Fprint(w, successHTML)
+			_, _ = fmt.Fprint(w, successHTML)
 		default:
 			http.Error(w, "callback already handled", http.StatusConflict)
 		}
@@ -236,7 +244,7 @@ func callbackHandler(expectedState, expectedIssuer string, codeCh chan<- string,
 	return mux
 }
 
-func waitForCode(ctx context.Context, codeCh <-chan string, errCh <-chan error) (string, error) {
+func waitForCode(ctx context.Context, callbackTimeout time.Duration, codeCh <-chan string, errCh <-chan error) (string, error) {
 	timer := time.NewTimer(callbackTimeout)
 	defer timer.Stop()
 	select {

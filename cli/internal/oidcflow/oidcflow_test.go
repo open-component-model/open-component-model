@@ -212,7 +212,7 @@ func Test_waitForCode(t *testing.T) {
 			r := require.New(t)
 
 			ctx, codeCh, errCh := tt.setup()
-			code, err := waitForCode(ctx, codeCh, errCh)
+			code, err := waitForCode(ctx, defaultCallbackTimeout, codeCh, errCh)
 
 			if tt.wantErr != "" {
 				r.ErrorContains(err, tt.wantErr)
