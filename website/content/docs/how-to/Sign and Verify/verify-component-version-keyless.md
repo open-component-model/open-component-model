@@ -157,19 +157,14 @@ Use `trusted_root_json` (inline JSON) if you'd rather not point at a file. The `
 
 ### Create a Sigstore verifier spec (Private/Enterprise)
 
-Set `privateInfrastructure: true` and the identity constraints the signature must satisfy:
+Add the identity constraints the signature must satisfy. The trusted-root credential from the previous step is what binds verification to your enterprise stack — no extra fields on the spec are needed:
 
 ```yaml
 # sigstore-verify.yaml
 type: SigstoreVerificationConfiguration/v1alpha1
-privateInfrastructure: true
 certificateOIDCIssuer: https://login.example.com/realms/ocm
 certificateIdentity: ci@example.com
 ```
-
-{{< callout context="note" title="What privateInfrastructure does" >}}
-`privateInfrastructure: true` tells the verifier the signature was made against a privately-deployed Sigstore stack — don't try to look the certificate up in the public Rekor transparency log. Signature, certificate chain, identity (SAN + issuer), and SCT (Signed Certificate Timestamp) checks are **unchanged**. The flag must be paired with the trusted-root credential from the previous step; without it, the verifier errors out.
-{{< /callout >}}
 
 {{< callout context="caution" >}}
 Without identity constraints, verification cannot assert **who** signed the component. The verifier rejects specs that omit them.
@@ -258,7 +253,7 @@ The bundle includes the certificate's `Subject Alternative Name` (your OIDC iden
 
 **Cause:** The signature was made against a different Rekor instance than the one being queried, or the entry was pruned.
 
-**Fix:** For private/enterprise infrastructure, ensure a trusted-root credential is configured for the `SigstoreVerifier/v1alpha1` consumer in `.ocmconfig` and that your verifier spec sets `privateInfrastructure: true`. For the public log, verify the signature is recent and that you're not behind a network filter blocking `rekor.sigstore.dev`.
+**Fix:** For private/enterprise infrastructure, configure a trusted-root credential for the `SigstoreVerifier/v1alpha1` consumer in `.ocmconfig` so the verifier knows which Rekor public key to trust. For the public log, verify the signature is recent and that you're not behind a network filter blocking `rekor.sigstore.dev`.
 
 ### Symptom: "certificate expired"
 
