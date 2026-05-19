@@ -25,16 +25,7 @@ func NewStaticCredentialsResolver(credMap map[string]map[string]string) *StaticC
 	}
 }
 
-func (s *StaticCredentialsResolver) Resolve(_ context.Context, identity runtime.Identity) (map[string]string, error) {
-	creds, ok := s.staticCredentialsStore[identity.String()]
-	if !ok {
-		return nil, ErrNotFound
-	}
-
-	return maps.Clone(creds), nil
-}
-
-func (s *StaticCredentialsResolver) ResolveTyped(_ context.Context, identity runtime.Identity) (runtime.Typed, error) {
+func (s *StaticCredentialsResolver) Resolve(_ context.Context, identity runtime.Identity) (runtime.Typed, error) {
 	creds, ok := s.staticCredentialsStore[identity.String()]
 	if !ok {
 		return nil, ErrNotFound
