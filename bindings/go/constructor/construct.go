@@ -16,7 +16,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/credentials"
-	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
@@ -786,8 +785,5 @@ func resolveCredentials(ctx context.Context, provider credentials.Resolver, cons
 		return nil, nil
 	}
 
-	if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
-		return ocmruntime.Identity(dc.Properties), err
-	}
-	return nil, err
+	return typed, err
 }
