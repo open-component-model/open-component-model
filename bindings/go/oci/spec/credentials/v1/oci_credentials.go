@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -50,11 +51,30 @@ type OCICredentials struct {
 // Direct conversation as well as converting from v1.DirectCredentials is supported.
 // In every other case, an error will be returned.
 func FromTyped(creds runtime.Typed) (*OCICredentials, error) {
+	if creds == nil {
+		return nil, nil
+	}
 	switch t := creds.(type) {
 	case *OCICredentials:
 		return t, nil
 	case *v1.DirectCredentials:
 		return FromDirectCredentials(t.Properties), nil
+	case *runtime.Raw:
+		ociCredentials := OCICredentials{}
+		if err := Scheme.Convert(creds, &ociCredentials); err != nil {
+			return nil, fmt.Errorf("error converting raw credentials to OCICredentials: %w", err)
+		}
+		return &ociCredentials, nil
+	case *runtime.Unstructured:
+		data, err := json.Marshal(t)
+		if err != nil {
+			return nil, fmt.Errorf("error marshalling unstructured credentials: %w", err)
+		}
+		ociCredentials := OCICredentials{}
+		if err := json.Unmarshal(data, &ociCredentials); err != nil {
+			return nil, fmt.Errorf("error converting unstructured credentials to OCICredentials: %w", err)
+		}
+		return &ociCredentials, nil
 	}
 
 	slog.Error("unexpected credential type, expected OCICredentials or DirectCredentials", "type", creds.GetType())

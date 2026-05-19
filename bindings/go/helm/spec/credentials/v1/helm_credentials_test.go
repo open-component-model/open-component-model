@@ -1,13 +1,130 @@
 package v1
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	credv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+type fakeTyped struct{}
+
+func (f *fakeTyped) GetType() runtime.Type        { return runtime.NewUnversionedType("Unknown") }
+func (f *fakeTyped) SetType(_ runtime.Type)       {}
+func (f *fakeTyped) DeepCopyTyped() runtime.Typed { return &fakeTyped{} }
+
+func TestFromTyped(t *testing.T) {
+	raw := &runtime.Raw{}
+	require.NoError(t, json.Unmarshal([]byte(
+		`{"type":"HelmHTTPCredentials/v1","username":"user","password":"pass","certFile":"/cert","keyFile":"/key","keyring":"/ring"}`),
+		raw))
+
+	tests := []struct {
+		name    string
+		input   runtime.Typed
+		want    *HelmHTTPCredentials
+		wantErr bool
+	}{
+		{
+			name:  "nil",
+			input: nil,
+			want:  nil,
+		},
+		{
+			name: "HelmHTTPCredentials passthrough",
+			input: &HelmHTTPCredentials{
+				Type:     runtime.NewVersionedType(HelmHTTPCredentialsType, Version),
+				Username: "user",
+				Password: "pass",
+				CertFile: "/cert",
+				KeyFile:  "/key",
+				Keyring:  "/ring",
+			},
+			want: &HelmHTTPCredentials{
+				Type:     runtime.NewVersionedType(HelmHTTPCredentialsType, Version),
+				Username: "user",
+				Password: "pass",
+				CertFile: "/cert",
+				KeyFile:  "/key",
+				Keyring:  "/ring",
+			},
+		},
+		{
+			name: "DirectCredentials",
+			input: &credv1.DirectCredentials{
+				Properties: map[string]string{
+					CredentialKeyUsername: "user",
+					CredentialKeyPassword: "pass",
+					CredentialKeyCertFile: "/cert",
+					CredentialKeyKeyFile:  "/key",
+					CredentialKeyKeyring:  "/ring",
+				},
+			},
+			want: &HelmHTTPCredentials{
+				Type:     runtime.NewVersionedType(HelmHTTPCredentialsType, Version),
+				Username: "user",
+				Password: "pass",
+				CertFile: "/cert",
+				KeyFile:  "/key",
+				Keyring:  "/ring",
+			},
+		},
+		{
+			name:  "Raw",
+			input: raw,
+			want: &HelmHTTPCredentials{
+				Type:     runtime.NewVersionedType(HelmHTTPCredentialsType, Version),
+				Username: "user",
+				Password: "pass",
+				CertFile: "/cert",
+				KeyFile:  "/key",
+				Keyring:  "/ring",
+			},
+		},
+		{
+			name: "Unstructured",
+			input: &runtime.Unstructured{
+				Data: map[string]any{
+					"type":     runtime.NewVersionedType(HelmHTTPCredentialsType, Version),
+					"username": "user",
+					"password": "pass",
+					"certFile": "/cert",
+					"keyFile":  "/key",
+					"keyring":  "/ring",
+				},
+			},
+			want: &HelmHTTPCredentials{
+				Type:     runtime.NewVersionedType(HelmHTTPCredentialsType, Version),
+				Username: "user",
+				Password: "pass",
+				CertFile: "/cert",
+				KeyFile:  "/key",
+				Keyring:  "/ring",
+			},
+		},
+		{
+			name:    "unknown type returns error",
+			input:   &fakeTyped{},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := FromTyped(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
 
 func TestFromDirectCredentials(t *testing.T) {
 	props := map[string]string{
@@ -64,42 +181,3 @@ func TestFromDirectCredentials_NilMap(t *testing.T) {
 	assert.Empty(t, creds.Keyring)
 }
 
-func TestMustRegisterCredentialType(t *testing.T) {
-	scheme := runtime.NewScheme()
-	MustRegisterCredentialType(scheme)
-
-	obj, err := scheme.NewObject(runtime.NewVersionedType(HelmHTTPCredentialsType, Version))
-	require.NoError(t, err)
-	assert.IsType(t, &HelmHTTPCredentials{}, obj)
-
-	obj, err = scheme.NewObject(runtime.NewUnversionedType(HelmHTTPCredentialsType))
-	require.NoError(t, err)
-	assert.IsType(t, &HelmHTTPCredentials{}, obj)
-}
-
-func TestHelmHTTPCredentials_SchemeConvert(t *testing.T) {
-	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
-	MustRegisterCredentialType(scheme)
-
-	original := &HelmHTTPCredentials{
-		Type:     runtime.NewVersionedType(HelmHTTPCredentialsType, Version),
-		Username: "testuser",
-		Password: "testpass",
-		CertFile: "/path/cert.pem",
-		KeyFile:  "/path/key.pem",
-		Keyring:  "/path/keyring",
-	}
-
-	raw := &runtime.Raw{}
-	require.NoError(t, scheme.Convert(original, raw))
-
-	restored := &HelmHTTPCredentials{}
-	require.NoError(t, scheme.Convert(raw, restored))
-
-	assert.Equal(t, original.Type, restored.Type)
-	assert.Equal(t, original.Username, restored.Username)
-	assert.Equal(t, original.Password, restored.Password)
-	assert.Equal(t, original.CertFile, restored.CertFile)
-	assert.Equal(t, original.KeyFile, restored.KeyFile)
-	assert.Equal(t, original.Keyring, restored.Keyring)
-}
