@@ -36,19 +36,20 @@ func handleJSONResponse(w http.ResponseWriter, response interface{}) {
 	}
 }
 
-// credentialsFromHeader extracts credentials from the Authorization header if present
-// and unmarshals them into a map. If the header is absent, it returns an empty map.
+// credentialsFromHeader extracts credentials from the Authorization header if present.
+// The header value must be a JSON-encoded typed object. If the header is absent, nil is returned.
 // If the header is present but cannot be unmarshaled, it writes an error response and returns ok as false.
-func credentialsFromHeader(w http.ResponseWriter, h http.Header) (credentials runtime.Typed, ok bool) {
+func credentialsFromHeader(w http.ResponseWriter, h http.Header) (runtime.Typed, bool) {
 	authHeader := h.Get("Authorization")
 	if authHeader == "" {
 		return nil, true
 	}
-	if err := json.Unmarshal([]byte(authHeader), &credentials); err != nil {
-		plugins.NewError(fmt.Errorf("failed to marshal credentials: %w", err), http.StatusUnauthorized).Write(w)
+	raw := &runtime.Raw{}
+	if err := json.Unmarshal([]byte(authHeader), raw); err != nil {
+		plugins.NewError(fmt.Errorf("failed to unmarshal credentials: %w", err), http.StatusUnauthorized).Write(w)
 		return nil, false
 	}
-	return credentials, true
+	return raw, true
 }
 
 // handleGetSignerIdentity handles the GetSignerIdentity endpoint
