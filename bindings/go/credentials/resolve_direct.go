@@ -88,6 +88,8 @@ func mergeTyped(creds []runtime.Typed, scheme *runtime.Scheme) (runtime.Typed, e
 		return nil, fmt.Errorf("scheme is nil")
 	}
 
+	// Using [runtime.Unstructured] here is not beneficial,
+	// since we are working with shallow map[string]string data and not with nested JSON types.
 	merged := make(map[string]string)
 	for _, c := range creds {
 		// DirectCredentials nests its values under "properties", every other
