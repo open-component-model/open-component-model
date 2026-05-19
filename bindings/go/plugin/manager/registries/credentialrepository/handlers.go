@@ -68,4 +68,3 @@ func ResolveHandlerFunc[T runtime.Typed](f func(ctx context.Context, cfg v1.Reso
 		}
 	}
 }
-

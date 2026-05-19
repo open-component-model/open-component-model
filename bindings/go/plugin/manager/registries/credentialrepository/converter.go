@@ -52,4 +52,3 @@ func (c *credentialRepositoryPluginConverter) Resolve(ctx context.Context, cfg r
 	}
 	return result, nil
 }
-

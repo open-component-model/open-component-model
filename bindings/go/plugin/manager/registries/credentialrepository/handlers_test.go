@@ -105,12 +105,12 @@ func TestConsumerIdentityForConfigHandlerFunc(t *testing.T) {
 	}
 }
 
-func TestResolveTypedHandlerFunc(t *testing.T) {
+func TestResolveHandlerFunc(t *testing.T) {
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 	dummyRepo := &dummyv1.Repository{}
 
-	resolveTyped := func(ctx context.Context, cfg v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
+	Resolve := func(ctx context.Context, cfg v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
 		return &runtime.Raw{
 			Type: runtime.NewVersionedType("Credentials", "v1"),
 			Data: []byte(`{"resolved":"credentials","token":"abc123"}`),
@@ -125,9 +125,9 @@ func TestResolveTypedHandlerFunc(t *testing.T) {
 		assertError  func(t *testing.T, err error)
 	}{
 		{
-			name: "ResolveTypedHandlerFunc unauthorized error",
+			name: "ResolveHandlerFunc unauthorized error",
 			handlerFunc: func() http.HandlerFunc {
-				return ResolveHandlerFunc(resolveTyped, scheme, dummyRepo)
+				return ResolveHandlerFunc(Resolve, scheme, dummyRepo)
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
@@ -159,9 +159,9 @@ func TestResolveTypedHandlerFunc(t *testing.T) {
 			},
 		},
 		{
-			name: "ResolveTypedHandlerFunc missing body error",
+			name: "ResolveHandlerFunc missing body error",
 			handlerFunc: func() http.HandlerFunc {
-				return ResolveHandlerFunc(resolveTyped, scheme, dummyRepo)
+				return ResolveHandlerFunc(Resolve, scheme, dummyRepo)
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
@@ -183,9 +183,9 @@ func TestResolveTypedHandlerFunc(t *testing.T) {
 			},
 		},
 		{
-			name: "ResolveTypedHandlerFunc success",
+			name: "ResolveHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				return ResolveHandlerFunc(resolveTyped, scheme, dummyRepo)
+				return ResolveHandlerFunc(Resolve, scheme, dummyRepo)
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				defer resp.Body.Close()

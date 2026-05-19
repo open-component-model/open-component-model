@@ -17,8 +17,8 @@ import (
 const (
 	// ConsumerIdentityForConfig defines the endpoint to get consumer identity for configuration.
 	ConsumerIdentityForConfig = "/consumer-identity"
-	// ResolveTyped defines the endpoint to resolve typed credentials using the credential graph.
-	ResolveTyped = "/resolve-typed"
+	// Resolve defines the endpoint to resolve typed credentials using the credential graph.
+	Resolve = "/resolve-typed"
 )
 
 type RepositoryPlugin struct {
@@ -79,7 +79,7 @@ func (r *RepositoryPlugin) ConsumerIdentityForConfig(ctx context.Context, cfg cr
 }
 
 func (r *RepositoryPlugin) Resolve(ctx context.Context, cfg credentialsv1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
-	slog.InfoContext(ctx, "Resolving credentials", "id", r.ID)
+	slog.InfoContext(ctx, "Resolving typed credentials", "id", r.ID)
 
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
@@ -91,8 +91,8 @@ func (r *RepositoryPlugin) Resolve(ctx context.Context, cfg credentialsv1.Resolv
 	}
 
 	var resolvedCredentials runtime.Raw
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, ResolveTyped, http.MethodPost, plugins.WithPayload(cfg), plugins.WithHeader(credHeader), plugins.WithResult(&resolvedCredentials)); err != nil {
-		return nil, fmt.Errorf("failed to resolve credentials from plugin %q: %w", r.ID, err)
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Resolve, http.MethodPost, plugins.WithPayload(cfg), plugins.WithHeader(credHeader), plugins.WithResult(&resolvedCredentials)); err != nil {
+		return nil, fmt.Errorf("failed to resolve typed credentials from plugin %q: %w", r.ID, err)
 	}
 
 	if resolvedCredentials.Data == nil {

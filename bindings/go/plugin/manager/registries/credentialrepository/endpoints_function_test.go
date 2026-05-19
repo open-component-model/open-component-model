@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	v2 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
@@ -114,7 +115,7 @@ func TestRegisterCredentialRepository(t *testing.T) {
 					found[handler.Location] = true
 				}
 				r.True(found[ConsumerIdentityForConfig], "ConsumerIdentityForConfig endpoint should be registered")
-				r.True(found[ResolveTyped], "ResolveTyped endpoint should be registered")
+				r.True(found[Resolve], "Resolve endpoint should be registered")
 			}
 		})
 	}

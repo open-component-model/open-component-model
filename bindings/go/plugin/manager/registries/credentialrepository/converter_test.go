@@ -13,7 +13,7 @@ import (
 // mockExternalPlugin is a test implementation of v1.CredentialRepositoryPluginContract
 type mockExternalPlugin struct {
 	consumerIdentityForConfigFunc func(ctx context.Context, cfg v1.ConsumerIdentityForConfigRequest[runtime.Typed]) (runtime.Identity, error)
-	resolveFunc                   func(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error)
+	ResolveFunc              func(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error)
 	pingFunc                      func(ctx context.Context) error
 }
 
@@ -32,8 +32,8 @@ func (m *mockExternalPlugin) ConsumerIdentityForConfig(ctx context.Context, cfg 
 }
 
 func (m *mockExternalPlugin) Resolve(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
-	if m.resolveFunc != nil {
-		return m.resolveFunc(ctx, cfg, credentials)
+	if m.ResolveFunc != nil {
+		return m.ResolveFunc(ctx, cfg, credentials)
 	}
 	return &credconfigv1.DirectCredentials{
 		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
@@ -74,7 +74,7 @@ func TestCredentialRepositoryPluginConverter_Resolve(t *testing.T) {
 		Properties: map[string]string{"username": "testuser", "password": "testpass"},
 	}
 	mockPlugin := &mockExternalPlugin{
-		resolveFunc: func(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
+		ResolveFunc: func(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
 			return expected, nil
 		},
 	}
@@ -86,17 +86,17 @@ func TestCredentialRepositoryPluginConverter_Resolve(t *testing.T) {
 
 	resolved, err := converter.Resolve(context.Background(), mockConfig, mockIdentity, inputCredentials)
 	if err != nil {
-		t.Errorf("ResolveTyped() returned unexpected error: %v", err)
+		t.Errorf("Resolve() returned unexpected error: %v", err)
 	}
 
 	dc, ok := resolved.(*credconfigv1.DirectCredentials)
 	if !ok {
-		t.Fatalf("ResolveTyped() returned %T, expected *DirectCredentials", resolved)
+		t.Fatalf("Resolve() returned %T, expected *DirectCredentials", resolved)
 	}
 
 	for key, value := range expected.Properties {
 		if dc.Properties[key] != value {
-			t.Errorf("ResolveTyped() returned credentials[%s] = %s, expected %s", key, dc.Properties[key], value)
+			t.Errorf("Resolve() returned credentials[%s] = %s, expected %s", key, dc.Properties[key], value)
 		}
 	}
 }
