@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -33,13 +34,16 @@ func inputProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, r *REQ,
 		logger.Info("request", "request", request.Method, "url", request.URL.String())
 
 		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := &runtime.Raw{}
-		if err := json.Unmarshal(rawCredentials, credentials); err != nil {
+		//TODO(matthiasbruns): Raw?
+		credentials := runtime.Raw{}
+		if err := credentials.UnmarshalJSON(rawCredentials); err != nil {
 			plugins.NewError(fmt.Errorf("failed to marshal credentials: %w", err), http.StatusUnauthorized).Write(writer)
 			return
 		}
 
-		defer request.Body.Close()
+		defer func(Body io.ReadCloser) {
+			_ = Body.Close()
+		}(request.Body)
 
 		result := new(REQ)
 		if err := json.NewDecoder(request.Body).Decode(result); err != nil {
@@ -47,7 +51,7 @@ func inputProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, r *REQ,
 			return
 		}
 
-		resp, err := f(request.Context(), result, credentials)
+		resp, err := f(request.Context(), result, &credentials)
 		if err != nil {
 			plugins.NewError(fmt.Errorf("failed to call processor function: %w", err), http.StatusInternalServerError).Write(writer)
 			return
