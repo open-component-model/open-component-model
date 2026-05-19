@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto"
 	"encoding/hex"
+	"fmt"
 	"testing"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
@@ -13,9 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/gpg/spec/signing/v1alpha1"
 	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	identityv1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/gpg/spec/signing/v1alpha1"
 )
 
 func TestGPGHandler_RoundTrip_Unprotected(t *testing.T) {
@@ -151,6 +152,52 @@ func TestGPGHandler_CredentialIdentities(t *testing.T) {
 	verIdentity, err := h.GetVerifyingCredentialConsumerIdentity(context.Background(), signed, &v1alpha1.Config{})
 	require.NoError(t, err)
 	require.Equal(t, "mysig", verIdentity[IdentityAttributeSignature])
+}
+
+func TestGPGHandler_HashAlgorithm_SHA512(t *testing.T) {
+	h := mustHandler(t)
+	entity := mustEntity(t, "")
+
+	privCreds := armoredPrivKey(t, entity)
+	pubCreds := armoredPubKey(t, entity)
+
+	digest := makeDigest(t, crypto.SHA512, []byte("hello world"))
+	cfg := &v1alpha1.Config{HashAlgorithm: v1alpha1.HashAlgorithmSHA512}
+
+	sig, err := h.Sign(context.Background(), digest, cfg, privCreds)
+	require.NoError(t, err)
+
+	signed := descruntime.Signature{Name: "test", Digest: digest, Signature: sig}
+	require.NoError(t, h.Verify(context.Background(), signed, cfg, pubCreds))
+}
+
+func TestGPGHandler_KeyFingerprint_Match(t *testing.T) {
+	h := mustHandler(t)
+	entity := mustEntity(t, "")
+	fp := fmt.Sprintf("%X", entity.PrimaryKey.Fingerprint)
+
+	privCreds := armoredPrivKey(t, entity)
+	pubCreds := armoredPubKey(t, entity)
+	digest := makeDigest(t, crypto.SHA256, []byte("fingerprint test"))
+	cfg := &v1alpha1.Config{KeyFingerprint: fp}
+
+	sig, err := h.Sign(context.Background(), digest, cfg, privCreds)
+	require.NoError(t, err)
+
+	signed := descruntime.Signature{Name: "test", Digest: digest, Signature: sig}
+	require.NoError(t, h.Verify(context.Background(), signed, cfg, pubCreds))
+}
+
+func TestGPGHandler_KeyFingerprint_NoMatch(t *testing.T) {
+	h := mustHandler(t)
+	entity := mustEntity(t, "")
+
+	privCreds := armoredPrivKey(t, entity)
+	digest := makeDigest(t, crypto.SHA256, []byte("fingerprint test"))
+	cfg := &v1alpha1.Config{KeyFingerprint: "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"}
+
+	_, err := h.Sign(context.Background(), digest, cfg, privCreds)
+	require.Error(t, err)
 }
 
 // ---- helpers ----
