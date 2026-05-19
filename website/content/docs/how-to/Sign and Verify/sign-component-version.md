@@ -280,7 +280,7 @@ time=2026-05-18T10:12:11.972+02:00 level=INFO msg="signed successfully" name=def
 {{< /details >}}
 
 {{< callout context="tip" >}}
-On the first run, OCM may download and cache the `cosign` binary into `~/.cache/ocm/cosign/...` (used internally for signing). Subsequent runs skip the download.
+If the `cosign` binary is not on your PATH or its version to low, OCM will download and cache the binary into `~/.cache/ocm/cosign/...`. Subsequent runs skip the download.
 {{< /callout >}}
 
 {{< /step >}}
