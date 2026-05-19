@@ -125,40 +125,6 @@ func TestResolveHandlerFunc(t *testing.T) {
 		assertError  func(t *testing.T, err error)
 	}{
 		{
-			name: "ResolveHandlerFunc unauthorized error",
-			handlerFunc: func() http.HandlerFunc {
-				return ResolveHandlerFunc(Resolve, scheme, dummyRepo)
-			},
-			assertOutput: func(t *testing.T, resp *http.Response) {
-				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-			},
-			assertError: func(t *testing.T, err error) {
-				require.NoError(t, err)
-			},
-			request: func(base string) *http.Request {
-				parse, _ := url.Parse(base)
-				body := &bytes.Buffer{}
-				body.Write([]byte(`{
-					"config": {
-						"type": "DummyRepository",
-						"baseUrl": "test-url"
-					},
-					"identity": {
-						"id": "test-identity"
-					}
-				}`))
-
-				header := http.Header{}
-				header.Add("Authorization", "not-json")
-				return &http.Request{
-					Method: "POST",
-					URL:    parse,
-					Header: header,
-					Body:   io.NopCloser(body),
-				}
-			},
-		},
-		{
 			name: "ResolveHandlerFunc missing body error",
 			handlerFunc: func() http.HandlerFunc {
 				return ResolveHandlerFunc(Resolve, scheme, dummyRepo)

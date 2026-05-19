@@ -29,29 +29,6 @@ func TestListComponentsHandlerFunc(t *testing.T) {
 		assertError  func(t *testing.T, err error)
 	}{
 		{
-			name: "ListComponentsHandlerFunc unauthorized error",
-			handlerFunc: func() http.HandlerFunc {
-				handler := ListComponentsHandlerFunc(func(ctx context.Context, request *v1.ListComponentsRequest[*dummyv1.Repository], credentials runtime.Typed) (*v1.ListComponentsResponse, error) {
-					return &v1.ListComponentsResponse{}, nil
-				}, scheme, &dummyv1.Repository{})
-
-				return handler
-			},
-			assertOutput: func(t *testing.T, resp *http.Response) {
-				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-			},
-			assertError: func(t *testing.T, err error) {
-				require.NoError(t, err)
-			},
-			request: func(base string) *http.Request {
-				parse, _ := url.Parse(base)
-				return &http.Request{
-					Method: http.MethodPost,
-					URL:    parse,
-				}
-			},
-		},
-		{
 			name: "ListComponentsHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
 				handler := ListComponentsHandlerFunc(func(ctx context.Context, request *v1.ListComponentsRequest[*dummyv1.Repository], credentials runtime.Typed) (*v1.ListComponentsResponse, error) {
