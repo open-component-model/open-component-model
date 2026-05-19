@@ -2,7 +2,7 @@
 
 **Adopted 2025-06-06**
 
-This Charter sets forth the responsibilities and procedures for technical contribution to, and oversight of, the Open Managed Control Plane open source project, which has been established as a project of Linux Foundation Europe, a Belgian private stichting headquartered at Kunstlaan 56, Brussels (“LF Europe”) (the “Project”). All contributors and other participants in the Project (collectively, “Collaborators”) must comply with the terms of this Charter.
+This Charter sets forth the responsibilities and procedures for technical contribution to, and oversight of, the Open Component Model open source project, which has been established as a project of Linux Foundation Europe, a Belgian private stichting headquartered at Kunstlaan 56, Brussels (“LF Europe”) (the “Project”). All contributors and other participants in the Project (collectively, “Collaborators”) must comply with the terms of this Charter.
 
 Throughout this document, we use terms as defined in the GitHub Glossary.  
 <https://docs.github.com/en/get-started/learning-about-github/github-glossary> (as of 01.03.2025)

@@ -13,6 +13,9 @@ find them. **Resolvers** map component name patterns to repositories so the CLI 
 components during recursive operations. For a high-level introduction, see the [Resolvers concept page]({{< relref "docs/concepts/resolvers.md" >}}).
 For configuration details and pattern syntax, see the [Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}).
 
+To understand **why** component references don't include repository specifications and how resolvers fit into OCM's
+location-independent design, see [Canonical Component Repositories]({{< relref "docs/concepts/canonical-components.md" >}}).
+
 ## What You'll Learn
 
 - Create components with references and push them to OCI registries

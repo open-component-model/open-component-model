@@ -52,7 +52,7 @@ jobs:
     steps:
       - name: Generate App Token
         id: get_token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
@@ -66,11 +66,14 @@ jobs:
           ref: ${{ github.ref_name }}
           token: ${{ steps.get_token.outputs.token }}
           fetch-tags: true
+          persist-credentials: false
 
       - name: Setup git config
+        env:
+          ACTOR: ${{ github.actor }}
         run: |
-          git config --global user.name "${{ github.actor }}"
-          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          git config --global user.name "${ACTOR}"
+          git config --global user.email "${ACTOR}@users.noreply.github.com"
 
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7
@@ -82,7 +85,7 @@ jobs:
 
       - name: Create RC tag
         id: tag
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           TAG: ${{ needs.prepare.outputs.new_tag }}
         with:
@@ -134,17 +137,19 @@ jobs:
           path: ${{ runner.temp }}/assets
 
       - name: Create RC Release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
-        with:
-          name: ${{ env.COMPONENT_NAME }} ${{ needs.prepare.outputs.new_version }}
-          tag_name: ${{ needs.prepare.outputs.new_tag }}
-          body_path: ${{ runner.temp }}/CHANGELOG.md
-          fail_on_unmatched_files: true
-          prerelease: true
-          files: ${{ runner.temp }}/assets/chart-*.tgz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+        run: |
+          gh release create "${RC_TAG}" \
+            --title "${{ env.COMPONENT_NAME }} ${RC_VERSION}" \
+            --notes-file "${{ runner.temp }}/CHANGELOG.md" \
+            --prerelease \
+            "${{ runner.temp }}/assets/chart-"*.tgz
 
       - name: Summarize RC release
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           RC_VERSION: ${{ needs.prepare.outputs.new_version }}
@@ -232,7 +237,7 @@ jobs:
     steps:
       - name: Generate App Token
         id: get_token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
@@ -247,11 +252,14 @@ jobs:
           ref: ${{ github.ref_name }}
           token: ${{ steps.get_token.outputs.token }}
           fetch-tags: true
+          persist-credentials: false
 
       - name: Setup git config
+        env:
+          ACTOR: ${{ github.actor }}
         run: |
-          git config --global user.name "${{ github.actor }}"
-          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          git config --global user.name "${ACTOR}"
+          git config --global user.email "${ACTOR}@users.noreply.github.com"
 
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7
@@ -262,7 +270,7 @@ jobs:
           git_tag_gpgsign: true
 
       - name: Create new release tag
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
@@ -273,7 +281,7 @@ jobs:
             await script.createNewReleaseTag({ core });
 
       - name: Setup ORAS
-        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
 
       - name: Log in to GHCR
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
@@ -380,9 +388,10 @@ jobs:
       - name: Get RC release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ needs.prepare.outputs.new_tag }}
         run: |
           set -euo pipefail
-          gh release view "${{ needs.prepare.outputs.new_tag }}" \
+          gh release view "${NEW_TAG}" \
             --repo "${{ github.repository }}" --json body --jq '.body' > "${{ runner.temp }}/CHANGELOG.md"
 
       - name: Prepare final chart assets
@@ -394,7 +403,7 @@ jobs:
           cp "${{ env.COMPONENT_PATH }}/dist/chart-${VERSION}.tgz" "${{ runner.temp }}/final-assets/"
 
       - name: Publish final release
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}

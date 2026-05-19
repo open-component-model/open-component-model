@@ -15,6 +15,8 @@ import (
 	helmdownload "ocm.software/open-component-model/bindings/go/helm/internal/download"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -50,6 +52,9 @@ func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 // for the given helm resource. For OCI-based helm repositories the identity type
 // is OCIRegistry; for HTTP/HTTPS repositories it is HelmChartRepository.
 // Returns nil if the resource has no remote repository (local chart).
+//
+// TODO(matthiasbruns): migrate return type to runtime.Typed once the ResourceRepository interface is updated.
+// https://github.com/open-component-model/ocm-project/issues/988
 func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	helm, err := r.convertAccess(resource)
 	if err != nil {
@@ -67,6 +72,9 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 // DownloadResource fetches a helm chart (and optional provenance file) from the
 // remote repository specified in the resource's helm access. The returned blob
 // is a [helmblob.ChartBlob] wrapping a tar archive of the downloaded files.
+//
+// TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the ResourceRepository interface is updated.
+// https://github.com/open-component-model/ocm-project/issues/988
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	helm, err := r.convertAccess(resource)
 	if err != nil {
@@ -100,7 +108,8 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	slog.DebugContext(ctx, "Created temporary download directory", "dir", downloadDir)
 
 	opts := []helmdownload.Option{
-		helmdownload.WithCredentials(credentials),
+		helmdownload.WithCredentials(helmcredsv1.FromDirectCredentials(credentials)),
+		helmdownload.WithOCICredentials(ocicredsv1.FromDirectCredentials(credentials)),
 		helmdownload.WithAlwaysDownloadProv(true),
 	}
 
@@ -136,6 +145,9 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 // Traditional Helm chart repositories are read-only HTTP servers that serve a static
 // index.yaml and packaged chart archives; there is no standardized upload API.
 // Charts stored in OCI registries should use the OCI resource repository instead.
+//
+// TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the ResourceRepository interface is updated.
+// https://github.com/open-component-model/ocm-project/issues/988
 func (r *ResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ map[string]string) (*descriptor.Resource, error) {
 	return nil, fmt.Errorf("helm chart repositories do not support upload operations")
 }

@@ -272,11 +272,11 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 					},
 				},
 				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
-					if identity["secretId"] != "vault-access-creds" {
-						return nil, fmt.Errorf("failed access")
-					}
 					if credentials["roleid"] != "my-role-id" {
 						return nil, fmt.Errorf("failed access")
+					}
+					if identity[runtime.IdentityAttributeHostname] != "myvault.example.com" {
+						return nil, fmt.Errorf("no secret for consumer: %v", identity)
 					}
 					return map[string]string{
 						"role_id":   "myvault.example.com-role",
@@ -285,6 +285,22 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 				},
 			}, nil
 		case runtime.NewUnversionedType("HashiCorpVault"):
+			// Extract vault host from the typed credential.
+			// During resolution this is a runtime.Identity with "hostname" field.
+			// During ingestion this is a *runtime.Raw with "serverURL" field.
+			var vaultHost string
+			if id, ok := repoType.(runtime.Identity); ok {
+				vaultHost = id[runtime.IdentityAttributeHostname]
+			} else {
+				data, _ := json.Marshal(repoType)
+				var mm map[string]any
+				_ = json.Unmarshal(data, &mm)
+				if surl, ok := mm["serverURL"].(string); ok {
+					parsedURL, _ := url.Parse(surl)
+					vaultHost = parsedURL.Hostname()
+				}
+			}
+
 			return CredentialPlugin{
 				ConsumerIdentityTypeAttributes: map[runtime.Type]map[string]func(v any) (string, string){
 					runtime.NewUnversionedType("HashiCorpVault"): {
@@ -295,11 +311,15 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 					},
 				},
 				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
-					switch identity["hostname"] {
+					switch vaultHost {
+					// this is the vault instance we are connected to, that's why we use a closure
 					case "myvault.example.com":
 						roleid, secret := credentials["role_id"], credentials["secret_id"]
 						if roleid != "myvault.example.com-role" || secret != "myvault.example.com-secret" {
 							return nil, fmt.Errorf("failed access")
+						}
+						if identity[runtime.IdentityAttributeHostname] != "other.vault.com" {
+							return nil, fmt.Errorf("no secret for consumer: %v", identity)
 						}
 						return map[string]string{
 							"role_id":   "other.vault.com-role",
@@ -310,6 +330,9 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 						if roleid != "other.vault.com-role" || secret != "other.vault.com-secret" {
 							return nil, fmt.Errorf("failed access")
 						}
+						if identity[runtime.IdentityAttributeHostname] != "docker.io" {
+							return nil, fmt.Errorf("no secret for consumer: %v", identity)
+						}
 						return map[string]string{
 							"username": "foo",
 							"password": "bar",
@@ -317,7 +340,7 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 					}
 
 					return map[string]string{
-						"vaultSecret": "vault-secret-for-https://" + identity["hostname"] + "/",
+						"vaultSecret": "vault-secret-for-https://" + vaultHost + "/",
 					}, nil
 				},
 			}, nil

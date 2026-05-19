@@ -127,7 +127,7 @@ The mission of SIG Runtime is to allow OCM components to be:
 
 ### Meetings
 
-**Participation in [OCM Community Call](https://ocm.software/community/engagement/#community-calls):** Regular updates and discussions held within the OCM shared community call.
+**Participation in [OCM Community Call](https://ocm.software/community/#community-calls):** Regular updates and discussions held within the OCM shared community call.
 
 ### Communication
 

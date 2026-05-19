@@ -49,7 +49,6 @@ jobs:
     with:
       branch: ${{ github.ref_name }}
       component_path: cli # cannot use env here
-    secrets: inherit
 
   # --------------------------------------------------------
   # 2. TAG RC: Create and push RC tag (skipped on dry-run)
@@ -71,11 +70,14 @@ jobs:
             ${{ env.COMPONENT_PATH }}
             .github/scripts
           ref: ${{ github.ref_name }}
+          persist-credentials: false
 
       - name: Setup git config
+        env:
+          ACTOR: ${{ github.actor }}
         run: |
-          git config --global user.name "${{ github.actor }}"
-          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          git config --global user.name "${ACTOR}"
+          git config --global user.email "${ACTOR}@users.noreply.github.com"
 
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7
@@ -87,7 +89,7 @@ jobs:
 
       - name: Create ${{ needs.prepare.outputs.new_tag }}
         id: tag
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           TAG: ${{ needs.prepare.outputs.new_tag }}
         with:
@@ -114,7 +116,6 @@ jobs:
       attestations: write      # Allows storing provenance attestation
       artifact-metadata: write # Needed for github artifact metadata publishing for oci
     uses: ./.github/workflows/cli.yml
-    secrets: inherit
     with:
       ref: ${{ needs.prepare.outputs.new_tag }}
       build_version: ${{ needs.prepare.outputs.base_version }}
@@ -145,21 +146,20 @@ jobs:
           path: ${{ runner.temp }}/rc-build-assets
 
       - name: Create RC Release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
-        with:
-          name: CLI ${{ needs.prepare.outputs.new_version }}
-          tag_name: ${{ needs.prepare.outputs.new_tag }}
-          body_path: ${{ runner.temp }}/CHANGELOG.md
-          fail_on_unmatched_files: true
-          prerelease: true
-          files: |
-            ${{ runner.temp }}/rc-build-assets/bin/ocm-*
-            ${{ runner.temp }}/rc-build-assets/oci/*
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+        run: |
+          gh release create "${RC_TAG}" \
+            --title "CLI ${RC_VERSION}" \
+            --notes-file "${{ runner.temp }}/CHANGELOG.md" \
+            --prerelease \
+            "${{ runner.temp }}/rc-build-assets/bin/ocm-"* \
+            "${{ runner.temp }}/rc-build-assets/oci/"*
 
       - name: Summarize RC release
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           RC_VERSION: ${{ needs.prepare.outputs.new_version }}
@@ -258,11 +258,14 @@ jobs:
             .github/scripts
           fetch-depth: 0
           ref: ${{ github.ref_name }}
+          persist-credentials: false
 
       - name: Setup git config
+        env:
+          ACTOR: ${{ github.actor }}
         run: |
-          git config --global user.name "${{ github.actor }}"
-          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          git config --global user.name "${ACTOR}"
+          git config --global user.email "${ACTOR}@users.noreply.github.com"
 
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7
@@ -273,7 +276,7 @@ jobs:
           git_tag_gpgsign: true
 
       - name: Create new release tag
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
@@ -283,7 +286,7 @@ jobs:
             await script.createNewReleaseTag({ core });
 
       - name: Setup ORAS
-        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
 
       - name: Log in to GHCR
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
@@ -341,7 +344,7 @@ jobs:
             --dir "${{ runner.temp }}/assets"
 
       - name: Publish final release
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}

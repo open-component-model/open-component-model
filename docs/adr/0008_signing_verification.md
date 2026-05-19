@@ -360,11 +360,11 @@ verifying.
 Sigstore requires a special external plugin that works as:
 
 - Signing Handler with `SigstoreSigningConfiguration/v1alpha1`
-  - This handler requests credentials with consumer identity type `OIDCIdentityToken/v1alpha1` for signing.
+  - This handler requests credentials with consumer identity type `SigstoreSigner/v1alpha1` for signing.
 - Verification Handler with `SigstoreVerificationConfiguration/v1alpha1`
-  - This handler requests credentials with consumer identity type `TrustedRoot/v1alpha1` for offline verification.
+  - This handler requests credentials with consumer identity type `SigstoreVerifier/v1alpha1` for offline verification.
 - Credential Graph Plugin
-  - This plugin can resolve credentials of type `SigstoreOIDC/v1alpha1` to use for signing.
+  - This plugin (`OIDCIdentityTokenProvider/v1alpha1`) can resolve credentials of type `OIDCIdentityToken/v1alpha1` for signing via an interactive OIDC flow.
 
 ### Flow
 
@@ -386,9 +386,9 @@ sequenceDiagram
     Repo-->>CLI: Component Descriptor
     CLI->>CLI: Normalize + Compute Digest
     CLI->>Plugin: GetSigningCredentialConsumerIdentity(config)
-    Plugin-->>CLI: Credential Identity (OIDCIdentityToken/v1alpha1)
+    Plugin-->>CLI: Credential Identity (SigstoreSigner/v1alpha1)
     CLI->>Creds: Resolve credentials for identity
-    Creds->>Plugin: Trigger SigstoreOIDC flow
+    Creds->>Plugin: Trigger OIDCIdentityTokenProvider flow
     Plugin->>Browser: Open auth URL (with PKCE)
     U->>Browser: Authenticate + Consent
     Browser->>Plugin: Redirect to localhost callback with auth code. Forward auth code to plugin callback server
@@ -411,7 +411,7 @@ sequenceDiagram
     Repo-->>CLI: Component Descriptor
     CLI->>CLI: Normalize + Recompute Digest
     CLI->>Plugin: GetVerifyingCredentialConsumerIdentity(config)
-    Plugin-->>CLI: Credential Identity (TrustedRoot/v1alpha1)
+    Plugin-->>CLI: Credential Identity (SigstoreVerifier/v1alpha1)
     CLI->>Creds: Resolve credentials for identity
     Creds-->>CLI: trusted_root_json_file
     CLI->>Plugin: Verify(signature, config, credentials)
@@ -428,17 +428,35 @@ sequenceDiagram
 - type: credentials.config.ocm.software
   consumers:
     - identity:
-        # consumer identity for signing: the handler needs an OIDC token
-        type: OIDCIdentityToken/v1alpha1
+        # consumer identity for signing: identifies a sigstore signer
+        type: SigstoreSigner/v1alpha1
         algorithm: sigstore
         signature: mysig
       credentials:
-        # resolve credentials for this identity token via the SigstoreOIDC credential plugin.
-        - type: SigstoreOIDC/v1alpha1
-          flow: normal # request an auth code with PKCE, use for token exchange with id token, stores auth code in local cache for reuse, equivalent to authorization_code in OIDC terms but name kept as in sigstore
+        # resolve credentials via the OIDCIdentityTokenProvider credential plugin (interactive browser flow).
+        # Uses sigstore public-good defaults (oauth2.sigstore.dev/auth, clientID: sigstore).
+        - type: OIDCIdentityTokenProvider/v1alpha1
     - identity:
-        # consumer identity for verification: the handler needs a trusted root
-        type: TrustedRoot/v1alpha1
+        # consumer identity for signing with a pre-obtained token (e.g. CI)
+        type: SigstoreSigner/v1alpha1
+        algorithm: sigstore
+        signature: mysig-ci
+      credentials:
+        - type: Credentials/v1
+          properties:
+            token: "eyJhbGciOi..."
+    - identity:
+        # consumer identity for signing targeting private OIDC infrastructure
+        type: SigstoreSigner/v1alpha1
+        algorithm: sigstore
+        signature: mysig-private
+      credentials:
+        - type: OIDCIdentityTokenProvider/v1alpha1
+          issuer: https://dex.my-company.internal
+          clientID: my-sigstore-client
+    - identity:
+        # consumer identity for verification: identifies a sigstore verifier
+        type: SigstoreVerifier/v1alpha1
         algorithm: sigstore
         signature: mysig
       credentials:
@@ -476,25 +494,23 @@ ocm verify componentversion --signature mysig --verifier-spec ./sigstore-verify.
 Generated Credential Consumer Identity for `GetSigningCredentialConsumerIdentity`:
 
 ```yaml
-type: OIDCIdentityToken/v1alpha1
+type: SigstoreSigner/v1alpha1
 algorithm: sigstore
 signature: mysig
 ```
 
-Returned Credentials from `SigstoreOIDC/v1alpha1` after a successful normal / implicit OIDC flow:
+Returned Credentials from `OIDCIdentityTokenProvider/v1alpha1` after a successful interactive OIDC flow:
 
 ```yaml
-token: <base64 id token that contains email and openid scope => id token>
+token: <OIDC identity token containing email and openid scope>
 ```
 
-These credentials are retrieved via the plugin by using the [interactive OIDC flow from Sigstores OIDC implementation](https://github.com/sigstore/sigstore/blob/main/pkg/oauthflow/interactive.go#L48) via plugin.
-
-Because OIDC allows to open a browser with a redirect, the plugin can dynamically open a browser window to authenticate the user and redirect back to its own small webserver retrieving the auth code. This works across binary boundaries, because the webserver is running in the same process as the plugin. Potentially, even if the server is not running on the same machine, the browser can still open a window when the client_credentials flow is used (not realized in this ADR, but possible).
+These credentials are retrieved via the credential plugin by using an interactive OIDC authorization code flow with PKCE. The plugin opens a browser window to authenticate the user and receives the auth code via a localhost callback. Alternatively, a direct `Credentials/v1` entry with a `token` property can be used (e.g. in CI environments where a token is pre-obtained via `SIGSTORE_ID_TOKEN`).
 
 Generated Credential Consumer Identity for `GetVerifyingCredentialConsumerIdentity`:
 
 ```yaml
-type: TrustedRoot/v1alpha1
+type: SigstoreVerifier/v1alpha1
 algorithm: sigstore
 signature: mysig
 ```

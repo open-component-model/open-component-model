@@ -110,7 +110,7 @@ jobs:
       # Compute VERSION from env.REF
       - name: Compute VERSION
         id: version
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           TAG_PREFIX: "cli/v"
         with:
@@ -153,7 +153,7 @@ jobs:
       - name: Determine if this is a push-eligible branch
         if: ${{ github.event_name != 'pull_request' }}
         id: branch-check
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           INPUT_REF: ${{ inputs.ref }}
         with:
@@ -209,7 +209,7 @@ jobs:
 
       # Setup ORAS CLI for pushing OCI artifacts from OCI layouts.
       - name: Setup ORAS
-        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
 
       # use discovered tag from layout
       - name: Set TAG
@@ -254,7 +254,6 @@ jobs:
     uses: ./.github/workflows/conformance.yml
     with:
       cli_image: "ghcr.io/${{ github.repository_owner }}/cli:${{ needs.publish.outputs.image_tag }}@${{ needs.publish.outputs.image_digest }}"
-    secrets: inherit
 
   # Run conformance tests against the built image on PRs to main,
   # but only if the CLI was modified (as determined by the build job)
@@ -266,4 +265,3 @@ jobs:
     with:
       cli_artifact: ${{ needs.build.outputs.artifact_name }}
       cli_version: ${{ needs.build.outputs.version }}
-    secrets: inherit

@@ -140,7 +140,7 @@ jobs:
 
       - name: Compute VERSION
         id: version
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           REF: ${{ env.REF }}
           TAG_PREFIX: "kubernetes/controller/v"
@@ -156,7 +156,7 @@ jobs:
 
       - name: Determine publish eligibility
         id: branch-check
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           REF: ${{ env.REF }}
         with:
@@ -254,7 +254,7 @@ jobs:
         run: bash website/static/install.sh
 
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@3cf3cb546fc549fa7e8a9ec6d3254accc027b46e # v2.8.4
+        uses: fluxcd/flux2/action@5adad89dcce7b79f20274ae8e112bcec7bd46764 # v2.8.5
 
       - name: Install Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
@@ -324,7 +324,6 @@ jobs:
       toolkit_chart_artifact: controller-chart-pr
       toolkit_image_artifact: ${{ needs.build.outputs.artifact_name }}
       toolkit_version: ${{ needs.build.outputs.version }}
-    secrets: inherit
 
   publish:
     name: Publish and Attest Image & Chart
@@ -362,7 +361,7 @@ jobs:
           version: 3.x
 
       - name: Setup ORAS
-        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
 
       - name: Install Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
@@ -468,4 +467,3 @@ jobs:
     uses: ./.github/workflows/conformance.yml
     with:
       toolkit_image: "oci://ghcr.io/${{ github.repository_owner }}/kubernetes/controller/chart:${{ needs.publish.outputs.chart_version }}"
-    secrets: inherit

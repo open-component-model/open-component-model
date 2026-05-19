@@ -43,6 +43,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -50,7 +52,7 @@ jobs:
           node-version: 25.5.0
 
       - name: Setup Hugo
-        uses: peaceiris/actions-hugo@75d2e84710de30f6ff7268e08f310b60ef14033f # v3
+        uses: peaceiris/actions-hugo@2752ce1d29631191ea3f27c23495fa06139a5b78 # v3
         with:
           hugo-version: '0.160.0'
           extended: true
@@ -95,9 +97,11 @@ jobs:
 
       - name: Publish as GitHub Pages
         uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e #v4
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         with:
           github_token: ${{ steps.generate_token.outputs.token }}
           publish_dir: ./website/public
-          commit_message: ${{ github.event.head_commit.message }}
+          commit_message: ${{ env.COMMIT_MSG }}
           user_name: 'GitHub Actions Bot'
           user_email: '<41898282+github-actions[bot]@users.noreply.github.com>'

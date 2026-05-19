@@ -23,6 +23,7 @@ jobs:
       with:
         sparse-checkout: website/static/.well-known/security.txt
         sparse-checkout-cone-mode: false
+        persist-credentials: false
 
     - name: Set Expires to end of next year
       run: |

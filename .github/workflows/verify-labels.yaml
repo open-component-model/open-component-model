@@ -1,0 +1,39 @@
+name: Verify PR Labels
+
+on:
+  workflow_call:
+    inputs:
+      any_of:
+        description: Comma-separated list of labels, at least one must be present
+        required: true
+        type: string
+
+permissions:
+  pull-requests: read
+
+jobs:
+  verify-labels:
+    name: verify labels
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          ANY_OF: ${{ inputs.any_of }}
+        with:
+          script: |
+            const required = process.env.ANY_OF.split(',').map(l => l.trim());
+            const { data: labels } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const prLabels = labels.map(l => l.name);
+            const match = required.find(r => prLabels.includes(r));
+            if (match) {
+              core.info(`Found qualifying label: ${match}`);
+            } else {
+              core.setFailed(
+                `PR needs at least one of: ${required.join(', ')}\n` +
+                `Current labels: ${prLabels.join(', ') || '(none)'}`
+              );
+            }

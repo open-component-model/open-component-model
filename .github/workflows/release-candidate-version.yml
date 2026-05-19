@@ -64,11 +64,12 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.branch }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       # Compute new RC version based on branch and existing tags
       - name: Compute new RC version
         id: compute
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           BRANCH: ${{ inputs.branch }}
           COMPONENT_PATH: ${{ inputs.component_path }}
@@ -86,6 +87,8 @@ jobs:
           # Empty when this is the first release (no previous tag exists).
           CHANGELOG_RANGE: ${{ steps.compute.outputs.changelog_range }}
         with:
+          # pinning because our release broke with v2.13.0
+          version: 'v2.12.0'
           github_token: ${{ secrets.GITHUB_TOKEN }}
           config: ${{ inputs.component_path }}/cliff.toml
           args: |
@@ -99,7 +102,7 @@ jobs:
 
       - name: Summarize changelog
         id: summarize
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           CHANGELOG_FILE: ${{ runner.temp }}/CHANGELOG.md
           TAG: ${{ steps.compute.outputs.new_tag }}
@@ -135,7 +138,7 @@ jobs:
 
       - name: Determine if release should be latest
         id: latest
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           COMPONENT_PATH: ${{ inputs.component_path }}
           NEW_RELEASE_VERSION: ${{ steps.compute.outputs.base_version }}
