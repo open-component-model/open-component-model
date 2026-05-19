@@ -14,7 +14,7 @@ import (
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	gpgcredentials "ocm.software/open-component-model/bindings/go/gpg/signing/handler/internal/credentials"
-	"ocm.software/open-component-model/bindings/go/gpg/signing/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/gpg/spec/signing/v1alpha1"
 	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	identityv1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
