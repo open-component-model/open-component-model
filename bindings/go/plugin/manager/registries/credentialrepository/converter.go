@@ -39,16 +39,15 @@ func (c *credentialRepositoryPluginConverter) ConsumerIdentityForConfig(ctx cont
 	return identity, nil
 }
 
-// ResolveTyped converts the internal typed interface call to the external contract format.
-func (c *credentialRepositoryPluginConverter) ResolveTyped(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
+// Resolve converts the internal typed interface call to the external contract format.
+func (c *credentialRepositoryPluginConverter) Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 	request := v1.ResolveRequest[runtime.Typed]{
 		Config:   cfg,
 		Identity: identity,
 	}
-	result, err := c.externalPlugin.ResolveTyped(ctx, request, credentials)
+	result, err := c.externalPlugin.Resolve(ctx, request, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve typed credentials: %w", err)
 	}
 	return result, nil
 }
-

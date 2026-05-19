@@ -78,7 +78,7 @@ func TestRegisterInternalCredentialPlugin(t *testing.T) {
 			require.Equal(t, runtime.Identity{"type": "stub"}, identity)
 			require.True(t, plugin.identityCalled)
 
-			typed, err := got.ResolveTyped(ctx, identity, nil)
+			typed, err := got.Resolve(ctx, identity, nil)
 			require.NoError(t, err)
 			dc, ok := typed.(*credconfigv1.DirectCredentials)
 			require.True(t, ok, "expected *DirectCredentials, got %T", typed)
@@ -158,7 +158,7 @@ func (m *mockCredentialPlugin) GetConsumerIdentity(_ context.Context, _ runtime.
 	return runtime.Identity{"type": "stub"}, nil
 }
 
-func (m *mockCredentialPlugin) ResolveTyped(_ context.Context, _ runtime.Identity, _ runtime.Typed) (runtime.Typed, error) {
+func (m *mockCredentialPlugin) Resolve(_ context.Context, _ runtime.Identity, _ runtime.Typed) (runtime.Typed, error) {
 	m.resolveCalled = true
 	return &credconfigv1.DirectCredentials{
 		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),

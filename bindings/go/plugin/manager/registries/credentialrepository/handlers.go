@@ -35,8 +35,8 @@ func ConsumerIdentityForConfigHandlerFunc[T runtime.Typed](f func(ctx context.Co
 	}
 }
 
-// ResolveTypedHandlerFunc is a wrapper around calling the typed ResolveTyped method for the plugin.
-func ResolveTypedHandlerFunc[T runtime.Typed](f func(ctx context.Context, cfg v1.ResolveRequest[T], credentials runtime.Typed) (runtime.Typed, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
+// ResolveHandlerFunc is a wrapper around calling the typed Resolve method for the plugin.
+func ResolveHandlerFunc[T runtime.Typed](f func(ctx context.Context, cfg v1.ResolveRequest[T], credentials runtime.Typed) (runtime.Typed, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		var credentials runtime.Typed
 		if authHeader := request.Header.Get("Authorization"); authHeader != "" && authHeader != "null" {
@@ -66,4 +66,3 @@ func ResolveTypedHandlerFunc[T runtime.Typed](f func(ctx context.Context, cfg v1
 		}
 	}
 }
-
