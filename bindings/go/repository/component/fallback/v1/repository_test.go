@@ -412,7 +412,7 @@ func (m MockProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ct
 	return nil, nil
 }
 
-func (m MockProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
+func (m MockProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials runtime.Typed) (repository.ComponentVersionRepository, error) {
 	switch spec := repositorySpecification.(type) {
 	case *RepositorySpec:
 		switch spec.Policy {

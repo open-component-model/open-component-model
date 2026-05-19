@@ -64,7 +64,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 
 // ProcessResource processes a UTF8-based resource input by converting the input specification
 // to a v1.UTF8 format, reading the utf8 string, and returning the processed blob data based on GetV1UTF8Blob.
-func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, _ map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
+func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, _ runtime.Typed) (result *constructor.ResourceInputMethodResult, err error) {
 	utf8 := v1.UTF8{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &utf8); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
@@ -89,7 +89,7 @@ func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, sou
 
 // ProcessSource processes a UTF8-based source input by converting the input specification
 // to a v1.UTF8 format and returning the processed blob data based on GetV1UTF8Blob.
-func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.Source, _ map[string]string) (result *constructor.SourceInputMethodResult, err error) {
+func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.Source, _ runtime.Typed) (result *constructor.SourceInputMethodResult, err error) {
 	utf8 := v1.UTF8{}
 	if err := i.GetInputMethodScheme().Convert(src.Input, &utf8); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)

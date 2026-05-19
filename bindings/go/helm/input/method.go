@@ -8,6 +8,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
 	credsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input"
@@ -66,10 +67,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context,
 //
 // For local charts (a path specified): Returns only ProcessedBlobData (local access)
 // For remote charts (helmRepository specified): Returns both ProcessedResource (remote access) and ProcessedBlobData
-//
-// TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the ResourceInputMethod interface is updated.
-// https://github.com/open-component-model/ocm-project/issues/988
-func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
+func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (result *constructor.ResourceInputMethodResult, err error) {
 	helm := v1.Helm{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &helm); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
@@ -86,8 +84,8 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	}
 
 	helmBlob, chart, err := GetV1HelmBlob(ctx, helm, i.TempFolder,
-		WithCredentials(credsv1.FromDirectCredentials(credentials)),
-		WithOCICredentials(ocicredsv1.FromDirectCredentials(credentials)),
+		WithCredentials(typedToHelmCreds(credentials)),
+		WithOCICredentials(typedToOCICreds(credentials)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error getting helm blob based on resource input specification: %w", err)
@@ -108,6 +106,32 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	}
 
 	return result, nil
+}
+
+func typedToHelmCreds(credentials runtime.Typed) *credsv1.HelmHTTPCredentials {
+	if credentials == nil {
+		return nil
+	}
+	if h, ok := credentials.(*credsv1.HelmHTTPCredentials); ok {
+		return h
+	}
+	if dc, ok := credentials.(*credconfigv1.DirectCredentials); ok {
+		return credsv1.FromDirectCredentials(dc.Properties)
+	}
+	return nil
+}
+
+func typedToOCICreds(credentials runtime.Typed) *ocicredsv1.OCICredentials {
+	if credentials == nil {
+		return nil
+	}
+	if oci, ok := credentials.(*ocicredsv1.OCICredentials); ok {
+		return oci
+	}
+	if dc, ok := credentials.(*credconfigv1.DirectCredentials); ok {
+		return ocicredsv1.FromDirectCredentials(dc.Properties)
+	}
+	return nil
 }
 
 // createRemoteResourceAccess creates a resource descriptor with remote access information

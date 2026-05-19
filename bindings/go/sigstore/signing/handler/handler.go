@@ -60,6 +60,21 @@ func (h *Handler) GetSigningHandlerScheme() *runtime.Scheme {
 	return v1alpha1.Scheme
 }
 
+// typedToCredsMap converts a runtime.Typed credential to a map[string]string.
+// It accepts *runtime.Raw (JSON-encoded map) and returns nil for unknown types.
+func typedToCredsMap(creds runtime.Typed) map[string]string {
+	if creds == nil {
+		return nil
+	}
+	if raw, ok := creds.(*runtime.Raw); ok {
+		var m map[string]string
+		if err := json.Unmarshal(raw.Data, &m); err == nil {
+			return m
+		}
+	}
+	return nil
+}
+
 // Sign performs keyless signing via cosign sign-blob: resolves an OIDC token,
 // invokes Fulcio for a short-lived certificate, signs the digest, records in Rekor,
 // and returns the base64-encoded Sigstore bundle with extracted issuer/identity.
@@ -67,8 +82,9 @@ func (h *Handler) Sign(
 	ctx context.Context,
 	unsigned descruntime.Digest,
 	rawCfg runtime.Typed,
-	creds map[string]string,
+	creds runtime.Typed,
 ) (descruntime.SignatureInfo, error) {
+	credsMap := typedToCredsMap(creds)
 	var cfg v1alpha1.SignConfig
 	if err := v1alpha1.Scheme.Convert(rawCfg, &cfg); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
@@ -92,7 +108,7 @@ func (h *Handler) Sign(
 
 	env := os.Environ()
 	if !internal.HasEnvKey(env, "SIGSTORE_ID_TOKEN") && !internal.HasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN") {
-		token := strings.TrimSpace(creds[CredentialKeyOIDCToken])
+		token := strings.TrimSpace(credsMap[CredentialKeyOIDCToken])
 		if token == "" {
 			return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required: " +
 				"set SIGSTORE_ID_TOKEN env var, use GitHub Actions OIDC, " +
@@ -118,7 +134,7 @@ func (h *Handler) Sign(
 
 	bundlePath := filepath.Join(tmpDir, "bundle.json")
 
-	trustedRootPath, err := resolveTrustedRootPath(creds, tmpDir)
+	trustedRootPath, err := resolveTrustedRootPath(credsMap, tmpDir)
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("resolve trusted root: %w", err)
 	}
@@ -165,8 +181,9 @@ func (h *Handler) Verify(
 	ctx context.Context,
 	signed descruntime.Signature,
 	rawCfg runtime.Typed,
-	creds map[string]string,
+	creds runtime.Typed,
 ) error {
+	credsMap := typedToCredsMap(creds)
 	var cfg v1alpha1.VerifyConfig
 	if err := v1alpha1.Scheme.Convert(rawCfg, &cfg); err != nil {
 		return fmt.Errorf("convert config: %w", err)
@@ -181,8 +198,8 @@ func (h *Handler) Verify(
 	}
 
 	if cfg.PrivateInfrastructure &&
-		strings.TrimSpace(creds[CredentialKeyTrustedRootJSON]) == "" &&
-		strings.TrimSpace(creds[CredentialKeyTrustedRootJSONFile]) == "" {
+		strings.TrimSpace(credsMap[CredentialKeyTrustedRootJSON]) == "" &&
+		strings.TrimSpace(credsMap[CredentialKeyTrustedRootJSONFile]) == "" {
 		return fmt.Errorf("privateInfrastructure requires a trusted root: " +
 			"provide a TrustedRoot credential (trusted_root_json or trusted_root_json_file)")
 	}
@@ -214,7 +231,7 @@ func (h *Handler) Verify(
 		}
 	}()
 
-	trustedRootPath, err := resolveTrustedRootPath(creds, tmpDir)
+	trustedRootPath, err := resolveTrustedRootPath(credsMap, tmpDir)
 	if err != nil {
 		return fmt.Errorf("resolve trusted root: %w", err)
 	}

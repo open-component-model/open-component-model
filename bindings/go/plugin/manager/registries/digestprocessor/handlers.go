@@ -16,7 +16,7 @@ import (
 // ResourceDigestProcessorHandlerFunc is a wrapper around calling the interface method ProcessResourceDigest for the plugin.
 // This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
 // the plugin implementor.
-func ResourceDigestProcessorHandlerFunc(f func(ctx context.Context, request *v1.ProcessResourceDigestRequest, credentials map[string]string) (*v1.ProcessResourceDigestResponse, error)) http.HandlerFunc {
+func ResourceDigestProcessorHandlerFunc(f func(ctx context.Context, request *v1.ProcessResourceDigestRequest, credentials runtime.Typed) (*v1.ProcessResourceDigestResponse, error)) http.HandlerFunc {
 	return digestProcessorHandlerFunc[v1.ProcessResourceDigestRequest, v1.ProcessResourceDigestResponse](f)
 }
 
@@ -27,16 +27,19 @@ func IdentityProcessorHandlerFunc(f func(ctx context.Context, typ *v1.GetIdentit
 	return identityProcessorHandlerFunc[v1.GetIdentityRequest[runtime.Typed], v1.GetIdentityResponse](f)
 }
 
-func digestProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, resource *REQ, credentials map[string]string) (*RES, error)) http.HandlerFunc {
+func digestProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, resource *REQ, credentials runtime.Typed) (*RES, error)) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		logger.Info("request", "request", request.Method, "url", request.URL.String())
 
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := map[string]string{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(fmt.Errorf("failed to marshal credentials: %w", err), http.StatusUnauthorized).Write(writer)
-			return
+		var credentials runtime.Typed
+		if raw := request.Header.Get("Authorization"); raw != "" && raw != "null" {
+			c := &runtime.Raw{}
+			if err := json.Unmarshal([]byte(raw), c); err != nil {
+				plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
+				return
+			}
+			credentials = c
 		}
 
 		defer request.Body.Close()

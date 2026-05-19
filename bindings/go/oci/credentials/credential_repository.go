@@ -26,16 +26,18 @@ func (p *OCICredentialRepository) GetCredentialRepositoryScheme() *runtime.Schem
 
 // Resolve attempts to resolve credentials for a given repository configuration and consumer identity.
 // It converts the provided configuration to a DockerConfig and uses it to resolve credentials.
-// The passed map of pre-resolved credentials is unused in this implementation, because docker configs do not require
+// The passed credentials are unused in this implementation, because docker configs do not require
 // authentication themselves.
-//
-// Returns a map of credential key-value pairs (username, password, access token, refresh token as per ResolveV1DockerConfigCredentials)
-func (p *OCICredentialRepository) Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, _ map[string]string) (map[string]string, error) {
+func (p *OCICredentialRepository) Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, _ runtime.Typed) (runtime.Typed, error) {
 	dockerConfig := credentialsv1.DockerConfig{}
 	if err := p.GetCredentialRepositoryScheme().Convert(cfg, &dockerConfig); err != nil {
 		return nil, fmt.Errorf("failed to resolve credentials because config could not be interpreted as docker config: %w", err)
 	}
-	return ResolveV1DockerConfigCredentials(ctx, dockerConfig, identity)
+	props, err := ResolveV1DockerConfigCredentials(ctx, dockerConfig, identity)
+	if err != nil || props == nil {
+		return nil, err
+	}
+	return credentialsv1.FromDirectCredentials(props), nil
 }
 
 // ConsumerIdentityForConfig is not supported for Docker config files as they are

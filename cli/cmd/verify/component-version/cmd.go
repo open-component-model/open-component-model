@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"maps"
 	"os"
-	"slices"
 	"strings"
 	"time"
 
@@ -254,9 +252,9 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				return err
 			}
 
-			var creds map[string]string
+			var creds runtime.Typed
 			if consumerID, err := handler.GetVerifyingCredentialConsumerIdentity(egctx, signature, verifierSpec); err == nil {
-				if creds, err = credentialGraph.Resolve(egctx, consumerID); err != nil { //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
+				if creds, err = credentialGraph.Resolve(egctx, consumerID); err != nil {
 					if errors.Is(err, credentials.ErrNotFound) {
 						logger.DebugContext(egctx, "could not resolve credentials for verification", "error", err.Error())
 					} else {
@@ -265,8 +263,8 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				}
 			}
 
-			if len(creds) > 0 {
-				logger.DebugContext(egctx, "using discovered credentials for verification", "attributes", slices.Collect(maps.Keys(creds)))
+			if creds != nil {
+				logger.DebugContext(egctx, "using discovered credentials for verification")
 			}
 
 			return handler.Verify(egctx, signature, verifierSpec, creds)

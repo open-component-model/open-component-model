@@ -57,9 +57,9 @@ func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginMana
 		if err != nil {
 			return nil, fmt.Errorf("getting resource plugin for access %q failed: %w", access.GetType(), err)
 		}
-		var creds map[string]string
+		var creds runtime.Typed
 		if credIdentity, err := plugin.GetResourceCredentialConsumerIdentity(ctx, res); err == nil {
-			if creds, err = credentialGraph.Resolve(ctx, credIdentity); err != nil && !errors.Is(err, credentials.ErrNotFound) { //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
+			if creds, err = credentialGraph.Resolve(ctx, credIdentity); err != nil && !errors.Is(err, credentials.ErrNotFound) {
 				return nil, fmt.Errorf("getting credentials for resource %q failed: %w", res.Name, err)
 			}
 		}

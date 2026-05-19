@@ -78,7 +78,7 @@ func (r *RepositoryPlugin) ConsumerIdentityForConfig(ctx context.Context, cfg cr
 	return identity, nil
 }
 
-func (r *RepositoryPlugin) Resolve(ctx context.Context, cfg credentialsv1.ResolveRequest[runtime.Typed], credentials map[string]string) (map[string]string, error) {
+func (r *RepositoryPlugin) Resolve(ctx context.Context, cfg credentialsv1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
 	slog.InfoContext(ctx, "Resolving credentials", "id", r.ID)
 
 	credHeader, err := toCredentials(credentials)
@@ -91,12 +91,15 @@ func (r *RepositoryPlugin) Resolve(ctx context.Context, cfg credentialsv1.Resolv
 		return nil, err
 	}
 
-	var resolvedCredentials map[string]string
+	var resolvedCredentials runtime.Raw
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Resolve, http.MethodPost, plugins.WithPayload(cfg), plugins.WithHeader(credHeader), plugins.WithResult(&resolvedCredentials)); err != nil {
 		return nil, fmt.Errorf("failed to resolve credentials from plugin %q: %w", r.ID, err)
 	}
 
-	return resolvedCredentials, nil
+	if len(resolvedCredentials.Data) == 0 {
+		return nil, nil
+	}
+	return &resolvedCredentials, nil
 }
 
 // validateEndpoint uses the provided JSON schema and the runtime.Typed and, using the JSON schema, validates that the
@@ -122,7 +125,7 @@ func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
 	return nil
 }
 
-func toCredentials(credentials map[string]string) (plugins.KV, error) {
+func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
 	rawCreds, err := json.Marshal(credentials)
 	if err != nil {
 		return plugins.KV{}, err

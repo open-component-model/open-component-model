@@ -9,11 +9,12 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/credentials"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
-	v2 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	repoSpec "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -121,9 +122,22 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 	}
 }
 
+func typedToOCICreds(creds runtime.Typed) *ocicredsv1.OCICredentials {
+	if creds == nil {
+		return nil
+	}
+	if oci, ok := creds.(*ocicredsv1.OCICredentials); ok {
+		return oci
+	}
+	if dc, ok := creds.(*credconfigv1.DirectCredentials); ok {
+		return ocicredsv1.FromDirectCredentials(dc.Properties)
+	}
+	return nil
+}
+
 // GetComponentVersionRepository implements the repository.ComponentVersionRepositoryProvider interface.
 // It retrieves a component version repository with caching support for the given specification and credentials.
-func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, creds map[string]string) (repository.ComponentVersionRepository, error) {
+func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, creds runtime.Typed) (repository.ComponentVersionRepository, error) {
 	obj, err := getConvertedTypedSpec(b.scheme, repositorySpecification)
 	if err != nil {
 		return nil, err
@@ -134,7 +148,7 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		oci.WithCreator(b.creator),
 	}
 
-	typedCreds := v2.FromDirectCredentials(creds)
+	typedCreds := typedToOCICreds(creds)
 
 	switch obj := obj.(type) {
 	case *ocirepospecv1.Repository:

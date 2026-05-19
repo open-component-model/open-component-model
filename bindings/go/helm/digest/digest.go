@@ -12,6 +12,7 @@ import (
 	"helm.sh/helm/v4/pkg/repo/v1"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/helm/internal/download"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access"
@@ -43,10 +44,33 @@ func (p *DigestProcessor) GetResourceRepositoryScheme() *ocmruntime.Scheme {
 	return access.Scheme
 }
 
+func typedToHelmCreds(credentials ocmruntime.Typed) *helmcredsv1.HelmHTTPCredentials {
+	if credentials == nil {
+		return nil
+	}
+	if h, ok := credentials.(*helmcredsv1.HelmHTTPCredentials); ok {
+		return h
+	}
+	if dc, ok := credentials.(*credconfigv1.DirectCredentials); ok {
+		return helmcredsv1.FromDirectCredentials(dc.Properties)
+	}
+	return nil
+}
+
+func typedToOCICreds(credentials ocmruntime.Typed) *ocicredsv1.OCICredentials {
+	if credentials == nil {
+		return nil
+	}
+	if oci, ok := credentials.(*ocicredsv1.OCICredentials); ok {
+		return oci
+	}
+	if dc, ok := credentials.(*credconfigv1.DirectCredentials); ok {
+		return ocicredsv1.FromDirectCredentials(dc.Properties)
+	}
+	return nil
+}
+
 // GetResourceDigestProcessorCredentialConsumerIdentity resolves the credential consumer identity for digest processing.
-//
-// TODO(matthiasbruns): migrate return type to runtime.Typed once the DigestProcessor interface is updated.
-// https://github.com/open-component-model/ocm-project/issues/988
 func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 	ctx context.Context, resource *runtime.Resource,
 ) (ocmruntime.Identity, error) {
@@ -64,11 +88,8 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 }
 
 // ProcessResourceDigest resolves the digest of a Helm chart resource.
-//
-// TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the DigestProcessor interface is updated.
-// https://github.com/open-component-model/ocm-project/issues/988
 func (p *DigestProcessor) ProcessResourceDigest(
-	ctx context.Context, resource *runtime.Resource, credentials map[string]string,
+	ctx context.Context, resource *runtime.Resource, credentials ocmruntime.Typed,
 ) (*runtime.Resource, error) {
 	helm := helmv1.Helm{}
 	if err := access.Scheme.Convert(resource.Access, &helm); err != nil {
@@ -85,9 +106,9 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	)
 
 	if strings.HasPrefix(helm.HelmRepository, "oci://") {
-		resolvedDigest, err = p.resolveOCIDigest(ctx, helm, ocicredsv1.FromDirectCredentials(credentials))
+		resolvedDigest, err = p.resolveOCIDigest(ctx, helm, typedToOCICreds(credentials))
 	} else {
-		resolvedDigest, err = p.resolveHTTPDigest(ctx, helm, helmcredsv1.FromDirectCredentials(credentials))
+		resolvedDigest, err = p.resolveHTTPDigest(ctx, helm, typedToHelmCreds(credentials))
 	}
 	if err != nil {
 		return nil, err

@@ -23,7 +23,7 @@ func (m *mockCredentialPlugin[T]) ConsumerIdentityForConfig(ctx context.Context,
 	return map[string]string{"id": "mock-identity"}, nil
 }
 
-func (m *mockCredentialPlugin[T]) Resolve(ctx context.Context, cfg v1.ResolveRequest[T], credentials map[string]string) (map[string]string, error) {
+func (m *mockCredentialPlugin[T]) Resolve(ctx context.Context, cfg v1.ResolveRequest[T], credentials runtime.Typed) (map[string]string, error) {
 	return map[string]string{"resolved": "mock-credentials"}, nil
 }
 

@@ -20,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/repository"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	rsacredentialsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
 )
@@ -469,12 +470,10 @@ func verifySignatures(ctx context.Context, desc *descriptor.Descriptor, verifica
 			return nil, fmt.Errorf("digest verification failed for signature %q: %w", descSig.Name, err)
 		}
 
-		// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
-		//       reliable currently. This will probably change, when typed credentials are supported.
-		credentials := map[string]string{}
+		var credentials *rsacredentialsv1.RSACredentials
 		switch signingv1alpha1.SignatureAlgorithm(descSig.Signature.Algorithm) {
 		case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
-			credentials["public_key_pem"] = string(v.PublicKey)
+			credentials = &rsacredentialsv1.RSACredentials{PublicKeyPEM: string(v.PublicKey)}
 		default:
 			return nil, fmt.Errorf("unsupported signature algorithm: %q", descSig.Signature.Algorithm)
 		}

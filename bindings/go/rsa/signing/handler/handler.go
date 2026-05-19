@@ -14,6 +14,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -79,6 +80,25 @@ func (h *Handler) GetSigningHandlerScheme() *runtime.Scheme {
 
 // ---- SPI ----
 
+// typedToRSACreds converts a runtime.Typed to *rsacredentialsv1.RSACredentials.
+// It accepts *RSACredentials directly or falls back to JSON-decoding a map[string]string
+// from *runtime.Raw for backward compatibility with older credential formats.
+func typedToRSACreds(creds runtime.Typed) *rsacredentialsv1.RSACredentials {
+	if creds == nil {
+		return rsacredentialsv1.FromDirectCredentials(nil)
+	}
+	if rc, ok := creds.(*rsacredentialsv1.RSACredentials); ok {
+		return rc
+	}
+	if raw, ok := creds.(*runtime.Raw); ok {
+		var m map[string]string
+		if err := json.Unmarshal(raw.Data, &m); err == nil {
+			return rsacredentialsv1.FromDirectCredentials(m)
+		}
+	}
+	return rsacredentialsv1.FromDirectCredentials(nil)
+}
+
 // Sign produces a signature for the given digest, using RSA and the configured
 // algorithm and encoding policy. For PEM encoding, the certificate chain is
 // read from credentials and embedded into the SIGNATURE block.
@@ -86,14 +106,14 @@ func (h *Handler) Sign(
 	ctx context.Context,
 	unsigned descruntime.Digest,
 	rawCfg runtime.Typed,
-	creds map[string]string,
+	creds runtime.Typed,
 ) (descruntime.SignatureInfo, error) {
 	var supported v1alpha1.Config
 	if err := h.GetSigningHandlerScheme().Convert(rawCfg, &supported); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
 	}
 	algorithm := supported.GetSignatureAlgorithm()
-	typedCreds := rsacredentialsv1.FromDirectCredentials(creds)
+	typedCreds := typedToRSACreds(creds)
 
 	priv, err := rsacredentials.PrivateKeyFromCredentials(typedCreds)
 	if err != nil {
@@ -145,9 +165,9 @@ func (h *Handler) Verify(
 	signed descruntime.Signature,
 	// we use hints from the signature to determine the correct settings, so no additional config is needed
 	_ runtime.Typed,
-	creds map[string]string,
+	creds runtime.Typed,
 ) error {
-	typedCreds := rsacredentialsv1.FromDirectCredentials(creds)
+	typedCreds := typedToRSACreds(creds)
 	pubFromCreds, err := rsacredentials.PublicKeyFromCredentials(typedCreds)
 	if err != nil {
 		return fmt.Errorf("cannot load public key from credentials for verification: %w", err)

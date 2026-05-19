@@ -118,7 +118,7 @@ func TestResolve(t *testing.T) {
 	tests := []struct {
 		name        string
 		request     v1.ResolveRequest[runtime.Typed]
-		credentials map[string]string
+		credentials runtime.Typed
 		setupMock   func() *httptest.Server
 		expectErr   bool
 		expectedKey string
@@ -132,7 +132,7 @@ func TestResolve(t *testing.T) {
 				},
 				Identity: map[string]string{"id": "test-identity"},
 			},
-			credentials: map[string]string{"key": "value"},
+			credentials: &runtime.Raw{Data: []byte(`{"key":"value"}`)},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == Resolve {
@@ -153,7 +153,7 @@ func TestResolve(t *testing.T) {
 				Config:   &dummyv1.Repository{},
 				Identity: map[string]string{"id": "test-identity"},
 			},
-			credentials: map[string]string{"invalid_key": "invalid_value"},
+			credentials: &runtime.Raw{Data: []byte(`{"invalid_key":"invalid_value"}`)},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusForbidden)
@@ -167,7 +167,7 @@ func TestResolve(t *testing.T) {
 				Config:   &dummyv1.Repository{},
 				Identity: map[string]string{"id": "test-identity"},
 			},
-			credentials: map[string]string{"key": "value"},
+			credentials: &runtime.Raw{Data: []byte(`{"key":"value"}`)},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusOK)
@@ -181,7 +181,7 @@ func TestResolve(t *testing.T) {
 				Config:   &dummyv1.Repository{},
 				Identity: map[string]string{"id": "test-identity"},
 			},
-			credentials: map[string]string{"key": "value"},
+			credentials: &runtime.Raw{Data: []byte(`{"key":"value"}`)},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
@@ -267,12 +267,12 @@ func TestPing(t *testing.T) {
 func TestToCredentials(t *testing.T) {
 	tests := []struct {
 		name        string
-		credentials map[string]string
+		credentials runtime.Typed
 		expectErr   bool
 	}{
-		{name: "valid", credentials: map[string]string{"key": "value"}, expectErr: false},
-		{name: "empty", credentials: map[string]string{}, expectErr: false},
-		{name: "multiple_keys", credentials: map[string]string{"key1": "value1", "key2": "value2"}, expectErr: false},
+		{name: "valid", credentials: &runtime.Raw{Data: []byte(`{"key":"value"}`)}, expectErr: false},
+		{name: "empty", credentials: &runtime.Raw{Data: []byte(`{}`)}, expectErr: false},
+		{name: "multiple_keys", credentials: &runtime.Raw{Data: []byte(`{"key1":"value1","key2":"value2"}`)}, expectErr: false},
 	}
 
 	for _, tt := range tests {

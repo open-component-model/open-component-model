@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -26,12 +27,21 @@ func TestStaticCredentialsResolver(t *testing.T) {
 	resolver := credentials.NewStaticCredentialsResolver(credMap)
 	r := require.New(t)
 
+	resolveMap := func(t *testing.T, identity runtime.Identity) (map[string]string, error) {
+		t.Helper()
+		typed, err := resolver.Resolve(context.Background(), identity)
+		if err != nil {
+			return nil, err
+		}
+		return typed.(*v1.DirectCredentials).Properties, nil
+	}
+
 	t.Run("resolve existing credentials", func(t *testing.T) {
 		identity := runtime.Identity{
 			"type":     "OCIRegistry",
 			"hostname": "docker.io",
 		}
-		creds, err := resolver.Resolve(context.Background(), identity)
+		creds, err := resolveMap(t, identity)
 		r.NoError(err)
 		r.Equal("testuser", creds["username"])
 		r.Equal("testpass", creds["password"])
@@ -42,7 +52,7 @@ func TestStaticCredentialsResolver(t *testing.T) {
 			"type":     "OCIRegistry",
 			"hostname": "notfound.io",
 		}
-		creds, err := resolver.Resolve(context.Background(), identity)
+		creds, err := resolveMap(t, identity)
 		r.Error(err)
 		r.ErrorIs(err, credentials.ErrNotFound)
 		r.Nil(creds)
@@ -58,7 +68,7 @@ func TestStaticCredentialsResolver(t *testing.T) {
 					"type":     "OCIRegistry",
 					"hostname": "quay.io",
 				}
-				creds, err := resolver.Resolve(context.Background(), identity)
+				creds, err := resolveMap(t, identity)
 				r.NoError(err)
 				r.Equal("quayuser", creds["username"])
 			}()
@@ -71,14 +81,12 @@ func TestStaticCredentialsResolver(t *testing.T) {
 			"type":     "OCIRegistry",
 			"hostname": "docker.io",
 		}
-		creds, err := resolver.Resolve(context.Background(), identity)
+		creds, err := resolveMap(t, identity)
 		r.NoError(err)
 
-		// Modify the returned credentials map
 		creds["username"] = "modifieduser"
 
-		// Resolve again to check if the original credentials are unaffected
-		creds2, err := resolver.Resolve(context.Background(), identity)
+		creds2, err := resolveMap(t, identity)
 		r.NoError(err)
 		r.Equal("testuser", creds2["username"])
 	})

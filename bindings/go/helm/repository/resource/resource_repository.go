@@ -10,6 +10,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
 	helmdownload "ocm.software/open-component-model/bindings/go/helm/internal/download"
@@ -52,9 +53,6 @@ func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 // for the given helm resource. For OCI-based helm repositories the identity type
 // is OCIRegistry; for HTTP/HTTPS repositories it is HelmChartRepository.
 // Returns nil if the resource has no remote repository (local chart).
-//
-// TODO(matthiasbruns): migrate return type to runtime.Typed once the ResourceRepository interface is updated.
-// https://github.com/open-component-model/ocm-project/issues/988
 func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	helm, err := r.convertAccess(resource)
 	if err != nil {
@@ -69,13 +67,36 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 	return helminternal.CredentialConsumerIdentity(helm.HelmRepository)
 }
 
+func typedToHelmCreds(credentials runtime.Typed) *helmcredsv1.HelmHTTPCredentials {
+	if credentials == nil {
+		return nil
+	}
+	if h, ok := credentials.(*helmcredsv1.HelmHTTPCredentials); ok {
+		return h
+	}
+	if dc, ok := credentials.(*credconfigv1.DirectCredentials); ok {
+		return helmcredsv1.FromDirectCredentials(dc.Properties)
+	}
+	return nil
+}
+
+func typedToOCICreds(credentials runtime.Typed) *ocicredsv1.OCICredentials {
+	if credentials == nil {
+		return nil
+	}
+	if oci, ok := credentials.(*ocicredsv1.OCICredentials); ok {
+		return oci
+	}
+	if dc, ok := credentials.(*credconfigv1.DirectCredentials); ok {
+		return ocicredsv1.FromDirectCredentials(dc.Properties)
+	}
+	return nil
+}
+
 // DownloadResource fetches a helm chart (and optional provenance file) from the
 // remote repository specified in the resource's helm access. The returned blob
 // is a [helmblob.ChartBlob] wrapping a tar archive of the downloaded files.
-//
-// TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the ResourceRepository interface is updated.
-// https://github.com/open-component-model/ocm-project/issues/988
-func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	helm, err := r.convertAccess(resource)
 	if err != nil {
 		return nil, err
@@ -108,8 +129,8 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	slog.DebugContext(ctx, "Created temporary download directory", "dir", downloadDir)
 
 	opts := []helmdownload.Option{
-		helmdownload.WithCredentials(helmcredsv1.FromDirectCredentials(credentials)),
-		helmdownload.WithOCICredentials(ocicredsv1.FromDirectCredentials(credentials)),
+		helmdownload.WithCredentials(typedToHelmCreds(credentials)),
+		helmdownload.WithOCICredentials(typedToOCICreds(credentials)),
 		helmdownload.WithAlwaysDownloadProv(true),
 	}
 
@@ -145,10 +166,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 // Traditional Helm chart repositories are read-only HTTP servers that serve a static
 // index.yaml and packaged chart archives; there is no standardized upload API.
 // Charts stored in OCI registries should use the OCI resource repository instead.
-//
-// TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the ResourceRepository interface is updated.
-// https://github.com/open-component-model/ocm-project/issues/988
-func (r *ResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ map[string]string) (*descriptor.Resource, error) {
+func (r *ResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ runtime.Typed) (*descriptor.Resource, error) {
 	return nil, fmt.Errorf("helm chart repositories do not support upload operations")
 }
 

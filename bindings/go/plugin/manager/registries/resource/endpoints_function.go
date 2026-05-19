@@ -62,7 +62,7 @@ func handleGetGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.Han
 			return
 		}
 
-		response, err := plugin.GetGlobalResource(r.Context(), &request, make(map[string]string))
+		response, err := plugin.GetGlobalResource(r.Context(), &request, nil)
 		if err != nil {
 			handleError(w, err, http.StatusInternalServerError, "failed to get global resource")
 			return
@@ -81,7 +81,7 @@ func handleAddGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.Han
 			return
 		}
 
-		response, err := plugin.AddGlobalResource(r.Context(), &request, make(map[string]string))
+		response, err := plugin.AddGlobalResource(r.Context(), &request, nil)
 		if err != nil {
 			handleError(w, err, http.StatusInternalServerError, "failed to add global resource")
 			return

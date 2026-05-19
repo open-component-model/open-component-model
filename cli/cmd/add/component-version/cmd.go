@@ -471,16 +471,16 @@ func (c *constructorPlugin) GetResourceCredentialConsumerIdentity(ctx context.Co
 	return c.plugin.GetResourceCredentialConsumerIdentity(ctx, constructorruntime.ConvertToDescriptorResource(resource))
 }
 
-func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (content blob.ReadOnlyBlob, err error) {
+func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (content blob.ReadOnlyBlob, err error) {
 	return c.plugin.DownloadResource(ctx, res, credentials)
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
-	var creds map[string]string
+	var creds runtime.Typed
 	identity, err := prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, prov.targetRepoSpec)
 	if err == nil {
 		if prov.graph != nil {
-			if creds, err = prov.graph.Resolve(ctx, identity); err != nil { //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
+			if creds, err = prov.graph.Resolve(ctx, identity); err != nil {
 				if errors.Is(err, credentials.ErrNotFound) {
 					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", prov.targetRepoSpec, err.Error()))
 				} else {

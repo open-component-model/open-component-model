@@ -9,6 +9,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
@@ -92,7 +93,20 @@ func (p *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 	return p.getIdentity(obj)
 }
 
-func (p *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
+func typedToOCICreds(credentials runtime.Typed) *ocicredsv1.OCICredentials {
+	if credentials == nil {
+		return nil
+	}
+	if oci, ok := credentials.(*ocicredsv1.OCICredentials); ok {
+		return oci
+	}
+	if dc, ok := credentials.(*credconfigv1.DirectCredentials); ok {
+		return ocicredsv1.FromDirectCredentials(dc.Properties)
+	}
+	return nil
+}
+
+func (p *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
@@ -110,7 +124,7 @@ func (p *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 
 		repo, err := p.getRepository(&ociv1.Repository{
 			BaseUrl: baseURL,
-		}, ocicredsv1.FromDirectCredentials(credentials))
+		}, typedToOCICreds(credentials))
 		if err != nil {
 			return nil, fmt.Errorf("error creating repository: %w", err)
 		}
@@ -147,7 +161,7 @@ func (p *ResourceRepository) getIdentity(obj runtime.Typed) (runtime.Identity, e
 	}
 }
 
-func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
@@ -165,7 +179,7 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 		repo, err := p.getRepository(&ociv1.Repository{
 			BaseUrl: baseURL,
-		}, ocicredsv1.FromDirectCredentials(credentials))
+		}, typedToOCICreds(credentials))
 		if err != nil {
 			return nil, fmt.Errorf("error creating repository: %w", err)
 		}
@@ -181,7 +195,7 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	}
 }
 
-func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
+func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
@@ -199,7 +213,7 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 
 		repo, err := p.getRepository(&ociv1.Repository{
 			BaseUrl: baseURL,
-		}, ocicredsv1.FromDirectCredentials(credentials))
+		}, typedToOCICreds(credentials))
 		if err != nil {
 			return nil, fmt.Errorf("error creating repository: %w", err)
 		}

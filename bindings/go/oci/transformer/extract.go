@@ -52,7 +52,7 @@ func (t *Transformer) GetTransformerScheme() *runtime.Scheme {
 }
 
 // TransformBlob transforms an OCI Layout blob by extracting its main artifacts.
-func (t *Transformer) TransformBlob(ctx context.Context, input blob.ReadOnlyBlob, config runtime.Typed, _ map[string]string) (_ blob.ReadOnlyBlob, err error) {
+func (t *Transformer) TransformBlob(ctx context.Context, input blob.ReadOnlyBlob, config runtime.Typed, _ runtime.Typed) (_ blob.ReadOnlyBlob, err error) {
 	store, err := ocitar.ReadOCILayout(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read OCI layout: %w", err)

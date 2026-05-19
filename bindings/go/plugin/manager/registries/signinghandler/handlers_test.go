@@ -17,6 +17,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+type rawCreds struct {
+	Test string `json:"test"`
+}
+
 type stubSigningPlugin[T runtime.Typed] struct {
 	contracts.EmptyBasePlugin
 }
@@ -29,11 +33,19 @@ func (s *stubSigningPlugin[T]) GetVerifierIdentity(ctx context.Context, req *v1.
 	return &v1.IdentityResponse{Identity: map[string]string{"id": "verifier"}}, nil
 }
 
-func (s *stubSigningPlugin[T]) Sign(ctx context.Context, request *v1.SignRequest[T], credentials map[string]string) (*v1.SignResponse, error) {
-	return &v1.SignResponse{Signature: &v2.SignatureInfo{Algorithm: "rsa", Value: credentials["test"]}}, nil
+func (s *stubSigningPlugin[T]) Sign(ctx context.Context, request *v1.SignRequest[T], credentials runtime.Typed) (*v1.SignResponse, error) {
+	var value string
+	if credentials != nil {
+		c := &rawCreds{}
+		if data, err := json.Marshal(credentials); err == nil {
+			_ = json.Unmarshal(data, c)
+			value = c.Test
+		}
+	}
+	return &v1.SignResponse{Signature: &v2.SignatureInfo{Algorithm: "rsa", Value: value}}, nil
 }
 
-func (s *stubSigningPlugin[T]) Verify(ctx context.Context, request *v1.VerifyRequest[T], credentials map[string]string) (*v1.VerifyResponse, error) {
+func (s *stubSigningPlugin[T]) Verify(ctx context.Context, request *v1.VerifyRequest[T], credentials runtime.Typed) (*v1.VerifyResponse, error) {
 	return &v1.VerifyResponse{}, nil
 }
 

@@ -400,10 +400,10 @@ components:
 }
 
 func createRepo(ctx context.Context, repoProvider *provider.CachingComponentVersionRepositoryProvider, credentialResolver credentials.Resolver, targetSpec ocmruntime.Typed) (repository.ComponentVersionRepository, error) {
-	var creds map[string]string
+	var creds ocmruntime.Typed
 	id, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, targetSpec)
 	if err == nil {
-		creds, err = credentialResolver.Resolve(ctx, id)
+		creds, err = credentialResolver.ResolveTyped(ctx, id)
 		if err != nil {
 			return nil, fmt.Errorf("should be able to resolve credentials for target repository: %w", err)
 		}

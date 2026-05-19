@@ -18,16 +18,19 @@ import (
 // GetComponentVersionHandlerFunc is a wrapper around calling the interface method GetComponentVersion for the plugin.
 // This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
 // the plugin implementor.
-func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetComponentVersionRequest[T], credentials map[string]string) (*descriptor.Descriptor, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
+func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetComponentVersionRequest[T], credentials runtime.Typed) (*descriptor.Descriptor, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		query := request.URL.Query()
 		name := query.Get("name")
 		version := query.Get("version")
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := map[string]string{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
-			return
+		var credentials runtime.Typed
+		if raw := request.Header.Get("Authorization"); raw != "" && raw != "null" {
+			c := &runtime.Raw{}
+			if err := json.Unmarshal([]byte(raw), c); err != nil {
+				plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
+				return
+			}
+			credentials = c
 		}
 
 		desc, err := f(request.Context(), v1.GetComponentVersionRequest[T]{
@@ -57,15 +60,18 @@ func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 // ListComponentVersionsHandlerFunc is a wrapper around calling the interface method ListComponentVersions for the plugin.
 // This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
 // the plugin implementor.
-func ListComponentVersionsHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.ListComponentVersionsRequest[T], credentials map[string]string) ([]string, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
+func ListComponentVersionsHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.ListComponentVersionsRequest[T], credentials runtime.Typed) ([]string, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		query := request.URL.Query()
 		name := query.Get("name")
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := map[string]string{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
-			return
+		var credentials runtime.Typed
+		if raw := request.Header.Get("Authorization"); raw != "" && raw != "null" {
+			c := &runtime.Raw{}
+			if err := json.Unmarshal([]byte(raw), c); err != nil {
+				plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
+				return
+			}
+			credentials = c
 		}
 
 		versions, err := f(request.Context(), v1.ListComponentVersionsRequest[T]{
@@ -86,13 +92,16 @@ func ListComponentVersionsHandlerFunc[T runtime.Typed](f func(ctx context.Contex
 
 // AddComponentVersionHandlerFunc creates an HTTP handler for adding component versions.
 // It handles authentication and request body parsing for the plugin implementation.
-func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, r v1.PostComponentVersionRequest[T], credentials map[string]string) error) http.HandlerFunc {
+func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, r v1.PostComponentVersionRequest[T], credentials runtime.Typed) error) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := map[string]string{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
-			return
+		var credentials runtime.Typed
+		if raw := request.Header.Get("Authorization"); raw != "" && raw != "null" {
+			c := &runtime.Raw{}
+			if err := json.Unmarshal([]byte(raw), c); err != nil {
+				plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
+				return
+			}
+			credentials = c
 		}
 		body, err := plugins.DecodeJSONRequestBody[v1.PostComponentVersionRequest[T]](writer, request)
 		if err != nil {
@@ -108,13 +117,16 @@ func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 
 // GetLocalResourceHandlerFunc creates an HTTP handler for retrieving local resources.
 // It handles authentication, query parameter parsing, and response encoding for the plugin implementation.
-func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetLocalResourceRequest[T], credentials map[string]string) (v1.GetLocalResourceResponse, error), scheme *runtime.Scheme, proto T) http.HandlerFunc {
+func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetLocalResourceRequest[T], credentials runtime.Typed) (v1.GetLocalResourceResponse, error), scheme *runtime.Scheme, proto T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := map[string]string{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
-			return
+		var credentials runtime.Typed
+		if raw := request.Header.Get("Authorization"); raw != "" && raw != "null" {
+			c := &runtime.Raw{}
+			if err := json.Unmarshal([]byte(raw), c); err != nil {
+				plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
+				return
+			}
+			credentials = c
 		}
 
 		query := request.URL.Query()
@@ -155,13 +167,16 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 
 // GetLocalSourceHandlerFunc creates an HTTP handler for retrieving local sources.
 // It handles authentication, query parameter parsing, and response encoding for the plugin implementation.
-func GetLocalSourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetLocalSourceRequest[T], credentials map[string]string) (v1.GetLocalSourceResponse, error), scheme *runtime.Scheme, proto T) http.HandlerFunc {
+func GetLocalSourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetLocalSourceRequest[T], credentials runtime.Typed) (v1.GetLocalSourceResponse, error), scheme *runtime.Scheme, proto T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := map[string]string{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
-			return
+		var credentials runtime.Typed
+		if raw := request.Header.Get("Authorization"); raw != "" && raw != "null" {
+			c := &runtime.Raw{}
+			if err := json.Unmarshal([]byte(raw), c); err != nil {
+				plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
+				return
+			}
+			credentials = c
 		}
 
 		query := request.URL.Query()
@@ -221,13 +236,16 @@ func GetIdentityHandlerFunc[T runtime.Typed](f func(ctx context.Context, typ *v1
 
 // AddLocalResourceHandlerFunc creates an HTTP handler for adding local resources.
 // It handles authentication, request body parsing, and resource conversion for the plugin implementation.
-func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.PostLocalResourceRequest[T], credentials map[string]string) (*descriptor.Resource, error), scheme *runtime.Scheme) http.HandlerFunc {
+func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.PostLocalResourceRequest[T], credentials runtime.Typed) (*descriptor.Resource, error), scheme *runtime.Scheme) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := map[string]string{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
-			return
+		var credentials runtime.Typed
+		if raw := request.Header.Get("Authorization"); raw != "" && raw != "null" {
+			c := &runtime.Raw{}
+			if err := json.Unmarshal([]byte(raw), c); err != nil {
+				plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
+				return
+			}
+			credentials = c
 		}
 
 		body, err := plugins.DecodeJSONRequestBody[v1.PostLocalResourceRequest[T]](writer, request)
@@ -263,13 +281,16 @@ func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 
 // AddLocalSourceHandlerFunc creates an HTTP handler for adding local sources.
 // It handles authentication, request body parsing, and source conversion for the plugin implementation.
-func AddLocalSourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.PostLocalSourceRequest[T], credentials map[string]string) (*descriptor.Source, error), scheme *runtime.Scheme) http.HandlerFunc {
+func AddLocalSourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.PostLocalSourceRequest[T], credentials runtime.Typed) (*descriptor.Source, error), scheme *runtime.Scheme) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := map[string]string{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
-			return
+		var credentials runtime.Typed
+		if raw := request.Header.Get("Authorization"); raw != "" && raw != "null" {
+			c := &runtime.Raw{}
+			if err := json.Unmarshal([]byte(raw), c); err != nil {
+				plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
+				return
+			}
+			credentials = c
 		}
 
 		body, err := plugins.DecodeJSONRequestBody[v1.PostLocalSourceRequest[T]](writer, request)

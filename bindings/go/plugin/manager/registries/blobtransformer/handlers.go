@@ -15,13 +15,16 @@ import (
 // TransformBlobHandlerFunc is a wrapper around calling the interface method TransformBlobHandler for the plugin.
 // This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
 // the plugin implementor.
-func TransformBlobHandlerFunc[T runtime.Typed](f func(ctx context.Context, request *v1.TransformBlobRequest[T], credentials map[string]string) (*v1.TransformBlobResponse, error)) http.HandlerFunc {
+func TransformBlobHandlerFunc[T runtime.Typed](f func(ctx context.Context, request *v1.TransformBlobRequest[T], credentials runtime.Typed) (*v1.TransformBlobResponse, error)) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := map[string]string{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
-			return
+		var credentials runtime.Typed
+		if raw := request.Header.Get("Authorization"); raw != "" && raw != "null" {
+			c := &runtime.Raw{}
+			if err := json.Unmarshal([]byte(raw), c); err != nil {
+				plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
+				return
+			}
+			credentials = c
 		}
 
 		body, err := plugins.DecodeJSONRequestBody[v1.TransformBlobRequest[T]](writer, request)

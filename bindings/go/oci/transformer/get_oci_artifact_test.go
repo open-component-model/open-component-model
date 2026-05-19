@@ -27,7 +27,7 @@ type mockRepositoryForGetOCI struct {
 	returnBlob blob.ReadOnlyBlob
 }
 
-func (m mockRepositoryForGetOCI) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (m mockRepositoryForGetOCI) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	return m.returnBlob, nil
 }
 
