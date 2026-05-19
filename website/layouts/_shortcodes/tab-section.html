@@ -1,0 +1,14 @@
+{{- $name := .Get 0 -}}
+{{- if not $name -}}
+{{- errorf "tab-section: missing positional argument 'section name' (page: %s)" .Page.Path -}}
+{{- end -}}
+{{- $stack := .Page.Scratch.Get "currentTabGroup" -}}
+{{- if or (not $stack) (eq (len $stack) 0) -}}
+{{- errorf "tab-section: no enclosing tab-group is open (page: %s)" .Page.Path -}}
+{{- end -}}
+{{- $groupId := index $stack (sub (len $stack) 1) -}}
+{{- $openKey := printf "tabGroupOpenSection:%s" $groupId -}}
+{{- $openSection := .Page.Scratch.Get $openKey -}}
+{{- if $openSection -}}</div>{{- end -}}
+<div class="tab-section" data-tab-name="{{ $name }}">
+{{- .Page.Scratch.Set $openKey $name -}}

@@ -1,0 +1,2 @@
+{{- /* Load project-level JS additions through Doks's esbuild pipeline. */ -}}
+{{ partial "footer/esbuild" (dict "src" "js/tab-group.js" "load" "defer" "transpile" false) -}}

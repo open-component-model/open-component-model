@@ -1,0 +1,75 @@
+/*
+ * Tab Group component
+ *
+ * Styles a generic tab group rendered by Hugo shortcodes and activated by
+ * project JavaScript. Without JS, the buttons nav is not inserted and all
+ * `.tab-section` blocks would visually stack — that is acceptable as a
+ * graceful degradation path.
+ *
+ * DOM contract (produced by other agents):
+ *   <div class="tab-group" data-tab-group="ID">
+ *     <nav class="tab-group-buttons" data-tab-group="ID" role="tablist">…</nav>
+ *     <div class="tab-section tab-section--active" data-tab-name="…">…</div>
+ *     <div class="tab-section" data-tab-name="…">…</div>
+ *   </div>
+ *
+ * The TOC sidebar uses `.toc-hidden` on `<li>` elements whose target heading
+ * lives inside an inactive tab section.
+ */
+
+// Outer container — spaces the tab group from surrounding prose.
+.tab-group {
+  margin: 1.5rem 0;
+}
+
+// Tablist nav — a flex row of buttons with a Bootstrap nav-tabs style underline.
+.tab-group-buttons {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--bs-border-color); // Bootstrap CSS custom prop (Doks defines this)
+  margin-bottom: 1rem;
+  padding: 0;
+
+  // Inactive tab button — transparent so the underline shows through.
+  > button {
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: none;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    color: var(--bs-body-color);
+    font-size: 0.95rem;
+    border-radius: 0.375rem 0.375rem 0 0; // rounded top corners only, like Bootstrap nav-tabs
+
+    // Subtle hover affordance using Bootstrap's tertiary background token.
+    &:hover {
+      background: var(--bs-tertiary-bg);
+    }
+  }
+}
+
+// Active tab button — uses Bootstrap's nav-tabs trick: bottom border matches
+// body bg so the button visually merges with the underline below it.
+.tab-button--active {
+  background: var(--bs-body-bg);
+  border-color: var(--bs-border-color) var(--bs-border-color) var(--bs-body-bg);
+  color: var(--bs-body-color);
+  font-weight: 500;
+}
+
+// Default-inactive panel — hidden until JS promotes one to active.
+.tab-section {
+  display: none;
+}
+
+// Active panel — JS toggles this class on the chosen section.
+.tab-section--active {
+  display: block;
+}
+
+// TOC entry whose heading sits inside an inactive tab — JS toggles this class
+// on `<li>` elements inside `nav#TableOfContents` / `nav#toc`.
+.toc-hidden {
+  display: none;
+}

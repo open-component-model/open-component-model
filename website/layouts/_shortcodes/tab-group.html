@@ -1,0 +1,12 @@
+{{- $id := .Get 0 -}}
+{{- if not $id -}}
+{{- errorf "tab-group: missing positional argument 'group id' (page: %s)" .Page.Path -}}
+{{- end -}}
+{{- $stack := .Page.Scratch.Get "currentTabGroup" -}}
+{{- if not $stack -}}
+{{- $stack = slice -}}
+{{- end -}}
+{{- $stack = $stack | append $id -}}
+{{- .Page.Scratch.Set "currentTabGroup" $stack -}}
+{{- .Page.Scratch.Set (printf "tabGroupOpenSection:%s" $id) "" -}}
+<div class="tab-group" data-tab-group="{{ $id }}">

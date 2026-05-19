@@ -1,0 +1,9 @@
+{{- $stack := .Page.Scratch.Get "currentTabGroup" -}}
+{{- if or (not $stack) (eq (len $stack) 0) -}}
+{{- errorf "tab-group-end: no open tab-group to close (page: %s)" .Page.Path -}}
+{{- end -}}
+{{- $groupId := index $stack (sub (len $stack) 1) -}}
+{{- $stack = first (sub (len $stack) 1) $stack -}}
+{{- .Page.Scratch.Set "currentTabGroup" $stack -}}
+{{- .Page.Scratch.Set (printf "tabGroupOpenSection:%s" $groupId) "" -}}
+</div></div>
