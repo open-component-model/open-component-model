@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"maps"
 
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
@@ -35,7 +34,7 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 	node := identity.String()
 
 	// Non–leaf node: recursively resolve each child and merge the results.
-	result := make(map[string]string)
+	var resolved []runtime.Typed
 	for edgeID := range vertex.Edges {
 		childID, ok := g.getIdentity(edgeID)
 		if !ok {
@@ -50,70 +49,77 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 			return nil, fmt.Errorf("could not get credential plugin for node %q: %w", edgeID, err)
 		}
 
-		// Plugin interface still uses map[string]string — extract from the child's typed credential.
-		childMap := typedToMap(childCredentials)
-
 		// Let the plugin resolve the child's credentials.
-		credentials, err := plugin.Resolve(ctx, identity, childMap)
+		credentials, err := plugin.Resolve(ctx, identity, childCredentials)
 		if err != nil {
 			return nil, fmt.Errorf("no credentials for node %q resolved from plugin: %w", edgeID, err)
 		}
-
-		// Merge the resolved credentials into the result
-		maps.Copy(result, credentials)
+		if credentials != nil {
+			resolved = append(resolved, credentials)
+		}
 	}
 
-	// Store as DirectCredentials
-	typed := &v1.DirectCredentials{
-		Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
-		Properties: result,
+	// Merge the resolved credentials into the result
+	merged, err := mergeTyped(resolved, g.credentialTypeScheme())
+	if err != nil {
+		return nil, fmt.Errorf("merging credentials for node %q: %w", node, err)
 	}
 
-	// Cache the resolved credentials for the identity
-	g.setCredentials(node, typed)
+	g.setCredentials(node, merged)
 
-	return typed, nil
+	return merged, nil
 }
 
-// typedToMap extracts map[string]string from a runtime.Typed credential.
-// For DirectCredentials, it returns the Properties map directly.
-// For other typed credentials (e.g. HelmHTTPCredentials), it falls back to a JSON
-// round-trip, extracting only string-valued fields (excluding the "type" field).
-// This bridge exists because plugin interfaces and the legacy Resolve method work
-// with map[string]string, while ResolveTyped returns runtime.Typed.
-func typedToMap(cred runtime.Typed) map[string]string {
-	if cred == nil {
-		return nil
-	}
-	if dc, ok := cred.(*v1.DirectCredentials); ok {
-		return maps.Clone(dc.Properties)
+// mergeTyped combines multiple resolved typed credentials into a single value,
+// preserving the original map-merge semantic (later entries override earlier
+// ones per field).
+//
+// The scheme must know every input's runtime type so scheme.Convert can
+// serialize it to runtime.Raw.
+func mergeTyped(creds []runtime.Typed, scheme *runtime.Scheme) (runtime.Typed, error) {
+	switch len(creds) {
+	case 0:
+		return nil, nil
+	case 1:
+		return creds[0], nil
 	}
 
-	// Fallback: JSON round-trip for any typed credential.
-	data, err := json.Marshal(cred)
-	if err != nil {
-		return nil
+	if scheme == nil {
+		return nil, fmt.Errorf("scheme is nil")
 	}
-	var rawAny map[string]any
-	if err := json.Unmarshal(data, &rawAny); err != nil {
-		return nil
-	}
-	result := make(map[string]string, len(rawAny))
-	for k, v := range rawAny {
-		if k == "type" {
-			continue // Don't leak the type field into credential properties
-		}
-		s, ok := v.(string)
-		if !ok {
-			slog.Warn("typedToMap: skipping non-string credential field", "key", k)
+
+	// Using [runtime.Unstructured] here is not beneficial,
+	// since we are working with shallow map[string]string data and not with nested JSON types.
+	merged := make(map[string]string)
+	for _, c := range creds {
+		// DirectCredentials nests its values under "properties", every other
+		// typed credential carries its fields at the top level.
+		if dc, ok := c.(*v1.DirectCredentials); ok {
+			maps.Copy(merged, dc.Properties)
 			continue
 		}
-		if s != "" {
-			result[k] = s
+
+		var raw runtime.Raw
+		if err := scheme.Convert(c, &raw); err != nil {
+			return nil, fmt.Errorf("converting credential of type %T to raw: %w", c, err)
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(raw.Data, &fields); err != nil {
+			return nil, fmt.Errorf("unmarshaling raw credential of type %s: %w", raw.Type, err)
+		}
+		for k, v := range fields {
+			if k == "type" {
+				continue
+			}
+			if v == nil {
+				continue
+			}
+			merged[k] = fmt.Sprint(v)
 		}
 	}
-	if len(result) == 0 {
-		return nil
-	}
-	return result
+
+	return &v1.DirectCredentials{
+		Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+		Properties: merged,
+	}, nil
 }

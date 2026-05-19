@@ -20,11 +20,11 @@ type RepositoryPlugin interface {
 	// This identity is used to look up credentials in the credential graph.
 	ConsumerIdentityForConfig(ctx context.Context, config runtime.Typed) (runtime.Identity, error)
 
-	// Resolve attempts to resolve credentials for a given repository configuration
-	// and consumer identity. The provided credentials map may contain pre-resolved
-	// credentials from the credential graph.
-	// TODO(matthiasbruns): Migrate to runtime.Typed https://github.com/open-component-model/ocm-project/issues/980
-	Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
+	// Resolve resolves credentials for a given repository configuration and consumer
+	// identity, returning a runtime.Typed credential.
+	// The credentials parameter contains any pre-resolved credentials from the credential
+	// graph; it may be nil when no graph credentials are available for this repository.
+	Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error)
 }
 
 // CredentialPlugin defines the interface for plugins that handle custom credential
@@ -36,11 +36,10 @@ type CredentialPlugin interface {
 	// This identity is used to look up credentials in the credential graph.
 	GetConsumerIdentity(ctx context.Context, credential runtime.Typed) (runtime.Identity, error)
 
-	// Resolve attempts to resolve credentials for a given consumer identity.
-	// The provided credentials map may contain pre-resolved credentials from
-	// the credential graph.
-	// TODO(matthiasbruns): Migrate to runtime.Typed https://github.com/open-component-model/ocm-project/issues/980
-	Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
+	// Resolve resolves credentials for a given consumer identity, returning a
+	// runtime.Typed credential. The credentials parameter contains any pre-resolved
+	// credentials from the credential graph; it may be nil.
+	Resolve(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error)
 }
 
 // GetRepositoryPluginFn is a function type that returns a RepositoryPlugin for a given
