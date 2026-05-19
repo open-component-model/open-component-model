@@ -157,7 +157,7 @@ See [Configure Signing Credentials]({{< relref "configure-signing-credentials.md
 
 **Cause:** Missing write access to the OCI registry.
 
-**Fix:** Ensure you're `.ocmconfig` file is configured with credentials for the registry.
+**Fix:** Ensure your `.ocmconfig` file is configured with credentials for the registry.
 See [How-To: Configure Credentials for Multiple Registries]({{< relref "configure-multiple-credentials.md" >}}) for details.
 
 {{< /tab >}}
@@ -167,7 +167,8 @@ Sign with [Sigstore](https://www.sigstore.dev/) keyless signing.
 Instead of a long-lived RSA key, the signature is bound to your OIDC identity (e.g. your corporate email)
 via a short-lived certificate issued by Fulcio and recorded in the Rekor transparency log.
 
-This walkthrough uses the public-good Sigstore infrastructure: Dex federates to Google/GitHub/Microsoft for OIDC, Fulcio issues the certificate, and the entry is recorded in the public Rekor transparency log.
+This walkthrough uses the public-good Sigstore infrastructure: Dex federates to Google/GitHub/Microsoft for OIDC, Fulcio issues the certificate,
+and the entry is recorded in the public Rekor transparency log.
 
 ## You'll end up with (Sigstore)
 
@@ -181,10 +182,6 @@ This walkthrough uses the public-good Sigstore infrastructure: Dex federates to 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
 - A browser available on the machine (the OIDC flow opens a browser to authenticate you)
 - A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
-
-{{< callout context="tip" >}}
-You do **not** need to generate or distribute keys for this flow. Identity is the signer.
-{{< /callout >}}
 
 ## Steps (Sigstore)
 
@@ -279,7 +276,7 @@ time=2026-05-18T10:12:11.972+02:00 level=INFO msg="signed successfully" name=def
 {{< /details >}}
 
 {{< callout context="tip" >}}
-The first run downloads and caches the `cosign` binary into `~/.cache/ocm/cosign/...`. Subsequent runs skip the download.
+If the Cosing CLI is not on your PATH or has a too old version, the first run downloads and caches the `cosign` binary into `~/.cache/ocm/cosign/...`. Subsequent runs skip the download.
 {{< /callout >}}
 
 {{< /step >}}

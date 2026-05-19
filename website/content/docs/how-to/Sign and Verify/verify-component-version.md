@@ -168,7 +168,8 @@ certificateIdentity: jane.doe@example.com
 ```
 
 {{< callout context="caution" title="certificateOIDCIssuer is the upstream IdP, not the Dex endpoint" >}}
-On public Sigstore (`oauth2.sigstore.dev`), the value Fulcio writes into the certificate's OIDC Issuer extension is the **upstream identity provider**'s issuer URL, not the Dex federation endpoint. Use the value that matches the provider the signer logged in with:
+On public Sigstore (`oauth2.sigstore.dev`), the value Fulcio writes into the certificate's OIDC Issuer extension is the **upstream identity provider**'s issuer URL,
+not the Dex federation endpoint. Use the value that matches the provider the signer logged in with:
 
 | Signer logged in via | `certificateOIDCIssuer` value |
 | --- | --- |
@@ -179,7 +180,8 @@ On public Sigstore (`oauth2.sigstore.dev`), the value Fulcio writes into the cer
 {{< /callout >}}
 
 {{< callout context="caution" >}}
-Without identity constraints, verification cannot assert **who** signed the component. The verifier rejects specs that omit them.
+Without the identity constraints, verification cannot assert **who** signed the component. The signature could be valid but from an untrusted party,
+or the component could have been tampered with after signing. Always set constraints that match your trust requirements.
 {{< /callout >}}
 
 {{< /step >}}
