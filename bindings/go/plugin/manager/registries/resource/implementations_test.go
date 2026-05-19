@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	v2 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -52,7 +53,7 @@ func TestGetGlobalResource(t *testing.T) {
 				Data: []byte(`{ "foo": "bar" }`),
 			},
 		},
-	}, map[string]string{})
+	}, &v2.DirectCredentials{})
 	require.NoError(t, err)
 }
 
@@ -93,7 +94,7 @@ func TestAddGlobalResource(t *testing.T) {
 				Data: []byte(`{ "foo": "bar" }`),
 			},
 		},
-	}, map[string]string{})
+	}, &v2.DirectCredentials{})
 	require.NoError(t, err)
 }
 

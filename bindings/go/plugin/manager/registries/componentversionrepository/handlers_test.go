@@ -32,7 +32,7 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 		{
 			name: "GetComponentVersionHandlerFunc unauthorized error",
 			handlerFunc: func() http.HandlerFunc {
-				handler := GetComponentVersionHandlerFunc(func(ctx context.Context, request repov1.GetComponentVersionRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Descriptor, error) {
+				handler := GetComponentVersionHandlerFunc(func(ctx context.Context, request repov1.GetComponentVersionRequest[*dummyv1.Repository], credentials runtime.Typed) (*descriptor.Descriptor, error) {
 					return &descriptor.Descriptor{}, nil
 				}, scheme, &dummyv1.Repository{})
 
@@ -55,7 +55,7 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 		{
 			name: "GetComponentVersionHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := GetComponentVersionHandlerFunc(func(ctx context.Context, request repov1.GetComponentVersionRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Descriptor, error) {
+				handler := GetComponentVersionHandlerFunc(func(ctx context.Context, request repov1.GetComponentVersionRequest[*dummyv1.Repository], credentials runtime.Typed) (*descriptor.Descriptor, error) {
 					return &descriptor.Descriptor{
 						Meta: descriptor.Meta{
 							Version: "1.0.0",
@@ -83,7 +83,6 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, `{"meta":{"schemaVersion":"1.0.0"},"component":{"name":"component","version":"1.0.0","repositoryContexts":null,"provider":"ocm.software","resources":null,"sources":null,"componentReferences":null}}
 `, string(content))
-
 			},
 			assertError: func(t *testing.T, err error) {
 				require.NoError(t, err)
@@ -133,7 +132,7 @@ func TestGetLocalResourceHandlerFunc(t *testing.T) {
 		{
 			name: "GetLocalResourceHandlerFunc unauthorized error",
 			handlerFunc: func(t *testing.T) http.HandlerFunc {
-				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (repov1.GetLocalResourceResponse, error) {
+				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials runtime.Typed) (repov1.GetLocalResourceResponse, error) {
 					return repov1.GetLocalResourceResponse{}, nil
 				}, scheme, &dummyv1.Repository{})
 
@@ -156,7 +155,7 @@ func TestGetLocalResourceHandlerFunc(t *testing.T) {
 		{
 			name: "GetLocalResourceHandlerFunc success",
 			handlerFunc: func(t *testing.T) http.HandlerFunc {
-				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (repov1.GetLocalResourceResponse, error) {
+				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials runtime.Typed) (repov1.GetLocalResourceResponse, error) {
 					require.Equal(t, "component", request.Name)
 					require.Equal(t, "1.0.0", request.Version)
 					return repov1.GetLocalResourceResponse{}, nil
@@ -216,7 +215,7 @@ func TestAddComponentVersionHandlerFunc(t *testing.T) {
 		{
 			name: "AddComponentVersionHandlerFunc unauthorized error",
 			handlerFunc: func() http.HandlerFunc {
-				handler := AddComponentVersionHandlerFunc(func(ctx context.Context, request repov1.PostComponentVersionRequest[*dummyv1.Repository], credentials map[string]string) error {
+				handler := AddComponentVersionHandlerFunc(func(ctx context.Context, request repov1.PostComponentVersionRequest[*dummyv1.Repository], credentials runtime.Typed) error {
 					return nil
 				})
 
@@ -239,7 +238,7 @@ func TestAddComponentVersionHandlerFunc(t *testing.T) {
 		{
 			name: "AddComponentVersionHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := AddComponentVersionHandlerFunc(func(ctx context.Context, request repov1.PostComponentVersionRequest[*dummyv1.Repository], credentials map[string]string) error {
+				handler := AddComponentVersionHandlerFunc(func(ctx context.Context, request repov1.PostComponentVersionRequest[*dummyv1.Repository], credentials runtime.Typed) error {
 					return nil
 				})
 
@@ -315,7 +314,7 @@ func TestAddLocalResourceHandlerFunc(t *testing.T) {
 		{
 			name: "AddLocalResourceHandlerFunc unauthorized error",
 			handlerFunc: func() http.HandlerFunc {
-				handler := AddLocalResourceHandlerFunc(func(ctx context.Context, request repov1.PostLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Resource, error) {
+				handler := AddLocalResourceHandlerFunc(func(ctx context.Context, request repov1.PostLocalResourceRequest[*dummyv1.Repository], credentials runtime.Typed) (*descriptor.Resource, error) {
 					return &descriptor.Resource{}, nil
 				}, scheme)
 
@@ -338,7 +337,7 @@ func TestAddLocalResourceHandlerFunc(t *testing.T) {
 		{
 			name: "AddLocalResourceHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := AddLocalResourceHandlerFunc(func(ctx context.Context, request repov1.PostLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Resource, error) {
+				handler := AddLocalResourceHandlerFunc(func(ctx context.Context, request repov1.PostLocalResourceRequest[*dummyv1.Repository], credentials runtime.Typed) (*descriptor.Resource, error) {
 					res := &descriptor.Resource{
 						ElementMeta: descriptor.ElementMeta{
 							ObjectMeta: descriptor.ObjectMeta{
