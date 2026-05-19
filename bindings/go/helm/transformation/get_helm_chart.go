@@ -126,7 +126,7 @@ func (t *GetHelmChart) resolveCredentials(ctx context.Context, targetResource *d
 	if consumerId == nil {
 		return nil, nil
 	}
-	typed, err := t.CredentialProvider.ResolveTyped(ctx, consumerId)
+	typed, err := t.CredentialProvider.Resolve(ctx, consumerId)
 	if err != nil && !errors.Is(err, credentials.ErrNotFound) {
 		return nil, fmt.Errorf("failed resolving credentials: %w", err)
 	}
