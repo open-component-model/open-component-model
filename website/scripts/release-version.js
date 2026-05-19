@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Cut off a new versioned content release (module-import-only model)
+ * Release a new versioned docs import (module-import-only model)
  *
  * Usage:
- *   node scripts/cutoff-version.js X.Y.Z --cli-gomod <path>
+ *   node scripts/release-version.js X.Y.Z --cli-gomod <path>
  *
  * Behavior:
  * - Accepts SemVer version X.Y.Z, derives minor identifier X.Y
@@ -127,7 +127,7 @@ function parseArguments(args) {
         }
     }
 
-    if (positionals.length === 0) throw new Error('Missing version. Usage: cutoff-version.js X.Y.Z --cli-gomod <path>');
+    if (positionals.length === 0) throw new Error('Missing version. Usage: release-version.js X.Y.Z --cli-gomod <path>');
     if (positionals.length > 1) throw new Error(`Expected exactly one version argument, got ${positionals.length}: ${positionals.join(', ')}`);
 
     const fullVersion = positionals[0];

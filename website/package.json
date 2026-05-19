@@ -11,7 +11,7 @@
     "clean:lint": "shx rm -rf .eslintcache .stylelintcache",
     "clean": "npm run clean:build && npm run clean:lint && npm run clean:install",
     "create": "./node_modules/.bin/hugo new",
-    "cutoff": "node scripts/cutoff-version.js",
+    "release-version": "node scripts/release-version.js",
     "dev:drafts": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --baseURL=http://localhost --noHTTPCache --buildDrafts",
     "dev": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --noHTTPCache",
     "hugo": "./node_modules/.bin/hugo",
@@ -28,7 +28,7 @@
     "preinfo": "npm version",
     "preview": "http-server --gzip --brotli --ext=html --cors",
     "postinstall": "node scripts/link-dart-sass.js",
-    "test": "node --test scripts/cutoff-version.test.js"
+    "test": "node --test scripts/release-version.test.js"
   },
   "dependencies": {
     "@tabler/icons": "^3.41.0",

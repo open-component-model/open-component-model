@@ -1,10 +1,10 @@
-// Tests for cutoff-version.js
+// Tests for release-version.js
 
-// Run: `npm test` or `node --test scripts/cutoff-version.test.js`
+// Run: `npm test` or `node --test scripts/release-version.test.js`
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags } = require('./cutoff-version');
+const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags } = require('./release-version');
 
 // --- parseArguments ---
 
