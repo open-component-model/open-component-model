@@ -16,9 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var (
-	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
-)
+var dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
 
 func dummyCapability(schema []byte) v1.CapabilitySpec {
 	return v1.CapabilitySpec{
@@ -111,7 +109,7 @@ func TestConsumerIdentityForConfig(t *testing.T) {
 	}
 }
 
-func TestResolveTyped(t *testing.T) {
+func TestResolve(t *testing.T) {
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 
@@ -138,7 +136,7 @@ func TestResolveTyped(t *testing.T) {
 			},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					if r.URL.Path == ResolveTyped {
+					if r.URL.Path == Resolve {
 						resolved := map[string]string{"type": "Credentials/v1", "token": "abc123"}
 						err := json.NewEncoder(w).Encode(resolved)
 						require.NoError(t, err)
@@ -205,7 +203,7 @@ func TestResolveTyped(t *testing.T) {
 				PluginType: v1.CredentialRepositoryPluginType,
 			}, server.URL, dummyCapability([]byte(`{}`)))
 
-			resolved, err := plugin.ResolveTyped(context.Background(), tt.request, tt.credentials)
+			resolved, err := plugin.Resolve(context.Background(), tt.request, tt.credentials)
 			if tt.expectErr {
 				require.Error(t, err)
 			} else {

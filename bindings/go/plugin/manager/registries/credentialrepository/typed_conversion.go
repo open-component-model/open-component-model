@@ -19,8 +19,8 @@ func (r *TypeToUntypedPlugin[T]) ConsumerIdentityForConfig(ctx context.Context, 
 	})
 }
 
-func (r *TypeToUntypedPlugin[T]) ResolveTyped(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
-	return r.base.ResolveTyped(ctx, v1.ResolveRequest[T]{
+func (r *TypeToUntypedPlugin[T]) Resolve(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
+	return r.base.Resolve(ctx, v1.ResolveRequest[T]{
 		Config:   cfg.Config.(T),
 		Identity: cfg.Identity,
 	}, credentials)
