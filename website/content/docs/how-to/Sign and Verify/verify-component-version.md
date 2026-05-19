@@ -140,11 +140,11 @@ Verify a [Sigstore](https://www.sigstore.dev/) keyless signature. There's no pub
 
 If you've done classical key-based verification, here's what changes:
 
-| Aspect | RSA | Sigstore |
-| --- | --- | --- |
-| Before you verify | Obtain the signer's public key, configure `.ocmconfig` | Nothing — declare expected identity in a small spec file |
-| What proves trust | Signature decrypts with the public key you have | Signature ties back to an OIDC identity you've decided to trust |
-| Key rotation problem | You re-distribute the new public key | Doesn't apply — there's no long-lived key |
+| Aspect               | RSA                                                    | Sigstore                                                        |
+|----------------------|--------------------------------------------------------|-----------------------------------------------------------------|
+| Before you verify    | Obtain the signer's public key, configure `.ocmconfig` | Nothing — declare expected identity in a verifier spec file     |
+| What proves trust    | Signature decrypts with the public key you have        | Signature ties back to an OIDC identity you've decided to trust |
+| Key rotation problem | You re-distribute the new public key                   | Doesn't apply — there's no long-lived key                       |
 
 **Mental model:** instead of asking "does this signature match the public key I was handed?" you ask "was this signed by `jane.doe@example.com` logging in via GitHub?" The verifier only needs to know **who** to trust.
 
