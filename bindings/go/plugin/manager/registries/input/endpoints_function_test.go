@@ -6,13 +6,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -20,11 +20,11 @@ type mockPlugin struct {
 	contracts.EmptyBasePlugin
 }
 
-func (m *mockPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceInputResponse, error) {
+func (m *mockPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials runtime.Typed) (*v1.ProcessResourceInputResponse, error) {
 	return nil, nil
 }
 
-func (m *mockPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceInputResponse, error) {
+func (m *mockPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials runtime.Typed) (*v1.ProcessSourceInputResponse, error) {
 	return nil, nil
 }
 
