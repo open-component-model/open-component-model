@@ -10,10 +10,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -31,7 +31,7 @@ func TestResourceDigestProcessorHandlerFunc(t *testing.T) {
 		{
 			name: "ResourceInputProcessorHandlerFunc unauthorized error",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ResourceDigestProcessorHandlerFunc(func(ctx context.Context, req *v1.ProcessResourceDigestRequest, credentials map[string]string) (*v1.ProcessResourceDigestResponse, error) {
+				handler := ResourceDigestProcessorHandlerFunc(func(ctx context.Context, req *v1.ProcessResourceDigestRequest, credentials runtime.Typed) (*v1.ProcessResourceDigestResponse, error) {
 					return &v1.ProcessResourceDigestResponse{}, nil
 				})
 
@@ -54,7 +54,7 @@ func TestResourceDigestProcessorHandlerFunc(t *testing.T) {
 		{
 			name: "ResourceInputProcessorHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ResourceDigestProcessorHandlerFunc(func(ctx context.Context, req *v1.ProcessResourceDigestRequest, credentials map[string]string) (*v1.ProcessResourceDigestResponse, error) {
+				handler := ResourceDigestProcessorHandlerFunc(func(ctx context.Context, req *v1.ProcessResourceDigestRequest, credentials runtime.Typed) (*v1.ProcessResourceDigestResponse, error) {
 					return &v1.ProcessResourceDigestResponse{
 						Resource: &descriptorv2.Resource{
 							ElementMeta: descriptorv2.ElementMeta{

@@ -19,5 +19,5 @@ type IdentityProvider[T runtime.Typed] interface {
 type ResourceDigestProcessorContract interface {
 	contracts.PluginBase
 	IdentityProvider[runtime.Typed]
-	ProcessResourceDigest(ctx context.Context, resource *ProcessResourceDigestRequest, credentials map[string]string) (*ProcessResourceDigestResponse, error)
+	ProcessResourceDigest(ctx context.Context, resource *ProcessResourceDigestRequest, credentials runtime.Typed) (*ProcessResourceDigestResponse, error)
 }
