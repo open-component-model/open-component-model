@@ -30,28 +30,6 @@ func TestTransformBlobHandlerFunc(t *testing.T) {
 		assertError  func(t *testing.T, err error)
 	}{
 		{
-			name: "TransformBlobHandlerFunc unauthorized error",
-			handlerFunc: func() http.HandlerFunc {
-				handler := TransformBlobHandlerFunc(func(ctx context.Context, request *v1.TransformBlobRequest[*dummyv1.Repository], credentials map[string]string) (*v1.TransformBlobResponse, error) {
-					return &v1.TransformBlobResponse{}, nil
-				})
-				return handler
-			},
-			assertOutput: func(t *testing.T, resp *http.Response) {
-				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-			},
-			assertError: func(t *testing.T, err error) {
-				require.NoError(t, err)
-			},
-			request: func(base string) *http.Request {
-				parse, _ := url.Parse(base)
-				return &http.Request{
-					Method: "POST",
-					URL:    parse,
-				}
-			},
-		},
-		{
 			name: "TransformBlobHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
 				handler := TransformBlobHandlerFunc(func(ctx context.Context, request *v1.TransformBlobRequest[*dummyv1.Repository], credentials map[string]string) (*v1.TransformBlobResponse, error) {

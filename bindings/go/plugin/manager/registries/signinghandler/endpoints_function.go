@@ -36,21 +36,6 @@ func handleJSONResponse(w http.ResponseWriter, response interface{}) {
 	}
 }
 
-// credentialsFromHeader extracts credentials from the Authorization header if present.
-// The header value must be a JSON-encoded typed object. If the header is absent, nil is returned.
-// If the header is present but cannot be unmarshaled, it writes an error response and returns ok as false.
-func credentialsFromHeader(w http.ResponseWriter, h http.Header) (runtime.Typed, bool) {
-	authHeader := h.Get("Authorization")
-	if authHeader == "" {
-		return nil, true
-	}
-	raw := &runtime.Raw{}
-	if err := json.Unmarshal([]byte(authHeader), raw); err != nil {
-		plugins.NewError(fmt.Errorf("failed to unmarshal credentials: %w", err), http.StatusUnauthorized).Write(w)
-		return nil, false
-	}
-	return raw, true
-}
 
 // handleGetSignerIdentity handles the GetSignerIdentity endpoint
 func handleGetSignerIdentity[T runtime.Typed](plugin v1.SignerPluginContract[T]) http.HandlerFunc {
@@ -93,7 +78,7 @@ func handleGetVerifierIdentity[T runtime.Typed](plugin v1.VerifierPluginContract
 // handleSign handles the Sign endpoint
 func handleSign[T runtime.Typed](plugin v1.SignerPluginContract[T]) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		credentials, ok := credentialsFromHeader(w, r.Header)
+		credentials, ok := plugins.CredentialsFromHeader(w, r.Header)
 		if !ok {
 			return
 		}
@@ -117,7 +102,7 @@ func handleSign[T runtime.Typed](plugin v1.SignerPluginContract[T]) http.Handler
 // handleVerify handles the Verify endpoint
 func handleVerify[T runtime.Typed](plugin v1.VerifierPluginContract[T]) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		credentials, ok := credentialsFromHeader(w, r.Header)
+		credentials, ok := plugins.CredentialsFromHeader(w, r.Header)
 		if !ok {
 			return
 		}

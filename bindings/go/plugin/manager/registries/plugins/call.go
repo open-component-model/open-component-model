@@ -98,6 +98,9 @@ func Call(ctx context.Context, client *http.Client, locationType types.Connectio
 	}
 
 	for _, v := range options.Headers {
+		if v.Key == "" {
+			continue
+		}
 		request.Header.Add(v.Key, v.Value)
 	}
 	request.Header.Set("Content-Type", "application/json")

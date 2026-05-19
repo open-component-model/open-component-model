@@ -108,7 +108,9 @@ func (p *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
 }
 
 func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
-	// TODO(matthiasbruns): Raw?
+	if credentials == nil {
+		return plugins.KV{}, nil
+	}
 	rawCreds, err := json.Marshal(credentials)
 	if err != nil {
 		return plugins.KV{}, err

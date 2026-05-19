@@ -291,8 +291,12 @@ func TestToCredentials(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, "Authorization", kv.Key)
-				require.NotEmpty(t, kv.Value)
+				if tt.credentials == nil {
+					require.Empty(t, kv.Key)
+				} else {
+					require.Equal(t, "Authorization", kv.Key)
+					require.NotEmpty(t, kv.Value)
+				}
 			}
 		})
 	}
