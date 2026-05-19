@@ -6,6 +6,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -14,7 +15,6 @@ import (
 
 // TransferOCIArtifact is a fused transformer that streams OCI artifacts directly
 // between registries using ResourceStream, bypassing tar materialization.
-// Falls back to DownloadResource + UploadResource if streaming is not supported.
 type TransferOCIArtifact struct {
 	Scheme             *runtime.Scheme
 	Repository         repository.ResourceRepository
@@ -46,7 +46,7 @@ func (t *TransferOCIArtifact) Transform(ctx context.Context, step runtime.Typed)
 	var srcCreds map[string]string
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, srcResource); err == nil {
-			if srcCreds, err = resolveCredentialsMap(ctx, t.CredentialProvider, consumerId); err != nil {
+			if srcCreds, err = resolveCredentialsMap(ctx, t.CredentialProvider, v1.FromIdentity(consumerId)); err != nil {
 				return nil, fmt.Errorf("failed resolving source credentials: %w", err)
 			}
 		}
@@ -56,14 +56,14 @@ func (t *TransferOCIArtifact) Transform(ctx context.Context, step runtime.Typed)
 	var dstCreds map[string]string
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
-			if dstCreds, err = resolveCredentialsMap(ctx, t.CredentialProvider, consumerId); err != nil {
+			if dstCreds, err = resolveCredentialsMap(ctx, t.CredentialProvider, v1.FromIdentity(consumerId)); err != nil {
 				return nil, fmt.Errorf("failed resolving target credentials: %w", err)
 			}
 		}
 	}
 
 	// Try streaming path
-	streamingRepo, ok := t.Repository.(ocistream.Repository)
+	streamingRepo, ok := t.Repository.(ocistream.ResourceRepository)
 	if !ok {
 		return nil, fmt.Errorf("repository does not support streaming transfers")
 	}

@@ -730,7 +730,11 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	if res.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("resource access type is empty")
 	}
-	return repo.download(ctx, res.Access)
+	stream, err := repo.DownloadResourceStream(ctx, res)
+	if err != nil {
+		return nil, err
+	}
+	return stream.Materialize(ctx)
 }
 
 // DownloadSource downloads a [*descriptor.Source] from the repository.
@@ -925,7 +929,17 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 			return nil, fmt.Errorf("failed to resolve reference %q: %w", typed.ImageReference, err)
 		}
 
-		return ocistream.New(src, desc, repo.resourceCopyOptions.CopyGraphOptions, repo.tempDir, []string{typed.ImageReference}), nil
+		var tags []string
+		if resolved.Tag != "" {
+			tags = []string{typed.ImageReference}
+		}
+		return &ocistream.OCIResourceStream{
+			ReadOnlyStorage: src,
+			Descriptor:      desc,
+			CopyOpts:        repo.resourceCopyOptions.CopyGraphOptions,
+			TempDir:         repo.tempDir,
+			Tags:            tags,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
@@ -941,6 +955,14 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		return nil, fmt.Errorf("error converting resource target to OCI image: %w", err)
 	}
 
+	ref, err := looseref.ParseReference(access.ImageReference)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
+	}
+	if err := ref.ValidateReferenceAsTag(); err != nil {
+		return nil, fmt.Errorf("can only upload %q if it is tagged: %w", access.ImageReference, err)
+	}
+
 	store, err := repo.resolver.StoreForReference(ctx, access.ImageReference)
 	if err != nil {
 		return nil, err
@@ -950,19 +972,17 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		return nil, fmt.Errorf("failed to stream resource via copy: %w", err)
 	}
 
-	ref, err := looseref.ParseReference(access.ImageReference)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
-	}
-	if err := ref.ValidateReferenceAsTag(); err != nil {
-		return nil, fmt.Errorf("can only copy %q if it is tagged: %w", access.ImageReference, err)
-	}
-
 	if err := store.Tag(ctx, rs.Root(), ref.Tag); err != nil {
 		return nil, fmt.Errorf("failed to tag artifact with tag %q: %w", ref.Tag, err)
 	}
 
 	res = res.DeepCopy()
+	if res.Digest == nil {
+		res.Digest = &descriptor.Digest{}
+	}
+	if err := internaldigest.Apply(res.Digest, rs.Root().Digest); err != nil {
+		return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+	}
 	access.ImageReference = ref.String()
 	res.Access = &access
 

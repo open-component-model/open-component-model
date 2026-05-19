@@ -26,9 +26,9 @@ type ResourceStream interface {
 	Materialize(ctx context.Context) (blob.ReadOnlyBlob, error)
 }
 
-// Repository extends the generic ResourceRepository with
+// ResourceRepository extends the generic ResourceRepository with
 // OCI-native streaming. Only implemented by OCI-backed repositories.
-type Repository interface {
+type ResourceRepository interface {
 	repository.ResourceRepository
 
 	// DownloadResourceStream returns a lazy store handle and root descriptor.

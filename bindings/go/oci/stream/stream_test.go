@@ -23,7 +23,7 @@ func TestOCIResourceStream_Fetch(t *testing.T) {
 	layerContent := []byte("hello layer")
 	layerDesc := pushBlob(t, ctx, store, ocispec.MediaTypeImageLayer, layerContent)
 
-	s := New(store, layerDesc, oras.DefaultCopyGraphOptions, "", nil)
+	s := &OCIResourceStream{ReadOnlyStorage: store, Descriptor: layerDesc, CopyOpts: oras.DefaultCopyGraphOptions}
 
 	rc, err := s.Fetch(ctx, layerDesc)
 	require.NoError(t, err)
@@ -41,7 +41,7 @@ func TestOCIResourceStream_Exists(t *testing.T) {
 	layerContent := []byte("exists check")
 	layerDesc := pushBlob(t, ctx, store, ocispec.MediaTypeImageLayer, layerContent)
 
-	s := New(store, layerDesc, oras.DefaultCopyGraphOptions, "", nil)
+	s := &OCIResourceStream{ReadOnlyStorage: store, Descriptor: layerDesc, CopyOpts: oras.DefaultCopyGraphOptions}
 
 	exists, err := s.Exists(ctx, layerDesc)
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestOCIResourceStream_Root(t *testing.T) {
 		Size:      4,
 	}
 
-	s := New(store, desc, oras.DefaultCopyGraphOptions, "", nil)
+	s := &OCIResourceStream{ReadOnlyStorage: store, Descriptor: desc, CopyOpts: oras.DefaultCopyGraphOptions}
 	assert.Equal(t, desc, s.Root())
 }
 
@@ -89,7 +89,7 @@ func TestOCIResourceStream_Materialize(t *testing.T) {
 	require.NoError(t, err)
 	manifestDesc := pushBlob(t, ctx, store, ocispec.MediaTypeImageManifest, manifestBytes)
 
-	s := New(store, manifestDesc, oras.DefaultCopyGraphOptions, t.TempDir(), nil)
+	s := &OCIResourceStream{ReadOnlyStorage: store, Descriptor: manifestDesc, CopyOpts: oras.DefaultCopyGraphOptions, TempDir: t.TempDir()}
 
 	blob, err := s.Materialize(ctx)
 	require.NoError(t, err)
@@ -124,7 +124,7 @@ func TestOCIResourceStream_CopyGraph(t *testing.T) {
 	require.NoError(t, err)
 	manifestDesc := pushBlob(t, ctx, srcStore, ocispec.MediaTypeImageManifest, manifestBytes)
 
-	s := New(srcStore, manifestDesc, oras.DefaultCopyGraphOptions, "", nil)
+	s := &OCIResourceStream{ReadOnlyStorage: srcStore, Descriptor: manifestDesc, CopyOpts: oras.DefaultCopyGraphOptions}
 
 	err = oras.CopyGraph(ctx, s, dstStore, s.Root(), oras.DefaultCopyGraphOptions)
 	require.NoError(t, err)
