@@ -213,7 +213,7 @@ func TestCredentialFuncTyped(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			credFunc := CredentialFuncTyped(tt.identity, tt.credentials)
+			credFunc := CredentialFunc(tt.identity, tt.credentials)
 			cred, err := credFunc(t.Context(), tt.hostport)
 
 			if tt.wantErr {
@@ -326,7 +326,7 @@ func TestCredentialFromTyped(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, CredentialFromTyped(tt.credentials))
+			assert.Equal(t, tt.expected, MapCredentials(tt.credentials))
 		})
 	}
 }

@@ -14,7 +14,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	dlinternal "ocm.software/open-component-model/bindings/go/helm/internal/download"
 	"ocm.software/open-component-model/bindings/go/helm/internal/oci"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
 
 const (
@@ -33,22 +35,22 @@ type ReadOnlyChart struct {
 type Option func(options *Options)
 
 // WithCredentials sets the credentials to use for the remote repository.
-// The credentials could contain the following keys:
-// - "username": for basic authentication
-// - "password": for basic authentication
-// - "certFile": for TLS client certificate
-// - "keyFile": for TLS client private key
-// - "keyring": for keyring name to use
-// - "caCert": for CA certificate
-// - "caCertFile": for CA certificate file
-func WithCredentials(credentials map[string]string) Option {
+func WithCredentials(credentials *helmcredsv1.HelmHTTPCredentials) Option {
 	return func(options *Options) {
 		options.Credentials = credentials
 	}
 }
 
+// WithOCICredentials sets the credentials to use for an oci registry.
+func WithOCICredentials(credentials *ocicredsv1.OCICredentials) Option {
+	return func(options *Options) {
+		options.OCICredentials = credentials
+	}
+}
+
 type Options struct {
-	Credentials map[string]string
+	Credentials    *helmcredsv1.HelmHTTPCredentials
+	OCICredentials *ocicredsv1.OCICredentials
 }
 
 // GetV1HelmBlob creates a ReadOnlyBlob from a v1.Helm specification.
@@ -75,7 +77,7 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 			return nil, nil, fmt.Errorf("error loading local helm chart %q: %w", helmSpec.Path, err)
 		}
 	case helmSpec.HelmRepository != "":
-		chart, err = newReadOnlyChartFromRemote(ctx, helmSpec, tmpDir, options.Credentials)
+		chart, err = newReadOnlyChartFromRemote(ctx, helmSpec, tmpDir, options.Credentials, options.OCICredentials)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error loading remote helm chart from %q: %w", helmSpec.HelmRepository, err)
 		}
@@ -161,9 +163,16 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 
 // newReadOnlyChartFromRemote downloads a chart from a remote Helm repository
 // and creates a ReadOnlyChart from it.
-func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBase string, credentials map[string]string) (result *ReadOnlyChart, err error) {
+func newReadOnlyChartFromRemote(
+	ctx context.Context,
+	helmSpec v1.Helm,
+	tmpDirBase string,
+	credentials *helmcredsv1.HelmHTTPCredentials,
+	ociCredentials *ocicredsv1.OCICredentials,
+) (result *ReadOnlyChart, err error) {
 	opts := []dlinternal.Option{
 		dlinternal.WithCredentials(credentials),
+		dlinternal.WithOCICredentials(ociCredentials),
 		//nolint:staticcheck // downward compatibility for helm input
 		dlinternal.WithVersion(helmSpec.Version),
 		//nolint:staticcheck // downward compatibility for helm input

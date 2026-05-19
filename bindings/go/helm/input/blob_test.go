@@ -3,6 +3,8 @@ package input_test
 import (
 	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,7 +16,9 @@ import (
 	"helm.sh/helm/v4/pkg/registry"
 
 	"ocm.software/open-component-model/bindings/go/helm/input"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	v1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 
@@ -179,6 +183,71 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOptions(t *testing.T) {
+	t.Run("WithCredentials sets helm http credentials", func(t *testing.T) {
+		options := &input.Options{}
+		creds := &helmcredsv1.HelmHTTPCredentials{Username: "u", Password: "p"}
+		input.WithCredentials(creds)(options)
+		assert.Same(t, creds, options.Credentials)
+	})
+
+	t.Run("WithOCICredentials sets OCI credentials", func(t *testing.T) {
+		options := &input.Options{}
+		creds := &ocicredsv1.OCICredentials{AccessToken: "tok"}
+		input.WithOCICredentials(creds)(options)
+		assert.Same(t, creds, options.OCICredentials)
+	})
+
+	t.Run("WithOCICredentials and WithCredentials coexist", func(t *testing.T) {
+		options := &input.Options{}
+		helmCreds := &helmcredsv1.HelmHTTPCredentials{Username: "u"}
+		ociCreds := &ocicredsv1.OCICredentials{AccessToken: "tok"}
+		input.WithCredentials(helmCreds)(options)
+		input.WithOCICredentials(ociCreds)(options)
+		assert.Same(t, helmCreds, options.Credentials)
+		assert.Same(t, ociCreds, options.OCICredentials)
+	})
+}
+
+// TestGetV1HelmBlob_OCICredentialsBasicAuthFallback verifies that an OCI access token
+// supplied via [input.WithOCICredentials] is propagated through the download pipeline
+// and used as the basic-auth password when no helm HTTP password is set.
+func TestGetV1HelmBlob_OCICredentialsBasicAuthFallback(t *testing.T) {
+	workDir, err := os.Getwd()
+	require.NoError(t, err)
+	testDataDir := filepath.Join(workDir, "..", "testdata")
+
+	const (
+		expectedUser = "user1"
+		accessToken  = "tok-abc"
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		if !ok || u != expectedUser || p != accessToken {
+			w.Header().Set("WWW-Authenticate", `Basic realm="test"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		http.FileServer(http.Dir(testDataDir)).ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+
+	spec := v1.Helm{
+		HelmRepository: srv.URL + "/mychart-0.1.0.tgz",
+	}
+
+	b, chart, err := input.GetV1HelmBlob(t.Context(), spec, t.TempDir(),
+		input.WithCredentials(&helmcredsv1.HelmHTTPCredentials{Username: expectedUser}),
+		input.WithOCICredentials(&ocicredsv1.OCICredentials{AccessToken: accessToken}),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, b)
+	require.NotNil(t, chart)
+	assert.Equal(t, "mychart", chart.Name)
+	assert.Equal(t, "0.1.0", chart.Version)
 }
 
 func TestGetV1HelmBlob_BadCharts(t *testing.T) {

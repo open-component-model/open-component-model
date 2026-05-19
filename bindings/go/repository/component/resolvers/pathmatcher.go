@@ -11,7 +11,6 @@ import (
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
-	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
@@ -52,26 +51,23 @@ func (p *pathMatcherResolver) getRepository(ctx context.Context, specification r
 	p.lock.RUnlock()
 
 	// Resolve credentials
-	var credMap map[string]string
+	var creds runtime.Typed
 	consumerIdentity, err := p.repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, specification)
 	if err == nil {
 		if p.graph != nil {
-			typed, resolveErr := p.graph.ResolveTyped(ctx, consumerIdentity)
-			if resolveErr != nil {
-				if errors.Is(resolveErr, credentials.ErrNotFound) {
-					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, resolveErr.Error()))
+			if creds, err = p.graph.Resolve(ctx, consumerIdentity); err != nil {
+				if errors.Is(err, credentials.ErrNotFound) {
+					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, err.Error()))
 				} else {
-					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", specification, resolveErr)
+					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", specification, err)
 				}
-			} else if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
-				credMap = dc.Properties
 			}
 		}
 	} else {
 		slog.DebugContext(ctx, "could not get credential consumer identity for component version repository", "repository", specification, "error", err)
 	}
 
-	repo, err := p.repoProvider.GetComponentVersionRepository(ctx, specification, credMap)
+	repo, err := p.repoProvider.GetComponentVersionRepository(ctx, specification, creds)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version repository for %q failed: %w", specification, err)
 	}

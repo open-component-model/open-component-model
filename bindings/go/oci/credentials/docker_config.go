@@ -30,80 +30,9 @@ const (
 	CredentialKeyRefreshToken = credentialsv1.CredentialKeyRefreshToken
 )
 
-// CredentialFromMap converts a credential map to an auth.Credential.
-//
-// Deprecated: Use CredentialFromTyped instead.
-func CredentialFromMap(credentials map[string]string) auth.Credential {
-	cred := auth.Credential{}
-	if v, ok := credentials[CredentialKeyUsername]; ok {
-		cred.Username = v
-	}
-	if v, ok := credentials[CredentialKeyPassword]; ok {
-		cred.Password = v
-	}
-	if v, ok := credentials[CredentialKeyAccessToken]; ok {
-		cred.AccessToken = v
-	}
-	if v, ok := credentials[CredentialKeyRefreshToken]; ok {
-		cred.RefreshToken = v
-	}
-	return cred
-}
-
-// CredentialFunc creates a function that returns credentials based on host and port matching.
-// It takes an identity map and a credentials map as input and returns a function that can be
-// used with the ORAS client for authentication.
-//
-// The returned function will:
-//   - Return the provided credentials if the host and port match the identity
-//   - Return empty credentials if there's a mismatch
-//   - Return an error if the hostport string is invalid
-//
-// Example:
-//
-//	identity := runtime.Identity{
-//		runtime.IdentityAttributeHostname: "example.com",
-//		runtime.IdentityAttributePort:     "443",
-//	}
-//	credentials := map[string]string{
-//		CredentialKeyUsername: "user",
-//		CredentialKeyPassword: "pass",
-//	}
-//	credFunc := CredentialFunc(identity, credentials)
-//
-// This will create a function that checks if the host and port match "example.com:443",
-// and returns the provided credentials if they do. If the host and port don't match,
-// it will return empty credentials.
-//
-// Deprecated: Use CredentialFuncTyped instead.
-func CredentialFunc(identity runtime.Identity, credentials map[string]string) auth.CredentialFunc {
-	credential := CredentialFromMap(credentials)
-	registeredHostname, hostInIdentity := identity[runtime.IdentityAttributeHostname]
-	registeredPort, portInIdentity := identity[runtime.IdentityAttributePort]
-
-	return func(ctx context.Context, hostport string) (auth.Credential, error) {
-		actualHost, actualPort, err := net.SplitHostPort(hostport)
-		if err != nil {
-			// it can happen that no port is given here
-			err, addrError := errors.AsType[*net.AddrError](err)
-			portIsMissing := addrError && err.Err == "missing port in address"
-			if !portIsMissing {
-				return auth.Credential{}, fmt.Errorf("failed to split host and port: %w", err)
-			}
-			actualHost = hostport
-		}
-		hostMismatch := hostInIdentity && registeredHostname != actualHost
-		portMismatch := portInIdentity && registeredPort != actualPort
-		if hostMismatch || portMismatch {
-			return auth.EmptyCredential, nil
-		}
-		return credential, nil
-	}
-}
-
-// CredentialFromTyped converts a [credentialsv1.OCICredentials] to an auth.Credential.
+// MapCredentials converts a [credentialsv1.OCICredentials] to an auth.Credential.
 // A nil input yields an empty [auth.Credential].
-func CredentialFromTyped(credentials *credentialsv1.OCICredentials) auth.Credential {
+func MapCredentials(credentials *credentialsv1.OCICredentials) auth.Credential {
 	if credentials == nil {
 		return auth.Credential{}
 	}
@@ -115,7 +44,7 @@ func CredentialFromTyped(credentials *credentialsv1.OCICredentials) auth.Credent
 	return cred
 }
 
-// CredentialFuncTyped creates a function that returns credentials based on host and port matching.
+// CredentialFunc creates a function that returns credentials based on host and port matching.
 // It takes an identity map and [credentialsv1.OCICredentials] as input and returns a function that can be
 // used with the ORAS client for authentication.
 //
@@ -139,8 +68,8 @@ func CredentialFromTyped(credentials *credentialsv1.OCICredentials) auth.Credent
 // This will create a function that checks if the host and port match "example.com:443",
 // and returns the provided credentials if they do. If the host and port don't match,
 // it will return empty credentials.
-func CredentialFuncTyped(identity *identityv1.OCIRegistryIdentity, credentials *credentialsv1.OCICredentials) auth.CredentialFunc {
-	credential := CredentialFromTyped(credentials)
+func CredentialFunc(identity *identityv1.OCIRegistryIdentity, credentials *credentialsv1.OCICredentials) auth.CredentialFunc {
+	credential := MapCredentials(credentials)
 	hasHost := identity != nil && identity.Hostname != ""
 	hasPort := identity != nil && identity.Port != ""
 

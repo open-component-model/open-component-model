@@ -29,13 +29,9 @@
 //	identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, res)
 //
 //	// Resolve credentials
-//	typed, err := t.CredentialProvider.Resolve(ctx, consumerId)
-//	if err != nil && !errors.Is(err, credentials.ErrNotFound) {
-//		return nil, fmt.Errorf("failed resolving credentials: %w", err)
-//	}
 //	var creds map[string]string
-//	if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
-//		creds = dc.Properties
+//	if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
+//		return nil, fmt.Errorf("failed resolving credentials: %w", err)
 //	}
 //
 //	// Download a chart from its remote helm repository.

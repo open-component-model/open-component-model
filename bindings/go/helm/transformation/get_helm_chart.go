@@ -12,7 +12,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/credentials"
-	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access"
@@ -115,7 +114,7 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 // resolveCredentials returns credentials for downloading targetResource, or nil if
 // no credential provider is configured or the resource has no consumer identity.
 // An ErrNotFound from the resolver is treated as "no credentials" rather than an error.
-func (t *GetHelmChart) resolveCredentials(ctx context.Context, targetResource *descriptor.Resource) (map[string]string, error) {
+func (t *GetHelmChart) resolveCredentials(ctx context.Context, targetResource *descriptor.Resource) (runtime.Typed, error) {
 	if t.CredentialProvider == nil {
 		return nil, nil
 	}
@@ -126,14 +125,14 @@ func (t *GetHelmChart) resolveCredentials(ctx context.Context, targetResource *d
 	if consumerId == nil {
 		return nil, nil
 	}
+
 	typed, err := t.CredentialProvider.Resolve(ctx, consumerId)
-	if err != nil && !errors.Is(err, credentials.ErrNotFound) {
-		return nil, fmt.Errorf("failed resolving credentials: %w", err)
+	if err != nil {
+		if !errors.Is(err, credentials.ErrNotFound) {
+			return nil, fmt.Errorf("error resolving credentials for consumer identity %v: %w", consumerId, err)
+		}
 	}
-	if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
-		return dc.Properties, nil
-	}
-	return nil, nil
+	return typed, nil
 }
 
 // writeChartAndProvFiles buffers the chart archive and, if present, the provenance file
