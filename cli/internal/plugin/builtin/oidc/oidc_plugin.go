@@ -52,6 +52,16 @@ func (p *OIDCPlugin) GetCredentialPluginScheme() *runtime.Scheme {
 }
 
 // GetConsumerIdentity returns the credential identity used for graph node matching.
+//
+// TODO(cred-graph-vs-cred-plugin): the credential-graph model (ADR 0002, ADR 0021)
+// assumes plugins like HashiCorpVault put disambiguating fields (address, hostname,
+// auth-type) on the credential body, so each consumer that references the plugin
+// gets a distinct leaf vertex. The OIDC plugin has no such fields on the credential
+// body — issuer and clientID live on the consumer identity — so all consumers
+// referencing this plugin collapse onto a single type-only leaf. This is currently
+// safe only because the consumer identity (not the
+// leaf identity) is routed into Resolve (see PR #2511). Revisit if that contract changes, or if a future
+// .ocmconfig syntax allows OIDC parameters on the credential entry itself.
 func (p *OIDCPlugin) GetConsumerIdentity(_ context.Context, credential runtime.Typed) (runtime.Identity, error) {
 	if credential == nil {
 		return nil, fmt.Errorf("credential must not be nil")
@@ -66,6 +76,11 @@ func (p *OIDCPlugin) GetConsumerIdentity(_ context.Context, credential runtime.T
 
 // Resolve acquires an OIDC identity token via interactive authorization code flow.
 // issuer and clientID are read from the consumer identity. If empty, defaults to Sigstore public.
+//
+// TODO(cred-graph-vs-cred-plugin): this plugin reads its parameters from the consumer
+// identity, not from a resolved credential map on the leaf. This depends on
+// credential graph PR #2511, which passes the consumer identity (not the leaf credential
+// identity) into plugin.Resolve. See GetConsumerIdentity above for the exposed design issue.
 func (p *OIDCPlugin) Resolve(ctx context.Context, identity runtime.Identity, _ map[string]string) (map[string]string, error) {
 	token, err := oidcflow.GetIDToken(ctx, oidcflow.Options{
 		Issuer:   identity[configKeyIssuer],
