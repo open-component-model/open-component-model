@@ -13,10 +13,6 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "oneOf": [
         {
-          "const": "GPG/v1"
-        },
-        {
-          "deprecated": true,
           "const": "GPG/v1alpha1"
         },
         {

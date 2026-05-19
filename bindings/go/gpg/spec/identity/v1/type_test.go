@@ -13,21 +13,15 @@ func TestMustRegisterIdentityType(t *testing.T) {
 	scheme := runtime.NewScheme()
 	MustRegisterIdentityType(scheme)
 
-	assert.True(t, scheme.IsRegistered(VersionedType))
-	assert.True(t, scheme.IsRegistered(Type))
 	assert.True(t, scheme.IsRegistered(V1Alpha1Type))
+	assert.True(t, scheme.IsRegistered(Type))
 
-	obj, err := scheme.NewObject(VersionedType)
+	obj, err := scheme.NewObject(V1Alpha1Type)
 	require.NoError(t, err)
 	_, ok := obj.(*GPGIdentity)
 	assert.True(t, ok, "expected *GPGIdentity, got %T", obj)
 
 	obj, err = scheme.NewObject(Type)
-	require.NoError(t, err)
-	_, ok = obj.(*GPGIdentity)
-	assert.True(t, ok, "expected *GPGIdentity, got %T", obj)
-
-	obj, err = scheme.NewObject(V1Alpha1Type)
 	require.NoError(t, err)
 	_, ok = obj.(*GPGIdentity)
 	assert.True(t, ok, "expected *GPGIdentity, got %T", obj)
