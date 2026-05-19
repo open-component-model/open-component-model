@@ -787,7 +787,7 @@ func resolveCredentials(ctx context.Context, provider credentials.Resolver, cons
 	}
 
 	if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
-		return dc.Properties, err
+		return ocmruntime.Identity(dc.Properties), err
 	}
 	return nil, err
 }

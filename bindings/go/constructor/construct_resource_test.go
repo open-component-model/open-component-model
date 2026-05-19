@@ -7,12 +7,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -162,7 +163,14 @@ func (m *mockCredentialProvider) Resolve(ctx context.Context, identity runtime.I
 	if m.fail {
 		return nil, fmt.Errorf("simulated credential resolution failure")
 	}
-	return runtime.Identity(m.credentials[identity.GetType().String()]), nil
+	creds := m.credentials[identity.GetType().String()]
+	if creds == nil {
+		return nil, nil
+	}
+	return &credconfigv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
+		Properties: creds,
+	}, nil
 }
 
 // setupTestComponent creates a basic component constructor for testing
