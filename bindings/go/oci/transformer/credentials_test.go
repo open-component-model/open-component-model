@@ -20,11 +20,7 @@ type stubResolver struct {
 	err   error
 }
 
-func (s *stubResolver) Resolve(_ context.Context, _ runtime.Identity) (map[string]string, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (s *stubResolver) ResolveTyped(_ context.Context, _ runtime.Identity) (runtime.Typed, error) {
+func (s *stubResolver) Resolve(_ context.Context, _ runtime.Identity) (runtime.Typed, error) {
 	return s.typed, s.err
 }
 
