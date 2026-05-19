@@ -32,7 +32,11 @@ func (s *stubSigningPlugin[T]) GetVerifierIdentity(ctx context.Context, req *v1.
 }
 
 func (s *stubSigningPlugin[T]) Sign(ctx context.Context, request *v1.SignRequest[T], credentials runtime.Typed) (*v1.SignResponse, error) {
-	directCreds := credentials.(*credsv1.DirectCredentials)
+	raw := credentials.(*runtime.Raw)
+	directCreds := &credsv1.DirectCredentials{}
+	if err := json.Unmarshal(raw.Data, directCreds); err != nil {
+		return nil, err
+	}
 	return &v1.SignResponse{Signature: &v2.SignatureInfo{Algorithm: "rsa", Value: directCreds.Properties["test"]}}, nil
 }
 
@@ -131,7 +135,7 @@ func TestHandleVerifyAndSign(t *testing.T) {
 		defer srv.Close()
 		reqBody := bytes.NewBufferString(`{"digest":{"hashAlgorithm":"sha256","normalisationAlgorithm":"ociArtifactDigest/v1","value":"abc"},"config":{"type":"dummy/v1"}}`)
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, reqBody)
-		req.Header.Set("Authorization", `{"test":"value"}`)
+		req.Header.Set("Authorization", `{"type":"DirectCredentials/v1","properties":{"test":"value"}}`)
 		require.NoError(t, err)
 		resp, err := srv.Client().Do(req)
 		t.Cleanup(func() {
