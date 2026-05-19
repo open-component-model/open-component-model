@@ -179,13 +179,15 @@ If you've done classical key-based signing, here's what changes:
 
 **Mental model:** your identity is the key. When you sign, you log in with your OIDC provider (Google, GitHub, Microsoft, …). Sigstore issues a short-lived certificate that binds the signature to that identity. The verifier doesn't need a public key from you — they just check that the identity in the certificate is one they trust.
 
-## You'll end up with (Sigstore)
+<!-- markdownlint-disable-next-line MD024 -->
+## You'll end up with
 
 - A component version signed with a Sigstore keyless signature, tied to your OIDC identity
 
 **Estimated time:** ~5 minutes
 
-## Prerequisites (Sigstore)
+<!-- markdownlint-disable-next-line MD024 -->
+## Prerequisites
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
 - A browser on the same machine (signing opens a browser window to log you in)
@@ -195,7 +197,8 @@ If you've done classical key-based signing, here's what changes:
 Want the full picture of what's happening behind the scenes (Fulcio certificates, Rekor transparency log, OIDC token flow)? A dedicated Sigstore tutorial is in the works. For now, [ADR 0017: Sigstore Integration](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0017_sigstore_integration.md) covers the design.
 {{< /callout >}}
 
-## Steps (Sigstore)
+<!-- markdownlint-disable-next-line MD024 -->
+## Steps
 
 {{< steps >}}
 
@@ -272,10 +275,18 @@ That's the whole signing flow. No private key was generated, none was loaded fro
 {{< details "Expected output from signing" >}}
 
 ```text
-time=2026-05-18T10:12:03.118+02:00 level=INFO msg="acquiring OIDC identity token" issuer=https://oauth2.sigstore.dev/auth
-time=2026-05-18T10:12:08.402+02:00 level=INFO msg="OIDC identity token acquired"
-time=2026-05-18T10:12:08.601+02:00 level=INFO msg="signing via Sigstore" fulcio=https://fulcio.sigstore.dev rekor=https://rekor.sigstore.dev
-time=2026-05-18T10:12:11.972+02:00 level=INFO msg="signed successfully" name=default digest=91dd197868907487e62872695db1fa7b397fde300bcbae23e24abc188fb147ad hashAlgorithm=SHA-256 normalisationAlgorithm=jsonNormalisation/v4alpha1
+digest:
+  hashAlgorithm: SHA-256
+  normalisationAlgorithm: jsonNormalisation/v4alpha1
+  value: 91dd197868907487e62872695db1fa7b397fde300bcbae23e24abc188fb147ad
+name: default
+signature:
+  algorithm: sigstore
+  issuer: https://github.com/login/oauth
+  mediaType: application/vnd.dev.sigstore.bundle.v0.3+json
+  value: ...
+
+time=2026-05-19T17:43:28.524+02:00 level=INFO msg="signed successfully" name=default digest=91dd197868907487e62872695db1fa7b397fde300bcbae23e24abc188fb147ad hashAlgorithm=SHA-256 normalisationAlgorithm=jsonNormalisation/v4alpha1
 ```
 {{< /details >}}
 
@@ -315,7 +326,8 @@ The `value` field contains the full Sigstore bundle (signature + Fulcio certific
 {{< /step >}}
 {{< /steps >}}
 
-## Troubleshooting (Sigstore)
+<!-- markdownlint-disable-next-line MD024 -->
+## Troubleshooting
 
 ### Symptom: "browser did not open" or "timed out waiting for authentication callback"
 

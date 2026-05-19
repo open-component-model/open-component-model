@@ -148,13 +148,15 @@ If you've done classical key-based verification, here's what changes:
 
 **Mental model:** instead of asking "does this signature match the public key I was handed?" you ask "was this signed by `jane.doe@example.com` logging in via GitHub?" The verifier only needs to know **who** to trust.
 
-## You'll end up with (Sigstore)
+<!-- markdownlint-disable-next-line MD024 -->
+## You'll end up with
 
 - Confidence that a component version was signed by an identity you trust
 
 **Estimated time:** ~3 minutes
 
-## Prerequisites (Sigstore)
+<!-- markdownlint-disable-next-line MD024 -->
+## Prerequisites
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
 - A component version signed with Sigstore (see [How-To: Sign Component Versions]({{< relref "sign-component-version.md" >}}))
@@ -164,7 +166,8 @@ If you've done classical key-based verification, here's what changes:
 Want the full picture of how Sigstore verification works behind the scenes (Fulcio certificate validation, Rekor inclusion proofs, TUF trust roots)? A dedicated Sigstore tutorial is in the works. For now, [ADR 0017: Sigstore Integration](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0017_sigstore_integration.md) covers the design.
 {{< /callout >}}
 
-## Steps (Sigstore)
+<!-- markdownlint-disable-next-line MD024 -->
+## Steps
 
 {{< steps >}}
 
@@ -236,9 +239,9 @@ ocm verify cv \
 <summary>Expected output</summary>
 
 ```text
-time=2026-05-18T10:18:42.114+02:00 level=INFO msg="verifying signature" name=default
-time=2026-05-18T10:18:42.612+02:00 level=INFO msg="signature verification completed" name=default duration=498.214ms
-time=2026-05-18T10:18:42.612+02:00 level=INFO msg="SIGNATURE VERIFICATION SUCCESSFUL"
+time=2026-05-19T18:49:13.316+02:00 level=INFO msg="verifying signature" name=default
+time=2026-05-19T18:49:13.856+02:00 level=INFO msg="signature verification completed" name=default duration=539.512209ms
+time=2026-05-19T18:49:13.856+02:00 level=INFO msg="SIGNATURE VERIFICATION SUCCESSFUL"
 ```
 
 </details>
@@ -255,7 +258,7 @@ If the component carries multiple signatures (e.g. an RSA signature and a Sigsto
 ocm verify cv \
   --verifier-spec ./sigstore-verify.yaml \
   --signature sigstore \
-  ghcr.io/myorg/components//github.com/acme.org/helloworld:1.0.0
+  ghcr.io/<your namespace>//github.com/acme.org/helloworld:1.0.0
 ```
 
 {{< callout context="note" >}}
@@ -277,29 +280,38 @@ ocm get cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0
 
 Look for the signer email and the OIDC issuer URL. Those are exactly what `certificateIdentity` and `certificateOIDCIssuer` are matched against.
 
-## Troubleshooting (Sigstore)
+<!-- markdownlint-disable-next-line MD024 -->
+## Troubleshooting
 
-### Symptom: "no matching identity in signing certificate"
+### Symptom: "no matching CertificateIdentity found"
 
 **Cause:** The signature was made by a different identity than what your spec expects — or the same identity but via a different OIDC provider.
 
-**Fix:** Inspect the signature (see above) to see the actual identity, and update `certificateIdentity` / `certificateOIDCIssuer` to match. Watch for trailing slashes and capitalization.
+The full error names which side did not match. For an identity mismatch:
 
-### Symptom: "transparency log entry not found"
+```text
+Error: SIGNATURE VERIFICATION FAILED: cosign verify-blob failed: exit status 1
+stderr: Error: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected SAN value "nobody@nowhere.invalid", got "gerald.gm.morrison@gmail.com"
+```
 
-**Cause:** OCM couldn't reach Rekor (the public log Sigstore uses to record signatures), or the signature wasn't recorded there.
+For an issuer mismatch:
 
-**Fix:** Check your network can reach `rekor.sigstore.dev`. If the signature is recent and the network is fine, the signing flow likely failed to record the entry — ask the signer to re-sign.
+```text
+Error: SIGNATURE VERIFICATION FAILED: cosign verify-blob failed: exit status 1
+stderr: Error: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected issuer value "https://accounts.google.com", got "https://github.com/login/oauth"
+```
 
-### Symptom: "certificate expired"
+**Fix:** Inspect the signature (see above) to read the actual identity, and update `certificateIdentity` / `certificateOIDCIssuer` to match. Watch for trailing slashes and capitalization.
 
-**Cause:** Sigstore certificates are intentionally short-lived (~10 minutes) — they're meant to last only as long as the signing operation. This error means the proof that ties the signature back to the certificate's valid window is missing or broken in the bundle.
-
-**Fix:** Re-fetch the component version (the bundle may be partial). If it's still failing, ask the signer to re-sign.
-
-### Symptom: "identity constraints required"
+### Symptom: "keyless verification requires both an issuer constraint ... and an identity constraint"
 
 **Cause:** Your verifier spec is missing `certificateIdentity`, `certificateOIDCIssuer`, or both.
+
+The full error:
+
+```text
+Error: SIGNATURE VERIFICATION FAILED: invalid verification config: keyless verification requires both an issuer constraint (CertificateOIDCIssuer or CertificateOIDCIssuerRegexp) and an identity constraint (CertificateIdentity or CertificateIdentityRegexp)
+```
 
 **Fix:** Both are mandatory — they're how Sigstore knows whose signatures to accept. See Step 1 above.
 
