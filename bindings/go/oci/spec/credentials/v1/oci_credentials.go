@@ -42,14 +42,6 @@ type OCICredentials struct {
 	RefreshToken string       `json:"refreshToken,omitempty"`
 }
 
-// MustRegisterCredentialType registers OCICredentials/v1 in the given scheme.
-func MustRegisterCredentialType(scheme *runtime.Scheme) {
-	scheme.MustRegisterWithAlias(&OCICredentials{},
-		runtime.NewVersionedType(OCICredentialsType, Version),
-		runtime.NewUnversionedType(OCICredentialsType),
-	)
-}
-
 // FromDirectCredentials converts a DirectCredentials properties map into typed OCICredentials.
 // This supports old .ocmconfig files that use Credentials/v1 with OCI registry properties.
 func FromDirectCredentials(properties map[string]string) *OCICredentials {

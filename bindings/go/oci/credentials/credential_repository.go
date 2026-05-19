@@ -40,7 +40,7 @@ func (p *OCICredentialRepository) ResolveTyped(ctx context.Context, cfg runtime.
 		slog.DebugContext(ctx, "no credentials resolved for config and identity")
 		return nil, nil
 	}
-	return credentialsv1.FromDirectCredentials(resolved), nil
+	return resolved, nil
 }
 
 // ConsumerIdentityForConfig is not supported for Docker config files as they are

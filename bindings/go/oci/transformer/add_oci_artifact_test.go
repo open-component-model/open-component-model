@@ -27,10 +27,10 @@ type mockResourceRepositoryForAddOCI struct {
 	repository.ResourceRepository
 	uploadedResource *descriptor.Resource
 	uploadedBlob     blob.ReadOnlyBlob
-	creds            map[string]string
+	creds            runtime.Typed
 }
 
-func (m *mockResourceRepositoryForAddOCI) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
+func (m *mockResourceRepositoryForAddOCI) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
 	m.uploadedResource = res
 	m.uploadedBlob = content
 	m.creds = credentials
@@ -158,7 +158,9 @@ func TestAddOCIArtifact_Transform(t *testing.T) {
 	assert.Equal(t, testBlobData, data)
 
 	// Verify credentials were resolved and passed
-	assert.Equal(t, "test-user", mockRepo.creds["username"])
+
+	ociCreds := mockRepo.creds.(*ocicredsv1.OCICredentials)
+	assert.Equal(t, "test-user", ociCreds.Username)
 }
 
 func TestAddOCIArtifact_ValidationErrors(t *testing.T) {

@@ -101,12 +101,7 @@ var storeConcurrencyMu sync.Mutex
 
 // ResolveV1DockerConfigCredentials resolves credentials from a Docker configuration
 // for a given identity. It supports both file-based and in-memory Docker configurations.
-//
-// The function will:
-//   - Load credentials from the specified Docker config source
-//   - Match the credentials against the provided identity
-//   - Return a map of credential key-value pairs
-func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credentialsv1.DockerConfig, identity runtime.Identity) (map[string]string, error) {
+func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credentialsv1.DockerConfig, identity runtime.Identity) (*credentialsv1.OCICredentials, error) {
 	credStore, err := getStore(ctx, dockerConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve credentials store: %w", err)
@@ -153,23 +148,15 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 		return nil, nil
 	}
 
-	credentialMap := map[string]string{}
-	if v := cred.Username; v != "" {
-		credentialMap[CredentialKeyUsername] = v
-	}
-	if v := cred.Password; v != "" {
-		credentialMap[CredentialKeyPassword] = v
-	}
-	if v := cred.AccessToken; v != "" {
-		credentialMap[CredentialKeyAccessToken] = v
-	}
-	if v := cred.RefreshToken; v != "" {
-		credentialMap[CredentialKeyRefreshToken] = v
-	}
-
 	logger.DebugContext(ctx, "credentials found", "username", cred.Username)
 
-	return credentialMap, nil
+	return &credentialsv1.OCICredentials{
+		Type:         runtime.NewVersionedType(credentialsv1.OCICredentialsType, credentialsv1.Version),
+		Username:     cred.Username,
+		Password:     cred.Password,
+		AccessToken:  cred.AccessToken,
+		RefreshToken: cred.RefreshToken,
+	}, nil
 }
 
 // getStore creates a credential store based on the provided Docker configuration.
