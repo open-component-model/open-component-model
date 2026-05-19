@@ -73,7 +73,7 @@ flowchart TD
     ReleaseRC --> Gate{{release environment<br/>manual approval}}
     Gate --> Verify[verify_attestations<br/>CLI binaries, CLI OCI,<br/>controller image, chart]
     Verify --> Promote[promote_and_release_final<br/>tag v0.X.Y + cli/v0.X.Y + kubernetes/controller/v0.X.Y + website/v0.X.Y<br/>oras retag images, set :latest if applicable<br/>repackage chart, diff vs RC, push + attest<br/>publish final GitHub release]
-    Promote --> WebsiteDocs[website_version_release<br/>open docs PR to main<br/>pin Hugo module imports to website/v0.X.Y]
+    Promote --> WebsiteDocs[create_website_update_pr<br/>open docs PR to main<br/>pin Hugo module imports to website/v0.X.Y]
     WebsiteDocs --> End([Final release live])
 
     classDef rc fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
@@ -92,7 +92,7 @@ Phase 1 (RC, blue) runs end-to-end without human intervention once you trigger t
 The website integrates into the same workflow run, after `promote_and_release_final` succeeds:
 
 * The `website/v0.X.Y` tag is created at the same commit as the canonical tag — same `ADDITIONAL_TAGS` step that emits `cli/` and `kubernetes/controller/` tags.
-* A separate `website_version_release` job then opens a PR to `main` updating `website/config/_default/{hugo.toml,module.toml}` to pin the new minor's Hugo module imports to the just-created `website/v0.X.Y` tag. The PR uses the OCMBot app token, signed commits, and `add-paths: website/config/`.
+* A separate `create_website_update_pr` job then opens a PR to `main` updating `website/config/_default/{hugo.toml,module.toml}` to pin the new minor's Hugo module imports to the just-created `website/v0.X.Y` tag. The PR uses the OCMBot app token, signed commits, and `add-paths: website/config/`.
 * Binding versions (constructor, descriptor, controller chart) referenced by the docs are resolved from the released `cli/v0.X.Y` go.mod, not from `main`. This guarantees the docs site for `v0.X.Y` matches what the released CLI was built against.
 * On a **minor release** (`Z=0`) the script adds a new version entry under `[versions]` in `hugo.toml` and a new set of import blocks in `module.toml`.
 * On a **patch release** (`Z>0`) the script updates the existing minor's import tags in `module.toml` in place; `hugo.toml` is unchanged.

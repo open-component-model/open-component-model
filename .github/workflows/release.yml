@@ -617,8 +617,8 @@ jobs:
   # final promotion succeeded, when the website/v0.X.Y tag exists. Opens a PR
   # to main pinning Hugo module imports to the just-created website tag, with
   # binding versions resolved from the released CLI module's go.mod.
-  website_version_release:
-    name: Release docs version
+  create_website_update_pr:
+    name: Open website update PR
     needs: [prepare, promote_and_release_final]
     if: ${{ github.event.inputs.dry_run == 'false' }}
     runs-on: ubuntu-24.04-arm
