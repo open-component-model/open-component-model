@@ -12,15 +12,7 @@ import (
 //go:embed schemas/Config.schema.json
 var schemaConfig []byte
 
-//go:embed schemas/HashAlgorithm.schema.json
-var schemaHashAlgorithm []byte
-
 // JSONSchema returns the JSON Schema for Config.
 func (Config) JSONSchema() []byte {
 	return schemaConfig
-}
-
-// JSONSchema returns the JSON Schema for HashAlgorithm.
-func (HashAlgorithm) JSONSchema() []byte {
-	return schemaHashAlgorithm
 }

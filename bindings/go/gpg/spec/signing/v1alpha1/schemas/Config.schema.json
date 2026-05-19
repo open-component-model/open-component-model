@@ -7,10 +7,12 @@
   "description": "Config defines configuration for OpenPGP (GPG) signing and verification.",
   "properties": {
     "hashAlgorithm": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.gpg.spec.signing.v1alpha1.HashAlgorithm"
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.gpg.spec.signing.v1alpha1.HashAlgorithm",
+      "description": "HashAlgorithm selects the hash function applied to the digest bytes before signing.\nDefaults to SHA-256 when empty.\nSupported values: SHA-256, SHA-384, SHA-512."
     },
     "keyFingerprint": {
-      "type": "string"
+      "type": "string",
+      "description": "KeyFingerprint pins which key in the keyring to use when signing or verifying.\nWhen empty the first available key is used.\nAccepts a full 40-hex-character v4 fingerprint or a 16-hex-character long key ID."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
