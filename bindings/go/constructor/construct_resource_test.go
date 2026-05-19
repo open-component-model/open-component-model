@@ -165,12 +165,8 @@ func (m *mockCredentialProvider) Resolve(ctx context.Context, identity runtime.I
 	return m.credentials[identity.GetType().String()], nil
 }
 
-func (m *mockCredentialProvider) ResolveTyped(ctx context.Context, identity runtime.Typed) (runtime.Typed, error) {
-	id, ok := identity.(runtime.Identity)
-	if !ok {
-		return nil, fmt.Errorf("unsupported identity type")
-	}
-	creds, err := m.Resolve(ctx, id)
+func (m *mockCredentialProvider) ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
+	creds, err := m.Resolve(ctx, identity)
 	if err != nil {
 		return nil, err
 	}
