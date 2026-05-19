@@ -29,7 +29,7 @@ func TestStaticCredentialsResolver(t *testing.T) {
 
 	resolveMap := func(t *testing.T, identity runtime.Identity) (map[string]string, error) {
 		t.Helper()
-		typed, err := resolver.ResolveTyped(context.Background(), identity)
+		typed, err := resolver.Resolve(context.Background(), identity)
 		if err != nil {
 			return nil, err
 		}

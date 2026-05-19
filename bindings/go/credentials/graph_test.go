@@ -50,7 +50,7 @@ func (p CredentialPlugin) GetConsumerIdentity(_ context.Context, typed runtime.T
 	return identity, nil
 }
 
-func (p CredentialPlugin) ResolveTyped(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
+func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 	if p.CredentialFunc == nil {
 		return nil, fmt.Errorf("no credential function for %v", identity)
 	}
@@ -70,7 +70,7 @@ func (s RepositoryPlugin) ConsumerIdentityForConfig(_ context.Context, config ru
 	return s.RepositoryIdentityFunc(config)
 }
 
-func (s RepositoryPlugin) ResolveTyped(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
+func (s RepositoryPlugin) Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 	return s.ResolveFunc(ctx, cfg, identity, credentials)
 }
 
@@ -479,7 +479,7 @@ func TestResolveCredentials(t *testing.T) {
 			r := require.New(t)
 			graph, err := GetGraph(t, tc.yaml)
 			r.NoError(err)
-			typed, err := graph.ResolveTyped(t.Context(), tc.identity)
+			typed, err := graph.Resolve(t.Context(), tc.identity)
 			tc.expectedErr(t, err)
 			if err != nil {
 				return
@@ -544,7 +544,7 @@ func TestResolveTypedCredentials(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			graph, err := GetGraph(t, tc.yaml)
 			require.NoError(t, err)
-			typed, err := graph.ResolveTyped(t.Context(), tc.identity)
+			typed, err := graph.Resolve(t.Context(), tc.identity)
 			tc.expectedErr(t, err)
 			if err != nil {
 				return
@@ -662,7 +662,7 @@ func TestResolutionErrors(t *testing.T) {
 	r := require.New(t)
 	g, err := credentials.ToGraph(t.Context(), &credentialruntime.Config{}, credentials.Options{})
 	require.NoError(t, err)
-	creds, err := g.ResolveTyped(t.Context(), id)
+	creds, err := g.Resolve(t.Context(), id)
 	r.Empty(creds)
 	r.Error(err)
 	r.ErrorIs(err, credentials.ErrNoDirectCredentials)
@@ -679,7 +679,7 @@ func TestResolutionErrors(t *testing.T) {
 		}),
 	})
 	r.NoError(err)
-	creds, err = g.ResolveTyped(t.Context(), id)
+	creds, err = g.Resolve(t.Context(), id)
 	r.Empty(creds)
 	r.Error(err)
 	r.ErrorIs(err, credentials.ErrNoIndirectCredentials)

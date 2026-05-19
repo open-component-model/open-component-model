@@ -50,7 +50,7 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 		}
 
 		// Let the plugin resolve the child's credentials.
-		credentials, err := plugin.ResolveTyped(ctx, identity, childCredentials)
+		credentials, err := plugin.Resolve(ctx, identity, childCredentials)
 		if err != nil {
 			return nil, fmt.Errorf("no credentials for node %q resolved from plugin: %w", edgeID, err)
 		}
