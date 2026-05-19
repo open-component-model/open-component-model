@@ -16,7 +16,7 @@ func Benchmark_Perf_Resolve_Direct(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		creds, err = graph.ResolveTyped(b.Context(), runtime.Identity{
+		creds, err = graph.Resolve(b.Context(), runtime.Identity{
 			"type":     "OCIRegistry",
 			"hostname": "docker.io",
 		})
@@ -33,7 +33,7 @@ func Benchmark_Perf_Resolve_Repository(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		creds, err = graph.ResolveTyped(b.Context(), runtime.Identity{
+		creds, err = graph.Resolve(b.Context(), runtime.Identity{
 			"type":     "OCIRegistry",
 			"hostname": "quay.io",
 		})
@@ -49,7 +49,7 @@ func Benchmark_Perf_Resolve_Indirect_CatchAll(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		creds, err := graph.ResolveTyped(b.Context(), runtime.Identity{
+		creds, err := graph.Resolve(b.Context(), runtime.Identity{
 			"type":     "SomeCatchAllType",
 			"hostname": "some-hostname.com",
 		})
@@ -66,7 +66,7 @@ func Benchmark_Perf_Resolve_Indirect_PartialPath(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		creds, err = graph.ResolveTyped(b.Context(), runtime.Identity{
+		creds, err = graph.Resolve(b.Context(), runtime.Identity{
 			"type":     "OCIRegistry",
 			"hostname": "quay.io",
 			"path":     "some-owner/some-repo",
