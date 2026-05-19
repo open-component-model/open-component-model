@@ -41,13 +41,13 @@ type ResourceInputMethodResult struct {
 // method and to request credentials from the credentials system. The credentials system is not part of this interface and
 // is expected to be supplied by the caller of the input method.
 //
-// The resolved credentials MAY be passed to the input method via the credentials map, but a method MAY
+// The resolved credentials MAY be passed to the input method via the typed credentials, but a method MAY
 // work without credentials as well.
 type ResourceInputMethod interface {
 	// ResourceConsumerIdentityProvider that resolves the identity of the given resource to use for credential resolution.
 	// These can then be passed to ProcessResource.
 	ResourceConsumerIdentityProvider
-	ProcessResource(ctx context.Context, resource *constructor.Resource, credentials map[string]string) (result *ResourceInputMethodResult, err error)
+	ProcessResource(ctx context.Context, resource *constructor.Resource, credentials runtime.Typed) (result *ResourceInputMethodResult, err error)
 }
 
 // SourceInputMethodResult is the return value of a SourceInputMethod.
@@ -81,13 +81,13 @@ type SourceInputMethodResult struct {
 // method and to request credentials from the credentials system. The credentials system is not part of this interface and
 // is expected to be supplied by the caller of the input method.
 //
-// The resolved credentials MAY be passed to the input method via the credentials map, but a method MAY
+// The resolved credentials MAY be passed to the input method via the typed credentials, but a method MAY
 // work without credentials as well.
 type SourceInputMethod interface {
 	// SourceConsumerIdentityProvider that resolves the identity of the given source to use for credential resolution.
 	// These can then be passed to ProcessSource.
 	SourceConsumerIdentityProvider
-	ProcessSource(ctx context.Context, source *constructor.Source, credentials map[string]string) (result *SourceInputMethodResult, err error)
+	ProcessSource(ctx context.Context, source *constructor.Source, credentials runtime.Typed) (result *SourceInputMethodResult, err error)
 }
 
 type ResourceInputMethodProvider interface {
