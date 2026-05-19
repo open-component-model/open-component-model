@@ -62,8 +62,6 @@ func New() *cobra.Command {
 - Signatures are verified concurrently (--concurrency-limit); the command exits non-zero on the first failure
 - Default verifier: RSASSA-PSS, resolves the public key from credentials in .ocmconfig
 - For Sigstore keyless verification, pass --verifier-spec with a SigstoreVerificationConfiguration/v1alpha1 config
-  - Identity constraints (certificateOIDCIssuer + certificateIdentity, or regexp variants) are REQUIRED
-  - Without them, verification cannot assert who produced the signature
 
 Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.`,
 			compref.DefaultPrefix,
