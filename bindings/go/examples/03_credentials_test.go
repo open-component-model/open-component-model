@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -44,8 +45,9 @@ func TestExample_StaticCredentialResolver(t *testing.T) {
 		"hostname": "registry.example.com",
 	})
 	r.NoError(err)
-	r.Equal("test-user", creds["username"])
-	r.Equal("test-password", creds["password"])
+	directCreds := creds.(*v1.DirectCredentials)
+	r.Equal("test-user", directCreds.Properties["username"])
+	r.Equal("test-password", directCreds.Properties["password"])
 }
 
 // TestExample_CredentialResolutionNotFound shows how credential resolution

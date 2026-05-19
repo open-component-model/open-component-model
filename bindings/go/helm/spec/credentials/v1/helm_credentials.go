@@ -1,6 +1,11 @@
 package v1
 
 import (
+	"errors"
+	"fmt"
+	"log/slog"
+
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -63,4 +68,19 @@ func FromDirectCredentials(properties map[string]string) *HelmHTTPCredentials {
 		KeyFile:  properties[CredentialKeyKeyFile],
 		Keyring:  properties[CredentialKeyKeyring],
 	}
+}
+
+// FromTyped converts runtime.Typed into HelmHTTPCredentials.
+// Direct conversation as well as converting from v1.DirectCredentials is supported.
+// In every other case, an error will be returned.
+func FromTyped(creds runtime.Typed) (*HelmHTTPCredentials, error) {
+	switch t := creds.(type) {
+	case *HelmHTTPCredentials:
+		return t, nil
+	case *v1.DirectCredentials:
+		return FromDirectCredentials(t.Properties), nil
+	}
+
+	slog.Error("unexpected credential type, expected HelmHTTPCredentials or DirectCredentials", "type", creds.GetType())
+	return nil, errors.New(fmt.Sprintf("unexpected credential type: %T", creds))
 }

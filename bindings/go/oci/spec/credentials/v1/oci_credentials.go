@@ -1,6 +1,11 @@
 package v1
 
 import (
+	"errors"
+	"fmt"
+	"log/slog"
+
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -39,4 +44,19 @@ type OCICredentials struct {
 	// each registry request.
 	// Reference: https://distribution.github.io/distribution/spec/auth/oauth/
 	RefreshToken string `json:"refreshToken,omitempty"`
+}
+
+// FromTyped converts runtime.Typed into OCICredentials.
+// Direct conversation as well as converting from v1.DirectCredentials is supported.
+// In every other case, an error will be returned.
+func FromTyped(creds runtime.Typed) (*OCICredentials, error) {
+	switch t := creds.(type) {
+	case *OCICredentials:
+		return t, nil
+	case *v1.DirectCredentials:
+		return FromDirectCredentials(t.Properties), nil
+	}
+
+	slog.Error("unexpected credential type, expected OCICredentials or DirectCredentials", "type", creds.GetType())
+	return nil, errors.New(fmt.Sprintf("unexpected credential type: %T", creds))
 }

@@ -18,14 +18,31 @@
 //
 // # Authentication
 //
-// Credentials can be supplied via [WithCredentials] using a map of key-value pairs.
-// Username/password authentication is supported through the standard OCI credential keys:
+// Credentials can be supplied via [WithCredentials] using typed [helmcredsv1.HelmHTTPCredentials]:
 //
-//	creds := map[string]string{
-//	    "username": "user",
-//	    "password": "pass",
+//	creds := &helmcredsv1.HelmHTTPCredentials{
+//	    Username: "user",
+//	    Password: "pass",
 //	}
 //	chartData, err := download.NewReadOnlyChartFromRemote(ctx, chartURL, download.WithCredentials(creds))
+//
+// For OCI-backed Helm repositories, credentials may additionally be supplied via
+// [WithOCICredentials] using typed [ocicredsv1.OCICredentials]. Both option sets are
+// then merged into a single basic-auth pair using the following resolution order:
+//
+//   - Username: [helmcredsv1.HelmHTTPCredentials.Username], falling back to
+//     [ocicredsv1.OCICredentials.Username] when empty.
+//   - Password: [helmcredsv1.HelmHTTPCredentials.Password], falling back to
+//     [ocicredsv1.OCICredentials.Password], then to [ocicredsv1.OCICredentials.AccessToken]
+//     (bearer/OAuth2 token) when each is empty.
+//
+// Basic auth is only attached to the request when both the resolved username and
+// password are non-empty.
+//
+//	chartData, err := download.NewReadOnlyChartFromRemote(ctx, chartURL,
+//	    download.WithCredentials(&helmcredsv1.HelmHTTPCredentials{Username: "user"}),
+//	    download.WithOCICredentials(&ocicredsv1.OCICredentials{AccessToken: "token"}),
+//	)
 //
 // # TLS Configuration
 //
