@@ -33,7 +33,7 @@ func (m *mockSourceInputMethod) GetSourceCredentialConsumerIdentity(ctx context.
 	return id, nil
 }
 
-func (m *mockSourceInputMethod) ProcessSource(ctx context.Context, source *constructorruntime.Source, creds map[string]string) (*SourceInputMethodResult, error) {
+func (m *mockSourceInputMethod) ProcessSource(ctx context.Context, source *constructorruntime.Source, creds runtime.Typed) (*SourceInputMethodResult, error) {
 	if m.processedSource != nil {
 		return &SourceInputMethodResult{
 			ProcessedSource: m.processedSource,
