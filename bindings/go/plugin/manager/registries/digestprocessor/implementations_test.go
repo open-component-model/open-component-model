@@ -8,10 +8,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/runtime"
 
+	v2 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestProcessResourceDigest(t *testing.T) {
@@ -25,7 +26,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		{
 			name:        "success",
 			request:     &v1.ProcessResourceDigestRequest{},
-			credentials: runtime.Identity{"key": "value"},
+			credentials: &v2.DirectCredentials{Properties: map[string]string{"key": "value"}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == ProcessResourceDigest {
@@ -41,7 +42,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		{
 			name:        "invalid_credentials",
 			request:     &v1.ProcessResourceDigestRequest{},
-			credentials: runtime.Identity{"invalid_key": "invalid_value"},
+			credentials: &v2.DirectCredentials{Properties: map[string]string{"invalid_key": "invalid_value"}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusForbidden)
@@ -52,7 +53,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		{
 			name:        "call_failed",
 			request:     &v1.ProcessResourceDigestRequest{},
-			credentials: runtime.Identity{"key": "value"},
+			credentials: &v2.DirectCredentials{Properties: map[string]string{"key": "value"}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
@@ -205,8 +206,8 @@ func TestToCredentials(t *testing.T) {
 		credentials runtime.Typed
 		expectErr   bool
 	}{
-		{name: "valid", credentials: runtime.Identity{"key": "value"}, expectErr: false},
-		{name: "empty", credentials: runtime.Identity{}, expectErr: false},
+		{name: "valid", credentials: &v2.DirectCredentials{Properties: map[string]string{"key": "value"}}, expectErr: false},
+		{name: "empty", credentials: &v2.DirectCredentials{Properties: map[string]string{}}, expectErr: false},
 	}
 
 	for _, tt := range tests {

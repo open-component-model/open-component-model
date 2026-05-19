@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -33,13 +34,17 @@ func digestProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, resour
 		logger.Info("request", "request", request.Method, "url", request.URL.String())
 
 		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := &runtime.Raw{}
-		if err := json.Unmarshal(rawCredentials, credentials); err != nil {
+		// TODO(matthiasbruns): Double check if we can pass Raw as credentials
+		credentials := runtime.Raw{}
+		if err := credentials.UnmarshalJSON(rawCredentials); err != nil {
 			plugins.NewError(fmt.Errorf("failed to marshal credentials: %w", err), http.StatusUnauthorized).Write(writer)
 			return
 		}
-
-		defer request.Body.Close()
+		defer func(Body io.ReadCloser) {
+			if err := Body.Close(); err != nil {
+				logger.Error("failed to close body", "error", err)
+			}
+		}(request.Body)
 
 		req := new(REQ)
 		if err := json.NewDecoder(request.Body).Decode(req); err != nil {
@@ -47,7 +52,7 @@ func digestProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, resour
 			return
 		}
 
-		resp, err := f(request.Context(), req, credentials)
+		resp, err := f(request.Context(), req, &credentials)
 		if err != nil {
 			plugins.NewError(fmt.Errorf("failed to call processor function: %w", err), http.StatusInternalServerError).Write(writer)
 			return
