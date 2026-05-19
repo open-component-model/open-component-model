@@ -62,14 +62,7 @@ func handleGetGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.Han
 			return
 		}
 
-		rawCredentials := []byte(r.Header.Get("Authorization"))
-		credentials := &runtime.Raw{}
-		if err := json.Unmarshal(rawCredentials, credentials); err != nil {
-			handleError(w, err, http.StatusUnauthorized, "failed to unmarshal credentials")
-			return
-		}
-
-		response, err := plugin.GetGlobalResource(r.Context(), &request, credentials)
+		response, err := plugin.GetGlobalResource(r.Context(), &request, nil)
 		if err != nil {
 			handleError(w, err, http.StatusInternalServerError, "failed to get global resource")
 			return
@@ -88,14 +81,7 @@ func handleAddGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.Han
 			return
 		}
 
-		rawCredentials := []byte(r.Header.Get("Authorization"))
-		credentials := &runtime.Raw{}
-		if err := json.Unmarshal(rawCredentials, credentials); err != nil {
-			handleError(w, err, http.StatusUnauthorized, "failed to unmarshal credentials")
-			return
-		}
-
-		response, err := plugin.AddGlobalResource(r.Context(), &request, credentials)
+		response, err := plugin.AddGlobalResource(r.Context(), &request, nil)
 		if err != nil {
 			handleError(w, err, http.StatusInternalServerError, "failed to add global resource")
 			return

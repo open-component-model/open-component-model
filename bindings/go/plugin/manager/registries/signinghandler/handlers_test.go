@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	credsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
@@ -30,16 +32,8 @@ func (s *stubSigningPlugin[T]) GetVerifierIdentity(ctx context.Context, req *v1.
 }
 
 func (s *stubSigningPlugin[T]) Sign(ctx context.Context, request *v1.SignRequest[T], credentials runtime.Typed) (*v1.SignResponse, error) {
-	value := ""
-	switch c := credentials.(type) {
-	case runtime.Identity:
-		value = c["test"]
-	case *runtime.Raw:
-		var m map[string]string
-		_ = json.Unmarshal(c.Data, &m)
-		value = m["test"]
-	}
-	return &v1.SignResponse{Signature: &v2.SignatureInfo{Algorithm: "rsa", Value: value}}, nil
+	directCreds := credentials.(*credsv1.DirectCredentials)
+	return &v1.SignResponse{Signature: &v2.SignatureInfo{Algorithm: "rsa", Value: directCreds.Properties["test"]}}, nil
 }
 
 func (s *stubSigningPlugin[T]) Verify(ctx context.Context, request *v1.VerifyRequest[T], credentials runtime.Typed) (*v1.VerifyResponse, error) {
@@ -93,7 +87,9 @@ func TestHandleGetSignerIdentity(t *testing.T) {
 				return http.NewRequestWithContext(ctx, http.MethodPost, parse.String(), bytes.NewReader(body))
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
-				defer resp.Body.Close()
+				defer func(Body io.ReadCloser) {
+					_ = Body.Close()
+				}(resp.Body)
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) { require.NoError(t, err) },

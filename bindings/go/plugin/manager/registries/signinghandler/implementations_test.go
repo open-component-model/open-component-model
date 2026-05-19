@@ -8,11 +8,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/runtime"
 
+	credsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestPing(t *testing.T) {
@@ -168,7 +169,8 @@ func TestGetVerifierIdentity(t *testing.T) {
 		{
 			name: "call_failed",
 			request: &v1.GetVerifierIdentityRequest[runtime.Typed]{VerifyRequest: v1.VerifyRequest[runtime.Typed]{
-				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"x":true}`)}}},
+				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"x":true}`)},
+			}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
@@ -213,7 +215,7 @@ func TestSign(t *testing.T) {
 				Digest: &v2.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: "abc"},
 				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"k":"v"}`)},
 			},
-			credentials: runtime.Identity{"key": "value"},
+			credentials: &credsv1.DirectCredentials{Properties: map[string]string{"key": "value"}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == Sign {
@@ -228,7 +230,7 @@ func TestSign(t *testing.T) {
 		{
 			name:        "invalid_credentials",
 			request:     &v1.SignRequest[runtime.Typed]{Digest: &v2.Digest{}, Config: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)}},
-			credentials: runtime.Identity{"invalid": "creds"},
+			credentials: &credsv1.DirectCredentials{Properties: map[string]string{"invalid": "creds"}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusForbidden)
@@ -239,7 +241,7 @@ func TestSign(t *testing.T) {
 		{
 			name:        "call_failed",
 			request:     &v1.SignRequest[runtime.Typed]{Digest: &v2.Digest{}, Config: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)}},
-			credentials: runtime.Identity{"key": "value"},
+			credentials: &credsv1.DirectCredentials{Properties: map[string]string{"key": "value"}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
@@ -284,7 +286,7 @@ func TestVerify(t *testing.T) {
 				Signature: &v2.Signature{Signature: v2.SignatureInfo{Algorithm: "rsa", Value: "sig"}},
 				Config:    &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 			},
-			credentials: runtime.Identity{"key": "value"},
+			credentials: &credsv1.DirectCredentials{Properties: map[string]string{"key": "value"}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
