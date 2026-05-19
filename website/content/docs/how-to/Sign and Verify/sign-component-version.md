@@ -169,14 +169,14 @@ via a short-lived certificate issued by Fulcio and recorded in the Rekor transpa
 
 This walkthrough uses the public-good Sigstore infrastructure: Dex federates to Google/GitHub/Microsoft for OIDC, Fulcio issues the certificate, and the entry is recorded in the public Rekor transparency log.
 
-## You'll end up with
+## You'll end up with (Sigstore)
 
 - A component version signed with a Sigstore keyless signature
 - A signature that ties the component to your OIDC identity, recorded in a Rekor transparency log
 
 **Estimated time:** ~5 minutes
 
-## Prerequisites
+## Prerequisites (Sigstore)
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
 - A browser available on the machine (the OIDC flow opens a browser to authenticate you)
@@ -186,7 +186,7 @@ This walkthrough uses the public-good Sigstore infrastructure: Dex federates to 
 You do **not** need to generate or distribute keys for this flow. Identity is the signer.
 {{< /callout >}}
 
-## Steps
+## Steps (Sigstore)
 
 {{< steps >}}
 

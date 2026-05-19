@@ -138,19 +138,19 @@ Verify a [Sigstore](https://www.sigstore.dev/) keyless signature against identit
 
 This walkthrough targets signatures made against the public-good Sigstore infrastructure (`fulcio.sigstore.dev`, `rekor.sigstore.dev`). The trusted root is fetched from the embedded TUF root — no credentials needed.
 
-## You'll end up with
+## You'll end up with (Sigstore)
 
 - Confidence that a component version was signed by an identity you trust (verified via Sigstore + Fulcio + Rekor)
 
 **Estimated time:** ~3 minutes
 
-## Prerequisites
+## Prerequisites (Sigstore)
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
 - A component version signed with Sigstore (see [How-To: Sign Component Versions]({{< relref "sign-component-version.md" >}}))
 - The expected signer identity (OIDC issuer + email or workload identity URI)
 
-## Steps
+## Steps (Sigstore)
 
 {{< steps >}}
 
