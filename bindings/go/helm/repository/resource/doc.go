@@ -29,7 +29,7 @@
 //	identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, res)
 //
 //	// Resolve credentials
-//	typed, err := t.CredentialProvider.ResolveTyped(ctx, consumerId)
+//	typed, err := t.CredentialProvider.Resolve(ctx, consumerId)
 //	if err != nil && !errors.Is(err, credentials.ErrNotFound) {
 //		return nil, fmt.Errorf("failed resolving credentials: %w", err)
 //	}
