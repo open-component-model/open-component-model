@@ -31,12 +31,12 @@ const (
 type GPGCredentials struct {
 	// +ocm:jsonschema-gen:enum=GPGCredentials/v1
 	// +ocm:jsonschema-gen:enum:deprecated=GPGCredentials
-	Type               runtime.Type `json:"type"`
-	PrivateKeyPGP      string       `json:"privateKeyPGP,omitempty"`
-	PrivateKeyPGPFile  string       `json:"privateKeyPGPFile,omitempty"`
-	PublicKeyPGP       string       `json:"publicKeyPGP,omitempty"`
-	PublicKeyPGPFile   string       `json:"publicKeyPGPFile,omitempty"`
-	Passphrase         string       `json:"passphrase,omitempty"`
+	Type              runtime.Type `json:"type"`
+	PrivateKeyPGP     string       `json:"privateKeyPGP,omitempty"`
+	PrivateKeyPGPFile string       `json:"privateKeyPGPFile,omitempty"`
+	PublicKeyPGP      string       `json:"publicKeyPGP,omitempty"`
+	PublicKeyPGPFile  string       `json:"publicKeyPGPFile,omitempty"`
+	Passphrase        string       `json:"passphrase,omitempty"`
 }
 
 // MustRegisterCredentialType registers GPGCredentials/v1 in the given scheme.
