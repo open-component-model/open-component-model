@@ -16,6 +16,9 @@ Pick the tab that matches the algorithm you want to use — each tab is a self-c
 
 Sign with a long-lived RSA key pair. The private key produces the signature; verifiers use the matching public key to validate it.
 
+Before you can run `ocm sign`, you'll need to generate an RSA key pair and point `.ocmconfig` at it (see prerequisites).
+With Sigstore (other tab) you skip that setup entirely.
+
 ## You'll end up with
 
 - A component version with an RSA signature attached
@@ -163,25 +166,34 @@ See [How-To: Configure Credentials for Multiple Registries]({{< relref "configur
 {{< /tab >}}
 {{< tab "Sigstore (keyless)" >}}
 
-Sign with [Sigstore](https://www.sigstore.dev/) keyless signing.
-Instead of a long-lived RSA key, the signature is bound to your OIDC identity (e.g. your corporate email)
-via a short-lived certificate issued by Fulcio and recorded in the Rekor transparency log.
+Sign with [Sigstore](https://www.sigstore.dev/) — no key pair to generate, no public key to distribute.
 
-This walkthrough uses the public-good Sigstore infrastructure: Dex federates to Google/GitHub/Microsoft for OIDC, Fulcio issues the certificate,
-and the entry is recorded in the public Rekor transparency log.
+If you've done classical key-based signing, here's what changes:
+
+| Aspect | RSA | Sigstore |
+| --- | --- | --- |
+| Before you sign | Generate key pair, configure `.ocmconfig` with file paths | Nothing — just log in when prompted |
+| What proves authorship | Possession of the private key | Your OIDC login (e.g. corporate email) |
+| What the verifier needs | Your public key, distributed somehow | Your expected identity (email + provider) |
+| Audit trail | None unless you build one | Public, automatic |
+
+**Mental model:** your identity is the key. When you sign, you log in with your OIDC provider (Google, GitHub, Microsoft, …). Sigstore issues a short-lived certificate that binds the signature to that identity. The verifier doesn't need a public key from you — they just check that the identity in the certificate is one they trust.
 
 ## You'll end up with (Sigstore)
 
-- A component version signed with a Sigstore keyless signature
-- A signature that ties the component to your OIDC identity, recorded in a Rekor transparency log
+- A component version signed with a Sigstore keyless signature, tied to your OIDC identity
 
 **Estimated time:** ~5 minutes
 
 ## Prerequisites (Sigstore)
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
-- A browser available on the machine (the OIDC flow opens a browser to authenticate you)
+- A browser on the same machine (signing opens a browser window to log you in)
 - A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
+
+{{< callout context="note" >}}
+Want the full picture of what's happening behind the scenes (Fulcio certificates, Rekor transparency log, OIDC token flow)? A dedicated Sigstore tutorial is in the works. For now, [ADR 0017: Sigstore Integration](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0017_sigstore_integration.md) covers the design.
+{{< /callout >}}
 
 ## Steps (Sigstore)
 
@@ -189,9 +201,9 @@ and the entry is recorded in the public Rekor transparency log.
 
 {{< step >}}
 
-### Configure your OCM credentials for OIDC
+### Tell OCM to use Sigstore for signing
 
-Add a consumer entry to your `.ocmconfig` so the Sigstore signing handler can acquire an OIDC identity token via the public Sigstore Dex instance:
+Add this entry to your `.ocmconfig`. It says "for the signature named `default`, get an OIDC token instead of using a private key":
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -205,36 +217,26 @@ configurations:
     - type: OIDCIdentityTokenProvider/v1alpha1
 ```
 
+That's all the credential configuration you need. No keys, no paths.
+
 {{< callout context="note" >}}
-`signature` must match the `--signature` flag passed to `ocm sign` (defaults to `default`); add more consumer entries with distinct `signature` names for multi-signature setups.
+`signature: default` matches the default name `ocm sign` uses. Add more entries with different `signature` names if you want multiple Sigstore signing identities.
 {{< /callout >}}
 
 {{< /step >}}
 
 {{< step >}}
 
-### Create a Sigstore signer spec
+### Create a minimal signer spec
 
-Create `sigstore-sign.yaml`. With no extra fields, the handler uses public-good Sigstore TUF discovery (`sigstore.dev`) and the public Sigstore Dex OIDC issuer:
+Until Sigstore is the default signing handler, create `sigstore-sign.yaml` with one line — this picks the Sigstore signing handler and uses public Sigstore defaults:
 
 ```yaml
 # sigstore-sign.yaml
 type: SigstoreSigningConfiguration/v1alpha1
 ```
 
-{{< callout context="caution" title="The OIDC issuer in the Fulcio certificate is the upstream IdP, not the Dex endpoint" >}}
-On public Sigstore (`oauth2.sigstore.dev`), Dex federates to upstream identity providers (Google, GitHub, Microsoft) but **passes through the upstream `iss` claim** to Fulcio. Fulcio then writes that **upstream issuer** into the signing certificate (OID `1.3.6.1.4.1.57264.1.8`) — *not* the Dex URL.
-
-Concretely, depending on which provider you logged in with:
-
-| Login provider | Issuer recorded in the certificate |
-| --- | --- |
-| Google | `https://accounts.google.com` |
-| GitHub | `https://github.com/login/oauth` |
-| Microsoft | `https://login.microsoftonline.com` |
-
-This is what the verifier's `certificateOIDCIssuer` constraint must match (see [How-to: Verify Component Versions]({{< relref "verify-component-version.md" >}})).
-{{< /callout >}}
+That's it. No URLs, no keys, no certificates. The handler uses public Sigstore (`fulcio.sigstore.dev`, `rekor.sigstore.dev`) automatically.
 
 {{< /step >}}
 
@@ -265,6 +267,8 @@ ocm sign cv \
 
 A browser window opens against your OIDC provider's login page. Authenticate, and you'll see the OCM "Signing identity verified!" page. Return to the terminal — signing continues automatically.
 
+That's the whole signing flow. No private key was generated, none was loaded from disk, and nothing needs to be distributed to verifiers. Your OIDC identity is what the verifier will check.
+
 {{< details "Expected output from signing" >}}
 
 ```text
@@ -276,7 +280,7 @@ time=2026-05-18T10:12:11.972+02:00 level=INFO msg="signed successfully" name=def
 {{< /details >}}
 
 {{< callout context="tip" >}}
-If the Cosing CLI is not on your PATH or has a too old version, the first run downloads and caches the `cosign` binary into `~/.cache/ocm/cosign/...`. Subsequent runs skip the download.
+On the first run, OCM may download and cache the `cosign` binary into `~/.cache/ocm/cosign/...` (used internally for signing). Subsequent runs skip the download.
 {{< /callout >}}
 
 {{< /step >}}
@@ -321,15 +325,15 @@ The `value` field contains the full Sigstore bundle (signature + Fulcio certific
 
 ### Symptom: "OIDC provider does not support PKCE S256"
 
-**Cause:** The configured `issuer` doesn't advertise `S256` in `code_challenge_methods_supported`.
+**Cause:** The OIDC provider you're using doesn't support a security feature the OCM CLI requires for browser-based login.
 
-**Fix:** Use a provider that supports PKCE S256 (sigstore.dev does; most modern enterprise OPs do). PKCE S256 is required for the OCM CLI's public client flow.
+**Fix:** Use a provider that supports it — public Sigstore (Google/GitHub/Microsoft via `sigstore.dev`) does, and most modern enterprise IdPs do too. If you're pointing at a custom enterprise provider, check with your platform team.
 
 ### Symptom: "issuer mismatch in callback"
 
-**Cause:** Your provider sent an `iss` parameter that doesn't match the configured `issuer` (RFC 9207).
+**Cause:** Your OIDC provider returned a different issuer URL than the one configured.
 
-**Fix:** Make sure the `issuer` in `.ocmconfig` matches your provider's canonical issuer URL exactly (scheme, host, path). Trailing slashes matter.
+**Fix:** Make sure the `issuer` in `.ocmconfig` matches your provider's canonical issuer URL exactly (scheme, host, path — trailing slashes matter). If you're using public Sigstore defaults, you don't need to set `issuer` at all.
 
 ### Symptom: Permission denied on registry
 
