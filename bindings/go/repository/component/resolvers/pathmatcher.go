@@ -59,10 +59,8 @@ func (p *pathMatcherResolver) getRepository(ctx context.Context, specification r
 				if errors.Is(err, credentials.ErrNotFound) {
 					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, err.Error()))
 				} else {
-					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", specification, resolveErr)
+					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", specification, err)
 				}
-			} else if dc, ok := typed.(*credconfigv1.DirectCredentials); ok {
-				credMap = dc.Properties
 			}
 		}
 	} else {

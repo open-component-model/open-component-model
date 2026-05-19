@@ -4,15 +4,24 @@ import (
 	"time"
 
 	"helm.sh/helm/v4/pkg/getter"
+
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
 
 const (
 	// CredentialCertFile is the key for storing the location of a client certificate.
-	CredentialCertFile = "certFile"
+	//
+	// Deprecated: Use helmcredsv1.CredentialKeyCertFile instead.
+	CredentialCertFile = helmcredsv1.CredentialKeyCertFile
 	// CredentialKeyFile is the key for storing the location of a client private key.
-	CredentialKeyFile = "keyFile"
+	//
+	// Deprecated: Use helmcredsv1.CredentialKeyKeyFile instead.
+	CredentialKeyFile = helmcredsv1.CredentialKeyKeyFile
 	// CredentialKeyring is the key for storing the keyring name to use.
-	CredentialKeyring = "keyring"
+	//
+	// Deprecated: Use helmcredsv1.CredentialKeyKeyring instead.
+	CredentialKeyring = helmcredsv1.CredentialKeyKeyring
 
 	// DefaultHTTPTimeout
 	// The cost timeout references curl's default connection timeout.
@@ -45,9 +54,13 @@ type option struct {
 	// Deprecated: This field is deprecated in favor of using certificates through the credentials.
 	CACertFile string `json:"caCertFile,omitempty"`
 
-	// Credentials is a map of credential keys to their values,
-	// used for authentication and TLS configuration when downloading charts from remote repositories.
-	Credentials map[string]string
+	// Credentials contains typed Helm credentials used for authentication and TLS configuration
+	// when downloading charts from remote repositories.
+	Credentials *helmcredsv1.HelmHTTPCredentials
+
+	// OCICredentials contains credentials for direct OCI access instead of going through the Helm registry client.
+	// This is used for OCI-based Helm repositories and allows for more direct control over OCI interactions.
+	OCICredentials *ocicredsv1.OCICredentials
 
 	// AlwaysDownloadProv indicates whether to always download the provenance file for the chart.
 	// In cases where a Keyring is present in the credentials, Helm will attempt to download the provenance file to verify the chart's integrity.
@@ -87,12 +100,17 @@ func WithCACertFile(caCertFile string) Option {
 	}
 }
 
-// WithCredentials sets the credentials map used for authentication and TLS configuration.
-// Supported keys include username/password for basic auth, [CredentialCertFile] and [CredentialKeyFile]
-// for client TLS certificates, and [CredentialKeyring] for chart provenance verification.
-func WithCredentials(credentials map[string]string) Option {
+// WithCredentials sets the typed Helm credentials used for authentication and TLS configuration.
+func WithCredentials(credentials *helmcredsv1.HelmHTTPCredentials) Option {
 	return func(t *option) {
 		t.Credentials = credentials
+	}
+}
+
+// WithOCICredentials sets the typed Helm credentials used for authentication against an OCI registry.
+func WithOCICredentials(credentials *ocicredsv1.OCICredentials) Option {
+	return func(t *option) {
+		t.OCICredentials = credentials
 	}
 }
 

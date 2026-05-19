@@ -61,12 +61,12 @@ func (h *HelmInputPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRe
 	return nil, nil
 }
 
-func (h *HelmInputPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceInputResponse, error) {
+func (h *HelmInputPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials runtime.Typed) (*v1.ProcessResourceInputResponse, error) {
 	logger.Info("ProcessResource called for Helm input")
 	return processHelmResource(ctx, request, credentials, h.filesystemConfig)
 }
 
-func (h *HelmInputPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceInputResponse, error) {
+func (h *HelmInputPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials runtime.Typed) (*v1.ProcessSourceInputResponse, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
@@ -175,7 +175,7 @@ func parseFilesystemConfig(conf types.Config) (*filesystemv1alpha1.Config, error
 }
 
 // processHelmResource wraps the helm.InputMethod to process resources
-func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string, filesystemConfig *filesystemv1alpha1.Config) (_ *v1.ProcessResourceInputResponse, err error) {
+func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials runtime.Typed, filesystemConfig *filesystemv1alpha1.Config) (_ *v1.ProcessResourceInputResponse, err error) {
 	resource := &constructorruntime.Resource{
 		AccessOrInput: constructorruntime.AccessOrInput{
 			Input: request.Resource.Input,
