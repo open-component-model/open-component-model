@@ -39,7 +39,7 @@ func handleJSONResponse(w http.ResponseWriter, response interface{}) {
 // credentialsFromHeader extracts credentials from the Authorization header if present
 // and unmarshals them into a map. If the header is absent, it returns an empty map.
 // If the header is present but cannot be unmarshaled, it writes an error response and returns ok as false.
-func credentialsFromHeader(w http.ResponseWriter, h http.Header) (credentials map[string]string, ok bool) {
+func credentialsFromHeader(w http.ResponseWriter, h http.Header) (credentials runtime.Typed, ok bool) {
 	authHeader := h.Get("Authorization")
 	if authHeader == "" {
 		return nil, true

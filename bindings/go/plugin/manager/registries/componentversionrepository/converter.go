@@ -22,7 +22,7 @@ import (
 type componentVersionRepositoryWrapper struct {
 	externalPlugin          ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[runtime.Typed]
 	repositorySpecification runtime.Typed
-	credentials             map[string]string
+	credentials             runtime.Typed
 	scheme                  *runtime.Scheme
 }
 
@@ -172,7 +172,7 @@ func (c *componentVersionRepositoryWrapper) GetLocalSource(ctx context.Context, 
 	return rBlob, &convert[0], nil
 }
 
-func (r *RepositoryRegistry) externalToComponentVersionRepository(plugin ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[runtime.Typed], scheme *runtime.Scheme, repositorySpecification runtime.Typed, credentials map[string]string) *componentVersionRepositoryWrapper {
+func (r *RepositoryRegistry) externalToComponentVersionRepository(plugin ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[runtime.Typed], scheme *runtime.Scheme, repositorySpecification runtime.Typed, credentials runtime.Typed) *componentVersionRepositoryWrapper {
 	return &componentVersionRepositoryWrapper{
 		externalPlugin:          plugin,
 		repositorySpecification: repositorySpecification,

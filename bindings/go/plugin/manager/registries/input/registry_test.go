@@ -10,8 +10,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	constructor2 "ocm.software/open-component-model/bindings/go/constructor"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
@@ -19,9 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var (
-	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
-)
+var dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
 
 func dummyCapability(schema []byte) inputv1.CapabilitySpec {
 	return inputv1.CapabilitySpec{
@@ -90,7 +90,7 @@ func TestPluginFlow(t *testing.T) {
 				Data: []byte(`{ "access": "v1" }`),
 			},
 		},
-	}, map[string]string{})
+	}, &v1.DirectCredentials{})
 	require.NoError(t, err)
 	require.Equal(t, "test-resource", resource.ProcessedResource.Name)
 
@@ -110,7 +110,7 @@ func TestPluginFlow(t *testing.T) {
 				Data: []byte(`{ "access": "v1" }`),
 			},
 		},
-	}, map[string]string{})
+	}, &v1.DirectCredentials{})
 	require.NoError(t, err)
 	require.Equal(t, "test-source", source.ProcessedSource.Name)
 }
@@ -211,7 +211,7 @@ func (m *mockResourceInputPlugin) GetResourceCredentialConsumerIdentity(ctx cont
 	return nil, nil
 }
 
-func (m *mockResourceInputPlugin) ProcessResource(ctx context.Context, resource *constructor.Resource, credentials map[string]string) (result *constructor2.ResourceInputMethodResult, err error) {
+func (m *mockResourceInputPlugin) ProcessResource(ctx context.Context, resource *constructor.Resource, credentials runtime.Typed) (result *constructor2.ResourceInputMethodResult, err error) {
 	m.processCalled = true
 	return nil, nil
 }
@@ -232,7 +232,7 @@ func (m *mockSourceInputPlugin) GetSourceCredentialConsumerIdentity(ctx context.
 	return nil, nil
 }
 
-func (m *mockSourceInputPlugin) ProcessSource(ctx context.Context, resource *constructor.Source, credentials map[string]string) (result *constructor2.SourceInputMethodResult, err error) {
+func (m *mockSourceInputPlugin) ProcessSource(ctx context.Context, resource *constructor.Source, credentials runtime.Typed) (result *constructor2.SourceInputMethodResult, err error) {
 	m.processCalled = true
 	return nil, nil
 }

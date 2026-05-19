@@ -6,13 +6,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -24,11 +24,11 @@ func (m mockPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequ
 	return nil, nil
 }
 
-func (m mockPlugin) GetGlobalResource(ctx context.Context, request *v1.GetGlobalResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
+func (m mockPlugin) GetGlobalResource(ctx context.Context, request *v1.GetGlobalResourceRequest, credentials runtime.Typed) (*v1.GetGlobalResourceResponse, error) {
 	return nil, nil
 }
 
-func (m mockPlugin) AddGlobalResource(ctx context.Context, request *v1.AddGlobalResourceRequest, credentials map[string]string) (*v1.AddGlobalResourceResponse, error) {
+func (m mockPlugin) AddGlobalResource(ctx context.Context, request *v1.AddGlobalResourceRequest, credentials runtime.Typed) (*v1.AddGlobalResourceResponse, error) {
 	return nil, nil
 }
 
