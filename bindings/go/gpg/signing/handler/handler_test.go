@@ -14,8 +14,8 @@ import (
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/gpg/signing/v1alpha1"
-	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1"
-	identityv1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1"
+	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
+	identityv1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
 )
 
 func TestGPGHandler_RoundTrip_Unprotected(t *testing.T) {

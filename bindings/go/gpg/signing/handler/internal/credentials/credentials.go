@@ -7,8 +7,8 @@ import (
 
 	"github.com/ProtonMail/go-crypto/openpgp"
 
-	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1"
-	identityv1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1"
+	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
+	identityv1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
 )
 
 // IdentityTypeGPG is the consumer identity type for GPG signing.

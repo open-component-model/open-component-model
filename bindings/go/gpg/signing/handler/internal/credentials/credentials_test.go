@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1"
+	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 )
 
 func mustEntity(t *testing.T, passphrase string) *openpgp.Entity {
