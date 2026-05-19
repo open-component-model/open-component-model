@@ -1,7 +1,7 @@
 package credentials
 
 import (
-	"ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 

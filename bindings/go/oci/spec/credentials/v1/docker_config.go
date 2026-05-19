@@ -6,6 +6,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+const (
+	// DockerConfigType is the type name for DockerConfig credentials.
+	DockerConfigType = "DockerConfig"
+)
+
 // DockerConfig is a type that represents a docker config style credential repository.
 //
 // Credentials can be offered

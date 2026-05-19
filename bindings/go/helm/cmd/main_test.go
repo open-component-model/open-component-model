@@ -81,7 +81,9 @@ func TestHelmPluginProcessResource(t *testing.T) {
 		"Authorization": `{"access_token": "test"}`,
 	}
 	resp := setup.makeHTTPRequest(t, "POST", "/resource/process", requestBody, headers)
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	responseBody, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)

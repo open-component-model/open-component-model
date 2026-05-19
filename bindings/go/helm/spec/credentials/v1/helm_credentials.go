@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -8,6 +9,20 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+var Scheme = runtime.NewScheme()
+
+func init() {
+	MustAddToScheme(Scheme)
+}
+
+func MustAddToScheme(scheme *runtime.Scheme) {
+	helmHTTPCreds := &HelmHTTPCredentials{}
+	scheme.MustRegisterWithAlias(helmHTTPCreds,
+		runtime.NewVersionedType(HelmHTTPCredentialsType, v1.Version),
+		runtime.NewUnversionedType(HelmHTTPCredentialsType),
+	)
+}
 
 const (
 	//nolint:gosec // G101: This is a type name, not a credential.
@@ -74,11 +89,30 @@ func FromDirectCredentials(properties map[string]string) *HelmHTTPCredentials {
 // Direct conversation as well as converting from v1.DirectCredentials is supported.
 // In every other case, an error will be returned.
 func FromTyped(creds runtime.Typed) (*HelmHTTPCredentials, error) {
+	if creds == nil {
+		return nil, nil
+	}
 	switch t := creds.(type) {
 	case *HelmHTTPCredentials:
 		return t, nil
 	case *v1.DirectCredentials:
 		return FromDirectCredentials(t.Properties), nil
+	case *runtime.Raw:
+		credsMap := map[string]string{}
+		if err := json.Unmarshal(t.Data, &credsMap); err != nil {
+			return nil, fmt.Errorf("error unmarshalling credentials: %v", err)
+		}
+		return FromDirectCredentials(credsMap), nil
+	case *runtime.Unstructured:
+		data, err := json.Marshal(t)
+		if err != nil {
+			return nil, fmt.Errorf("error marshalling unstructured credentials: %w", err)
+		}
+		credsMap := map[string]string{}
+		if err := json.Unmarshal(data, &credsMap); err != nil {
+			return nil, fmt.Errorf("error unmarshalling unstructured credentials: %v", err)
+		}
+		return FromDirectCredentials(credsMap), nil
 	}
 
 	slog.Error("unexpected credential type, expected HelmHTTPCredentials or DirectCredentials", "type", creds.GetType())
