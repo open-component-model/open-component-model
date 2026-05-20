@@ -105,7 +105,6 @@ jobs:
           # the checkout above sets persist-credentials: false (zizmor requirement).
           GITHUB_TOKEN: ${{ steps.get_token.outputs.token }}
         with:
-          github-token: ${{ steps.get_token.outputs.token }}
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
             await script.createRcTag({ core });
@@ -308,7 +307,6 @@ jobs:
           # the checkout above sets persist-credentials: false (zizmor requirement).
           GITHUB_TOKEN: ${{ steps.get_token.outputs.token }}
         with:
-          github-token: ${{ steps.get_token.outputs.token }}
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
             await script.createNewReleaseTag({ core });
