@@ -15,7 +15,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/configuration"
 	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -109,13 +108,8 @@ func CredentialGraph(cmd *cobra.Command) error {
 	}
 
 	opts := credentials.Options{
-		RepositoryPluginProvider: pluginManager.CredentialRepositoryRegistry,
-		CredentialPluginProvider: credentials.GetCredentialPluginFn(
-			// TODO(jakobmoellerdev): use the plugin manager to get the credential plugin once we have some.
-			func(ctx context.Context, typed runtime.Typed) (credentials.CredentialPlugin, error) {
-				return nil, fmt.Errorf("no credential plugin found for type %s", typed)
-			},
-		),
+		RepositoryPluginProvider:       pluginManager.CredentialRepositoryRegistry,
+		CredentialPluginProvider:       pluginManager.CredentialPluginRegistry,
 		CredentialRepositoryTypeScheme: pluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
 	}
 

@@ -6,8 +6,8 @@ github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c h1:udKWzYgxTojEK
 github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
 github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ4pzQ=
 github.com/MakeNowJust/heredoc v1.0.0/go.mod h1:mG5amYoWBHf8vpLOuehzbGGw0EHxpZZ6lCpQ4fNJ8LE=
-github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
-github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
+github.com/Masterminds/semver/v3 v3.5.0 h1:kQceYJfbupGfZOKZQg0kou0DgAKhzDg2NZPAwZ/2OOE=
+github.com/Masterminds/semver/v3 v3.5.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/ProtonMail/go-crypto v1.4.1 h1:9RfcZHqEQUvP8RzecWEUafnZVtEvrBVL9BiF67IQOfM=
 github.com/ProtonMail/go-crypto v1.4.1/go.mod h1:e1OaTyu5SYVrO9gKOEhTc+5UcXtTUa+P3uLudwcgPqo=
 github.com/antlr4-go/antlr/v4 v4.13.1 h1:SqQKkuVZ+zWkMMNkjy5FZe5mr5WURWnlpmOuzYWrPrQ=
@@ -32,6 +32,8 @@ github.com/clipperhouse/uax29/v2 v2.7.0 h1:+gs4oBZ2gPfVrKPthwbMzWZDaAFPGYK72F0NJ
 github.com/clipperhouse/uax29/v2 v2.7.0/go.mod h1:EFJ2TJMRUaplDxHKj1qAEhCtQPW2tJSwu5BF98AuoVM=
 github.com/cloudflare/circl v1.6.3 h1:9GPOhQGF9MCYUeXyMYlqTR6a5gTrgR/fBLXvUgtVcg8=
 github.com/cloudflare/circl v1.6.3/go.mod h1:2eXP6Qfat4O/Yhh8BznvKnJ+uzEoTQ6jVKJRn81BiS4=
+github.com/coreos/go-oidc/v3 v3.18.0 h1:V9orjXynvu5wiC9SemFTWnG4F45v403aIcjWo0d41+A=
+github.com/coreos/go-oidc/v3 v3.18.0/go.mod h1:DYCf24+ncYi+XkIH97GY1+dqoRlbaSI26KVTCI9SrY4=
 github.com/coreos/go-systemd/v22 v22.5.0 h1:RrqgGjYQKalulkV8NGVIfkXQf6YYmOyiJKk8iXXhfZs=
 github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
@@ -83,6 +85,8 @@ github.com/gabriel-vasile/mimetype v1.4.13 h1:46nXokslUBsAJE/wMsp5gtO500a4F3Nkz9
 github.com/gabriel-vasile/mimetype v1.4.13/go.mod h1:d+9Oxyo1wTzWdyVUPMmXFvp4F9tea18J8ufA774AB3s=
 github.com/go-errors/errors v1.5.1 h1:ZwEMSLRCapFLflTpT7NKaAc7ukJ8ZPEjzlxt8rPN8bk=
 github.com/go-errors/errors v1.5.1/go.mod h1:sIVyrIiJhuEF+Pj9Ebtd6P/rEYROXFi3BopGUQ5a5Og=
+github.com/go-jose/go-jose/v4 v4.1.4 h1:moDMcTHmvE6Groj34emNPLs/qtYXRVcd6S7NHbHz3kA=
+github.com/go-jose/go-jose/v4 v4.1.4/go.mod h1:x4oUasVrzR7071A4TnHLGSPpNOm2a21K9Kf04k1rs08=
 github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
 github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
@@ -409,8 +413,8 @@ ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260505072254-1
 ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260505072254-1c17fcd5c971/go.mod h1:KvmfWYMZJN61wkocNYSGWWtAxh9XHlmJhKvMX2F8Brk=
 ocm.software/open-component-model/bindings/go/oci v0.0.40 h1:N1iMdJ9WHVM8rOXqxpB6q7GBvhat9HarTEz99VcRGqI=
 ocm.software/open-component-model/bindings/go/oci v0.0.40/go.mod h1:JvlaV+Cswx33bdWr01kSsF5FPZcEGGCQixRu0L1NCMU=
-ocm.software/open-component-model/bindings/go/plugin v0.0.14 h1:PJg5pYB26ji9xKhKjSmdhajw6XBs97wNhmoo0TdkS1o=
-ocm.software/open-component-model/bindings/go/plugin v0.0.14/go.mod h1:nXAFNN9qb4RpVbkjK55RVgWwGBgQZpfIIQw9kNrXlNE=
+ocm.software/open-component-model/bindings/go/plugin v0.0.15 h1:dvqtzF7P3d+wtFDeLSxvj3B6M4dHefgODbEc4qiGUec=
+ocm.software/open-component-model/bindings/go/plugin v0.0.15/go.mod h1:RLz8eRUJU1qgtBpSl118SlVwKeLST16IxNy9hkuXZ+w=
 ocm.software/open-component-model/bindings/go/repository v0.0.8 h1:TUwsQSOkPMvKAU3ciK7Tr2UgewDag640X+OD97zI2oE=
 ocm.software/open-component-model/bindings/go/repository v0.0.8/go.mod h1:2TCCOD2lV/druBsW3/YBRnk8uOqUJCPefk1s7MyULb8=
 ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260505072254-1c17fcd5c971 h1:S/jcieKZ4kq7jPbQGA+O8gc/PAfWZ0a9SxSWsr+Eb2s=
@@ -419,6 +423,8 @@ ocm.software/open-component-model/bindings/go/runtime v0.0.8 h1:NIN8smq0Fs64N10U
 ocm.software/open-component-model/bindings/go/runtime v0.0.8/go.mod h1:sRm+ybi9yjJGAgMSUHr0xdaSobsmeU8DWGP4Xonaso8=
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20260505072254-1c17fcd5c971 h1:nMeK6RHE1qAEO7ZtSX1CU5/BpSzLTJm7wbYnxLIrGUE=
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20260505072254-1c17fcd5c971/go.mod h1:ah2z8Y3/GdjP5sfMHij5V8YLgj4YC2FrcVa55FYHdJE=
+ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260515092758-4a81396fd61d h1:YAk7ysJXSzIO7/nsdeDFcLll+R2PxkYfqAvHklMXH9U=
+ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260515092758-4a81396fd61d/go.mod h1:XKpqkb2yZzXMkNiY64v15OVAw8YEL22BwlqHy9mOLR0=
 ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260505072254-1c17fcd5c971 h1:KdE/ZOjvNaMtAj36SAPcL0dSAnWw1zh3Ew5ifgv+Jnc=
 ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260505072254-1c17fcd5c971/go.mod h1:z4219PTvws8/Lmyu61rN+52KkhoXW0dhOi5LhRQESEA=
 ocm.software/open-component-model/bindings/go/transform v0.0.0-20260505072254-1c17fcd5c971 h1:BrdByk5MoKWFF1xJ6h4SBHSzh4BcmmidOxNTzc4zXcU=
