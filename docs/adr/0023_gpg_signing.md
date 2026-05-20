@@ -65,7 +65,7 @@ sequenceDiagram
     CLI->>Handler: GetSigningCredentialConsumerIdentity(config)
     Handler-->>CLI: Credential Identity (GPG/v1alpha1)
     CLI->>Creds: Resolve credentials for identity
-    Creds-->>CLI: private_key_pgp_file + passphrase
+    Creds-->>CLI: privateKeyPGPFile + passphrase
     CLI->>Handler: Sign(digest, config, credentials)
     Handler->>Handler: Load armored key, decrypt with passphrase
     Handler->>Handler: openpgp.ArmoredDetachSign over digest bytes
@@ -80,7 +80,7 @@ sequenceDiagram
     CLI->>Handler: GetVerifyingCredentialConsumerIdentity(config)
     Handler-->>CLI: Credential Identity (GPG/v1alpha1)
     CLI->>Creds: Resolve credentials for identity
-    Creds-->>CLI: public_key_pgp_file
+    Creds-->>CLI: publicKeyPGPFile
     CLI->>Handler: Verify(signature, config, credentials)
     Handler->>Handler: CheckArmoredDetachedSignature
     Handler-->>CLI: nil or error
@@ -93,11 +93,11 @@ Credential keys for `GPG/v1alpha1`:
 
 | Key | Description |
 |-----|-------------|
-| `private_key_pgp` | Inline ASCII-armored PGP private key |
-| `private_key_pgp_file` | Path to ASCII-armored PGP private key file |
+| `privateKeyPGP` | Inline ASCII-armored PGP private key |
+| `privateKeyPGPFile` | Path to ASCII-armored PGP private key file |
 | `passphrase` | Passphrase to decrypt the private key (if protected) |
-| `public_key_pgp` | Inline ASCII-armored PGP public key |
-| `public_key_pgp_file` | Path to ASCII-armored PGP public key file |
+| `publicKeyPGP` | Inline ASCII-armored PGP public key |
+| `publicKeyPGPFile` | Path to ASCII-armored PGP public key file |
 
 Produced `SignatureInfo`:
 
@@ -128,7 +128,7 @@ configurations:
     credentials:
     - type: Credentials/v1
       properties:
-        private_key_pgp_file: /path/to/signing-key.asc
+        privateKeyPGPFile: /path/to/signing-key.asc
         passphrase: <your-key-passphrase>
 ```
 
@@ -145,7 +145,7 @@ configurations:
     credentials:
     - type: Credentials/v1
       properties:
-        public_key_pgp_file: /path/to/public-key.asc
+        publicKeyPGPFile: /path/to/public-key.asc
 ```
 
 ---

@@ -11,14 +11,12 @@ const (
 	Version = "v1"
 )
 
-// Credential keys match the existing snake_case keys used in .ocmconfig files.
-//
 //nolint:gosec // G101: These are key names, not credentials.
 const (
-	CredentialKeyPrivateKeyPGP     = "private_key_pgp"
-	CredentialKeyPrivateKeyPGPFile = CredentialKeyPrivateKeyPGP + "_file"
-	CredentialKeyPublicKeyPGP      = "public_key_pgp"
-	CredentialKeyPublicKeyPGPFile  = CredentialKeyPublicKeyPGP + "_file"
+	CredentialKeyPrivateKeyPGP     = "privateKeyPGP"
+	CredentialKeyPrivateKeyPGPFile = "privateKeyPGPFile"
+	CredentialKeyPublicKeyPGP      = "publicKeyPGP"
+	CredentialKeyPublicKeyPGPFile  = "publicKeyPGPFile"
 	CredentialKeyPassphrase        = "passphrase"
 )
 
