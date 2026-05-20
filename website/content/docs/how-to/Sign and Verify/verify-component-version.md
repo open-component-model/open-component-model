@@ -230,7 +230,7 @@ ocm verify cv \
 ```bash
 ocm verify cv \
   --verifier-spec ./sigstore-verify.yaml \
-  ghcr.io/<my-namespce>//github.com/acme.org/helloworld:1.0.0
+  ghcr.io/<my-namespace>//github.com/acme.org/helloworld:1.0.0
 ```
 {{< /tab >}}
 {{< /tabs >}}
