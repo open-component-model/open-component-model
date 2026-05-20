@@ -10,6 +10,7 @@ import (
 	"github.com/invopop/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	v2 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
@@ -74,7 +75,7 @@ func TestTransformBlob(t *testing.T) {
 			BaseUrl: "ocm.software",
 		},
 	}
-	resp, err := plugin.TransformBlob(context.Background(), req, runtime.Identity{"token": "abc"})
+	resp, err := plugin.TransformBlob(context.Background(), req, &v2.DirectCredentials{Properties: map[string]string{"token": "abc"}})
 	require.NoError(t, err)
 	require.Equal(t, types.LocationTypeLocalFile, resp.Location.LocationType)
 	require.Equal(t, "/dummy/local-file", resp.Location.Value)
