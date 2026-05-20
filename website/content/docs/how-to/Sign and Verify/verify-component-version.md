@@ -12,11 +12,11 @@ Validate a component version signature to ensure it is authentic and has not bee
 Pick the tab that matches the algorithm the signature was made with — each tab is a self-contained walkthrough.
 
 {{< tabs "verify-algorithm" >}}
-{{< tab "RSA (key-based)" >}}
+{{< tab "RSA" >}}
 
 Verify an RSA signature using the matching public key configured in `.ocmconfig`.
 
-To run this you need the signer's public key on disk and pointed at by `.ocmconfig` (see prerequisites). With Sigstore (other tab) you don't install a public key at all — you just declare which identity you trust.
+To run this you need the signer's public key on disk and pointed at by `.ocmconfig` (see prerequisites). With Sigstore (other tabs) you don't install a public key at all — you just declare which identity you trust.
 
 ## You'll end up with
 
@@ -134,9 +134,9 @@ head -n 1 /tmp/keys/public-key.pem
 ```
 
 {{< /tab >}}
-{{< tab "Sigstore (keyless)" >}}
+{{< tab "Sigstore (interactive)" >}}
 
-Verify a [Sigstore](https://www.sigstore.dev/) keyless signature. There's no public key to install on this side either — you tell OCM **which identity you trust**, and it checks the signature was made by that identity.
+Verify a [Sigstore](https://www.sigstore.dev/) keyless signature made by a person who logged in via a browser. There's no public key to install on this side either — you tell OCM **which identity you trust**, and it checks the signature was made by that identity.
 
 If you've done classical key-based verification, here's what changes:
 
@@ -314,6 +314,144 @@ Error: SIGNATURE VERIFICATION FAILED: invalid verification config: keyless verif
 ```
 
 **Fix:** Both are mandatory — they're how Sigstore knows whose signatures to accept. See Step 1 above.
+
+{{< /tab >}}
+{{< tab "Sigstore (CI)" >}}
+
+Verify a [Sigstore](https://www.sigstore.dev/) signature that was created in a CI pipeline. Verification works exactly like the interactive case — only the **identity you trust** is different. Instead of a person's email and a consumer OIDC issuer (Google, GitHub, Microsoft), you trust a CI workflow's identity issued by a CI-provider OIDC.
+
+<!-- markdownlint-disable-next-line MD024 -->
+## You'll end up with
+
+- Confidence that a component version was signed by a specific CI workflow you trust
+
+**Estimated time:** ~3 minutes
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Prerequisites
+
+- The OCM CLI available where you run verify — see [How-To: Install the OCM CLI]({{< relref "ocm-cli-installation.md" >}}) or use the [pre-built OCM CLI container image]({{< relref "container-image-usage.md" >}})
+- A component version signed in CI (see the [Sigstore (CI)]({{< relref "sign-component-version.md" >}}) tab on the sign how-to)
+- Knowledge of which CI provider and which workflow signed it
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Steps
+
+{{< steps >}}
+
+{{< step >}}
+
+### Identify what to trust
+
+Two values are still required: `certificateOIDCIssuer` (which IdP minted the workload-identity token) and `certificateIdentity` (the workflow URL the IdP stamps into the cert).
+
+For **GitHub Actions** the values are:
+
+| Field                   | Value                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| `certificateOIDCIssuer` | `https://token.actions.githubusercontent.com`                                  |
+| `certificateIdentity`   | `https://github.com/<org>/<repo>/.github/workflows/<file>@refs/heads/<branch>` |
+
+{{< details "Other CI providers (GitLab, Buildkite, self-hosted, …)" >}}
+
+The mechanism is the same; only the issuer URL and identity shape are provider-specific. Two ways to find them:
+
+- Read your provider's OIDC discovery document at `https://<provider>/.well-known/openid-configuration` — the `issuer` field is what goes into `certificateOIDCIssuer`.
+- Decode an existing signature to read the values directly. The OIDC issuer is recorded in the Fulcio cert under the Sigstore-defined OID `1.3.6.1.4.1.57264.1.1` (the same OID is used by every Fulcio deployment — public Sigstore, scaffolding stacks, enterprise installs); the SAN identity is in the `URI:` line. Yes, this recipe is ugly — there's no clean field for it on the OCM side, and the cert itself is buried two base64 layers deep:
+
+  ```bash
+  REF=ctf::./ctf//github.com/acme.org/helloworld:1.0.0
+
+  ocm get cv "$REF" -o yaml \
+    | yq '.[].signatures[]? | select(.signature.algorithm == "sigstore") | .signature.value' \
+    | head -1 | base64 -d | jq -r '.verificationMaterial.certificate.rawBytes' \
+    | base64 -d | openssl x509 -inform DER -noout -text \
+    | awk '
+      /1.3.6.1.4.1.57264.1.1:/ {flag="issuer"; next}
+      /URI:/ {sub(/.*URI:[ \t]*/,""); print "certificateIdentity:    " $0; next}
+      flag=="issuer" {sub(/^[ \t]+/,""); print "certificateOIDCIssuer: " $0; flag=""}
+    '
+  ```
+
+  Output is two lines you can paste straight into your verifier spec.
+
+  Note: `ocm get cv -o yaml` also shows a `signature.issuer` field on the OCM signature object — don't rely on it for verification. The cert is the authoritative source.
+
+{{< /details >}}
+
+{{< /step >}}
+
+{{< step >}}
+
+### Create the verifier spec
+
+Create `sigstore-verify-ci.yaml`:
+
+```yaml
+# sigstore-verify-ci.yaml
+type: SigstoreVerificationConfiguration/v1alpha1
+certificateOIDCIssuer: https://token.actions.githubusercontent.com
+certificateIdentity: https://github.com/acme/helloworld/.github/workflows/release.yml@refs/heads/main
+```
+
+For GitHub Actions you often want to accept a release workflow on **any** ref (any branch, any tag). Use `certificateIdentityRegexp` instead of `certificateIdentity`:
+
+```yaml
+# sigstore-verify-ci-regex.yaml
+type: SigstoreVerificationConfiguration/v1alpha1
+certificateOIDCIssuer: https://token.actions.githubusercontent.com
+certificateIdentityRegexp: ^https://github\.com/acme/helloworld/\.github/workflows/release\.yml@refs/.*$
+```
+
+Exactly one of `certificateIdentity` or `certificateIdentityRegexp` is required (same applies to issuer's `*Regexp` form).
+
+{{< /step >}}
+
+{{< step >}}
+
+### Verify the component version
+
+{{< tabs "verify-sigstore-ci-target" >}}
+{{< tab "Local CTF Archive" >}}
+
+```bash
+ocm verify cv \
+  --verifier-spec ./sigstore-verify-ci.yaml \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+{{< /tab >}}
+{{< tab "Remote OCI Registry" >}}
+
+```bash
+ocm verify cv \
+  --verifier-spec ./sigstore-verify-ci.yaml \
+  ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
+```
+{{< /tab >}}
+{{< /tabs >}}
+
+A successful run prints `SIGNATURE VERIFICATION SUCCESSFUL`. The same `--signature <name>` flag from the interactive tab applies if the component carries multiple signatures.
+
+{{< /step >}}
+
+{{< /steps >}}
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Troubleshooting
+
+### Symptom: identity mismatch with a long workflow URL
+
+**Cause:** Subtle differences in the workflow path: ref type (`refs/heads/` vs `refs/tags/`), branch name, file casing, or trailing slashes.
+
+**Fix:** Decode the actual cert (recipe in Step 1) and copy the `URI:` line verbatim into `certificateIdentity`. For multi-ref signing, switch to `certificateIdentityRegexp`.
+
+{{< details "Issuer mismatch with a non-GitHub CI" >}}
+
+**Cause:** Other CI providers — GitLab, Buildkite, self-hosted runners — issue tokens from their own URL, not `https://token.actions.githubusercontent.com`.
+
+**Fix:** Set `certificateOIDCIssuer` to your provider's issuer URL (find it under `https://<provider>/.well-known/openid-configuration` → `issuer`). The `certificateIdentity` shape is provider-specific too — decode an existing cert (recipe in Step 1) to read the actual SAN.
+
+{{< /details >}}
 
 {{< /tab >}}
 {{< /tabs >}}

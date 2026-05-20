@@ -12,12 +12,12 @@ Sign a component version to certify its authenticity and enable downstream verif
 Pick the tab that matches the algorithm you want to use — each tab is a self-contained walkthrough.
 
 {{< tabs "sign-algorithm" >}}
-{{< tab "RSA (key-based)" >}}
+{{< tab "RSA" >}}
 
 Sign with a long-lived RSA key pair. The private key produces the signature; verifiers use the matching public key to validate it.
 
 Before you can run `ocm sign`, you'll need to generate an RSA key pair and point `.ocmconfig` at it (see prerequisites).
-With Sigstore (other tab) you skip that setup entirely.
+With Sigstore (other tabs) you skip that setup entirely.
 
 ## You'll end up with
 
@@ -164,9 +164,9 @@ See [Configure Signing Credentials]({{< relref "configure-signing-credentials.md
 See [How-To: Configure Credentials for Multiple Registries]({{< relref "configure-multiple-credentials.md" >}}) for details.
 
 {{< /tab >}}
-{{< tab "Sigstore (keyless)" >}}
+{{< tab "Sigstore (interactive)" >}}
 
-Sign with [Sigstore](https://www.sigstore.dev/) — no key pair to generate, no public key to distribute.
+Sign with [Sigstore](https://www.sigstore.dev/) by logging in via your browser — no key pair to generate, no public key to distribute. (For CI/CD pipelines without a browser, see the next tab.)
 
 If you've done classical key-based signing, here's what changes:
 
@@ -352,6 +352,197 @@ The `value` field contains the full Sigstore bundle (signature + Fulcio certific
 **Cause:** Missing write access to the OCI registry.
 
 **Fix:** Configure registry credentials in `.ocmconfig`. See [How-To: Configure Credentials for Multiple Registries]({{< relref "configure-multiple-credentials.md" >}}).
+
+{{< /tab >}}
+{{< tab "Sigstore (CI)" >}}
+
+Sign with [Sigstore](https://www.sigstore.dev/) from a CI/CD pipeline — no browser needed. Your CI runner's workload identity becomes the signing identity; the resulting signature, certificate, and Rekor entry are produced exactly as in the interactive case. Verifiers don't need to know it came from CI.
+
+This walk-through uses **GitHub Actions** as the CI provider; other providers work the same way (see the box at the end).
+
+<!-- markdownlint-disable-next-line MD024 -->
+## You'll end up with
+
+- A component version signed by your GitHub Actions workflow's identity, ready to be verified by anyone who trusts that workflow
+
+**Estimated time:** ~5 minutes (excludes existing CI workflow plumbing)
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Prerequisites
+
+- The OCM CLI available in your CI image — see [How-To: Install the OCM CLI]({{< relref "ocm-cli-installation.md" >}}) or use the [pre-built OCM CLI container image]({{< relref "container-image-usage.md" >}}) directly as your job's runtime
+- A GitHub Actions workflow with permission to mint OIDC tokens (one line in the workflow file, shown below)
+- A component version reachable from the runner — either built in the same job, restored from a job artefact, or pushed to an OCI registry the runner can read/write
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Steps
+
+{{< steps >}}
+
+{{< step >}}
+
+### Grant the workflow permission to mint OIDC tokens
+
+GitHub Actions only emits a workload-identity token when the workflow declares `id-token: write`. Add it at workflow level (or per-job):
+
+```yaml
+permissions:
+  contents: read
+  id-token: write   # required for Sigstore signing
+```
+
+Without this, the next step fails with `unable to mint OIDC token`.
+
+{{< /step >}}
+
+{{< step >}}
+
+### Use the same `.ocmconfig` and signer spec as the interactive flow
+
+Nothing changes here — the credential consumer and signer spec from the interactive tab work as-is in CI:
+
+```yaml
+# .ocmconfig (excerpt)
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: SigstoreSigner/v1alpha1
+      signature: default
+    credentials:
+    - type: OIDCIdentityTokenProvider/v1alpha1
+```
+
+```yaml
+# sigstore-sign.yaml
+type: SigstoreSigningConfiguration/v1alpha1
+```
+
+OCM auto-detects GitHub Actions' `ACTIONS_ID_TOKEN_REQUEST_TOKEN` environment variable and uses it instead of opening a browser. No code change between local interactive runs and CI runs.
+
+{{< /step >}}
+
+{{< step >}}
+
+### Sign the component version in a workflow step
+
+Drop a sign step into your workflow:
+
+```yaml
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OCM CLI
+        run: |
+          curl -sfL https://ocm.software/install-cli.sh | bash
+      - name: Sign component version
+        run: |
+          ocm sign cv \
+            --signer-spec ./sigstore-sign.yaml \
+            ghcr.io/${{ github.repository_owner }}//github.com/acme.org/helloworld:1.0.0
+```
+
+A successful run logs `signed successfully` and embeds the Sigstore bundle into the component descriptor — same shape as in the interactive tab.
+
+{{< details "Alternative: run `ocm` from the OCM CLI container image" >}}
+
+Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image is built `FROM scratch` for minimal attack surface — only the `ocm` binary plus CA certs, no shell — so it cannot be used as a GitHub Actions [`container:`]({{< relref "container-image-usage.md" >}}) job runtime. The `docker run` pattern below is the supported way:
+
+```yaml
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sign component version
+        run: |
+          docker run --rm \
+            -v "$PWD":/work -w /work \
+            -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -e ACTIONS_ID_TOKEN_REQUEST_URL \
+            ghcr.io/open-component-model/cli:0.6.0 \
+            sign cv --signer-spec ./sigstore-sign.yaml \
+              ghcr.io/${{ github.repository_owner }}//github.com/acme.org/helloworld:1.0.0
+```
+
+The OIDC environment variables are forwarded explicitly so OCM can mint a workload-identity token from inside the container. Pin a specific tag (e.g. `:0.x.y`) instead of `:latest` for reproducible builds. See [How-to: Use the OCM CLI container image]({{< relref "container-image-usage.md" >}}) for full image documentation.
+
+The OCM release workflow publishes a [GitHub artifact attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) for each CLI image. The attestation is a Sigstore bundle under the hood — same Fulcio cert and Rekor log entry mechanics as the component-version signing this how-to is about; only the publication path is different (GitHub's attestation API instead of the OCM signature itself). Verify the image before pulling:
+
+```bash
+gh attestation verify oci://ghcr.io/open-component-model/cli:0.6.0 \
+  --owner open-component-model
+```
+
+{{< /details >}}
+
+{{< /step >}}
+
+{{< step >}}
+
+### Verify the signature was added
+
+Identical to the interactive flow:
+
+```bash
+ocm get cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0 -o yaml
+```
+
+The `signatures` section carries `algorithm: sigstore` and the bundle in the `value` field. The bundle embeds the Fulcio cert with the workflow's identity (`https://github.com/<org>/<repo>/.github/workflows/<file>@refs/heads/<branch>`) and the GitHub Actions OIDC issuer — those are what the verify how-to uses to check the signature.
+
+{{< /step >}}
+
+{{< /steps >}}
+
+{{< callout context="caution" title="Mind the OIDC token's lifetime" >}}
+GitHub Actions OIDC tokens expire quickly — often within minutes. The `ocm sign` step must complete before the token expires. For long pipelines, request the token (i.e. run the sign step) just before you need it, not at the start of the workflow.
+{{< /callout >}}
+
+{{< details "Other CI providers (GitLab, Buildkite, self-hosted, …)" >}}
+
+The mechanism is the same; only how the runner exposes the OIDC token differs. Two patterns:
+
+1. **The runner exports a known env var** that OCM auto-detects (like `ACTIONS_ID_TOKEN_REQUEST_TOKEN` for GitHub Actions). Check your provider's docs.
+2. **The runner gives you a token via an API or file** — set `SIGSTORE_ID_TOKEN` from it before calling `ocm sign cv`:
+
+   ```bash
+   SIGSTORE_ID_TOKEN=$(your-runner-fetches-OIDC-token) \
+     ocm sign cv --signer-spec ./sigstore-sign.yaml ...
+   ```
+
+OCM checks `SIGSTORE_ID_TOKEN` first, then `ACTIONS_ID_TOKEN_REQUEST_TOKEN`, then falls back to the credential provider configured in `.ocmconfig`. Whichever route the token takes, the signature, certificate, and Rekor entry are identical.
+
+{{< /details >}}
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Troubleshooting
+
+### Symptom: "unable to mint OIDC token" in GitHub Actions
+
+**Cause:** The workflow (or job) is missing `permissions: id-token: write`.
+
+**Fix:** Add it as shown in Step 1. Workflow-level scope works for all jobs; per-job scope works for that job only.
+
+### Symptom: "Fulcio returned 400: error processing the identity token"
+
+**Cause:** The OIDC token expired between minting and the actual sign call. Common in long pipelines that fetch the token early.
+
+**Fix:** Move the sign step closer to where the token is minted. If you absolutely need an earlier token, your CI may support refreshing it explicitly.
+
+### Symptom: OCM still asks for browser auth in CI
+
+**Cause:** Neither `SIGSTORE_ID_TOKEN` nor `ACTIONS_ID_TOKEN_REQUEST_TOKEN` is set in the env that OCM sees. Often a step-scoping or shell-quoting issue.
+
+**Fix:** From the same step, run `env | grep -E 'SIGSTORE_ID_TOKEN|ACTIONS_ID_TOKEN_REQUEST_TOKEN'` right before `ocm sign cv` to confirm what's actually exported. For GitHub Actions, also confirm `permissions: id-token: write` is in scope.
 
 {{< /tab >}}
 {{< /tabs >}}
