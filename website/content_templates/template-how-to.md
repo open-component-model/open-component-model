@@ -27,11 +27,9 @@ flowchart LR
 
 One sentence explaining what this diagram shows.
 
-See [Diagram Color Guide]({{< relref "content_templates/template-tutorial.md#diagram-color-guide" >}}) for consistent styling across all documentation.
-
 ## Prerequisites
 
-- [OCM CLI]({{< relref "docs/getting-started/install.md" >}}) installed
+- [OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) installed
 - Access to the required repository/service
 - Required credentials/keys available
 
@@ -50,21 +48,21 @@ ocm <command> <args>
 ```
 
 {{< callout type="tip" >}}
-**Handling variants:** If your how-to covers multiple approaches or platforms, use tabs to show alternatives:
+**Handling variants:** If your how-to covers multiple approaches or platforms, use tabs to show alternatives.
+Headings inside tabs appear in the right-hand sidebar TOC and are deep-linkable via `?tab=group:section#heading-id` —
+see the [CONTRIBUTING guide](../CONTRIBUTING.md#tabs-steps-and-deep-links) for the full URL format.
 {{< /callout >}}
 
-{{< tabs "signing-methods" >}}
-{{< tab "RSA Key" >}}
+{{< tab-group "signing-methods" >}}
+{{< tab-section "RSA Key" >}}
 ```bash
 ocm sign cv --private-key private.key
 ```
-{{< /tab >}}
-{{< tab "Sigstore" >}}
+{{< tab-section "Sigstore" >}}
 ```bash
 ocm sign cv --sigstore
 ```
-{{< /tab >}}
-{{< /tabs >}}
+{{< tab-group-end >}}
 
 You should see: `[specific success indicator]`.
 
@@ -158,9 +156,9 @@ and ensure the following:
 - [ ] Title starts with "How to..." or action verb (Configure/Deploy/Create/...)
 - [ ] States the goal in the first paragraph
 - [ ] Realistic time estimate
-- [ ] Simple numbered lists (use `{{< steps >}}` only if 3+ complex steps)
+- [ ] Simple numbered lists (use `{{< step-list >}}` only if 3+ complex steps)
 - [ ] Success indicators after each step
 - [ ] Links to concepts (never inline "why" explanations)
-- [ ] Use `{{< tabs >}}` for variants (different approaches, platforms, configurations)
+- [ ] Use `{{< tab-group >}}` for variants (different approaches, platforms, configurations)
 - [ ] Troubleshooting with symptom-cause-fix
 - [ ] Working relref links

@@ -181,7 +181,7 @@ To help you get started with writing documentation, we provide templates for eac
 
 - **[Tutorial Template](./content_templates/template-tutorial.md)**
   - Complete guide for creating learning-oriented tutorials
-  - Includes examples for Mermaid diagrams, `{{< steps >}}`, `{{< tabs >}}`, and `{{< details >}}` shortcodes
+  - Includes examples for Mermaid diagrams, `{{< step-list >}}`, `{{< tab-group >}}`, and `{{< details >}}` shortcodes
   - Shows how to structure prerequisites, scenarios, and success indicators
   - Provides checklist for publication readiness
 
@@ -189,13 +189,100 @@ To help you get started with writing documentation, we provide templates for eac
   - Task-focused guide template
   - Demonstrates goal-oriented structure
   - Shows troubleshooting format with symptom-cause-fix
-  - Includes examples for `{{< tabs >}}` and `{{< card-grid >}}` shortcodes
+  - Includes examples for `{{< tab-group >}}` and `{{< card-grid >}}` shortcodes
 
 - **[Concept Template](./content_templates/template-concept.md)**
   - Explanation-oriented template for design decisions and rationale
   - Focuses on "why" rather than "how"
 
 These templates include inline comments and examples to guide you through creating high-quality documentation that follows Diataxis principles.
+
+---
+
+## Tabs, steps, and deep links
+
+Use these shortcodes for tabbed and stepwise content. Headings inside them are real Markdown headings — they appear in the right-hand sidebar TOC like any other heading, and the right TOC anchor on each heading produces a deep-linkable URL with the active tab path included.
+
+For ready-made copy/paste examples, see the templates under `content_templates/`:
+
+- [`template-tutorial.md`](./content_templates/template-tutorial.md) — tab-group + step-list together.
+- [`template-how-to.md`](./content_templates/template-how-to.md) — tab-group inside a how-to step.
+
+### tab-group + tab-section
+
+Wrap a region of content in a tab-group identified by a unique id. Each direct child tab-section becomes one tab. Nesting is supported — give each nested group its own id.
+
+```hugo
+{{</* tab-group "demo" */>}}
+
+{{</* tab-section "RSA" */>}}
+
+### A heading inside RSA
+
+Body text.
+
+{{</* tab-section "Sigstore" */>}}
+
+### A heading inside Sigstore
+
+{{</* tab-group-end */>}}
+```
+
+The id (`demo`) is what appears in deep-link URLs and in localStorage. The section name (`RSA`, `Sigstore`) is the human-visible label and the value used in URLs.
+
+`tab-section` is a marker without a closer — the next `tab-section` or the surrounding `tab-group-end` closes the previous one automatically.
+
+### step-list + step-item
+
+A step-list wraps an ordered sequence of step-items. Each step gets its own heading inside the step-item, one level deeper than the surrounding context (typically H3 if the step-list sits under an H2 chapter). The heading provides both the visible step title and the Goldmark anchor used for deep-linking.
+
+```hugo
+## Sign the component
+
+{{</* step-list */>}}
+
+{{</* step-item */>}}
+
+### Generate keys
+
+Body text.
+
+{{</* step-item */>}}
+
+### Run sign
+
+Body text.
+
+{{</* step-list-end */>}}
+```
+
+`step-item` is a marker without a closer — the next `step-item` or the surrounding `step-list-end` closes the previous one automatically.
+
+Step titles must be unique on the page; otherwise Goldmark deduplicates the ids (`run-sign`, `run-sign-1`) and deep-links become brittle. Make titles descriptive enough that they read well in the TOC and in shared URLs (e.g. "Run sign with RSA" instead of just "Run sign" if both RSA and Sigstore tabs each have a sign step).
+
+### Deep-link URL format
+
+```text
+<page-url>?tab=<group>:<section>[|<group>:<section>…]#<heading-id>
+```
+
+The query (`?tab=…`) always precedes the fragment (`#…`). Multiple `group:section` pairs are joined with `|` (outermost first) for nested tab-groups.
+
+### Constructing deep links
+
+| Target                                     | URL form                                                  |
+| ------------------------------------------ | --------------------------------------------------------- |
+| Heading inside a tab                       | `?tab=demo:RSA#sign-with-rsa`                             |
+| Heading inside nested tabs                 | `?tab=outer:RSA\|inner-rsa:Remote#rsa-remote-config`      |
+| Step inside a step-list                    | `#generate-keys`                                          |
+| Step inside a step-list inside a tab       | `?tab=demo:RSA#generate-rsa-keys`                         |
+| Step inside a step-list inside nested tabs | `?tab=outer:RSA\|inner-rsa:Local#rsa-local-setup-keys`    |
+
+Following a deep-link writes the chosen tab(s) to `localStorage`, same as clicking a tab button — so subsequent visits to the page (even without the query param) remember the user's choice.
+
+### Known limitation
+
+A plain fragment-only link (`#some-id`) where the target lives inside an inactive tab won't scroll, because the target is `display:none` at load time. Use the explicit `?tab=…` form to activate the containing tab(s) first.
 
 ---
 

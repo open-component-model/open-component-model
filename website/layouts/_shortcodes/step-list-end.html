@@ -1,1 +1,4 @@
+{{- $openKey := "stepItemOpen" -}}
+{{- if .Page.Scratch.Get $openKey -}}</li>{{- end -}}
+{{- .Page.Scratch.Set $openKey "" -}}
 </ol>

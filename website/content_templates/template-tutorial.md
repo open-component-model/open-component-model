@@ -56,32 +56,33 @@ Describe the concrete scenario you'll use throughout. Use specific values consis
 
 {{< callout type="tip" >}}
 **Handling variations:** If your tutorial covers multiple paths (e.g., different resource types or deployment targets),
-use tabs to keep the learning flow clear:
+use tabs to keep the learning flow clear. Headings inside tabs appear in the right-hand sidebar TOC and are deep-linkable
+via `?tab=group:section#heading-id` — see the
+[CONTRIBUTING guide](../CONTRIBUTING.md#tabs-steps-and-deep-links) for the full URL format.
 {{< /callout >}}
 
-{{< tabs "example-tabs" >}}
-{{< tab "Helm Chart" >}}
+{{< tab-group "example-tabs" >}}
+{{< tab-section "Helm Chart" >}}
 ```yaml
 type: helmChart
 input:
   type: Helm/v1
   path: ./chart
 ```
-{{< /tab >}}
-{{< tab "OCI Image" >}}
+{{< tab-section "OCI Image" >}}
 ```yaml
 type: ociImage
 input:
   type: dockermulti
   repository: ghcr.io/myorg/myimage
 ```
-{{< /tab >}}
-{{< /tabs >}}
+{{< tab-group-end >}}
 
 ## Tutorial Steps
 
-{{< steps >}}
-{{< step >}}
+{{< step-list >}}
+
+{{< step-item >}}
 
 ### Create the component constructor file
 
@@ -107,9 +108,8 @@ components:
         type: File/v1
         path: ./my-resource.txt
 ```
-{{< /step >}}
 
-{{< step >}}
+{{< step-item >}}
 
 ### Build the component version
 
@@ -145,11 +145,10 @@ tree transport-archive
 This allows CTF archives to be compatible with OCI registries and tools.
 {{< /details >}}
 
-{{< /step >}}
 
-{{< step >}}
+{{< step-item >}}
 
-### Verify the result**
+### Verify the result
 
 Check that your component was created correctly:
 
@@ -167,8 +166,8 @@ github.com/acme.org/helloworld │ 1.0.0   │ acme.org
 ```
 {{< /details >}}
 
-{{< /step >}}
-{{< /steps >}}
+
+{{< step-list-end >}}
 
 ## What you've learned
 
@@ -258,8 +257,8 @@ and ensure the following:
 - [ ] Consistent "you" voice throughout
 - [ ] Realistic time estimate
 - [ ] Prerequisites section lists all requirements
-- [ ] Sequential `{{< steps >}}` using `{{< step >}}` shortcodes
-- [ ] Use `{{< tabs >}}` for variants (resource types, platforms, options)
+- [ ] Sequential `{{< step-list >}}` using `{{< step-item >}}` shortcodes
+- [ ] Use `{{< tab-group >}}` for variants (resource types, platforms, options)
 - [ ] Every command can be copy-pasted and works
 - [ ] Expected output shown after commands hidden in `<details>` blocks
 - [ ] Success indicators after major steps

@@ -25,10 +25,10 @@
    */
   function resolveActiveName(group, sections) {
     var groupId = group.dataset.tabGroup;
-    var saved = null;
+    var saved;
     try {
       saved = window.localStorage.getItem(STORAGE_PREFIX + groupId);
-    } catch (e) {
+    } catch {
       saved = null;
     }
     if (saved) {
@@ -38,7 +38,15 @@
         }
       }
     }
-    return sections.length > 0 ? sections[0].dataset.tabName : null;
+    var fallback = sections.length > 0 ? sections[0].dataset.tabName : null;
+    if (fallback) {
+      try {
+        window.localStorage.setItem(STORAGE_PREFIX + groupId, fallback);
+      } catch {
+        /* private mode / storage disabled — best effort */
+      }
+    }
+    return fallback;
   }
 
   /**
@@ -87,39 +95,47 @@
   }
 
   /**
-   * Click handler for a tab button. Promotes the clicked button + matching
-   * section, persists the choice, and emits a `tabchanged` CustomEvent on the
-   * group element so the TOC filter (and anyone else) can react.
+   * Promote section `name` inside `group`: toggle section + button classes,
+   * persist to localStorage, dispatch `tabchanged`. Returns true on success,
+   * false when no direct-child section with that name exists (in which case
+   * nothing is toggled, persisted, or dispatched — important so a stale URL
+   * like `?tab=demo:Bogus` doesn't pollute storage).
+   *
+   * Shared by tab-button clicks and URL deep-link activation.
    */
-  function onButtonClick(event) {
-    var btn = event.currentTarget;
-    var nav = btn.closest(".tab-group-buttons");
-    if (!nav) return;
-    var group = nav.parentElement;
-    if (!group || !group.classList.contains("tab-group")) return;
+  function activateSection(group, name) {
+    var sections = group.querySelectorAll(":scope > .tab-section");
+    var match = false;
+    for (var i = 0; i < sections.length; i++) {
+      if (sections[i].dataset.tabName === name) {
+        match = true;
+        break;
+      }
+    }
+    if (!match) return false;
 
     var groupId = group.dataset.tabGroup;
-    var name = btn.dataset.tabName;
 
-    var sections = group.querySelectorAll(":scope > .tab-section");
-    for (var i = 0; i < sections.length; i++) {
-      sections[i].classList.toggle(
+    for (var k = 0; k < sections.length; k++) {
+      sections[k].classList.toggle(
         "tab-section--active",
-        sections[i].dataset.tabName === name
+        sections[k].dataset.tabName === name
       );
     }
 
-    var buttons = nav.querySelectorAll("button");
+    var buttons = group.querySelectorAll(
+      ":scope > .tab-group-buttons button"
+    );
     for (var j = 0; j < buttons.length; j++) {
       var b = buttons[j];
-      var bActive = b === btn;
+      var bActive = b.dataset.tabName === name;
       b.classList.toggle("tab-button--active", bActive);
       b.setAttribute("aria-selected", bActive ? "true" : "false");
     }
 
     try {
       window.localStorage.setItem(STORAGE_PREFIX + groupId, name);
-    } catch (e) {
+    } catch {
       /* private mode / storage disabled — best effort */
     }
 
@@ -129,6 +145,21 @@
         bubbles: true,
       })
     );
+
+    return true;
+  }
+
+  /**
+   * Click handler for a tab button. Thin wrapper around `activateSection`
+   * that resolves the enclosing group from the click target.
+   */
+  function onButtonClick(event) {
+    var btn = event.currentTarget;
+    var nav = btn.closest(".tab-group-buttons");
+    if (!nav) return;
+    var group = nav.parentElement;
+    if (!group || !group.classList.contains("tab-group")) return;
+    activateSection(group, btn.dataset.tabName);
   }
 
   /**
@@ -165,8 +196,12 @@
    * Decide whether a TOC entry whose stored path is `path` is currently
    * visible. An empty path means the heading is outside any tab-section
    * and is always visible.
+   *
+   * Relies on `buildButtonBar` having seeded localStorage for every
+   * tab-group on the page, so a missing key means the group doesn't
+   * exist (treat as visible).
    */
-  function pathIsVisible(path, firstSectionCache) {
+  function pathIsVisible(path) {
     if (!path) return true;
     var pairs = path.split("|");
     for (var i = 0; i < pairs.length; i++) {
@@ -176,33 +211,13 @@
       var groupId = pair.slice(0, idx);
       var name = pair.slice(idx + 1);
 
-      var saved = null;
+      var saved;
       try {
         saved = window.localStorage.getItem(STORAGE_PREFIX + groupId);
-      } catch (e) {
+      } catch {
         saved = null;
       }
-
-      if (saved) {
-        if (saved !== name) return false;
-      } else {
-        var firstName = firstSectionCache[groupId];
-        if (firstName === undefined) {
-          var group = document.querySelector(
-            '.tab-group[data-tab-group="' + cssEscape(groupId) + '"]'
-          );
-          if (group) {
-            var firstSection = group.querySelector(
-              ":scope > .tab-section"
-            );
-            firstName = firstSection ? firstSection.dataset.tabName : null;
-          } else {
-            firstName = null;
-          }
-          firstSectionCache[groupId] = firstName;
-        }
-        if (firstName !== name) return false;
-      }
+      if (saved && saved !== name) return false;
     }
     return true;
   }
@@ -220,14 +235,25 @@
   }
 
   /**
+   * Look up an element by id, trying the URL-decoded form first and
+   * falling back to the raw form if decoding fails. Returns null when
+   * no element matches.
+   */
+  function findElementById(id) {
+    try {
+      return document.getElementById(decodeURIComponent(id));
+    } catch {
+      return document.getElementById(id);
+    }
+  }
+
+  /**
    * Re-evaluate visibility for every TOC anchor. Anchors store their tab
    * path in `data-toc-tab-path` on first run and reuse it thereafter.
    */
   function updateTocVisibility() {
     var anchors = document.querySelectorAll(TOC_SELECTOR);
     if (anchors.length === 0) return;
-
-    var firstSectionCache = {};
 
     for (var i = 0; i < anchors.length; i++) {
       var a = anchors[i];
@@ -247,20 +273,86 @@
           path = "";
         } else {
           var id = href.slice(1);
-          var target = null;
-          try {
-            target = document.getElementById(decodeURIComponent(id));
-          } catch (e) {
-            target = document.getElementById(id);
-          }
+          var target = findElementById(id);
           path = target ? computeTabPath(target) : "";
           a.dataset.tocTabPath = path;
         }
       }
 
-      var visible = pathIsVisible(path, firstSectionCache);
-      li.classList.toggle("toc-hidden", !visible);
+      li.classList.toggle("toc-hidden", !pathIsVisible(path));
     }
+  }
+
+  /**
+   * Read `?tab=group:section[|group:section…]` from the current URL and
+   * activate each pair via `activateSection`. Then, if a `#fragment` is
+   * present, scroll the matching element into view on the next animation
+   * frame — manual scroll is needed because the target may have been
+   * `display:none` at the moment the browser tried its native fragment
+   * scroll.
+   *
+   * Idempotent: re-running with the same URL produces the same DOM and
+   * localStorage state.
+   */
+  function applyUrlTabState() {
+    var params;
+    try {
+      params = new URLSearchParams(window.location.search);
+    } catch {
+      return;
+    }
+
+    var raw = params.get("tab");
+    if (raw) {
+      var pairs = raw.split("|");
+      for (var i = 0; i < pairs.length; i++) {
+        var pair = pairs[i];
+        var idx = pair.indexOf(":");
+        if (idx < 1 || idx === pair.length - 1) continue;
+        var groupId = pair.slice(0, idx);
+        var name = pair.slice(idx + 1);
+        var group = document.querySelector(
+          '.tab-group[data-tab-group="' + cssEscape(groupId) + '"]'
+        );
+        if (group) activateSection(group, name);
+      }
+    }
+
+    var hash = window.location.hash;
+    if (hash && hash.length > 1) {
+      var target = findElementById(hash.slice(1));
+      if (target) {
+        window.requestAnimationFrame(function () {
+          target.scrollIntoView({ block: "start", behavior: "smooth" });
+        });
+      }
+    }
+  }
+
+  /**
+   * Click handler for in-page heading anchors (Doks renders these as
+   * <a class="anchor" href="#heading-id"> next to every heading). When
+   * the target heading lives inside one or more tab-sections, rewrite
+   * the address bar to include the active tab path so the URL the
+   * user copies is a working deep-link.
+   *
+   * Native browser scroll handles the actual scrolling; we only touch
+   * the URL.
+   */
+  function onAnchorClick(event) {
+    var a = event.target.closest && event.target.closest("a.anchor");
+    if (!a) return;
+    var href = a.getAttribute("href") || "";
+    if (href.charAt(0) !== "#" || href.length < 2) return;
+    var target = findElementById(href.slice(1));
+    if (!target) return;
+    var path = computeTabPath(target);
+    if (!path) return;
+
+    var url = new URL(window.location.href);
+    url.searchParams.set("tab", path);
+    url.hash = href;
+    window.history.replaceState(null, "", url.toString());
   }
 
   function main() {
@@ -269,12 +361,15 @@
       buildButtonBar(groups[i]);
     }
 
+    applyUrlTabState();
+
     updateTocVisibility();
 
     if (!document.__tabGroupTocListenerAttached) {
       document.addEventListener("tabchanged", function () {
         updateTocVisibility();
       });
+      document.addEventListener("click", onAnchorClick);
       document.__tabGroupTocListenerAttached = true;
     }
   }
