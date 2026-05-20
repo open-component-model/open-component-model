@@ -2,7 +2,7 @@
 title: "How to use the OCM CLI container image"
 description: "Use the OCM CLI container image to create and get a component version."
 icon: "📦"
-weight: 13
+weight: 15
 toc: true
 ---
 

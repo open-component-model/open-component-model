@@ -203,7 +203,7 @@ For key management, OCM uses PEM-encoded key files configured in the `.ocmconfig
 - **Private keys**: Used by producers to sign component versions
 - **Public keys**: Distributed to consumers for verification
 
-See [How-to: Generate Signing Keys]({{< relref "docs/how-to/generate-signing-keys.md" >}}) for creating RSA key pairs.
+See [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) for creating RSA key pairs.
 
 {{< callout context="tip" title="Upcoming Sigstore Support" icon="outline/bulb" >}}
 We are planning to add support for [Sigstore](https://www.sigstore.dev/) and Cosign as an additional signing mechanism.

@@ -37,6 +37,7 @@ Creates or update cryptographic signatures on component descriptors.
 - --dry-run: compute only, do not persist signature
 - Default signature name: default
 - Default signer: RSASSA-PSS plugin (needs private key)
+- For Sigstore keyless signing (no keys needed), pass --signer-spec with a SigstoreSigningConfiguration/v1alpha1 config
 
 Use this command to establish provenance of component versions.
 
@@ -115,6 +116,47 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
     type: RSASigningConfiguration/v1alpha1
     signatureAlgorithm: RSASSA-PSS
     signatureEncodingPolicy: PEM
+
+## Example Signer Spec File — Sigstore keyless (SigstoreSigningConfiguration/v1alpha1)
+#
+# Use when signing without private keys via Sigstore/Fulcio OIDC.
+# Endpoint discovery precedence:
+#   1. signingConfig — local signing_config.json (--signing-config)
+#   2. Not set — public-good Sigstore TUF (default)
+
+    type: SigstoreSigningConfiguration/v1alpha1
+
+# With a local signing config file (private infrastructure):
+
+    type: SigstoreSigningConfiguration/v1alpha1
+    signingConfig: /path/to/signing_config.json
+
+## Example Credential Config (.ocmconfig) — Sigstore OIDC token
+#
+# The OIDCIdentityTokenProvider plugin acquires an OIDC token via an interactive browser flow.
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: SigstoreSigner/v1alpha1
+          signature: default
+        credentials:
+        - type: OIDCIdentityTokenProvider/v1alpha1
+
+## Note on the OIDC issuer recorded in the Fulcio certificate
+#
+# On public Sigstore (Dex federation), Fulcio passes the upstream IdP issuer through
+# into the certificate (OID 1.3.6.1.4.1.57264.1.8) — NOT the Dex URL:
+#   - Google login   -> https://accounts.google.com
+#   - GitHub login   -> https://github.com/login/oauth
+#   - Microsoft login -> https://login.microsoftonline.com
+# Verifiers must use the upstream issuer in certificateOIDCIssuer.
+# OCM also stores this value in signatures[].signature.issuer for convenience.
+
+# Sign with Sigstore (requires sigstore signer spec):
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./sigstore-sign.yaml
 
 # Sign with custom signature name
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
