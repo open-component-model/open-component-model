@@ -96,7 +96,7 @@ The website integrates into the same workflow run, after `promote_and_release_fi
 * Binding versions (constructor, descriptor, controller chart) referenced by the docs are resolved from the released `cli/v0.X.Y` go.mod, not from `main`. This guarantees the docs site for `v0.X.Y` matches what the released CLI was built against.
 * On a **minor release** (`Z=0`) the script adds a new version entry under `[versions]` in `hugo.toml` and a new set of import blocks in `module.toml`.
 * On a **patch release** (`Z>0`) the script updates the existing minor's import tags in `module.toml` in place; `hugo.toml` is unchanged.
-* When more than 10 minors would be live, the oldest is retired (entry removed from `hugo.toml`, imports removed from `module.toml`). Retirement logic lives in `website/scripts/release-version.js`.
+* When more than 10 minors would be live, the oldest is retired (entry removed from `hugo.toml`, imports removed from `module.toml`). Retirement logic lives in `website/scripts/register-docs-version.js`.
 
 There is no `website/v0.X.Y-rc.N` tag. The website has no RC artifacts to validate (it's a docs site, not a binary or image), so the RC variant would have no consumer.
 

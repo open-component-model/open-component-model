@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Release a new versioned docs import (module-import-only model)
+ * Register a new versioned docs import (module-import-only model)
  *
  * Usage:
- *   node scripts/release-version.js X.Y.Z --cli-gomod <path>
+ *   node scripts/register-docs-version.js X.Y.Z --cli-gomod <path>
  *
  * Behavior:
  * - Accepts SemVer version X.Y.Z, derives minor identifier X.Y
@@ -127,7 +127,7 @@ function parseArguments(args) {
         }
     }
 
-    if (positionals.length === 0) throw new Error('Missing version. Usage: release-version.js X.Y.Z --cli-gomod <path>');
+    if (positionals.length === 0) throw new Error('Missing version. Usage: register-docs-version.js X.Y.Z --cli-gomod <path>');
     if (positionals.length > 1) throw new Error(`Expected exactly one version argument, got ${positionals.length}: ${positionals.join(', ')}`);
 
     const fullVersion = positionals[0];
@@ -423,7 +423,7 @@ async function main() {
         await updateModuleToml(version, fullVersion, retired, cliGomod);
     }
 
-    console.log('Cutoff completed.');
+    console.log('Docs version registered.');
 }
 
 if (require.main === module) {

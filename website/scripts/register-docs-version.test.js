@@ -1,10 +1,10 @@
-// Tests for release-version.js
+// Tests for register-docs-version.js
 
-// Run: `npm test` or `node --test scripts/release-version.test.js`
+// Run: `npm test` or `node --test scripts/register-docs-version.test.js`
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags } = require('./release-version');
+const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags } = require('./register-docs-version');
 
 // --- parseArguments ---
 

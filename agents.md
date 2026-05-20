@@ -146,9 +146,9 @@ Hugo-based documentation site published at <https://ocm.software>. Read `website
 - **Frontmatter**: Every page needs `title`, `description`, optional `logo`, and `weight` (lower weight ranks higher).
 - **Internal links**: Always use `{{< relref "filename.md" >}}`. Use the bare filename when unique across `content/`, otherwise the full path relative to `content/`.
 - **CLI reference** (`content/docs/reference/`) is mounted via Hugo modules from source repos; do not edit those files in this repo.
-- **Versioning**: `npm run release-version -- x.y.z` releases docs for version x.y.z and updates `config/_default/hugo.toml` and `module.toml`. Never edit the version configs by hand.
+- **Versioning**: `npm run register-docs-version -- x.y.z` registers docs for version x.y.z and updates `config/_default/hugo.toml` and `module.toml`. Never edit the version configs by hand.
 - **Linting**: `npm run lint` runs eslint, stylelint, and markdownlint. `npm run lint:scripts:fix` auto-fixes JS.
-- **Tests**: `npm test` runs the cutoff-version script tests via `node --test`.
+- **Tests**: `npm test` runs the register-docs-version script tests via `node --test`.
 
 ## Common Pitfalls
 
