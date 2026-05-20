@@ -272,15 +272,15 @@ assertions. Bindings can be migrated independently in separate PRs.
 
 ### Phase 3: Credential interfaces — final `credentials` cut
 
-`Resolve(ctx, runtime.Identity) (map[string]string, error)` is **removed** from `Resolver`, `CredentialPlugin`, and
-`RepositoryPlugin`. The interfaces only expose `ResolveTyped`. The deprecation period planned in the original Phase 6
+`Resolve(ctx, runtime.Identity) (map[string]string, error)` is **replaced** in `Resolver`, `CredentialPlugin`, and
+`RepositoryPlugin`. The interfaces only expose `Resolve` with `runtime.Typed`. The deprecation period planned in the original Phase 6
 is skipped — downstream bindings break against the new release and migrate when they consume it.
 
 Plugin HTTP transport in the credential-related registries (`credentialrepository/`, `credentialplugin/`) is flipped to
 `runtime.Typed`. The HTTP wire format is unchanged JSON; only the Go signatures change.
 
 Consumers that still hold a `map[string]string` surface (Phase 4 / Phase 5 binding APIs) inline a
-`*DirectCredentials` type assertion against the `ResolveTyped` result. No generic `runtime.Typed → map[string]string`
+`*DirectCredentials` type assertion against the `Resolve` with `runtime.Typed` result. No generic `runtime.Typed → map[string]string`
 helper ships from `bindings/go/credentials` — the inline assertion is short enough not to warrant one, and it keeps the
 typed-handling-not-yet-plumbed path explicit at each call site. The inline form goes away during Phase 4 / Phase 5 as
 each binding flips its API to `runtime.Typed`.
@@ -307,7 +307,7 @@ each Phase 4 binding that owns a corresponding registry.
 
 ### Phase 5: Consumer migration
 
-CLI commands, K8s controller, and remaining consumers switch to `ResolveTyped` and drop their inline
+CLI commands, K8s controller, and remaining consumers switch to `Resolve` and drop their inline
 `*DirectCredentials` assertions as their downstream APIs flip. No changes to `bindings/go/credentials` or
 `bindings/go/plugin`.
 
@@ -339,9 +339,9 @@ development blocking while transitioning the multi-module monorepo.
 
 ### 2026-05-15 — Phase 6 cleanup absorbed into Phase 3 / Phase 4; `Resolve` removed outright
 
-- **`Resolve` removed, not deprecated.** Phase 3 removes `Resolve` from `Resolver`, `CredentialPlugin`, and
-  `RepositoryPlugin` outright; the planned Phase 6 deprecation period is skipped. The interfaces only expose
-  `ResolveTyped`.
+- **`Resolve` replaced, not deprecated.** Phase 3 replaces `Resolve` with its `runtime.Typed` version in `Resolver`, `CredentialPlugin`, and
+  `RepositoryPlugin`; the planned Phase 6 deprecation period is skipped. The interfaces only expose
+  `Resolve` with `runtime.Typed` instead of `map[string]string`.
 - **`bindings/go/credentials` cut once.** All credential-side interface changes for this epic land in Phase 3.
   Phase 4 and Phase 5 do not author changes in `bindings/go/credentials`. Each downstream binding bumps once during
   its own PR.
