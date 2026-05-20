@@ -53,7 +53,7 @@ ocm verify cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:
 **Remote OCI Registry:**
 
 ```bash
-ocm verify cv ghcr.io/myorg/components//github.com/acme.org/helloworld:1.0.0
+ocm verify cv ghcr.io/<my-namespace>//github.com/acme.org/helloworld:1.0.0
 ```
 
 <details>
@@ -78,7 +78,7 @@ The command exits with status code `0` on success.
 If the component has multiple signatures, specify which one to verify:
 
 ```bash
-ocm verify cv --signature prod ghcr.io/myorg/components//github.com/acme.org/helloworld:1.0.0
+ocm verify cv --signature prod ghcr.io/<my-namespace>//github.com/acme.org/helloworld:1.0.0
 ```
 
 > 👉 Without the `--signature` flag, OCM uses the configuration named `default`.
