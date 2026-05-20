@@ -3,7 +3,6 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -149,6 +148,5 @@ func FromTyped(creds runtime.Typed) (*RSACredentials, error) {
 		return FromDirectCredentials(props), nil
 	}
 
-	slog.Error("unexpected credential type, expected RSACredentials or DirectCredentials", "type", creds.GetType())
-	return nil, fmt.Errorf("unexpected credential type: %T", creds)
+	return nil, fmt.Errorf("unexpected credential type, expected RSACredentials or supported runtime.Type, got %v", creds.GetType())
 }
