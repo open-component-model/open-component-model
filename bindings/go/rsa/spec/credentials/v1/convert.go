@@ -26,7 +26,10 @@ const (
 var convertScheme = runtime.NewScheme()
 
 func init() {
-	MustRegisterCredentialType(convertScheme)
+	convertScheme.MustRegisterWithAlias(&RSACredentials{},
+		VersionedType,
+		runtime.NewUnversionedType(RSACredentialsType),
+	)
 	v1.MustRegister(convertScheme)
 }
 
