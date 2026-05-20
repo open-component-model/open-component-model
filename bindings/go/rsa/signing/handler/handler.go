@@ -30,7 +30,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-
 // Common errors for callers to test.
 var (
 	ErrInvalidAlgorithm  = errors.New("invalid algorithm")

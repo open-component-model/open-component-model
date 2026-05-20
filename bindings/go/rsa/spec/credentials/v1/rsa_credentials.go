@@ -17,7 +17,6 @@ const (
 	Version = "v1"
 )
 
-//nolint:gosec // G101: These are key names, not credentials.
 const (
 	CredentialKeyPublicKeyPEM      = "publicKeyPEM"
 	CredentialKeyPublicKeyPEMFile  = "publicKeyPEMFile"
@@ -123,5 +122,5 @@ func FromTyped(creds runtime.Typed) (*RSACredentials, error) {
 	}
 
 	slog.Error("unexpected credential type, expected RSACredentials or DirectCredentials", "type", creds.GetType())
-	return nil, errors.New(fmt.Sprintf("unexpected credential type: %T", creds))
+	return nil, fmt.Errorf("unexpected credential type: %T", creds)
 }
