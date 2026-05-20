@@ -269,16 +269,30 @@ When using PEM encoding for signing, the credential referenced by `public_key_pe
 
 ### Sigstore (Keyless)
 
-Sigstore replaces the long-lived key pair at the heart of RSA signing with a short-lived certificate bound to your OIDC identity. The signer logs in to an identity provider; Sigstore issues a certificate valid for ~10 minutes; the signature is recorded in a public transparency log. Verifiers don't pin a public key — they declare which identity they trust.
+Sigstore replaces the long-lived key pair at the heart of RSA signing with a short-lived certificate bound to your OIDC identity.
+The signer logs in to an identity provider; Sigstore issues a certificate valid for ~10 minutes; the signature is recorded in a public transparency log.
+Verifiers don't pin a public key — they declare which identity they trust.
 
-The Sigstore stack is four cooperating pieces. For the public-good happy path (`sigstore.dev`) you don't deploy any of them; for an enterprise stack a platform team has already deployed them and you point your config at their endpoints.
+The Sigstore stack is four cooperating pieces. For the public-good happy path (`sigstore.dev`) you don't deploy any of them;
+for an enterprise stack a platform team has already deployed them and you point your config at their endpoints.
 
 - **OIDC IdP** — the identity provider you log in to (Google, GitHub, Microsoft, or your corporate IdP). The token it issues proves *who* is signing.
 - **Fulcio** — a short-lived certificate authority. It accepts your OIDC token and issues a certificate (valid for ~10 minutes) that binds the token's identity claims to a fresh signing key.
 - **Rekor** — an append-only public transparency log. Every signature is recorded so anyone can audit when, and by whom, it was made.
 - **TUF** — the mechanism clients use to discover the current trusted roots for Fulcio and Rekor. The verifier uses it to know which CA and which log to trust.
 
-The signature payload stored in the component descriptor is a Sigstore bundle: the signature bytes, the Fulcio certificate, and the Rekor inclusion proof, all in one self-contained blob.
+The signature payload stored in the component descriptor is a Sigstore bundle: the signature bytes, the Fulcio certificate,
+and the Rekor inclusion proof, all in one self-contained blob. This self-containment is a key design principle of Sigstore:
+the signature value includes everything a verifier needs to validate the signature and establish trust in the signer's identity,
+without needing any out-of-band information.
+
+This matters directly for OCM's sovereign-delivery and air-gapped scenarios. The component version is the unit of transport,
+and OCM carries the proof of authorship along with it: the signed descriptor and the bundle embedded inside it travel as one.
+The only piece a verifier needs in addition is a local trusted-root file — the public keys of the Fulcio CA and the Rekor
+instance the component was signed against, whether that is public-good Sigstore or an enterprise stack — distributed into the
+disconnected environment once, out of band. With those pieces in place, `ocm verify cv` runs entirely offline: no callback to
+any Sigstore service, no TUF refresh, no network egress whatsoever. This is what makes Sigstore viable in regulated and
+sovereign-cloud deployments where egress to public or on-premise infrastructure is not permitted at verification time.
 
 ```yaml
 signature:
