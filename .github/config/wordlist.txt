@@ -155,6 +155,7 @@ cryptographic
 cryptographically
 csl
 csr
+cvss
 cta
 ctf
 CTFAddComponentVersion
@@ -444,6 +445,7 @@ microservice
 microservices
 mimetype
 mimetypes
+mitigations
 mirza
 misattributed
 Misconfiguration
@@ -527,6 +529,7 @@ oncefunc
 oo
 openapi
 openfluxcd
+openssf
 openmcp
 OpenSSF
 openssl
