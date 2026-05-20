@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"ocm.software/open-component-model/cli/cmd/setup"
+	"ocm.software/open-component-model/cli/cmd/version"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 )
@@ -50,6 +51,8 @@ func PreRunEWithConfig(cmd *cobra.Command, cfg Config) error {
 		cmd.SetOut(parent.OutOrStdout())
 		cmd.SetErr(parent.ErrOrStderr())
 	}
+
+	setup.VersionCheck(cmd, version.BuildVersion)
 
 	return nil
 }

@@ -20,27 +20,35 @@ type RepositoryPlugin interface {
 	// This identity is used to look up credentials in the credential graph.
 	ConsumerIdentityForConfig(ctx context.Context, config runtime.Typed) (runtime.Identity, error)
 
-	// Resolve attempts to resolve credentials for a given repository configuration
-	// and consumer identity. The provided credentials map may contain pre-resolved
-	// credentials from the credential graph.
-	// TODO(matthiasbruns): Migrate to runtime.Typed https://github.com/open-component-model/ocm-project/issues/980
-	Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
+	// Resolve resolves credentials for a given repository configuration and consumer
+	// identity, returning a runtime.Typed credential.
+	// The credentials parameter contains any pre-resolved credentials from the credential
+	// graph; it may be nil when no graph credentials are available for this repository.
+	Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error)
 }
 
 // CredentialPlugin defines the interface for plugins that handle custom credential
 // resolution logic. These plugins are responsible for:
 // - Mapping credentials to consumer identities
 // - Resolving credentials for specific identities
+//
+// TODO(cred-graph-vs-cred-plugin): the contract was originally shaped around plugins
+// like HashiCorpVault that carry their parameters on the credential body (so
+// GetConsumerIdentity can derive a meaningful per-instance leaf identity). Plugins
+// whose configuration lives on the consumer identity (e.g. OIDCIdentityTokenProvider)
+// end up returning a type-only leaf identity and rely on Resolve receiving the
+// consumer identity (see PR #2511). The OIDC plugin in
+// cli/internal/plugin/builtin/oidc is the first concrete case; the contract may
+// need to evolve once a second such plugin appears.
 type CredentialPlugin interface {
 	// GetConsumerIdentity maps a credential to a consumer identity.
 	// This identity is used to look up credentials in the credential graph.
 	GetConsumerIdentity(ctx context.Context, credential runtime.Typed) (runtime.Identity, error)
 
-	// Resolve attempts to resolve credentials for a given consumer identity.
-	// The provided credentials map may contain pre-resolved credentials from
-	// the credential graph.
-	// TODO(matthiasbruns): Migrate to runtime.Typed https://github.com/open-component-model/ocm-project/issues/980
-	Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
+	// Resolve resolves credentials for a given consumer identity, returning a
+	// runtime.Typed credential. The credentials parameter contains any pre-resolved
+	// credentials from the credential graph; it may be nil.
+	Resolve(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error)
 }
 
 // GetRepositoryPluginFn is a function type that returns a RepositoryPlugin for a given

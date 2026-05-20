@@ -88,6 +88,9 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           TAG: ${{ needs.prepare.outputs.new_tag }}
+          # create-tag.js uses GITHUB_TOKEN to authenticate git push because
+          # the checkout above sets persist-credentials: false (zizmor requirement).
+          GITHUB_TOKEN: ${{ steps.get_token.outputs.token }}
         with:
           github-token: ${{ steps.get_token.outputs.token }}
           script: |
@@ -274,6 +277,9 @@ jobs:
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
+          # create-tag.js uses GITHUB_TOKEN to authenticate git push because
+          # the checkout above sets persist-credentials: false (zizmor requirement).
+          GITHUB_TOKEN: ${{ steps.get_token.outputs.token }}
         with:
           github-token: ${{ steps.get_token.outputs.token }}
           script: |

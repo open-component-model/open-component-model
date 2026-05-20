@@ -69,23 +69,11 @@ func (g *Graph) credentialTypeScheme() *runtime.Scheme {
 // Compile-time interface check.
 var _ Resolver = (*Graph)(nil)
 
-// Resolve implements Resolver. It returns credentials as map[string]string for backward compatibility.
-// Consumers that need typed credentials should use ResolveTyped instead.
-//
-// Deprecated: Migrate to ResolveTyped instead for typed credential support.
-func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
-	typed, err := g.ResolveTyped(ctx, identity)
-	if err != nil {
-		return nil, err
-	}
-	return typedToMap(typed), nil
-}
-
-// ResolveTyped resolves credentials for the given identity and returns them as a runtime.Typed.
+// Resolve resolves credentials for the given identity and returns them as a runtime.Typed.
 // The returned type depends on what was configured: a registered typed credential
 // (e.g. *HelmHTTPCredentials) when a CredentialTypeSchemeProvider is configured and the
 // config uses a known typed credential, otherwise *v1.DirectCredentials.
-func (g *Graph) ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
+func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
 	if _, err := identity.ParseType(); err != nil {
 		err = errors.Join(ErrUnknown, err)
 		return nil, fmt.Errorf("to be resolved from the credential graph, a consumer identity type is required: %w", err)
