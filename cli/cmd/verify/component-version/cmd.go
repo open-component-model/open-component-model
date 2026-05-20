@@ -315,7 +315,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 			}
 
 			if creds != nil {
-				logger.DebugContext(egctx, "using discovered credentials for verification %t", creds)
+				logger.DebugContext(egctx, "using discovered credentials for verification", "type", creds.GetType())
 			}
 
 			return handler.Verify(egctx, signature, verifierSpec, creds)
