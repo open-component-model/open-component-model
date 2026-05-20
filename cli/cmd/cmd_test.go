@@ -1514,18 +1514,11 @@ configurations:
 	ocmConfigFilePath := filepath.Join(tmp, "ocm-config.yaml")
 	r.NoError(os.WriteFile(ocmConfigFilePath, []byte(ocmConfigYAML), 0o600))
 
-	signerSpecYAML := `type: RSASigningConfiguration/v1alpha1
-signatureAlgorithm: RSASSA-PSS
-`
-	signerSpecFilePath := filepath.Join(tmp, "signer-spec.yaml")
-	r.NoError(os.WriteFile(signerSpecFilePath, []byte(signerSpecYAML), 0o600))
-
 	reference := archiveFilePath + "//" + name + ":" + version
 
 	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
 		reference,
 		"--signature", signatureName,
-		"--signer-spec", signerSpecFilePath,
 		"--config", ocmConfigFilePath),
 		test.WithOutput(logs),
 	)
@@ -1534,11 +1527,55 @@ signatureAlgorithm: RSASSA-PSS
 	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
 		reference,
 		"--signature", signatureName,
-		"--verifier-spec", signerSpecFilePath,
 		"--config", ocmConfigFilePath),
 		test.WithOutput(logs),
 	)
 	r.NoError(err, "failed to verify component version")
+}
+
+func Test_Sign_With_Sigstore_Spec_Selects_Cosign_Handler(t *testing.T) {
+	t.Setenv("SIGSTORE_ID_TOKEN", "")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	name, version := "ocm.software/sigstore-wiring", "1.0.0"
+	constructorYAML := fmt.Sprintf(`
+name: %[1]s
+version: %[2]s
+provider:
+  name: ocm.software
+resources:
+  - name: my-resource
+    type: blob
+    input:
+      type: utf8/v1
+      text: "wiring test"
+`, name, version)
+
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	r.NoError(err, "could not construct component version")
+
+	signerSpecFilePath := filepath.Join(tmp, "sigstore-signer-spec.yaml")
+	r.NoError(os.WriteFile(signerSpecFilePath,
+		[]byte("type: SigstoreSigningConfiguration/v1alpha1\n"), 0o600))
+
+	reference := archiveFilePath + "//" + name + ":" + version
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference,
+		"--signature", "sigstore-wiring-test",
+		"--signer-spec", signerSpecFilePath,
+	))
+	r.Error(err)
+	r.Contains(err.Error(), "OIDC identity token required")
 }
 
 // Test_Add_Component_Version_Docker_Credentials tests the use of docker credentials in the add cv command
