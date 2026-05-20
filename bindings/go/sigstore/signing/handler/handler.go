@@ -21,8 +21,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
-	oidcv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1alpha1"
-	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1"
+	oidcv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1"
+	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1"
 	signerv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1alpha1"
 	verifierv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1alpha1"
 )
@@ -83,22 +83,11 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("digest value must not be empty")
 	}
 
-	var oidcCreds *oidcv1.OIDCIdentityToken
-	if creds != nil {
-		oidcCreds, err = oidcv1.ConvertToOIDCIdentityToken(creds)
-		if err != nil {
-			return descruntime.SignatureInfo{}, fmt.Errorf("failed to convert credentials to OIDC identity token during signing: %w", err)
-		}
-	}
-	if oidcCreds == nil {
-		// OIDCIdentityToken is optional. As an alternative way, os.Env is being consumed.
-		// If both result in unset fields, an error will be returned during runtime.
-		oidcCreds = &oidcv1.OIDCIdentityToken{}
-	}
+	oidcToken, trustedRoot := convertOptionalCredentials(creds)
 
 	env := os.Environ()
 	if !internal.HasEnvKey(env, "SIGSTORE_ID_TOKEN") && !internal.HasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN") {
-		token := strings.TrimSpace(oidcCreds.Token)
+		token := strings.TrimSpace(oidcToken.Token)
 		if token == "" {
 			return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required: " +
 				"set SIGSTORE_ID_TOKEN env var, use GitHub Actions OIDC, " +
@@ -124,9 +113,17 @@ func (h *Handler) Sign(
 
 	bundlePath := filepath.Join(tmpDir, "bundle.json")
 
+	trustedRootPath, err := resolveTrustedRootPath(trustedRoot, tmpDir)
+	if err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("resolve trusted root: %w", err)
+	}
+
 	var extraArgs []string
 	if cfg.SigningConfig != "" {
 		extraArgs = append(extraArgs, "--signing-config", cfg.SigningConfig)
+	}
+	if trustedRootPath != "" {
+		extraArgs = append(extraArgs, "--trusted-root", trustedRootPath)
 	}
 
 	if err := h.runner.Sign(ctx, dataPath, bundlePath, extraArgs, env); err != nil {
@@ -156,6 +153,19 @@ func (h *Handler) Sign(
 	}, nil
 }
 
+func convertOptionalCredentials(creds runtime.Typed) (*oidcv1.OIDCIdentityToken, *trustedrootv1.TrustedRoot) {
+	oidcIdentityToken, _ := oidcv1.FromTyped(creds)
+	if oidcIdentityToken == nil {
+		oidcIdentityToken = &oidcv1.OIDCIdentityToken{}
+	}
+	trustedRoot, _ := trustedrootv1.FromTyped(creds)
+	if trustedRoot == nil {
+		trustedRoot = &trustedrootv1.TrustedRoot{}
+	}
+
+	return oidcIdentityToken, trustedRoot
+}
+
 // Verify checks a Sigstore bundle via cosign verify-blob: decodes the bundle and digest,
 // validates the Fulcio certificate chain and Rekor inclusion proof, and confirms the
 // signed content matches the digest using the configured identity/issuer constraints.
@@ -178,22 +188,11 @@ func (h *Handler) Verify(
 		return fmt.Errorf("invalid verification config: %w", err)
 	}
 
-	var trustedRootCreds *trustedrootv1.TrustedRoot
-	if creds != nil {
-		c, err := trustedrootv1.ConvertToTrustedRoot(creds)
-		if err != nil {
-			return fmt.Errorf("failed to convert credentials to trusted root during verify: %w", err)
-		}
-		trustedRootCreds = c
-	}
-	if trustedRootCreds == nil {
-		// TrustedRoot is optional and only needed if cfg.PrivateInfrastructure is true.
-		trustedRootCreds = &trustedrootv1.TrustedRoot{}
-	}
+	_, trustedRoot := convertOptionalCredentials(creds)
 
 	if cfg.PrivateInfrastructure &&
-		strings.TrimSpace(trustedRootCreds.TrustedRootJSON) == "" &&
-		strings.TrimSpace(trustedRootCreds.TrustedRootJSONFile) == "" {
+		strings.TrimSpace(trustedRoot.TrustedRootJSON) == "" &&
+		strings.TrimSpace(trustedRoot.TrustedRootJSONFile) == "" {
 		return fmt.Errorf("privateInfrastructure requires a trusted root: " +
 			"provide a TrustedRoot credential (trustedRootJSON or trustedRootJSONFile)")
 	}
@@ -225,7 +224,7 @@ func (h *Handler) Verify(
 		}
 	}()
 
-	trustedRootPath, err := resolveTrustedRootPath(trustedRootCreds, tmpDir)
+	trustedRootPath, err := resolveTrustedRootPath(trustedRoot, tmpDir)
 	if err != nil {
 		return fmt.Errorf("resolve trusted root: %w", err)
 	}
