@@ -23,8 +23,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 func TestIntegration_MultipleConfigSources(t *testing.T) {
@@ -229,7 +229,7 @@ func (p *simpleOCIPlugin) GetComponentVersionRepositoryCredentialConsumerIdentit
 func (p *simpleOCIPlugin) GetComponentVersionRepository(
 	_ context.Context,
 	_ ocmruntime.Typed,
-	_ map[string]string,
+	_ ocmruntime.Typed,
 ) (repository.ComponentVersionRepository, error) {
 	// test plugin
 	return &mockRepository{

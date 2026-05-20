@@ -33,7 +33,7 @@ func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *de
 		return resource, errors.Join(ErrPluginNotFound, err)
 	}
 
-	var creds map[string]string
+	var creds runtime.Typed
 	if cfg != nil {
 		id, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, resource)
 		if err != nil {

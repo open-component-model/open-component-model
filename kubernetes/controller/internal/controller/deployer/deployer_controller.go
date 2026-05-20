@@ -708,7 +708,7 @@ func resolveResourceCredentials(
 	pm *manager.PluginManager,
 	resource *descriptor.Resource,
 	cfg *configuration.Configuration,
-) (map[string]string, error) {
+) (ocmruntime.Typed, error) {
 	if cfg == nil {
 		return nil, nil
 	}
