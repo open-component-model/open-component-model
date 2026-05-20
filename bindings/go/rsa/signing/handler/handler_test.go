@@ -55,8 +55,6 @@ func Test_RSA_Handler(t *testing.T) {
 				d := digestHex(hashCfg, testData)
 
 				t.Run(string(alg), func(t *testing.T) {
-					// used for a dynamic root
-					var rootPEM string
 
 					type tc struct {
 						name    string
@@ -185,46 +183,49 @@ func Test_RSA_Handler(t *testing.T) {
 							},
 							wantErr: "certificate signed by unknown authority",
 						},
-						{
-							name: "pem_signature_full_chain_in_signature_root_in_credentials_ok",
-							build: func(t *testing.T) descruntime.Signature {
-								c := buildChain(t)
+						func() tc {
+							var rootPEM string
+							return tc{
+								name: "pem_signature_full_chain_in_signature_root_in_credentials_ok",
+								build: func(t *testing.T) descruntime.Signature {
+									c := buildChain(t)
 
-								dir := t.TempDir()
-								privPath := filepath.Join(dir, "leaf.key")
-								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+									dir := t.TempDir()
+									privPath := filepath.Join(dir, "leaf.key")
+									writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
 
-								embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
+									embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
 
-								cfg := v1alpha1.Config{
-									SignatureAlgorithm:      alg,
-									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
-								}
-								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
-									PrivateKeyPEMFile: privPath,
-									PublicKeyPEMFile:  embedded,
-								})
-								require.NoError(t, err)
+									cfg := v1alpha1.Config{
+										SignatureAlgorithm:      alg,
+										SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
+									}
+									si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+										PrivateKeyPEMFile: privPath,
+										PublicKeyPEMFile:  embedded,
+									})
+									require.NoError(t, err)
 
-								rootDir := t.TempDir()
-								rootPEM = writeCertsPEM(t, rootDir, "root.pem", c.root)
+									rootDir := t.TempDir()
+									rootPEM = writeCertsPEM(t, rootDir, "root.pem", c.root)
 
-								// Issuer must match the leaf's X.509 Issuer field, which is the
-								// intermediate's Subject (the cert that directly signed the leaf).
-								return descruntime.Signature{
-									Digest: d,
-									Signature: descruntime.SignatureInfo{
-										Algorithm: si.Algorithm,
-										MediaType: si.MediaType,
-										Value:     si.Value,
-										Issuer:    c.interm.Subject.String(),
-									},
-								}
-							},
-							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
-							},
-						},
+									// Issuer must match the leaf's X.509 Issuer field, which is the
+									// intermediate's Subject (the cert that directly signed the leaf).
+									return descruntime.Signature{
+										Digest: d,
+										Signature: descruntime.SignatureInfo{
+											Algorithm: si.Algorithm,
+											MediaType: si.MediaType,
+											Value:     si.Value,
+											Issuer:    c.interm.Subject.String(),
+										},
+									}
+								},
+								creds: func(t *testing.T) runtime.Typed {
+									return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
+								},
+							}
+						}(),
 						{
 							// A signer must not embed a self-signed root CA in the signature —
 							// root trust must come from the verifier's credentials only.
@@ -254,89 +255,95 @@ func Test_RSA_Handler(t *testing.T) {
 							creds:   func(t *testing.T) runtime.Typed { return nil },
 							wantErr: "must not be embedded in the signature",
 						},
-						{
-							// The signature Issuer field must match the X.509 Issuer field of the
-							// leaf certificate, which is the Subject of the CA that directly signed
-							// it (the intermediate). Setting it correctly must succeed.
-							name: "pem_signature_issuer_matches_leaf_issuer_field",
-							build: func(t *testing.T) descruntime.Signature {
-								c := buildChain(t)
+						func() tc {
+							var rootPEM string
+							return tc{
+								// The signature Issuer field must match the X.509 Issuer field of the
+								// leaf certificate, which is the Subject of the CA that directly signed
+								// it (the intermediate). Setting it correctly must succeed.
+								name: "pem_signature_issuer_matches_leaf_issuer_field",
+								build: func(t *testing.T) descruntime.Signature {
+									c := buildChain(t)
 
-								dir := t.TempDir()
-								privPath := filepath.Join(dir, "leaf.key")
-								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
-								// Root is NOT embedded — it will come from credentials.
-								embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
+									dir := t.TempDir()
+									privPath := filepath.Join(dir, "leaf.key")
+									writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+									// Root is NOT embedded — it will come from credentials.
+									embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
 
-								cfg := v1alpha1.Config{
-									SignatureAlgorithm:      alg,
-									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
-								}
-								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
-									PrivateKeyPEMFile: privPath,
-									PublicKeyPEMFile:  embedded,
-								})
-								require.NoError(t, err)
+									cfg := v1alpha1.Config{
+										SignatureAlgorithm:      alg,
+										SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
+									}
+									si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+										PrivateKeyPEMFile: privPath,
+										PublicKeyPEMFile:  embedded,
+									})
+									require.NoError(t, err)
 
-								rootPEM = writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
+									rootPEM = writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
 
-								// leaf.Issuer == interm.Subject: set Issuer to that, should succeed.
-								return descruntime.Signature{
-									Digest: d,
-									Signature: descruntime.SignatureInfo{
-										Algorithm: si.Algorithm,
-										MediaType: si.MediaType,
-										Value:     si.Value,
-										Issuer:    c.interm.Subject.String(),
-									},
-								}
-							},
-							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
-							},
-						},
-						{
-							// Setting the signature Issuer field to a DN that does not match the
-							// leaf's X.509 Issuer (e.g. the root's Subject instead of the
-							// intermediate's Subject) must be rejected.
-							name: "pem_signature_issuer_mismatch_with_leaf_issuer_field",
-							build: func(t *testing.T) descruntime.Signature {
-								c := buildChain(t)
+									// leaf.Issuer == interm.Subject: set Issuer to that, should succeed.
+									return descruntime.Signature{
+										Digest: d,
+										Signature: descruntime.SignatureInfo{
+											Algorithm: si.Algorithm,
+											MediaType: si.MediaType,
+											Value:     si.Value,
+											Issuer:    c.interm.Subject.String(),
+										},
+									}
+								},
+								creds: func(t *testing.T) runtime.Typed {
+									return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
+								},
+							}
+						}(),
+						func() tc {
+							var rootPEM string
+							return tc{
+								// Setting the signature Issuer field to a DN that does not match the
+								// leaf's X.509 Issuer (e.g. the root's Subject instead of the
+								// intermediate's Subject) must be rejected.
+								name: "pem_signature_issuer_mismatch_with_leaf_issuer_field",
+								build: func(t *testing.T) descruntime.Signature {
+									c := buildChain(t)
 
-								dir := t.TempDir()
-								privPath := filepath.Join(dir, "leaf.key")
-								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
-								// Root is NOT embedded — it will come from credentials.
-								embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
+									dir := t.TempDir()
+									privPath := filepath.Join(dir, "leaf.key")
+									writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+									// Root is NOT embedded — it will come from credentials.
+									embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
 
-								cfg := v1alpha1.Config{
-									SignatureAlgorithm:      alg,
-									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
-								}
-								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
-									PrivateKeyPEMFile: privPath,
-									PublicKeyPEMFile:  embedded,
-								})
-								require.NoError(t, err)
+									cfg := v1alpha1.Config{
+										SignatureAlgorithm:      alg,
+										SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
+									}
+									si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+										PrivateKeyPEMFile: privPath,
+										PublicKeyPEMFile:  embedded,
+									})
+									require.NoError(t, err)
 
-								rootPEM = writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
+									rootPEM = writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
 
-								// Set Issuer to root's subject, but leaf was signed by intermediate — mismatch.
-								return descruntime.Signature{
-									Digest: d,
-									Signature: descruntime.SignatureInfo{
-										Algorithm: si.Algorithm,
-										MediaType: si.MediaType,
-										Value:     si.Value,
-										Issuer:    c.root.Subject.String(),
-									},
-								}
-							},
-							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
-							},
-							wantErr: "issuer mismatch",
-						},
+									// Set Issuer to root's subject, but leaf was signed by intermediate — mismatch.
+									return descruntime.Signature{
+										Digest: d,
+										Signature: descruntime.SignatureInfo{
+											Algorithm: si.Algorithm,
+											MediaType: si.MediaType,
+											Value:     si.Value,
+											Issuer:    c.root.Subject.String(),
+										},
+									}
+								},
+								creds: func(t *testing.T) runtime.Typed {
+									return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
+								},
+								wantErr: "issuer mismatch",
+							}
+						}(),
 						{
 							// an intermediate CA embedded in the chain
 							// must NOT be trusted as a root anchor. Without a root in the chain
@@ -355,50 +362,53 @@ func Test_RSA_Handler(t *testing.T) {
 							creds:   func(t *testing.T) runtime.Typed { return nil },
 							wantErr: "certificate signed by unknown authority",
 						},
-						{
-							// with a credentials anchor (root cert), the
-							// signature Issuer field must match leaf.Issuer (= intermediate's
-							// Subject), NOT the anchor's Subject. Setting Issuer to the root's
-							// Subject must now be rejected.
-							name: "pem_signature_issuer_set_to_anchor_subject_fails",
-							build: func(t *testing.T) descruntime.Signature {
-								c := buildChain(t)
+						func() tc {
+							var rootPEM string
+							return tc{
+								// with a credentials anchor (root cert), the
+								// signature Issuer field must match leaf.Issuer (= intermediate's
+								// Subject), NOT the anchor's Subject. Setting Issuer to the root's
+								// Subject must now be rejected.
+								name: "pem_signature_issuer_set_to_anchor_subject_fails",
+								build: func(t *testing.T) descruntime.Signature {
+									c := buildChain(t)
 
-								dir := t.TempDir()
-								privPath := filepath.Join(dir, "leaf.key")
-								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
-								embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
+									dir := t.TempDir()
+									privPath := filepath.Join(dir, "leaf.key")
+									writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+									embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
 
-								cfg := v1alpha1.Config{
-									SignatureAlgorithm:      alg,
-									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
-								}
-								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
-									PrivateKeyPEMFile: privPath,
-									PublicKeyPEMFile:  embedded,
-								})
-								require.NoError(t, err)
+									cfg := v1alpha1.Config{
+										SignatureAlgorithm:      alg,
+										SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
+									}
+									si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+										PrivateKeyPEMFile: privPath,
+										PublicKeyPEMFile:  embedded,
+									})
+									require.NoError(t, err)
 
-								rootDir := t.TempDir()
-								rootPEM = writeCertsPEM(t, rootDir, "root.pem", c.root)
+									rootDir := t.TempDir()
+									rootPEM = writeCertsPEM(t, rootDir, "root.pem", c.root)
 
-								// It must now fail because leaf.Issuer is
-								// interm.Subject, not root.Subject.
-								return descruntime.Signature{
-									Digest: d,
-									Signature: descruntime.SignatureInfo{
-										Algorithm: si.Algorithm,
-										MediaType: si.MediaType,
-										Value:     si.Value,
-										Issuer:    c.root.Subject.String(),
-									},
-								}
-							},
-							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
-							},
-							wantErr: "issuer mismatch",
-						},
+									// It must now fail because leaf.Issuer is
+									// interm.Subject, not root.Subject.
+									return descruntime.Signature{
+										Digest: d,
+										Signature: descruntime.SignatureInfo{
+											Algorithm: si.Algorithm,
+											MediaType: si.MediaType,
+											Value:     si.Value,
+											Issuer:    c.root.Subject.String(),
+										},
+									}
+								},
+								creds: func(t *testing.T) runtime.Typed {
+									return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
+								},
+								wantErr: "issuer mismatch",
+							}
+						}(),
 						{
 							// build and creds use independent buildChain() calls, producing
 							// certificates with different keys. The leaf in the signature was
@@ -421,42 +431,45 @@ func Test_RSA_Handler(t *testing.T) {
 							},
 							wantErr: "certificate signed by unknown authority",
 						},
-						{
-							// Credentials contain a multi-cert PEM [interm, root] from the same
-							// chain as the signature. The handler routes the intermediate to the
-							// intermediates pool and the self-signed root to the roots pool, so
-							// the full path leaf→interm→root can be verified successfully.
-							name: "pem_signature_leaf_only_cred_chain_interm_and_root_ok",
-							build: func(t *testing.T) descruntime.Signature {
-								// Share the chain with the creds closure via a captured variable.
-								// Both closures run before verification, so we build once here and
-								// write the credential path to a shared local var that creds reads.
-								c := buildChain(t)
-								dir := t.TempDir()
-								privPath := filepath.Join(dir, "leaf.key")
-								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
-								leafOnly := writeCertsPEM(t, dir, "leaf.pem", c.leaf)
+						func() tc {
+							var rootPEM string
+							return tc{
+								// Credentials contain a multi-cert PEM [interm, root] from the same
+								// chain as the signature. The handler routes the intermediate to the
+								// intermediates pool and the self-signed root to the roots pool, so
+								// the full path leaf→interm→root can be verified successfully.
+								name: "pem_signature_leaf_only_cred_chain_interm_and_root_ok",
+								build: func(t *testing.T) descruntime.Signature {
+									// Share the chain with the creds closure via a captured variable.
+									// Both closures run before verification, so we build once here and
+									// write the credential path to a shared local var that creds reads.
+									c := buildChain(t)
+									dir := t.TempDir()
+									privPath := filepath.Join(dir, "leaf.key")
+									writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+									leafOnly := writeCertsPEM(t, dir, "leaf.pem", c.leaf)
 
-								cfg := v1alpha1.Config{
-									SignatureAlgorithm:      alg,
-									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
-								}
-								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
-									PrivateKeyPEMFile: privPath,
-									PublicKeyPEMFile:  leafOnly,
-								})
-								require.NoError(t, err)
+									cfg := v1alpha1.Config{
+										SignatureAlgorithm:      alg,
+										SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
+									}
+									si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+										PrivateKeyPEMFile: privPath,
+										PublicKeyPEMFile:  leafOnly,
+									})
+									require.NoError(t, err)
 
-								rootPEM = writeCertsPEM(t, t.TempDir(), "chain.pem", c.interm, c.root)
+									rootPEM = writeCertsPEM(t, t.TempDir(), "chain.pem", c.interm, c.root)
 
-								return descruntime.Signature{Digest: d, Signature: si}
-							},
-							// Credentials provide [interm, root] from the same chain as the
-							// signature.
-							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
-							},
-						},
+									return descruntime.Signature{Digest: d, Signature: si}
+								},
+								// Credentials provide [interm, root] from the same chain as the
+								// signature.
+								creds: func(t *testing.T) runtime.Typed {
+									return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
+								},
+							}
+						}(),
 						{
 							// Credentials contain only a non-self-signed intermediate (no root).
 							// The intermediate goes to the intermediates pool; no root exists
