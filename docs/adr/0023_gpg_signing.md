@@ -43,7 +43,7 @@ Justification:
 
 ### Description
 
-A new Go module `ocm.software/open-component-model/bindings/go/gpg` implements the `signing.Handler` interface using the ProtonMail OpenPGP library (`github.com/ProtonMail/go-crypto`). The handler is registered as a built-in plugin identically to the RSA handler.
+A new Go module `ocm.software/open-component-model/bindings/go/gpg` implements the `signing.Handler` interface using the ProtonMail OpenPGP library (`github.com/ProtonMail/go-crypto`). The handler will be registered as a built-in plugin in the `ocm` CLI in a follow-up PR after module tagging.
 
 Passphrase support is provided through the standard OCM credential map: a `passphrase` credential key is used to decrypt the in-memory private key before signing. The private key is never written to disk in decrypted form.
 
@@ -58,7 +58,7 @@ sequenceDiagram
     participant Creds as Credentials Store
 
     Note over U,CLI: Signing
-    U->>CLI: ocm sign component-version --signer-spec ./gpg.yaml
+    U->>CLI: ocm sign componentversion --signer-spec ./gpg.yaml
     CLI->>Repo: Download Component Descriptor
     Repo-->>CLI: Component Descriptor
     CLI->>CLI: Normalize + Compute Digest
@@ -73,7 +73,7 @@ sequenceDiagram
     CLI->>Repo: Upload Descriptor with Signature
 
     Note over U,CLI: Verification
-    U->>CLI: ocm verify component-version --verifier-spec ./gpg.yaml
+    U->>CLI: ocm verify componentversion --verifier-spec ./gpg.yaml
     CLI->>Repo: Download Component Descriptor
     Repo-->>CLI: Component Descriptor
     CLI->>CLI: Normalize + Recompute Digest
@@ -193,7 +193,7 @@ Cons:
 
 ## Discovery and Distribution
 
-The handler ships as part of the `ocm` CLI binary. No separate installation needed. Config follows the existing `.ocmconfig` credential pattern documented in ADR-0002.
+The handler will ship as part of the `ocm` CLI binary in a follow-up PR after module tagging. No separate installation will be needed. Config follows the existing `.ocmconfig` credential pattern documented in ADR-0002.
 
 ## Conclusion
 

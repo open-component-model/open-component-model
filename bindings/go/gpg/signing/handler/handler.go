@@ -58,16 +58,17 @@ func (h *Handler) Sign(
 	sigCfg := configFrom(cfg)
 	typedCreds := gpgcredentialsv1.FromDirectCredentials(creds)
 
-	entity, err := gpgcredentials.PrivateEntityFromCredentials(typedCreds)
+	keyring, err := gpgcredentials.PrivateKeyRingFromCredentials(typedCreds)
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("load GPG private key: %w", err)
 	}
-	if entity == nil {
+	if len(keyring) == 0 {
 		return descruntime.SignatureInfo{}, ErrMissingPrivateKey
 	}
 
+	entity := keyring[0]
 	if fp := sigCfg.GetKeyFingerprint(); fp != "" {
-		entity, err = selectEntityByFingerprint(openpgp.EntityList{entity}, fp)
+		entity, err = selectEntityByFingerprint(keyring, fp)
 		if err != nil {
 			return descruntime.SignatureInfo{}, err
 		}

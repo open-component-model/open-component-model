@@ -18,7 +18,27 @@ var IdentityTypeGPG = identityv1.V1Alpha1Type
 
 // PrivateEntityFromCredentials loads a signing-capable OpenPGP entity from
 // the credential map, decrypting it with the passphrase credential if present.
+// Returns only the first entity; use PrivateKeyRingFromCredentials for multi-key keyrings.
 func PrivateEntityFromCredentials(creds *gpgcredentialsv1.GPGCredentials) (*openpgp.Entity, error) {
+	if creds == nil {
+		return nil, nil
+	}
+	entities, err := PrivateKeyRingFromCredentials(creds)
+	if err != nil {
+		return nil, err
+	}
+	if len(entities) == 0 {
+		return nil, nil
+	}
+	return entities[0], nil
+}
+
+// PrivateKeyRingFromCredentials loads all signing-capable OpenPGP entities from
+// the credential map, decrypting each with the passphrase credential if present.
+func PrivateKeyRingFromCredentials(creds *gpgcredentialsv1.GPGCredentials) (openpgp.EntityList, error) {
+	if creds == nil {
+		return nil, nil
+	}
 	b, err := loadBytes(creds.PrivateKeyPGP, creds.PrivateKeyPGPFile)
 	if err != nil {
 		return nil, fmt.Errorf("load private key: %w", err)
@@ -35,20 +55,23 @@ func PrivateEntityFromCredentials(creds *gpgcredentialsv1.GPGCredentials) (*open
 		return nil, fmt.Errorf("no keys found in private key material")
 	}
 
-	entity := entities[0]
-
 	if creds.Passphrase != "" {
-		if err := entity.DecryptPrivateKeys([]byte(creds.Passphrase)); err != nil {
-			return nil, fmt.Errorf("decrypt GPG private key: %w", err)
+		for _, entity := range entities {
+			if err := entity.DecryptPrivateKeys([]byte(creds.Passphrase)); err != nil {
+				return nil, fmt.Errorf("decrypt GPG private key: %w", err)
+			}
 		}
 	}
 
-	return entity, nil
+	return entities, nil
 }
 
 // PublicKeyRingFromCredentials loads a public OpenPGP key ring from credentials.
 // Falls back to the private key if no public key is provided.
 func PublicKeyRingFromCredentials(creds *gpgcredentialsv1.GPGCredentials) (openpgp.EntityList, error) {
+	if creds == nil {
+		return nil, nil
+	}
 	b, err := loadBytes(creds.PublicKeyPGP, creds.PublicKeyPGPFile)
 	if err != nil {
 		return nil, fmt.Errorf("load public key: %w", err)
