@@ -17,13 +17,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/runtime"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	internalpem "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/pem"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	rsacredentialsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/rsa/spec/identity/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func Test_RSA_Handler(t *testing.T) {
@@ -201,9 +201,9 @@ func Test_RSA_Handler(t *testing.T) {
 									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 								}
 								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
-						PrivateKeyPEMFile: privPath,
-						PublicKeyPEMFile:  embedded,
-					})
+									PrivateKeyPEMFile: privPath,
+									PublicKeyPEMFile:  embedded,
+								})
 								require.NoError(t, err)
 
 								rootDir := t.TempDir()
@@ -244,9 +244,9 @@ func Test_RSA_Handler(t *testing.T) {
 									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 								}
 								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
-						PrivateKeyPEMFile: privPath,
-						PublicKeyPEMFile:  embedded,
-					})
+									PrivateKeyPEMFile: privPath,
+									PublicKeyPEMFile:  embedded,
+								})
 								require.NoError(t, err)
 
 								return descruntime.Signature{Digest: d, Signature: si}
@@ -273,9 +273,9 @@ func Test_RSA_Handler(t *testing.T) {
 									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 								}
 								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
-						PrivateKeyPEMFile: privPath,
-						PublicKeyPEMFile:  embedded,
-					})
+									PrivateKeyPEMFile: privPath,
+									PublicKeyPEMFile:  embedded,
+								})
 								require.NoError(t, err)
 
 								rootPEM = writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
@@ -314,9 +314,9 @@ func Test_RSA_Handler(t *testing.T) {
 									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 								}
 								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
-						PrivateKeyPEMFile: privPath,
-						PublicKeyPEMFile:  embedded,
-					})
+									PrivateKeyPEMFile: privPath,
+									PublicKeyPEMFile:  embedded,
+								})
 								require.NoError(t, err)
 
 								rootPEM = writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
@@ -374,9 +374,9 @@ func Test_RSA_Handler(t *testing.T) {
 									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 								}
 								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
-						PrivateKeyPEMFile: privPath,
-						PublicKeyPEMFile:  embedded,
-					})
+									PrivateKeyPEMFile: privPath,
+									PublicKeyPEMFile:  embedded,
+								})
 								require.NoError(t, err)
 
 								rootDir := t.TempDir()
@@ -442,9 +442,9 @@ func Test_RSA_Handler(t *testing.T) {
 									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 								}
 								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
-						PrivateKeyPEMFile: privPath,
-						PublicKeyPEMFile:  leafOnly,
-					})
+									PrivateKeyPEMFile: privPath,
+									PublicKeyPEMFile:  leafOnly,
+								})
 								require.NoError(t, err)
 
 								rootPEM = writeCertsPEM(t, t.TempDir(), "chain.pem", c.interm, c.root)
@@ -545,9 +545,9 @@ func Test_RSA_Credentials_Override_SystemRoots(t *testing.T) {
 		SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 	}
 	si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
-						PrivateKeyPEMFile: privPath,
-						PublicKeyPEMFile:  chainPath,
-					})
+		PrivateKeyPEMFile: privPath,
+		PublicKeyPEMFile:  chainPath,
+	})
 	require.NoError(t, err)
 	sig := descruntime.Signature{Digest: d, Signature: si}
 
@@ -582,9 +582,9 @@ func Test_RSA_Credentials_Override_SystemRoots(t *testing.T) {
 		leafOnly := writeCertsPEM(t, leafDir, "leaf.pem", c.leaf)
 
 		leafSI, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
-						PrivateKeyPEMFile: leafPrivPath,
-						PublicKeyPEMFile:  leafOnly,
-					})
+			PrivateKeyPEMFile: leafPrivPath,
+			PublicKeyPEMFile:  leafOnly,
+		})
 		require.NoError(t, err)
 		leafSig := descruntime.Signature{Digest: d, Signature: leafSI}
 
@@ -626,9 +626,9 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 				SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 			}
 			si, err := h.Sign(t.Context(), d, &cfgPEM, &rsacredentialsv1.RSACredentials{
-						PrivateKeyPEMFile: privPath,
-						PublicKeyPEMFile:  chainPath,
-					})
+				PrivateKeyPEMFile: privPath,
+				PublicKeyPEMFile:  chainPath,
+			})
 			require.NoError(t, err)
 
 			t.Run("missing public key for plain media", func(t *testing.T) {
