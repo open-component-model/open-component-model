@@ -1,6 +1,12 @@
 package v1
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -51,4 +57,38 @@ type RSACredentials struct {
 	// PrivateKeyPEMFile is a path to a PEM file containing an RSA private key (PKCS#1 or PKCS#8).
 	// Same semantics as PrivateKeyPEM, but loaded from disk. Ignored when PrivateKeyPEM is also set.
 	PrivateKeyPEMFile string `json:"privateKeyPEMFile,omitempty"`
+}
+
+// FromTyped converts runtime.Typed into RSACredentials.
+// Direct conversation as well as converting from v1.DirectCredentials is supported.
+// In every other case, an error will be returned.
+func FromTyped(creds runtime.Typed) (*RSACredentials, error) {
+	if creds == nil {
+		return nil, nil
+	}
+	switch t := creds.(type) {
+	case *RSACredentials:
+		return t, nil
+	case *v1.DirectCredentials:
+		return FromDirectCredentials(t.Properties), nil
+	case *runtime.Raw:
+		RSACredentials := RSACredentials{}
+		if err := Scheme.Convert(creds, &RSACredentials); err != nil {
+			return nil, fmt.Errorf("error converting raw credentials to RSACredentials: %w", err)
+		}
+		return &RSACredentials, nil
+	case *runtime.Unstructured:
+		data, err := json.Marshal(t)
+		if err != nil {
+			return nil, fmt.Errorf("error marshalling unstructured credentials: %w", err)
+		}
+		RSACredentials := RSACredentials{}
+		if err := json.Unmarshal(data, &RSACredentials); err != nil {
+			return nil, fmt.Errorf("error converting unstructured credentials to RSACredentials: %w", err)
+		}
+		return &RSACredentials, nil
+	}
+
+	slog.Error("unexpected credential type, expected RSACredentials or DirectCredentials", "type", creds.GetType())
+	return nil, errors.New(fmt.Sprintf("unexpected credential type: %T", creds))
 }
