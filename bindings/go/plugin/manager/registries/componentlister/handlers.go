@@ -3,7 +3,6 @@ package componentlister
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
@@ -19,17 +18,15 @@ func ListComponentsHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 	credentials runtime.Typed) (*v1.ListComponentsResponse, error), scheme *runtime.Scheme, typ T,
 ) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := &runtime.Raw{}
-		if err := json.Unmarshal(rawCredentials, credentials); err != nil {
-			plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
+		credentials, ok := plugins.CredentialsFromHeader(writer, request.Header)
+		if !ok {
 			return
 		}
 
 		// body contains encoded ListComponentsRequest.
 		body, err := plugins.DecodeJSONRequestBody[v1.ListComponentsRequest[T]](writer, request)
 		if err != nil {
-			plugins.NewError(fmt.Errorf("failed to unmarshal request body: %w", err), http.StatusInternalServerError).Write(writer)
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}
 
