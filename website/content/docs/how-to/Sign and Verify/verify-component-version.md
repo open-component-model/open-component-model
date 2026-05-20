@@ -230,7 +230,7 @@ ocm verify cv \
 ```bash
 ocm verify cv \
   --verifier-spec ./sigstore-verify.yaml \
-  ghcr.io/myorg/components//github.com/acme.org/helloworld:1.0.0
+  ghcr.io/<my-namespce>//github.com/acme.org/helloworld:1.0.0
 ```
 {{< /tab >}}
 {{< /tabs >}}
@@ -291,7 +291,7 @@ The full error names which side did not match. For an identity mismatch:
 
 ```text
 Error: SIGNATURE VERIFICATION FAILED: cosign verify-blob failed: exit status 1
-stderr: Error: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected SAN value "nobody@nowhere.invalid", got "gerald.gm.morrison@gmail.com"
+stderr: Error: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected SAN value "nobody@nowhere.invalid", got "john.doe@gmail.com"
 ```
 
 For an issuer mismatch:
