@@ -18,49 +18,51 @@ const (
 
 const (
 	// CredentialKeyPublicKeyPEM is the key for an inline PEM-encoded RSA public key or X.509 certificate chain.
-	// For plain signatures it supplies the verifier's public key.
-	// For PEM-encoded signatures it provides the trust anchor (root CA or leaf certificate) used during chain validation.
+	// For plain signature verification: supplies the signer's public key. If absent, derived from the private key.
+	// For PEM-encoded signing: the certificate chain (leaf + intermediates) to embed in the signature.
+	// For PEM-encoded signature verification: optional trust anchor; if absent, system roots are used.
 	// Takes precedence over CredentialKeyPublicKeyPEMFile when both are set.
-	// If absent during signing, the public key is derived automatically from the private key.
 	CredentialKeyPublicKeyPEM = "publicKeyPEM"
 	// CredentialKeyPublicKeyPEMFile is the key for a path to a PEM file containing an RSA public key or X.509 certificate chain.
-	// Semantics are identical to CredentialKeyPublicKeyPEM; used when the PEM material is stored on disk rather than inline.
-	// Ignored when CredentialKeyPublicKeyPEM is also set.
+	// Same semantics as CredentialKeyPublicKeyPEM, but loaded from disk. Ignored when CredentialKeyPublicKeyPEM is also set.
 	CredentialKeyPublicKeyPEMFile = "publicKeyPEMFile"
-	// CredentialKeyPrivateKeyPEM is the key for an inline PEM-encoded RSA private key (PKCS#1 or PKCS#8 format).
+	// CredentialKeyPrivateKeyPEM is the key for an inline PEM-encoded RSA private key (PKCS#1 or PKCS#8).
 	// Required for signing; not used during verification.
 	// Takes precedence over CredentialKeyPrivateKeyPEMFile when both are set.
 	CredentialKeyPrivateKeyPEM = "privateKeyPEM"
-	// CredentialKeyPrivateKeyPEMFile is the key for a path to a PEM file containing an RSA private key (PKCS#1 or PKCS#8 format).
-	// Semantics are identical to CredentialKeyPrivateKeyPEM; used when the key is stored on disk rather than inline.
-	// Ignored when CredentialKeyPrivateKeyPEM is also set.
+	// CredentialKeyPrivateKeyPEMFile is the key for a path to a PEM file containing an RSA private key (PKCS#1 or PKCS#8).
+	// Same semantics as CredentialKeyPrivateKeyPEM, but loaded from disk. Ignored when CredentialKeyPrivateKeyPEM is also set.
 	CredentialKeyPrivateKeyPEMFile = "privateKeyPEMFile"
 )
 
-// Deprecated snake_case aliases kept for backward compatibility with legacy .ocmconfig files.
-// FromDirectCredentials accepts both camelCase and these deprecated keys.
+// Legacy snake_case aliases accepted by FromDirectCredentials for backward compatibility
+// with .ocmconfig files that predate the camelCase keys.
 //
 //nolint:gosec // G101: These are key names, not credentials.
 const (
 	// Deprecated: Use CredentialKeyPublicKeyPEM instead.
-	// Legacy snake_case key for an inline PEM-encoded RSA public key or X.509 certificate chain.
-	// Semantics are identical to CredentialKeyPublicKeyPEM; accepted by FromDirectCredentials for backward compatibility with legacy .ocmconfig files.
 	DeprecatedCredentialKeyPublicKeyPEM = "public_key_pem"
 	// Deprecated: Use CredentialKeyPublicKeyPEMFile instead.
-	// Legacy snake_case key for a path to a PEM file containing an RSA public key or X.509 certificate chain.
-	// Semantics are identical to CredentialKeyPublicKeyPEMFile; accepted by FromDirectCredentials for backward compatibility with legacy .ocmconfig files.
 	DeprecatedCredentialKeyPublicKeyPEMFile = "public_key_pem_file"
 	// Deprecated: Use CredentialKeyPrivateKeyPEM instead.
-	// Legacy snake_case key for an inline PEM-encoded RSA private key (PKCS#1 or PKCS#8).
-	// Semantics are identical to CredentialKeyPrivateKeyPEM; accepted by FromDirectCredentials for backward compatibility with legacy .ocmconfig files.
 	DeprecatedCredentialKeyPrivateKeyPEM = "private_key_pem"
 	// Deprecated: Use CredentialKeyPrivateKeyPEMFile instead.
-	// Legacy snake_case key for a path to a PEM file containing an RSA private key (PKCS#1 or PKCS#8).
-	// Semantics are identical to CredentialKeyPrivateKeyPEMFile; accepted by FromDirectCredentials for backward compatibility with legacy .ocmconfig files.
 	DeprecatedCredentialKeyPrivateKeyPEMFile = "private_key_pem_file"
 )
 
-// RSACredentials represents typed credentials for RSA signing and verification.
+// RSACredentials holds key material for RSA signing and/or verification.
+//
+// Each field has two forms: inline PEM content (PEM field) or a file path (PEMFile field).
+// The inline form takes precedence when both are set.
+//
+// Signing requires PrivateKeyPEM or PrivateKeyPEMFile.
+// For PEM-encoded signing, PublicKeyPEM or PublicKeyPEMFile should contain the certificate
+// chain (leaf + intermediates) to embed in the signature.
+//
+// Verification of plain signatures requires PublicKeyPEM or PublicKeyPEMFile.
+// If absent, the public key is derived from the private key.
+// Verification of PEM-encoded signatures uses PublicKeyPEM or PublicKeyPEMFile as an
+// optional trust anchor; if absent, the system root pool is used.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -70,17 +72,21 @@ type RSACredentials struct {
 	// +ocm:jsonschema-gen:enum=RSACredentials/v1
 	// +ocm:jsonschema-gen:enum:deprecated=RSACredentials
 	Type runtime.Type `json:"type"`
-	// PublicKeyPEM holds an inline PEM-encoded RSA public key or X.509 certificate chain.
-	// See CredentialKeyPublicKeyPEM for full semantics and precedence rules.
+	// PublicKeyPEM is an inline PEM-encoded RSA public key or X.509 certificate chain.
+	// For plain signature verification: the signer's public key; derived from PrivateKeyPEM if absent.
+	// For PEM-encoded signing: the certificate chain (leaf + intermediates) to embed in the signature.
+	// For PEM-encoded signature verification: optional trust anchor; if absent, system roots are used.
+	// Takes precedence over PublicKeyPEMFile when both are set.
 	PublicKeyPEM string `json:"publicKeyPEM,omitempty"`
-	// PublicKeyPEMFile is the path to a PEM file containing an RSA public key or X.509 certificate chain.
-	// Used when CredentialKeyPublicKeyPEM is absent. See CredentialKeyPublicKeyPEMFile for full semantics.
+	// PublicKeyPEMFile is a path to a PEM file containing an RSA public key or X.509 certificate chain.
+	// Same semantics as PublicKeyPEM, but loaded from disk. Ignored when PublicKeyPEM is also set.
 	PublicKeyPEMFile string `json:"publicKeyPEMFile,omitempty"`
-	// PrivateKeyPEM holds an inline PEM-encoded RSA private key (PKCS#1 or PKCS#8).
-	// Required for signing. See CredentialKeyPrivateKeyPEM for precedence rules.
+	// PrivateKeyPEM is an inline PEM-encoded RSA private key (PKCS#1 or PKCS#8).
+	// Required for signing; not used during verification.
+	// Takes precedence over PrivateKeyPEMFile when both are set.
 	PrivateKeyPEM string `json:"privateKeyPEM,omitempty"`
-	// PrivateKeyPEMFile is the path to a PEM file containing an RSA private key (PKCS#1 or PKCS#8).
-	// Used when CredentialKeyPrivateKeyPEM is absent. See CredentialKeyPrivateKeyPEMFile for full semantics.
+	// PrivateKeyPEMFile is a path to a PEM file containing an RSA private key (PKCS#1 or PKCS#8).
+	// Same semantics as PrivateKeyPEM, but loaded from disk. Ignored when PrivateKeyPEM is also set.
 	PrivateKeyPEMFile string `json:"privateKeyPEMFile,omitempty"`
 }
 
