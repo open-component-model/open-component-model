@@ -32,7 +32,7 @@ func TestTransformBlobHandlerFunc(t *testing.T) {
 		{
 			name: "TransformBlobHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := TransformBlobHandlerFunc(func(ctx context.Context, request *v1.TransformBlobRequest[*dummyv1.Repository], credentials map[string]string) (*v1.TransformBlobResponse, error) {
+				handler := TransformBlobHandlerFunc(func(ctx context.Context, request *v1.TransformBlobRequest[*dummyv1.Repository], credentials runtime.Typed) (*v1.TransformBlobResponse, error) {
 					require.Equal(t, "DummyRepository/v1", request.Specification.Type.String())
 					return &v1.TransformBlobResponse{
 						Location: types.Location{

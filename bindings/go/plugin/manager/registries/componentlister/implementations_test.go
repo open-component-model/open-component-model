@@ -68,7 +68,7 @@ func TestListComponentsHandler(t *testing.T) {
 	response, err := plugin.ListComponents(ctx, &v1.ListComponentsRequest[runtime.Typed]{
 		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Last:       "",
-	}, map[string]string{})
+	}, nil)
 	require.NoError(t, err)
 	require.Equal(t, []string{"test-component-1", "test-component-2"}, response.List)
 }
