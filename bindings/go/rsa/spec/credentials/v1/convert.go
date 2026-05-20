@@ -21,11 +21,11 @@ func init() {
 func ConvertToRSACredentials(creds runtime.Typed) (*RSACredentials, error) {
 	typed, err := convertScheme.NewObject(creds.GetType())
 	if err != nil {
-		return nil, fmt.Errorf("error converting credential type: %v", err)
+		return nil, fmt.Errorf("error converting credential type: %w", err)
 	}
 
 	if err = convertScheme.Convert(creds, typed); err != nil {
-		return nil, fmt.Errorf("error converting credential type: %v", err)
+		return nil, fmt.Errorf("error converting credential type: %w", err)
 	}
 
 	switch t := typed.(type) {
@@ -33,7 +33,6 @@ func ConvertToRSACredentials(creds runtime.Typed) (*RSACredentials, error) {
 		return fromDirectCredentials(t.Properties), nil
 	case *RSACredentials:
 		return t, nil
-
 	}
 
 	return nil, fmt.Errorf("unsupported credential type %v", typed.GetType())

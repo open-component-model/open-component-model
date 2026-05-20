@@ -71,6 +71,7 @@ func Test_RSA_Handler(t *testing.T) {
 							SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain,
 						}
 						si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+							Type:              rsacredentialsv1.VersionedType,
 							PrivateKeyPEMFile: privPath,
 						})
 						require.NoError(t, err)
@@ -83,6 +84,7 @@ func Test_RSA_Handler(t *testing.T) {
 							SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 						}
 						si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+							Type:              rsacredentialsv1.VersionedType,
 							PrivateKeyPEMFile: privPath,
 							PublicKeyPEMFile:  pubPath, // embeds chain
 						})
@@ -108,7 +110,10 @@ func Test_RSA_Handler(t *testing.T) {
 							name:  "plain_hex_signature_with_matching_pub",
 							build: func(t *testing.T) descruntime.Signature { return signPlain(t, aPriv) },
 							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: aPub}
+								return &rsacredentialsv1.RSACredentials{
+									Type:             rsacredentialsv1.VersionedType,
+									PublicKeyPEMFile: aPub,
+								}
 							},
 						},
 						{
@@ -116,7 +121,9 @@ func Test_RSA_Handler(t *testing.T) {
 							build: func(t *testing.T) descruntime.Signature { return signPlain(t, aPriv) },
 							creds: func(t *testing.T) runtime.Typed {
 								p := writePKIXPublicKeyPEM(t, t.TempDir(), &aKey.PublicKey)
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: p}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: p,
+								}
 							},
 						},
 						{
@@ -124,14 +131,18 @@ func Test_RSA_Handler(t *testing.T) {
 							build: func(t *testing.T) descruntime.Signature { return signPlain(t, aPriv) },
 							creds: func(t *testing.T) runtime.Typed {
 								p := writePKCS1PublicKeyPEM(t, t.TempDir(), &aKey.PublicKey)
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: p}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: p,
+								}
 							},
 						},
 						{
 							name:  "plain_hex_signature_with_only_priv",
 							build: func(t *testing.T) descruntime.Signature { return signPlain(t, aPriv) },
 							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PrivateKeyPEMFile: aPriv}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PrivateKeyPEMFile: aPriv,
+								}
 							},
 						},
 						{
@@ -144,12 +155,16 @@ func Test_RSA_Handler(t *testing.T) {
 									SignatureAlgorithm:      alg,
 									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain,
 								}
-								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{PrivateKeyPEMFile: pkcs8Path})
+								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PrivateKeyPEMFile: pkcs8Path,
+								})
 								require.NoError(t, err)
 								return descruntime.Signature{Digest: d, Signature: si}
 							},
 							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: aPub}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: aPub,
+								}
 							},
 						},
 						{
@@ -162,7 +177,9 @@ func Test_RSA_Handler(t *testing.T) {
 							name:  "pem_signature_with_matching_credentials_pub",
 							build: func(t *testing.T) descruntime.Signature { return signPEM(t, aPriv, aPub) },
 							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: aPub}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: aPub,
+								}
 							},
 						},
 						{
@@ -173,7 +190,9 @@ func Test_RSA_Handler(t *testing.T) {
 								return s
 							},
 							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: aPub}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: aPub,
+								}
 							},
 							wantErr: "issuer mismatch between \"CN=mismatch\" and \"CN=signer\"",
 						},
@@ -181,7 +200,9 @@ func Test_RSA_Handler(t *testing.T) {
 							name:  "pem_signature_with_mismatched_credentials_pub_fails",
 							build: func(t *testing.T) descruntime.Signature { return signPEM(t, aPriv, aPub) },
 							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: bPub}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: bPub,
+								}
 							},
 							wantErr: "certificate signed by unknown authority",
 						},
@@ -201,6 +222,7 @@ func Test_RSA_Handler(t *testing.T) {
 									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 								}
 								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+									Type:              rsacredentialsv1.VersionedType,
 									PrivateKeyPEMFile: privPath,
 									PublicKeyPEMFile:  embedded,
 								})
@@ -222,7 +244,9 @@ func Test_RSA_Handler(t *testing.T) {
 								}
 							},
 							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPEM,
+								}
 							},
 						},
 						{
@@ -244,6 +268,7 @@ func Test_RSA_Handler(t *testing.T) {
 									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 								}
 								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+									Type:              rsacredentialsv1.VersionedType,
 									PrivateKeyPEMFile: privPath,
 									PublicKeyPEMFile:  embedded,
 								})
@@ -273,6 +298,7 @@ func Test_RSA_Handler(t *testing.T) {
 									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 								}
 								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+									Type:              rsacredentialsv1.VersionedType,
 									PrivateKeyPEMFile: privPath,
 									PublicKeyPEMFile:  embedded,
 								})
@@ -292,7 +318,9 @@ func Test_RSA_Handler(t *testing.T) {
 								}
 							},
 							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPEM,
+								}
 							},
 						},
 						{
@@ -314,6 +342,7 @@ func Test_RSA_Handler(t *testing.T) {
 									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 								}
 								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+									Type:              rsacredentialsv1.VersionedType,
 									PrivateKeyPEMFile: privPath,
 									PublicKeyPEMFile:  embedded,
 								})
@@ -333,7 +362,9 @@ func Test_RSA_Handler(t *testing.T) {
 								}
 							},
 							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPEM,
+								}
 							},
 							wantErr: "issuer mismatch",
 						},
@@ -374,6 +405,7 @@ func Test_RSA_Handler(t *testing.T) {
 									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 								}
 								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+									Type:              rsacredentialsv1.VersionedType,
 									PrivateKeyPEMFile: privPath,
 									PublicKeyPEMFile:  embedded,
 								})
@@ -395,7 +427,9 @@ func Test_RSA_Handler(t *testing.T) {
 								}
 							},
 							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPEM,
+								}
 							},
 							wantErr: "issuer mismatch",
 						},
@@ -417,7 +451,9 @@ func Test_RSA_Handler(t *testing.T) {
 							creds: func(t *testing.T) runtime.Typed {
 								c := buildChain(t) // different chain — interm/root don't match the leaf above
 								chainPath := writeCertsPEM(t, t.TempDir(), "chain.pem", c.interm, c.root)
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: chainPath}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: chainPath,
+								}
 							},
 							wantErr: "certificate signed by unknown authority",
 						},
@@ -442,6 +478,7 @@ func Test_RSA_Handler(t *testing.T) {
 									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 								}
 								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+									Type:              rsacredentialsv1.VersionedType,
 									PrivateKeyPEMFile: privPath,
 									PublicKeyPEMFile:  leafOnly,
 								})
@@ -454,7 +491,9 @@ func Test_RSA_Handler(t *testing.T) {
 							// Credentials provide [interm, root] from the same chain as the
 							// signature.
 							creds: func(t *testing.T) runtime.Typed {
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPEM}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPEM,
+								}
 							},
 						},
 						{
@@ -466,7 +505,9 @@ func Test_RSA_Handler(t *testing.T) {
 							creds: func(t *testing.T) runtime.Typed {
 								c := buildChain(t)
 								intermOnly := writeCertsPEM(t, t.TempDir(), "interm.pem", c.interm)
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: intermOnly}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: intermOnly,
+								}
 							},
 							wantErr: "certificate signed by unknown authority",
 						},
@@ -479,7 +520,9 @@ func Test_RSA_Handler(t *testing.T) {
 								c := buildChain(t)
 								// Deliberately wrong order: [root, interm] — self-signed root is not last.
 								badChain := writeCertsPEM(t, t.TempDir(), "bad.pem", c.root, c.interm)
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: badChain}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: badChain,
+								}
 							},
 							wantErr: "must be the last certificate in the credential chain",
 						},
@@ -494,7 +537,9 @@ func Test_RSA_Handler(t *testing.T) {
 							creds: func(t *testing.T) runtime.Typed {
 								c := buildChain(t)
 								rootPath := writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
-								return &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: rootPath}
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPath,
+								}
 							},
 							wantErr: "certificate signed by unknown authority",
 						},
@@ -545,6 +590,7 @@ func Test_RSA_Credentials_Override_SystemRoots(t *testing.T) {
 		SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 	}
 	si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+		Type:              rsacredentialsv1.VersionedType,
 		PrivateKeyPEMFile: privPath,
 		PublicKeyPEMFile:  chainPath,
 	})
@@ -553,7 +599,9 @@ func Test_RSA_Credentials_Override_SystemRoots(t *testing.T) {
 
 	// Self-signed anchor: correct cert succeeds.
 	t.Run("self_signed_anchor_correct_succeeds", func(t *testing.T) {
-		err := h.Verify(t.Context(), sig, nil, &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: chainPath})
+		err := h.Verify(t.Context(), sig, nil, &rsacredentialsv1.RSACredentials{
+			Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: chainPath,
+		})
 		require.NoError(t, err)
 	})
 
@@ -564,7 +612,9 @@ func Test_RSA_Credentials_Override_SystemRoots(t *testing.T) {
 		otherCert := mustSelfSigned(t, "unrelated-root", otherKey)
 		otherPath := writeCertsPEM(t, t.TempDir(), "other.pem", otherCert)
 
-		err := h.Verify(t.Context(), sig, nil, &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: otherPath})
+		err := h.Verify(t.Context(), sig, nil, &rsacredentialsv1.RSACredentials{
+			Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: otherPath,
+		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "certificate verification failed")
 	})
@@ -582,6 +632,7 @@ func Test_RSA_Credentials_Override_SystemRoots(t *testing.T) {
 		leafOnly := writeCertsPEM(t, leafDir, "leaf.pem", c.leaf)
 
 		leafSI, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+			Type:              rsacredentialsv1.VersionedType,
 			PrivateKeyPEMFile: leafPrivPath,
 			PublicKeyPEMFile:  leafOnly,
 		})
@@ -591,14 +642,20 @@ func Test_RSA_Credentials_Override_SystemRoots(t *testing.T) {
 		// Credentials supply [interm, root]: interm → intermediates pool,
 		// root (self-signed, last) → isolated anchor. Must succeed.
 		chainPath := writeCertsPEM(t, t.TempDir(), "chain.pem", c.interm, c.root)
-		err = h.Verify(t.Context(), leafSig, nil, &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: chainPath})
+		err = h.Verify(t.Context(), leafSig, nil, &rsacredentialsv1.RSACredentials{
+			Type:             rsacredentialsv1.VersionedType,
+			PublicKeyPEMFile: chainPath,
+		})
 		require.NoError(t, err)
 
 		// Credentials supply only [interm] (no self-signed root). The intermediate
 		// goes to the intermediates pool; no root exists to terminate the chain.
 		// Must fail — a non-self-signed cert is never elevated to an anchor.
 		intermPath := writeCertsPEM(t, t.TempDir(), "interm.pem", c.interm)
-		err = h.Verify(t.Context(), leafSig, nil, &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: intermPath})
+		err = h.Verify(t.Context(), leafSig, nil, &rsacredentialsv1.RSACredentials{
+			Type:             rsacredentialsv1.VersionedType,
+			PublicKeyPEMFile: intermPath,
+		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "certificate verification failed")
 	})
@@ -626,6 +683,7 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 				SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 			}
 			si, err := h.Sign(t.Context(), d, &cfgPEM, &rsacredentialsv1.RSACredentials{
+				Type:              rsacredentialsv1.VersionedType,
 				PrivateKeyPEMFile: privPath,
 				PublicKeyPEMFile:  chainPath,
 			})
@@ -636,7 +694,10 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 					SignatureAlgorithm:      alg,
 					SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain,
 				}
-				plain, err := h.Sign(t.Context(), d, &cfgPlain, &rsacredentialsv1.RSACredentials{PrivateKeyPEMFile: privPath})
+				plain, err := h.Sign(t.Context(), d, &cfgPlain, &rsacredentialsv1.RSACredentials{
+					Type:              rsacredentialsv1.VersionedType,
+					PrivateKeyPEMFile: privPath,
+				})
 				require.NoError(t, err)
 
 				err = h.Verify(t.Context(), descruntime.Signature{Digest: d, Signature: plain}, nil, nil)
@@ -646,35 +707,45 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 
 			t.Run("missing hash algorithm", func(t *testing.T) {
 				s := descruntime.Signature{Digest: descruntime.Digest{HashAlgorithm: "", Value: d.Value}, Signature: si}
-				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: chainPath})
+				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{
+					Type: rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath})
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "missing hash algorithm")
 			})
 
 			t.Run("missing digest value", func(t *testing.T) {
 				s := descruntime.Signature{Digest: descruntime.Digest{HashAlgorithm: "sha256", Value: ""}, Signature: si}
-				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: chainPath})
+				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{
+					Type: rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath})
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "missing digest value")
 			})
 
 			t.Run("unsupported hash algorithm", func(t *testing.T) {
 				s := descruntime.Signature{Digest: descruntime.Digest{HashAlgorithm: "sha1", Value: d.Value}, Signature: si}
-				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: chainPath})
+				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{
+					Type: rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath})
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "unsupported hash algorithm")
 			})
 
 			t.Run("hash name mapping accepts SHA-256", func(t *testing.T) {
 				s := descruntime.Signature{Digest: descruntime.Digest{HashAlgorithm: "SHA-256", Value: d.Value}, Signature: si}
-				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: chainPath})
+				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{
+					Type: rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath})
 				require.NoError(t, err)
 			})
 
 			t.Run("tampered digest causes verification error", func(t *testing.T) {
 				sum2 := sha256.Sum256([]byte("different"))
 				d2 := descruntime.Digest{HashAlgorithm: crypto.SHA256.String(), Value: hex.EncodeToString(sum2[:])}
-				err := h.Verify(t.Context(), descruntime.Signature{Digest: d2, Signature: si}, nil, &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: chainPath})
+				err := h.Verify(t.Context(), descruntime.Signature{Digest: d2, Signature: si}, nil, &rsacredentialsv1.RSACredentials{
+					Type: rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath})
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "verification error")
 			})
@@ -688,7 +759,9 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 						MediaType: si.MediaType,
 						Value:     pemOnlySig,
 					},
-				}, nil, &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: chainPath})
+				}, nil, &rsacredentialsv1.RSACredentials{
+					Type: rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath})
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "invalid certificate format (expected \"CERTIFICATE\" PEM block)")
 			})
@@ -701,7 +774,9 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 						MediaType: si.MediaType,
 						Value:     bad,
 					},
-				}, nil, &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: chainPath})
+				}, nil, &rsacredentialsv1.RSACredentials{
+					Type: rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath})
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "invalid algorithm")
 			})
@@ -711,7 +786,9 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 				// on the signature must match the leaf certificate's X.509 Issuer field.
 				s := descruntime.Signature{Digest: d, Signature: si}
 				s.Signature.Issuer = cert.Subject.String()
-				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{PublicKeyPEMFile: chainPath})
+				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{
+					Type: rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath})
 				require.NoError(t, err)
 			})
 
