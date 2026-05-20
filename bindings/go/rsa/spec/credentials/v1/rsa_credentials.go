@@ -2,7 +2,6 @@ package v1
 
 import (
 	"encoding/json"
-	"fmt"
 
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -89,6 +88,38 @@ type RSACredentials struct {
 	PrivateKeyPEMFile string `json:"privateKeyPEMFile,omitempty"`
 }
 
+// UnmarshalJSON implements [json.Unmarshaler], accepting both camelCase and deprecated
+// snake_case field names so that legacy .ocmconfig JSON is handled transparently.
+// The camelCase form takes precedence when both keys are present.
+func (r *RSACredentials) UnmarshalJSON(data []byte) error {
+	type alias RSACredentials // avoids infinite recursion
+	if err := json.Unmarshal(data, (*alias)(r)); err != nil {
+		return err
+	}
+	// Fallback: apply deprecated snake_case keys for any field not already set.
+	var leg struct {
+		PublicKeyPEM      string `json:"public_key_pem"`
+		PublicKeyPEMFile  string `json:"public_key_pem_file"`
+		PrivateKeyPEM     string `json:"private_key_pem"`
+		PrivateKeyPEMFile string `json:"private_key_pem_file"`
+	}
+	if err := json.Unmarshal(data, &leg); err == nil {
+		if r.PublicKeyPEM == "" {
+			r.PublicKeyPEM = leg.PublicKeyPEM
+		}
+		if r.PublicKeyPEMFile == "" {
+			r.PublicKeyPEMFile = leg.PublicKeyPEMFile
+		}
+		if r.PrivateKeyPEM == "" {
+			r.PrivateKeyPEM = leg.PrivateKeyPEM
+		}
+		if r.PrivateKeyPEMFile == "" {
+			r.PrivateKeyPEMFile = leg.PrivateKeyPEMFile
+		}
+	}
+	return nil
+}
+
 // MustRegisterCredentialType registers RSACredentials/v1 in the given scheme.
 func MustRegisterCredentialType(scheme *runtime.Scheme) {
 	scheme.MustRegisterWithAlias(&RSACredentials{},
@@ -119,7 +150,7 @@ func lookupProperty(properties map[string]string, key, deprecated string) string
 
 // FromTyped converts [runtime.Typed] into RSACredentials.
 // Direct conversation as well as converting from [v1.DirectCredentials] is supported.
-// Other supported [runtime.Typed] implementations are [runtime.Raw] and [runtime.Unstructured].
+// Other supported [runtime.Typed] implementations are [runtime.Raw].
 // For unsupported [runtime.Typed] implementations, an error will be returned.
 func FromTyped(creds runtime.Typed) (*RSACredentials, error) {
 	if creds == nil {
@@ -130,23 +161,12 @@ func FromTyped(creds runtime.Typed) (*RSACredentials, error) {
 		return t, nil
 	case *v1.DirectCredentials:
 		return FromDirectCredentials(t.Properties), nil
-	case *runtime.Raw:
-		props := map[string]string{}
-		if err := json.Unmarshal(t.Data, &props); err != nil {
-			return nil, fmt.Errorf("error unmarshalling raw RSA credentials: %w", err)
-		}
-		return FromDirectCredentials(props), nil
-	case *runtime.Unstructured:
-		data, err := json.Marshal(t)
-		if err != nil {
-			return nil, fmt.Errorf("error marshalling unstructured credentials: %w", err)
-		}
-		props := map[string]string{}
-		if err := json.Unmarshal(data, &props); err != nil {
-			return nil, fmt.Errorf("error converting unstructured credentials to RSACredentials: %w", err)
-		}
-		return FromDirectCredentials(props), nil
+	default:
 	}
 
-	return nil, fmt.Errorf("unexpected credential type, expected RSACredentials or supported runtime.Type, got %v", creds.GetType())
+	rsaCreds := RSACredentials{}
+	if err := Scheme.Convert(creds, &rsaCreds); err != nil {
+		return nil, err
+	}
+	return &rsaCreds, nil
 }

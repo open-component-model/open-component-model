@@ -73,21 +73,6 @@ func TestFromTyped(t *testing.T) {
 			},
 		},
 		{
-			name: "Unstructured",
-			input: &runtime.Unstructured{
-				Data: map[string]any{
-					"type":             typ,
-					"privateKeyPEM":    "my-key",
-					"publicKeyPEMFile": "/path/pub.pem",
-				},
-			},
-			want: &RSACredentials{
-				Type:             typ,
-				PrivateKeyPEM:    "my-key",
-				PublicKeyPEMFile: "/path/pub.pem",
-			},
-		},
-		{
 			name: "Raw with deprecated snake_case keys",
 			input: func() *runtime.Raw {
 				r := &runtime.Raw{}
@@ -96,21 +81,6 @@ func TestFromTyped(t *testing.T) {
 					r))
 				return r
 			}(),
-			want: &RSACredentials{
-				Type:             typ,
-				PrivateKeyPEM:    "my-key",
-				PublicKeyPEMFile: "/path/pub.pem",
-			},
-		},
-		{
-			name: "Unstructured with deprecated snake_case keys",
-			input: &runtime.Unstructured{
-				Data: map[string]any{
-					"type":                typ,
-					"private_key_pem":     "my-key",
-					"public_key_pem_file": "/path/pub.pem",
-				},
-			},
 			want: &RSACredentials{
 				Type:             typ,
 				PrivateKeyPEM:    "my-key",
