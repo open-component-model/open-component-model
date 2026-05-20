@@ -73,7 +73,7 @@ type RSACredentials struct {
 	PrivateKeyPEMFile string `json:"privateKeyPEMFile,omitempty"`
 }
 
-// ConvertToRSACredentials converts [runtime.Typed] into RSACredentials.
+// ConvertToRSACredentials converts [runtime.Typed] into [RSACredentials].
 // Direct conversation as well as converting from [v1.DirectCredentials] is supported.
 // Other supported [runtime.Typed] implementations are [runtime.Raw].
 // For unsupported [runtime.Typed] implementations, an error will be returned.

@@ -17,12 +17,6 @@ func (f *fakeTyped) SetType(_ runtime.Type)       {}
 func (f *fakeTyped) DeepCopyTyped() runtime.Typed { return &fakeTyped{} }
 
 func TestConvertToRSACredentials(t *testing.T) {
-	typ := VersionedType
-
-	raw := &runtime.Raw{}
-	err := raw.UnmarshalJSON([]byte(`{"type":"RSACredentials/v1","privateKeyPEM":"my-key","publicKeyPEMFile":"/path/pub.pem"}`))
-	require.NoError(t, err)
-
 	tests := []struct {
 		name    string
 		input   runtime.Typed
@@ -32,12 +26,12 @@ func TestConvertToRSACredentials(t *testing.T) {
 		{
 			name: "RSACredentials passthrough",
 			input: &RSACredentials{
-				Type:             typ,
+				Type:             VersionedType,
 				PrivateKeyPEM:    "my-key",
 				PublicKeyPEMFile: "/path/pub.pem",
 			},
 			want: &RSACredentials{
-				Type:             typ,
+				Type:             VersionedType,
 				PrivateKeyPEM:    "my-key",
 				PublicKeyPEMFile: "/path/pub.pem",
 			},
@@ -51,30 +45,31 @@ func TestConvertToRSACredentials(t *testing.T) {
 				},
 			},
 			want: &RSACredentials{
-				Type:             typ,
+				Type:             VersionedType,
 				PrivateKeyPEM:    "my-key",
 				PublicKeyPEMFile: "/path/pub.pem",
 			},
 		},
 		{
-			name:  "Raw",
-			input: raw,
+			name: "Raw",
+			input: &runtime.Raw{
+				Type: VersionedType,
+				Data: []byte(`{"type":"RSACredentials/v1","private_key_pem":"my-key","public_key_pem_file":"/path/pub.pem"}`),
+			},
 			want: &RSACredentials{
-				Type:             typ,
+				Type:             VersionedType,
 				PrivateKeyPEM:    "my-key",
 				PublicKeyPEMFile: "/path/pub.pem",
 			},
 		},
 		{
 			name: "Raw with deprecated snake_case keys",
-			input: func() *runtime.Raw {
-				raw := &runtime.Raw{}
-				err := raw.UnmarshalJSON([]byte(`{"type":"RSACredentials/v1","private_key_pem":"my-key","public_key_pem_file":"/path/pub.pem"}`))
-				require.NoError(t, err)
-				return raw
-			}(),
+			input: &runtime.Raw{
+				Type: VersionedType,
+				Data: []byte(`{"type":"RSACredentials/v1","private_key_pem":"my-key","public_key_pem_file":"/path/pub.pem"}`),
+			},
 			want: &RSACredentials{
-				Type:             typ,
+				Type:             VersionedType,
 				PrivateKeyPEM:    "my-key",
 				PublicKeyPEMFile: "/path/pub.pem",
 			},

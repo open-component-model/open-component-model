@@ -81,6 +81,7 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
 	}
 	algorithm := supported.GetSignatureAlgorithm()
+
 	var rsaCreds *rsacredentialsv1.RSACredentials
 	if creds != nil {
 		if c, err := rsacredentialsv1.ConvertToRSACredentials(creds); err != nil {
@@ -138,10 +139,11 @@ func (h *Handler) Sign(
 func (h *Handler) Verify(
 	ctx context.Context,
 	signed descruntime.Signature,
-	// we use hints from the signature to determine the correct settings, so no additional config is needed
+// we use hints from the signature to determine the correct settings, so no additional config is needed
 	_ runtime.Typed,
 	creds runtime.Typed,
 ) error {
+
 	var rsaCreds *rsacredentialsv1.RSACredentials
 	if creds != nil {
 		if c, err := rsacredentialsv1.ConvertToRSACredentials(creds); err != nil {
@@ -150,6 +152,7 @@ func (h *Handler) Verify(
 			rsaCreds = c
 		}
 	}
+
 	pubFromCreds, err := rsacredentials.PublicKeyFromCredentials(rsaCreds)
 	if err != nil {
 		return fmt.Errorf("cannot load public key from credentials for verification: %w", err)
