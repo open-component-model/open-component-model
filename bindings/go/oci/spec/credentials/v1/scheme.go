@@ -4,6 +4,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+var CredentialRepositoryConfigType = runtime.NewVersionedType("DockerConfig", "v1")
+
 var Scheme = runtime.NewScheme()
 
 func init() {
@@ -13,7 +15,7 @@ func init() {
 func MustAddToScheme(scheme *runtime.Scheme) {
 	dockerConfig := &DockerConfig{}
 	scheme.MustRegisterWithAlias(dockerConfig,
-		runtime.NewVersionedType(DockerConfigType, Version),
+		CredentialRepositoryConfigType,
 		runtime.NewUnversionedType(DockerConfigType),
 	)
 

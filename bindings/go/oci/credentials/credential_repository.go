@@ -24,10 +24,10 @@ func (p *OCICredentialRepository) GetCredentialRepositoryScheme() *runtime.Schem
 	return credentialsv1.Scheme
 }
 
-// ResolveTyped resolves credentials and returns them as typed *credentialsv1.OCICredentials.
+// Resolve resolves credentials and returns them as typed *credentialsv1.OCICredentials.
 // The credentials parameter is unused: docker configs are read from the host and do not require
 // authentication themselves.
-func (p *OCICredentialRepository) ResolveTyped(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, _ runtime.Typed) (runtime.Typed, error) {
+func (p *OCICredentialRepository) Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, _ runtime.Typed) (runtime.Typed, error) {
 	dockerConfig := credentialsv1.DockerConfig{}
 	if err := p.GetCredentialRepositoryScheme().Convert(cfg, &dockerConfig); err != nil {
 		return nil, fmt.Errorf("failed to resolve credentials because config could not be interpreted as docker config: %w", err)
