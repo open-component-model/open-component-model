@@ -145,7 +145,6 @@ tree transport-archive
 This allows CTF archives to be compatible with OCI registries and tools.
 {{< /details >}}
 
-
 {{< step-item >}}
 
 ### Verify the result
@@ -165,7 +164,6 @@ COMPONENT                      │ VERSION │ PROVIDER
 github.com/acme.org/helloworld │ 1.0.0   │ acme.org
 ```
 {{< /details >}}
-
 
 {{< step-list-end >}}
 
