@@ -16,8 +16,15 @@ const (
 )
 
 const (
-	CredentialKeyTrustedRootJSON     = "trusted_root_json"
-	CredentialKeyTrustedRootJSONFile = "trusted_root_json_file"
+	CredentialKeyTrustedRootJSON     = "trustedRootJSON"
+	CredentialKeyTrustedRootJSONFile = "trustedRootJSONFile"
+)
+
+const (
+	// Deprecated: Use CredentialKeyTrustedRootJSON instead.
+	DeprecatedCredentialKeyTrustedRootJSON = "trusted_root_json"
+	// Deprecated: Use CredentialKeyTrustedRootJSONFile instead.
+	DeprecatedCredentialKeyTrustedRootJSONFile = "trusted_root_json_file"
 )
 
 // TrustedRoot represents typed credentials for Sigstore verification trust material.
@@ -41,12 +48,22 @@ func MustRegisterCredentialType(scheme *runtime.Scheme) {
 	)
 }
 
+// FromDirectCredentials converts a DirectCredentials properties map into typed TrustedRoot.
+// Both camelCase and deprecated snake_case keys are accepted.
+// A nil map is safe and returns a TrustedRoot with only the type set.
 func FromDirectCredentials(properties map[string]string) *TrustedRoot {
 	return &TrustedRoot{
 		Type:                runtime.NewVersionedType(TrustedRootType, Version),
-		TrustedRootJSON:     properties[CredentialKeyTrustedRootJSON],
-		TrustedRootJSONFile: properties[CredentialKeyTrustedRootJSONFile],
+		TrustedRootJSON:     lookupProperty(properties, CredentialKeyTrustedRootJSON, DeprecatedCredentialKeyTrustedRootJSON),
+		TrustedRootJSONFile: lookupProperty(properties, CredentialKeyTrustedRootJSONFile, DeprecatedCredentialKeyTrustedRootJSONFile),
 	}
+}
+
+func lookupProperty(properties map[string]string, key, deprecated string) string {
+	if v := properties[key]; v != "" {
+		return v
+	}
+	return properties[deprecated]
 }
 
 // FromTyped converts runtime.Typed into TrustedRoot.
