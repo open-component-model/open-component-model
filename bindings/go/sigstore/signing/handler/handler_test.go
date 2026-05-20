@@ -19,12 +19,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
-	oidcv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1alpha1"
-	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1"
+	oidcv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1"
+	v2 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1"
+	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1"
 	signerv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1alpha1"
 	verifierv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1alpha1"
 )
@@ -332,10 +334,7 @@ func TestHandler_Sign(t *testing.T) {
 		{
 			name:    "TrustedRoot credential rejected on sign",
 			creds:   &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/trusted_root.json"},
-			wantErr: "convert credentials",
-			assertMock: func(t *testing.T, mock *execRecorder) {
-				require.Nil(t, mock.lastSignArgs)
-			},
+			wantErr: "OIDC identity token required",
 		},
 	}
 
@@ -435,6 +434,22 @@ func TestSign_AmbientACTIONS_ID_TOKEN_vars(t *testing.T) {
 	require.False(t, internal.HasEnvKey(mock.lastSignEnv, "SIGSTORE_ID_TOKEN"), "should not inject SIGSTORE_ID_TOKEN when Actions OIDC is available")
 }
 
+func TestSign_TUF_ROOT_DoesNotSuppressTrustedRootFlag(t *testing.T) {
+	t.Setenv("TUF_ROOT", "/tuf/cache")
+
+	mock := newSignMock(t, fakeBundleJSON(t))
+	h := newWithRunner(mock)
+
+	creds := map[string]string{
+		oidcv1.CredentialKeyToken:           "test-token",
+		v2.CredentialKeyTrustedRootJSONFile: "/cred/root.json",
+	}
+	_, err := h.Sign(t.Context(), testDigest(), testSignConfig(), &v1.DirectCredentials{Properties: creds})
+	require.NoError(t, err)
+	require.Equal(t, "/cred/root.json", argValue(mock.lastSignArgs, "--trusted-root"),
+		"TUF_ROOT is for TUF cache, not trusted root — credential should still produce --trusted-root")
+}
+
 func TestVerify_TUF_ROOT_DoesNotSuppressTrustedRootFlag(t *testing.T) {
 	t.Setenv("TUF_ROOT", "/tuf/cache")
 
@@ -442,7 +457,7 @@ func TestVerify_TUF_ROOT_DoesNotSuppressTrustedRootFlag(t *testing.T) {
 	h := newWithRunner(mock)
 
 	cfg := testVerifyConfig()
-	creds := &trustedrootv1.TrustedRoot{
+	creds := &v2.TrustedRoot{
 		TrustedRootJSONFile: "/cred/root.json",
 	}
 
@@ -673,7 +688,7 @@ func TestVerify_PrivateInfrastructureWithTrustedRootCredential(t *testing.T) {
 	cfg := testVerifyConfig()
 	cfg.PrivateInfrastructure = true
 
-	creds := &trustedrootv1.TrustedRoot{
+	creds := &v2.TrustedRoot{
 		TrustedRootJSON: `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`,
 	}
 
@@ -792,19 +807,19 @@ func TestResolveTrustedRootPath(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		creds   *trustedrootv1.TrustedRoot
+		creds   *v2.TrustedRoot
 		want    string
 		wantErr string
 		isFile  bool // if true, assert path exists as a file (written from inline JSON)
 	}{
 		{
 			name:   "inline JSON wins over file credential",
-			creds:  &trustedrootv1.TrustedRoot{TrustedRootJSON: `{"mediaType":"test"}`, TrustedRootJSONFile: "/cred/root.json"},
+			creds:  &v2.TrustedRoot{TrustedRootJSON: `{"mediaType":"test"}`, TrustedRootJSONFile: "/cred/root.json"},
 			isFile: true,
 		},
 		{
 			name:  "file credential used",
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/cred/root.json"},
+			creds: &v2.TrustedRoot{TrustedRootJSONFile: "/cred/root.json"},
 			want:  "/cred/root.json",
 		},
 		{
@@ -814,27 +829,27 @@ func TestResolveTrustedRootPath(t *testing.T) {
 		},
 		{
 			name:    "relative path rejected",
-			creds:   &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "../../etc/passwd"},
+			creds:   &v2.TrustedRoot{TrustedRootJSONFile: "../../etc/passwd"},
 			wantErr: "must be absolute",
 		},
 		{
 			name:    "path traversal rejected",
-			creds:   &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/legit/../../../etc/passwd"},
+			creds:   &v2.TrustedRoot{TrustedRootJSONFile: "/legit/../../../etc/passwd"},
 			wantErr: "non-canonical",
 		},
 		{
 			name:  "whitespace-only JSON treated as empty",
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSON: "   \n\t  "},
+			creds: &v2.TrustedRoot{TrustedRootJSON: "   \n\t  "},
 			want:  "",
 		},
 		{
 			name:  "whitespace-only file path treated as empty",
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "   "},
+			creds: &v2.TrustedRoot{TrustedRootJSONFile: "   "},
 			want:  "",
 		},
 		{
 			name:  "valid absolute path accepted",
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/opt/sigstore/trusted_root.json"},
+			creds: &v2.TrustedRoot{TrustedRootJSONFile: "/opt/sigstore/trusted_root.json"},
 			want:  "/opt/sigstore/trusted_root.json",
 		},
 	}
