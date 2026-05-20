@@ -2,7 +2,7 @@
 title: "Download Resources from Component Versions"
 description: "Extract resources from OCM component versions to your local filesystem."
 icon: "📥"
-weight: 8
+weight: 10
 toc: true
 ---
 

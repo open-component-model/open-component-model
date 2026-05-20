@@ -1,7 +1,7 @@
 ---
 title: "Resolving Components across Multiple Registries"
 description: "Configure resolvers to recursively resolve component references distributed across multiple OCI registries."
-weight: 11
+weight: 13
 toc: true
 ---
 

@@ -430,7 +430,6 @@ sequenceDiagram
     - identity:
         # consumer identity for signing: identifies a sigstore signer
         type: SigstoreSigner/v1alpha1
-        algorithm: sigstore
         signature: mysig
       credentials:
         # resolve credentials via the OIDCIdentityTokenProvider credential plugin (interactive browser flow).
@@ -439,7 +438,6 @@ sequenceDiagram
     - identity:
         # consumer identity for signing with a pre-obtained token (e.g. CI)
         type: SigstoreSigner/v1alpha1
-        algorithm: sigstore
         signature: mysig-ci
       credentials:
         - type: Credentials/v1
@@ -448,7 +446,6 @@ sequenceDiagram
     - identity:
         # consumer identity for signing targeting private OIDC infrastructure
         type: SigstoreSigner/v1alpha1
-        algorithm: sigstore
         signature: mysig-private
       credentials:
         - type: OIDCIdentityTokenProvider/v1alpha1
@@ -457,7 +454,6 @@ sequenceDiagram
     - identity:
         # consumer identity for verification: identifies a sigstore verifier
         type: SigstoreVerifier/v1alpha1
-        algorithm: sigstore
         signature: mysig
       credentials:
         - type: Credentials/v1
@@ -495,7 +491,6 @@ Generated Credential Consumer Identity for `GetSigningCredentialConsumerIdentity
 
 ```yaml
 type: SigstoreSigner/v1alpha1
-algorithm: sigstore
 signature: mysig
 ```
 
@@ -511,7 +506,6 @@ Generated Credential Consumer Identity for `GetVerifyingCredentialConsumerIdenti
 
 ```yaml
 type: SigstoreVerifier/v1alpha1
-algorithm: sigstore
 signature: mysig
 ```
 
