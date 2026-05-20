@@ -18,11 +18,8 @@ const TRUNCATION_NOTICE = `\n\n---\n\n*Release notes truncated to fit GitHub's $
  * Promote changelog from RC: Read RC changelog and rewrite header for the final release.
  * Falls back to a simple "Promoted from …" message if file is missing.
  *
- * The header pattern is derived dynamically from the RC tag, so it works for
- * any component prefix (cli/v…, kubernetes/controller/v…, etc.). The cliff.toml
- * template strips a leading "v" from the version segment via
- * `trim_start_matches(pat="v")`, so we apply the same trim when matching and
- * rewriting headers.
+ * The cliff.toml template renders headers as `version | trim_start_matches(pat="v")`,
+ * so we apply the same trim when matching and rewriting headers.
  *
  * @param {string} notesFile - Path to the changelog markdown file.
  * @param {string} rcTag - The RC tag being promoted (e.g. "v0.1.0-rc.1").
@@ -44,15 +41,13 @@ export function prepareReleaseNotes(notesFile, rcTag, newReleaseTag) {
   const today = new Date().toISOString().split("T")[0];
 
   // Match the cliff.toml header rendering: `version | trim_start_matches(pat="v")`.
-  // Only trims a leading "v" of the *whole tag*, not embedded ones (e.g.
-  // "v0.1.0-rc.1" → "0.1.0-rc.1", but "cli/v0.1.0-rc.1" stays as-is).
   const trimLeadingV = (s) => s.startsWith("v") ? s.slice(1) : s;
   const rcHeaderLabel = trimLeadingV(rcTag);
   const finalHeaderLabel = trimLeadingV(newReleaseTag);
 
   // The RC header is a single line of the form `## [<label>] - <date>`.
   // Find it by line scan rather than regex — clearer and avoids escaping
-  // the label's regex metacharacters (`.`, `/`, etc.).
+  // metacharacters in the label.
   const rcHeaderLine = `## [${rcHeaderLabel}]`;
   const finalHeaderLine = `## [${finalHeaderLabel}] - promoted from [${rcHeaderLabel}] on ${today}`;
 

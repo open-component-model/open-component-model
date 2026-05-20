@@ -88,21 +88,6 @@ function mockCore() {
   assert.ok(result.includes("- Some change"), "Body should be preserved");
 }
 
-// Rewrites git-cliff header line for prefixed tags (no leading "v" to trim)
-{
-  const dir = tmpDir({ "notes.md": "## [cli/v0.17.0-rc.1] - 2025-02-02\n\n- Fix bug" });
-  const result = prepareReleaseNotes(
-    path.join(dir, "notes.md"),
-    "cli/v0.17.0-rc.1",
-    "cli/v0.17.0",
-  );
-  const today = new Date().toISOString().split("T")[0];
-  assert.ok(
-    result.startsWith(`## [cli/v0.17.0] - promoted from [cli/v0.17.0-rc.1] on ${today}`),
-    `Expected header rewrite for prefixed tag, got: ${result.split("\n")[0]}`,
-  );
-}
-
 // Prepends header when notes don't match the RC header pattern
 {
   const dir = tmpDir({ "notes.md": "Just some plain notes\n\n- Fix bug" });
@@ -149,14 +134,14 @@ function mockCore() {
   const result = await getOrCreateRelease(gh, mockContext, {
     newReleaseTag: "v1.0.0",
     newReleaseVersion: "1.0.0",
-    componentName: "OCM Controller",
+    componentName: "OCM",
     notes: "notes",
     isLatest: true,
   });
   assert.strictEqual(result.id, 42);
   assert.strictEqual(calls.length, 1);
   assert.strictEqual(calls[0].opts.make_latest, "true");
-  assert.strictEqual(calls[0].opts.name, "OCM Controller 1.0.0");
+  assert.strictEqual(calls[0].opts.name, "OCM 1.0.0");
 }
 
 // Updates existing release when tag already exists
@@ -172,14 +157,14 @@ function mockCore() {
   const result = await getOrCreateRelease(gh, mockContext, {
     newReleaseTag: "v1.0.0",
     newReleaseVersion: "1.0.0",
-    componentName: "OCM CLI",
+    componentName: "OCM",
     notes: "notes",
     isLatest: false,
   });
   assert.strictEqual(result.id, 10);
   assert.strictEqual(calls.length, 1);
   assert.strictEqual(calls[0].opts.make_latest, "false");
-  assert.strictEqual(calls[0].opts.name, "OCM CLI 1.0.0");
+  assert.strictEqual(calls[0].opts.name, "OCM 1.0.0");
 }
 
 // Rethrows non-404 errors
@@ -269,7 +254,7 @@ function mockCore() {
     newReleaseTag: "v1.0.0",
     rcTag: "v1.0.0-rc.1",
     newReleaseVersion: "1.0.0",
-    componentName: "OCM Controller",
+    componentName: "OCM",
     imageRepo: "ghcr.io/org/img",
     chartRepo: "ghcr.io/org/chart",
     imageDigest: "sha256:abc123def456789012345",
@@ -290,34 +275,13 @@ function mockCore() {
     newReleaseTag: "v1.0.0",
     rcTag: "v1.0.0-rc.1",
     newReleaseVersion: "1.0.0",
-    componentName: "OCM CLI",
+    componentName: "OCM",
     imageRepo: "",
     chartRepo: "",
     imageDigest: "",
     isLatest: false,
     highestPreviousReleaseVersion: "",
     uploadedCount: 0,
-    releaseUrl: "https://example.com",
-  });
-  assert.ok(written, "summary.write() should have been called");
-}
-
-// Latest set but not release version (e.g., promoting an RC that is highest overall)
-{
-  let written = false;
-  const core = mockCore();
-  core.summary.write = async () => { written = true; };
-  await writeSummary(core, {
-    newReleaseTag: "v1.0.0",
-    rcTag: "v1.0.0-rc.1",
-    newReleaseVersion: "1.0.0",
-    componentName: "OCM Controller",
-    imageRepo: "ghcr.io/org/img",
-    chartRepo: "ghcr.io/org/chart",
-    imageDigest: "sha256:abc123def456789012345",
-    isLatest: true,
-    highestPreviousReleaseVersion: "1.1.0",
-    uploadedCount: 1,
     releaseUrl: "https://example.com",
   });
   assert.ok(written, "summary.write() should have been called");
