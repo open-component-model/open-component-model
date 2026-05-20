@@ -12,38 +12,19 @@ const (
 	Version = "v1"
 )
 
-const (
-	// CredentialKeyPublicKeyPEM is the key for an inline PEM-encoded RSA public key or X.509 certificate chain.
-	// For plain signature verification: supplies the signer's public key. If absent, derived from the private key.
-	// For PEM-encoded signing: the certificate chain (leaf + intermediates) to embed in the signature.
-	// For PEM-encoded signature verification: optional trust anchor; if absent, system roots are used.
-	// Takes precedence over CredentialKeyPublicKeyPEMFile when both are set.
-	CredentialKeyPublicKeyPEM = "publicKeyPEM"
-	// CredentialKeyPublicKeyPEMFile is the key for a path to a PEM file containing an RSA public key or X.509 certificate chain.
-	// Same semantics as CredentialKeyPublicKeyPEM, but loaded from disk. Ignored when CredentialKeyPublicKeyPEM is also set.
-	CredentialKeyPublicKeyPEMFile = "publicKeyPEMFile"
-	// CredentialKeyPrivateKeyPEM is the key for an inline PEM-encoded RSA private key (PKCS#1 or PKCS#8).
-	// Required for signing; not used during verification.
-	// Takes precedence over CredentialKeyPrivateKeyPEMFile when both are set.
-	CredentialKeyPrivateKeyPEM = "privateKeyPEM"
-	// CredentialKeyPrivateKeyPEMFile is the key for a path to a PEM file containing an RSA private key (PKCS#1 or PKCS#8).
-	// Same semantics as CredentialKeyPrivateKeyPEM, but loaded from disk. Ignored when CredentialKeyPrivateKeyPEM is also set.
-	CredentialKeyPrivateKeyPEMFile = "privateKeyPEMFile"
-)
-
-// Legacy snake_case aliases accepted by fromDirectCredentials for backward compatibility
-// with .ocmconfig files that predate the camelCase keys.
-//
 //nolint:gosec // G101: These are key names, not credentials.
 const (
-	// Deprecated: Use CredentialKeyPublicKeyPEM instead.
-	DeprecatedCredentialKeyPublicKeyPEM = "public_key_pem"
-	// Deprecated: Use CredentialKeyPublicKeyPEMFile instead.
-	DeprecatedCredentialKeyPublicKeyPEMFile = "public_key_pem_file"
-	// Deprecated: Use CredentialKeyPrivateKeyPEM instead.
-	DeprecatedCredentialKeyPrivateKeyPEM = "private_key_pem"
-	// Deprecated: Use CredentialKeyPrivateKeyPEMFile instead.
-	DeprecatedCredentialKeyPrivateKeyPEMFile = "private_key_pem_file"
+	// camelCase JSON property keys — used by FromDirectCredentials.
+	credentialKeyPublicKeyPEM      = "publicKeyPEM"
+	credentialKeyPublicKeyPEMFile  = "publicKeyPEMFile"
+	credentialKeyPrivateKeyPEM     = "privateKeyPEM"
+	credentialKeyPrivateKeyPEMFile = "privateKeyPEMFile"
+
+	// Legacy snake_case aliases from .ocmconfig files, accepted as fallback.
+	deprecatedCredentialKeyPublicKeyPEM      = "public_key_pem"
+	deprecatedCredentialKeyPublicKeyPEMFile  = "public_key_pem_file"
+	deprecatedCredentialKeyPrivateKeyPEM     = "private_key_pem"
+	deprecatedCredentialKeyPrivateKeyPEMFile = "private_key_pem_file"
 )
 
 // RSACredentials holds key material for RSA signing and/or verification.
@@ -112,10 +93,10 @@ func FromTyped(creds runtime.Typed) (*RSACredentials, error) {
 func fromDirectCredentials(properties map[string]string) *RSACredentials {
 	return &RSACredentials{
 		Type:              runtime.NewVersionedType(RSACredentialsType, Version),
-		PublicKeyPEM:      lookupProperty(properties, CredentialKeyPublicKeyPEM, DeprecatedCredentialKeyPublicKeyPEM),
-		PublicKeyPEMFile:  lookupProperty(properties, CredentialKeyPublicKeyPEMFile, DeprecatedCredentialKeyPublicKeyPEMFile),
-		PrivateKeyPEM:     lookupProperty(properties, CredentialKeyPrivateKeyPEM, DeprecatedCredentialKeyPrivateKeyPEM),
-		PrivateKeyPEMFile: lookupProperty(properties, CredentialKeyPrivateKeyPEMFile, DeprecatedCredentialKeyPrivateKeyPEMFile),
+		PublicKeyPEM:      lookupProperty(properties, credentialKeyPublicKeyPEM, deprecatedCredentialKeyPublicKeyPEM),
+		PublicKeyPEMFile:  lookupProperty(properties, credentialKeyPublicKeyPEMFile, deprecatedCredentialKeyPublicKeyPEMFile),
+		PrivateKeyPEM:     lookupProperty(properties, credentialKeyPrivateKeyPEM, deprecatedCredentialKeyPrivateKeyPEM),
+		PrivateKeyPEMFile: lookupProperty(properties, credentialKeyPrivateKeyPEMFile, deprecatedCredentialKeyPrivateKeyPEMFile),
 	}
 }
 

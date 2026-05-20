@@ -53,8 +53,8 @@ func TestFromTyped(t *testing.T) {
 			name: "DirectCredentials",
 			input: &credv1.DirectCredentials{
 				Properties: map[string]string{
-					CredentialKeyPrivateKeyPEM:    "my-key",
-					CredentialKeyPublicKeyPEMFile: "/path/pub.pem",
+					credentialKeyPrivateKeyPEM:    "my-key",
+					credentialKeyPublicKeyPEMFile: "/path/pub.pem",
 				},
 			},
 			want: &RSACredentials{
@@ -116,10 +116,10 @@ func TestFromDirectCredentials(t *testing.T) {
 		{
 			name: "all camelCase fields",
 			properties: map[string]string{
-				CredentialKeyPublicKeyPEM:      "test-public-key",
-				CredentialKeyPublicKeyPEMFile:  "/path/to/public.pem",
-				CredentialKeyPrivateKeyPEM:     "test-private-key",
-				CredentialKeyPrivateKeyPEMFile: "/path/to/private.pem",
+				credentialKeyPublicKeyPEM:      "test-public-key",
+				credentialKeyPublicKeyPEMFile:  "/path/to/public.pem",
+				credentialKeyPrivateKeyPEM:     "test-private-key",
+				credentialKeyPrivateKeyPEMFile: "/path/to/private.pem",
 			},
 			expected: &RSACredentials{
 				Type:              typ,
@@ -132,10 +132,10 @@ func TestFromDirectCredentials(t *testing.T) {
 		{
 			name: "deprecated snake_case fields",
 			properties: map[string]string{
-				DeprecatedCredentialKeyPublicKeyPEM:      "test-public-key",
-				DeprecatedCredentialKeyPublicKeyPEMFile:  "/path/to/public.pem",
-				DeprecatedCredentialKeyPrivateKeyPEM:     "test-private-key",
-				DeprecatedCredentialKeyPrivateKeyPEMFile: "/path/to/private.pem",
+				deprecatedCredentialKeyPublicKeyPEM:      "test-public-key",
+				deprecatedCredentialKeyPublicKeyPEMFile:  "/path/to/public.pem",
+				deprecatedCredentialKeyPrivateKeyPEM:     "test-private-key",
+				deprecatedCredentialKeyPrivateKeyPEMFile: "/path/to/private.pem",
 			},
 			expected: &RSACredentials{
 				Type:              typ,
@@ -148,8 +148,8 @@ func TestFromDirectCredentials(t *testing.T) {
 		{
 			name: "camelCase takes precedence over deprecated snake_case",
 			properties: map[string]string{
-				CredentialKeyPrivateKeyPEM:           "camel-key",
-				DeprecatedCredentialKeyPrivateKeyPEM: "snake-key",
+				credentialKeyPrivateKeyPEM:           "camel-key",
+				deprecatedCredentialKeyPrivateKeyPEM: "snake-key",
 			},
 			expected: &RSACredentials{Type: typ, PrivateKeyPEM: "camel-key"},
 		},
@@ -161,14 +161,14 @@ func TestFromDirectCredentials(t *testing.T) {
 		{
 			name: "partial fields",
 			properties: map[string]string{
-				CredentialKeyPrivateKeyPEM: "only-private-key",
+				credentialKeyPrivateKeyPEM: "only-private-key",
 			},
 			expected: &RSACredentials{Type: typ, PrivateKeyPEM: "only-private-key"},
 		},
 		{
 			name: "ignores unknown properties",
 			properties: map[string]string{
-				CredentialKeyPrivateKeyPEM: "my-key",
+				credentialKeyPrivateKeyPEM: "my-key",
 				"unknownField":             "ignored",
 			},
 			expected: &RSACredentials{Type: typ, PrivateKeyPEM: "my-key"},
