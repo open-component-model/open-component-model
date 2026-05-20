@@ -29,6 +29,7 @@ import (
 
 var _ signing.Handler = (*Handler)(nil)
 
+
 // Handler implements signing.Handler by delegating to the cosign CLI.
 // Safe for concurrent use. Binary resolution happens lazily on first Sign or Verify call.
 type Handler struct {

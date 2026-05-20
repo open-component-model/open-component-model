@@ -18,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+
 // MapCredentials converts a [credentialsv1.OCICredentials] to an auth.Credential.
 // A nil input yields an empty [auth.Credential].
 func MapCredentials(credentials *v1.OCICredentials) auth.Credential {
