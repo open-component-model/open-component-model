@@ -156,12 +156,9 @@ func FromTyped(creds runtime.Typed) (*RSACredentials, error) {
 	if creds == nil {
 		return nil, nil
 	}
-	switch t := creds.(type) {
-	case *RSACredentials:
-		return t, nil
-	case *v1.DirectCredentials:
-		return FromDirectCredentials(t.Properties), nil
-	default:
+
+	if dc, ok := creds.(*v1.DirectCredentials); ok {
+		return FromDirectCredentials(dc.Properties), nil
 	}
 
 	rsaCreds := RSACredentials{}
