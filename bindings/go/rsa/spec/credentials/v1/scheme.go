@@ -7,12 +7,12 @@ import (
 var Scheme = runtime.NewScheme()
 
 func init() {
-	MustAddToScheme(Scheme)
+	MustRegisterCredentialType(Scheme)
 }
 
-func MustAddToScheme(scheme *runtime.Scheme) {
-	rsaCreds := &RSACredentials{}
-	scheme.MustRegisterWithAlias(rsaCreds,
+// MustRegisterCredentialType registers RSACredentials/v1 in the given scheme.
+func MustRegisterCredentialType(scheme *runtime.Scheme) {
+	scheme.MustRegisterWithAlias(&RSACredentials{},
 		runtime.NewVersionedType(RSACredentialsType, Version),
 		runtime.NewUnversionedType(RSACredentialsType),
 	)

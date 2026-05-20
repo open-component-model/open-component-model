@@ -1,8 +1,6 @@
 package v1
 
 import (
-	"encoding/json"
-
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -33,7 +31,7 @@ const (
 	CredentialKeyPrivateKeyPEMFile = "privateKeyPEMFile"
 )
 
-// Legacy snake_case aliases accepted by FromDirectCredentials for backward compatibility
+// Legacy snake_case aliases accepted by fromDirectCredentials for backward compatibility
 // with .ocmconfig files that predate the camelCase keys.
 //
 //nolint:gosec // G101: These are key names, not credentials.
@@ -88,50 +86,30 @@ type RSACredentials struct {
 	PrivateKeyPEMFile string `json:"privateKeyPEMFile,omitempty"`
 }
 
-// UnmarshalJSON implements [json.Unmarshaler], accepting both camelCase and deprecated
-// snake_case field names so that legacy .ocmconfig JSON is handled transparently.
-// The camelCase form takes precedence when both keys are present.
-func (r *RSACredentials) UnmarshalJSON(data []byte) error {
-	type alias RSACredentials // avoids infinite recursion
-	if err := json.Unmarshal(data, (*alias)(r)); err != nil {
-		return err
+// FromTyped converts [runtime.Typed] into RSACredentials.
+// Direct conversation as well as converting from [v1.DirectCredentials] is supported.
+// Other supported [runtime.Typed] implementations are [runtime.Raw].
+// For unsupported [runtime.Typed] implementations, an error will be returned.
+func FromTyped(creds runtime.Typed) (*RSACredentials, error) {
+	if creds == nil {
+		return nil, nil
 	}
-	// Fallback: apply deprecated snake_case keys for any field not already set.
-	var leg struct {
-		PublicKeyPEM      string `json:"public_key_pem"`
-		PublicKeyPEMFile  string `json:"public_key_pem_file"`
-		PrivateKeyPEM     string `json:"private_key_pem"`
-		PrivateKeyPEMFile string `json:"private_key_pem_file"`
+
+	if dc, ok := creds.(*v1.DirectCredentials); ok {
+		return fromDirectCredentials(dc.Properties), nil
 	}
-	if err := json.Unmarshal(data, &leg); err == nil {
-		if r.PublicKeyPEM == "" {
-			r.PublicKeyPEM = leg.PublicKeyPEM
-		}
-		if r.PublicKeyPEMFile == "" {
-			r.PublicKeyPEMFile = leg.PublicKeyPEMFile
-		}
-		if r.PrivateKeyPEM == "" {
-			r.PrivateKeyPEM = leg.PrivateKeyPEM
-		}
-		if r.PrivateKeyPEMFile == "" {
-			r.PrivateKeyPEMFile = leg.PrivateKeyPEMFile
-		}
+
+	rsaCreds := RSACredentials{}
+	if err := Scheme.Convert(creds, &rsaCreds); err != nil {
+		return nil, err
 	}
-	return nil
+	return &rsaCreds, nil
 }
 
-// MustRegisterCredentialType registers RSACredentials/v1 in the given scheme.
-func MustRegisterCredentialType(scheme *runtime.Scheme) {
-	scheme.MustRegisterWithAlias(&RSACredentials{},
-		runtime.NewVersionedType(RSACredentialsType, Version),
-		runtime.NewUnversionedType(RSACredentialsType),
-	)
-}
-
-// FromDirectCredentials converts a DirectCredentials properties map into typed RSACredentials.
+// fromDirectCredentials converts a DirectCredentials properties map into typed RSACredentials.
 // Both camelCase and deprecated snake_case keys are accepted.
 // A nil map is safe and returns an RSACredentials with only the type set.
-func FromDirectCredentials(properties map[string]string) *RSACredentials {
+func fromDirectCredentials(properties map[string]string) *RSACredentials {
 	return &RSACredentials{
 		Type:              runtime.NewVersionedType(RSACredentialsType, Version),
 		PublicKeyPEM:      lookupProperty(properties, CredentialKeyPublicKeyPEM, DeprecatedCredentialKeyPublicKeyPEM),
@@ -146,24 +124,4 @@ func lookupProperty(properties map[string]string, key, deprecated string) string
 		return v
 	}
 	return properties[deprecated]
-}
-
-// FromTyped converts [runtime.Typed] into RSACredentials.
-// Direct conversation as well as converting from [v1.DirectCredentials] is supported.
-// Other supported [runtime.Typed] implementations are [runtime.Raw].
-// For unsupported [runtime.Typed] implementations, an error will be returned.
-func FromTyped(creds runtime.Typed) (*RSACredentials, error) {
-	if creds == nil {
-		return nil, nil
-	}
-
-	if dc, ok := creds.(*v1.DirectCredentials); ok {
-		return FromDirectCredentials(dc.Properties), nil
-	}
-
-	rsaCreds := RSACredentials{}
-	if err := Scheme.Convert(creds, &rsaCreds); err != nil {
-		return nil, err
-	}
-	return &rsaCreds, nil
 }
