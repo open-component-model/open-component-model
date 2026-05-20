@@ -304,4 +304,4 @@ configurations:
 - [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) — How the credential system works
 - [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}) — Step-by-step matching examples for OCI registries
 - [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) — Task-oriented registry credential setup
-- [How-To: Configure Credentials for Signing]({{< relref "docs/how-to/configure-signing-credentials.md" >}}) — Task-oriented signing credential setup
+- [How-To: Configure Credentials for Signing]({{< relref "configure-signing-credentials.md" >}}) — Task-oriented signing credential setup

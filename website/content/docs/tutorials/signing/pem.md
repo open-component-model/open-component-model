@@ -575,4 +575,4 @@ Use `--force` to overwrite or choose a different name with `--signature`.
 ## Related Documentation
 
 - [Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) -- Basic key-pair signing without certificate chains
-- [Configure Credentials for Signing]({{< relref "docs/how-to/configure-signing-credentials.md" >}}) -- Full credential configuration reference
+- [Configure Credentials for Signing]({{< relref "configure-signing-credentials.md" >}}) -- Full credential configuration reference
