@@ -70,7 +70,7 @@ spec:
       configurations:
         - type: GlobalTransferOptions/v1alpha1 # Current not existing configuration type.
           spec:
-            recursive: false
+            recursive: -1 # -1 means infinitely recursive. 
             copyMode: localBlob
 
   # References resolved in the Replication CR's namespace.
@@ -96,7 +96,7 @@ data:
     configurations:
       - type: GlobalTransferOptions/v1alpha1 # Current not existing configuration type.
         spec:
-          recursive: false
+          recursive: -1
           copyMode: localBlob
 ```
 

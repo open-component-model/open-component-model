@@ -40,8 +40,8 @@ import (
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-
 	"ocm.software/open-component-model/bindings/go/transfer"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1"
 )
 
 const (
@@ -872,7 +872,7 @@ func Test_Integration_TransferOCIImageResource_CopyModeAllResources(t *testing.T
 	)
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithCopyMode(transfer.CopyModeAllResources),
+		transfer.WithCopyMode(transferv1alpha1.CopyModeAllResources),
 		transfer.WithTransfer(
 			transfer.Component(componentName, componentVersion),
 			transfer.ToRepositorySpec(targetSpec),
@@ -1043,8 +1043,8 @@ func Test_Integration_TransferOCIArtifact_OCIToOCI(t *testing.T) {
 	r.NoError(err)
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithCopyMode(transfer.CopyModeAllResources),
-		transfer.WithUploadType(transfer.UploadAsOciArtifact),
+		transfer.WithCopyMode(transferv1alpha1.CopyModeAllResources),
+		transfer.WithUploadType(transferv1alpha1.UploadAsOciArtifact),
 		transfer.WithTransfer(
 			transfer.Component(componentName, componentVersion),
 			transfer.ToRepositorySpec(targetSpec),
@@ -1235,8 +1235,8 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 	)
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithCopyMode(transfer.CopyModeAllResources),
-		transfer.WithUploadType(transfer.UploadAsOciArtifact),
+		transfer.WithCopyMode(transferv1alpha1.CopyModeAllResources),
+		transfer.WithUploadType(transferv1alpha1.UploadAsOciArtifact),
 		transfer.WithTransfer(
 			transfer.Component(componentName, componentVersion),
 			transfer.ToRepositorySpec(targetSpec),
@@ -1295,4 +1295,129 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 	r.NoError(json.Unmarshal(rawAccess, &typedOCIAccess))
 	r.Contains(typedOCIAccess.ImageReference, targetAddr,
 		"OCIImage access should reference the target registry after transfer")
+}
+
+// Test_Integration_TransferOCIImageResource_FromConfig is the config-driven mirror
+// of [Test_Integration_TransferOCIImageResource_CopyModeAllResources]: same component
+// shape and target outcome, but the transfer is configured via a [transferv1alpha1.Config]
+// fed through [transfer.FromConfig] - the same path the CLI's --transfer-config flag and
+// the replication controller's CRD spec take.
+//
+// This pins the SSOT property at runtime: a Config struct must drive a transfer
+// identically to the equivalent functional-options call. If FromConfig drifts from
+// the With* setters (or if the v1alpha1 enum values fall out of sync with what the
+// internal layer expects), this test fails.
+func Test_Integration_TransferOCIImageResource_FromConfig(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	sourceAddr, sourceUser, sourcePwd := startRegistry(t)
+	targetAddr, targetUser, targetPwd := startRegistry(t)
+
+	imageRef := pushTestOCIImage(t, sourceAddr, sourceUser, sourcePwd, "test/image", "v1")
+
+	componentName := "ocm.software/oci-resource-fromconfig-test"
+	componentVersion := "1.0.0"
+	sourceCTFPath := t.TempDir()
+	ctfRepo := createCTFRepository(t, sourceCTFPath)
+
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    componentName,
+					Version: componentVersion,
+				},
+			},
+			Provider: descriptor.Provider{Name: "test-provider"},
+			Resources: []descriptor.Resource{
+				{
+					ElementMeta: descriptor.ElementMeta{
+						ObjectMeta: descriptor.ObjectMeta{Name: "external-image", Version: "1.0.0"},
+					},
+					Type:     "ociImage",
+					Relation: descriptor.ExternalRelation,
+					Access: &ociaccessv1.OCIImage{
+						Type:           runtime.NewVersionedType(ociaccessv1.LegacyType, ociaccessv1.LegacyTypeVersion),
+						ImageReference: imageRef,
+					},
+				},
+			},
+		},
+	}
+	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
+
+	sourceSpec := &ctfrepospec.Repository{
+		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+		FilePath: sourceCTFPath,
+	}
+	targetSpec := &ocirepospec.Repository{
+		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
+		BaseUrl: fmt.Sprintf("http://%s", targetAddr),
+	}
+
+	credResolver := newCredResolver(t,
+		registryCreds{sourceAddr, sourceUser, sourcePwd},
+		registryCreds{targetAddr, targetUser, targetPwd},
+	)
+
+	// Drive the transfer from a struct-literal Config rather than With* setters.
+	// transfer.FromConfig(cfg) must produce a transfer behaviourally identical to
+	// transfer.WithCopyMode(transferv1alpha1.CopyModeAllResources).
+	cfg := &transferv1alpha1.Config{
+		CopyMode:   transferv1alpha1.CopyModeAllResources,
+		UploadType: transferv1alpha1.UploadAsLocalBlob,
+	}
+	r.NoError(cfg.Validate())
+
+	tgd, err := transfer.BuildGraphDefinition(t.Context(),
+		append(transfer.FromConfig(cfg),
+			transfer.WithTransfer(
+				transfer.Component(componentName, componentVersion),
+				transfer.ToRepositorySpec(targetSpec),
+				transfer.FromRepository(ctfRepo, sourceSpec),
+			),
+		)...,
+	)
+	r.NoError(err)
+	r.NotNil(tgd)
+
+	hasGetOCIArtifact := false
+	for _, tr := range tgd.Transformations {
+		if tr.Type.Name == "GetOCIArtifact" {
+			hasGetOCIArtifact = true
+			break
+		}
+	}
+	r.True(hasGetOCIArtifact, "Config-driven CopyModeAllResources must generate GetOCIArtifact transformation for OCIImage resource")
+
+	ctx := t.Context()
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+	resourceRepo := resource.NewResourceRepository(nil)
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	graph, err := b.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	// End-to-end: same outcome as the With*-driven test - resource arrives as a localBlob.
+	client := createAuthClient(targetAddr, targetUser, targetPwd)
+	urlRes, err := urlresolver.New(
+		urlresolver.WithBaseURL(targetAddr),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
+	targetRepo, err := oci.NewRepository(oci.WithResolver(urlRes), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	gotDesc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err, "should find transferred component in target registry")
+	r.Equal(componentName, gotDesc.Component.Name)
+	r.Len(gotDesc.Component.Resources, 1)
+
+	gotAccess := gotDesc.Component.Resources[0].Access
+	r.NotNil(gotAccess, "resource access should not be nil")
+	r.Equal(descriptorv2.LocalBlobAccessType, gotAccess.GetType().Name,
+		"OCI image resource should be stored as localBlob in target after FromConfig-driven CopyModeAllResources transfer")
 }

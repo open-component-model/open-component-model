@@ -20,7 +20,7 @@
 //	        transfer.ToRepositorySpec(targetSpec),
 //	        transfer.FromResolver(repoResolver),
 //	    ),
-//	    transfer.WithCopyMode(transfer.CopyModeAllResources),
+//	    transfer.WithCopyMode(transferv1alpha1.CopyModeAllResources),
 //	)
 //	if err != nil {
 //	    return err
@@ -75,4 +75,37 @@
 //	        transfer.FromResolver(repoResolver),
 //	    ),
 //	)
+//
+// # Driving the Transfer from a Wire-Format Config
+//
+// The transfer knobs (recursive, copy mode, upload type) are also expressed by
+// [transferv1alpha1.Config] - the same wire format the CLI loads via
+// `ocm transfer component-version --transfer-config <file>` and that the
+// replication controller will consume from a CRD spec. Use [FromConfig] to feed
+// a loaded config into [BuildGraphDefinition] alongside the runtime-only mappings:
+//
+//	cfg := &transferv1alpha1.Config{
+//	    Recursive:  true,
+//	    CopyMode:   transferv1alpha1.CopyModeAllResources,
+//	    UploadType: transferv1alpha1.UploadAsOciArtifact,
+//	}
+//	if err := cfg.Validate(); err != nil {
+//	    return err
+//	}
+//	tgd, err := transfer.BuildGraphDefinition(ctx,
+//	    append(transfer.FromConfig(cfg),
+//	        transfer.WithTransfer(
+//	            transfer.Component("ocm.software/app", "1.0.0"),
+//	            transfer.ToRepositorySpec(targetSpec),
+//	            transfer.FromResolver(repoResolver),
+//	        ),
+//	    )...,
+//	)
+//
+// [FromConfig] skips empty fields - so callers can overlay explicit overrides
+// on top of a partial config without the zero values clobbering them. The
+// resulting [Options] therefore still carries empty enum strings until
+// [BuildGraphDefinition] runs; that's where the empties are resolved to their
+// canonical defaults via [transferv1alpha1.Config.GetCopyMode] and
+// [transferv1alpha1.Config.GetUploadType].
 package transfer

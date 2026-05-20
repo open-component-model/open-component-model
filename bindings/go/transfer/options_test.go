@@ -11,19 +11,27 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1"
 )
 
 func TestDefaultOptions(t *testing.T) {
 	var o Options
-	assert.Equal(t, CopyModeLocalBlobResources, o.CopyMode)
-	assert.Equal(t, UploadAsDefault, o.UploadType)
+	// The Options zero value carries empty strings for the enums (string-typed,
+	// so the language has no way to fold the canonical default into the zero value
+	// the way an int+iota would). The defaulting contract therefore lives on the
+	// embedded Config: BuildGraphDefinition normalises through GetCopyMode /
+	// GetUploadType before handing values to internal.BuildGraphDefinition.
+	assert.Equal(t, transferv1alpha1.CopyMode(""), o.CopyMode)
+	assert.Equal(t, transferv1alpha1.UploadType(""), o.UploadType)
+	assert.Equal(t, transferv1alpha1.CopyModeLocalBlobResources, o.GetCopyMode())
+	assert.Equal(t, transferv1alpha1.UploadAsDefault, o.GetUploadType())
 	assert.False(t, o.Recursive)
 }
 
 func TestWithCopyMode(t *testing.T) {
 	var o Options
-	WithCopyMode(CopyModeAllResources)(&o)
-	assert.Equal(t, CopyModeAllResources, o.CopyMode)
+	WithCopyMode(transferv1alpha1.CopyModeAllResources)(&o)
+	assert.Equal(t, transferv1alpha1.CopyModeAllResources, o.CopyMode)
 }
 
 func TestWithRecursive(t *testing.T) {
@@ -34,8 +42,8 @@ func TestWithRecursive(t *testing.T) {
 
 func TestWithUploadType(t *testing.T) {
 	var o Options
-	WithUploadType(UploadAsOciArtifact)(&o)
-	assert.Equal(t, UploadAsOciArtifact, o.UploadType)
+	WithUploadType(transferv1alpha1.UploadAsOciArtifact)(&o)
+	assert.Equal(t, transferv1alpha1.UploadAsOciArtifact, o.UploadType)
 }
 
 type mockRepo struct {
@@ -129,4 +137,40 @@ func TestRepoResolver_ReturnsRepo(t *testing.T) {
 	gotSpec, err := r.GetRepositorySpecificationForComponent(t.Context(), "ocm.software/test", "1.0.0")
 	require.NoError(t, err)
 	assert.Equal(t, spec, gotSpec)
+}
+
+func TestFromConfig_Nil(t *testing.T) {
+	require.Nil(t, FromConfig(nil))
+}
+
+func TestFromConfig_Empty(t *testing.T) {
+	require.Empty(t, FromConfig(&transferv1alpha1.Config{}))
+}
+
+func TestFromConfig_AllFields(t *testing.T) {
+	cfg := &transferv1alpha1.Config{
+		Recursive:  true,
+		CopyMode:   transferv1alpha1.CopyModeAllResources,
+		UploadType: transferv1alpha1.UploadAsOciArtifact,
+	}
+	var o Options
+	for _, opt := range FromConfig(cfg) {
+		opt(&o)
+	}
+	require.True(t, o.Recursive)
+	require.Equal(t, transferv1alpha1.CopyModeAllResources, o.CopyMode)
+	require.Equal(t, transferv1alpha1.UploadAsOciArtifact, o.UploadType)
+}
+
+func TestFromConfig_PartialDoesNotClobber(t *testing.T) {
+	// Empty config fields are skipped so prior overrides survive.
+	cfg := &transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}
+
+	o := Options{Config: transferv1alpha1.Config{Recursive: true, UploadType: transferv1alpha1.UploadAsLocalBlob}}
+	for _, opt := range FromConfig(cfg) {
+		opt(&o)
+	}
+	require.True(t, o.Recursive)
+	require.Equal(t, transferv1alpha1.CopyModeAllResources, o.CopyMode)
+	require.Equal(t, transferv1alpha1.UploadAsLocalBlob, o.UploadType)
 }

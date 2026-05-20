@@ -33,13 +33,16 @@ func BuildGraphDefinition(
 		return nil, err
 	}
 
+	copyMode := o.GetCopyMode()
+	uploadType := o.GetUploadType()
+
 	slog.DebugContext(ctx, "building transfer graph definition",
 		"roots", len(roots),
 		"recursive", o.Recursive,
-		"copyMode", o.CopyMode,
-		"uploadType", o.UploadType)
+		"copyMode", copyMode,
+		"uploadType", uploadType)
 
-	return internal.BuildGraphDefinition(ctx, roots, o.Recursive, int(o.CopyMode), int(o.UploadType))
+	return internal.BuildGraphDefinition(ctx, roots, o.Recursive, copyMode, uploadType)
 }
 
 // collectTransferRoots resolves all transfer mappings into internal TransferRoots.
