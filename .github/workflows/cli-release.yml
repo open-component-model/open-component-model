@@ -63,6 +63,14 @@ jobs:
     outputs:
       pushed: ${{ steps.tag.outputs.pushed }}
     steps:
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          permission-contents: write
+
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -70,6 +78,7 @@ jobs:
             ${{ env.COMPONENT_PATH }}
             .github/scripts
           ref: ${{ github.ref_name }}
+          token: ${{ steps.get_token.outputs.token }}
           persist-credentials: false
 
       - name: Setup git config
@@ -92,9 +101,11 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           TAG: ${{ needs.prepare.outputs.new_tag }}
-          # create-tag.js uses GITHUB_TOKEN to authenticate git push because
-          # the checkout above sets persist-credentials: false (zizmor requirement).
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # Use the OCM bot app token (not GITHUB_TOKEN) because:
+  # 1. persist-credentials: false (zizmor) → git push needs explicit token.
+  # 2. Pushes via secrets.GITHUB_TOKEN do NOT trigger other workflows;
+  #    cli.yml listens on `push: tags: ['cli/v**']` to publish the OCI image.
+          GITHUB_TOKEN: ${{ steps.get_token.outputs.token }}
         with:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
@@ -133,6 +144,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: write
+      actions: read
     steps:
       - name: Download changelog artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -155,6 +167,7 @@ jobs:
           RC_VERSION: ${{ needs.prepare.outputs.new_version }}
         run: |
           gh release create "${RC_TAG}" \
+            --repo "${{ github.repository }}" \
             --title "CLI ${RC_VERSION}" \
             --notes-file "${{ runner.temp }}/CHANGELOG.md" \
             --prerelease \
@@ -253,6 +266,14 @@ jobs:
       contents: write
       packages: write
     steps:
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          permission-contents: write
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -261,6 +282,7 @@ jobs:
             .github/scripts
           fetch-depth: 0
           ref: ${{ github.ref_name }}
+          token: ${{ steps.get_token.outputs.token }}
           persist-credentials: false
 
       - name: Setup git config
@@ -283,9 +305,11 @@ jobs:
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
-          # create-tag.js uses GITHUB_TOKEN to authenticate git push because
-          # the checkout above sets persist-credentials: false (zizmor requirement).
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # Use the OCM bot app token (not GITHUB_TOKEN) because:
+  # 1. persist-credentials: false (zizmor) → git push needs explicit token.
+  # 2. Pushes via secrets.GITHUB_TOKEN do NOT trigger other workflows;
+  #    cli.yml listens on `push: tags: ['cli/v**']` to publish the OCI image.
+          GITHUB_TOKEN: ${{ steps.get_token.outputs.token }}
         with:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
