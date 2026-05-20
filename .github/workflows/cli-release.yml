@@ -305,8 +305,10 @@ jobs:
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
-          # create-tag.js uses GITHUB_TOKEN to authenticate git push because
-          # the checkout above sets persist-credentials: false (zizmor requirement).
+  # Use the OCM bot app token (not GITHUB_TOKEN) because:
+  # 1. persist-credentials: false (zizmor) → git push needs explicit token.
+  # 2. Pushes via secrets.GITHUB_TOKEN do NOT trigger other workflows;
+  #    cli.yml listens on `push: tags: ['cli/v**']` to publish the OCI image.
           GITHUB_TOKEN: ${{ steps.get_token.outputs.token }}
         with:
           script: |
