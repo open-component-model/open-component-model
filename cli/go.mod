@@ -3,7 +3,8 @@ module ocm.software/open-component-model/cli
 go 1.26.3
 
 require (
-	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/Masterminds/semver/v3 v3.5.0
+	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/jedib0t/go-pretty/v6 v6.7.9
 	github.com/nlepage/go-tarfs v1.2.1
 	github.com/opencontainers/image-spec v1.1.1
@@ -11,6 +12,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.43.0
 	golang.org/x/term v0.42.0
@@ -30,11 +32,12 @@ require (
 	ocm.software/open-component-model/bindings/go/input/file v0.0.4
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/oci v0.0.40
-	ocm.software/open-component-model/bindings/go/plugin v0.0.14
+	ocm.software/open-component-model/bindings/go/plugin v0.0.15
 	ocm.software/open-component-model/bindings/go/repository v0.0.8
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260505072254-1c17fcd5c971
+	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260515092758-4a81396fd61d
 	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260505072254-1c17fcd5c971
 	sigs.k8s.io/yaml v1.6.0
@@ -65,6 +68,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-openapi/jsonpointer v0.23.1 // indirect
 	github.com/go-openapi/jsonreference v0.21.5 // indirect
@@ -118,7 +122,6 @@ require (
 	golang.org/x/crypto v0.50.0 // indirect
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39 // indirect
 	golang.org/x/net v0.53.0 // indirect
-	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260226221140-a57be14db171 // indirect

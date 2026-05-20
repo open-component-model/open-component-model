@@ -58,12 +58,10 @@ func New() *cobra.Command {
 
 ## Behavior
 
-- --signature: verify only the named signature  
-- Without --signature: verify all signatures  
-- Fail fast on first invalid signature  
-- Default verifier: RSASSA-PSS plugin  
-  - Supports config-less verification  
-  - Uses discovered credentials or PEM certificates when possible  
+- --signature selects a single signature by name; without it, every signature on the descriptor is verified
+- Signatures are verified concurrently (--concurrency-limit); the command exits non-zero on the first failure
+- Default verifier: RSASSA-PSS, resolves the public key from credentials in .ocmconfig
+- For Sigstore keyless verification, pass --verifier-spec with a SigstoreVerificationConfiguration/v1alpha1 config
 
 Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.`,
 			compref.DefaultPrefix,
@@ -112,6 +110,59 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
           properties:
             public_key_pem_file: /path/to/root-ca.pem
 
+## Example Verifier Spec — Sigstore keyless (SigstoreVerificationConfiguration/v1alpha1)
+#
+# Identity constraints are REQUIRED: (certificateOIDCIssuer or certificateOIDCIssuerRegexp)
+# AND (certificateIdentity or certificateIdentityRegexp) must be set.
+#
+# certificateOIDCIssuer must match the issuer that Fulcio recorded in the cert.
+# On public Sigstore (Dex federation), Fulcio passes through the upstream IdP issuer:
+#   - Google login   -> https://accounts.google.com
+#   - GitHub login   -> https://github.com/login/oauth
+#   - Microsoft login -> https://login.microsoftonline.com
+# It is NOT the Dex URL (https://oauth2.sigstore.dev/auth).
+# See https://docs.sigstore.dev/cosign/verifying/verify/
+
+    type: SigstoreVerificationConfiguration/v1alpha1
+    certificateOIDCIssuer: https://accounts.google.com
+    certificateIdentity: jane.doe@example.com
+
+# With regexp identity constraints:
+
+    type: SigstoreVerificationConfiguration/v1alpha1
+    certificateOIDCIssuerRegexp: https://github.com/.*
+    certificateIdentityRegexp: https://github.com/my-org/my-repo/.*
+
+# For private Sigstore infrastructure (skips public transparency log verification).
+# The trusted root is NOT a verifier-spec field. It is supplied via credentials
+# under a SigstoreVerifier/v1alpha1 consumer (see Example Credential Config below):
+
+    type: SigstoreVerificationConfiguration/v1alpha1
+    certificateOIDCIssuer: https://login.example.com
+    certificateIdentity: ci-user@example.com
+    privateInfrastructure: true
+
+## Example Credential Config (.ocmconfig) — Sigstore trusted root (private deployments)
+#
+# Required for private Sigstore infrastructure (privateInfrastructure: true on the
+# verifier spec). Use trusted_root_json_file (path) or trusted_root_json (inline JSON).
+# Public-good Sigstore does not need this credential.
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: SigstoreVerifier/v1alpha1
+          signature: default
+        credentials:
+        - type: Credentials/v1
+          properties:
+            trusted_root_json_file: /path/to/trusted_root.json
+
+# Verify with Sigstore verifier spec:
+verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./sigstore-verify.yaml
+
 # Verify a specific signature
 verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
 
@@ -124,7 +175,7 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().String(FlagSignature, "", "name of the signature to verify. If not set, all signatures are verified.")
-	cmd.Flags().String(FlagVerifierSpec, "", "path to an optional verifier specification file. If empty, defaults to an empty RSASSA-PSS configuration.")
+	cmd.Flags().String(FlagVerifierSpec, "", "path to a verifier specification file. If empty, defaults to RSASSA-PSS.")
 
 	return cmd
 }
