@@ -21,6 +21,7 @@ const (
 	credentialKeyPrivateKeyPEMFile = "privateKeyPEMFile"
 
 	// Legacy snake_case aliases from .ocmconfig files, accepted as fallback.
+	// TODO(matthiasbruns): https://github.com/open-component-model/ocm-project/issues/1072
 	deprecatedCredentialKeyPublicKeyPEM      = "public_key_pem"
 	deprecatedCredentialKeyPublicKeyPEMFile  = "public_key_pem_file"
 	deprecatedCredentialKeyPrivateKeyPEM     = "private_key_pem"
