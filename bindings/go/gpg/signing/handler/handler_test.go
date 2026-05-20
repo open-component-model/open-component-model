@@ -200,6 +200,19 @@ func TestGPGHandler_KeyFingerprint_NoMatch(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestGPGHandler_InvalidHashAlgorithm(t *testing.T) {
+	h := mustHandler(t)
+	entity := mustEntity(t, "")
+
+	privCreds := armoredPrivKey(t, entity)
+	digest := makeDigest(t, crypto.SHA256, []byte("hash alg test"))
+	cfg := &v1alpha1.Config{HashAlgorithm: "SHA521"}
+
+	_, err := h.Sign(context.Background(), digest, cfg, privCreds)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "SHA521")
+}
+
 // ---- helpers ----
 
 func mustHandler(t *testing.T) *Handler {

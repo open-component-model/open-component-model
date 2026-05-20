@@ -108,6 +108,18 @@ func TestPrivateEntityFromCredentials_Passphrase(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestPrivateEntityFromCredentials_EncryptedKeyNoPassphrase(t *testing.T) {
+	const passphrase = "test-credentials-passphrase"
+	entity := mustEntity(t, passphrase)
+	armored := armoredPrivKeyStr(t, entity)
+
+	_, err := PrivateEntityFromCredentials(&gpgcredentialsv1.GPGCredentials{
+		PrivateKeyPGP: armored,
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "passphrase")
+}
+
 func TestPublicKeyRingFromCredentials_Inline(t *testing.T) {
 	entity := mustEntity(t, "")
 	armored := armoredPubKeyStr(t, entity)

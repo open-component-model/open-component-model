@@ -8,7 +8,7 @@ const (
 	// GPGCredentialsType is the type name for GPG credentials.
 	GPGCredentialsType = "GPGCredentials"
 	// Version is the version of the GPG credentials type.
-	Version = "v1"
+	Version = "v1alpha1"
 )
 
 //nolint:gosec // G101: These are key names, not credentials.
@@ -27,7 +27,7 @@ const (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type GPGCredentials struct {
-	// +ocm:jsonschema-gen:enum=GPGCredentials/v1
+	// +ocm:jsonschema-gen:enum=GPGCredentials/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=GPGCredentials
 	Type              runtime.Type `json:"type"`
 	PrivateKeyPGP     string       `json:"privateKeyPGP,omitempty"`
@@ -37,7 +37,7 @@ type GPGCredentials struct {
 	Passphrase        string       `json:"passphrase,omitempty"`
 }
 
-// MustRegisterCredentialType registers GPGCredentials/v1 in the given scheme.
+// MustRegisterCredentialType registers GPGCredentials/v1alpha1 in the given scheme.
 func MustRegisterCredentialType(scheme *runtime.Scheme) {
 	scheme.MustRegisterWithAlias(&GPGCredentials{},
 		runtime.NewVersionedType(GPGCredentialsType, Version),

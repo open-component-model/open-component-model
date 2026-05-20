@@ -12,8 +12,6 @@ import (
 )
 
 // IdentityTypeGPG is the consumer identity type for GPG signing.
-//
-// Deprecated: Use identityv1.VersionedType or identityv1.V1Alpha1Type instead.
 var IdentityTypeGPG = identityv1.V1Alpha1Type
 
 // PrivateEntityFromCredentials loads a signing-capable OpenPGP entity from
@@ -59,6 +57,12 @@ func PrivateKeyRingFromCredentials(creds *gpgcredentialsv1.GPGCredentials) (open
 		for _, entity := range entities {
 			if err := entity.DecryptPrivateKeys([]byte(creds.Passphrase)); err != nil {
 				return nil, fmt.Errorf("decrypt GPG private key: %w", err)
+			}
+		}
+	} else {
+		for _, entity := range entities {
+			if entity.PrivateKey != nil && entity.PrivateKey.Encrypted {
+				return nil, fmt.Errorf("private key is passphrase-protected but no passphrase was provided")
 			}
 		}
 	}

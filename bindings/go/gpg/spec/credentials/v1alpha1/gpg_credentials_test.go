@@ -82,7 +82,7 @@ func TestGPGCredentials_TypedJSONParsing(t *testing.T) {
 	MustRegisterCredentialType(scheme)
 
 	raw := &runtime.Raw{}
-	raw.Data = []byte(`{"type":"GPGCredentials/v1","privateKeyPGP":"my-key","publicKeyPGPFile":"/path/pub.asc"}`)
+	raw.Data = []byte(`{"type":"GPGCredentials/v1alpha1","privateKeyPGP":"my-key","publicKeyPGPFile":"/path/pub.asc"}`)
 	raw.Type = runtime.NewVersionedType(GPGCredentialsType, Version)
 
 	creds := &GPGCredentials{}

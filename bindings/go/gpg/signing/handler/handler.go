@@ -79,7 +79,10 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, err
 	}
 
-	pktCfg := packetConfigForHash(sigCfg.GetHashAlgorithm())
+	pktCfg, err := packetConfigForHash(sigCfg.GetHashAlgorithm())
+	if err != nil {
+		return descruntime.SignatureInfo{}, err
+	}
 	var sigBuf bytes.Buffer
 	if err := openpgp.ArmoredDetachSign(&sigBuf, entity, bytes.NewReader(digestBytes), pktCfg); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("gpg sign: %w", err)
@@ -186,14 +189,17 @@ func configFrom(cfg runtime.Typed) *v1alpha1.Config {
 }
 
 // packetConfigForHash maps a HashAlgorithm to an openpgp packet.Config.
-func packetConfigForHash(alg v1alpha1.HashAlgorithm) *packet.Config {
+// Returns an error for unknown or misspelled values so callers don't silently get SHA-256.
+func packetConfigForHash(alg v1alpha1.HashAlgorithm) (*packet.Config, error) {
 	switch alg {
+	case "", v1alpha1.HashAlgorithmSHA256:
+		return &packet.Config{DefaultHash: gocrypto.SHA256}, nil
 	case v1alpha1.HashAlgorithmSHA384:
-		return &packet.Config{DefaultHash: gocrypto.SHA384}
+		return &packet.Config{DefaultHash: gocrypto.SHA384}, nil
 	case v1alpha1.HashAlgorithmSHA512:
-		return &packet.Config{DefaultHash: gocrypto.SHA512}
+		return &packet.Config{DefaultHash: gocrypto.SHA512}, nil
 	default:
-		return &packet.Config{DefaultHash: gocrypto.SHA256}
+		return nil, fmt.Errorf("unsupported GPG hash algorithm %q", alg)
 	}
 }
 

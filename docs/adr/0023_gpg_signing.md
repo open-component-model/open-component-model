@@ -4,7 +4,7 @@
 * **Deciders**: OCM Technical Steering Committee
 * **Date**: 2026.05.18
 
-**Technical Story**: Users with passphrase-protected GPG keys cannot sign component versions today. OCM only supports RSA/PEM keys. This blocks projects like OpenBao from reusing their established key material (see issue #1544).
+**Technical Story**: Users with passphrase-protected GPG keys cannot sign component versions today. OCM only supports RSA/PEM keys. This blocks projects like OpenBao from reusing their established key material (see [ocm/#1544](https://github.com/open-component-model/ocm/issues/1544)).
 
 ---
 
@@ -146,6 +146,33 @@ configurations:
     - type: Credentials/v1
       properties:
         publicKeyPGPFile: /path/to/public-key.asc
+```
+
+Passphrase via environment variable:
+
+The OCM credential graph supports `EnvCredentials/v1` as an alternative to inline values.
+This allows the passphrase to be injected from the environment without appearing in any config file:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: GPG/v1alpha1
+      signature: default
+    credentials:
+    - type: Credentials/v1
+      properties:
+        privateKeyPGPFile: /path/to/signing-key.asc
+        passphrase: $GPG_PASSPHRASE
+```
+
+Set the environment variable before running the CLI:
+
+```sh
+export GPG_PASSPHRASE=<your-key-passphrase>
+ocm sign componentversion --signer-spec ./gpg.yaml ...
 ```
 
 ---
