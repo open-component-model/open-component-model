@@ -58,11 +58,20 @@ export function createAndPushTag({ tag, commit, message, execGit = defaultExecGi
 /**
  * Default git executor using child_process.execFileSync.
  *
+ * Authenticates via GITHUB_TOKEN when present. This is required because the
+ * checkout action sets persist-credentials: false (enforced by zizmor), so git
+ * has no stored credentials for push. The token must be passed to the script
+ * via the workflow step's env block.
+ *
  * @param {string[]} args - Git arguments.
  * @returns {string} Trimmed stdout.
  */
 function defaultExecGit(args) {
-  return execFileSync("git", args, { encoding: "utf-8", stdio: "pipe" }).trim();
+  const token = process.env.GITHUB_TOKEN;
+  const authArgs = token
+    ? ["-c", `http.extraHeader=Authorization: basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`]
+    : [];
+  return execFileSync("git", [...authArgs, ...args], { encoding: "utf-8", stdio: "pipe" }).trim();
 }
 
 // --------------------------

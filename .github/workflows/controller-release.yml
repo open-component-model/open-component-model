@@ -56,6 +56,7 @@ jobs:
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          permission-contents: write
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -88,6 +89,9 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           TAG: ${{ needs.prepare.outputs.new_tag }}
+          # create-tag.js uses GITHUB_TOKEN to authenticate git push because
+          # the checkout above sets persist-credentials: false (zizmor requirement).
+          GITHUB_TOKEN: ${{ steps.get_token.outputs.token }}
         with:
           github-token: ${{ steps.get_token.outputs.token }}
           script: |
@@ -143,6 +147,7 @@ jobs:
           RC_VERSION: ${{ needs.prepare.outputs.new_version }}
         run: |
           gh release create "${RC_TAG}" \
+            --repo "${{ github.repository }}" \
             --title "${{ env.COMPONENT_NAME }} ${RC_VERSION}" \
             --notes-file "${{ runner.temp }}/CHANGELOG.md" \
             --prerelease \
@@ -241,6 +246,7 @@ jobs:
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          permission-contents: write
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -274,6 +280,9 @@ jobs:
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
+          # create-tag.js uses GITHUB_TOKEN to authenticate git push because
+          # the checkout above sets persist-credentials: false (zizmor requirement).
+          GITHUB_TOKEN: ${{ steps.get_token.outputs.token }}
         with:
           github-token: ${{ steps.get_token.outputs.token }}
           script: |

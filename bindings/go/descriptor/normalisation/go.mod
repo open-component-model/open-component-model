@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/descriptor/normalisation
 
-go 1.26.1
+go 1.26.3
 
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467

@@ -95,15 +95,19 @@ type VerifyConfig struct {
 	// +ocm:jsonschema-gen:enum=SigstoreVerificationConfiguration/v1alpha1
 	Type runtime.Type `json:"type"`
 
-	// PrivateInfrastructure skips public transparency log verification.
-	// Use this when verifying artifacts signed by a privately deployed Sigstore
-	// infrastructure where the transparency log is not the public-good Rekor instance.
+	// PrivateInfrastructure indicates the signature was made against a privately
+	// deployed Sigstore stack. When set, the verifier skips the public Rekor
+	// transparency-log lookup; signature, certificate chain, identity, and SCT
+	// checks are unchanged. Must be paired with a trusted-root credential
+	// (trusted_root_json or trusted_root_json_file).
 	// Maps to cosign --private-infrastructure.
 	PrivateInfrastructure bool `json:"privateInfrastructure,omitempty"`
 
-	// CertificateOIDCIssuer is the exact OIDC issuer URL that the signing certificate must have
-	// been issued for. Required for keyless verification unless CertificateOIDCIssuerRegexp is set.
-	// Example: "https://accounts.google.com" or "https://github.com/login/oauth"
+	// CertificateOIDCIssuer is the exact OIDC issuer URL the signing certificate
+	// must have been issued for. Required unless CertificateOIDCIssuerRegexp is set.
+	// On public Sigstore, Dex passes the upstream IdP "iss" through to Fulcio, so
+	// this is the upstream issuer (e.g. https://accounts.google.com,
+	// https://github.com/login/oauth), not the Dex URL.
 	// Maps to cosign --certificate-oidc-issuer.
 	CertificateOIDCIssuer string `json:"certificateOIDCIssuer,omitempty"`
 

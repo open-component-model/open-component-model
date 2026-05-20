@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/spf13/cobra"
 
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -78,6 +79,15 @@ func isVersionCheckDisabled(cmd *cobra.Command, currentVersion string) bool {
 		return true
 	}
 
+	// Pseudo-versions (e.g. 0.0.0-20260520062203-abc) are produced by go install from
+	// an untagged commit. They are not real releases and must not trigger a warning.
+	// RCs and alphas (e.g. 0.6.0-rc.1) are intentional pre-releases and should warn.
+	if v, err := semver.NewVersion(currentVersion); err != nil ||
+		(v.Major() == 0 && v.Minor() == 0 && v.Patch() == 0 && v.Prerelease() != "") {
+		slog.Debug("version check skipped: dev/pseudo-version build", slog.String("version", currentVersion))
+		return true
+	}
+
 	// Don't show an upgrade warning alongside version output — redundant.
 	if cmd.Name() == "version" {
 		return true
@@ -134,7 +144,7 @@ func printUpgradeWarning(result *versioncheck.Result) {
 	slog.Warn("A newer version of ocm is available",
 		slog.String("current", "v"+result.CurrentVersion),
 		slog.String("available", "v"+result.LatestVersion),
-		slog.String("url", fmt.Sprintf("https://github.com/%s/%s/releases/tag/%sv%s",
+		slog.String("url", fmt.Sprintf("https://github.com/%s/%s/releases/tag/%s%s",
 			versioncheck.DefaultGitHubOwner, versioncheck.DefaultGitHubRepo,
 			versioncheck.DefaultTagPrefix, result.LatestVersion)),
 	)

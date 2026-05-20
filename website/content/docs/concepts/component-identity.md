@@ -163,7 +163,7 @@ Component versions can be cryptographically signed to ensure integrity and prove
 - **Access specifications are excluded** from the digest because they change when artifacts are transported to a new location — this is what makes location independence possible.
 - **Multiple signatures** are supported, allowing different parties to independently attest to a component version.
 
-For hands-on signing instructions, see [Sign Component Versions]({{< relref "docs/how-to/sign-component-version.md" >}}).
+For hands-on signing instructions, see [Sign Component Versions]({{< relref "sign-component-version.md" >}}).
 
 ## Next Steps
 
