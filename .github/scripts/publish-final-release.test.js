@@ -72,23 +72,23 @@ function mockCore() {
   assert.strictEqual(result, "Promoted from rc-tag");
 }
 
-// Rewrites git-cliff header line for controller tags
+// Rewrites git-cliff header line for canonical v* tags (cliff strips leading "v")
 {
-  const dir = tmpDir({ "notes.md": "## [kubernetes/controller/v0.1.0-rc.1] - 2025-01-01\n\n- Some change" });
+  const dir = tmpDir({ "notes.md": "## [0.1.0-rc.1] - 2025-01-01\n\n- Some change" });
   const result = prepareReleaseNotes(
     path.join(dir, "notes.md"),
-    "kubernetes/controller/v0.1.0-rc.1",
-    "kubernetes/controller/v0.1.0",
+    "v0.1.0-rc.1",
+    "v0.1.0",
   );
   const today = new Date().toISOString().split("T")[0];
   assert.ok(
-    result.startsWith(`## [kubernetes/controller/v0.1.0] - promoted from [kubernetes/controller/v0.1.0-rc.1] on ${today}`),
+    result.startsWith(`## [0.1.0] - promoted from [0.1.0-rc.1] on ${today}`),
     `Expected header rewrite, got: ${result.split("\n")[0]}`,
   );
   assert.ok(result.includes("- Some change"), "Body should be preserved");
 }
 
-// Rewrites git-cliff header line for CLI tags
+// Rewrites git-cliff header line for prefixed tags (no leading "v" to trim)
 {
   const dir = tmpDir({ "notes.md": "## [cli/v0.17.0-rc.1] - 2025-02-02\n\n- Fix bug" });
   const result = prepareReleaseNotes(
@@ -99,7 +99,7 @@ function mockCore() {
   const today = new Date().toISOString().split("T")[0];
   assert.ok(
     result.startsWith(`## [cli/v0.17.0] - promoted from [cli/v0.17.0-rc.1] on ${today}`),
-    `Expected header rewrite for CLI, got: ${result.split("\n")[0]}`,
+    `Expected header rewrite for prefixed tag, got: ${result.split("\n")[0]}`,
   );
 }
 
@@ -117,17 +117,17 @@ function mockCore() {
 
 // Truncates body when it exceeds GitHub's 125000-char release body limit
 {
-  const oversize = "## [v0.7.0-rc.1] - 2026-05-08\n\n" + "x".repeat(130000);
+  const oversize = "## [0.7.0-rc.1] - 2026-05-08\n\n" + "x".repeat(130000);
   const dir = tmpDir({ "huge.md": oversize });
   const result = prepareReleaseNotes(path.join(dir, "huge.md"), "v0.7.0-rc.1", "v0.7.0");
   assert.strictEqual(result.length, 120000, `Expected exact MAX_RELEASE_BODY_LENGTH (120000), got: ${result.length}`)
   assert.ok(result.endsWith("complete history.*"), "Expected truncation notice as suffix");
-  assert.ok(result.startsWith("## [v0.7.0]"), "Expected rewritten header to remain intact");
+  assert.ok(result.startsWith("## [0.7.0]"), "Expected rewritten header to remain intact");
 }
 
 // Does not truncate body when within limit
 {
-  const fits = "## [v0.7.0-rc.1] - 2026-05-08\n\nSmall body";
+  const fits = "## [0.7.0-rc.1] - 2026-05-08\n\nSmall body";
   const dir = tmpDir({ "small.md": fits });
   const result = prepareReleaseNotes(path.join(dir, "small.md"), "v0.7.0-rc.1", "v0.7.0");
   assert.ok(!result.includes("Release notes truncated"), "Expected no truncation notice for small body");

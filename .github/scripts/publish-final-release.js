@@ -19,11 +19,14 @@ const TRUNCATION_NOTICE = `\n\n---\n\n*Release notes truncated to fit GitHub's $
  * Falls back to a simple "Promoted from …" message if file is missing.
  *
  * The header pattern is derived dynamically from the RC tag, so it works for
- * any component prefix (cli/v…, kubernetes/controller/v…, etc.).
+ * any component prefix (cli/v…, kubernetes/controller/v…, etc.). The cliff.toml
+ * template strips a leading "v" from the version segment via
+ * `trim_start_matches(pat="v")`, so we apply the same trim when matching and
+ * rewriting headers.
  *
  * @param {string} notesFile - Path to the changelog markdown file.
- * @param {string} rcTag - The RC tag being promoted (e.g. "kubernetes/controller/v0.1.0-rc.1").
- * @param {string} newReleaseTag - The new release tag (e.g. "kubernetes/controller/v0.1.0").
+ * @param {string} rcTag - The RC tag being promoted (e.g. "v0.1.0-rc.1").
+ * @param {string} newReleaseTag - The new release tag (e.g. "v0.1.0").
  * @returns {string} The release notes body.
  */
 export function prepareReleaseNotes(notesFile, rcTag, newReleaseTag) {
@@ -40,23 +43,29 @@ export function prepareReleaseNotes(notesFile, rcTag, newReleaseTag) {
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Build a regex that matches the RC header line produced by git-cliff
-  // and that works across different component naming patterns. For example:
-  // Header: "## [kubernetes/controller/v0.1.0-rc.1] - 2026-03-08"
-  // We escape the RC tag to ensure that characters like `.` and `/`
-  // in the tag name are matched literally, not as regex metacharacters.
-  const escapedRcTag = rcTag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const rcHeaderPattern = new RegExp(`^## \\[${escapedRcTag}\\].*$`, "m");
+  // Match the cliff.toml header rendering: `version | trim_start_matches(pat="v")`.
+  // Only trims a leading "v" of the *whole tag*, not embedded ones (e.g.
+  // "v0.1.0-rc.1" → "0.1.0-rc.1", but "cli/v0.1.0-rc.1" stays as-is).
+  const trimLeadingV = (s) => s.startsWith("v") ? s.slice(1) : s;
+  const rcHeaderLabel = trimLeadingV(rcTag);
+  const finalHeaderLabel = trimLeadingV(newReleaseTag);
 
-  if (rcHeaderPattern.test(notes)) {
-    notes = notes.replace(
-        rcHeaderPattern,
-        `## [${newReleaseTag}] - promoted from [${rcTag}] on ${today}`,
-    );
+  // The RC header is a single line of the form `## [<label>] - <date>`.
+  // Find it by line scan rather than regex — clearer and avoids escaping
+  // the label's regex metacharacters (`.`, `/`, etc.).
+  const rcHeaderLine = `## [${rcHeaderLabel}]`;
+  const finalHeaderLine = `## [${finalHeaderLabel}] - promoted from [${rcHeaderLabel}] on ${today}`;
+
+  const lines = notes.split("\n");
+  const headerIdx = lines.findIndex(line => line.startsWith(rcHeaderLine));
+
+  if (headerIdx !== -1) {
+    lines[headerIdx] = finalHeaderLine;
+    notes = lines.join("\n");
   } else {
     // No RC header found — prepend a final header instead of failing.
     // Handles edge cases like manually edited release notes.
-    notes = `## [${newReleaseTag}] - promoted from [${rcTag}] on ${today}\n\n${notes}`;
+    notes = `${finalHeaderLine}\n\n${notes}`;
   }
 
   // GitHub rejects release bodies > 125000 chars. Truncate with a notice if
