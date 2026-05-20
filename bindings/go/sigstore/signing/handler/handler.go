@@ -33,9 +33,9 @@ const (
 	IdentityAttributeIssuer    = "issuer"
 	IdentityAttributeClientID  = "clientID"
 
-	CredentialKeyOIDCToken           = "token"
-	CredentialKeyTrustedRootJSON     = "trusted_root_json"
-	CredentialKeyTrustedRootJSONFile = CredentialKeyTrustedRootJSON + "_file"
+	CredentialKeyOIDCToken           = oidcv1.CredentialKeyToken
+	CredentialKeyTrustedRootJSON     = trustedrootv1.CredentialKeyTrustedRootJSON
+	CredentialKeyTrustedRootJSONFile = trustedrootv1.CredentialKeyTrustedRootJSONFile
 )
 
 // Handler implements signing.Handler by delegating to the cosign CLI.

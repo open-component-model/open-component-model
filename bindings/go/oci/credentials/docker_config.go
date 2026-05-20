@@ -18,17 +18,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Credential key constants re-exported from the typed credential package for backward compatibility.
-const (
-	// CredentialKeyUsername is the key for basic auth username.
-	CredentialKeyUsername = credentialsv1.CredentialKeyUsername
-	// CredentialKeyPassword is the key for basic auth password.
-	CredentialKeyPassword = credentialsv1.CredentialKeyPassword
-	// CredentialKeyAccessToken is the key for OAuth2/bearer access tokens.
-	CredentialKeyAccessToken = credentialsv1.CredentialKeyAccessToken
-	// CredentialKeyRefreshToken is the key for OAuth2 refresh tokens.
-	CredentialKeyRefreshToken = credentialsv1.CredentialKeyRefreshToken
-)
 
 // MapCredentials converts a [credentialsv1.OCICredentials] to an auth.Credential.
 // A nil input yields an empty [auth.Credential].
