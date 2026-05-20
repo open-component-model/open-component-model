@@ -11,22 +11,6 @@ const (
 	Version = "v1"
 )
 
-//nolint:gosec // G101: These are key names, not credentials.
-const (
-	// camelCase JSON property keys — used by FromDirectCredentials.
-	credentialKeyPublicKeyPEM      = "publicKeyPEM"
-	credentialKeyPublicKeyPEMFile  = "publicKeyPEMFile"
-	credentialKeyPrivateKeyPEM     = "privateKeyPEM"
-	credentialKeyPrivateKeyPEMFile = "privateKeyPEMFile"
-
-	// Legacy snake_case aliases from .ocmconfig files, accepted as fallback.
-	// TODO(matthiasbruns): https://github.com/open-component-model/ocm-project/issues/1072
-	deprecatedCredentialKeyPublicKeyPEM      = "public_key_pem"
-	deprecatedCredentialKeyPublicKeyPEMFile  = "public_key_pem_file"
-	deprecatedCredentialKeyPrivateKeyPEM     = "private_key_pem"
-	deprecatedCredentialKeyPrivateKeyPEMFile = "private_key_pem_file"
-)
-
 var VersionedType = runtime.NewVersionedType(RSACredentialsType, Version)
 
 // RSACredentials holds key material for RSA signing and/or verification.
