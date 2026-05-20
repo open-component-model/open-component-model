@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/spf13/cobra"
 
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -75,6 +76,15 @@ func isVersionCheckDisabled(cmd *cobra.Command, currentVersion string) bool {
 	// Dev builds have no meaningful version to compare.
 	if currentVersion == "" || currentVersion == "n/a" {
 		slog.Debug("version check skipped: no build version set")
+		return true
+	}
+
+	// Pseudo-versions (e.g. 0.0.0-20260520062203-abc) are produced by go install from
+	// an untagged commit. They are not real releases and must not trigger a warning.
+	// RCs and alphas (e.g. 0.6.0-rc.1) are intentional pre-releases and should warn.
+	if v, err := semver.NewVersion(currentVersion); err != nil ||
+		(v.Major() == 0 && v.Minor() == 0 && v.Patch() == 0 && v.Prerelease() != "") {
+		slog.Debug("version check skipped: dev/pseudo-version build", slog.String("version", currentVersion))
 		return true
 	}
 
