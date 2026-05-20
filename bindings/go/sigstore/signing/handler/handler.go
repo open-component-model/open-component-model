@@ -163,11 +163,11 @@ func (h *Handler) Sign(
 }
 
 func convertOptionalCredentials(creds runtime.Typed) (*oidcv1.OIDCIdentityToken, *trustedrootv1.TrustedRoot) {
-	oidcIdentityToken, _ := oidcv1.FromTyped(creds)
+	oidcIdentityToken, _ := oidcv1.ConvertToOIDCIdentityToken(creds)
 	if oidcIdentityToken == nil {
 		oidcIdentityToken = &oidcv1.OIDCIdentityToken{}
 	}
-	trustedRoot, _ := trustedrootv1.FromTyped(creds)
+	trustedRoot, _ := trustedrootv1.ConvertToTrustedRoot(creds)
 	if trustedRoot == nil {
 		trustedRoot = &trustedrootv1.TrustedRoot{}
 	}
