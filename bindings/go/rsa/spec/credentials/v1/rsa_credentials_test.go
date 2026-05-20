@@ -16,8 +16,8 @@ func (f *fakeTyped) GetType() runtime.Type        { return runtime.NewUnversione
 func (f *fakeTyped) SetType(_ runtime.Type)       {}
 func (f *fakeTyped) DeepCopyTyped() runtime.Typed { return &fakeTyped{} }
 
-func TestFromTyped(t *testing.T) {
-	typ := runtime.NewVersionedType(RSACredentialsType, Version)
+func TestConvertToRSACredentials(t *testing.T) {
+	typ := VersionedType
 
 	raw := &runtime.Raw{}
 	err := raw.UnmarshalJSON([]byte(`{"type":"RSACredentials/v1","privateKeyPEM":"my-key","publicKeyPEMFile":"/path/pub.pem"}`))
@@ -29,11 +29,6 @@ func TestFromTyped(t *testing.T) {
 		want    *RSACredentials
 		wantErr bool
 	}{
-		{
-			name:  "nil",
-			input: nil,
-			want:  nil,
-		},
 		{
 			name: "RSACredentials passthrough",
 			input: &RSACredentials{
@@ -73,13 +68,15 @@ func TestFromTyped(t *testing.T) {
 		{
 			name: "Raw with deprecated snake_case keys",
 			input: func() *runtime.Raw {
-				r := &runtime.Raw{}
+				raw := &runtime.Raw{}
 				err := raw.UnmarshalJSON([]byte(`{"type":"RSACredentials/v1","private_key_pem":"my-key","public_key_pem_file":"/path/pub.pem"}`))
 				require.NoError(t, err)
-				return r
+				return raw
 			}(),
 			want: &RSACredentials{
-				Type: typ,
+				Type:             typ,
+				PrivateKeyPEM:    "my-key",
+				PublicKeyPEMFile: "/path/pub.pem",
 			},
 		},
 		{
@@ -91,7 +88,7 @@ func TestFromTyped(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FromTyped(tt.input)
+			got, err := ConvertToRSACredentials(tt.input)
 			if tt.wantErr {
 				require.Error(t, err)
 				return

@@ -1,6 +1,9 @@
 package v1
 
 import (
+	"encoding/json"
+	"fmt"
+
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -27,6 +30,8 @@ const (
 	deprecatedCredentialKeyPrivateKeyPEM     = "private_key_pem"
 	deprecatedCredentialKeyPrivateKeyPEMFile = "private_key_pem_file"
 )
+
+var VersionedType = runtime.NewVersionedType(RSACredentialsType, Version)
 
 // RSACredentials holds key material for RSA signing and/or verification.
 //
@@ -68,17 +73,20 @@ type RSACredentials struct {
 	PrivateKeyPEMFile string `json:"privateKeyPEMFile,omitempty"`
 }
 
-// FromTyped converts [runtime.Typed] into RSACredentials.
+// ConvertToRSACredentials converts [runtime.Typed] into RSACredentials.
 // Direct conversation as well as converting from [v1.DirectCredentials] is supported.
 // Other supported [runtime.Typed] implementations are [runtime.Raw].
 // For unsupported [runtime.Typed] implementations, an error will be returned.
-func FromTyped(creds runtime.Typed) (*RSACredentials, error) {
-	if creds == nil {
-		return nil, nil
-	}
-
-	if dc, ok := creds.(*v1.DirectCredentials); ok {
-		return fromDirectCredentials(dc.Properties), nil
+func ConvertToRSACredentials(creds runtime.Typed) (*RSACredentials, error) {
+	switch t := creds.(type) {
+	case *v1.DirectCredentials:
+		return fromDirectCredentials(t.Properties), nil
+	case *runtime.Raw:
+		props := map[string]string{}
+		if err := json.Unmarshal(t.Data, &props); err != nil {
+			return nil, fmt.Errorf("error unmarshalling raw RSA credentials: %w", err)
+		}
+		return fromDirectCredentials(props), nil
 	}
 
 	rsaCreds := RSACredentials{}

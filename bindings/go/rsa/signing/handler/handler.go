@@ -81,9 +81,13 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
 	}
 	algorithm := supported.GetSignatureAlgorithm()
-	rsaCreds, err := rsacredentialsv1.FromTyped(creds)
-	if err != nil {
-		return descruntime.SignatureInfo{}, fmt.Errorf("parse rsa credentials: %w", err)
+	var rsaCreds *rsacredentialsv1.RSACredentials
+	if creds != nil {
+		if c, err := rsacredentialsv1.ConvertToRSACredentials(creds); err != nil {
+			return descruntime.SignatureInfo{}, fmt.Errorf("parse rsa credentials: %w", err)
+		} else {
+			rsaCreds = c
+		}
 	}
 
 	priv, err := rsacredentials.PrivateKeyFromCredentials(rsaCreds)
@@ -138,9 +142,13 @@ func (h *Handler) Verify(
 	_ runtime.Typed,
 	creds runtime.Typed,
 ) error {
-	rsaCreds, err := rsacredentialsv1.FromTyped(creds)
-	if err != nil {
-		return fmt.Errorf("parse rsa credentials: %w", err)
+	var rsaCreds *rsacredentialsv1.RSACredentials
+	if creds != nil {
+		if c, err := rsacredentialsv1.ConvertToRSACredentials(creds); err != nil {
+			return fmt.Errorf("parse rsa credentials: %w", err)
+		} else {
+			rsaCreds = c
+		}
 	}
 	pubFromCreds, err := rsacredentials.PublicKeyFromCredentials(rsaCreds)
 	if err != nil {

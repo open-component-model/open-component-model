@@ -13,7 +13,7 @@ func init() {
 // MustRegisterCredentialType registers RSACredentials/v1 in the given scheme.
 func MustRegisterCredentialType(scheme *runtime.Scheme) {
 	scheme.MustRegisterWithAlias(&RSACredentials{},
-		runtime.NewVersionedType(RSACredentialsType, Version),
+		VersionedType,
 		runtime.NewUnversionedType(RSACredentialsType),
 	)
 }
