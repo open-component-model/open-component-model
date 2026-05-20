@@ -17,8 +17,11 @@ const (
 
 const (
 	CredentialKeyToken     = "token"
-	CredentialKeyTokenFile = "token_file"
+	CredentialKeyTokenFile = "tokenFile"
 )
+
+// Deprecated: Use CredentialKeyTokenFile instead.
+const DeprecatedCredentialKeyTokenFile = "token_file"
 
 // OIDCIdentityToken represents typed credentials for Sigstore keyless signing.
 //
@@ -43,13 +46,24 @@ func MustRegisterCredentialType(scheme *runtime.Scheme) {
 }
 
 // FromDirectCredentials converts a DirectCredentials properties map into typed OIDCIdentityToken.
+// Both camelCase and deprecated snake_case keys are accepted.
+// A nil map is safe and returns an OIDCIdentityToken with only the type set.
+// FromDirectCredentials converts a DirectCredentials properties map into typed OIDCIdentityToken.
+// Both camelCase and deprecated snake_case keys are accepted.
 // A nil map is safe and returns an OIDCIdentityToken with only the type set.
 func FromDirectCredentials(properties map[string]string) *OIDCIdentityToken {
 	return &OIDCIdentityToken{
 		Type:      runtime.NewVersionedType(OIDCIdentityTokenType, Version),
 		Token:     properties[CredentialKeyToken],
-		TokenFile: properties[CredentialKeyTokenFile],
+		TokenFile: lookupProperty(properties, CredentialKeyTokenFile, DeprecatedCredentialKeyTokenFile),
 	}
+}
+
+func lookupProperty(properties map[string]string, key, deprecated string) string {
+	if v := properties[key]; v != "" {
+		return v
+	}
+	return properties[deprecated]
 }
 
 // FromTyped converts runtime.Typed into OIDCIdentityToken.
