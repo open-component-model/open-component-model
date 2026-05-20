@@ -139,11 +139,10 @@ func (h *Handler) Sign(
 func (h *Handler) Verify(
 	ctx context.Context,
 	signed descruntime.Signature,
-// we use hints from the signature to determine the correct settings, so no additional config is needed
+	// we use hints from the signature to determine the correct settings, so no additional config is needed
 	_ runtime.Typed,
 	creds runtime.Typed,
 ) error {
-
 	var rsaCreds *rsacredentialsv1.RSACredentials
 	if creds != nil {
 		if c, err := rsacredentialsv1.ConvertToRSACredentials(creds); err != nil {
