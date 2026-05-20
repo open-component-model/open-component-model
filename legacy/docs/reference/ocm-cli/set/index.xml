@@ -31,26 +31,6 @@ to set the pub/sub specification for a repository.
 If no specification is given an existing specification
 will be removed for the given repository.
 The specification
-can be queried with the 
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/get/pubsub/"&gt;ocm get pubsub&lt;/a&gt;.
+can be queried with the &lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/get/pubsub/"&gt;ocm get pubsub&lt;/a&gt;.
 Types and specification formats are shown for the topic
-
-
-
-
-
-
- 
- 
-
-
 &lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/help/ocm-pubsub/"&gt;ocm ocm-pubsub&lt;/a&gt;.&lt;/p&gt;</description></item></channel></rss>

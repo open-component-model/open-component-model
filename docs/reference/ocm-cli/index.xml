@@ -77,28 +77,8 @@ Component Repositories, and Component Versions.&lt;/p&gt;</description></item><i
 &lt;/div&gt;
 &lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
 &lt;ul&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-add-component-version/"&gt;ocm add component-version&lt;/a&gt;	 - Add component version(s) to an OCM Repository based on a &amp;ldquo;component-constructor&amp;rdquo; file&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-add-component-version/"&gt;ocm add component-version&lt;/a&gt;	 - Add component version(s) to an OCM Repository based on a &amp;ldquo;component-constructor&amp;rdquo; file&lt;/li&gt;
 &lt;/ul&gt;</description></item><item><title>ocm add component-version</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-add-component-version/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-add-component-version/</guid><description>&lt;h2 id="ocm-add-component-version"&gt;ocm add component-version&lt;/h2&gt;
 &lt;p&gt;Add component version(s) to an OCM Repository based on a &amp;ldquo;component-constructor&amp;rdquo; file&lt;/p&gt;
 &lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
@@ -198,28 +178,8 @@ to enable it. You can execute the following once:&lt;/p&gt;</description></item>
 &lt;/div&gt;
 &lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
 &lt;ul&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-describe-types/"&gt;ocm describe types&lt;/a&gt;	 - Describe OCM types and their configuration schema&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-describe-types/"&gt;ocm describe types&lt;/a&gt;	 - Describe OCM types and their configuration schema&lt;/li&gt;
 &lt;/ul&gt;</description></item><item><title>ocm describe types</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-describe-types/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-describe-types/</guid><description>&lt;h2 id="ocm-describe-types"&gt;ocm describe types&lt;/h2&gt;
 &lt;p&gt;Describe OCM types and their configuration schema&lt;/p&gt;
 &lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
@@ -301,39 +261,9 @@ use OCM commands or configure OCM resources, you specify types from these subsys
 &lt;/div&gt;
 &lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
 &lt;ul&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-download-plugin/"&gt;ocm download plugin&lt;/a&gt;	 - Download plugin binaries from a component version.&lt;/li&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-download-resource/"&gt;ocm download resource&lt;/a&gt;	 - Download resources described in a component version in an OCM Repository&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-download-plugin/"&gt;ocm download plugin&lt;/a&gt;	 - Download plugin binaries from a component version.&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-download-resource/"&gt;ocm download resource&lt;/a&gt;	 - Download resources described in a component version in an OCM Repository&lt;/li&gt;
 &lt;/ul&gt;</description></item><item><title>ocm download plugin</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-download-plugin/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-download-plugin/</guid><description>&lt;h2 id="ocm-download-plugin"&gt;ocm download plugin&lt;/h2&gt;
 &lt;p&gt;Download plugin binaries from a component version.&lt;/p&gt;
 &lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
@@ -421,39 +351,9 @@ and usage of using your command. For example:&lt;/p&gt;</description></item><ite
 &lt;/div&gt;
 &lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
 &lt;ul&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-get-component-version/"&gt;ocm get component-version&lt;/a&gt;	 - Get component version(s) from an OCM repository&lt;/li&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-get-types/"&gt;ocm get types&lt;/a&gt;	 - Describe OCM types and their configuration schema&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-get-component-version/"&gt;ocm get component-version&lt;/a&gt;	 - Get component version(s) from an OCM repository&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-get-types/"&gt;ocm get types&lt;/a&gt;	 - Describe OCM types and their configuration schema&lt;/li&gt;
 &lt;/ul&gt;</description></item><item><title>ocm get component-version</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-get-component-version/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-get-component-version/</guid><description>&lt;h2 id="ocm-get-component-version"&gt;ocm get component-version&lt;/h2&gt;
 &lt;p&gt;Get component version(s) from an OCM repository&lt;/p&gt;
 &lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
@@ -540,28 +440,8 @@ use OCM commands or configure OCM resources, you specify types from these subsys
 &lt;/div&gt;
 &lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
 &lt;ul&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/"&gt;ocm plugin registry&lt;/a&gt;	 - Manage plugin registries&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/"&gt;ocm plugin registry&lt;/a&gt;	 - Manage plugin registries&lt;/li&gt;
 &lt;/ul&gt;</description></item><item><title>ocm plugin registry</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/</guid><description>&lt;h2 id="ocm-plugin-registry"&gt;ocm plugin registry&lt;/h2&gt;
 &lt;p&gt;Manage plugin registries&lt;/p&gt;
 
@@ -636,37 +516,7 @@ use OCM commands or configure OCM resources, you specify types from these subsys
 &lt;/div&gt;
 &lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
 &lt;ul&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin/"&gt;ocm plugin&lt;/a&gt;	 - Manage OCM plugins&lt;/li&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-get/"&gt;ocm plugin registry get&lt;/a&gt;	 - Get information about specified plugin from a plugin registry.&lt;/li&gt;
-&lt;li&gt;
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-list/"&gt;ocm plugin registry list&lt;/a&gt;	 - List available plugin binaries from a plugin registry.&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin/"&gt;ocm plugin&lt;/a&gt;	 - Manage OCM plugins&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-get/"&gt;ocm plugin registry get&lt;/a&gt;	 - Get information about specified plugin from a plugin registry.&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-list/"&gt;ocm plugin registry list&lt;/a&gt;	 - List available plugin binaries from a plugin registry.&lt;/li&gt;
 &lt;/ul&gt;</description></item></channel></rss>

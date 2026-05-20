@@ -179,17 +179,7 @@ all registered ones are listed.&lt;/p&gt;</description></item><item><title>pubsu
 to propagate the creation or update of component versions.
 If such an implementation is available and a specification is
 assigned to the repository, it is shown. The specification
-can be set with the 
-
-
-
-
-
- 
- 
-
-
-&lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/set/pubsub/"&gt;ocm set pubsub&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>references</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/get/references/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/get/references/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
+can be set with the &lt;a href="https://ocm.software/legacy/docs/reference/ocm-cli/set/pubsub/"&gt;ocm set pubsub&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>references</title><link>https://ocm.software/legacy/docs/reference/ocm-cli/get/references/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/legacy/docs/reference/ocm-cli/get/references/</guid><description>&lt;h3 id="usage"&gt;Usage&lt;/h3&gt;
 
 
 

@@ -95,15 +95,12 @@ components will be added by value.</p><p>The <code>&ndash;replace</code> option 
 element with the same name and extra identity but different version as an
 existing element, append (false) or replace (true) the existing element.</p><p>The <code>&ndash;preserve-signature</code> option prohibits changes of signature
 relevant elements.</p><p>The source, resource and reference list can be composed according to the commands
-<a href=/legacy/docs/reference/ocm-cli/add/sources/>ocm add sources</a>,
-<a href=/legacy/docs/reference/ocm-cli/add/resources/>ocm add resources</a>,
-<a href=/legacy/docs/reference/ocm-cli/add/references/>ocm add references</a>,
+<a href=/legacy/docs/reference/ocm-cli/add/sources/>ocm add sources</a>, <a href=/legacy/docs/reference/ocm-cli/add/resources/>ocm add resources</a>, <a href=/legacy/docs/reference/ocm-cli/add/references/>ocm add references</a>,
 respectively.</p><p>The description file might contain:</p><ul><li>a single component as shown in the example</li><li>a list of components under the key <code>components</code></li><li>a list of yaml documents with a single component or component list</li></ul><p>The optional field <code>meta.configuredSchemaVersion</code> for a component
 entry can be used to specify a dedicated serialization format to use for the
 component descriptor. If given it overrides the <code>&ndash;schema</code> option
 of the command. By default, v2 is used.</p><p>Various elements support to add arbitrary information by using labels
-(see
-<a href=/legacy/docs/reference/ocm-cli/help/ocm-labels/>ocm ocm-labels</a>).</p><p>The <code>&ndash;type</code> option accepts a file format for the
+(see <a href=/legacy/docs/reference/ocm-cli/help/ocm-labels/>ocm ocm-labels</a>).</p><p>The <code>&ndash;type</code> option accepts a file format for the
 target archive to use. It is only evaluated if the target
 archive does not exist yet. The following formats are supported:</p><ul><li>directory</li><li>tar</li><li>tgz</li></ul><p>The default format is <code>directory</code>.</p><p>All yaml/json defined resources can be templated.
 Variables are specified as regular arguments following the syntax <code>&lt;name>=&lt;value></code>.
@@ -113,8 +110,7 @@ Values are overwritten in the order environment, settings file, command line set
 </pre><p>There are several templaters that can be selected by the <code>&ndash;templater</code> option:</p><ul><li><p><code>go</code> go templating supports complex values.</p><pre>
   key:
     subkey: "abc {{.MY_VAL}}"
-</pre></li><li><p><code>none</code> do not do any substitution.</p></li><li><p><code>spiff</code>
-<a href=https://github.com/mandelsoft/spiff target=_blank rel=noopener>spiff templating</a>.</p><p>It supports complex values. the settings are accessible using the binding <code>values</code>.</p><pre>
+</pre></li><li><p><code>none</code> do not do any substitution.</p></li><li><p><code>spiff</code> <a href=https://github.com/mandelsoft/spiff target=_blank rel=noopener>spiff templating</a>.</p><p>It supports complex values. the settings are accessible using the binding <code>values</code>.</p><pre>
   key:
     subkey: "abc (( values.MY_VAL ))"
 </pre></li><li><p><code>subst</code> simple value substitution with the <code>drone/envsubst</code> templater.</p><p>It supports string values, only. Complex settings will be json encoded.</p><pre>
@@ -142,8 +138,7 @@ If registered the default mime type is: application/x-tgz</p><p>It accepts a pla
 &lsquo;url&rsquo;: the URL of the npm repository.</p></li><li><p><code>ocm/ociArtifacts</code>: downloading OCI artifacts</p><p>The <code>ociArtifacts</code> downloader is able to download OCI artifacts
 as artifact archive according to the OCI distribution spec.
 The following artifact media types are supported:</p><ul><li><code>application/vnd.oci.image.manifest.v1+tar</code></li><li><code>application/vnd.oci.image.manifest.v1+tar+gzip</code></li><li><code>application/vnd.oci.image.index.v1+tar</code></li><li><code>application/vnd.oci.image.index.v1+tar+gzip</code></li><li><code>application/vnd.docker.distribution.manifest.v2+tar</code></li><li><code>application/vnd.docker.distribution.manifest.v2+tar+gzip</code></li><li><code>application/vnd.docker.distribution.manifest.list.v2+tar</code></li><li><code>application/vnd.docker.distribution.manifest.list.v2+tar+gzip</code></li></ul><p>By default, it is registered for these mimetypes.</p><p>It accepts a config with the following fields:</p><ul><li><code>namespacePrefix</code>: a namespace prefix used for the uploaded artifacts</li><li><code>ociRef</code>: an OCI repository reference</li><li><code>repository</code>: an OCI repository specification for the target OCI registry</li></ul><p>Alternatively, a single string value can be given representing an OCI repository
-reference.</p></li><li><p><code>plugin</code>: [downloaders provided by plugins]</p><p>sub namespace of the form <code>&lt;plugin name>/&lt;handler></code></p></li></ul><p>See
-<a href=/legacy/docs/reference/ocm-cli/help/ocm-uploadhandlers/>ocm ocm-uploadhandlers</a> for further details on using
+reference.</p></li><li><p><code>plugin</code>: [downloaders provided by plugins]</p><p>sub namespace of the form <code>&lt;plugin name>/&lt;handler></code></p></li></ul><p>See <a href=/legacy/docs/reference/ocm-cli/help/ocm-uploadhandlers/>ocm ocm-uploadhandlers</a> for further details on using
 upload handlers.</p><h3 id=examples>Examples<a href=#examples class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>
 $ ocm add componentversions --file ctf --version 1.0 component-constructor.yaml
 

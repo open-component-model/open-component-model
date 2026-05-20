@@ -8,30 +8,7 @@
 &lt;li&gt;Verified access to private OCM repositories&lt;/li&gt;
 &lt;/ul&gt;
 &lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~5 minutes&lt;/p&gt;</description></item><item><title>Configure Credentials for Multiple Registries</title><link>https://ocm.software/docs/how-to/configure-credentials-for-multiple-registries/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/how-to/configure-credentials-for-multiple-registries/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
-&lt;p&gt;Configure OCM to authenticate against multiple OCI registries — pinning explicit credentials for specific registries while using Docker config as a catch-all fallback.&lt;/p&gt;</description></item><item><title>Generate Signing Keys</title><link>https://ocm.software/docs/how-to/generate-signing-keys/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/how-to/generate-signing-keys/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
-&lt;p&gt;Generate an RSA key pair that can be used to sign and verify OCM component versions.&lt;/p&gt;
-&lt;h2 id="youll-end-up-with"&gt;You&amp;rsquo;ll end up with&lt;/h2&gt;
-&lt;ul&gt;
-&lt;li&gt;A private key file for signing component versions&lt;/li&gt;
-&lt;li&gt;A public key file for sharing with consumers who need to verify signatures&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~2 minutes&lt;/p&gt;</description></item><item><title>Configure Credentials for Signing</title><link>https://ocm.software/docs/how-to/configure-credentials-for-signing/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/how-to/configure-credentials-for-signing/</guid><description>&lt;p&gt;Set up credential configuration so OCM can find your signing keys when signing or verifying component versions.&lt;/p&gt;
-&lt;h2 id="youll-end-up-with"&gt;You&amp;rsquo;ll end up with&lt;/h2&gt;
-&lt;ul&gt;
-&lt;li&gt;A configured &lt;code&gt;.ocmconfig&lt;/code&gt; file that OCM uses to locate your signing keys&lt;/li&gt;
-&lt;li&gt;Ability to sign and verify component versions without specifying key paths manually&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~3 minutes&lt;/p&gt;</description></item><item><title>Sign Component Versions</title><link>https://ocm.software/docs/how-to/sign-component-versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/how-to/sign-component-versions/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
-&lt;p&gt;Sign a component version to certify its authenticity and enable downstream verification.&lt;/p&gt;
-&lt;h2 id="youll-end-up-with"&gt;You&amp;rsquo;ll end up with&lt;/h2&gt;
-&lt;ul&gt;
-&lt;li&gt;A component version with a cryptographic signature attached&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~3 minutes&lt;/p&gt;</description></item><item><title>Verify Component Versions</title><link>https://ocm.software/docs/how-to/verify-component-versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/how-to/verify-component-versions/</guid><description>&lt;h2 id="youll-end-up-with"&gt;You&amp;rsquo;ll end up with&lt;/h2&gt;
-&lt;ul&gt;
-&lt;li&gt;Confidence that a component version is authentic and hasn&amp;rsquo;t been tampered with&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~3 minutes&lt;/p&gt;</description></item><item><title>Download Resources from Component Versions</title><link>https://ocm.software/docs/how-to/download-resources-from-component-versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/how-to/download-resources-from-component-versions/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Configure OCM to authenticate against multiple OCI registries — pinning explicit credentials for specific registries while using Docker config as a catch-all fallback.&lt;/p&gt;</description></item><item><title>Download Resources from Component Versions</title><link>https://ocm.software/docs/how-to/download-resources-from-component-versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/how-to/download-resources-from-component-versions/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
 &lt;p&gt;Download resources from a component version using the OCM CLI.
 Learn how to fetch specific resources, optionally transform them to their native format,
 and save them to your local filesystem.&lt;/p&gt;</description></item><item><title>Migrate Legacy Credentials</title><link>https://ocm.software/docs/how-to/migrate-legacy-credentials/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/how-to/migrate-legacy-credentials/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
@@ -57,13 +34,6 @@ to an OCI registry. This guide does not cover charts that are already stored as 
 &lt;/ul&gt;
 &lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~5 minutes&lt;/p&gt;</description></item><item><title>Model Software Products</title><link>https://ocm.software/docs/how-to/model-software-products/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/how-to/model-software-products/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
 &lt;p&gt;Most products consist of multiple independently versioned services.
-This guide uses OCM component references to pin those services into a single 
-
-
-
-
-
-
-&lt;a href="https://ocm.software/docs/overview/benefits-of-ocm/#create-a-software-bill-of-delivery" target="_blank" rel="noopener"&gt;Software Bill of Delivery&lt;/a&gt; — a versioned, auditable record of what a release contains.&lt;/p&gt;</description></item><item><title>Configure Custom RBAC for Deployers</title><link>https://ocm.software/docs/how-to/configure-custom-rbac-for-deployers/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/how-to/configure-custom-rbac-for-deployers/</guid><description>&lt;p&gt;The OCM Kubernetes Controller Toolkit ships with the minimum RBAC permissions needed to manage its own custom resources
+This guide uses OCM component references to pin those services into a single &lt;a href="https://ocm.software/docs/overview/benefits-of-ocm/#create-a-software-bill-of-delivery" target="_blank" rel="noopener"&gt;Software Bill of Delivery&lt;/a&gt; — a versioned, auditable record of what a release contains.&lt;/p&gt;</description></item><item><title>Configure Custom RBAC for Deployers</title><link>https://ocm.software/docs/how-to/configure-custom-rbac-for-deployers/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/how-to/configure-custom-rbac-for-deployers/</guid><description>&lt;p&gt;The OCM Kubernetes Controller Toolkit ships with the minimum RBAC permissions needed to manage its own custom resources
 (&lt;code&gt;Repository&lt;/code&gt;, &lt;code&gt;Component&lt;/code&gt;, &lt;code&gt;Resource&lt;/code&gt;, &lt;code&gt;Deployer&lt;/code&gt;). It does &lt;strong&gt;not&lt;/strong&gt; include permissions for third-party resources
 that your deployers may create or manage.&lt;/p&gt;</description></item></channel></rss>

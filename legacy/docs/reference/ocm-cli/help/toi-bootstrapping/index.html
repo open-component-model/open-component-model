@@ -69,11 +69,9 @@ It provides a possibility to run images taken from a component version with user
 configuration and feed them with the content of this component version.
 It is some basic mechanism, which can be used to execute simple installation
 steps based on content described by the Open Component Model
-(see
-<a href=https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_bootstrap_package.md target=_blank rel=noopener>ocm bootstrap package</a>).</p><p>Therefore, a dedicated resource type <code>toiPackage</code> is defined,
+(see <a href=https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_bootstrap_package.md target=_blank rel=noopener>ocm bootstrap package</a>).</p><p>Therefore, a dedicated resource type <code>toiPackage</code> is defined,
 which describes an installation package to be handled by TOI.
-When calling the
-<a href=https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_bootstrap_package.md target=_blank rel=noopener>ocm bootstrap package</a> command it is selected by a resource
+When calling the <a href=https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_bootstrap_package.md target=_blank rel=noopener>ocm bootstrap package</a> command it is selected by a resource
 identity pattern. The first resource in given component version matching the
 pattern is used. A possible use case could be to provide different packages for
 different environments. The resource can use an identity attribute
@@ -97,11 +95,9 @@ requested action and provide some labeled output files, which will be passed
 to the caller.</p><h3 id=the-toipackage-resource>The <code>toiPackage</code> Resource<a href=#the-toipackage-resource class=anchor aria-hidden=true>#</a></h3><p>This resource describes an installable software package, whose content is
 contained in the component version, which contains the package resource.</p><p>It is a plain yaml resource with the media types media type <code>application/x-yaml</code>,
 <code>text/yaml</code> or</p><p><code>application/vnd.toi.ocm.software.package.v1+yaml</code>) containing
-information required to control the instantiation of an executor.</p><p>It has the following format:</p><ul><li><p><strong><code>description</code></strong> (optional) <em>string</em></p><p>A short description of the installation package and some configuration hints.</p></li><li><p><strong><code>executors</code></strong> <em>[]ExecutorSpecification</em></p></li><li><p><strong><code>configTemplate</code></strong> (optional) <em>yaml</em></p><p>This is a
-<a href=https://github.com/mandelsoft/spiff target=_blank rel=noopener>spiff</a> template used to generate
+information required to control the instantiation of an executor.</p><p>It has the following format:</p><ul><li><p><strong><code>description</code></strong> (optional) <em>string</em></p><p>A short description of the installation package and some configuration hints.</p></li><li><p><strong><code>executors</code></strong> <em>[]ExecutorSpecification</em></p></li><li><p><strong><code>configTemplate</code></strong> (optional) <em>yaml</em></p><p>This is a <a href=https://github.com/mandelsoft/spiff target=_blank rel=noopener>spiff</a> template used to generate
 The user config that is finally passed to the executor. If no template
-is specified the user parameter input will be processed directly without template.</p></li><li><p><strong><code>configScheme</code></strong> (optional) <em>yaml</em></p><p>This is a
-<a href=https://json-schema.org/ target=_blank rel=noopener>JSONSCHEMA</a> used to validate the user
+is specified the user parameter input will be processed directly without template.</p></li><li><p><strong><code>configScheme</code></strong> (optional) <em>yaml</em></p><p>This is a <a href=https://json-schema.org/ target=_blank rel=noopener>JSONSCHEMA</a> used to validate the user
 input prior to merging with the template</p></li><li><p><strong><code>templateLibraries</code></strong> (optional) <em>[]ResourceReference</em></p><p>This is a list of resources whose content is used as additional stubs
 for the template processing.</p></li><li><p><strong><code>credentials</code></strong> (optional) <em>map[string]CredentialRequest</em></p><p>Here the package may request the provisioning of some credentials with a
 dedicated name/purpose and structure. If specified the bootstrap command
@@ -109,8 +105,7 @@ requites the specification of a credentials file providing the information
 how to satisfy those credential requests.</p></li><li><p><strong><code>additionalResources</code></strong> (optional) <em>map[string]AdditionalResource)</em></p><p>A set of additional resources specified by an OCM resource reference or
 direct data as byte, string or yaml.
 The key describes the meaning of the resource. The following keys have
-a special meaning:</p><ul><li><strong><code>configFile</code></strong>: an example template for a parameter file</li><li><strong><code>credentialsFile</code></strong>: an example template for a credentials file</li></ul><p>Those templates can be downloaded with
-<a href=https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_bootstrap_configuration.md target=_blank rel=noopener>ocm bootstrap configuration</a>.</p></li></ul><h4 id=executorspecification><em>ExecutorSpecification</em><a href=#executorspecification class=anchor aria-hidden=true>#</a></h4><p>The executor specification describes the available actions and their mapping
+a special meaning:</p><ul><li><strong><code>configFile</code></strong>: an example template for a parameter file</li><li><strong><code>credentialsFile</code></strong>: an example template for a credentials file</li></ul><p>Those templates can be downloaded with <a href=https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_bootstrap_configuration.md target=_blank rel=noopener>ocm bootstrap configuration</a>.</p></li></ul><h4 id=executorspecification><em>ExecutorSpecification</em><a href=#executorspecification class=anchor aria-hidden=true>#</a></h4><p>The executor specification describes the available actions and their mapping
 to executors. It uses the following fields:</p><ul><li><p><strong><code>actions</code></strong> <em>[]string</em></p><p>The list of actions this executor can be used for. If nothings is specified
 the executor will be used for all actions. The first matching executor entry
 will be used to execute an action by the bootstrap command</p></li><li><p><strong><code>resourceRef</code></strong> <em>ResourceReference</em></p><p>An OCM resource reference describing a component version resource relative to
@@ -172,12 +167,10 @@ is a yaml file with the media type <code>application/x-yaml</code>,
 <code>application/vnd.toi.ocm.software.package.v1+yaml</code>) containing
 common information about the executor. If this flavor is used by the package,
 this information is used to validate settings in the package specification.</p><p>It has the following format:</p><ul><li><p><strong><code>imageRef</code></strong> <em>ResourceReference</em></p><p>This field reference the image resource relative to the component version
-providing the executor resource</p></li><li><p><strong><code>configTemplate</code></strong> (optional) <em>yaml</em></p><p>This a
-<a href=https://github.com/mandelsoft/spiff target=_blank rel=noopener>spiff</a> template used to generate
+providing the executor resource</p></li><li><p><strong><code>configTemplate</code></strong> (optional) <em>yaml</em></p><p>This a <a href=https://github.com/mandelsoft/spiff target=_blank rel=noopener>spiff</a> template used to generate
 The executor config from the package specification that is finally passed to
 the executor. If no template is specified the executor config specified in
-the package will be processed directly without template.</p></li><li><p><strong><code>configScheme</code></strong> (optional) <em>yaml</em></p><p>This is a
-<a href=https://json-schema.org/ target=_blank rel=noopener>JSONSCHEMA</a> used to validate the executor
+the package will be processed directly without template.</p></li><li><p><strong><code>configScheme</code></strong> (optional) <em>yaml</em></p><p>This is a <a href=https://json-schema.org/ target=_blank rel=noopener>JSONSCHEMA</a> used to validate the executor
 config from the package prior to merging with the template</p></li><li><p><strong><code>templateLibraries</code></strong> (optional) <em>[]ResourceReference</em></p><p>This is a list of resources whose content is used as additional stubs
 for the template processing.</p></li><li><p><strong><code>credentials</code></strong> (optional) <em>map[string]CredentialRequest</em></p><p>Here the executor may request the provisioning of some credentials with a
 dedicated name/purpose and structure. If specified it will be propagated
@@ -188,16 +181,14 @@ so far. It is intended to be extended to contain further information to more
 formally describe the type of output.</p></li><li><p><strong><code>image</code></strong> (development) <em>object</em></p><p>Instead of an <code>imageRef</code> it is possible to directly specify an
 absolute image.</p><p>ATTENTION: this is intended for development purposes, ONLY. Do not use it
 for final component versions.</p><p>It has the field <code>ref</code> and the optional field <code>digest</code>.</p></li></ul><h3 id=client-parameters>Client Parameters<a href=#client-parameters class=anchor aria-hidden=true>#</a></h3><p>Common to all executors a parameter file can be provided by the caller. The
-package specification may provide a
-<a href=https://github.com/mandelsoft/spiff target=_blank rel=noopener>spiff template</a>
+package specification may provide a <a href=https://github.com/mandelsoft/spiff target=_blank rel=noopener>spiff template</a>
 for this parameter file. It can be used, for example to provide useful defaults.
 The actually provided content is merged with this template.</p><p>To validate user configuration a JSON scheme can be provided. The user input is
 validated first against this scheme before the actual merge is done.</p><h3 id=credentials>Credentials<a href=#credentials class=anchor aria-hidden=true>#</a></h3><p>Additionally credentials can be requested to be provided by a client.
 This is done with the <code>credentials</code> field. It is a map
 of credentials names and their meaning and/or handling.</p><p>It uses the following fields:</p><ul><li><p><strong><code>description</code></strong> <em>string</em></p><p>This field should describe the purpose of the credential.</p></li><li><p><strong><code>properties</code></strong> <em>map[string]string</em></p><p>This field should describe the used credential fields</p></li><li><p><strong><code>consumerId</code></strong> <em>map[string]</em></p><p>This field can be used to optionally define a consumer id that should be set
 in the OCM support library, if used by the executor. At least the field
-<code>type</code> and one additional field must be set.</p></li></ul><p>Credentials are provided in an ocm config file (see
-<a href=/legacy/docs/reference/ocm-cli/help/configfile/>ocm configfile</a>).
+<code>type</code> and one additional field must be set.</p></li></ul><p>Credentials are provided in an ocm config file (see <a href=/legacy/docs/reference/ocm-cli/help/configfile/>ocm configfile</a>).
 It uses a memory credential repository with the name <code>default</code>
 to store the credentials under the given name. Additionally appropriate
 consumer ids will be propagated, if requested in the credentials request config.</p><h3 id=executor-image-contract>Executor Image Contract<a href=#executor-image-contract class=anchor aria-hidden=true>#</a></h3><p>The executor image is called with the action as additional argument. It is

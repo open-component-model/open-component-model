@@ -133,8 +133,7 @@ which might be directly mapped to consumer identities (if supported
 by the provider type).</p><p>The type <code>Credentials</code> can be used to inline
 credentials in credential configuration objects
 to configure mappings of consumer identities to a credential
-set (see
-<a href=/legacy/docs/reference/ocm-cli/help/configfile/>ocm configfile</a>).</p><p>The following types are currently available:</p><ul><li><p>Credential provider <code>Credentials</code></p><p>This repository type can be used to specify a single inline credential
+set (see <a href=/legacy/docs/reference/ocm-cli/help/configfile/>ocm configfile</a>).</p><p>The following types are currently available:</p><ul><li><p>Credential provider <code>Credentials</code></p><p>This repository type can be used to specify a single inline credential
 set. The default name is the empty string or <code>Credentials</code>.</p><p>The following versions are supported:</p><ul><li><p>Version <code>v1</code></p><p>The repository specification supports the following fields:</p><ul><li><code>properties</code>: <em>map[string]string</em>: direct credential fields</li></ul></li></ul></li><li><p>Credential provider <code>DockerConfig</code></p><p>This repository type can be used to access credentials stored in a file
 following the docker config json format. It take into account the
 credentials helper section, also. If enabled, the described

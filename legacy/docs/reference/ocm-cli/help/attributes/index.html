@@ -66,10 +66,8 @@ Versions
 For up-to-date documentation, see the
 <a class=version-warning-link href=/>latest version (latest)</a>.</div><h1>attributes</h1><nav class="toc-mobile d-xl-none" aria-label="Quaternary navigation"><details><summary>On this page</summary><div class=page-links><nav id=TableOfContents><ul><li><ul><li><a href=#description>Description</a></li><li><a href=#see-also>See Also</a></li></ul></li></ul></nav></div></details></nav><div style=margin-bottom:2rem></div><h3 id=description>Description<a href=#description class=anchor aria-hidden=true>#</a></h3><p>The OCM library supports a set of attributes, which can be used to influence
 the behaviour of various functions. The CLI also supports setting of those
-attributes using the config file (see
-<a href=/legacy/docs/reference/ocm-cli/help/configfile/>ocm configfile</a>) or by
-command line options of the main command (see
-<a href=/legacy/docs/reference/ocm-cli/>ocm</a>).</p><p>The following options are available in the currently used version of the
+attributes using the config file (see <a href=/legacy/docs/reference/ocm-cli/help/configfile/>ocm configfile</a>) or by
+command line options of the main command (see <a href=/legacy/docs/reference/ocm-cli/>ocm</a>).</p><p>The following options are available in the currently used version of the
 OCM library:</p><ul><li><p><code>github.com/mandelsoft/logforward</code> [<code>logfwd</code>]: <em>logconfig</em> Logging config structure used for config forwarding</p><p>This attribute is used to specify a logging configuration intended
 to be forwarded to other tools.
 (For example: TOI passes this config to the executor)</p></li><li><p><code>github.com/mandelsoft/oci/cache</code> [<code>cache</code>]: <em>string</em></p><p>Filesystem folder to use for caching OCI blobs</p></li><li><p><code>github.com/mandelsoft/ocm/compat</code> [<code>compat</code>]: <em>bool</em></p><p>Compatibility mode: Avoid generic local access methods and prefer type specific ones.</p></li><li><p><code>github.com/mandelsoft/ocm/hasher</code>: <em>JSON</em></p><p>Preferred hash algorithm to calculate resource digests. The following

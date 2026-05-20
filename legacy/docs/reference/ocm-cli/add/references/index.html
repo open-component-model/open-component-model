@@ -101,8 +101,7 @@ Values are overwritten in the order environment, settings file, command line set
 </pre><p>There are several templaters that can be selected by the <code>&ndash;templater</code> option:</p><ul><li><p><code>go</code> go templating supports complex values.</p><pre>
   key:
     subkey: "abc {{.MY_VAL}}"
-</pre></li><li><p><code>none</code> do not do any substitution.</p></li><li><p><code>spiff</code>
-<a href=https://github.com/mandelsoft/spiff target=_blank rel=noopener>spiff templating</a>.</p><p>It supports complex values. the settings are accessible using the binding <code>values</code>.</p><pre>
+</pre></li><li><p><code>none</code> do not do any substitution.</p></li><li><p><code>spiff</code> <a href=https://github.com/mandelsoft/spiff target=_blank rel=noopener>spiff templating</a>.</p><p>It supports complex values. the settings are accessible using the binding <code>values</code>.</p><pre>
   key:
     subkey: "abc (( values.MY_VAL ))"
 </pre></li><li><p><code>subst</code> simple value substitution with the <code>drone/envsubst</code> templater.</p><p>It supports string values, only. Complex settings will be json encoded.</p><pre>
@@ -119,8 +118,7 @@ Values are overwritten in the order environment, settings file, command line set
 </pre><p>There are several templaters that can be selected by the <code>&ndash;templater</code> option:</p><ul><li><p><code>go</code> go templating supports complex values.</p><pre>
   key:
     subkey: "abc {{.MY_VAL}}"
-</pre></li><li><p><code>none</code> do not do any substitution.</p></li><li><p><code>spiff</code>
-<a href=https://github.com/mandelsoft/spiff target=_blank rel=noopener>spiff templating</a>.</p><p>It supports complex values. the settings are accessible using the binding <code>values</code>.</p><pre>
+</pre></li><li><p><code>none</code> do not do any substitution.</p></li><li><p><code>spiff</code> <a href=https://github.com/mandelsoft/spiff target=_blank rel=noopener>spiff templating</a>.</p><p>It supports complex values. the settings are accessible using the binding <code>values</code>.</p><pre>
   key:
     subkey: "abc (( values.MY_VAL ))"
 </pre></li><li><p><code>subst</code> simple value substitution with the <code>drone/envsubst</code> templater.</p><p>It supports string values, only. Complex settings will be json encoded.</p><pre>
