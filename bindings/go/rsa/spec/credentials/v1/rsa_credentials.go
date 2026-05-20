@@ -1,10 +1,6 @@
 package v1
 
 import (
-	"encoding/json"
-	"fmt"
-
-	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -71,47 +67,4 @@ type RSACredentials struct {
 	// PrivateKeyPEMFile is a path to a PEM file containing an RSA private key (PKCS#1 or PKCS#8).
 	// Same semantics as PrivateKeyPEM, but loaded from disk. Ignored when PrivateKeyPEM is also set.
 	PrivateKeyPEMFile string `json:"privateKeyPEMFile,omitempty"`
-}
-
-// ConvertToRSACredentials converts [runtime.Typed] into [RSACredentials].
-// Direct conversation as well as converting from [v1.DirectCredentials] is supported.
-// Other supported [runtime.Typed] implementations are [runtime.Raw].
-// For unsupported [runtime.Typed] implementations, an error will be returned.
-func ConvertToRSACredentials(creds runtime.Typed) (*RSACredentials, error) {
-	switch t := creds.(type) {
-	case *v1.DirectCredentials:
-		return fromDirectCredentials(t.Properties), nil
-	case *runtime.Raw:
-		props := map[string]string{}
-		if err := json.Unmarshal(t.Data, &props); err != nil {
-			return nil, fmt.Errorf("error unmarshalling raw RSA credentials: %w", err)
-		}
-		return fromDirectCredentials(props), nil
-	}
-
-	rsaCreds := RSACredentials{}
-	if err := Scheme.Convert(creds, &rsaCreds); err != nil {
-		return nil, err
-	}
-	return &rsaCreds, nil
-}
-
-// fromDirectCredentials converts a DirectCredentials properties map into typed RSACredentials.
-// Both camelCase and deprecated snake_case keys are accepted.
-// A nil map is safe and returns an RSACredentials with only the type set.
-func fromDirectCredentials(properties map[string]string) *RSACredentials {
-	return &RSACredentials{
-		Type:              runtime.NewVersionedType(RSACredentialsType, Version),
-		PublicKeyPEM:      lookupProperty(properties, credentialKeyPublicKeyPEM, deprecatedCredentialKeyPublicKeyPEM),
-		PublicKeyPEMFile:  lookupProperty(properties, credentialKeyPublicKeyPEMFile, deprecatedCredentialKeyPublicKeyPEMFile),
-		PrivateKeyPEM:     lookupProperty(properties, credentialKeyPrivateKeyPEM, deprecatedCredentialKeyPrivateKeyPEM),
-		PrivateKeyPEMFile: lookupProperty(properties, credentialKeyPrivateKeyPEMFile, deprecatedCredentialKeyPrivateKeyPEMFile),
-	}
-}
-
-func lookupProperty(properties map[string]string, key, deprecated string) string {
-	if v := properties[key]; v != "" {
-		return v
-	}
-	return properties[deprecated]
 }

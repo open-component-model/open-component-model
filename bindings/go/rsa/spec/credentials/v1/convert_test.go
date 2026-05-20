@@ -39,6 +39,7 @@ func TestConvertToRSACredentials(t *testing.T) {
 		{
 			name: "DirectCredentials",
 			input: &credv1.DirectCredentials{
+				Type: runtime.NewVersionedType(credv1.DirectCredentialsType, Version),
 				Properties: map[string]string{
 					credentialKeyPrivateKeyPEM:    "my-key",
 					credentialKeyPublicKeyPEMFile: "/path/pub.pem",
@@ -51,10 +52,13 @@ func TestConvertToRSACredentials(t *testing.T) {
 			},
 		},
 		{
-			name: "Raw",
-			input: &runtime.Raw{
-				Type: VersionedType,
-				Data: []byte(`{"type":"RSACredentials/v1","private_key_pem":"my-key","public_key_pem_file":"/path/pub.pem"}`),
+			name: "DirectCredentials with deprecated snake_case keys",
+			input: &credv1.DirectCredentials{
+				Type: runtime.NewVersionedType(credv1.DirectCredentialsType, Version),
+				Properties: map[string]string{
+					deprecatedCredentialKeyPrivateKeyPEM:    "my-key",
+					deprecatedCredentialKeyPublicKeyPEMFile: "/path/pub.pem",
+				},
 			},
 			want: &RSACredentials{
 				Type:             VersionedType,
@@ -63,10 +67,10 @@ func TestConvertToRSACredentials(t *testing.T) {
 			},
 		},
 		{
-			name: "Raw with deprecated snake_case keys",
+			name: "Raw",
 			input: &runtime.Raw{
 				Type: VersionedType,
-				Data: []byte(`{"type":"RSACredentials/v1","private_key_pem":"my-key","public_key_pem_file":"/path/pub.pem"}`),
+				Data: []byte(`{"type":"RSACredentials/v1","privateKeyPEM":"my-key","publicKeyPEMFile":"/path/pub.pem"}`),
 			},
 			want: &RSACredentials{
 				Type:             VersionedType,
