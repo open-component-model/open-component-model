@@ -141,9 +141,9 @@ npm run cutoff -- 0.0.2
 What the script does (brief):
 
 - Copies `content/` to `content_versioned/version-x.y.z`.
-- Appends a `[versions."x.y.z"]` stanza (without weight) to `config/_default/hugo.toml` and optionally keeps
+- Appends a `[versions."x.y.z"]` stanza (without weight) to `config/_default/hugo.yaml` and optionally keeps
   `defaultContentVersion` unchanged when `--keepDefault` is supplied.
-- Appends a grouped, per-version section to `config/_default/module.toml`.
+- Appends a grouped, per-version section to `config/_default/module.yaml`.
 
 The script keeps versioning configuration minimal and consistent. Authors only need to run the script; no manual edits of config files are required.
 

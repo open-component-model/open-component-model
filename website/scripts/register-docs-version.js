@@ -7,19 +7,20 @@
  *
  * Behavior:
  * - Accepts SemVer version X.Y.Z, derives minor identifier X.Y
- * - If Z == 0 (minor release): adds version to hugo.toml, adds import blocks to module.toml
- * - If Z > 0 (patch release): updates existing import tags for version X.Y (no hugo.toml changes)
+ * - If Z == 0 (minor release): adds version to hugo.yaml, adds import blocks to module.yaml
+ * - If Z > 0 (patch release): updates existing import tags for version X.Y (no hugo.yaml changes)
  * - Retires oldest minor version when >10 minor versions exist
  */
 
 const fsp = require('node:fs/promises');
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
+const yaml = require('js-yaml');
 
 // Paths
 const REPO_ROOT = path.resolve(__dirname, '..');
-const HUGO_TOML = path.join(REPO_ROOT, 'config', '_default', 'hugo.toml');
-const MODULE_TOML = path.join(REPO_ROOT, 'config', '_default', 'module.toml');
+const HUGO_CONFIG = path.join(REPO_ROOT, 'config', '_default', 'hugo.yaml');
+const MODULE_CONFIG = path.join(REPO_ROOT, 'config', '_default', 'module.yaml');
 
 // Headers for regenerated files
 const HUGO_HEADER = `# Hugo Configuration
@@ -36,11 +37,10 @@ const MODULE_HEADER = `# Hugo Module Configuration
 
 `;
 
-// TOML module cache
-let TOML;
-
-// Load smol-toml
-const loadToml = async () => TOML || (TOML = await import('smol-toml'));
+// Serialize a parsed config back to YAML
+function dumpYaml(parsed) {
+    return yaml.dump(parsed, { lineWidth: -1, noRefs: true });
+}
 
 // Maximum number of minor versions (excluding special versions like main/legacy)
 const MAX_MINOR_VERSIONS = 10;
@@ -69,7 +69,7 @@ const SPECIAL_VERSIONS = new Set(['main', 'legacy']);
  * - SemVer versions (X.Y) are sorted descending (newest first)
  * - "legacy" (if present) always gets the highest weight (last)
  *
- * @param {Object} existingVersions - current versions from hugo.toml
+ * @param {Object} existingVersions - current versions from hugo.yaml
  * @param {string} newVersion - minor version to add (X.Y)
  * @returns {Object} rebuilt versions object with weights
  */
@@ -253,9 +253,9 @@ function buildModuleBlocks(version, fullVersion, deps) {
 
 /**
  * Retire the oldest minor version when there are more than MAX_MINOR_VERSIONS.
- * Removes it from hugo.toml versions and returns the removed version key.
+ * Removes it from hugo.yaml versions and returns the removed version key.
  *
- * @param {Object} versions - versions object from hugo.toml
+ * @param {Object} versions - versions object from hugo.yaml
  * @returns {string|null} removed version key, or null if no retirement needed
  */
 function retireOldestVersion(versions) {
@@ -273,7 +273,7 @@ function retireOldestVersion(versions) {
  * Updates versioned tags (website, cli, controller) to the new fullVersion.
  * Bindings imports (version: 'latest') are left unchanged.
  *
- * @param {Object} parsed - parsed module.toml
+ * @param {Object} parsed - parsed module.yaml
  * @param {string} version - minor version (X.Y)
  * @param {string} fullVersion - full version (X.Y.Z)
  * @returns {boolean} true if any tags were updated
@@ -309,7 +309,7 @@ function updateImportTags(parsed, version, fullVersion, deps) {
     return changed;
 }
 
-// Remove all imports for a given version from module.toml parsed object
+// Remove all imports for a given version from module.yaml parsed object
 function removeImportsForVersion(parsed, version) {
     if (!parsed?.imports) return;
     parsed.imports = parsed.imports.filter(
@@ -317,51 +317,49 @@ function removeImportsForVersion(parsed, version) {
     );
 }
 
-// Update hugo.toml: add version, set default, retire old
-async function updateHugoToml(version) {
-    const { parse, stringify } = await loadToml();
-    const content = await fsp.readFile(HUGO_TOML, 'utf-8').catch(e => fail(`Read hugo.toml: ${e.message}`));
-    const parsed = parse(content);
+// Update hugo.yaml: add version, set default, retire old
+async function updateHugoConfig(version) {
+    const content = await fsp.readFile(HUGO_CONFIG, 'utf-8').catch(e => fail(`Read hugo.yaml: ${e.message}`));
+    const parsed = yaml.load(content) || {};
 
     const alreadyExists = !!(parsed.versions && parsed.versions[version]);
 
     parsed.versions = assignVersionWeights(parsed.versions || {}, version);
 
     if (alreadyExists) {
-        console.log(`hugo.toml: version ${version} already exists, skipping.`);
+        console.log(`hugo.yaml: version ${version} already exists, skipping.`);
     } else {
         const oldDefault = parsed.defaultContentVersion;
         parsed.defaultContentVersion = version;
-        console.log(`hugo.toml: defaultContentVersion changed from '${oldDefault}' to '${version}'.`);
+        console.log(`hugo.yaml: defaultContentVersion changed from '${oldDefault}' to '${version}'.`);
     }
 
     // Retire oldest if over limit
     const retired = retireOldestVersion(parsed.versions);
     if (retired) {
-        console.log(`hugo.toml: retired oldest version '${retired}' (exceeded ${MAX_MINOR_VERSIONS} minor versions).`);
+        console.log(`hugo.yaml: retired oldest version '${retired}' (exceeded ${MAX_MINOR_VERSIONS} minor versions).`);
     }
 
-    await fsp.writeFile(HUGO_TOML, HUGO_HEADER + stringify(parsed), 'utf-8');
+    await fsp.writeFile(HUGO_CONFIG, HUGO_HEADER + dumpYaml(parsed), 'utf-8');
     if (!alreadyExists) {
-        console.log(`hugo.toml: added version ${version} (weights reassigned).`);
+        console.log(`hugo.yaml: added version ${version} (weights reassigned).`);
     }
 
     return retired;
 }
 
-// Update module.toml: add import blocks for a new version
-async function updateModuleToml(version, fullVersion, retiredVersion, cliGomod) {
-    const { parse, stringify } = await loadToml();
-    const content = await fsp.readFile(MODULE_TOML, 'utf-8').catch(e => fail(`Read module.toml: ${e.message}`));
-    const parsed = parse(content);
+// Update module.yaml: add import blocks for a new version
+async function updateModuleConfig(version, fullVersion, retiredVersion, cliGomod) {
+    const content = await fsp.readFile(MODULE_CONFIG, 'utf-8').catch(e => fail(`Read module.yaml: ${e.message}`));
+    const parsed = yaml.load(content) || {};
 
     const hasAllImports = hasAllImportsForVersion(parsed, version);
     const hasAnyImport = hasAnyImportForVersion(parsed, version);
 
     if (hasAllImports) {
-        console.log(`module.toml: version ${version} exists, skipping.`);
+        console.log(`module.yaml: version ${version} exists, skipping.`);
     } else if (hasAnyImport) {
-        fail(`module.toml: incomplete block for ${version}. Fix manually.`);
+        fail(`module.yaml: incomplete block for ${version}. Fix manually.`);
     } else {
         const deps = resolveGoModVersions(cliGomod, CLI_DERIVED_MODULES);
         const { imports } = buildModuleBlocks(version, fullVersion, deps);
@@ -369,35 +367,34 @@ async function updateModuleToml(version, fullVersion, retiredVersion, cliGomod) 
         for (const imp of imports) {
             parsed.imports.push(imp);
         }
-        console.log(`module.toml: added imports for version ${version}.`);
+        console.log(`module.yaml: added imports for version ${version}.`);
     }
 
     // Remove imports for retired version
     if (retiredVersion) {
         removeImportsForVersion(parsed, retiredVersion);
-        console.log(`module.toml: removed imports for retired version '${retiredVersion}'.`);
+        console.log(`module.yaml: removed imports for retired version '${retiredVersion}'.`);
     }
 
-    await fsp.writeFile(MODULE_TOML, MODULE_HEADER + stringify(parsed), 'utf-8');
+    await fsp.writeFile(MODULE_CONFIG, MODULE_HEADER + dumpYaml(parsed), 'utf-8');
 }
 
-// Update module.toml in patch mode: update tags for existing version
-async function updateModuleTomlPatch(version, fullVersion, cliGomod) {
-    const { parse, stringify } = await loadToml();
-    const content = await fsp.readFile(MODULE_TOML, 'utf-8').catch(e => fail(`Read module.toml: ${e.message}`));
-    const parsed = parse(content);
+// Update module.yaml in patch mode: update tags for existing version
+async function updateModuleConfigPatch(version, fullVersion, cliGomod) {
+    const content = await fsp.readFile(MODULE_CONFIG, 'utf-8').catch(e => fail(`Read module.yaml: ${e.message}`));
+    const parsed = yaml.load(content) || {};
 
     if (!hasAnyImportForVersion(parsed, version)) {
-        fail(`module.toml: no imports found for version '${version}'. Cannot patch.`);
+        fail(`module.yaml: no imports found for version '${version}'. Cannot patch.`);
     }
 
     const deps = resolveGoModVersions(cliGomod, CLI_DERIVED_MODULES);
     const changed = updateImportTags(parsed, version, fullVersion, deps);
     if (changed) {
-        await fsp.writeFile(MODULE_TOML, MODULE_HEADER + stringify(parsed), 'utf-8');
-        console.log(`module.toml: updated import tags for version ${version} to ${fullVersion}.`);
+        await fsp.writeFile(MODULE_CONFIG, MODULE_HEADER + dumpYaml(parsed), 'utf-8');
+        console.log(`module.yaml: updated import tags for version ${version} to ${fullVersion}.`);
     } else {
-        console.log(`module.toml: import tags for version ${version} already up to date.`);
+        console.log(`module.yaml: import tags for version ${version} already up to date.`);
     }
 }
 
@@ -410,17 +407,16 @@ async function main() {
     }
 
     if (patch) {
-        // Patch release (Z > 0): verify version exists in hugo.toml, update tags only
-        const { parse } = await loadToml();
-        const content = await fsp.readFile(HUGO_TOML, 'utf-8').catch(e => fail(`Read hugo.toml: ${e.message}`));
-        const parsed = parse(content);
+        // Patch release (Z > 0): verify version exists in hugo.yaml, update tags only
+        const content = await fsp.readFile(HUGO_CONFIG, 'utf-8').catch(e => fail(`Read hugo.yaml: ${e.message}`));
+        const parsed = yaml.load(content) || {};
         if (!parsed.versions || !parsed.versions[version]) {
-            fail(`Version '${version}' does not exist in hugo.toml. Cannot patch a version that hasn't been created yet.`);
+            fail(`Version '${version}' does not exist in hugo.yaml. Cannot patch a version that hasn't been created yet.`);
         }
-        await updateModuleTomlPatch(version, fullVersion, cliGomod);
+        await updateModuleConfigPatch(version, fullVersion, cliGomod);
     } else {
-        const retired = await updateHugoToml(version);
-        await updateModuleToml(version, fullVersion, retired, cliGomod);
+        const retired = await updateHugoConfig(version);
+        await updateModuleConfig(version, fullVersion, retired, cliGomod);
     }
 
     console.log('Docs version registered.');

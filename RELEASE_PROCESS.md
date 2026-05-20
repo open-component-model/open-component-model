@@ -92,11 +92,11 @@ Phase 1 (RC, blue) runs end-to-end without human intervention once you trigger t
 The website integrates into the same workflow run, after `promote_and_release_final` succeeds:
 
 * The `website/v0.X.Y` tag is created at the same commit as the canonical tag — same `ADDITIONAL_TAGS` step that emits `cli/` and `kubernetes/controller/` tags.
-* A separate `create_website_update_pr` job then opens a PR to `main` updating `website/config/_default/{hugo.toml,module.toml}` to pin the new minor's Hugo module imports to the just-created `website/v0.X.Y` tag. The PR uses the OCMBot app token, signed commits, and `add-paths: website/config/`.
+* A separate `create_website_update_pr` job then opens a PR to `main` updating `website/config/_default/{hugo.yaml,module.yaml}` to pin the new minor's Hugo module imports to the just-created `website/v0.X.Y` tag. The PR uses the OCMBot app token, signed commits, and `add-paths: website/config/`.
 * Binding versions (constructor, descriptor, controller chart) referenced by the docs are resolved from the released `cli/v0.X.Y` go.mod, not from `main`. This guarantees the docs site for `v0.X.Y` matches what the released CLI was built against.
-* On a **minor release** (`Z=0`) the script adds a new version entry under `[versions]` in `hugo.toml` and a new set of import blocks in `module.toml`.
-* On a **patch release** (`Z>0`) the script updates the existing minor's import tags in `module.toml` in place; `hugo.toml` is unchanged.
-* When more than 10 minors would be live, the oldest is retired (entry removed from `hugo.toml`, imports removed from `module.toml`). Retirement logic lives in `website/scripts/register-docs-version.js`.
+* On a **minor release** (`Z=0`) the script adds a new version entry under `versions` in `hugo.yaml` and a new set of import blocks in `module.yaml`.
+* On a **patch release** (`Z>0`) the script updates the existing minor's import tags in `module.yaml` in place; `hugo.yaml` is unchanged.
+* When more than 10 minors would be live, the oldest is retired (entry removed from `hugo.yaml`, imports removed from `module.yaml`). Retirement logic lives in `website/scripts/register-docs-version.js`.
 
 There is no `website/v0.X.Y-rc.N` tag. The website has no RC artifacts to validate (it's a docs site, not a binary or image), so the RC variant would have no consumer.
 
