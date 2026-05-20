@@ -288,9 +288,12 @@ without needing any out-of-band information.
 
 This matters directly for OCM's sovereign-delivery and air-gapped scenarios. The component version is the unit of transport,
 and OCM carries the proof of authorship along with it: the signed descriptor and the bundle embedded inside it travel as one.
+
 The only piece a verifier needs in addition is a local trusted-root file — the public keys of the Fulcio CA and the Rekor
 instance the component was signed against, whether that is public-good Sigstore or an enterprise stack — distributed into the
-disconnected environment once, out of band. With those pieces in place, `ocm verify cv` runs entirely offline: no callback to
+disconnected environment once, out of band.
+
+With those pieces in place, `ocm verify cv` runs entirely offline: no callback to
 any Sigstore service, no TUF refresh, no network egress whatsoever. This is what makes Sigstore viable in regulated and
 sovereign-cloud deployments where egress to public or on-premise infrastructure is not permitted at verification time.
 
