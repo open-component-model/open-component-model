@@ -2,7 +2,7 @@ package v1alpha1
 
 // SignatureAlgorithm identifies an OCM-versioned Sigstore signing algorithm.
 //
-// The Algorithm captures the fachliche contract of the signing flow — what
+// The Algorithm captures the domain contract of the signing flow — what
 // goes into the bundle, which cosign conventions apply, how verification is
 // performed — and evolves independently from the on-the-wire bundle MediaType.
 //
@@ -30,8 +30,8 @@ func IsKnownAlgorithm(alg SignatureAlgorithm) bool {
 }
 
 // IsAcceptableMediaType reports whether the handler can read a bundle with
-// this MediaType. Independent of Algorithm — both must hold for verification,
-// but the acceptance lists are separate.
+// this MediaType. Independent of Algorithm: both checks must pass on verify,
+// but they are evaluated separately and can evolve on different schedules.
 func IsAcceptableMediaType(mt string) bool {
 	return mt == MediaTypeSigstoreBundle
 }

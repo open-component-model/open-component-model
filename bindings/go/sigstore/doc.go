@@ -33,9 +33,9 @@
 // SignatureInfo.Algorithm must be a known Algorithm
 // (signing/v1alpha1.IsKnownAlgorithm) and SignatureInfo.MediaType must be a
 // MediaType this handler can read (signing/v1alpha1.IsAcceptableMediaType).
-// A future cosign bundle wire-format version that is semantically compatible
-// can be added by extending IsAcceptableMediaType — independent of any
-// algorithm change.
+// The two predicates are decoupled so a future cosign bundle wire-format
+// version that is semantically compatible can be accepted without touching
+// the Algorithm enum.
 //
 // # Endpoint Discovery
 //

@@ -137,6 +137,9 @@ type VerifyConfig struct {
 
 // Validate checks that SignConfig fields are well-formed.
 func (c *SignConfig) Validate() error {
+	if c == nil {
+		return nil
+	}
 	if c.Issuer != "" {
 		if err := validateURL("Issuer", c.Issuer); err != nil {
 			return err

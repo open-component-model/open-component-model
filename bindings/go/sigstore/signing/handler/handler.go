@@ -170,6 +170,9 @@ func (h *Handler) Verify(
 		return fmt.Errorf("convert config: %w", err)
 	}
 
+	// Empty Algorithm is rejected (not defaulted) because OCM signatures must
+	// be produced by the OCM CLI; an unset value indicates a foreign or
+	// malformed signature.
 	if signed.Signature.Algorithm == "" {
 		return fmt.Errorf("signature.Algorithm is required for sigstore verification")
 	}

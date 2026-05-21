@@ -23,6 +23,8 @@ func TestSignConfig_Validate(t *testing.T) {
 		{"invalid issuer not absolute", SignConfig{Issuer: "//dex.example.com"}, "must be absolute"},
 		{"invalid issuer with query", SignConfig{Issuer: "https://dex.example.com?foo=bar"}, "must not contain a query"},
 		{"invalid issuer with fragment", SignConfig{Issuer: "https://dex.example.com#frag"}, "must not contain a fragment"},
+		{"valid known SignatureAlgorithm", SignConfig{SignatureAlgorithm: AlgorithmSigstoreV1Alpha1}, ""},
+		{"invalid unknown SignatureAlgorithm", SignConfig{SignatureAlgorithm: "Sigstore/v99alpha1"}, "unknown algorithm"},
 	}
 
 	for _, tc := range tests {
@@ -35,6 +37,27 @@ func TestSignConfig_Validate(t *testing.T) {
 			} else {
 				r.ErrorContains(err, tc.wantErr)
 			}
+		})
+	}
+}
+
+func TestSignConfig_GetSignatureAlgorithm(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cfg  *SignConfig
+		want SignatureAlgorithm
+	}{
+		{"nil receiver returns default", nil, AlgorithmSigstoreDefault},
+		{"empty field returns default", &SignConfig{}, AlgorithmSigstoreDefault},
+		{"explicit value passes through", &SignConfig{SignatureAlgorithm: AlgorithmSigstoreV1Alpha1}, AlgorithmSigstoreV1Alpha1},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, tc.cfg.GetSignatureAlgorithm())
 		})
 	}
 }
