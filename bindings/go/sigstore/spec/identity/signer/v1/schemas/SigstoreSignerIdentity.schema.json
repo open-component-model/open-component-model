@@ -4,13 +4,23 @@
   "$id": "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1/schemas/SigstoreSignerIdentity.schema.json",
   "title": "SigstoreSignerIdentity",
   "type": "object",
-  "description": "SigstoreSignerIdentity is the typed consumer identity for Sigstore signing handlers.",
+  "description": "SigstoreSignerIdentity is the typed consumer identity for Sigstore signing handlers.\n\nThe credential system matches this identity against configured credentials to resolve\nthe [SigstoreCredentials] used during cosign sign-blob. All fields are optional\nfilters: omitting a field matches any value for that attribute.\n\nEach field corresponds to an identity attribute constant ([IdentityAttributeAlgorithm],\n[IdentityAttributeSignature], [IdentityAttributeIssuer], [IdentityAttributeClientID])\nin the flat runtime.Identity map produced by GetSigningCredentialConsumerIdentity.",
   "properties": {
     "algorithm": {
-      "type": "string"
+      "type": "string",
+      "description": "Algorithm restricts this identity to a specific signing algorithm.\nFor Sigstore keyless signing the value is \"sigstore\" (v1alpha1.AlgorithmSigstore).\nOmit to match all algorithms."
+    },
+    "clientID": {
+      "type": "string",
+      "description": "ClientID restricts this identity to a specific OIDC client ID.\nPopulated from SignConfig.ClientID. Omit to match any client ID."
+    },
+    "issuer": {
+      "type": "string",
+      "description": "Issuer restricts this identity to a specific OIDC issuer URL (e.g. the Fulcio endpoint).\nPopulated from SignConfig.Issuer. Omit to match any issuer."
     },
     "signature": {
-      "type": "string"
+      "type": "string",
+      "description": "Signature restricts this identity to a specific named signature within a component version.\nThe value must match the signature name passed to GetSigningCredentialConsumerIdentity.\nOmit to match all signature names."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

@@ -4,13 +4,15 @@
   "$id": "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1/schemas/SigstoreVerifierIdentity.schema.json",
   "title": "SigstoreVerifierIdentity",
   "type": "object",
-  "description": "SigstoreVerifierIdentity is the typed consumer identity for Sigstore verification handlers.",
+  "description": "SigstoreVerifierIdentity is the typed consumer identity for Sigstore verification handlers.\n\nThe credential system matches this identity against configured credentials to resolve\nthe [SigstoreCredentials] used during cosign verify-blob. Both fields are optional\nfilters: omitting a field matches any value for that attribute.\n\nAlgorithm and Signature correspond to the identity attributes [IdentityAttributeAlgorithm]\nand [IdentityAttributeSignature] in the flat runtime.Identity map produced by\nGetVerifyingCredentialConsumerIdentity.",
   "properties": {
     "algorithm": {
-      "type": "string"
+      "type": "string",
+      "description": "Algorithm restricts this identity to a specific signing algorithm.\nFor Sigstore keyless signing the value is \"sigstore\" (v1alpha1.AlgorithmSigstore).\nOmit to match all algorithms."
     },
     "signature": {
-      "type": "string"
+      "type": "string",
+      "description": "Signature restricts this identity to a specific named signature within a component version.\nThe value must match the signature name passed to GetVerifyingCredentialConsumerIdentity\n(i.e. the Name field of the descruntime.Signature being verified).\nOmit to match all signature names."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
