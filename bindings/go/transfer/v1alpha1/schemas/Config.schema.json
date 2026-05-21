@@ -4,19 +4,17 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/schemas/Config.schema.json",
   "title": "Config",
   "type": "object",
-  "description": "Config defines configuration for a component-version transfer operation.\n\nIt is the canonical, wire-format representation of the high-level transfer knobs\n(recursive descent, resource copy mode, upload strategy). Downstream consumers\nsuch as the CLI or controllers load it from YAML/JSON and pass the result into\n[transfer.FromConfig], so any new transfer setting belongs here first.",
+  "description": "Config is the canonical wire format for transfer knobs. Downstream consumers\n(CLI, controllers) load it from YAML/JSON and pass it into [transfer.FromConfig],\nso any new transfer setting belongs here first.",
   "properties": {
     "copyMode": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.CopyMode",
-      "description": "CopyMode controls which resources are included in the transfer.\nSee [CopyModeLocalBlobResources] (default) and [CopyModeAllResources]."
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.CopyMode"
     },
     "recursive": {
       "type": "boolean",
-      "description": "Recursive enables recursive discovery and transfer of referenced component versions."
+      "description": "Pointer-typed so an explicit \"false\" in the wire format is distinguishable\nfrom \"unset\", which lets the controller's CRD spec turn recursion off without\nambiguity."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "description": "Type identifies this configuration object's runtime type.",
       "oneOf": [
         {
           "const": "TransferConfiguration/v1alpha1"
@@ -28,8 +26,7 @@
       ]
     },
     "uploadType": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.UploadType",
-      "description": "UploadType controls how resources are stored in the target repository.\nSee [UploadAsDefault], [UploadAsLocalBlob], and [UploadAsOciArtifact]."
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.UploadType"
     }
   },
   "required": [
