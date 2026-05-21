@@ -40,6 +40,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	descriptor2 "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
+	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -729,7 +730,11 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	if res.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("resource access type is empty")
 	}
-	return repo.download(ctx, res.Access)
+	stream, err := repo.DownloadResourceStream(ctx, res)
+	if err != nil {
+		return nil, err
+	}
+	return stream.Materialize(ctx)
 }
 
 // DownloadSource downloads a [*descriptor.Source] from the repository.
@@ -747,63 +752,13 @@ func (repo *Repository) DownloadSource(ctx context.Context, src *descriptor.Sour
 }
 
 // download downloads an artifact specified by an access from the repository into a blob.ReadOnlyBlob.
-// It is expected that the access is
-//   - a valid [accessv1.OCIImage], or
-//   - a [v2.LocalBlob] access that has a [v2.LocalBlob.GlobalAccess] set that can be interpreted as [accessv1.OCIImage].
+// It delegates to downloadStream and materializes the result into a tar-based OCI layout blob.
 func (repo *Repository) download(ctx context.Context, access runtime.Typed) (data blob.ReadOnlyBlob, err error) {
-	typed, err := repo.scheme.NewObject(access.GetType())
+	stream, err := repo.downloadStream(ctx, access)
 	if err != nil {
-		return nil, fmt.Errorf("error creating resource access: %w", err)
+		return nil, err
 	}
-	if err := repo.scheme.Convert(access, typed); err != nil {
-		return nil, fmt.Errorf("error converting resource access: %w", err)
-	}
-
-	switch typed := typed.(type) {
-	case *v2.LocalBlob:
-		if typed.GlobalAccess == nil {
-			return nil, fmt.Errorf("local blob access does not have a global access and cannot be used")
-		}
-
-		globalAccess, err := repo.scheme.NewObject(typed.GlobalAccess.GetType())
-		if err != nil {
-			return nil, fmt.Errorf("error creating typed global blob access with help of scheme: %w", err)
-		}
-		if err := repo.scheme.Convert(typed.GlobalAccess, globalAccess); err != nil {
-			return nil, fmt.Errorf("error converting global blob access: %w", err)
-		}
-		return repo.download(ctx, globalAccess)
-	case *accessv1.OCIImage:
-		src, err := repo.resolver.StoreForReference(ctx, typed.ImageReference)
-		if err != nil {
-			return nil, err
-		}
-
-		resolved, err := looseref.ParseReference(typed.ImageReference)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing image reference %q: %w", typed.ImageReference, err)
-		}
-
-		reference := resolved.ReferenceOrTag()
-
-		desc, err := src.Resolve(ctx, reference)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve reference %q: %w", typed.ImageReference, err)
-		}
-
-		downloaded, err := tar.CopyToOCILayoutInMemory(ctx, src, desc, tar.CopyToOCILayoutOptions{
-			CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
-			Tags:             []string{typed.ImageReference},
-			TempDir:          repo.tempDir,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to copy to OCI layout: %w", err)
-		}
-
-		return downloaded, nil
-	default:
-		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
-	}
+	return stream.Materialize(ctx)
 }
 
 // getDescriptorOCIImageManifest retrieves the manifest for a given reference from the store.
@@ -922,4 +877,114 @@ func (repo *Repository) AddComponentVersionAlias(ctx context.Context, component,
 	}
 
 	return nil
+}
+
+// DownloadResourceStream returns a lazy ResourceStream for the given resource.
+// No data is downloaded — content streams on demand via Fetch calls.
+func (repo *Repository) DownloadResourceStream(ctx context.Context, res *descriptor.Resource) (ocistream.ResourceStream, error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	if res.Access.GetType().IsEmpty() {
+		return nil, fmt.Errorf("resource access type is empty")
+	}
+	return repo.downloadStream(ctx, res.Access)
+}
+
+func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed) (ocistream.ResourceStream, error) {
+	typed, err := repo.scheme.NewObject(access.GetType())
+	if err != nil {
+		return nil, fmt.Errorf("error creating resource access: %w", err)
+	}
+	if err := repo.scheme.Convert(access, typed); err != nil {
+		return nil, fmt.Errorf("error converting resource access: %w", err)
+	}
+
+	switch typed := typed.(type) {
+	case *v2.LocalBlob:
+		if typed.GlobalAccess == nil {
+			return nil, fmt.Errorf("local blob access does not have a global access and cannot be used")
+		}
+		globalAccess, err := repo.scheme.NewObject(typed.GlobalAccess.GetType())
+		if err != nil {
+			return nil, fmt.Errorf("error creating typed global blob access with help of scheme: %w", err)
+		}
+		if err := repo.scheme.Convert(typed.GlobalAccess, globalAccess); err != nil {
+			return nil, fmt.Errorf("error converting global blob access: %w", err)
+		}
+		return repo.downloadStream(ctx, globalAccess)
+	case *accessv1.OCIImage:
+		src, err := repo.resolver.StoreForReference(ctx, typed.ImageReference)
+		if err != nil {
+			return nil, err
+		}
+
+		resolved, err := looseref.ParseReference(typed.ImageReference)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing image reference %q: %w", typed.ImageReference, err)
+		}
+
+		reference := resolved.ReferenceOrTag()
+
+		desc, err := src.Resolve(ctx, reference)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve reference %q: %w", typed.ImageReference, err)
+		}
+
+		var tags []string
+		if resolved.Tag != "" {
+			tags = []string{typed.ImageReference}
+		}
+		return &ocistream.OCIResourceStream{
+			ReadOnlyStorage: src,
+			Descriptor:      desc,
+			CopyOpts:        repo.resourceCopyOptions.CopyGraphOptions,
+			TempDir:         repo.tempDir,
+			Tags:            tags,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
+	}
+}
+
+// UploadResourceStream streams content from a ResourceStream directly into the repository
+// using oras.CopyGraph. No tar materialization occurs.
+func (repo *Repository) UploadResourceStream(ctx context.Context, res *descriptor.Resource, rs ocistream.ResourceStream) (*descriptor.Resource, error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+
+	var access accessv1.OCIImage
+	if err := repo.scheme.Convert(res.Access, &access); err != nil {
+		return nil, fmt.Errorf("error converting resource target to OCI image: %w", err)
+	}
+
+	ref, err := looseref.ParseReference(access.ImageReference)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
+	}
+	if err := ref.ValidateReferenceAsTag(); err != nil {
+		return nil, fmt.Errorf("can only upload %q if it is tagged: %w", access.ImageReference, err)
+	}
+
+	store, err := repo.resolver.StoreForReference(ctx, access.ImageReference)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := oras.CopyGraph(ctx, rs, store, rs.Root(), repo.resourceCopyOptions.CopyGraphOptions); err != nil {
+		return nil, fmt.Errorf("failed to stream resource via copy: %w", err)
+	}
+
+	if err := store.Tag(ctx, rs.Root(), ref.Tag); err != nil {
+		return nil, fmt.Errorf("failed to tag artifact with tag %q: %w", ref.Tag, err)
+	}
+
+	res = res.DeepCopy()
+	if res.Digest == nil {
+		res.Digest = &descriptor.Digest{}
+	}
+	if err := internaldigest.Apply(res.Digest, rs.Root().Digest); err != nil {
+		return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+	}
+	access.ImageReference = ref.String()
+	res.Access = &access
+
+	return res, nil
 }
