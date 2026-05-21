@@ -182,7 +182,7 @@ func (h *Handler) Verify(
 	if creds != nil {
 		c, err := trustedrootv1.ConvertToTrustedRoot(creds)
 		if err != nil {
-			return fmt.Errorf("convert credentials: %w", err)
+			return fmt.Errorf("failed to convert credentials to trusted root during verify: %w", err)
 		}
 		trCreds = c
 	}
