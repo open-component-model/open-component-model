@@ -41,8 +41,8 @@ func TestConvertToSigstoreCredentials(t *testing.T) {
 			input: &credv1.DirectCredentials{
 				Type: runtime.NewVersionedType(credv1.DirectCredentialsType, credv1.Version),
 				Properties: map[string]string{
-					CredentialKeyToken:     "test-token",
-					CredentialKeyTokenFile: "/path/token",
+					credentialKeyToken:     "test-token",
+					credentialKeyTokenFile: "/path/token",
 				},
 			},
 			want: &SigstoreCredentials{
@@ -56,8 +56,8 @@ func TestConvertToSigstoreCredentials(t *testing.T) {
 			input: &credv1.DirectCredentials{
 				Type: runtime.NewVersionedType(credv1.DirectCredentialsType, credv1.Version),
 				Properties: map[string]string{
-					CredentialKeyToken:               "test-token",
-					DeprecatedCredentialKeyTokenFile: "/path/token",
+					credentialKeyToken:               "test-token",
+					deprecatedCredentialKeyTokenFile: "/path/token",
 				},
 			},
 			want: &SigstoreCredentials{
@@ -71,9 +71,9 @@ func TestConvertToSigstoreCredentials(t *testing.T) {
 			input: &credv1.DirectCredentials{
 				Type: runtime.NewVersionedType(credv1.DirectCredentialsType, credv1.Version),
 				Properties: map[string]string{
-					CredentialKeyToken:               "test-token",
-					CredentialKeyTrustedRootJSON:     `{"keys":[]}`,
-					CredentialKeyTrustedRootJSONFile: "/path/root.json",
+					credentialKeyToken:               "test-token",
+					credentialKeyTrustedRootJSON:     `{"keys":[]}`,
+					credentialKeyTrustedRootJSONFile: "/path/root.json",
 				},
 			},
 			want: &SigstoreCredentials{
@@ -88,9 +88,9 @@ func TestConvertToSigstoreCredentials(t *testing.T) {
 			input: &credv1.DirectCredentials{
 				Type: runtime.NewVersionedType(credv1.DirectCredentialsType, credv1.Version),
 				Properties: map[string]string{
-					CredentialKeyToken:                         "test-token",
-					DeprecatedCredentialKeyTrustedRootJSON:     `{"keys":[]}`,
-					DeprecatedCredentialKeyTrustedRootJSONFile: "/path/root.json",
+					credentialKeyToken:                         "test-token",
+					deprecatedCredentialKeyTrustedRootJSON:     `{"keys":[]}`,
+					deprecatedCredentialKeyTrustedRootJSONFile: "/path/root.json",
 				},
 			},
 			want: &SigstoreCredentials{

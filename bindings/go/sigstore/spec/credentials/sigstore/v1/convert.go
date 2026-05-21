@@ -8,19 +8,16 @@ import (
 )
 
 const (
-	CredentialKeyToken               = "token"
-	CredentialKeyTokenFile           = "tokenFile"
-	CredentialKeyTrustedRootJSON     = "trustedRootJSON"
-	CredentialKeyTrustedRootJSONFile = "trustedRootJSONFile"
+	credentialKeyToken               = "token"
+	credentialKeyTokenFile           = "tokenFile"
+	credentialKeyTrustedRootJSON     = "trustedRootJSON"
+	credentialKeyTrustedRootJSONFile = "trustedRootJSONFile"
 )
 
-// Deprecated: Use CredentialKeyTokenFile instead.
 const (
-	DeprecatedCredentialKeyTokenFile = "token_file"
-	// Deprecated: Use CredentialKeyTrustedRootJSON instead.
-	DeprecatedCredentialKeyTrustedRootJSON = "trusted_root_json"
-	// Deprecated: Use CredentialKeyTrustedRootJSONFile instead.
-	DeprecatedCredentialKeyTrustedRootJSONFile = "trusted_root_json_file"
+	deprecatedCredentialKeyTokenFile           = "token_file"
+	deprecatedCredentialKeyTrustedRootJSON     = "trusted_root_json"
+	deprecatedCredentialKeyTrustedRootJSONFile = "trusted_root_json_file"
 )
 
 var convertScheme = runtime.NewScheme()
@@ -68,10 +65,10 @@ func ConvertToSigstoreCredentials(creds runtime.Typed) (*SigstoreCredentials, er
 func fromDirectCredentials(properties map[string]string) *SigstoreCredentials {
 	return &SigstoreCredentials{
 		Type:                runtime.NewVersionedType(SigstoreCredentialsType, Version),
-		Token:               properties[CredentialKeyToken],
-		TokenFile:           lookupProperty(properties, CredentialKeyTokenFile, DeprecatedCredentialKeyTokenFile),
-		TrustedRootJSON:     lookupProperty(properties, CredentialKeyTrustedRootJSON, DeprecatedCredentialKeyTrustedRootJSON),
-		TrustedRootJSONFile: lookupProperty(properties, CredentialKeyTrustedRootJSONFile, DeprecatedCredentialKeyTrustedRootJSONFile),
+		Token:               properties[credentialKeyToken],
+		TokenFile:           lookupProperty(properties, credentialKeyTokenFile, deprecatedCredentialKeyTokenFile),
+		TrustedRootJSON:     lookupProperty(properties, credentialKeyTrustedRootJSON, deprecatedCredentialKeyTrustedRootJSON),
+		TrustedRootJSONFile: lookupProperty(properties, credentialKeyTrustedRootJSONFile, deprecatedCredentialKeyTrustedRootJSONFile),
 	}
 }
 
