@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/oidcflow"
 )
@@ -81,7 +82,7 @@ func (p *OIDCPlugin) GetConsumerIdentity(_ context.Context, credential runtime.T
 // identity, not from a resolved credential map on the leaf. This depends on
 // credential graph PR #2511, which passes the consumer identity (not the leaf credential
 // identity) into plugin.Resolve. See GetConsumerIdentity above for the exposed design issue.
-func (p *OIDCPlugin) Resolve(ctx context.Context, identity runtime.Identity, _ map[string]string) (map[string]string, error) {
+func (p *OIDCPlugin) Resolve(ctx context.Context, identity runtime.Identity, _ runtime.Typed) (runtime.Typed, error) {
 	token, err := oidcflow.GetIDToken(ctx, oidcflow.Options{
 		Issuer:   identity[configKeyIssuer],
 		ClientID: identity[configKeyClientID],
@@ -89,5 +90,5 @@ func (p *OIDCPlugin) Resolve(ctx context.Context, identity runtime.Identity, _ m
 	if err != nil {
 		return nil, fmt.Errorf("OIDC authentication: %w", err)
 	}
-	return map[string]string{credentialKeyToken: token.RawToken}, nil
+	return &v1.DirectCredentials{Properties: map[string]string{credentialKeyToken: token.RawToken}}, nil
 }

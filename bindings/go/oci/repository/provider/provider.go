@@ -13,7 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/credentials"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
-	v2 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	repoSpec "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -140,8 +140,8 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		if err != nil {
 			return nil, err
 		}
-		
-		ociCredentials, err := v2.FromTyped(creds)
+
+		ociCredentials, err := credentialsv1.ConvertToOCICredentials(creds)
 		if err != nil {
 			return nil, fmt.Errorf("error converting credentials: %w", err)
 		}

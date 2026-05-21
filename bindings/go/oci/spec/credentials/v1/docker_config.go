@@ -11,6 +11,8 @@ const (
 	DockerConfigType = "DockerConfig"
 )
 
+var DockerConfigVersionedType = runtime.NewVersionedType(DockerConfigType, Version)
+
 // DockerConfig is a type that represents a docker config style credential repository.
 //
 // Credentials can be offered

@@ -82,15 +82,21 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	)
 
 	if strings.HasPrefix(helm.HelmRepository, "oci://") {
-		typed, cerr := ocicredsv1.FromTyped(credentials)
-		if cerr != nil {
-			return nil, fmt.Errorf("error converting credentials for digest processing: %w", err)
+		var typed *ocicredsv1.OCICredentials
+		if credentials != nil {
+			typed, err = ocicredsv1.ConvertToOCICredentials(credentials)
+			if err != nil {
+				return nil, fmt.Errorf("error converting credentials for digest processing: %w", err)
+			}
 		}
 		resolvedDigest, err = p.resolveOCIDigest(ctx, helm, typed)
 	} else {
-		typed, cerr := helmcredsv1.FromTyped(credentials)
-		if cerr != nil {
-			return nil, fmt.Errorf("error converting credentials for digest processing: %w", err)
+		var typed *helmcredsv1.HelmHTTPCredentials
+		if credentials != nil {
+			typed, err = helmcredsv1.ConvertToHelmHTTPCredentials(credentials)
+			if err != nil {
+				return nil, fmt.Errorf("error converting credentials for digest processing: %w", err)
+			}
 		}
 		resolvedDigest, err = p.resolveHTTPDigest(ctx, helm, typed)
 	}

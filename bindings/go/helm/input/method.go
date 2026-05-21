@@ -9,7 +9,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
-	v2 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
@@ -81,9 +81,12 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		i.TempFolder = temp
 	}
 
-	helmCreds, err := v2.FromTyped(credentials)
-	if err != nil {
-		return nil, fmt.Errorf("error converting resource input spec: %w", err)
+	var helmCreds *helmcredsv1.HelmHTTPCredentials
+	if credentials != nil {
+		helmCreds, err = helmcredsv1.ConvertToHelmHTTPCredentials(credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error converting resource input spec: %w", err)
+		}
 	}
 	helmBlob, chart, err := GetV1HelmBlob(ctx, helm, i.TempFolder, WithCredentials(helmCreds))
 	if err != nil {

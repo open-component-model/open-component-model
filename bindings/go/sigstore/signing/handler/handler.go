@@ -20,23 +20,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal"
-	sigcredentials "ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal/credentials"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
-	oidcv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1"
-	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1"
+	sigcredv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/sigstore/v1alpha1"
+	signerv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1alpha1"
+	verifierv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1alpha1"
 )
 
 var _ signing.Handler = (*Handler)(nil)
-
-const (
-	IdentityAttributeSignature = "signature"
-	IdentityAttributeIssuer    = "issuer"
-	IdentityAttributeClientID  = "clientID"
-
-	CredentialKeyOIDCToken           = oidcv1.CredentialKeyToken
-	CredentialKeyTrustedRootJSON     = trustedrootv1.CredentialKeyTrustedRootJSON
-	CredentialKeyTrustedRootJSONFile = trustedrootv1.CredentialKeyTrustedRootJSONFile
-)
 
 // Handler implements signing.Handler by delegating to the cosign CLI.
 // Safe for concurrent use. Binary resolution happens lazily on first Sign or Verify call.
@@ -92,15 +82,24 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("digest value must not be empty")
 	}
 
-	oidcToken, trustedRoot := convertOptionalCredentials(creds)
+	var sigstoreCreds *sigcredv1.SigstoreCredentials
+	if creds != nil {
+		sigstoreCreds, err = sigcredv1.ConvertToSigstoreCredentials(creds)
+		if err != nil {
+			return descruntime.SignatureInfo{}, fmt.Errorf("convert credentials: %w", err)
+		}
+	}
+	if sigstoreCreds == nil {
+		sigstoreCreds = &sigcredv1.SigstoreCredentials{}
+	}
 
 	env := os.Environ()
 	if !internal.HasEnvKey(env, "SIGSTORE_ID_TOKEN") && !internal.HasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN") {
-		token := strings.TrimSpace(oidcToken.Token)
+		token := strings.TrimSpace(sigstoreCreds.Token)
 		if token == "" {
 			return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required: " +
 				"set SIGSTORE_ID_TOKEN env var, use GitHub Actions OIDC, " +
-				"or configure an OIDCIdentityToken credential")
+				"or configure a SigstoreCredentials credential")
 		}
 		env = append(env, "SIGSTORE_ID_TOKEN="+token)
 	}
@@ -122,7 +121,7 @@ func (h *Handler) Sign(
 
 	bundlePath := filepath.Join(tmpDir, "bundle.json")
 
-	trustedRootPath, err := resolveTrustedRootPath(trustedRoot, tmpDir)
+	trustedRootPath, err := resolveTrustedRootPath(sigstoreCreds, tmpDir)
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("resolve trusted root: %w", err)
 	}
@@ -162,19 +161,6 @@ func (h *Handler) Sign(
 	}, nil
 }
 
-func convertOptionalCredentials(creds runtime.Typed) (*oidcv1.OIDCIdentityToken, *trustedrootv1.TrustedRoot) {
-	oidcIdentityToken, _ := oidcv1.FromTyped(creds)
-	if oidcIdentityToken == nil {
-		oidcIdentityToken = &oidcv1.OIDCIdentityToken{}
-	}
-	trustedRoot, _ := trustedrootv1.FromTyped(creds)
-	if trustedRoot == nil {
-		trustedRoot = &trustedrootv1.TrustedRoot{}
-	}
-
-	return oidcIdentityToken, trustedRoot
-}
-
 // Verify checks a Sigstore bundle via cosign verify-blob: decodes the bundle and digest,
 // validates the Fulcio certificate chain and Rekor inclusion proof, and confirms the
 // signed content matches the digest using the configured identity/issuer constraints.
@@ -197,11 +183,21 @@ func (h *Handler) Verify(
 		return fmt.Errorf("invalid verification config: %w", err)
 	}
 
-	_, trustedRoot := convertOptionalCredentials(creds)
+	var sigstoreCreds *sigcredv1.SigstoreCredentials
+	if creds != nil {
+		if c, err := sigcredv1.ConvertToSigstoreCredentials(creds); err != nil {
+			return fmt.Errorf("convert credentials: %w", err)
+		} else {
+			sigstoreCreds = c
+		}
+	}
+	if sigstoreCreds == nil {
+		sigstoreCreds = &sigcredv1.SigstoreCredentials{}
+	}
 
 	if cfg.PrivateInfrastructure &&
-		strings.TrimSpace(trustedRoot.TrustedRootJSON) == "" &&
-		strings.TrimSpace(trustedRoot.TrustedRootJSONFile) == "" {
+		strings.TrimSpace(sigstoreCreds.TrustedRootJSON) == "" &&
+		strings.TrimSpace(sigstoreCreds.TrustedRootJSONFile) == "" {
 		return fmt.Errorf("privateInfrastructure requires a trusted root: " +
 			"provide a TrustedRoot credential (trusted_root_json or trusted_root_json_file)")
 	}
@@ -233,7 +229,7 @@ func (h *Handler) Verify(
 		}
 	}()
 
-	trustedRootPath, err := resolveTrustedRootPath(trustedRoot, tmpDir)
+	trustedRootPath, err := resolveTrustedRootPath(sigstoreCreds, tmpDir)
 	if err != nil {
 		return fmt.Errorf("resolve trusted root: %w", err)
 	}
@@ -285,13 +281,13 @@ func (*Handler) GetSigningCredentialConsumerIdentity(
 	if err := v1alpha1.Scheme.Convert(rawCfg, &cfg); err != nil {
 		return nil, fmt.Errorf("convert config: %w", err)
 	}
-	id := credentialIdentity(sigcredentials.IdentityTypeSigstoreSigner)
-	id[IdentityAttributeSignature] = name
+	id := credentialIdentity(signerv1.VersionedType)
+	id[signerv1.IdentityAttributeSignature] = name
 	if cfg.Issuer != "" {
-		id[IdentityAttributeIssuer] = cfg.Issuer
+		id[signerv1.IdentityAttributeIssuer] = cfg.Issuer
 	}
 	if cfg.ClientID != "" {
-		id[IdentityAttributeClientID] = cfg.ClientID
+		id[signerv1.IdentityAttributeClientID] = cfg.ClientID
 	}
 	return id, nil
 }
@@ -304,8 +300,8 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 	if signature.Signature.MediaType != v1alpha1.MediaTypeSigstoreBundle {
 		return nil, fmt.Errorf("unsupported media type %q for sigstore verification", signature.Signature.MediaType)
 	}
-	id := credentialIdentity(sigcredentials.IdentityTypeSigstoreVerifier)
-	id[IdentityAttributeSignature] = signature.Name
+	id := credentialIdentity(verifierv1.VersionedType)
+	id[verifierv1.IdentityAttributeSignature] = signature.Name
 	return id, nil
 }
 
@@ -322,7 +318,7 @@ func credentialIdentity(identityType runtime.Type) runtime.Identity {
 //  1. Inline JSON from credentials (written to a temp file, cleaned up by caller's defer os.RemoveAll(tmpDir))
 //  2. File path from credentials (not removed on cleanup)
 //  3. "" — cosign falls back to public-good TUF
-func resolveTrustedRootPath(creds *trustedrootv1.TrustedRoot, tmpDir string) (string, error) {
+func resolveTrustedRootPath(creds *sigcredv1.SigstoreCredentials, tmpDir string) (string, error) {
 	if creds == nil {
 		slog.Debug("no trusted root credentials provided")
 		return "", nil
