@@ -120,6 +120,14 @@ includes:
     optional: true
     taskfile: ./bindings/go/transform/Taskfile.yml
     dir: ./bindings/go/transform
+  bindings/go/httpclient:
+    optional: true
+    taskfile: ./bindings/go/httpclient/Taskfile.yml
+    dir: ./bindings/go/httpclient
+  bindings/go/httpclient/integration:
+    optional: true
+    taskfile: ./bindings/go/httpclient/integration/Taskfile.yml
+    dir: ./bindings/go/httpclient/integration
   cli:
     optional: true
     taskfile: ./cli/Taskfile.yml

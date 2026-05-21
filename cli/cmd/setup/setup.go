@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/http/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -80,7 +81,11 @@ func PluginManager(cmd *cobra.Command) error {
 
 	ocmContext := ocmctx.FromContext(cmd.Context())
 	filesystemConfig := ocmContext.FilesystemConfig()
-	if err := builtin.Register(pluginManager, filesystemConfig, slog.Default()); err != nil {
+	httpConfig, err := httpv1alpha1.ResolveHTTPConfig(ocmContext.Configuration())
+	if err != nil {
+		return fmt.Errorf("could not get http configuration: %w", err)
+	}
+	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, slog.Default()); err != nil {
 		return fmt.Errorf("could not register builtin plugins: %w", err)
 	}
 

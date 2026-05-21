@@ -48,6 +48,12 @@ func (d *Timeout) UnmarshalJSON(b []byte) error {
 	}
 }
 
+// NewTimeout creates a pointer to a Timeout value.
+func NewTimeout(d time.Duration) *Timeout {
+	t := Timeout(d)
+	return &t
+}
+
 var Scheme = runtime.NewScheme()
 
 func init() {
@@ -55,6 +61,93 @@ func init() {
 		runtime.NewVersionedType(ConfigType, Version),
 		runtime.NewUnversionedType(ConfigType),
 	)
+}
+
+// TimeoutConfig holds HTTP client timeout settings.
+// All fields are pointers; nil means "use default".
+type TimeoutConfig struct {
+	// Timeout specifies a time limit for requests made by the HTTP
+	// client. The timeout includes connection time, any redirects,
+	// and reading the response body. A timeout of zero means no
+	// timeout.
+	Timeout *Timeout `json:"timeout,omitempty"`
+
+	// TCPDialTimeout is the maximum amount of time a dial will wait
+	// for a TCP connect to complete. When dialing a host name with
+	// multiple IP addresses, the timeout may be divided between them.
+	// The operating system may impose its own earlier timeout.
+	TCPDialTimeout *Timeout `json:"tcpDialTimeout,omitempty"`
+
+	// TCPKeepAlive specifies the interval between keep-alive probes
+	// for an active network connection. If negative, keep-alive
+	// probes are disabled.
+	TCPKeepAlive *Timeout `json:"tcpKeepAlive,omitempty"`
+
+	// TLSHandshakeTimeout specifies the maximum amount of time to
+	// wait for a TLS handshake. Zero means no timeout.
+	TLSHandshakeTimeout *Timeout `json:"tlsHandshakeTimeout,omitempty"`
+
+	// ResponseHeaderTimeout specifies the amount of time to wait for
+	// a server's response headers after fully writing the request
+	// (including its body, if any). This time does not include the
+	// time to read the response body.
+	ResponseHeaderTimeout *Timeout `json:"responseHeaderTimeout,omitempty"`
+
+	// IdleConnTimeout is the maximum amount of time an idle
+	// (keep-alive) connection will remain idle before closing itself.
+	// Zero means no limit.
+	IdleConnTimeout *Timeout `json:"idleConnTimeout,omitempty"`
+}
+
+// Validate checks that timeout values are non-negative.
+// TCPKeepAlive is not validated because any negative value
+// disables keep-alive probes (consistent with Go's net.Dialer.KeepAlive).
+func (c *TimeoutConfig) Validate() error {
+	for _, check := range []struct {
+		name string
+		val  *Timeout
+	}{
+		{"timeout", c.Timeout},
+		{"tcpDialTimeout", c.TCPDialTimeout},
+		{"tlsHandshakeTimeout", c.TLSHandshakeTimeout},
+		{"responseHeaderTimeout", c.ResponseHeaderTimeout},
+		{"idleConnTimeout", c.IdleConnTimeout},
+	} {
+		if check.val != nil && time.Duration(*check.val) < 0 {
+			return fmt.Errorf("invalid value for %s: %s, must be zero or positive", check.name, time.Duration(*check.val))
+		}
+	}
+	return nil
+}
+
+// MergeTimeoutConfig merges src into dst. Non-nil fields in src override dst.
+func MergeTimeoutConfig(dst, src *TimeoutConfig) TimeoutConfig {
+	out := TimeoutConfig{}
+	if dst != nil {
+		out = *dst
+	}
+	if src == nil {
+		return out
+	}
+	if src.Timeout != nil {
+		out.Timeout = src.Timeout
+	}
+	if src.TCPDialTimeout != nil {
+		out.TCPDialTimeout = src.TCPDialTimeout
+	}
+	if src.TCPKeepAlive != nil {
+		out.TCPKeepAlive = src.TCPKeepAlive
+	}
+	if src.TLSHandshakeTimeout != nil {
+		out.TLSHandshakeTimeout = src.TLSHandshakeTimeout
+	}
+	if src.ResponseHeaderTimeout != nil {
+		out.ResponseHeaderTimeout = src.ResponseHeaderTimeout
+	}
+	if src.IdleConnTimeout != nil {
+		out.IdleConnTimeout = src.IdleConnTimeout
+	}
+	return out
 }
 
 // Config represents the HTTP client configuration.
@@ -68,9 +161,29 @@ type Config struct {
 	// +ocm:jsonschema-gen:enum:deprecated=http.config.ocm.software
 	Type runtime.Type `json:"type"`
 
-	// Timeout specifies the HTTP client timeout as a Go duration string
-	// (e.g. "30s", "5m", "1h"). If not set, the default timeout of 30s is used.
-	Timeout Timeout `json:"timeout,omitempty"`
+	TimeoutConfig `json:",inline"`
+}
+
+// Validate checks the embedded TimeoutConfig for non-negative timeout values.
+func (c *Config) Validate() error {
+	return c.TimeoutConfig.Validate()
+}
+
+// ResolveHTTPConfig resolves the HTTP configuration from a central generic V1
+// config and validates it. It is equivalent to calling LookupConfig followed
+// by Config.Validate, but returns the validation error directly so callers
+// don't have to handle the two-step flow.
+//
+// A nil cfg is allowed; it produces a Config carrying only DefaultTimeout.
+func ResolveHTTPConfig(cfg *genericv1.Config) (*Config, error) {
+	c, err := LookupConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid http configuration: %w", err)
+	}
+	return c, nil
 }
 
 // LookupConfig creates an HTTP configuration from a central generic V1 config.
@@ -102,15 +215,15 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 		merged = new(Config)
 	}
 
-	if merged.Timeout == 0 {
-		merged.Timeout = DefaultTimeout
+	if merged.Timeout == nil {
+		merged.Timeout = NewTimeout(time.Duration(DefaultTimeout))
 	}
 
 	return merged, nil
 }
 
 // Merge merges the provided configs into a single config.
-// The last non-zero timeout wins.
+// For pointer fields the last non-nil value wins.
 func Merge(configs ...*Config) *Config {
 	if len(configs) == 0 {
 		return nil
@@ -119,10 +232,8 @@ func Merge(configs ...*Config) *Config {
 	merged := new(Config)
 	_, _ = Scheme.DefaultType(merged)
 
-	for _, config := range configs {
-		if config.Timeout != 0 {
-			merged.Timeout = config.Timeout
-		}
+	for _, c := range configs {
+		merged.TimeoutConfig = MergeTimeoutConfig(&merged.TimeoutConfig, &c.TimeoutConfig)
 	}
 
 	return merged

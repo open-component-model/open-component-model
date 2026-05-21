@@ -28,6 +28,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260505072254-1c17fcd5c971
+	ocm.software/open-component-model/bindings/go/httpclient v0.0.0-00010101000000-000000000000
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.3
 	ocm.software/open-component-model/bindings/go/input/file v0.0.4
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260505072254-1c17fcd5c971
@@ -148,4 +149,10 @@ require (
 	sigs.k8s.io/kustomize/kyaml v0.21.1 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
+)
+
+replace (
+	ocm.software/open-component-model/bindings/go/configuration => ../bindings/go/configuration
+	ocm.software/open-component-model/bindings/go/httpclient => ../bindings/go/httpclient
+	ocm.software/open-component-model/bindings/go/oci => ../bindings/go/oci
 )
