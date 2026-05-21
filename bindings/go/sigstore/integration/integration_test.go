@@ -308,7 +308,7 @@ func Test_Integration_SignAndVerify(t *testing.T) {
 	}
 	r.NotNil(bundle.MessageSignature)
 	r.NotEmpty(bundle.MessageSignature.Signature)
-	r.Equal(v1alpha1.AlgorithmSigstore, sigInfo.Algorithm)
+	r.Equal(string(v1alpha1.AlgorithmSigstoreV1Alpha1), sigInfo.Algorithm)
 	r.Equal(v1alpha1.MediaTypeSigstoreBundle, sigInfo.MediaType)
 	r.NotEmpty(sigInfo.Issuer)
 
@@ -404,7 +404,7 @@ func Test_Integration_AmbientSIGSTORE_ID_TOKEN(t *testing.T) {
 
 	sigInfo, err := h.Sign(t.Context(), digest, defaultSignConfig(), nil)
 	require.NoError(t, err, "signing with ambient SIGSTORE_ID_TOKEN should succeed without credential")
-	require.Equal(t, v1alpha1.AlgorithmSigstore, sigInfo.Algorithm)
+	require.Equal(t, string(v1alpha1.AlgorithmSigstoreV1Alpha1), sigInfo.Algorithm)
 	require.NotEmpty(t, sigInfo.Value)
 	require.NotEmpty(t, sigInfo.Issuer)
 
