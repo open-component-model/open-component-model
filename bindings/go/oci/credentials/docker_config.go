@@ -14,7 +14,6 @@ import (
 	remotecredentials "oras.land/oras-go/v2/registry/remote/credentials"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
-	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -90,7 +89,7 @@ var storeConcurrencyMu sync.Mutex
 
 // ResolveV1DockerConfigCredentials resolves credentials from a Docker configuration
 // for a given identity. It supports both file-based and in-memory Docker configurations.
-func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credentialsv1.DockerConfig, identity runtime.Identity) (*v1.OCICredentials, error) {
+func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig v1.DockerConfig, identity runtime.Identity) (*v1.OCICredentials, error) {
 	credStore, err := getStore(ctx, dockerConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve credentials store: %w", err)
@@ -140,7 +139,7 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 	logger.DebugContext(ctx, "credentials found", "username", cred.Username)
 
 	return &v1.OCICredentials{
-		Type:         runtime.NewVersionedType(v1.OCICredentialsType, credentialsv1.Version),
+		Type:         runtime.NewVersionedType(v1.OCICredentialsType, v1.Version),
 		Username:     cred.Username,
 		Password:     cred.Password,
 		AccessToken:  cred.AccessToken,
@@ -158,7 +157,7 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 //   - Shell expansion for file paths (e.g., ~ for home directory)
 //   - Temporary file creation for inline configurations
 //   - Integration with the native host credential store
-func getStore(ctx context.Context, dockerConfig credentialsv1.DockerConfig) (remotecredentials.Store, error) {
+func getStore(ctx context.Context, dockerConfig v1.DockerConfig) (remotecredentials.Store, error) {
 	// Determine which store creation strategy to use based on the provided configuration
 	switch {
 	case dockerConfig.DockerConfigFile == "" && dockerConfig.DockerConfig == "":

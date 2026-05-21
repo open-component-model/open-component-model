@@ -17,7 +17,7 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
-	v2 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
@@ -148,7 +148,7 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 	return b, nil
 }
 
-func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *v2.OCICredentials) (*oci.Repository, error) {
+func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *ocicredsv1.OCICredentials) (*oci.Repository, error) {
 	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
@@ -168,7 +168,7 @@ func ociImageAccessToBaseURL(access *v1.OCIImage) (string, error) {
 
 func createRepository(
 	spec *ociv1.Repository,
-	credentials *v2.OCICredentials,
+	credentials *ocicredsv1.OCICredentials,
 	filesystemConfig *filesystemv1alpha1.Config,
 	userAgent string,
 ) (*oci.Repository, error) {
@@ -226,7 +226,7 @@ func (p *ResourceRepository) resolveOCIImageRepo(resource *descriptor.Resource, 
 		return nil, fmt.Errorf("error creating oci image access: %w", err)
 	}
 
-	ociCredentials, err := v2.ConvertToOCICredentials(credentials)
+	ociCredentials, err := ocicredsv1.ConvertToOCICredentials(credentials)
 	if err != nil {
 		return nil, fmt.Errorf("error converting credentials: %w", err)
 	}

@@ -50,7 +50,7 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	var creds runtime.Typed
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
-			if creds, err = t.CredentialProvider.Resolve(ctx,consumerId); err != nil {
+			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
 				return nil, fmt.Errorf("failed resolving credentials: %w", err)
 			}
 		}
