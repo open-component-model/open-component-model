@@ -20,13 +20,9 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
+	sigcredv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/sigstore/v1"
 )
 
-//nolint:gosec // these are not secrets
-const (
-	credOIDCToken           = handler.CredentialKeyOIDCToken
-	credTrustedRootJSONFile = handler.CredentialKeyTrustedRootJSONFile
-)
 
 // sigstoreEnv holds the environment configuration for the sigstore integration
 // tests. All values are read from environment variables in TestMain, which are
@@ -115,8 +111,8 @@ func defaultSignConfig() *v1alpha1.SignConfig {
 
 func signDigest(t *testing.T, h *handler.Handler, digest descruntime.Digest) descruntime.SignatureInfo {
 	t.Helper()
-	sigInfo, err := h.Sign(t.Context(), digest, defaultSignConfig(), map[string]string{
-		credOIDCToken: stack.OIDCToken,
+	sigInfo, err := h.Sign(t.Context(), digest, defaultSignConfig(), &sigcredv1.SigstoreCredentials{
+		Token: stack.OIDCToken,
 	})
 	require.NoError(t, err, "signing should succeed")
 	return sigInfo
@@ -361,9 +357,9 @@ func Test_Integration_SignWithTrustedRoot(t *testing.T) {
 	}
 	signCfg.SetType(runtime.NewVersionedType(v1alpha1.SignConfigType, v1alpha1.Version))
 
-	sigInfo, err := h.Sign(t.Context(), digest, signCfg, map[string]string{
-		credOIDCToken:           stack.OIDCToken,
-		credTrustedRootJSONFile: stack.TrustedRootPath,
+	sigInfo, err := h.Sign(t.Context(), digest, signCfg, &sigcredv1.SigstoreCredentials{
+		Token:               stack.OIDCToken,
+		TrustedRootJSONFile: stack.TrustedRootPath,
 	})
 	r.NoError(err)
 
@@ -388,8 +384,8 @@ func Test_Integration_SignWithTrustedRoot(t *testing.T) {
 
 	t.Run("verify with explicit trusted root succeeds", func(t *testing.T) {
 		r := require.New(t)
-		err := h.Verify(t.Context(), signed, verifyConfig(), map[string]string{
-			credTrustedRootJSONFile: stack.TrustedRootPath,
+		err := h.Verify(t.Context(), signed, verifyConfig(), &sigcredv1.SigstoreCredentials{
+			TrustedRootJSONFile: stack.TrustedRootPath,
 		})
 		r.NoError(err)
 	})
@@ -401,8 +397,8 @@ func Test_Integration_VerifyWithExplicitTrustedRoot(t *testing.T) {
 
 	t.Run("trusted root via credential file path", func(t *testing.T) {
 		r := require.New(t)
-		r.NoError(h.Verify(t.Context(), signed, verifyConfig(), map[string]string{
-			credTrustedRootJSONFile: stack.TrustedRootPath,
+		r.NoError(h.Verify(t.Context(), signed, verifyConfig(), &sigcredv1.SigstoreCredentials{
+			TrustedRootJSONFile: stack.TrustedRootPath,
 		}))
 	})
 
@@ -411,8 +407,8 @@ func Test_Integration_VerifyWithExplicitTrustedRoot(t *testing.T) {
 		trustedRootJSON, err := os.ReadFile(stack.TrustedRootPath)
 		r.NoError(err)
 
-		err = h.Verify(t.Context(), signed, verifyConfig(), map[string]string{
-			handler.CredentialKeyTrustedRootJSON: string(trustedRootJSON),
+		err = h.Verify(t.Context(), signed, verifyConfig(), &sigcredv1.SigstoreCredentials{
+			TrustedRootJSON: string(trustedRootJSON),
 		})
 		r.NoError(err)
 	})
@@ -422,8 +418,8 @@ func Test_Integration_VerifyWithExplicitTrustedRoot(t *testing.T) {
 		cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
 			c.CertificateOIDCIssuer = "https://wrong-issuer.example.com"
 		})
-		err := h.Verify(t.Context(), signed, cfg, map[string]string{
-			credTrustedRootJSONFile: stack.TrustedRootPath,
+		err := h.Verify(t.Context(), signed, cfg, &sigcredv1.SigstoreCredentials{
+			TrustedRootJSONFile: stack.TrustedRootPath,
 		})
 		r.Error(err)
 		r.ErrorContains(err, "issuer")
@@ -439,8 +435,8 @@ func Test_Integration_PrivateInfrastructure(t *testing.T) {
 	})
 
 	r := require.New(t)
-	err := h.Verify(t.Context(), signed, cfg, map[string]string{
-		credTrustedRootJSONFile: stack.TrustedRootPath,
+	err := h.Verify(t.Context(), signed, cfg, &sigcredv1.SigstoreCredentials{
+		TrustedRootJSONFile: stack.TrustedRootPath,
 	})
 	r.NoError(err)
 }
@@ -451,7 +447,7 @@ func Test_Integration_AmbientSIGSTORE_ID_TOKEN(t *testing.T) {
 	h := newHandler(t)
 	digest := uniqueDigest(t, "ambient-sigstore-id-token")
 
-	sigInfo, err := h.Sign(t.Context(), digest, defaultSignConfig(), map[string]string{})
+	sigInfo, err := h.Sign(t.Context(), digest, defaultSignConfig(), nil)
 	require.NoError(t, err, "signing with ambient SIGSTORE_ID_TOKEN should succeed without credential")
 	require.Equal(t, v1alpha1.AlgorithmSigstore, sigInfo.Algorithm)
 	require.NotEmpty(t, sigInfo.Value)
