@@ -1196,11 +1196,43 @@ func TestSchemaConformance(t *testing.T) {
 				expect: assert.Error,
 			},
 			{
-				name: "MissingValue",
+				name: "NilValueIsNull",
 				label: descriptorv2.Label{
 					Name: "test-label",
 				},
-				expect: assert.Error,
+				expect: assert.NoError,
+			},
+			// Regression test for https://github.com/open-component-model/open-component-model/issues/2585:
+			// label.value must accept any JSON type, not only objects.
+			{
+				name:   "StringValue",
+				label:  descriptorv2.Label{Name: "imagevector.gardener.cloud/name", Value: json.RawMessage(`"alpine"`)},
+				expect: assert.NoError,
+			},
+			{
+				name:   "NumberValue",
+				label:  descriptorv2.Label{Name: "priority", Value: json.RawMessage(`42`)},
+				expect: assert.NoError,
+			},
+			{
+				name:   "BooleanValue",
+				label:  descriptorv2.Label{Name: "signing", Value: json.RawMessage(`true`)},
+				expect: assert.NoError,
+			},
+			{
+				name:   "NullValue",
+				label:  descriptorv2.Label{Name: "optional", Value: json.RawMessage(`null`)},
+				expect: assert.NoError,
+			},
+			{
+				name:   "ArrayValue",
+				label:  descriptorv2.Label{Name: "tags", Value: json.RawMessage(`["a","b"]`)},
+				expect: assert.NoError,
+			},
+			{
+				name:   "ObjectValue",
+				label:  descriptorv2.Label{Name: "metadata", Value: json.RawMessage(`{"key":"val"}`)},
+				expect: assert.NoError,
 			},
 		}
 
@@ -1211,6 +1243,7 @@ func TestSchemaConformance(t *testing.T) {
 						Version: "v2",
 					},
 					Component: descriptorv2.Component{
+						Provider: "example-provider",
 						ComponentMeta: descriptorv2.ComponentMeta{
 							ObjectMeta: descriptorv2.ObjectMeta{
 								Name:    "github.com/example/component",
