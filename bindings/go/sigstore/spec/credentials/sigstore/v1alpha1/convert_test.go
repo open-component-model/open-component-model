@@ -1,4 +1,4 @@
-package v1
+package v1alpha1
 
 import (
 	"testing"
@@ -104,7 +104,7 @@ func TestConvertToSigstoreCredentials(t *testing.T) {
 			name: "Raw",
 			input: &runtime.Raw{
 				Type: SigstoreCredentialsVersionedType,
-				Data: []byte(`{"type":"SigstoreCredentials/v1","token":"test-token","tokenFile":"/path/token"}`),
+				Data: []byte(`{"type":"SigstoreCredentials/v1alpha1","token":"test-token","tokenFile":"/path/token"}`),
 			},
 			want: &SigstoreCredentials{
 				Type:      SigstoreCredentialsVersionedType,

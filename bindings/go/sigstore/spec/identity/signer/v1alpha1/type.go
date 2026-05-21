@@ -1,4 +1,4 @@
-package v1
+package v1alpha1
 
 import (
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -7,17 +7,15 @@ import (
 const (
 	// SigstoreSignerIdentityType is the type name for Sigstore signer consumer identities.
 	SigstoreSignerIdentityType = "SigstoreSigner"
-	// Version is the current version of the SigstoreSignerIdentity type.
-	Version = "v1"
 	// V1Alpha1Version is the legacy v1alpha1 version, kept for backward compatibility.
 	V1Alpha1Version = "v1alpha1"
+	// Version is the current version of the SigstoreSignerIdentityType type.
+	Version = V1Alpha1Version
 )
 
 var Type = runtime.NewUnversionedType(SigstoreSignerIdentityType)
 
 var VersionedType = runtime.NewVersionedType(SigstoreSignerIdentityType, Version)
-
-var V1Alpha1Type = runtime.NewVersionedType(SigstoreSignerIdentityType, V1Alpha1Version)
 
 const (
 	// IdentityAttributeAlgorithm is the key for the signing algorithm in a credential consumer identity map.
@@ -47,8 +45,7 @@ const (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type SigstoreSignerIdentity struct {
-	// +ocm:jsonschema-gen:enum=SigstoreSigner/v1
-	// +ocm:jsonschema-gen:enum:deprecated=SigstoreSigner/v1alpha1
+	// +ocm:jsonschema-gen:enum=SigstoreSigner/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=SigstoreSigner
 	Type runtime.Type `json:"type"`
 	// Algorithm restricts this identity to a specific signing algorithm.

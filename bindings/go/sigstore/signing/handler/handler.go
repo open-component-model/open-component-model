@@ -21,9 +21,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
-	sigcredv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/sigstore/v1"
-	signerv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1"
-	verifierv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1"
+	sigcredv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/sigstore/v1alpha1"
+	signerv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1alpha1"
+	verifierv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1alpha1"
 )
 
 var _ signing.Handler = (*Handler)(nil)
@@ -281,7 +281,7 @@ func (*Handler) GetSigningCredentialConsumerIdentity(
 	if err := v1alpha1.Scheme.Convert(rawCfg, &cfg); err != nil {
 		return nil, fmt.Errorf("convert config: %w", err)
 	}
-	id := credentialIdentity(signerv1.V1Alpha1Type)
+	id := credentialIdentity(signerv1.VersionedType)
 	id[signerv1.IdentityAttributeSignature] = name
 	if cfg.Issuer != "" {
 		id[signerv1.IdentityAttributeIssuer] = cfg.Issuer
@@ -300,7 +300,7 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 	if signature.Signature.MediaType != v1alpha1.MediaTypeSigstoreBundle {
 		return nil, fmt.Errorf("unsupported media type %q for sigstore verification", signature.Signature.MediaType)
 	}
-	id := credentialIdentity(verifierv1.V1Alpha1Type)
+	id := credentialIdentity(verifierv1.VersionedType)
 	id[verifierv1.IdentityAttributeSignature] = signature.Name
 	return id, nil
 }

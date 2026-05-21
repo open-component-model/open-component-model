@@ -23,9 +23,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
-	sigcredv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/sigstore/v1"
-	signerv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1"
-	verifierv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1"
+	sigcredv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/sigstore/v1alpha1"
+	signerv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1alpha1"
+	verifierv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1alpha1"
 )
 
 // execRecorder captures args and env from ExecCosign calls and optionally writes a bundle file.
@@ -932,7 +932,7 @@ func TestGetSigningCredentialConsumerIdentity(t *testing.T) {
 			h := newWithRunner(&execRecorder{})
 			id, err := h.GetSigningCredentialConsumerIdentity(t.Context(), "my-sig", testDigest(), tc.cfg)
 			r.NoError(err)
-			r.Equal(signerv1.V1Alpha1Type, id.GetType())
+			r.Equal(signerv1.VersionedType, id.GetType())
 			r.Equal("my-sig", id[signerv1.IdentityAttributeSignature])
 			r.Len(id, tc.wantLen)
 			if tc.wantIssuer != "" {
@@ -981,7 +981,7 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 				return
 			}
 			r.NoError(err)
-			r.Equal(verifierv1.V1Alpha1Type, id.GetType())
+			r.Equal(verifierv1.VersionedType, id.GetType())
 			r.Equal("my-sig", id[verifierv1.IdentityAttributeSignature])
 			r.Len(id, 2)
 		})

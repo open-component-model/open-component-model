@@ -17,12 +17,10 @@ import (
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
-
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
-	sigcredv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/sigstore/v1"
+	sigcredv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/sigstore/v1alpha1"
 )
-
 
 // sigstoreEnv holds the environment configuration for the sigstore integration
 // tests. All values are read from environment variables in TestMain, which are

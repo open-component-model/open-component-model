@@ -2,7 +2,7 @@ package sigstore
 
 import (
 	"ocm.software/open-component-model/bindings/go/runtime"
-	creds "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/sigstore/v1"
+	creds "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/sigstore/v1alpha1"
 )
 
 var Scheme = runtime.NewScheme()

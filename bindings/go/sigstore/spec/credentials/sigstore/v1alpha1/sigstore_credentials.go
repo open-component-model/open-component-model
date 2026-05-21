@@ -1,4 +1,4 @@
-package v1
+package v1alpha1
 
 import (
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -9,7 +9,7 @@ const (
 	//nolint:gosec // G101: This is a type name, not a credential.
 	SigstoreCredentialsType = "SigstoreCredentials"
 	// Version is the version of the SigstoreCredentials type.
-	Version = "v1"
+	Version = "v1alpha1"
 )
 
 var SigstoreCredentialsVersionedType = runtime.NewVersionedType(SigstoreCredentialsType, Version)
@@ -30,9 +30,7 @@ var SigstoreCredentialsVersionedType = runtime.NewVersionedType(SigstoreCredenti
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type SigstoreCredentials struct {
-	// +ocm:jsonschema-gen:enum=SigstoreCredentials/v1
-	// +ocm:jsonschema-gen:enum:deprecated=OIDCIdentityToken/v1
-	// +ocm:jsonschema-gen:enum:deprecated=OIDCIdentityToken
+	// +ocm:jsonschema-gen:enum=SigstoreCredentials/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=SigstoreCredentials
 	Type runtime.Type `json:"type"`
 	// Token is an inline OIDC identity token used to authenticate to Fulcio during signing.

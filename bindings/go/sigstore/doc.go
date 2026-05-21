@@ -51,7 +51,7 @@
 //
 // # Credentials
 //
-// Both signing and verification accept a SigstoreCredentials/v1 credential.
+// Both signing and verification accept a SigstoreCredentials/v1alpha1 credential.
 // The relevant fields per operation:
 //
 // Signing (SigstoreSigner/v1alpha1):
@@ -84,7 +84,7 @@
 // OIDC token acquisition for keyless signing happens before cosign is invoked.
 // The token must be resolved through the credential graph (configured as a
 // consumer identity of type SigstoreSigner/v1alpha1 in .ocmconfig with a
-// credential of type SigstoreCredentials/v1 or Credentials/v1
+// credential of type SigstoreCredentials/v1alpha1 or Credentials/v1
 // with a "token" property). The handler forwards the resolved token to cosign
 // via the SIGSTORE_ID_TOKEN environment variable.
 //
