@@ -157,20 +157,12 @@ type mockCredentialProvider struct {
 	fail        bool
 }
 
-func (m *mockCredentialProvider) Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
+func (m *mockCredentialProvider) Resolve(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
 	m.called[identity.GetType().String()]++
 	if m.fail {
 		return nil, fmt.Errorf("simulated credential resolution failure")
 	}
-	return m.credentials[identity.GetType().String()], nil
-}
-
-func (m *mockCredentialProvider) ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
-	creds, err := m.Resolve(ctx, identity)
-	if err != nil {
-		return nil, err
-	}
-	return runtime.Identity(creds), nil
+	return runtime.Identity(m.credentials[identity.GetType().String()]), nil
 }
 
 // setupTestComponent creates a basic component constructor for testing
