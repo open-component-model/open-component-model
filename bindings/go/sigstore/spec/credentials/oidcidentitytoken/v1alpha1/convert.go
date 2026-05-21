@@ -17,9 +17,6 @@ const (
 	deprecatedCredentialKeyTokenFile = "token_file"
 )
 
-// convertScheme is a private scheme that knows OIDCIdentityToken and DirectCredentials.
-// It deliberately does NOT register sigstore's TrustedRoot type: a TrustedRoot credential
-// passed into the Sign path is rejected here with a clear "unsupported type" error.
 var convertScheme = runtime.NewScheme()
 
 func init() {
@@ -33,8 +30,7 @@ func init() {
 // ConvertToOIDCIdentityToken converts [runtime.Typed] into [OIDCIdentityToken].
 // Direct conversion as well as converting from [v1.DirectCredentials] is supported.
 // Other supported [runtime.Typed] implementations are [runtime.Raw].
-// For unsupported [runtime.Typed] implementations (for example a sigstore TrustedRoot
-// credential mistakenly resolved for a Sign call), an error is returned.
+// For unsupported [runtime.Typed] implementations, an error will be returned.
 func ConvertToOIDCIdentityToken(creds runtime.Typed) (*OIDCIdentityToken, error) {
 	typ := creds.GetType()
 	if typ.IsEmpty() {

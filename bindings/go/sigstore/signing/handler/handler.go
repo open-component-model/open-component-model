@@ -91,6 +91,8 @@ func (h *Handler) Sign(
 		}
 	}
 	if oidcCreds == nil {
+		// OIDCIdentityToken is optional. As an alternative way, os.Env is being consumed.
+		// If both result in unset fields, an error will be returned during runtime.
 		oidcCreds = &oidcv1.OIDCIdentityToken{}
 	}
 
@@ -185,6 +187,7 @@ func (h *Handler) Verify(
 		trCreds = c
 	}
 	if trCreds == nil {
+		// TrustedRoot is optional and only needed if cfg.PrivateInfrastructure is true.
 		trCreds = &trustedrootv1.TrustedRoot{}
 	}
 

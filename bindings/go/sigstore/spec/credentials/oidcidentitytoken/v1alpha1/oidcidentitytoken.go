@@ -34,10 +34,12 @@ type OIDCIdentityToken struct {
 	// +ocm:jsonschema-gen:enum=OIDCIdentityToken/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=OIDCIdentityToken
 	Type runtime.Type `json:"type"`
-	// Token is an inline OIDC identity token used to authenticate to Fulcio during signing.
+	// Token is an inline OIDC identity token forwarded to cosign as SIGSTORE_ID_TOKEN for
+	// Fulcio authentication during keyless signing. Required when neither SIGSTORE_ID_TOKEN
+	// nor ACTIONS_ID_TOKEN_REQUEST_TOKEN is already set in the process environment.
 	// Takes precedence over TokenFile when both are set.
 	Token string `json:"token,omitempty"`
 	// TokenFile is a path to a file containing an OIDC identity token.
-	// Ignored when Token is also set.
+	// Same semantics as Token, but read from disk. Ignored when Token is also set.
 	TokenFile string `json:"tokenFile,omitempty"`
 }

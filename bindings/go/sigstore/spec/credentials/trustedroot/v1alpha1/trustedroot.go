@@ -34,12 +34,15 @@ type TrustedRoot struct {
 	// +ocm:jsonschema-gen:enum=TrustedRoot/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=TrustedRoot
 	Type runtime.Type `json:"type"`
-	// TrustedRootJSON is an inline JSON document conforming to the Sigstore TrustedRoot
-	// schema. Overrides the default public-good TUF root for private Sigstore infrastructure.
+	// TrustedRootJSON is an inline JSON document conforming to the Sigstore TrustedRoot schema.
+	// Overrides the default public-good TUF root, enabling verification against private Sigstore
+	// infrastructure (required when VerifyConfig.PrivateInfrastructure is true).
+	// Written to a temp file and passed to cosign as --trusted-root.
 	// Takes precedence over TrustedRootJSONFile when both are set.
 	TrustedRootJSON string `json:"trustedRootJSON,omitempty"`
 	// TrustedRootJSONFile is a path to a JSON file conforming to the Sigstore TrustedRoot schema.
-	// Same semantics as TrustedRootJSON, but loaded from disk. Ignored when TrustedRootJSON is also set.
+	// Same semantics as TrustedRootJSON, but loaded from disk; passed directly to cosign as
+	// --trusted-root without an intermediate temp file. Ignored when TrustedRootJSON is also set.
 	// Must be an absolute, canonical path (no .. segments).
 	TrustedRootJSONFile string `json:"trustedRootJSONFile,omitempty"`
 }
