@@ -49,22 +49,30 @@
 // the handler emits them into the consumer identity so that .ocmconfig entries
 // can distinguish between different Sigstore deployments.
 //
-// # Credential Keys
+// # Credentials
 //
-// Signing credentials (resolved via SigstoreSigner/v1alpha1 identity):
-//   - token: OIDC identity token for Fulcio authentication
-//   - trusted_root_json: inline trusted root JSON (for private infrastructure signing)
-//   - trusted_root_json_file: path to trusted root JSON file (for private infrastructure signing)
+// Both signing and verification accept a SigstoreCredentials/v1 credential.
+// The relevant fields per operation:
 //
-// Verification credentials (resolved via SigstoreVerifier/v1alpha1 identity):
-//   - trusted_root_json: inline trusted root JSON
-//   - trusted_root_json_file: path to trusted root JSON file
+// Signing (SigstoreSigner/v1alpha1):
+//   - token:               OIDC identity token for Fulcio authentication
+//   - tokenFile:           path to a file containing the OIDC identity token
+//   - trustedRootJSON:     inline trusted root JSON (private infrastructure only)
+//   - trustedRootJSONFile: path to trusted root JSON file (private infrastructure only)
+//
+// Verification (SigstoreVerifier/v1alpha1):
+//   - trustedRootJSON:     inline trusted root JSON
+//   - trustedRootJSONFile: path to trusted root JSON file
+//
+// The deprecated snake_case property names (token_file, trusted_root_json,
+// trusted_root_json_file) are still accepted when credentials are provided as
+// Credentials/v1 DirectCredentials for backwards compatibility.
 //
 // # Trusted Root Resolution
 //
 // Trusted root resolution order (first wins, applies to both signing and verification):
-//  1. trusted_root_json credential — inline JSON written to a temp file
-//  2. trusted_root_json_file credential — path passed as --trusted-root
+//  1. trustedRootJSON credential — inline JSON written to a temp file
+//  2. trustedRootJSONFile credential — path passed as --trusted-root
 //  3. "" — cosign falls back to public-good TUF default
 //
 // Note: TUF_ROOT and SIGSTORE_ROOT_FILE env vars control cosign's TUF cache
