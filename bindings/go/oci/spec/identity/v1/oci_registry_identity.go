@@ -1,10 +1,19 @@
 package v1
 
 import (
-	"log/slog"
-
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+const (
+	OCIRegistryIdentityType = "OCIRegistry"
+	Version                 = "v1"
+)
+
+// Type is the unversioned Consumer Identity type for any OCI Repository (backward compat).
+var Type = runtime.NewUnversionedType(OCIRegistryIdentityType)
+
+// VersionedType is the versioned consumer identity type.
+var VersionedType = runtime.NewVersionedType(OCIRegistryIdentityType, Version)
 
 // OCIRegistryIdentity is the typed consumer identity for OCI container registries.
 // It describes the target registry by hostname, scheme, port, and path.
@@ -16,62 +25,21 @@ import (
 type OCIRegistryIdentity struct {
 	// +ocm:jsonschema-gen:enum=OCIRegistry/v1
 	// +ocm:jsonschema-gen:enum:deprecated=OCIRegistry
-	Type     runtime.Type `json:"type"`
-	Hostname string       `json:"hostname,omitempty"`
-	Scheme   string       `json:"scheme,omitempty"`
-	Port     string       `json:"port,omitempty"`
-	Path     string       `json:"path,omitempty"`
-}
-
-// ToIdentity converts an [OCIRegistryIdentity] into a [runtime.Identity].
-// Empty fields are omitted from the resulting map. If the type field is unset,
-// the canonical [VersionedType] is used.
-func ToIdentity(identity *OCIRegistryIdentity) runtime.Identity {
-	if identity == nil {
-		return nil
-	}
-	id := runtime.Identity{}
-	typ := identity.Type
-	if typ.IsEmpty() {
-		typ = VersionedType
-	}
-	id.SetType(typ)
-	if identity.Hostname != "" {
-		id[runtime.IdentityAttributeHostname] = identity.Hostname
-	}
-	if identity.Scheme != "" {
-		id[runtime.IdentityAttributeScheme] = identity.Scheme
-	}
-	if identity.Port != "" {
-		id[runtime.IdentityAttributePort] = identity.Port
-	}
-	if identity.Path != "" {
-		id[runtime.IdentityAttributePath] = identity.Path
-	}
-	return id
-}
-
-// FromIdentity converts a [runtime.Identity] into an [OCIRegistryIdentity].
-// Attributes outside the OCI registry schema are ignored. If the type
-// attribute is missing or empty, the canonical [VersionedType] is used.
-func FromIdentity(id runtime.Identity) *OCIRegistryIdentity {
-	if id == nil {
-		return nil
-	}
-	out := &OCIRegistryIdentity{
-		Hostname: id[runtime.IdentityAttributeHostname],
-		Scheme:   id[runtime.IdentityAttributeScheme],
-		Port:     id[runtime.IdentityAttributePort],
-		Path:     id[runtime.IdentityAttributePath],
-	}
-
-	typ, err := id.ParseType()
-	if err != nil {
-		slog.Debug("failed to parse identity type, defaulting to versioned type", "error", err)
-	}
-	if typ.IsEmpty() {
-		typ = VersionedType
-	}
-	out.Type = typ
-	return out
+	Type runtime.Type `json:"type"`
+	// Hostname is the registry hostname (e.g. "ghcr.io", "registry.example.com").
+	// Primary matching attribute when resolving credentials for a registry request.
+	// Omit to match any hostname.
+	Hostname string `json:"hostname,omitempty"`
+	// Scheme is the URL scheme used to connect to the registry ("https" or "http").
+	// When set to "http", the client connects without TLS (plain HTTP).
+	// Omit to match both schemes.
+	Scheme string `json:"scheme,omitempty"`
+	// Port is the registry port as a string (e.g. "443", "5000").
+	// Used together with Hostname to distinguish registries on non-standard ports.
+	// Omit to match any port.
+	Port string `json:"port,omitempty"`
+	// Path is a path prefix within the registry (e.g. "/myorg/myrepo").
+	// Narrows credential matching to a specific repository or namespace inside the registry.
+	// Omit to match all paths on the registry.
+	Path string `json:"path,omitempty"`
 }

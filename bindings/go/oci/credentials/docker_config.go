@@ -13,15 +13,15 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	remotecredentials "oras.land/oras-go/v2/registry/remote/credentials"
 
+	"ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-
 // MapCredentials converts a [credentialsv1.OCICredentials] to an auth.Credential.
 // A nil input yields an empty [auth.Credential].
-func MapCredentials(credentials *credentialsv1.OCICredentials) auth.Credential {
+func MapCredentials(credentials *v1.OCICredentials) auth.Credential {
 	if credentials == nil {
 		return auth.Credential{}
 	}
@@ -57,7 +57,7 @@ func MapCredentials(credentials *credentialsv1.OCICredentials) auth.Credential {
 // This will create a function that checks if the host and port match "example.com:443",
 // and returns the provided credentials if they do. If the host and port don't match,
 // it will return empty credentials.
-func CredentialFunc(identity *identityv1.OCIRegistryIdentity, credentials *credentialsv1.OCICredentials) auth.CredentialFunc {
+func CredentialFunc(identity *identityv1.OCIRegistryIdentity, credentials *v1.OCICredentials) auth.CredentialFunc {
 	credential := MapCredentials(credentials)
 	hasHost := identity != nil && identity.Hostname != ""
 	hasPort := identity != nil && identity.Port != ""
@@ -90,7 +90,7 @@ var storeConcurrencyMu sync.Mutex
 
 // ResolveV1DockerConfigCredentials resolves credentials from a Docker configuration
 // for a given identity. It supports both file-based and in-memory Docker configurations.
-func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credentialsv1.DockerConfig, identity runtime.Identity) (*credentialsv1.OCICredentials, error) {
+func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credentialsv1.DockerConfig, identity runtime.Identity) (*v1.OCICredentials, error) {
 	credStore, err := getStore(ctx, dockerConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve credentials store: %w", err)
@@ -139,8 +139,8 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 
 	logger.DebugContext(ctx, "credentials found", "username", cred.Username)
 
-	return &credentialsv1.OCICredentials{
-		Type:         runtime.NewVersionedType(credentialsv1.OCICredentialsType, credentialsv1.Version),
+	return &v1.OCICredentials{
+		Type:         runtime.NewVersionedType(v1.OCICredentialsType, credentialsv1.Version),
 		Username:     cred.Username,
 		Password:     cred.Password,
 		AccessToken:  cred.AccessToken,

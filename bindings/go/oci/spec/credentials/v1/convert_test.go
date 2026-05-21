@@ -1,7 +1,6 @@
 package v1
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,23 +16,13 @@ func (f *fakeTyped) GetType() runtime.Type        { return runtime.NewUnversione
 func (f *fakeTyped) SetType(_ runtime.Type)       {}
 func (f *fakeTyped) DeepCopyTyped() runtime.Typed { return &fakeTyped{} }
 
-func TestFromTyped(t *testing.T) {
-	raw := &runtime.Raw{}
-	require.NoError(t, json.Unmarshal([]byte(
-		`{"type":"OCICredentials/v1","username":"user","password":"pass","accessToken":"tok","refreshToken":"ref"}`),
-		raw))
-
+func TestConvertToOCICredentials(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   runtime.Typed
 		want    *OCICredentials
 		wantErr bool
 	}{
-		{
-			name:  "nil",
-			input: nil,
-			want:  nil,
-		},
 		{
 			name: "OCICredentials passthrough",
 			input: &OCICredentials{
@@ -54,11 +43,12 @@ func TestFromTyped(t *testing.T) {
 		{
 			name: "DirectCredentials",
 			input: &credv1.DirectCredentials{
+				Type: runtime.NewVersionedType(credv1.DirectCredentialsType, credv1.Version),
 				Properties: map[string]string{
-					CredentialKeyUsername:     "user",
-					CredentialKeyPassword:     "pass",
-					CredentialKeyAccessToken:  "tok",
-					CredentialKeyRefreshToken: "ref",
+					credentialKeyUsername:     "user",
+					credentialKeyPassword:     "pass",
+					credentialKeyAccessToken:  "tok",
+					credentialKeyRefreshToken: "ref",
 				},
 			},
 			want: &OCICredentials{
@@ -70,26 +60,10 @@ func TestFromTyped(t *testing.T) {
 			},
 		},
 		{
-			name:  "Raw",
-			input: raw,
-			want: &OCICredentials{
-				Type:         runtime.NewVersionedType(OCICredentialsType, Version),
-				Username:     "user",
-				Password:     "pass",
-				AccessToken:  "tok",
-				RefreshToken: "ref",
-			},
-		},
-		{
-			name: "Unstructured",
-			input: &runtime.Unstructured{
-				Data: map[string]any{
-					"type":         runtime.NewVersionedType(OCICredentialsType, Version),
-					"username":     "user",
-					"password":     "pass",
-					"accessToken":  "tok",
-					"refreshToken": "ref",
-				},
+			name: "Raw",
+			input: &runtime.Raw{
+				Type: runtime.NewVersionedType(OCICredentialsType, Version),
+				Data: []byte(`{"type":"OCICredentials/v1","username":"user","password":"pass","accessToken":"tok","refreshToken":"ref"}`),
 			},
 			want: &OCICredentials{
 				Type:         runtime.NewVersionedType(OCICredentialsType, Version),

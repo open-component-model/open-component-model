@@ -7,16 +7,20 @@
   "description": "OCIRegistryIdentity is the typed consumer identity for OCI container registries.\nIt describes the target registry by hostname, scheme, port, and path.",
   "properties": {
     "hostname": {
-      "type": "string"
+      "type": "string",
+      "description": "Hostname is the registry hostname (e.g. \"ghcr.io\", \"registry.example.com\").\nPrimary matching attribute when resolving credentials for a registry request.\nOmit to match any hostname."
     },
     "path": {
-      "type": "string"
+      "type": "string",
+      "description": "Path is a path prefix within the registry (e.g. \"/myorg/myrepo\").\nNarrows credential matching to a specific repository or namespace inside the registry.\nOmit to match all paths on the registry."
     },
     "port": {
-      "type": "string"
+      "type": "string",
+      "description": "Port is the registry port as a string (e.g. \"443\", \"5000\").\nUsed together with Hostname to distinguish registries on non-standard ports.\nOmit to match any port."
     },
     "scheme": {
-      "type": "string"
+      "type": "string",
+      "description": "Scheme is the URL scheme used to connect to the registry (\"https\" or \"http\").\nWhen set to \"http\", the client connects without TLS (plain HTTP).\nOmit to match both schemes."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

@@ -8,17 +8,14 @@ import (
 )
 
 const (
-	// OCICredentialsType is the type name for OCI registry credentials.
-	OCICredentialsType = "OCICredentials"
-
-	// CredentialKeyUsername is the key for basic auth username.
-	CredentialKeyUsername = "username"
-	// CredentialKeyPassword is the key for basic auth password.
-	CredentialKeyPassword = "password"
-	// CredentialKeyAccessToken is the key for OAuth2/bearer access tokens.
-	CredentialKeyAccessToken = "accessToken"
-	// CredentialKeyRefreshToken is the key for OAuth2 refresh tokens.
-	CredentialKeyRefreshToken = "refreshToken"
+	// credentialKeyUsername is the key for basic auth username.
+	credentialKeyUsername = "username"
+	// credentialKeyPassword is the key for basic auth password.
+	credentialKeyPassword = "password"
+	// credentialKeyAccessToken is the key for OAuth2/bearer access tokens.
+	credentialKeyAccessToken = "accessToken"
+	// credentialKeyRefreshToken is the key for OAuth2 refresh tokens.
+	credentialKeyRefreshToken = "refreshToken"
 )
 
 var convertScheme = runtime.NewScheme()
@@ -38,10 +35,10 @@ func init() {
 func fromDirectCredentials(properties map[string]string) *OCICredentials {
 	return &OCICredentials{
 		Type:         runtime.NewVersionedType(OCICredentialsType, Version),
-		Username:     properties[CredentialKeyUsername],
-		Password:     properties[CredentialKeyPassword],
-		AccessToken:  properties[CredentialKeyAccessToken],
-		RefreshToken: properties[CredentialKeyRefreshToken],
+		Username:     properties[credentialKeyUsername],
+		Password:     properties[credentialKeyPassword],
+		AccessToken:  properties[credentialKeyAccessToken],
+		RefreshToken: properties[credentialKeyRefreshToken],
 	}
 }
 
