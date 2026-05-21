@@ -51,26 +51,24 @@
 //
 // # Credentials
 //
-// Both signing and verification accept a SigstoreCredentials/v1alpha1 credential.
-// The relevant fields per operation:
+// The handler resolves a single typed credential per operation:
 //
-// Signing (SigstoreSigner/v1alpha1):
-//   - token:               OIDC identity token for Fulcio authentication
-//   - tokenFile:           path to a file containing the OIDC identity token
-//   - trustedRootJSON:     inline trusted root JSON (private infrastructure only)
-//   - trustedRootJSONFile: path to trusted root JSON file (private infrastructure only)
+// Signing accepts an OIDCIdentityToken/v1alpha1 credential. Relevant fields:
+//   - token:     OIDC identity token for Fulcio authentication
+//   - tokenFile: path to a file containing the OIDC identity token
 //
-// Verification (SigstoreVerifier/v1alpha1):
+// Verification accepts a TrustedRoot/v1alpha1 credential. Relevant fields:
 //   - trustedRootJSON:     inline trusted root JSON
 //   - trustedRootJSONFile: path to trusted root JSON file
 //
-// The deprecated snake_case property names (token_file, trusted_root_json,
-// trusted_root_json_file) are still accepted when credentials are provided as
-// Credentials/v1 DirectCredentials for backwards compatibility.
+// Both credential types also accept Credentials/v1 DirectCredentials with the
+// matching property keys for backwards compatibility, including the deprecated
+// snake_case forms (token_file, trusted_root_json, trusted_root_json_file).
 //
 // # Trusted Root Resolution
 //
-// Trusted root resolution order (first wins, applies to both signing and verification):
+// Trusted root resolution applies to verification only; the signing path does
+// not pass --trusted-root to cosign. Resolution order on verify (first wins):
 //  1. trustedRootJSON credential — inline JSON written to a temp file
 //  2. trustedRootJSONFile credential — path passed as --trusted-root
 //  3. "" — cosign falls back to public-good TUF default
@@ -84,9 +82,9 @@
 // OIDC token acquisition for keyless signing happens before cosign is invoked.
 // The token must be resolved through the credential graph (configured as a
 // consumer identity of type SigstoreSigner/v1alpha1 in .ocmconfig with a
-// credential of type SigstoreCredentials/v1alpha1 or Credentials/v1
-// with a "token" property). The handler forwards the resolved token to cosign
-// via the SIGSTORE_ID_TOKEN environment variable.
+// credential of type OIDCIdentityToken/v1alpha1 or Credentials/v1 with a
+// "token" property). The handler forwards the resolved token to cosign via
+// the SIGSTORE_ID_TOKEN environment variable.
 //
 // If SIGSTORE_ID_TOKEN or ACTIONS_ID_TOKEN_REQUEST_TOKEN is already set in
 // the process environment, the handler uses the ambient token and skips

@@ -8,33 +8,36 @@ import (
 )
 
 const (
-	credentialKeyToken               = "token"
-	credentialKeyTokenFile           = "tokenFile"
+	// camelCase JSON property keys — primary form expected on DirectCredentials.
 	credentialKeyTrustedRootJSON     = "trustedRootJSON"
 	credentialKeyTrustedRootJSONFile = "trustedRootJSONFile"
-)
 
-const (
-	deprecatedCredentialKeyTokenFile           = "token_file"
+	// Legacy snake_case aliases accepted from .ocmconfig as fallback.
+	// TODO(matthiasbruns): https://github.com/open-component-model/ocm-project/issues/1072
 	deprecatedCredentialKeyTrustedRootJSON     = "trusted_root_json"
 	deprecatedCredentialKeyTrustedRootJSONFile = "trusted_root_json_file"
 )
 
+// convertScheme is a private scheme that knows TrustedRoot and DirectCredentials.
+// It deliberately does NOT register sigstore's OIDCIdentityToken type: an OIDCIdentityToken
+// credential passed into the Verify path is rejected here with a clear "unsupported type"
+// error.
 var convertScheme = runtime.NewScheme()
 
 func init() {
-	convertScheme.MustRegisterWithAlias(&SigstoreCredentials{},
-		SigstoreCredentialsVersionedType,
-		runtime.NewUnversionedType(SigstoreCredentialsType),
+	convertScheme.MustRegisterWithAlias(&TrustedRoot{},
+		VersionedType,
+		runtime.NewUnversionedType(TrustedRootType),
 	)
 	v1.MustRegister(convertScheme)
 }
 
-// ConvertToSigstoreCredentials converts runtime.Typed into SigstoreCredentials.
-// Direct conversation as well as converting from [v1.DirectCredentials] is supported.
+// ConvertToTrustedRoot converts [runtime.Typed] into [TrustedRoot].
+// Direct conversion as well as converting from [v1.DirectCredentials] is supported.
 // Other supported [runtime.Typed] implementations are [runtime.Raw].
-// For unsupported [runtime.Typed] implementations, an error will be returned.
-func ConvertToSigstoreCredentials(creds runtime.Typed) (*SigstoreCredentials, error) {
+// For unsupported [runtime.Typed] implementations (for example a sigstore OIDCIdentityToken
+// credential mistakenly resolved for a Verify call), an error is returned.
+func ConvertToTrustedRoot(creds runtime.Typed) (*TrustedRoot, error) {
 	typ := creds.GetType()
 	if typ.IsEmpty() {
 		var err error
@@ -55,18 +58,19 @@ func ConvertToSigstoreCredentials(creds runtime.Typed) (*SigstoreCredentials, er
 	switch t := typed.(type) {
 	case *v1.DirectCredentials:
 		return fromDirectCredentials(t.Properties), nil
-	case *SigstoreCredentials:
+	case *TrustedRoot:
 		return t, nil
 	}
 
 	return nil, fmt.Errorf("unsupported credential type %v", typed.GetType())
 }
 
-func fromDirectCredentials(properties map[string]string) *SigstoreCredentials {
-	return &SigstoreCredentials{
-		Type:                runtime.NewVersionedType(SigstoreCredentialsType, Version),
-		Token:               properties[credentialKeyToken],
-		TokenFile:           lookupProperty(properties, credentialKeyTokenFile, deprecatedCredentialKeyTokenFile),
+// fromDirectCredentials converts a DirectCredentials properties map into a typed TrustedRoot.
+// Both camelCase and the deprecated snake_case keys are accepted.
+// A nil map is safe and returns a TrustedRoot with only the type set.
+func fromDirectCredentials(properties map[string]string) *TrustedRoot {
+	return &TrustedRoot{
+		Type:                VersionedType,
 		TrustedRootJSON:     lookupProperty(properties, credentialKeyTrustedRootJSON, deprecatedCredentialKeyTrustedRootJSON),
 		TrustedRootJSONFile: lookupProperty(properties, credentialKeyTrustedRootJSONFile, deprecatedCredentialKeyTrustedRootJSONFile),
 	}
