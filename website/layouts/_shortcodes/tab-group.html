@@ -2,6 +2,18 @@
 {{- if not $id -}}
 {{- errorf "tab-group: missing positional argument 'group id' (page: %s)" .Page.Path -}}
 {{- end -}}
+{{- if findRE "[\\s:|/]" $id -}}
+{{- errorf "tab-group: id %q must not contain whitespace or any of ':' '|' '/' (page: %s)" $id .Page.Path -}}
+{{- end -}}
+{{- $seenKey := "tabGroupIdsSeen" -}}
+{{- $seen := .Page.Scratch.Get $seenKey -}}
+{{- if not $seen -}}
+{{- $seen = slice -}}
+{{- end -}}
+{{- if in $seen $id -}}
+{{- errorf "tab-group: duplicate id %q on page %s — each tab-group id must be unique on a page (it is the localStorage key and the deep-link key)" $id .Page.Path -}}
+{{- end -}}
+{{- .Page.Scratch.Set $seenKey ($seen | append $id) -}}
 {{- $stack := .Page.Scratch.Get "currentTabGroup" -}}
 {{- if not $stack -}}
 {{- $stack = slice -}}

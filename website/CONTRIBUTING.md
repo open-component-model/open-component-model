@@ -260,6 +260,25 @@ Body text.
 
 Step titles must be unique on the page; otherwise Goldmark deduplicates the ids (`run-sign`, `run-sign-1`) and deep-links become brittle. Make titles descriptive enough that they read well in the TOC and in shared URLs (e.g. "Run sign with RSA" instead of just "Run sign" if both RSA and Sigstore tabs each have a sign step).
 
+### Combining tabs and steps
+
+Both nesting orders work and both contribute to the right-hand TOC:
+
+- **Steps inside tabs** — each tab-section contains its own step-list. Step titles are H3 (one level under the H2 chapter) and appear directly under the chapter in the TOC. Switching tabs filters the visible step titles in the TOC.
+- **Tabs inside steps** — a step-item wraps a tab-group. Variant headings inside the tab-sections should be H4 (one level under the step's H3). Tab-aware filtering hides non-active variants in the TOC.
+
+The site's TOC is configured to show H2–H4 (`config/_default/markup.toml`), so H4 variant headings inside tabs-in-steps are surfaced in the sidebar. Keep H4 reserved for genuine sub-sections — if a tab only wraps code blocks or short prose, drop the H4 entirely and let the step's H3 carry the navigation.
+
+### tab-group id rules
+
+A tab-group id is used three ways: as the `data-tab-group` attribute, as the localStorage key (`tabGroup:<id>`), and as the prefix in deep-link URLs (`?tab=<id>:<section>`). To keep all three unambiguous:
+
+- Must not be empty.
+- Must not contain whitespace or the reserved delimiters `:`, `|`, `/`.
+- Must be unique per page.
+
+Violations fail the Hugo build with an explicit error pointing at the offending page.
+
 ### Deep-link URL format
 
 ```text

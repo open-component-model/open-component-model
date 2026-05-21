@@ -5,5 +5,8 @@
 {{- $groupId := index $stack (sub (len $stack) 1) -}}
 {{- $stack = first (sub (len $stack) 1) $stack -}}
 {{- .Page.Scratch.Set "currentTabGroup" $stack -}}
-{{- .Page.Scratch.Set (printf "tabGroupOpenSection:%s" $groupId) "" -}}
-</div></div>
+{{- $openKey := printf "tabGroupOpenSection:%s" $groupId -}}
+{{- $hadSection := .Page.Scratch.Get $openKey -}}
+{{- .Page.Scratch.Set $openKey "" -}}
+{{- if $hadSection -}}</div>{{- end -}}
+</div>
