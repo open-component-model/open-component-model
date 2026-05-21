@@ -20,8 +20,10 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-const RuntimePackage = "ocm.software/open-component-model/bindings/go/runtime"
-const EncodingJSONPackage = "encoding/json"
+const (
+	RuntimePackage      = "ocm.software/open-component-model/bindings/go/runtime"
+	EncodingJSONPackage = "encoding/json"
+)
 
 // Universe is an indexed view over Go types discovered during scanning.
 // It is immutable after Build.
@@ -260,7 +262,8 @@ func discoverLoadTargets(ctx context.Context, marker string, roots ...string) ([
 		return nil, err
 	}
 
-	slog.InfoContext(ctx, "found packages with schema markers",
+	slog.InfoContext(
+		ctx, "found packages with schema markers",
 		"modules", len(pkgsByModule),
 		"total_modules", len(modRoots),
 	)
