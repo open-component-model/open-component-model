@@ -60,7 +60,7 @@ For local Sigstore setup, ensure your development environment can reach the Sigs
 
 ### Sigstore remote config
 
-For remote Sigstore setup, configure your CI/CD pipeline to use Sigstore with the platform's native identity (GitHub Actions, GitLab CI, etc.). The identity is automatically bound to each signature.
+For remote Sigstore setup, configure your CI/CD pipeline to use Sigstore with the platform's native identity (GitHub Actions, etc.). The identity is automatically bound to each signature.
 
 {{< tab-group-end >}}
 

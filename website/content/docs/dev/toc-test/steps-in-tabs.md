@@ -14,7 +14,7 @@ This page demonstrates tab-groups whose direct children are step-lists: each tab
 
 Follow the steps below for your chosen signing algorithm. Use the tabs to switch between RSA and Sigstore workflows.
 
-{{< tab-group "wts" >}}
+{{< tab-group "signing" >}}
 
 {{< tab-section "RSA" >}}
 
