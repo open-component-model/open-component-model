@@ -61,7 +61,7 @@ The producer logs in via OIDC; Fulcio binds that login to a short-lived signing 
 - Network access to `*.sigstore.dev` — corporate firewalls sometimes block these
 - A component version to sign (we'll create one if you don't have one)
 
-{{< callout context="note" title="Cosign is fetched automatically" icon="outline/info-circle" >}}
+{{< callout context="note" title="Cosign CLI is fetched automatically" icon="outline/info-circle" >}}
 The OCM CLI invokes the `cosign` binary under the hood. If it's not on your PATH (or the version is too old), OCM downloads and caches it under `~/.cache/ocm/cosign/...` on first use. Subsequent runs skip the download.
 {{< /callout >}}
 
