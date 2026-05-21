@@ -2,6 +2,7 @@ package transformer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -46,7 +47,9 @@ func (t *TransferOCIArtifact) Transform(ctx context.Context, step runtime.Typed)
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, srcResource); err == nil {
 			if srcCreds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
-				return nil, fmt.Errorf("failed resolving source credentials: %w", err)
+				if !errors.Is(err, credentials.ErrNotFound) {
+					return nil, fmt.Errorf("failed resolving source credentials: %w", err)
+				}
 			}
 		}
 	}
@@ -56,7 +59,9 @@ func (t *TransferOCIArtifact) Transform(ctx context.Context, step runtime.Typed)
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
 			if dstCreds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
-				return nil, fmt.Errorf("failed resolving target credentials: %w", err)
+				if !errors.Is(err, credentials.ErrNotFound) {
+					return nil, fmt.Errorf("failed resolving target credentials: %w", err)
+				}
 			}
 		}
 	}

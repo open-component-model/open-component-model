@@ -2,6 +2,7 @@ package transformer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -85,7 +86,9 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec); err == nil {
 			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
-				return nil, fmt.Errorf("failed resolving credentials: %w", err)
+				if !errors.Is(err, credentials.ErrNotFound) {
+					return nil, fmt.Errorf("failed resolving credentials: %w", err)
+				}
 			}
 		}
 	}

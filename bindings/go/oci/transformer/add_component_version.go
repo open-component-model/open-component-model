@@ -44,10 +44,9 @@ func (t *AddComponentVersion) Transform(ctx context.Context, step runtime.Typed)
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec); err == nil {
 			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
-				if errors.Is(err, credentials.ErrNotFound) {
-					return nil, nil
+				if !errors.Is(err, credentials.ErrNotFound) {
+					return nil, fmt.Errorf("failed resolving credentials: %w", err)
 				}
-				return nil, err
 			}
 		}
 	}

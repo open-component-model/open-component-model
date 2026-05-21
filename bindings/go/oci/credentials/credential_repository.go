@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	ocicreds "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -22,7 +22,7 @@ import (
 type OCICredentialRepository struct{}
 
 func (p *OCICredentialRepository) GetCredentialRepositoryScheme() *runtime.Scheme {
-	return ocicreds.Scheme
+	return ocicredentials.Scheme
 }
 
 // Resolve resolves credentials and returns them as typed *credentialsv1.OCICredentials.
