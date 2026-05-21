@@ -7,9 +7,12 @@ toc: true
 hasMermaid: true
 ---
 
-In this tutorial you'll sign a component version with [Sigstore](https://www.sigstore.dev/) and verify it again — without generating a key pair. Your OIDC identity (Google, GitHub, or Microsoft) is what proves authorship, and a verifier only needs to know which identity to trust.
+In this tutorial you'll sign a component version with [Sigstore](https://www.sigstore.dev/) and verify it again — without generating a key pair.
+Your OIDC identity (Google, GitHub, or Microsoft) is what proves authorship, and a verifier only needs to know which identity to trust.
 
-For the conceptual background — what Fulcio, Rekor, and TUF each do, and how identity-based trust differs from key pinning — see [Concept: Sigstore (Keyless)]({{< relref "docs/concepts/signing-and-verification-concept.md#sigstore-keyless" >}}) and [Concept: Identity-Based Trust]({{< relref "docs/concepts/signing-and-verification-concept.md#identity-based-trust-sigstore" >}}).
+For the conceptual background — what Fulcio, Rekor, and TUF each do, and how identity-based trust differs from key pinning —
+see [Concept: Sigstore (Keyless)]({{< relref "docs/concepts/signing-and-verification-concept.md#sigstore-keyless" >}})
+and [Concept: Identity-Based Trust]({{< relref "docs/concepts/signing-and-verification-concept.md#identity-based-trust-sigstore" >}}).
 
 ## What You'll Learn
 
@@ -205,7 +208,7 @@ Before verifying, take a look at what was actually written to the component desc
 
 ```bash
 ocm get cv ./transport-archive//github.com/acme.org/helloworld:1.0.0 -o yaml \
-  | yq '.[0].component.signatures[] | select(.signature.algorithm == "sigstore")'
+  | yq '.[0].signatures[] | select(.signature.algorithm == "sigstore")'
 ```
 
 You should see your signature with the recorded identity:
