@@ -16,22 +16,22 @@ func (f *fakeTyped) GetType() runtime.Type        { return runtime.NewUnversione
 func (f *fakeTyped) SetType(_ runtime.Type)       {}
 func (f *fakeTyped) DeepCopyTyped() runtime.Typed { return &fakeTyped{} }
 
-func TestConvertToOIDCIdentityToken(t *testing.T) {
+func TestConvertToSigstoreCredentials(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   runtime.Typed
-		want    *OIDCIdentityToken
+		want    *SigstoreCredentials
 		wantErr bool
 	}{
 		{
-			name: "OIDCIdentityToken passthrough",
-			input: &OIDCIdentityToken{
-				Type:      OIDCIdentityTokenVersionedType,
+			name: "SigstoreCredentials passthrough",
+			input: &SigstoreCredentials{
+				Type:      SigstoreCredentialsVersionedType,
 				Token:     "test-token",
 				TokenFile: "/path/token",
 			},
-			want: &OIDCIdentityToken{
-				Type:      OIDCIdentityTokenVersionedType,
+			want: &SigstoreCredentials{
+				Type:      SigstoreCredentialsVersionedType,
 				Token:     "test-token",
 				TokenFile: "/path/token",
 			},
@@ -45,8 +45,8 @@ func TestConvertToOIDCIdentityToken(t *testing.T) {
 					CredentialKeyTokenFile: "/path/token",
 				},
 			},
-			want: &OIDCIdentityToken{
-				Type:      OIDCIdentityTokenVersionedType,
+			want: &SigstoreCredentials{
+				Type:      SigstoreCredentialsVersionedType,
 				Token:     "test-token",
 				TokenFile: "/path/token",
 			},
@@ -60,8 +60,8 @@ func TestConvertToOIDCIdentityToken(t *testing.T) {
 					DeprecatedCredentialKeyTokenFile: "/path/token",
 				},
 			},
-			want: &OIDCIdentityToken{
-				Type:      OIDCIdentityTokenVersionedType,
+			want: &SigstoreCredentials{
+				Type:      SigstoreCredentialsVersionedType,
 				Token:     "test-token",
 				TokenFile: "/path/token",
 			},
@@ -76,8 +76,8 @@ func TestConvertToOIDCIdentityToken(t *testing.T) {
 					CredentialKeyTrustedRootJSONFile: "/path/root.json",
 				},
 			},
-			want: &OIDCIdentityToken{
-				Type:                OIDCIdentityTokenVersionedType,
+			want: &SigstoreCredentials{
+				Type:                SigstoreCredentialsVersionedType,
 				Token:               "test-token",
 				TrustedRootJSON:     `{"keys":[]}`,
 				TrustedRootJSONFile: "/path/root.json",
@@ -93,8 +93,8 @@ func TestConvertToOIDCIdentityToken(t *testing.T) {
 					DeprecatedCredentialKeyTrustedRootJSONFile: "/path/root.json",
 				},
 			},
-			want: &OIDCIdentityToken{
-				Type:                OIDCIdentityTokenVersionedType,
+			want: &SigstoreCredentials{
+				Type:                SigstoreCredentialsVersionedType,
 				Token:               "test-token",
 				TrustedRootJSON:     `{"keys":[]}`,
 				TrustedRootJSONFile: "/path/root.json",
@@ -103,11 +103,11 @@ func TestConvertToOIDCIdentityToken(t *testing.T) {
 		{
 			name: "Raw",
 			input: &runtime.Raw{
-				Type: OIDCIdentityTokenVersionedType,
-				Data: []byte(`{"type":"OIDCIdentityToken/v1","token":"test-token","tokenFile":"/path/token"}`),
+				Type: SigstoreCredentialsVersionedType,
+				Data: []byte(`{"type":"SigstoreCredentials/v1","token":"test-token","tokenFile":"/path/token"}`),
 			},
-			want: &OIDCIdentityToken{
-				Type:      OIDCIdentityTokenVersionedType,
+			want: &SigstoreCredentials{
+				Type:      SigstoreCredentialsVersionedType,
 				Token:     "test-token",
 				TokenFile: "/path/token",
 			},
@@ -121,7 +121,7 @@ func TestConvertToOIDCIdentityToken(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ConvertToOIDCIdentityToken(tt.input)
+			got, err := ConvertToSigstoreCredentials(tt.input)
 			if tt.wantErr {
 				require.Error(t, err)
 				return

@@ -26,18 +26,18 @@ const (
 var convertScheme = runtime.NewScheme()
 
 func init() {
-	convertScheme.MustRegisterWithAlias(&OIDCIdentityToken{},
-		OIDCIdentityTokenVersionedType,
-		runtime.NewUnversionedType(OIDCIdentityTokenType),
+	convertScheme.MustRegisterWithAlias(&SigstoreCredentials{},
+		SigstoreCredentialsVersionedType,
+		runtime.NewUnversionedType(SigstoreCredentialsType),
 	)
 	v1.MustRegister(convertScheme)
 }
 
-// ConvertToOIDCIdentityToken converts runtime.Typed into OIDCIdentityToken.
+// ConvertToSigstoreCredentials converts runtime.Typed into SigstoreCredentials.
 // Direct conversation as well as converting from [v1.DirectCredentials] is supported.
 // Other supported [runtime.Typed] implementations are [runtime.Raw].
 // For unsupported [runtime.Typed] implementations, an error will be returned.
-func ConvertToOIDCIdentityToken(creds runtime.Typed) (*OIDCIdentityToken, error) {
+func ConvertToSigstoreCredentials(creds runtime.Typed) (*SigstoreCredentials, error) {
 	typ := creds.GetType()
 	if typ.IsEmpty() {
 		var err error
@@ -58,18 +58,18 @@ func ConvertToOIDCIdentityToken(creds runtime.Typed) (*OIDCIdentityToken, error)
 	switch t := typed.(type) {
 	case *v1.DirectCredentials:
 		return fromDirectCredentials(t.Properties), nil
-	case *OIDCIdentityToken:
+	case *SigstoreCredentials:
 		return t, nil
 	}
 
 	return nil, fmt.Errorf("unsupported credential type %v", typed.GetType())
 }
 
-func fromDirectCredentials(properties map[string]string) *OIDCIdentityToken {
-	return &OIDCIdentityToken{
-		Type:      runtime.NewVersionedType(OIDCIdentityTokenType, Version),
-		Token:     properties[CredentialKeyToken],
-		TokenFile: lookupProperty(properties, CredentialKeyTokenFile, DeprecatedCredentialKeyTokenFile),
+func fromDirectCredentials(properties map[string]string) *SigstoreCredentials {
+	return &SigstoreCredentials{
+		Type:                runtime.NewVersionedType(SigstoreCredentialsType, Version),
+		Token:               properties[CredentialKeyToken],
+		TokenFile:           lookupProperty(properties, CredentialKeyTokenFile, DeprecatedCredentialKeyTokenFile),
 		TrustedRootJSON:     lookupProperty(properties, CredentialKeyTrustedRootJSON, DeprecatedCredentialKeyTrustedRootJSON),
 		TrustedRootJSONFile: lookupProperty(properties, CredentialKeyTrustedRootJSONFile, DeprecatedCredentialKeyTrustedRootJSONFile),
 	}

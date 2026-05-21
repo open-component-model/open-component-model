@@ -12,9 +12,9 @@ func init() {
 }
 
 func MustAddToScheme(scheme *runtime.Scheme) {
-	oidcToken := &oidcv1.OIDCIdentityToken{}
+	oidcToken := &oidcv1.SigstoreCredentials{}
 	scheme.MustRegisterWithAlias(oidcToken,
-		oidcv1.OIDCIdentityTokenVersionedType,
-		runtime.NewUnversionedType(oidcv1.OIDCIdentityTokenType),
+		oidcv1.SigstoreCredentialsVersionedType,
+		runtime.NewUnversionedType(oidcv1.SigstoreCredentialsType),
 	)
 }

@@ -465,7 +465,7 @@ func TestVerify_TUF_ROOT_DoesNotSuppressTrustedRootFlag(t *testing.T) {
 	h := newWithRunner(mock)
 
 	cfg := testVerifyConfig()
-	creds := &oidcv1.OIDCIdentityToken{
+	creds := &oidcv1.SigstoreCredentials{
 		TrustedRootJSONFile: "/cred/root.json",
 	}
 
@@ -709,7 +709,7 @@ func TestVerify_PrivateInfrastructureWithTrustedRootCredential(t *testing.T) {
 	cfg := testVerifyConfig()
 	cfg.PrivateInfrastructure = true
 
-	creds := &oidcv1.OIDCIdentityToken{
+	creds := &oidcv1.SigstoreCredentials{
 		TrustedRootJSON: `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`,
 	}
 
@@ -828,19 +828,19 @@ func TestResolveTrustedRootPath(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		creds   *oidcv1.OIDCIdentityToken
+		creds   *oidcv1.SigstoreCredentials
 		want    string
 		wantErr string
 		isFile  bool // if true, assert path exists as a file (written from inline JSON)
 	}{
 		{
 			name:   "inline JSON wins over file credential",
-			creds:  &oidcv1.OIDCIdentityToken{TrustedRootJSON: `{"mediaType":"test"}`, TrustedRootJSONFile: "/cred/root.json"},
+			creds:  &oidcv1.SigstoreCredentials{TrustedRootJSON: `{"mediaType":"test"}`, TrustedRootJSONFile: "/cred/root.json"},
 			isFile: true,
 		},
 		{
 			name:  "file credential used",
-			creds: &oidcv1.OIDCIdentityToken{TrustedRootJSONFile: "/cred/root.json"},
+			creds: &oidcv1.SigstoreCredentials{TrustedRootJSONFile: "/cred/root.json"},
 			want:  "/cred/root.json",
 		},
 		{
@@ -850,27 +850,27 @@ func TestResolveTrustedRootPath(t *testing.T) {
 		},
 		{
 			name:    "relative path rejected",
-			creds:   &oidcv1.OIDCIdentityToken{TrustedRootJSONFile: "../../etc/passwd"},
+			creds:   &oidcv1.SigstoreCredentials{TrustedRootJSONFile: "../../etc/passwd"},
 			wantErr: "must be absolute",
 		},
 		{
 			name:    "path traversal rejected",
-			creds:   &oidcv1.OIDCIdentityToken{TrustedRootJSONFile: "/legit/../../../etc/passwd"},
+			creds:   &oidcv1.SigstoreCredentials{TrustedRootJSONFile: "/legit/../../../etc/passwd"},
 			wantErr: "non-canonical",
 		},
 		{
 			name:  "whitespace-only JSON treated as empty",
-			creds: &oidcv1.OIDCIdentityToken{TrustedRootJSON: "   \n\t  "},
+			creds: &oidcv1.SigstoreCredentials{TrustedRootJSON: "   \n\t  "},
 			want:  "",
 		},
 		{
 			name:  "whitespace-only file path treated as empty",
-			creds: &oidcv1.OIDCIdentityToken{TrustedRootJSONFile: "   "},
+			creds: &oidcv1.SigstoreCredentials{TrustedRootJSONFile: "   "},
 			want:  "",
 		},
 		{
 			name:  "valid absolute path accepted",
-			creds: &oidcv1.OIDCIdentityToken{TrustedRootJSONFile: "/opt/sigstore/trusted_root.json"},
+			creds: &oidcv1.SigstoreCredentials{TrustedRootJSONFile: "/opt/sigstore/trusted_root.json"},
 			want:  "/opt/sigstore/trusted_root.json",
 		},
 	}
@@ -1148,7 +1148,7 @@ func TestWithOperationTimeout_DeadlineExceeded(t *testing.T) {
 		t.Context(),
 		testDigest(),
 		testSignConfig(),
-		&oidcv1.OIDCIdentityToken{Token: "tok"},
+		&oidcv1.SigstoreCredentials{Token: "tok"},
 	)
 	require.ErrorContains(t, err, "timed out")
 }

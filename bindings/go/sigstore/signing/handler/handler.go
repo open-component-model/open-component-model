@@ -161,15 +161,15 @@ func (h *Handler) Sign(
 	}, nil
 }
 
-func convertOptionalCredentials(creds runtime.Typed) *oidcv1.OIDCIdentityToken {
+func convertOptionalCredentials(creds runtime.Typed) *oidcv1.SigstoreCredentials {
 	if creds == nil {
-		return &oidcv1.OIDCIdentityToken{}
+		return &oidcv1.SigstoreCredentials{}
 	}
-	oidcIdentityToken, _ := oidcv1.ConvertToOIDCIdentityToken(creds)
-	if oidcIdentityToken == nil {
-		oidcIdentityToken = &oidcv1.OIDCIdentityToken{}
+	sigstoreCredentials, _ := oidcv1.ConvertToSigstoreCredentials(creds)
+	if sigstoreCredentials == nil {
+		sigstoreCredentials = &oidcv1.SigstoreCredentials{}
 	}
-	return oidcIdentityToken
+	return sigstoreCredentials
 }
 
 // Verify checks a Sigstore bundle via cosign verify-blob: decodes the bundle and digest,
@@ -319,7 +319,7 @@ func credentialIdentity(identityType runtime.Type) runtime.Identity {
 //  1. Inline JSON from credentials (written to a temp file, cleaned up by caller's defer os.RemoveAll(tmpDir))
 //  2. File path from credentials (not removed on cleanup)
 //  3. "" — cosign falls back to public-good TUF
-func resolveTrustedRootPath(creds *oidcv1.OIDCIdentityToken, tmpDir string) (string, error) {
+func resolveTrustedRootPath(creds *oidcv1.SigstoreCredentials, tmpDir string) (string, error) {
 	if creds == nil {
 		slog.Debug("no trusted root credentials provided")
 		return "", nil

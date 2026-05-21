@@ -9,10 +9,10 @@ import (
 	_ "embed"
 )
 
-//go:embed schemas/OIDCIdentityToken.schema.json
-var schemaOIDCIdentityToken []byte
+//go:embed schemas/SigstoreCredentials.schema.json
+var schemaSigstoreCredentials []byte
 
-// JSONSchema returns the JSON Schema for OIDCIdentityToken.
-func (OIDCIdentityToken) JSONSchema() []byte {
-	return schemaOIDCIdentityToken
+// JSONSchema returns the JSON Schema for SigstoreCredentials.
+func (SigstoreCredentials) JSONSchema() []byte {
+	return schemaSigstoreCredentials
 }
