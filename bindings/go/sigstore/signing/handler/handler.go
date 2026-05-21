@@ -87,7 +87,7 @@ func (h *Handler) Sign(
 	if creds != nil {
 		oidcCreds, err = oidcv1.ConvertToOIDCIdentityToken(creds)
 		if err != nil {
-			return descruntime.SignatureInfo{}, fmt.Errorf("convert credentials: %w", err)
+			return descruntime.SignatureInfo{}, fmt.Errorf("failed to convert credentials to OIDC identity token during signing: %w", err)
 		}
 	}
 	if oidcCreds == nil {
@@ -182,7 +182,7 @@ func (h *Handler) Verify(
 	if creds != nil {
 		c, err := trustedrootv1.ConvertToTrustedRoot(creds)
 		if err != nil {
-			return fmt.Errorf("convert credentials: %w", err)
+			return fmt.Errorf("failed to convert credentials to trusted root during verify: %w", err)
 		}
 		trustedRootCreds = c
 	}
