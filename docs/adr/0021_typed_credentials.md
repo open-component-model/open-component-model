@@ -337,6 +337,16 @@ development blocking while transitioning the multi-module monorepo.
 
 ## Changelog
 
+### 2026-05-21 — Phase 4: constructor binding migrated (#2598)
+
+- **`bindings/go/constructor` interfaces flipped to `runtime.Typed`.** `ProcessResource`, `ProcessSource`,
+  `ProcessResourceDigest`, and `DownloadResource` now accept `runtime.Typed` instead of `map[string]string`.
+- **`resolveCredentials` calls `ResolveTyped`.** The deprecated `Resolve` call is removed; `resolveCredentials`
+  returns `runtime.Typed` and calls `provider.ResolveTyped` directly.
+- **`credentials` bumped to `v0.0.11`** in `bindings/go/constructor/go.mod`, matching the OCI binding (#2594).
+- The corresponding `bindings/go/plugin` registries (`input/`, `digestprocessor/`) will need a follow-up release
+  to absorb the compile-time interface assertion changes.
+
 ### 2026-05-15 — Phase 6 cleanup absorbed into Phase 3 / Phase 4; `Resolve` removed outright
 
 - **`Resolve` replaced, not deprecated.** Phase 3 replaces `Resolve` with its `runtime.Typed` version in `Resolver`, `CredentialPlugin`, and
