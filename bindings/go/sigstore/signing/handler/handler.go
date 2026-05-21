@@ -82,11 +82,20 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("digest value must not be empty")
 	}
 
-	oidcCreds := convertOptionalCredentials(creds)
+	var sigstoreCreds *sigcredv1.SigstoreCredentials
+	if creds != nil {
+		sigstoreCreds, err = sigcredv1.ConvertToSigstoreCredentials(creds)
+		if err != nil {
+			return descruntime.SignatureInfo{}, fmt.Errorf("convert credentials: %w", err)
+		}
+	}
+	if sigstoreCreds == nil {
+		sigstoreCreds = &sigcredv1.SigstoreCredentials{}
+	}
 
 	env := os.Environ()
 	if !internal.HasEnvKey(env, "SIGSTORE_ID_TOKEN") && !internal.HasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN") {
-		token := strings.TrimSpace(oidcCreds.Token)
+		token := strings.TrimSpace(sigstoreCreds.Token)
 		if token == "" {
 			return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required: " +
 				"set SIGSTORE_ID_TOKEN env var, use GitHub Actions OIDC, " +
@@ -112,7 +121,7 @@ func (h *Handler) Sign(
 
 	bundlePath := filepath.Join(tmpDir, "bundle.json")
 
-	trustedRootPath, err := resolveTrustedRootPath(oidcCreds, tmpDir)
+	trustedRootPath, err := resolveTrustedRootPath(sigstoreCreds, tmpDir)
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("resolve trusted root: %w", err)
 	}
@@ -152,17 +161,6 @@ func (h *Handler) Sign(
 	}, nil
 }
 
-func convertOptionalCredentials(creds runtime.Typed) *sigcredv1.SigstoreCredentials {
-	if creds == nil {
-		return &sigcredv1.SigstoreCredentials{}
-	}
-	sigstoreCredentials, _ := sigcredv1.ConvertToSigstoreCredentials(creds)
-	if sigstoreCredentials == nil {
-		sigstoreCredentials = &sigcredv1.SigstoreCredentials{}
-	}
-	return sigstoreCredentials
-}
-
 // Verify checks a Sigstore bundle via cosign verify-blob: decodes the bundle and digest,
 // validates the Fulcio certificate chain and Rekor inclusion proof, and confirms the
 // signed content matches the digest using the configured identity/issuer constraints.
@@ -185,11 +183,21 @@ func (h *Handler) Verify(
 		return fmt.Errorf("invalid verification config: %w", err)
 	}
 
-	oidcCreds := convertOptionalCredentials(creds)
+	var sigstoreCreds *sigcredv1.SigstoreCredentials
+	if creds != nil {
+		if c, err := sigcredv1.ConvertToSigstoreCredentials(creds); err != nil {
+			return fmt.Errorf("convert credentials: %w", err)
+		} else {
+			sigstoreCreds = c
+		}
+	}
+	if sigstoreCreds == nil {
+		sigstoreCreds = &sigcredv1.SigstoreCredentials{}
+	}
 
 	if cfg.PrivateInfrastructure &&
-		strings.TrimSpace(oidcCreds.TrustedRootJSON) == "" &&
-		strings.TrimSpace(oidcCreds.TrustedRootJSONFile) == "" {
+		strings.TrimSpace(sigstoreCreds.TrustedRootJSON) == "" &&
+		strings.TrimSpace(sigstoreCreds.TrustedRootJSONFile) == "" {
 		return fmt.Errorf("privateInfrastructure requires a trusted root: " +
 			"provide a TrustedRoot credential (trusted_root_json or trusted_root_json_file)")
 	}
@@ -221,7 +229,7 @@ func (h *Handler) Verify(
 		}
 	}()
 
-	trustedRootPath, err := resolveTrustedRootPath(oidcCreds, tmpDir)
+	trustedRootPath, err := resolveTrustedRootPath(sigstoreCreds, tmpDir)
 	if err != nil {
 		return fmt.Errorf("resolve trusted root: %w", err)
 	}

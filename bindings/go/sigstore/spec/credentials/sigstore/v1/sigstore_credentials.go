@@ -6,6 +6,7 @@ import (
 
 const (
 	// SigstoreCredentialsType is the type name for Sigstore keyless signing credentials.
+	//nolint:gosec // G101: This is a type name, not a credential.
 	SigstoreCredentialsType = "SigstoreCredentials"
 	// Version is the version of the SigstoreCredentials type.
 	Version = "v1"
