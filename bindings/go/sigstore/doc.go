@@ -64,8 +64,7 @@
 //   - TrustedRootJSONFile: path to a Sigstore trusted root JSON file
 //
 // Both credential types also accept Credentials/v1 DirectCredentials with the
-// matching camelCase property keys for backwards compatibility, as well as the
-// deprecated snake_case forms (token_file, trusted_root_json, trusted_root_json_file).
+// matching camelCase property keys for backwards compatibility.
 //
 // # Trusted Root Resolution
 //

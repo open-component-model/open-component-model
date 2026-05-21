@@ -56,7 +56,6 @@ func ConvertToTrustedRoot(creds runtime.Typed) (*TrustedRoot, error) {
 }
 
 // fromDirectCredentials converts a DirectCredentials properties map into a typed TrustedRoot.
-// Both camelCase and the deprecated snake_case keys are accepted.
 // A nil map is safe and returns a TrustedRoot with only the type set.
 func fromDirectCredentials(properties map[string]string) *TrustedRoot {
 	return &TrustedRoot{

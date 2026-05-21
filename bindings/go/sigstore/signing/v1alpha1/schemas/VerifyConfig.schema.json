@@ -16,7 +16,7 @@
     },
     "certificateOIDCIssuer": {
       "type": "string",
-      "description": "CertificateOIDCIssuer is the exact OIDC issuer URL that the signing certificate must have\nbeen issued for. Required for keyless verification unless CertificateOIDCIssuerRegexp is set.\nExample: \"https://accounts.google.com\" or \"https://github.com/login/oauth\"\nMaps to cosign --certificate-oidc-issuer."
+      "description": "CertificateOIDCIssuer is the exact OIDC issuer URL the signing certificate\nmust have been issued for. Required unless CertificateOIDCIssuerRegexp is set.\nOn public Sigstore, Dex passes the upstream IdP \"iss\" through to Fulcio, so\nthis is the upstream issuer (e.g. https://accounts.google.com,\nhttps://github.com/login/oauth), not the Dex URL.\nMaps to cosign --certificate-oidc-issuer."
     },
     "certificateOIDCIssuerRegexp": {
       "type": "string",
@@ -24,7 +24,7 @@
     },
     "privateInfrastructure": {
       "type": "boolean",
-      "description": "PrivateInfrastructure skips public transparency log verification.\nUse this when verifying artifacts signed by a privately deployed Sigstore\ninfrastructure where the transparency log is not the public-good Rekor instance.\nMaps to cosign --private-infrastructure."
+      "description": "PrivateInfrastructure indicates the signature was made against a privately\ndeployed Sigstore stack. When set, the verifier skips the public Rekor\ntransparency-log lookup; signature, certificate chain, identity, and SCT\nchecks are unchanged. Must be paired with a trusted-root credential\n(trusted_root_json or trusted_root_json_file).\nMaps to cosign --private-infrastructure."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

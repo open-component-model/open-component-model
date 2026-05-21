@@ -56,7 +56,6 @@ func ConvertToOIDCIdentityToken(creds runtime.Typed) (*OIDCIdentityToken, error)
 }
 
 // fromDirectCredentials converts a DirectCredentials properties map into a typed OIDCIdentityToken.
-// Both camelCase and the deprecated snake_case TokenFile key are accepted.
 // A nil map is safe and returns an OIDCIdentityToken with only the type set.
 func fromDirectCredentials(properties map[string]string) *OIDCIdentityToken {
 	return &OIDCIdentityToken{
