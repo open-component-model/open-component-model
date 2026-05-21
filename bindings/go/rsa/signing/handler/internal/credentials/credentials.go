@@ -8,15 +8,12 @@ import (
 
 	rsapem "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/pem"
 	rsacredentialsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
-	identityv1 "ocm.software/open-component-model/bindings/go/rsa/spec/identity/v1"
 )
 
-// IdentityTypeRSA is the consumer identity type for RSA signing.
-//
-// Deprecated: Use identityv1.VersionedType or identityv1.V1Alpha1Type instead.
-var IdentityTypeRSA = identityv1.V1Alpha1Type
-
 func PrivateKeyFromCredentials(creds *rsacredentialsv1.RSACredentials) (*rsa.PrivateKey, error) {
+	if creds == nil {
+		return nil, nil
+	}
 	b, err := loadBytes(creds.PrivateKeyPEM, creds.PrivateKeyPEMFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed loading private key PEM: %w", err)
@@ -28,6 +25,9 @@ func PrivateKeyFromCredentials(creds *rsacredentialsv1.RSACredentials) (*rsa.Pri
 }
 
 func PublicKeyFromCredentials(creds *rsacredentialsv1.RSACredentials) (*rsapem.RSAPublicKeyPEM, error) {
+	if creds == nil {
+		return nil, nil
+	}
 	b, err := loadBytes(creds.PublicKeyPEM, creds.PublicKeyPEMFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed loading public key PEM: %w", err)
@@ -49,6 +49,9 @@ func PublicKeyFromCredentials(creds *rsacredentialsv1.RSACredentials) (*rsapem.R
 }
 
 func CertificateChainFromCredentials(creds *rsacredentialsv1.RSACredentials) ([]*x509.Certificate, error) {
+	if creds == nil {
+		return nil, nil
+	}
 	b, err := loadBytes(creds.PublicKeyPEM, creds.PublicKeyPEMFile)
 	if err != nil || len(b) == 0 {
 		return nil, nil
