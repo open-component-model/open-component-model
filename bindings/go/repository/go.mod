@@ -9,10 +9,10 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/veqryn/slog-context v0.9.0
 	golang.org/x/sync v0.20.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.12
+	ocm.software/open-component-model/bindings/go/blob v0.0.13
 	ocm.software/open-component-model/bindings/go/configuration v0.0.13
-	ocm.software/open-component-model/bindings/go/credentials v0.0.10
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260505072254-1c17fcd5c971
+	ocm.software/open-component-model/bindings/go/credentials v0.0.12
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260520144124-c7e5118f86a6
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 )
 

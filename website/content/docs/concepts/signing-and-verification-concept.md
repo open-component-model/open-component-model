@@ -188,27 +188,25 @@ A component version can have **multiple signatures** from different parties, ena
 
 ## Supported Signing Algorithms
 
-OCM currently only supports RSA-based signing algorithms:
+OCM's `signature.algorithm` field selects between two signing approaches: classical RSA signatures over a long-lived key pair, and [Sigstore](https://www.sigstore.dev/)-based keyless signing, where each signature is made with a fresh, short-lived key bound to your OIDC identity. The two approaches differ not just in cryptography but in their trust model — see [Trust Models](#trust-models) below.
 
-| Algorithm | Type | Characteristics |
-| --------- | ---- | --------------- |
-| RSASSA-PSS (default) | Asymmetric | Probabilistic, stronger security guarantees, recommended for new implementations |
-| RSA-PKCS#1 v1.5 | Asymmetric | Deterministic, widely supported, compatible with legacy systems |
+| Algorithm | Type | Trust Model | Characteristics |
+| --------- | ---- | ----------- | --------------- |
+| RSASSA-PSS (default) | Asymmetric (RSA) | Public key or certificate chain | Probabilistic, stronger security guarantees, recommended for new RSA-based implementations |
+| RSA-PKCS#1 v1.5 | Asymmetric (RSA) | Public key or certificate chain | Deterministic, widely supported, compatible with legacy systems |
+| Sigstore (keyless, early access) | Asymmetric (ECDSA, ephemeral) | OIDC identity | Short-lived certificate from Fulcio bound to your OIDC identity, transparency-log entry in Rekor; no long-lived keys to manage |
 
 To override the default signing algorithm or encoding policy, see the `--signer-spec` flag in the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}).
 The signer spec file configures only the algorithm and encoding policy — credentials are always resolved separately via the [`.ocmconfig`]({{< relref "configure-multiple-credentials.md" >}}) file.
 
-For key management, OCM uses PEM-encoded key files configured in the `.ocmconfig`:
+For RSA-based signing, OCM uses PEM-encoded key files configured in the `.ocmconfig`:
 
 - **Private keys**: Used by producers to sign component versions
 - **Public keys**: Distributed to consumers for verification
 
 See [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) for creating RSA key pairs.
 
-{{< callout context="tip" title="Upcoming Sigstore Support" icon="outline/bulb" >}}
-We are planning to add support for [Sigstore](https://www.sigstore.dev/) and Cosign as an additional signing mechanism.
-This will enable keyless signing workflows and improved supply chain security. Stay tuned for updates.
-{{< /callout >}}
+Sigstore-based signing has no long-lived keys: a fresh signing key is generated per signature and certified by Fulcio against your OIDC identity. See [Sigstore (Keyless)](#sigstore-keyless) below.
 
 ### Signature Encoding Policies
 
@@ -269,9 +267,55 @@ A common source of confusion: "PEM" in `signatureEncodingPolicy` refers to the *
 When using PEM encoding for signing, the credential referenced by `public_key_pem` / `public_key_pem_file` must contain **X.509 certificates** (not bare public keys), because the certificate chain is embedded into the signature for self-contained verification.
 {{< /callout >}}
 
+### Sigstore (Keyless)
+
+Sigstore replaces the long-lived key pair at the heart of RSA signing with a short-lived certificate bound to your OIDC identity.
+The signer logs in to an identity provider; Sigstore issues a certificate valid for ~10 minutes; the signature is recorded in a public transparency log.
+Verifiers don't pin a public key — they declare which identity they trust.
+
+The Sigstore stack is four cooperating pieces. For the public-good happy path (`sigstore.dev`) you don't deploy any of them;
+for an enterprise stack a platform team has already deployed them and you point your config at their endpoints.
+
+- **OIDC IdP** — the identity provider you log in to (Google, GitHub, Microsoft, or your corporate IdP). The token it issues proves *who* is signing.
+- **Fulcio** — a short-lived certificate authority. It accepts your OIDC token and issues a certificate (valid for ~10 minutes) that binds the token's identity claims to a fresh signing key.
+- **Rekor** — an append-only public transparency log. Every signature is recorded so anyone can audit when, and by whom, it was made.
+- **TUF** — the mechanism clients use to discover the current trusted roots for Fulcio and Rekor. The verifier uses it to know which CA and which log to trust.
+
+The signature payload stored in the component descriptor is a Sigstore bundle: the signature bytes, the Fulcio certificate,
+and the Rekor inclusion proof, all in one self-contained blob. This self-containment is a key design principle of Sigstore:
+the signature value includes everything a verifier needs to validate the signature and establish trust in the signer's identity,
+without needing any out-of-band information.
+
+This matters directly for OCM's sovereign-delivery and air-gapped scenarios. The component version is the unit of transport,
+and OCM carries the proof of authorship along with it: the signed descriptor and the bundle embedded inside it travel as one.
+
+The only piece a verifier needs in addition is a local trusted-root file — the public keys of the Fulcio CA and the Rekor
+instance the component was signed against, whether that is public-good Sigstore or an enterprise stack — distributed into the
+disconnected environment once, out of band.
+
+With those pieces in place, `ocm verify cv` runs entirely offline: no callback to
+any Sigstore service, no TUF refresh, no network egress whatsoever. This is what makes Sigstore viable in regulated and
+sovereign-cloud deployments where egress to public or on-premise infrastructure is not permitted at verification time.
+
+```yaml
+signature:
+  algorithm: sigstore
+  mediaType: application/vnd.dev.sigstore.bundle.v0.3+json
+  issuer: https://github.com/login/oauth
+  value: <base64-encoded Sigstore bundle>
+```
+
+Because the certificate is in the bundle and the trust roots come from TUF (or an enterprise trusted-root file), no encoding-policy choice is involved — Sigstore is its own algorithm with its own bundle format.
+
+For how this changes what verifiers pin, see [Identity-Based Trust](#identity-based-trust-sigstore) below.
+
+{{< callout context="note" title="Sigstore signing is in early access" icon="outline/info-circle" >}}
+Sigstore (keyless) signing is currently being rolled out and we are awaiting feedback. The interface may evolve based on that feedback.
+{{< /callout >}}
+
 ## Trust Models
 
-The encoding policy you choose determines how verifiers establish trust in a signature.
+The signing approach you choose determines how verifiers establish trust in a signature. RSA-based algorithms support two models depending on encoding policy (key pinning or certificate chain); Sigstore brings a third, identity-based model. OCM supports three trust models in total.
 
 ### Key Pinning (Plain Encoding)
 
@@ -291,15 +335,26 @@ The signer embeds the certificate chain (leaf + any intermediates) directly in t
 - Supports organizational delegation: the root CA can issue intermediate CAs for different teams
 - The root CA is never embedded in the signature; OCM rejects self-signed certificates found in the embedded chain
 
+### Identity-Based Trust (Sigstore)
+
+The signer authenticates to an OIDC identity provider; Fulcio binds that identity to a short-lived certificate; Rekor records the signature in a public transparency log. The verifier doesn't pin a key or a CA — it declares **which OIDC identity** it trusts.
+
+- No long-lived keys to manage, distribute, or rotate
+- Trust anchor is the signer's identity (e.g. `jane.doe@example.com` via `https://github.com/login/oauth`), not a public key
+- Public-good Sigstore (`sigstore.dev`) is shared infrastructure; an enterprise stack runs Fulcio/Rekor/TUF inside the organization
+- Audit trail is automatic and public (or organization-internal for enterprise stacks)
+
 ### When to Use Each
 
-| Criterion | Plain (Key Pinning) | PEM (Certificate Chain) |
-| --------- | ------------------- | ----------------------- |
-| PKI infrastructure available | No | Yes |
-| Number of signers | Few | Many or changing |
-| Key rotation complexity | High (update all verifiers) | Low (root CA stays stable) |
-| Signature is self-contained | No (public key needed separately) | Yes |
-| Recommended for | Simple setups, personal projects | Enterprise environments |
+| Criterion | Plain (Key Pinning) | PEM (Certificate Chain) | Sigstore (Identity) |
+| --------- | ------------------- | ----------------------- | ------------------- |
+| Long-lived keys to manage | Yes | Yes (issued by your CA) | No |
+| PKI infrastructure available | No | Yes | N/A (Fulcio replaces it) |
+| Number of signers | Few | Many or changing | Anyone with an OIDC identity |
+| Key rotation complexity | High (update all verifiers) | Low (root CA stays stable) | None (certs are short-lived) |
+| Signature is self-contained | No (public key needed separately) | Yes | Yes (bundle includes cert + log proof) |
+| Audit trail | Build your own | Build your own | Built-in (Rekor) |
+| Recommended for | Simple setups, personal projects | Enterprise environments with existing PKI | Teams that want to skip key management entirely |
 
 For hands-on steps, see [Tutorial: Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) and [Tutorial: Certificate Chains (PEM)]({{< relref "docs/tutorials/signing/pem.md" >}}).
 

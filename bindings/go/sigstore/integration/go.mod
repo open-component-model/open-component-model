@@ -4,9 +4,9 @@ go 1.26.3
 
 require (
 	github.com/stretchr/testify v1.11.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260402061016-e120070fd921
-	ocm.software/open-component-model/bindings/go/runtime v0.0.7
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-00010101000000-000000000000
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260521064803-7cf81b64c7b1
+	ocm.software/open-component-model/bindings/go/runtime v0.0.8
+	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260521064803-7cf81b64c7b1
 )
 
 require (
@@ -18,9 +18,10 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260401155312-e2b46f9fb25c // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha9 // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260402061016-e120070fd921 // indirect
+	ocm.software/open-component-model/bindings/go/credentials v0.0.12 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260505072254-1c17fcd5c971 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 // indirect
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260520144124-c7e5118f86a6 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
