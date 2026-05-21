@@ -30,18 +30,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const (
-	// IdentityAttributeAlgorithm will be removed in the future
-	//
-	// Deprecated: Use typed identity [identityv1.RSAIdentity] instead
-	IdentityAttributeAlgorithm = identityv1.IdentityAttributeAlgorithm
-
-	// IdentityAttributeSignature will be removed in the future
-	//
-	// Deprecated: Use typed identity [identityv1.RSAIdentity] instead
-	IdentityAttributeSignature = identityv1.IdentityAttributeSignature
-)
-
 // Common errors for callers to test.
 var (
 	ErrInvalidAlgorithm  = errors.New("invalid algorithm")
@@ -86,16 +74,24 @@ func (h *Handler) Sign(
 	ctx context.Context,
 	unsigned descruntime.Digest,
 	rawCfg runtime.Typed,
-	creds map[string]string,
+	creds runtime.Typed,
 ) (descruntime.SignatureInfo, error) {
 	var supported v1alpha1.Config
 	if err := h.GetSigningHandlerScheme().Convert(rawCfg, &supported); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
 	}
 	algorithm := supported.GetSignatureAlgorithm()
-	typedCreds := rsacredentialsv1.FromDirectCredentials(creds)
 
-	priv, err := rsacredentials.PrivateKeyFromCredentials(typedCreds)
+	var rsaCreds *rsacredentialsv1.RSACredentials
+	if creds != nil {
+		if c, err := rsacredentialsv1.ConvertToRSACredentials(creds); err != nil {
+			return descruntime.SignatureInfo{}, fmt.Errorf("parse rsa credentials: %w", err)
+		} else {
+			rsaCreds = c
+		}
+	}
+
+	priv, err := rsacredentials.PrivateKeyFromCredentials(rsaCreds)
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("cannot load private key from credentials for signing: %w", err)
 	}
@@ -116,7 +112,7 @@ func (h *Handler) Sign(
 	switch supported.GetSignatureEncodingPolicy() {
 	case v1alpha1.SignatureEncodingPolicyPEM:
 		slog.WarnContext(ctx, "signing with PEM encoding is experimental")
-		chain, err := rsacredentials.CertificateChainFromCredentials(typedCreds)
+		chain, err := rsacredentials.CertificateChainFromCredentials(rsaCreds)
 		if err != nil {
 			return descruntime.SignatureInfo{}, fmt.Errorf("read certificate chain: %w", err)
 		}
@@ -145,10 +141,18 @@ func (h *Handler) Verify(
 	signed descruntime.Signature,
 	// we use hints from the signature to determine the correct settings, so no additional config is needed
 	_ runtime.Typed,
-	creds map[string]string,
+	creds runtime.Typed,
 ) error {
-	typedCreds := rsacredentialsv1.FromDirectCredentials(creds)
-	pubFromCreds, err := rsacredentials.PublicKeyFromCredentials(typedCreds)
+	var rsaCreds *rsacredentialsv1.RSACredentials
+	if creds != nil {
+		if c, err := rsacredentialsv1.ConvertToRSACredentials(creds); err != nil {
+			return fmt.Errorf("parse rsa credentials: %w", err)
+		} else {
+			rsaCreds = c
+		}
+	}
+
+	pubFromCreds, err := rsacredentials.PublicKeyFromCredentials(rsaCreds)
 	if err != nil {
 		return fmt.Errorf("cannot load public key from credentials for verification: %w", err)
 	}
@@ -175,7 +179,7 @@ func (h *Handler) Verify(
 
 	case v1alpha1.MediaTypePEM:
 		slog.WarnContext(ctx, "verifying signatures with PEM encoding is experimental")
-		return h.verifyPEMSignature(signed, hash, dig, typedCreds)
+		return h.verifyPEMSignature(signed, hash, dig, rsaCreds)
 
 	default:
 		return fmt.Errorf("unsupported media type %q", signed.Signature.MediaType)
