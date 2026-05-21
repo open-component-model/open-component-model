@@ -31,11 +31,11 @@ func TestLookup(t *testing.T) {
 	t.Run("snippet round trips", func(t *testing.T) {
 		generic := makeGenericConfig(t, `{
 			"type": "ownership.config.ocm.software/v1alpha1",
-			"policy": "auto",
+			"policy": "AddIfSupported",
 			"repositories": [
 				{
 					"repository": { "type": "OCIRepository/v1" },
-					"policy": "disabled"
+					"policy": "Never"
 				},
 				{
 					"repository": {
@@ -43,7 +43,7 @@ func TestLookup(t *testing.T) {
 						"baseUrl": "ghcr.io",
 						"subPath": "my-org/components"
 					},
-					"policy": "auto"
+					"policy": "AddIfSupported"
 				}
 			]
 		}`)
@@ -52,14 +52,14 @@ func TestLookup(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
 
-		assert.Equal(t, ownershipv1alpha1.PolicyAuto, cfg.Policy)
+		assert.Equal(t, ownershipv1alpha1.PolicyAddIfSupported, cfg.Policy)
 		require.Len(t, cfg.Repositories, 2)
 
-		assert.Equal(t, ownershipv1alpha1.PolicyDisabled, cfg.Repositories[0].Policy)
+		assert.Equal(t, ownershipv1alpha1.PolicyNever, cfg.Repositories[0].Policy)
 		require.NotNil(t, cfg.Repositories[0].Repository)
 		assert.Equal(t, "OCIRepository/v1", cfg.Repositories[0].Repository.Type.String())
 
-		assert.Equal(t, ownershipv1alpha1.PolicyAuto, cfg.Repositories[1].Policy)
+		assert.Equal(t, ownershipv1alpha1.PolicyAddIfSupported, cfg.Repositories[1].Policy)
 		require.NotNil(t, cfg.Repositories[1].Repository)
 		assert.Equal(t, "OCIRepository/v1", cfg.Repositories[1].Repository.Type.String())
 	})
@@ -73,21 +73,21 @@ func TestLookup(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
 
-		assert.Empty(t, cfg.Policy, "policy must default to empty (disabled) when omitted")
+		assert.Empty(t, cfg.Policy, "policy must default to empty (Never) when omitted")
 		assert.Empty(t, cfg.Repositories)
 	})
 
 	t.Run("unversioned type backward compatibility", func(t *testing.T) {
 		generic := makeGenericConfig(t, `{
 			"type": "ownership.config.ocm.software",
-			"policy": "auto"
+			"policy": "AddIfSupported"
 		}`)
 
 		cfg, err := ownershipv1alpha1.Lookup(generic)
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
 
-		assert.Equal(t, ownershipv1alpha1.PolicyAuto, cfg.Policy)
+		assert.Equal(t, ownershipv1alpha1.PolicyAddIfSupported, cfg.Policy)
 	})
 }
 
@@ -95,33 +95,45 @@ func TestMerge(t *testing.T) {
 	t.Run("last policy wins and repositories concatenated", func(t *testing.T) {
 		cfg1 := &ownershipv1alpha1.Config{
 			Type:   runtime.NewVersionedType(ownershipv1alpha1.ConfigType, ownershipv1alpha1.Version),
-			Policy: ownershipv1alpha1.PolicyDisabled,
+			Policy: ownershipv1alpha1.PolicyNever,
 			Repositories: []*ownershipv1alpha1.RepositoryPolicy{
-				{Repository: &runtime.Raw{}, Policy: ownershipv1alpha1.PolicyDisabled},
+				{Repository: &runtime.Raw{}, Policy: ownershipv1alpha1.PolicyNever},
 			},
 		}
 		cfg2 := &ownershipv1alpha1.Config{
 			Type:   runtime.NewVersionedType(ownershipv1alpha1.ConfigType, ownershipv1alpha1.Version),
-			Policy: ownershipv1alpha1.PolicyAuto,
+			Policy: ownershipv1alpha1.PolicyAddIfSupported,
 			Repositories: []*ownershipv1alpha1.RepositoryPolicy{
-				{Repository: &runtime.Raw{}, Policy: ownershipv1alpha1.PolicyAuto},
+				{Repository: &runtime.Raw{}, Policy: ownershipv1alpha1.PolicyAddIfSupported},
 			},
 		}
 
 		merged := ownershipv1alpha1.Merge(cfg1, cfg2)
 		require.NotNil(t, merged)
-		assert.Equal(t, ownershipv1alpha1.PolicyAuto, merged.Policy)
+		assert.Equal(t, ownershipv1alpha1.PolicyAddIfSupported, merged.Policy)
 		require.Len(t, merged.Repositories, 2)
-		assert.Equal(t, ownershipv1alpha1.PolicyDisabled, merged.Repositories[0].Policy)
-		assert.Equal(t, ownershipv1alpha1.PolicyAuto, merged.Repositories[1].Policy)
+		assert.Equal(t, ownershipv1alpha1.PolicyNever, merged.Repositories[0].Policy)
+		assert.Equal(t, ownershipv1alpha1.PolicyAddIfSupported, merged.Repositories[1].Policy)
 	})
 
 	t.Run("empty policy does not override", func(t *testing.T) {
-		cfg1 := &ownershipv1alpha1.Config{Policy: ownershipv1alpha1.PolicyAuto}
+		cfg1 := &ownershipv1alpha1.Config{Policy: ownershipv1alpha1.PolicyAddIfSupported}
 		cfg2 := &ownershipv1alpha1.Config{}
 
 		merged := ownershipv1alpha1.Merge(cfg1, cfg2)
 		require.NotNil(t, merged)
-		assert.Equal(t, ownershipv1alpha1.PolicyAuto, merged.Policy)
+		assert.Equal(t, ownershipv1alpha1.PolicyAddIfSupported, merged.Policy)
+	})
+
+	t.Run("nil configs are skipped", func(t *testing.T) {
+		cfg := &ownershipv1alpha1.Config{
+			Type:   runtime.NewVersionedType(ownershipv1alpha1.ConfigType, ownershipv1alpha1.Version),
+			Policy: ownershipv1alpha1.PolicyAddIfSupported,
+		}
+
+		merged := ownershipv1alpha1.Merge(nil, cfg, nil)
+		require.NotNil(t, merged)
+		assert.Equal(t, cfg.Type, merged.Type)
+		assert.Equal(t, ownershipv1alpha1.PolicyAddIfSupported, merged.Policy)
 	})
 }
