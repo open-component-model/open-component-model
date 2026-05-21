@@ -47,7 +47,7 @@ type ResourceInputMethod interface {
 	// ResourceConsumerIdentityProvider that resolves the identity of the given resource to use for credential resolution.
 	// These can then be passed to ProcessResource.
 	ResourceConsumerIdentityProvider
-	ProcessResource(ctx context.Context, resource *constructor.Resource, credentials map[string]string) (result *ResourceInputMethodResult, err error)
+	ProcessResource(ctx context.Context, resource *constructor.Resource, credentials runtime.Typed) (result *ResourceInputMethodResult, err error)
 }
 
 // SourceInputMethodResult is the return value of a SourceInputMethod.
@@ -87,7 +87,7 @@ type SourceInputMethod interface {
 	// SourceConsumerIdentityProvider that resolves the identity of the given source to use for credential resolution.
 	// These can then be passed to ProcessSource.
 	SourceConsumerIdentityProvider
-	ProcessSource(ctx context.Context, source *constructor.Source, credentials map[string]string) (result *SourceInputMethodResult, err error)
+	ProcessSource(ctx context.Context, source *constructor.Source, credentials runtime.Typed) (result *SourceInputMethodResult, err error)
 }
 
 type ResourceInputMethodProvider interface {
@@ -109,7 +109,7 @@ type ResourceDigestProcessor interface {
 	// ProcessResourceDigest processes the given resource and returns a new resource with the digest information set.
 	// The resource returned MUST have its digest information filled appropriately or the method MUST return an error.
 	// The resource passed MUST have an access set that can be used to interpret the resource and provide the digest.
-	ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error)
+	ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error)
 }
 
 type ResourceDigestProcessorProvider interface {
@@ -166,7 +166,7 @@ type ResourceRepository interface {
 	// These can then be passed to DownloadResource.
 	ResourceConsumerIdentityProvider
 	// DownloadResource downloads a resource from the repository.
-	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (content blob.ReadOnlyBlob, err error)
+	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (content blob.ReadOnlyBlob, err error)
 }
 
 type ResourceRepositoryProvider interface {

@@ -34,7 +34,7 @@ func (m *mockInputMethod) GetResourceCredentialConsumerIdentity(ctx context.Cont
 	return id, nil
 }
 
-func (m *mockInputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, creds map[string]string) (*ResourceInputMethodResult, error) {
+func (m *mockInputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, creds runtime.Typed) (*ResourceInputMethodResult, error) {
 	if m.processedResource != nil {
 		return &ResourceInputMethodResult{
 			ProcessedResource: m.processedResource,
@@ -78,7 +78,7 @@ func (m *mockResourceRepository) GetCredentialConsumerIdentity(ctx context.Conte
 	return identity, nil
 }
 
-func (m *mockResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (m *mockResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	if m.fail {
 		return nil, fmt.Errorf("simulated download failure")
 	}
@@ -134,7 +134,7 @@ func (m *mockDigestProcessor) GetResourceDigestProcessorCredentialConsumerIdenti
 	return identity, nil
 }
 
-func (m *mockDigestProcessor) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
+func (m *mockDigestProcessor) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
 	if m.processedDigest != nil {
 		resource.Digest = m.processedDigest
 	}
@@ -165,12 +165,8 @@ func (m *mockCredentialProvider) Resolve(ctx context.Context, identity runtime.I
 	return m.credentials[identity.GetType().String()], nil
 }
 
-func (m *mockCredentialProvider) ResolveTyped(ctx context.Context, identity runtime.Typed) (runtime.Typed, error) {
-	id, ok := identity.(runtime.Identity)
-	if !ok {
-		return nil, fmt.Errorf("unsupported identity type")
-	}
-	creds, err := m.Resolve(ctx, id)
+func (m *mockCredentialProvider) ResolveTyped(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
+	creds, err := m.Resolve(ctx, identity)
 	if err != nil {
 		return nil, err
 	}
