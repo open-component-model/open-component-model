@@ -28,6 +28,10 @@ func BuildGraphDefinition(
 		}
 	}
 
+	if err := o.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid transfer options: %w", err)
+	}
+
 	roots, err := collectTransferRoots(ctx, &o)
 	if err != nil {
 		return nil, err
