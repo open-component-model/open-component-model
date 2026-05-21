@@ -64,21 +64,6 @@ func TestConvertToOIDCIdentityToken(t *testing.T) {
 			},
 		},
 		{
-			name: "DirectCredentials with deprecated snake_case tokenFile key",
-			input: &credv1.DirectCredentials{
-				Type: runtime.NewVersionedType(credv1.DirectCredentialsType, credv1.Version),
-				Properties: map[string]string{
-					credentialKeyToken:               "test-token",
-					deprecatedCredentialKeyTokenFile: "/path/token",
-				},
-			},
-			want: &OIDCIdentityToken{
-				Type:      VersionedType,
-				Token:     "test-token",
-				TokenFile: "/path/token",
-			},
-		},
-		{
 			name: "Raw",
 			input: &runtime.Raw{
 				Type: VersionedType,

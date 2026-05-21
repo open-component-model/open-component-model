@@ -64,21 +64,6 @@ func TestConvertToTrustedRoot(t *testing.T) {
 			},
 		},
 		{
-			name: "DirectCredentials with deprecated snake_case keys",
-			input: &credv1.DirectCredentials{
-				Type: runtime.NewVersionedType(credv1.DirectCredentialsType, credv1.Version),
-				Properties: map[string]string{
-					deprecatedCredentialKeyTrustedRootJSON:     `{"keys":[]}`,
-					deprecatedCredentialKeyTrustedRootJSONFile: "/path/root.json",
-				},
-			},
-			want: &TrustedRoot{
-				Type:                VersionedType,
-				TrustedRootJSON:     `{"keys":[]}`,
-				TrustedRootJSONFile: "/path/root.json",
-			},
-		},
-		{
 			name: "Raw",
 			input: &runtime.Raw{
 				Type: VersionedType,

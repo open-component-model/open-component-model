@@ -178,22 +178,22 @@ func (h *Handler) Verify(
 		return fmt.Errorf("invalid verification config: %w", err)
 	}
 
-	var trCreds *trustedrootv1.TrustedRoot
+	var trustedRootCreds *trustedrootv1.TrustedRoot
 	if creds != nil {
 		c, err := trustedrootv1.ConvertToTrustedRoot(creds)
 		if err != nil {
 			return fmt.Errorf("convert credentials: %w", err)
 		}
-		trCreds = c
+		trustedRootCreds = c
 	}
-	if trCreds == nil {
+	if trustedRootCreds == nil {
 		// TrustedRoot is optional and only needed if cfg.PrivateInfrastructure is true.
-		trCreds = &trustedrootv1.TrustedRoot{}
+		trustedRootCreds = &trustedrootv1.TrustedRoot{}
 	}
 
 	if cfg.PrivateInfrastructure &&
-		strings.TrimSpace(trCreds.TrustedRootJSON) == "" &&
-		strings.TrimSpace(trCreds.TrustedRootJSONFile) == "" {
+		strings.TrimSpace(trustedRootCreds.TrustedRootJSON) == "" &&
+		strings.TrimSpace(trustedRootCreds.TrustedRootJSONFile) == "" {
 		return fmt.Errorf("privateInfrastructure requires a trusted root: " +
 			"provide a TrustedRoot credential (trustedRootJSON or trustedRootJSONFile)")
 	}
@@ -225,7 +225,7 @@ func (h *Handler) Verify(
 		}
 	}()
 
-	trustedRootPath, err := resolveTrustedRootPath(trCreds, tmpDir)
+	trustedRootPath, err := resolveTrustedRootPath(trustedRootCreds, tmpDir)
 	if err != nil {
 		return fmt.Errorf("resolve trusted root: %w", err)
 	}

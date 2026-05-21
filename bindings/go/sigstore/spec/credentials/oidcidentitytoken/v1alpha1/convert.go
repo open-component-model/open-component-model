@@ -11,10 +11,6 @@ const (
 	// camelCase JSON property keys — primary form expected on DirectCredentials.
 	credentialKeyToken     = "token"
 	credentialKeyTokenFile = "tokenFile"
-
-	// Legacy snake_case alias accepted from .ocmconfig as fallback.
-	// TODO(matthiasbruns): https://github.com/open-component-model/ocm-project/issues/1072
-	deprecatedCredentialKeyTokenFile = "token_file"
 )
 
 var convertScheme = runtime.NewScheme()
@@ -66,13 +62,6 @@ func fromDirectCredentials(properties map[string]string) *OIDCIdentityToken {
 	return &OIDCIdentityToken{
 		Type:      VersionedType,
 		Token:     properties[credentialKeyToken],
-		TokenFile: lookupProperty(properties, credentialKeyTokenFile, deprecatedCredentialKeyTokenFile),
+		TokenFile: properties[credentialKeyTokenFile],
 	}
-}
-
-func lookupProperty(properties map[string]string, key, deprecated string) string {
-	if v := properties[key]; v != "" {
-		return v
-	}
-	return properties[deprecated]
 }

@@ -11,11 +11,6 @@ const (
 	// camelCase JSON property keys — primary form expected on DirectCredentials.
 	credentialKeyTrustedRootJSON     = "trustedRootJSON"
 	credentialKeyTrustedRootJSONFile = "trustedRootJSONFile"
-
-	// Legacy snake_case aliases accepted from .ocmconfig as fallback.
-	// TODO(matthiasbruns): https://github.com/open-component-model/ocm-project/issues/1072
-	deprecatedCredentialKeyTrustedRootJSON     = "trusted_root_json"
-	deprecatedCredentialKeyTrustedRootJSONFile = "trusted_root_json_file"
 )
 
 var convertScheme = runtime.NewScheme()
@@ -66,14 +61,7 @@ func ConvertToTrustedRoot(creds runtime.Typed) (*TrustedRoot, error) {
 func fromDirectCredentials(properties map[string]string) *TrustedRoot {
 	return &TrustedRoot{
 		Type:                VersionedType,
-		TrustedRootJSON:     lookupProperty(properties, credentialKeyTrustedRootJSON, deprecatedCredentialKeyTrustedRootJSON),
-		TrustedRootJSONFile: lookupProperty(properties, credentialKeyTrustedRootJSONFile, deprecatedCredentialKeyTrustedRootJSONFile),
+		TrustedRootJSON:     properties[credentialKeyTrustedRootJSON],
+		TrustedRootJSONFile: properties[credentialKeyTrustedRootJSONFile],
 	}
-}
-
-func lookupProperty(properties map[string]string, key, deprecated string) string {
-	if v := properties[key]; v != "" {
-		return v
-	}
-	return properties[deprecated]
 }
