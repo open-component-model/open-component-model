@@ -188,7 +188,7 @@ A component version can have **multiple signatures** from different parties, ena
 
 ## Supported Signing Algorithms
 
-OCM supports two algorithm families: long-lived RSA key pairs and keyless signing via [Sigstore](https://www.sigstore.dev/).
+OCM's `signature.algorithm` field selects between two signing approaches: classical RSA signatures over a long-lived key pair, and [Sigstore](https://www.sigstore.dev/)-based keyless signing, where each signature is made with a fresh, short-lived key bound to your OIDC identity. The two approaches differ not just in cryptography but in their trust model — see [Trust Models](#trust-models) below.
 
 | Algorithm | Type | Trust Model | Characteristics |
 | --------- | ---- | ----------- | --------------- |
@@ -315,7 +315,7 @@ Sigstore (keyless) signing is currently being rolled out and we are awaiting fee
 
 ## Trust Models
 
-The algorithm and encoding policy you choose determine how verifiers establish trust in a signature. OCM supports three trust models.
+The signing approach you choose determines how verifiers establish trust in a signature. RSA-based algorithms support two models depending on encoding policy (key pinning or certificate chain); Sigstore brings a third, identity-based model. OCM supports three trust models in total.
 
 ### Key Pinning (Plain Encoding)
 
