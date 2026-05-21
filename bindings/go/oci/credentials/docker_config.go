@@ -89,6 +89,11 @@ var storeConcurrencyMu sync.Mutex
 
 // ResolveV1DockerConfigCredentials resolves credentials from a Docker configuration
 // for a given identity. It supports both file-based and in-memory Docker configurations.
+//
+// The function will:
+//   - Load credentials from the specified Docker config source
+//   - Match the credentials against the provided identity
+//   - Return [v1.OCICredentials] if a match is found, or nil if no credentials are found
 func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig v1.DockerConfig, identity runtime.Identity) (*v1.OCICredentials, error) {
 	credStore, err := getStore(ctx, dockerConfig)
 	if err != nil {
