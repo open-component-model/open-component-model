@@ -172,12 +172,13 @@ If you've done classical key-based signing, here's what changes:
 
 | Aspect | RSA | Sigstore |
 | --- | --- | --- |
-| Before you sign | Generate key pair, configure `.ocmconfig` with file paths | Nothing — just log in when prompted |
-| What proves authorship | Possession of the private key | Your OIDC login (e.g. corporate email) |
+| Before you start | Generate key pair, configure `.ocmconfig` with file paths | Nothing — just log in when prompted |
+| What proves trust | Possession of the private key | Your OIDC login (e.g. corporate email) |
 | What the verifier needs | Your public key, distributed somehow | Your expected identity (email + provider) |
-| Audit trail | None unless you build one | Public, automatic |
 
-**Mental model:** your identity is the key. When you sign, you log in with your OIDC provider (Google, GitHub, Microsoft, …). Sigstore issues a short-lived certificate that binds the signature to that identity. The verifier doesn't need a public key from you — they just check that the identity in the certificate is one they trust.
+Sigstore also gives you a public, automatic audit trail (Rekor transparency log); RSA gives you none unless you build one.
+
+For the conceptual picture (how Fulcio, Rekor, and OIDC fit together), see [Identity-Based Trust (Sigstore)]({{< relref "docs/concepts/signing-and-verification-concept.md#identity-based-trust-sigstore" >}}).
 
 <!-- markdownlint-disable-next-line MD024 -->
 ## You'll end up with
@@ -191,10 +192,14 @@ If you've done classical key-based signing, here's what changes:
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
 - A browser on the same machine (signing opens a browser window to log you in)
+- An OIDC identity with a provider supported by your Sigstore stack — on public Sigstore that's Google, GitHub, or Microsoft
+- Network access to `*.sigstore.dev` (in particular `fulcio.sigstore.dev`, `oauth2.sigstore.dev`, `rekor.sigstore.dev`, `tuf-repo-cdn.sigstore.dev`) — corporate networks often block these
+- If `cosign` isn't on your PATH or its version is too low, OCM downloads and caches it under `~/.cache/ocm/cosign/...` automatically; subsequent runs skip the download
 - A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
 
 {{< callout context="note" >}}
-Want the full picture of what's happening behind the scenes (Fulcio certificates, Rekor transparency log, OIDC token flow)? A dedicated Sigstore tutorial is in the works. For now, [ADR 0017: Sigstore Integration](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0017_sigstore_integration.md) covers the design.
+<!-- TODO(#2588): once the Sigstore tutorial lands on main, restore the relref to docs/tutorials/signing/sigstore.md around "Tutorial: Sigstore (Keyless)" -->
+For the end-to-end walkthrough including how Fulcio certificates, Rekor transparency log, and the OIDC token flow fit together, see Tutorial: Sigstore (Keyless). Design background lives in [ADR 0017: Sigstore Integration](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0017_sigstore_integration.md).
 {{< /callout >}}
 
 <!-- markdownlint-disable-next-line MD024 -->
@@ -289,10 +294,6 @@ signature:
 time=2026-05-19T17:43:28.524+02:00 level=INFO msg="signed successfully" name=default digest=91dd197868907487e62872695db1fa7b397fde300bcbae23e24abc188fb147ad hashAlgorithm=SHA-256 normalisationAlgorithm=jsonNormalisation/v4alpha1
 ```
 {{< /details >}}
-
-{{< callout context="tip" >}}
-If the `cosign` binary is not on your PATH or its version to low, OCM will download and cache the binary into `~/.cache/ocm/cosign/...`. Subsequent runs skip the download.
-{{< /callout >}}
 
 {{< /step >}}
 

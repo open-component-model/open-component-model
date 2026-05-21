@@ -140,13 +140,13 @@ Verify a [Sigstore](https://www.sigstore.dev/) keyless signature made by a perso
 
 If you've done classical key-based verification, here's what changes:
 
-| Aspect               | RSA                                                    | Sigstore                                                        |
-|----------------------|--------------------------------------------------------|-----------------------------------------------------------------|
-| Before you verify    | Obtain the signer's public key, configure `.ocmconfig` | Nothing — declare expected identity in a verifier spec file     |
-| What proves trust    | Signature decrypts with the public key you have        | Signature ties back to an OIDC identity you've decided to trust |
-| Key rotation problem | You re-distribute the new public key                   | Doesn't apply — there's no long-lived key                       |
+| Aspect                  | RSA                                                    | Sigstore                                                        |
+| ----------------------- | ------------------------------------------------------ | --------------------------------------------------------------- |
+| Before you start        | Obtain the signer's public key, configure `.ocmconfig` | Nothing — declare expected identity in a verifier spec file     |
+| What proves trust       | Signature decrypts with the public key you have        | Signature ties back to an OIDC identity you've decided to trust |
+| What the verifier needs | The signer's public key (rotated and re-distributed)   | The expected OIDC identity and issuer — no long-lived key       |
 
-**Mental model:** instead of asking "does this signature match the public key I was handed?" you ask "was this signed by `jane.doe@example.com` logging in via GitHub?" The verifier only needs to know **who** to trust.
+For the conceptual picture (how Fulcio, Rekor, and OIDC fit together), see [Identity-Based Trust (Sigstore)]({{< relref "docs/concepts/signing-and-verification-concept.md#identity-based-trust-sigstore" >}}).
 
 <!-- markdownlint-disable-next-line MD024 -->
 ## You'll end up with
@@ -163,7 +163,8 @@ If you've done classical key-based verification, here's what changes:
 - The expected signer identity (their OIDC email and which provider they logged in with)
 
 {{< callout context="note" >}}
-Want the full picture of how Sigstore verification works behind the scenes (Fulcio certificate validation, Rekor inclusion proofs, TUF trust roots)? A dedicated Sigstore tutorial is in the works. For now, [ADR 0017: Sigstore Integration](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0017_sigstore_integration.md) covers the design.
+<!-- TODO(#2588): once the Sigstore tutorial lands on main, restore the relref to docs/tutorials/signing/sigstore.md around "Tutorial: Sigstore (Keyless)" -->
+For the end-to-end walkthrough including Fulcio certificate validation, Rekor inclusion proofs, and TUF trust roots, see Tutorial: Sigstore (Keyless). Design background lives in [ADR 0017: Sigstore Integration](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0017_sigstore_integration.md).
 {{< /callout >}}
 
 <!-- markdownlint-disable-next-line MD024 -->
@@ -252,33 +253,22 @@ time=2026-05-19T18:49:13.856+02:00 level=INFO msg="SIGNATURE VERIFICATION SUCCES
 
 ### Verify a specific signature
 
-If the component carries multiple signatures (e.g. an RSA signature and a Sigstore signature), select one with `--signature`:
+If the component carries multiple signatures (e.g. an RSA signature and a Sigstore signature), select one by **name** with `--signature`. The name is whatever was set at sign time — `default` if no `--signature` flag was passed:
 
 ```bash
 ocm verify cv \
   --verifier-spec ./sigstore-verify.yaml \
-  --signature sigstore \
+  --signature default \
   ghcr.io/<your namespace>//github.com/acme.org/helloworld:1.0.0
 ```
 
 {{< callout context="note" >}}
-The verifier spec's `type` field decides **which** verifier handles the signature. The `--signature` flag picks **which** signature on the component to verify.
+The verifier spec's `type` field decides **which algorithm/handler** verifies the signature. The `--signature` flag picks **which named signature** on the component to verify (matched by name, not by algorithm).
 {{< /callout >}}
 
 {{< /step >}}
 
 {{< /steps >}}
-
-## Inspect the recorded identity (optional)
-
-If verification fails because of an identity mismatch, you can read the identity directly from the signature to see what to put in your spec:
-
-```bash
-ocm get cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 -o yaml \
-  | yq '.[0].signatures[] | select(.signature.algorithm == "sigstore")'
-```
-
-Look for the signer email and the OIDC issuer URL. Those are exactly what `certificateIdentity` and `certificateOIDCIssuer` are matched against.
 
 <!-- markdownlint-disable-next-line MD024 -->
 ## Troubleshooting
@@ -301,7 +291,8 @@ Error: SIGNATURE VERIFICATION FAILED: cosign verify-blob failed: exit status 1
 stderr: Error: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected issuer value "https://accounts.google.com", got "https://github.com/login/oauth"
 ```
 
-**Fix:** Inspect the signature (see above) to read the actual identity, and update `certificateIdentity` / `certificateOIDCIssuer` to match. Watch for trailing slashes and capitalization.
+<!-- TODO(#2588): once the Sigstore tutorial lands on main, restore the relref to docs/tutorials/signing/sigstore.md around "Tutorial: Sigstore (Keyless) — Inspect the signature" -->
+**Fix:** Update `certificateIdentity` / `certificateOIDCIssuer` in your verifier spec to match the identity actually recorded in the signature. Watch for trailing slashes and capitalization. To read the actual identity stored in the signature, see Tutorial: Sigstore (Keyless) — Inspect the signature.
 
 ### Symptom: "keyless verification requires both an issuer constraint ... and an identity constraint"
 
