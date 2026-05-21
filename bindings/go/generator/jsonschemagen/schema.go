@@ -164,6 +164,14 @@ func (g *generation) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo, field 
 		return sch
 	}
 
+	// Types not registered in the universe (e.g. encoding/json.RawMessage) need direct
+	// resolution via types.Info to detect well-known external types.
+	if key, ok := universe.ResolveExprToTypeKey(ctx.Pkg.TypesInfo, expr); ok {
+		if universe.IsJSONRawMessageKey(key) {
+			return anySchema()
+		}
+	}
+
 	switch t := expr.(type) {
 	case *ast.StarExpr:
 		return g.schemaForExpr(t.X, ctx, field)
@@ -425,6 +433,10 @@ func anyObjectSchema() *JSONSchemaDraft202012 {
 		Type:                 "object",
 		AdditionalProperties: &SchemaOrBool{Bool: Ptr(true)},
 	}
+}
+
+func anySchema() *JSONSchemaDraft202012 {
+	return &JSONSchemaDraft202012{}
 }
 
 func Ptr[T any](v T) *T { return &v }

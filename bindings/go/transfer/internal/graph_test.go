@@ -635,3 +635,67 @@ func TestBuildGraphDefinition_CleanupMultiTarget_AggregatesAllRefs(t *testing.T)
 	}
 	assert.NotEqual(t, exprs[0], exprs[1], "multi-target refs should have different Add IDs")
 }
+
+// Regression test for https://github.com/open-component-model/open-component-model/issues/2585:
+// labels on the component descriptor must be forwarded into the upload transformation spec.
+func TestBuildDescriptorSpec_LabelsIncluded(t *testing.T) {
+	labels := []descriptorv2.Label{
+		{Name: "imagevector.gardener.cloud/name", Value: []byte(`"alpine"`)},
+		{Name: "priority", Value: []byte(`42`)},
+	}
+	v2desc := &descriptorv2.Descriptor{
+		Component: descriptorv2.Component{
+			ComponentMeta: descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Name:    "ocm.software/test",
+					Version: "1.0.0",
+					Labels:  labels,
+				},
+			},
+		},
+	}
+
+	// One resource so buildDescriptorSpec builds the composite map (resourceTransformIDs non-empty).
+	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
+
+	specMap, ok := spec.(map[string]any)
+	require.True(t, ok, "spec should be a map when resources are transformed")
+
+	componentMap, ok := specMap["component"].(map[string]any)
+	require.True(t, ok, "component field must be a map")
+
+	labelsExpr, ok := componentMap["labels"]
+	require.True(t, ok, "labels must be present in component map")
+	require.NotNil(t, labelsExpr, "labels value must not be nil")
+	assert.Contains(t, labelsExpr.(string), "labels", "labels expression must reference environment labels")
+}
+
+// Regression test: when labels is nil (no labels), the field is absent from the component map
+// (not set to a non-nil CEL expression that would fail evaluation).
+func TestBuildDescriptorSpec_NoLabelsOmitted(t *testing.T) {
+	v2desc := &descriptorv2.Descriptor{
+		Component: descriptorv2.Component{
+			ComponentMeta: descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Name:    "ocm.software/test",
+					Version: "1.0.0",
+				},
+			},
+		},
+	}
+
+	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
+
+	specMap, ok := spec.(map[string]any)
+	require.True(t, ok)
+
+	componentMap, ok := specMap["component"].(map[string]any)
+	require.True(t, ok)
+
+	labelsVal, present := componentMap["labels"]
+	if present {
+		assert.Nil(t, labelsVal, "when labels is nil, the map entry must be nil (not a CEL ref)")
+	}
+}
