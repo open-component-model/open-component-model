@@ -64,6 +64,11 @@ func PrivateKeyRingFromCredentials(creds *gpgcredentialsv1.GPGCredentials) (open
 			if entity.PrivateKey != nil && entity.PrivateKey.Encrypted {
 				return nil, fmt.Errorf("private key is passphrase-protected but no passphrase was provided")
 			}
+			for _, sub := range entity.Subkeys {
+				if sub.PrivateKey != nil && sub.PrivateKey.Encrypted {
+					return nil, fmt.Errorf("private key is passphrase-protected but no passphrase was provided")
+				}
+			}
 		}
 	}
 

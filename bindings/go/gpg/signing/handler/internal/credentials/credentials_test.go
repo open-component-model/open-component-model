@@ -161,6 +161,28 @@ func TestPublicKeyRingFromCredentials_Empty(t *testing.T) {
 	assert.Nil(t, ring)
 }
 
+func TestPrivateEntityFromCredentials_EncryptedSubkeyNoPassphrase(t *testing.T) {
+	// Build entity with unencrypted primary key but encrypted signing subkey.
+	cfg := &packet.Config{RSABits: 2048}
+	entity, err := openpgp.NewEntity("test", "", "test@example.com", cfg)
+	require.NoError(t, err)
+
+	const passphrase = "test-subkey-passphrase"
+	for _, sub := range entity.Subkeys {
+		if sub.PrivateKey != nil {
+			require.NoError(t, sub.PrivateKey.Encrypt([]byte(passphrase)))
+		}
+	}
+
+	armored := armoredPrivKeyStr(t, entity)
+
+	_, err = PrivateEntityFromCredentials(&gpgcredentialsv1.GPGCredentials{
+		PrivateKeyPGP: armored,
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "passphrase")
+}
+
 func TestLoadBytes(t *testing.T) {
 	existingFile := filepath.Join(t.TempDir(), "data.asc")
 	require.NoError(t, os.WriteFile(existingFile, []byte("from-file"), 0o600))
