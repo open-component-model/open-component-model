@@ -23,20 +23,19 @@
 //
 // The OCM Sigstore algorithm is versioned to allow multiple generations of the
 // signing flow to coexist. The current generation is "Sigstore/v1alpha1"
-// (signing/v1alpha1.AlgorithmSigstoreV1Alpha1). Endpoint and bundle conventions
-// are tied to this Algorithm value.
+// (signing/v1alpha1.AlgorithmSigstoreV1Alpha1).
 //
 // SignConfig.SignatureAlgorithm is optional. When empty, the handler picks
 // signing/v1alpha1.AlgorithmSigstoreDefault, which is the recommended default
-// for new signatures. Bumping the default is a breaking change — see
-// signing/v1alpha1/algorithm.go for the contract.
+// for new signatures. Bumping the default is a breaking change.
 //
-// On verify, the handler validates SignatureInfo.Algorithm strictly: the value
-// must be set, must be a known Algorithm, and the bundle MediaType must be in
-// the algorithm's accepted list (signing/v1alpha1.AcceptableMediaTypes). A
-// future cosign bundle wire-format version (e.g. v0.4) that is semantically
-// compatible can be added to the existing Algorithm's media-type list without
-// bumping the Algorithm version.
+// Algorithm and bundle MediaType are validated independently on verify:
+// SignatureInfo.Algorithm must be a known Algorithm
+// (signing/v1alpha1.IsKnownAlgorithm) and SignatureInfo.MediaType must be a
+// MediaType this handler can read (signing/v1alpha1.IsAcceptableMediaType).
+// A future cosign bundle wire-format version that is semantically compatible
+// can be added by extending IsAcceptableMediaType — independent of any
+// algorithm change.
 //
 // # Endpoint Discovery
 //

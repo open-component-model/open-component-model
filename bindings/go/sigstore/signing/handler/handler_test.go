@@ -419,7 +419,7 @@ func TestSign_DefaultAlgorithm(t *testing.T) {
 	result, err := h.Sign(t.Context(), testDigest(), cfg, &oidcv1.OIDCIdentityToken{Token: "test-token"})
 	r.NoError(err)
 	r.Equal(string(v1alpha1.AlgorithmSigstoreDefault), result.Algorithm)
-	r.Equal(v1alpha1.DefaultBundleMediaType(v1alpha1.AlgorithmSigstoreDefault), result.MediaType)
+	r.Equal(v1alpha1.MediaTypeSigstoreBundle, result.MediaType)
 }
 
 func TestSign_ExplicitAlgorithm(t *testing.T) {
