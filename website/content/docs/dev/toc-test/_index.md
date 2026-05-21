@@ -8,5 +8,6 @@ sidebar:
 ---
 
 These pages are only used during development to validate the
-right-hand TOC behaviour with `tabs`/`steps` shortcodes. They have no
+right-hand TOC behavior with `tab-group`/`tab-section` and
+`step-list`/`step-item` shortcodes. They have no
 production purpose.
