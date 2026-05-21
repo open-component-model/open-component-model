@@ -387,6 +387,7 @@ func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTra
 		"resources": resourcesArray,
 	}
 
+	setOptionalField(componentMap, "labels", id, v2desc.Component.Labels != nil)
 	setOptionalField(componentMap, "repositoryContexts", id, v2desc.Component.RepositoryContexts != nil)
 	setOptionalField(componentMap, "sources", id, v2desc.Component.Sources != nil)
 	setOptionalField(componentMap, "componentReferences", id, v2desc.Component.References != nil)
