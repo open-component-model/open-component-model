@@ -74,8 +74,11 @@ func (cfg *Config) Validate() error {
 		return nil
 	}
 
-	if !cfg.Type.IsEmpty() && cfg.Type.Name != ConfigType {
-		return fmt.Errorf("invalid type %q (must be %q)", cfg.Type, ConfigType)
+	if !cfg.Type.IsEmpty() {
+		if cfg.Type.Name != ConfigType || (cfg.Type.Version != "" && cfg.Type.Version != Version) {
+			return fmt.Errorf("invalid type %q (must be %q or %q)",
+				cfg.Type, ConfigType, runtime.NewVersionedType(ConfigType, Version))
+		}
 	}
 
 	switch cfg.CopyMode {

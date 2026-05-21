@@ -547,7 +547,7 @@ func TestBuildGraphDefinition_NoCleanupForStreamingOCIArtifact(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeAllResources, UploadAsOciArtifact)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, transferv1alpha1.CopyModeAllResources, transferv1alpha1.UploadAsOciArtifact)
 	require.NoError(t, err)
 
 	// TransferOCIArtifact streams blobs directly — no temp file is ever created.
