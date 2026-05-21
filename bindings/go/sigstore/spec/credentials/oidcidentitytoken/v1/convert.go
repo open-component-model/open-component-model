@@ -8,12 +8,20 @@ import (
 )
 
 const (
-	CredentialKeyToken     = "token"
-	CredentialKeyTokenFile = "tokenFile"
+	CredentialKeyToken               = "token"
+	CredentialKeyTokenFile           = "tokenFile"
+	CredentialKeyTrustedRootJSON     = "trustedRootJSON"
+	CredentialKeyTrustedRootJSONFile = "trustedRootJSONFile"
 )
 
 // Deprecated: Use CredentialKeyTokenFile instead.
-const DeprecatedCredentialKeyTokenFile = "token_file"
+const (
+	DeprecatedCredentialKeyTokenFile = "token_file"
+	// Deprecated: Use CredentialKeyTrustedRootJSON instead.
+	DeprecatedCredentialKeyTrustedRootJSON = "trusted_root_json"
+	// Deprecated: Use CredentialKeyTrustedRootJSONFile instead.
+	DeprecatedCredentialKeyTrustedRootJSONFile = "trusted_root_json_file"
+)
 
 var convertScheme = runtime.NewScheme()
 
@@ -30,7 +38,15 @@ func init() {
 // Other supported [runtime.Typed] implementations are [runtime.Raw].
 // For unsupported [runtime.Typed] implementations, an error will be returned.
 func ConvertToOIDCIdentityToken(creds runtime.Typed) (*OIDCIdentityToken, error) {
-	typed, err := convertScheme.NewObject(creds.GetType())
+	typ := creds.GetType()
+	if typ.IsEmpty() {
+		var err error
+		typ, err = convertScheme.TypeForPrototype(creds)
+		if err != nil {
+			return nil, fmt.Errorf("error converting credential type: %w", err)
+		}
+	}
+	typed, err := convertScheme.NewObject(typ)
 	if err != nil {
 		return nil, fmt.Errorf("error converting credential type: %w", err)
 	}
@@ -54,6 +70,8 @@ func fromDirectCredentials(properties map[string]string) *OIDCIdentityToken {
 		Type:      runtime.NewVersionedType(OIDCIdentityTokenType, Version),
 		Token:     properties[CredentialKeyToken],
 		TokenFile: lookupProperty(properties, CredentialKeyTokenFile, DeprecatedCredentialKeyTokenFile),
+		TrustedRootJSON:     lookupProperty(properties, CredentialKeyTrustedRootJSON, DeprecatedCredentialKeyTrustedRootJSON),
+		TrustedRootJSONFile: lookupProperty(properties, CredentialKeyTrustedRootJSONFile, DeprecatedCredentialKeyTrustedRootJSONFile),
 	}
 }
 

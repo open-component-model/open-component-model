@@ -23,7 +23,6 @@ import (
 	sigcredentials "ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal/credentials"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 	oidcv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1"
-	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1"
 )
 
 var _ signing.Handler = (*Handler)(nil)
@@ -34,8 +33,8 @@ const (
 	IdentityAttributeClientID  = "clientID"
 
 	CredentialKeyOIDCToken           = oidcv1.CredentialKeyToken
-	CredentialKeyTrustedRootJSON     = trustedrootv1.CredentialKeyTrustedRootJSON
-	CredentialKeyTrustedRootJSONFile = trustedrootv1.CredentialKeyTrustedRootJSONFile
+	CredentialKeyTrustedRootJSON     = oidcv1.CredentialKeyTrustedRootJSON
+	CredentialKeyTrustedRootJSONFile = oidcv1.CredentialKeyTrustedRootJSONFile
 )
 
 // Handler implements signing.Handler by delegating to the cosign CLI.
@@ -92,11 +91,11 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("digest value must not be empty")
 	}
 
-	oidcToken, trustedRoot := convertOptionalCredentials(creds)
+	oidcCreds := convertOptionalCredentials(creds)
 
 	env := os.Environ()
 	if !internal.HasEnvKey(env, "SIGSTORE_ID_TOKEN") && !internal.HasEnvKey(env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN") {
-		token := strings.TrimSpace(oidcToken.Token)
+		token := strings.TrimSpace(oidcCreds.Token)
 		if token == "" {
 			return descruntime.SignatureInfo{}, fmt.Errorf("OIDC identity token required: " +
 				"set SIGSTORE_ID_TOKEN env var, use GitHub Actions OIDC, " +
@@ -122,7 +121,7 @@ func (h *Handler) Sign(
 
 	bundlePath := filepath.Join(tmpDir, "bundle.json")
 
-	trustedRootPath, err := resolveTrustedRootPath(trustedRoot, tmpDir)
+	trustedRootPath, err := resolveTrustedRootPath(oidcCreds, tmpDir)
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("resolve trusted root: %w", err)
 	}
@@ -162,17 +161,15 @@ func (h *Handler) Sign(
 	}, nil
 }
 
-func convertOptionalCredentials(creds runtime.Typed) (*oidcv1.OIDCIdentityToken, *trustedrootv1.TrustedRoot) {
+func convertOptionalCredentials(creds runtime.Typed) *oidcv1.OIDCIdentityToken {
+	if creds == nil {
+		return &oidcv1.OIDCIdentityToken{}
+	}
 	oidcIdentityToken, _ := oidcv1.ConvertToOIDCIdentityToken(creds)
 	if oidcIdentityToken == nil {
 		oidcIdentityToken = &oidcv1.OIDCIdentityToken{}
 	}
-	trustedRoot, _ := trustedrootv1.ConvertToTrustedRoot(creds)
-	if trustedRoot == nil {
-		trustedRoot = &trustedrootv1.TrustedRoot{}
-	}
-
-	return oidcIdentityToken, trustedRoot
+	return oidcIdentityToken
 }
 
 // Verify checks a Sigstore bundle via cosign verify-blob: decodes the bundle and digest,
@@ -197,11 +194,11 @@ func (h *Handler) Verify(
 		return fmt.Errorf("invalid verification config: %w", err)
 	}
 
-	_, trustedRoot := convertOptionalCredentials(creds)
+	oidcCreds := convertOptionalCredentials(creds)
 
 	if cfg.PrivateInfrastructure &&
-		strings.TrimSpace(trustedRoot.TrustedRootJSON) == "" &&
-		strings.TrimSpace(trustedRoot.TrustedRootJSONFile) == "" {
+		strings.TrimSpace(oidcCreds.TrustedRootJSON) == "" &&
+		strings.TrimSpace(oidcCreds.TrustedRootJSONFile) == "" {
 		return fmt.Errorf("privateInfrastructure requires a trusted root: " +
 			"provide a TrustedRoot credential (trusted_root_json or trusted_root_json_file)")
 	}
@@ -233,7 +230,7 @@ func (h *Handler) Verify(
 		}
 	}()
 
-	trustedRootPath, err := resolveTrustedRootPath(trustedRoot, tmpDir)
+	trustedRootPath, err := resolveTrustedRootPath(oidcCreds, tmpDir)
 	if err != nil {
 		return fmt.Errorf("resolve trusted root: %w", err)
 	}
@@ -322,7 +319,7 @@ func credentialIdentity(identityType runtime.Type) runtime.Identity {
 //  1. Inline JSON from credentials (written to a temp file, cleaned up by caller's defer os.RemoveAll(tmpDir))
 //  2. File path from credentials (not removed on cleanup)
 //  3. "" — cosign falls back to public-good TUF
-func resolveTrustedRootPath(creds *trustedrootv1.TrustedRoot, tmpDir string) (string, error) {
+func resolveTrustedRootPath(creds *oidcv1.OIDCIdentityToken, tmpDir string) (string, error) {
 	if creds == nil {
 		slog.Debug("no trusted root credentials provided")
 		return "", nil

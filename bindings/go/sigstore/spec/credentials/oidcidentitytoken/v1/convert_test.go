@@ -67,6 +67,40 @@ func TestConvertToOIDCIdentityToken(t *testing.T) {
 			},
 		},
 		{
+			name: "DirectCredentials with trustedRoot fields",
+			input: &credv1.DirectCredentials{
+				Type: runtime.NewVersionedType(credv1.DirectCredentialsType, credv1.Version),
+				Properties: map[string]string{
+					CredentialKeyToken:               "test-token",
+					CredentialKeyTrustedRootJSON:     `{"keys":[]}`,
+					CredentialKeyTrustedRootJSONFile: "/path/root.json",
+				},
+			},
+			want: &OIDCIdentityToken{
+				Type:                OIDCIdentityTokenVersionedType,
+				Token:               "test-token",
+				TrustedRootJSON:     `{"keys":[]}`,
+				TrustedRootJSONFile: "/path/root.json",
+			},
+		},
+		{
+			name: "DirectCredentials with deprecated trustedRoot keys",
+			input: &credv1.DirectCredentials{
+				Type: runtime.NewVersionedType(credv1.DirectCredentialsType, credv1.Version),
+				Properties: map[string]string{
+					CredentialKeyToken:                         "test-token",
+					DeprecatedCredentialKeyTrustedRootJSON:     `{"keys":[]}`,
+					DeprecatedCredentialKeyTrustedRootJSONFile: "/path/root.json",
+				},
+			},
+			want: &OIDCIdentityToken{
+				Type:                OIDCIdentityTokenVersionedType,
+				Token:               "test-token",
+				TrustedRootJSON:     `{"keys":[]}`,
+				TrustedRootJSONFile: "/path/root.json",
+			},
+		},
+		{
 			name: "Raw",
 			input: &runtime.Raw{
 				Type: OIDCIdentityTokenVersionedType,

@@ -26,7 +26,6 @@ import (
 	sigcredentials "ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal/credentials"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 	oidcv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1"
-	v2 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1"
 )
 
 // execRecorder captures args and env from ExecCosign calls and optionally writes a bundle file.
@@ -466,7 +465,7 @@ func TestVerify_TUF_ROOT_DoesNotSuppressTrustedRootFlag(t *testing.T) {
 	h := newWithRunner(mock)
 
 	cfg := testVerifyConfig()
-	creds := &v2.TrustedRoot{
+	creds := &oidcv1.OIDCIdentityToken{
 		TrustedRootJSONFile: "/cred/root.json",
 	}
 
@@ -710,7 +709,7 @@ func TestVerify_PrivateInfrastructureWithTrustedRootCredential(t *testing.T) {
 	cfg := testVerifyConfig()
 	cfg.PrivateInfrastructure = true
 
-	creds := &v2.TrustedRoot{
+	creds := &oidcv1.OIDCIdentityToken{
 		TrustedRootJSON: `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`,
 	}
 
@@ -829,19 +828,19 @@ func TestResolveTrustedRootPath(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		creds   *v2.TrustedRoot
+		creds   *oidcv1.OIDCIdentityToken
 		want    string
 		wantErr string
 		isFile  bool // if true, assert path exists as a file (written from inline JSON)
 	}{
 		{
 			name:   "inline JSON wins over file credential",
-			creds:  &v2.TrustedRoot{TrustedRootJSON: `{"mediaType":"test"}`, TrustedRootJSONFile: "/cred/root.json"},
+			creds:  &oidcv1.OIDCIdentityToken{TrustedRootJSON: `{"mediaType":"test"}`, TrustedRootJSONFile: "/cred/root.json"},
 			isFile: true,
 		},
 		{
 			name:  "file credential used",
-			creds: &v2.TrustedRoot{TrustedRootJSONFile: "/cred/root.json"},
+			creds: &oidcv1.OIDCIdentityToken{TrustedRootJSONFile: "/cred/root.json"},
 			want:  "/cred/root.json",
 		},
 		{
@@ -851,27 +850,27 @@ func TestResolveTrustedRootPath(t *testing.T) {
 		},
 		{
 			name:    "relative path rejected",
-			creds:   &v2.TrustedRoot{TrustedRootJSONFile: "../../etc/passwd"},
+			creds:   &oidcv1.OIDCIdentityToken{TrustedRootJSONFile: "../../etc/passwd"},
 			wantErr: "must be absolute",
 		},
 		{
 			name:    "path traversal rejected",
-			creds:   &v2.TrustedRoot{TrustedRootJSONFile: "/legit/../../../etc/passwd"},
+			creds:   &oidcv1.OIDCIdentityToken{TrustedRootJSONFile: "/legit/../../../etc/passwd"},
 			wantErr: "non-canonical",
 		},
 		{
 			name:  "whitespace-only JSON treated as empty",
-			creds: &v2.TrustedRoot{TrustedRootJSON: "   \n\t  "},
+			creds: &oidcv1.OIDCIdentityToken{TrustedRootJSON: "   \n\t  "},
 			want:  "",
 		},
 		{
 			name:  "whitespace-only file path treated as empty",
-			creds: &v2.TrustedRoot{TrustedRootJSONFile: "   "},
+			creds: &oidcv1.OIDCIdentityToken{TrustedRootJSONFile: "   "},
 			want:  "",
 		},
 		{
 			name:  "valid absolute path accepted",
-			creds: &v2.TrustedRoot{TrustedRootJSONFile: "/opt/sigstore/trusted_root.json"},
+			creds: &oidcv1.OIDCIdentityToken{TrustedRootJSONFile: "/opt/sigstore/trusted_root.json"},
 			want:  "/opt/sigstore/trusted_root.json",
 		},
 	}
