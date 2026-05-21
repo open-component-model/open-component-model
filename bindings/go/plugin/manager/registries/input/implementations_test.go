@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	v2 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -45,6 +47,6 @@ func TestProcessResourceHandler(t *testing.T) {
 				},
 			},
 		},
-	}, map[string]string{})
+	}, &v2.DirectCredentials{})
 	require.NoError(t, err)
 }

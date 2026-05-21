@@ -52,3 +52,4 @@ type RSACredentials struct {
 	// Same semantics as PrivateKeyPEM, but loaded from disk. Ignored when PrivateKeyPEM is also set.
 	PrivateKeyPEMFile string `json:"privateKeyPEMFile,omitempty"`
 }
+

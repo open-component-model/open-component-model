@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -77,9 +78,11 @@ func TestRegisterInternalCredentialPlugin(t *testing.T) {
 			require.Equal(t, runtime.Identity{"type": "stub"}, identity)
 			require.True(t, plugin.identityCalled)
 
-			creds, err := got.Resolve(ctx, identity, nil)
+			typed, err := got.Resolve(ctx, identity, nil)
 			require.NoError(t, err)
-			require.Equal(t, map[string]string{"token": "resolved"}, creds)
+			dc, ok := typed.(*credconfigv1.DirectCredentials)
+			require.True(t, ok, "expected *DirectCredentials, got %T", typed)
+			require.Equal(t, map[string]string{"token": "resolved"}, dc.Properties)
 			require.True(t, plugin.resolveCalled)
 
 			plugin.identityCalled = false
@@ -155,7 +158,10 @@ func (m *mockCredentialPlugin) GetConsumerIdentity(_ context.Context, _ runtime.
 	return runtime.Identity{"type": "stub"}, nil
 }
 
-func (m *mockCredentialPlugin) Resolve(_ context.Context, _ runtime.Identity, _ map[string]string) (map[string]string, error) {
+func (m *mockCredentialPlugin) Resolve(_ context.Context, _ runtime.Identity, _ runtime.Typed) (runtime.Typed, error) {
 	m.resolveCalled = true
-	return map[string]string{"token": "resolved"}, nil
+	return &credconfigv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
+		Properties: map[string]string{"token": "resolved"},
+	}, nil
 }

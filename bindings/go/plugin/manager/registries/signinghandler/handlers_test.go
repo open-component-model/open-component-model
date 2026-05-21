@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	credsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
@@ -29,11 +31,16 @@ func (s *stubSigningPlugin[T]) GetVerifierIdentity(ctx context.Context, req *v1.
 	return &v1.IdentityResponse{Identity: map[string]string{"id": "verifier"}}, nil
 }
 
-func (s *stubSigningPlugin[T]) Sign(ctx context.Context, request *v1.SignRequest[T], credentials map[string]string) (*v1.SignResponse, error) {
-	return &v1.SignResponse{Signature: &v2.SignatureInfo{Algorithm: "rsa", Value: credentials["test"]}}, nil
+func (s *stubSigningPlugin[T]) Sign(ctx context.Context, request *v1.SignRequest[T], credentials runtime.Typed) (*v1.SignResponse, error) {
+	raw := credentials.(*runtime.Raw)
+	directCreds := &credsv1.DirectCredentials{}
+	if err := json.Unmarshal(raw.Data, directCreds); err != nil {
+		return nil, err
+	}
+	return &v1.SignResponse{Signature: &v2.SignatureInfo{Algorithm: "rsa", Value: directCreds.Properties["test"]}}, nil
 }
 
-func (s *stubSigningPlugin[T]) Verify(ctx context.Context, request *v1.VerifyRequest[T], credentials map[string]string) (*v1.VerifyResponse, error) {
+func (s *stubSigningPlugin[T]) Verify(ctx context.Context, request *v1.VerifyRequest[T], credentials runtime.Typed) (*v1.VerifyResponse, error) {
 	return &v1.VerifyResponse{}, nil
 }
 
@@ -84,7 +91,9 @@ func TestHandleGetSignerIdentity(t *testing.T) {
 				return http.NewRequestWithContext(ctx, http.MethodPost, parse.String(), bytes.NewReader(body))
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
-				defer resp.Body.Close()
+				defer func(Body io.ReadCloser) {
+					_ = Body.Close()
+				}(resp.Body)
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) { require.NoError(t, err) },
@@ -126,7 +135,7 @@ func TestHandleVerifyAndSign(t *testing.T) {
 		defer srv.Close()
 		reqBody := bytes.NewBufferString(`{"digest":{"hashAlgorithm":"sha256","normalisationAlgorithm":"ociArtifactDigest/v1","value":"abc"},"config":{"type":"dummy/v1"}}`)
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, reqBody)
-		req.Header.Set("Authorization", `{"test":"value"}`)
+		req.Header.Set("Authorization", `{"type":"DirectCredentials/v1","properties":{"test":"value"}}`)
 		require.NoError(t, err)
 		resp, err := srv.Client().Do(req)
 		t.Cleanup(func() {

@@ -64,11 +64,8 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 }
 
 // ProcessResourceDigest resolves the digest of a Helm chart resource.
-//
-// TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the DigestProcessor interface is updated.
-// https://github.com/open-component-model/ocm-project/issues/988
 func (p *DigestProcessor) ProcessResourceDigest(
-	ctx context.Context, resource *runtime.Resource, credentials map[string]string,
+	ctx context.Context, resource *runtime.Resource, credentials ocmruntime.Typed,
 ) (*runtime.Resource, error) {
 	helm := helmv1.Helm{}
 	if err := access.Scheme.Convert(resource.Access, &helm); err != nil {
@@ -85,9 +82,23 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	)
 
 	if strings.HasPrefix(helm.HelmRepository, "oci://") {
-		resolvedDigest, err = p.resolveOCIDigest(ctx, helm, ocicredsv1.FromDirectCredentials(credentials))
+		var typed *ocicredsv1.OCICredentials
+		if credentials != nil {
+			typed, err = ocicredsv1.ConvertToOCICredentials(credentials)
+			if err != nil {
+				return nil, fmt.Errorf("error converting credentials for digest processing: %w", err)
+			}
+		}
+		resolvedDigest, err = p.resolveOCIDigest(ctx, helm, typed)
 	} else {
-		resolvedDigest, err = p.resolveHTTPDigest(ctx, helm, helmcredsv1.FromDirectCredentials(credentials))
+		var typed *helmcredsv1.HelmHTTPCredentials
+		if credentials != nil {
+			typed, err = helmcredsv1.ConvertToHelmHTTPCredentials(credentials)
+			if err != nil {
+				return nil, fmt.Errorf("error converting credentials for digest processing: %w", err)
+			}
+		}
+		resolvedDigest, err = p.resolveHTTPDigest(ctx, helm, typed)
 	}
 	if err != nil {
 		return nil, err

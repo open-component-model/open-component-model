@@ -110,6 +110,13 @@ func TestResolveHandlerFunc(t *testing.T) {
 	dummytype.MustAddToScheme(scheme)
 	dummyRepo := &dummyv1.Repository{}
 
+	Resolve := func(ctx context.Context, cfg v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
+		return &runtime.Raw{
+			Type: runtime.NewVersionedType("Credentials", "v1"),
+			Data: []byte(`{"resolved":"credentials","token":"abc123"}`),
+		}, nil
+	}
+
 	tests := []struct {
 		name         string
 		handlerFunc  func() http.HandlerFunc
@@ -118,48 +125,9 @@ func TestResolveHandlerFunc(t *testing.T) {
 		assertError  func(t *testing.T, err error)
 	}{
 		{
-			name: "ResolveHandlerFunc unauthorized error",
-			handlerFunc: func() http.HandlerFunc {
-				handler := ResolveHandlerFunc(func(ctx context.Context, cfg v1.ResolveRequest[*dummyv1.Repository], credentials map[string]string) (map[string]string, error) {
-					return map[string]string{"resolved": "credentials"}, nil
-				}, scheme, dummyRepo)
-
-				return handler
-			},
-			assertOutput: func(t *testing.T, resp *http.Response) {
-				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-			},
-			assertError: func(t *testing.T, err error) {
-				require.NoError(t, err)
-			},
-			request: func(base string) *http.Request {
-				parse, _ := url.Parse(base)
-				body := &bytes.Buffer{}
-				body.Write([]byte(`{
-					"config": {
-						"type": "DummyRepository",
-						"baseUrl": "test-url"
-					},
-					"identity": {
-						"id": "test-identity"
-					}
-				}`))
-
-				return &http.Request{
-					Method: "POST",
-					URL:    parse,
-					Body:   io.NopCloser(body),
-				}
-			},
-		},
-		{
 			name: "ResolveHandlerFunc missing body error",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ResolveHandlerFunc(func(ctx context.Context, cfg v1.ResolveRequest[*dummyv1.Repository], credentials map[string]string) (map[string]string, error) {
-					return map[string]string{"resolved": "credentials"}, nil
-				}, scheme, dummyRepo)
-
-				return handler
+				return ResolveHandlerFunc(Resolve, scheme, dummyRepo)
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
@@ -169,7 +137,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 			},
 			request: func(base string) *http.Request {
 				header := http.Header{}
-				header.Add("Authorization", `{"access_token": "abc"}`)
+				header.Add("Authorization", `{"type":"Credentials/v1","access_token":"abc"}`)
 				parse, _ := url.Parse(base)
 
 				return &http.Request{
@@ -183,11 +151,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 		{
 			name: "ResolveHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ResolveHandlerFunc(func(ctx context.Context, cfg v1.ResolveRequest[*dummyv1.Repository], credentials map[string]string) (map[string]string, error) {
-					return map[string]string{"resolved": "credentials", "token": "abc123"}, nil
-				}, scheme, dummyRepo)
-
-				return handler
+				return ResolveHandlerFunc(Resolve, scheme, dummyRepo)
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				defer resp.Body.Close()
@@ -202,7 +166,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 			},
 			request: func(base string) *http.Request {
 				header := http.Header{}
-				header.Add("Authorization", `{"access_token": "abc"}`)
+				header.Add("Authorization", `{"type":"Credentials/v1","access_token":"abc"}`)
 				parse, _ := url.Parse(base)
 				body := &bytes.Buffer{}
 				body.Write([]byte(`{

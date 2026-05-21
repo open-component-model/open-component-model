@@ -75,7 +75,7 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 //
 // TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the ResourceRepository interface is updated.
 // https://github.com/open-component-model/ocm-project/issues/988
-func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	helm, err := r.convertAccess(resource)
 	if err != nil {
 		return nil, err
@@ -107,9 +107,22 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 	slog.DebugContext(ctx, "Created temporary download directory", "dir", downloadDir)
 
+	var helmCreds *helmcredsv1.HelmHTTPCredentials
+	var ociCreds *ocicredsv1.OCICredentials
+	if credentials != nil {
+		helmCreds, err = helmcredsv1.ConvertToHelmHTTPCredentials(credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error converting credentials to helm spec: %w", err)
+		}
+		ociCreds, err = ocicredsv1.ConvertToOCICredentials(credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error converting credentials to ocicreds spec: %w", err)
+		}
+	}
+
 	opts := []helmdownload.Option{
-		helmdownload.WithCredentials(helmcredsv1.FromDirectCredentials(credentials)),
-		helmdownload.WithOCICredentials(ocicredsv1.FromDirectCredentials(credentials)),
+		helmdownload.WithCredentials(helmCreds),
+		helmdownload.WithOCICredentials(ociCreds),
 		helmdownload.WithAlwaysDownloadProv(true),
 	}
 
@@ -148,7 +161,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 //
 // TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the ResourceRepository interface is updated.
 // https://github.com/open-component-model/ocm-project/issues/988
-func (r *ResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ map[string]string) (*descriptor.Resource, error) {
+func (r *ResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ runtime.Typed) (*descriptor.Resource, error) {
 	return nil, fmt.Errorf("helm chart repositories do not support upload operations")
 }
 

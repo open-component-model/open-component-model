@@ -20,23 +20,9 @@ var OCICredentialsVersionedType = runtime.NewVersionedType(OCICredentialsType, V
 type OCICredentials struct {
 	// +ocm:jsonschema-gen:enum=OCICredentials/v1
 	// +ocm:jsonschema-gen:enum:deprecated=OCICredentials
-	Type runtime.Type `json:"type"`
-	// Username is the username for basic authentication against the OCI registry.
-	// Used together with Password. Mutually exclusive with token-based authentication
-	// (AccessToken or RefreshToken); token fields take precedence when present.
-	Username string `json:"username,omitempty"`
-	// Password is the password for basic authentication against the OCI registry.
-	// Used together with Username.
-	Password string `json:"password,omitempty"`
-	// AccessToken is a bearer token sent directly to the OCI registry (registry token).
-	// Used in the Docker token authentication flow after the auth service has issued it.
-	// When set, it is forwarded as a Bearer token on registry requests.
-	// Reference: https://distribution.github.io/distribution/spec/auth/token/
-	AccessToken string `json:"accessToken,omitempty"`
-	// RefreshToken is a bearer token sent to the OCI authorization service to obtain
-	// an AccessToken (identity token / OAuth2 refresh token).
-	// When set, the client exchanges it for a short-lived AccessToken before
-	// each registry request.
-	// Reference: https://distribution.github.io/distribution/spec/auth/oauth/
-	RefreshToken string `json:"refreshToken,omitempty"`
+	Type         runtime.Type `json:"type"`
+	Username     string       `json:"username,omitempty"`
+	Password     string       `json:"password,omitempty"`
+	AccessToken  string       `json:"accessToken,omitempty"`
+	RefreshToken string       `json:"refreshToken,omitempty"`
 }

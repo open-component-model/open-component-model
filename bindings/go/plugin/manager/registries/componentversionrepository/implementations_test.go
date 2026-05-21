@@ -11,9 +11,10 @@ import (
 	"github.com/invopop/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -71,7 +72,7 @@ func TestAddComponentVersion(t *testing.T) {
 	err := plugin.AddComponentVersion(ctx, repov1.PostComponentVersionRequest[runtime.Typed]{
 		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{"baseUrl":"ocm.software"}`)},
 		Descriptor: defaultDescriptor(),
-	}, map[string]string{})
+	}, &v1.DirectCredentials{})
 	assert.NoError(t, err)
 }
 
@@ -105,7 +106,7 @@ func TestAddComponentVersionValidationFail(t *testing.T) {
 	err = plugin.AddComponentVersion(ctx, repov1.PostComponentVersionRequest[runtime.Typed]{
 		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{"baseUrl":"ocm.software"}`)},
 		Descriptor: defaultDescriptor(),
-	}, map[string]string{})
+	}, &v1.DirectCredentials{})
 	assert.ErrorContains(t, err, "jsonschema validation failed")
 }
 
@@ -135,7 +136,7 @@ func TestGetComponentVersion(t *testing.T) {
 		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
-	}, map[string]string{})
+	}, &v1.DirectCredentials{})
 	require.NoError(t, err)
 
 	require.Equal(t, response.String(), desc.String())
@@ -165,7 +166,7 @@ func TestListComponentVersions(t *testing.T) {
 	list, err := plugin.ListComponentVersions(ctx, repov1.ListComponentVersionsRequest[runtime.Typed]{
 		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Name:       "test-plugin",
-	}, map[string]string{})
+	}, &v1.DirectCredentials{})
 	require.NoError(t, err)
 
 	require.Equal(t, []string{"v0.0.1", "v0.0.2"}, list)
@@ -199,7 +200,7 @@ func TestAddLocalResource(t *testing.T) {
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
 		Resource:   &resource,
-	}, map[string]string{})
+	}, &v1.DirectCredentials{})
 	require.NoError(t, err)
 
 	require.Equal(t, resource.String(), gotResource.String())
@@ -265,7 +266,7 @@ func TestGetLocalResource(t *testing.T) {
 		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
-	}, map[string]string{})
+	}, &v1.DirectCredentials{})
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(f.Name())
@@ -330,7 +331,7 @@ func TestGetLocalSource(t *testing.T) {
 		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
-	}, map[string]string{})
+	}, &v1.DirectCredentials{})
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(f.Name())

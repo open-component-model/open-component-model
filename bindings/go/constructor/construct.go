@@ -779,11 +779,11 @@ func resolveCredentials(ctx context.Context, provider credentials.Resolver, cons
 		return nil, nil
 	}
 
-	creds, err := provider.ResolveTyped(ctx, consumerIdentity)
+	typed, err := provider.Resolve(ctx, consumerIdentity)
 	if errors.Is(err, credentials.ErrNotFound) {
 		logger.DebugContext(ctx, "no credentials found for consumer identity, proceeding without credentials")
 		return nil, nil
 	}
 
-	return creds, err
+	return typed, err
 }

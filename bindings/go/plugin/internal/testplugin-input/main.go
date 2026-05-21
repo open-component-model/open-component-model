@@ -28,7 +28,7 @@ func (m *TestPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest
 	return nil, nil
 }
 
-func (m *TestPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceInputResponse, error) {
+func (m *TestPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials runtime.Typed) (*v1.ProcessResourceInputResponse, error) {
 	tmp, err := os.CreateTemp("", "test-resource-file")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temp file: %w", err)
@@ -52,7 +52,7 @@ func (m *TestPlugin) ProcessResource(ctx context.Context, request *v1.ProcessRes
 	}, nil
 }
 
-func (m *TestPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceInputResponse, error) {
+func (m *TestPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials runtime.Typed) (*v1.ProcessSourceInputResponse, error) {
 	tmp, err := os.CreateTemp("", "test-source-file")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temp file: %w", err)

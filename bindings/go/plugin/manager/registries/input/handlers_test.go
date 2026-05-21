@@ -31,32 +31,9 @@ func TestResourceInputProcessorHandlerFunc(t *testing.T) {
 		assertError  func(t *testing.T, err error)
 	}{
 		{
-			name: "ResourceInputProcessorHandlerFunc unauthorized error",
-			handlerFunc: func() http.HandlerFunc {
-				handler := ResourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessResourceInputRequest, credentials map[string]string) (*inputv1.ProcessResourceInputResponse, error) {
-					return &inputv1.ProcessResourceInputResponse{}, nil
-				}, scheme, &dummyv1.Repository{})
-
-				return handler
-			},
-			assertOutput: func(t *testing.T, resp *http.Response) {
-				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-			},
-			assertError: func(t *testing.T, err error) {
-				require.NoError(t, err)
-			},
-			request: func(base string) *http.Request {
-				parse, _ := url.Parse(base)
-				return &http.Request{
-					Method: "POST",
-					URL:    parse,
-				}
-			},
-		},
-		{
 			name: "ResourceInputProcessorHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ResourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessResourceInputRequest, credentials map[string]string) (*inputv1.ProcessResourceInputResponse, error) {
+				handler := ResourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessResourceInputRequest, credentials runtime.Typed) (*inputv1.ProcessResourceInputResponse, error) {
 					return &inputv1.ProcessResourceInputResponse{
 						Resource: &v2.Resource{
 							ElementMeta: v2.ElementMeta{
@@ -139,32 +116,9 @@ func TestSourceInputProcessorHandlerFunc(t *testing.T) {
 		assertError  func(t *testing.T, err error)
 	}{
 		{
-			name: "SourceInputProcessorHandlerFunc unauthorized error",
-			handlerFunc: func() http.HandlerFunc {
-				handler := SourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessSourceInputRequest, credentials map[string]string) (*inputv1.ProcessSourceInputResponse, error) {
-					return &inputv1.ProcessSourceInputResponse{}, nil
-				}, scheme, &dummyv1.Repository{})
-
-				return handler
-			},
-			assertOutput: func(t *testing.T, resp *http.Response) {
-				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-			},
-			assertError: func(t *testing.T, err error) {
-				require.NoError(t, err)
-			},
-			request: func(base string) *http.Request {
-				parse, _ := url.Parse(base)
-				return &http.Request{
-					Method: "POST",
-					URL:    parse,
-				}
-			},
-		},
-		{
 			name: "SourceInputProcessorHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := SourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessSourceInputRequest, credentials map[string]string) (*inputv1.ProcessSourceInputResponse, error) {
+				handler := SourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessSourceInputRequest, credentials runtime.Typed) (*inputv1.ProcessSourceInputResponse, error) {
 					return &inputv1.ProcessSourceInputResponse{
 						Source: &v2.Source{
 							ElementMeta: v2.ElementMeta{

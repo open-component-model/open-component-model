@@ -10,10 +10,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -29,32 +29,9 @@ func TestResourceDigestProcessorHandlerFunc(t *testing.T) {
 		assertError  func(t *testing.T, err error)
 	}{
 		{
-			name: "ResourceInputProcessorHandlerFunc unauthorized error",
-			handlerFunc: func() http.HandlerFunc {
-				handler := ResourceDigestProcessorHandlerFunc(func(ctx context.Context, req *v1.ProcessResourceDigestRequest, credentials map[string]string) (*v1.ProcessResourceDigestResponse, error) {
-					return &v1.ProcessResourceDigestResponse{}, nil
-				})
-
-				return handler
-			},
-			assertOutput: func(t *testing.T, resp *http.Response) {
-				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-			},
-			assertError: func(t *testing.T, err error) {
-				require.NoError(t, err)
-			},
-			request: func(base string) *http.Request {
-				parse, _ := url.Parse(base)
-				return &http.Request{
-					Method: "POST",
-					URL:    parse,
-				}
-			},
-		},
-		{
 			name: "ResourceInputProcessorHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ResourceDigestProcessorHandlerFunc(func(ctx context.Context, req *v1.ProcessResourceDigestRequest, credentials map[string]string) (*v1.ProcessResourceDigestResponse, error) {
+				handler := ResourceDigestProcessorHandlerFunc(func(ctx context.Context, req *v1.ProcessResourceDigestRequest, credentials runtime.Typed) (*v1.ProcessResourceDigestResponse, error) {
 					return &v1.ProcessResourceDigestResponse{
 						Resource: &descriptorv2.Resource{
 							ElementMeta: descriptorv2.ElementMeta{

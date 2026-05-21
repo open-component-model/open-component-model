@@ -41,7 +41,7 @@ type ResourceInputMethodResult struct {
 // method and to request credentials from the credentials system. The credentials system is not part of this interface and
 // is expected to be supplied by the caller of the input method.
 //
-// The resolved credentials MAY be passed to the input method via the credentials map, but a method MAY
+// The resolved credentials MAY be passed to the input method via the typed credentials, but a method MAY
 // work without credentials as well.
 type ResourceInputMethod interface {
 	// ResourceConsumerIdentityProvider that resolves the identity of the given resource to use for credential resolution.
@@ -81,7 +81,7 @@ type SourceInputMethodResult struct {
 // method and to request credentials from the credentials system. The credentials system is not part of this interface and
 // is expected to be supplied by the caller of the input method.
 //
-// The resolved credentials MAY be passed to the input method via the credentials map, but a method MAY
+// The resolved credentials MAY be passed to the input method via the typed credentials, but a method MAY
 // work without credentials as well.
 type SourceInputMethod interface {
 	// SourceConsumerIdentityProvider that resolves the identity of the given source to use for credential resolution.

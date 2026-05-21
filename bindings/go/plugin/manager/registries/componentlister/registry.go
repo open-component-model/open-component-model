@@ -191,7 +191,7 @@ func (r *ComponentListerRegistry) GetComponentListerCredentialConsumerIdentity(c
 // GetComponentLister returns ComponentLister for a specific repository type.
 func (r *ComponentListerRegistry) GetComponentLister(ctx context.Context,
 	repositorySpecification runtime.Typed,
-	credentials map[string]string,
+	credentials runtime.Typed,
 ) (repository.ComponentLister, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

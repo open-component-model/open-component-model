@@ -7,17 +7,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
-	"ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestCredentialFunc(t *testing.T) {
 	tests := []struct {
 		name        string
 		identity    *identityv1.OCIRegistryIdentity
-		credentials *v1.OCICredentials
+		credentials *credentialsv1.OCICredentials
 		hostport    string
 		wantErr     bool
 		wantEmpty   bool
@@ -29,7 +28,7 @@ func TestCredentialFunc(t *testing.T) {
 				Hostname: "example.com",
 				Port:     "443",
 			},
-			credentials: &v1.OCICredentials{
+			credentials: &credentialsv1.OCICredentials{
 				Username: "testuser",
 				Password: "testpass",
 			},
@@ -43,7 +42,7 @@ func TestCredentialFunc(t *testing.T) {
 				Hostname: "example.com",
 				Port:     "443",
 			},
-			credentials: &v1.OCICredentials{
+			credentials: &credentialsv1.OCICredentials{
 				Username: "testuser",
 				Password: "testpass",
 			},
@@ -57,7 +56,7 @@ func TestCredentialFunc(t *testing.T) {
 				Hostname: "example.com",
 				Port:     "443",
 			},
-			credentials: &v1.OCICredentials{
+			credentials: &credentialsv1.OCICredentials{
 				Username: "testuser",
 				Password: "testpass",
 			},
@@ -70,7 +69,7 @@ func TestCredentialFunc(t *testing.T) {
 			identity: &identityv1.OCIRegistryIdentity{
 				Hostname: "example.com",
 			},
-			credentials: &v1.OCICredentials{
+			credentials: &credentialsv1.OCICredentials{
 				Username: "testuser",
 			},
 			hostport:  "example.com",
@@ -82,7 +81,7 @@ func TestCredentialFunc(t *testing.T) {
 			identity: &identityv1.OCIRegistryIdentity{
 				Hostname: "example.com",
 			},
-			credentials: &v1.OCICredentials{
+			credentials: &credentialsv1.OCICredentials{
 				Username:     "testuser",
 				Password:     "testpass",
 				AccessToken:  "testtoken",
@@ -123,20 +122,21 @@ func TestCredentialFunc(t *testing.T) {
 	}
 }
 
+
 func TestCredentialFromTyped(t *testing.T) {
 	tests := []struct {
 		name        string
-		credentials *v1.OCICredentials
+		credentials *credentialsv1.OCICredentials
 		expected    auth.Credential
 	}{
 		{
 			name:        "zero-value credentials",
-			credentials: &v1.OCICredentials{},
+			credentials: &credentialsv1.OCICredentials{},
 			expected:    auth.Credential{},
 		},
 		{
 			name: "all fields populated",
-			credentials: &v1.OCICredentials{
+			credentials: &credentialsv1.OCICredentials{
 				Username:     "user",
 				Password:     "pass",
 				AccessToken:  "atoken",
@@ -151,7 +151,7 @@ func TestCredentialFromTyped(t *testing.T) {
 		},
 		{
 			name: "only username and password",
-			credentials: &v1.OCICredentials{
+			credentials: &credentialsv1.OCICredentials{
 				Username: "user",
 				Password: "pass",
 			},
@@ -162,7 +162,7 @@ func TestCredentialFromTyped(t *testing.T) {
 		},
 		{
 			name: "only access token",
-			credentials: &v1.OCICredentials{
+			credentials: &credentialsv1.OCICredentials{
 				AccessToken: "atoken",
 			},
 			expected: auth.Credential{
@@ -186,7 +186,7 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 		wantErr      bool
 		wantEmpty    bool
 		wantNil      bool
-		wantCreds    *v1.OCICredentials
+		wantCreds    *credentialsv1.OCICredentials
 	}{
 		{
 			name:         "missing hostname in identity leads to no credentials",
@@ -219,8 +219,8 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 			identity: identityv1.OCIRegistryIdentity{
 				Hostname: "registry.example.com",
 			},
-			wantCreds: &v1.OCICredentials{
-				Type:     runtime.NewVersionedType(v1.OCICredentialsType, credentialsv1.Version),
+			wantCreds: &credentialsv1.OCICredentials{
+				Type:     runtime.NewVersionedType(credentialsv1.OCICredentialsType, credentialsv1.Version),
 				Username: "testuser",
 				Password: "testpass",
 			},
@@ -233,8 +233,8 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 			identity: identityv1.OCIRegistryIdentity{
 				Hostname: "docker.io",
 			},
-			wantCreds: &v1.OCICredentials{
-				Type:     runtime.NewVersionedType(v1.OCICredentialsType, credentialsv1.Version),
+			wantCreds: &credentialsv1.OCICredentials{
+				Type:     runtime.NewVersionedType(credentialsv1.OCICredentialsType, credentialsv1.Version),
 				Username: "testuser",
 				Password: "testpass",
 			},
@@ -248,8 +248,8 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 				Hostname: "registry.example.com",
 				Port:     "5000",
 			},
-			wantCreds: &v1.OCICredentials{
-				Type:     runtime.NewVersionedType(v1.OCICredentialsType, credentialsv1.Version),
+			wantCreds: &credentialsv1.OCICredentials{
+				Type:     runtime.NewVersionedType(credentialsv1.OCICredentialsType, credentialsv1.Version),
 				Username: "portuser",
 				Password: "portpass",
 			},
@@ -284,8 +284,8 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 				Hostname: "registry.example.com",
 				Port:     "443",
 			},
-			wantCreds: &v1.OCICredentials{
-				Type:     runtime.NewVersionedType(v1.OCICredentialsType, credentialsv1.Version),
+			wantCreds: &credentialsv1.OCICredentials{
+				Type:     runtime.NewVersionedType(credentialsv1.OCICredentialsType, credentialsv1.Version),
 				Username: "user",
 				Password: "pass",
 			},
@@ -299,8 +299,8 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 				Hostname: "registry.example.com",
 				Port:     "8080",
 			},
-			wantCreds: &v1.OCICredentials{
-				Type:     runtime.NewVersionedType(v1.OCICredentialsType, credentialsv1.Version),
+			wantCreds: &credentialsv1.OCICredentials{
+				Type:     runtime.NewVersionedType(credentialsv1.OCICredentialsType, credentialsv1.Version),
 				Username: "fulluser",
 				Password: "fullpass",
 			},
@@ -314,8 +314,8 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 				Hostname: "registry.example.com",
 				Port:     "5000",
 			},
-			wantCreds: &v1.OCICredentials{
-				Type:     runtime.NewVersionedType(v1.OCICredentialsType, credentialsv1.Version),
+			wantCreds: &credentialsv1.OCICredentials{
+				Type:     runtime.NewVersionedType(credentialsv1.OCICredentialsType, credentialsv1.Version),
 				Username: "noport",
 				Password: "noport",
 			},
