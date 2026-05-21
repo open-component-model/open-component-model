@@ -91,7 +91,7 @@ func TestPluginFlow(t *testing.T) {
 			Type: dummyType,
 			Data: []byte(`{ "access": "v1" }`),
 		},
-	}, map[string]string{})
+	}, nil)
 	require.NoError(t, err)
 	reader, err := resource.ReadCloser()
 	require.NoError(t, err)
@@ -175,6 +175,6 @@ func (m *mockResourcePlugin) GetResourceRepositoryScheme() *runtime.Scheme {
 	return dummytype.Scheme
 }
 
-func (m *mockResourcePlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (m *mockResourcePlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	return inmemory.New(strings.NewReader("test-resource")), nil
 }

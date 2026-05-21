@@ -55,7 +55,7 @@ func NewPlugin(client *http.Client, id string, path string, config types.Config,
 	}
 }
 
-func (r *RepositoryPlugin) TransformBlob(ctx context.Context, request *blobtransformerv1.TransformBlobRequest[runtime.Typed], credentials map[string]string) (*blobtransformerv1.TransformBlobResponse, error) {
+func (r *RepositoryPlugin) TransformBlob(ctx context.Context, request *blobtransformerv1.TransformBlobRequest[runtime.Typed], credentials runtime.Typed) (*blobtransformerv1.TransformBlobResponse, error) {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
@@ -120,7 +120,10 @@ func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
 	return nil
 }
 
-func toCredentials(credentials map[string]string) (plugins.KV, error) {
+func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
+	if credentials == nil {
+		return plugins.KV{Key: "Authorization", Value: "{}"}, nil
+	}
 	rawCreds, err := json.Marshal(credentials)
 	if err != nil {
 		return plugins.KV{}, err

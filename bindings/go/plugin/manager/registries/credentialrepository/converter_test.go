@@ -12,7 +12,7 @@ import (
 // mockExternalPlugin is a test implementation of v1.CredentialRepositoryPluginContract
 type mockExternalPlugin struct {
 	consumerIdentityForConfigFunc func(ctx context.Context, cfg v1.ConsumerIdentityForConfigRequest[runtime.Typed]) (runtime.Identity, error)
-	resolveFunc                   func(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials map[string]string) (map[string]string, error)
+	resolveFunc                   func(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error)
 	pingFunc                      func(ctx context.Context) error
 }
 
@@ -30,11 +30,11 @@ func (m *mockExternalPlugin) ConsumerIdentityForConfig(ctx context.Context, cfg 
 	return runtime.Identity{"test": "identity"}, nil
 }
 
-func (m *mockExternalPlugin) Resolve(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials map[string]string) (map[string]string, error) {
+func (m *mockExternalPlugin) Resolve(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
 	if m.resolveFunc != nil {
 		return m.resolveFunc(ctx, cfg, credentials)
 	}
-	return map[string]string{"resolved": "credentials"}, nil
+	return runtime.Identity{"resolved": "credentials"}, nil
 }
 
 func TestCredentialRepositoryPluginConverter_ConsumerIdentityForConfig(t *testing.T) {
@@ -66,9 +66,9 @@ func TestCredentialRepositoryPluginConverter_ConsumerIdentityForConfig(t *testin
 }
 
 func TestCredentialRepositoryPluginConverter_Resolve(t *testing.T) {
-	expectedCredentials := map[string]string{"username": "testuser", "password": "testpass"}
+	expectedCredentials := runtime.Identity{"username": "testuser", "password": "testpass"}
 	mockPlugin := &mockExternalPlugin{
-		resolveFunc: func(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials map[string]string) (map[string]string, error) {
+		resolveFunc: func(ctx context.Context, cfg v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
 			return expectedCredentials, nil
 		},
 	}
@@ -77,11 +77,16 @@ func TestCredentialRepositoryPluginConverter_Resolve(t *testing.T) {
 	// Create a mock typed config and identity
 	mockConfig := &runtime.Unstructured{}
 	mockIdentity := runtime.Identity{"consumer": "test"}
-	inputCredentials := map[string]string{"existing": "cred"}
+	inputCredentials := runtime.Identity{"existing": "cred"}
 
-	resolvedCredentials, err := converter.Resolve(context.Background(), mockConfig, mockIdentity, inputCredentials)
+	resolvedTyped, err := converter.Resolve(context.Background(), mockConfig, mockIdentity, inputCredentials)
 	if err != nil {
 		t.Errorf("Resolve() returned unexpected error: %v", err)
+	}
+
+	resolvedCredentials, ok := resolvedTyped.(runtime.Identity)
+	if !ok {
+		t.Fatalf("Resolve() returned credentials of type %T, expected runtime.Identity", resolvedTyped)
 	}
 
 	if len(resolvedCredentials) != len(expectedCredentials) {

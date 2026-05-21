@@ -21,7 +21,7 @@ import (
 
 type TestPlugin struct{}
 
-func (m *TestPlugin) ProcessResourceDigest(ctx context.Context, resource *v1.ProcessResourceDigestRequest, credentials map[string]string) (*v1.ProcessResourceDigestResponse, error) {
+func (m *TestPlugin) ProcessResourceDigest(ctx context.Context, resource *v1.ProcessResourceDigestRequest, credentials runtime.Typed) (*v1.ProcessResourceDigestResponse, error) {
 	return &v1.ProcessResourceDigestResponse{
 		Resource: &descriptorv2.Resource{
 			ElementMeta: descriptorv2.ElementMeta{

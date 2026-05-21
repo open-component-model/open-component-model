@@ -76,7 +76,7 @@ func (r *ComponentListerPlugin) GetIdentity(ctx context.Context, request *compon
 	return &identity, nil
 }
 
-func (r *ComponentListerPlugin) ListComponents(ctx context.Context, request *componentlisterv1.ListComponentsRequest[runtime.Typed], credentials map[string]string) (*componentlisterv1.ListComponentsResponse, error) {
+func (r *ComponentListerPlugin) ListComponents(ctx context.Context, request *componentlisterv1.ListComponentsRequest[runtime.Typed], credentials runtime.Typed) (*componentlisterv1.ListComponentsResponse, error) {
 	response := &componentlisterv1.ListComponentsResponse{}
 
 	// We know we only have this single schema for all endpoints which require validation.
@@ -116,7 +116,10 @@ func (r *ComponentListerPlugin) validateEndpoint(obj runtime.Typed) error {
 	return nil
 }
 
-func toCredentials(credentials map[string]string) (plugins.KV, error) {
+func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
+	if credentials == nil {
+		return plugins.KV{Key: "Authorization", Value: "{}"}, nil
+	}
 	rawCreds, err := json.Marshal(credentials)
 	if err != nil {
 		return plugins.KV{}, err

@@ -68,7 +68,7 @@ func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *inputv1.Get
 	return &identity, nil
 }
 
-func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *inputv1.ProcessResourceInputRequest, credentials map[string]string) (*inputv1.ProcessResourceInputResponse, error) {
+func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *inputv1.ProcessResourceInputRequest, credentials runtime.Typed) (*inputv1.ProcessResourceInputResponse, error) {
 	if err := r.validateEndpoint(request.Resource.Input); err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *inputv1
 	return &body, nil
 }
 
-func (r *RepositoryPlugin) ProcessSource(ctx context.Context, request *inputv1.ProcessSourceInputRequest, credentials map[string]string) (*inputv1.ProcessSourceInputResponse, error) {
+func (r *RepositoryPlugin) ProcessSource(ctx context.Context, request *inputv1.ProcessSourceInputRequest, credentials runtime.Typed) (*inputv1.ProcessSourceInputResponse, error) {
 	if err := r.validateEndpoint(request.Source.Input); err != nil {
 		return nil, err
 	}
@@ -125,7 +125,10 @@ func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
 	return nil
 }
 
-func toCredentials(credentials map[string]string) (plugins.KV, error) {
+func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
+	if credentials == nil {
+		return plugins.KV{Key: "Authorization", Value: "{}"}, nil
+	}
 	rawCreds, err := json.Marshal(credentials)
 	if err != nil {
 		return plugins.KV{}, err
