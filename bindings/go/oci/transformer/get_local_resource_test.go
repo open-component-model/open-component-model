@@ -65,7 +65,7 @@ func (m *mockRepoProviderForGet) GetComponentVersionRepositoryCredentialConsumer
 	return nil, nil
 }
 
-func (m *mockRepoProviderForGet) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
+func (m *mockRepoProviderForGet) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials runtime.Typed) (repository.ComponentVersionRepository, error) {
 	return m.repo, nil
 }
 
