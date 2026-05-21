@@ -107,13 +107,17 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 	slog.DebugContext(ctx, "Created temporary download directory", "dir", downloadDir)
 
-	helmCreds, err := helmcredsv1.FromTyped(credentials)
-	if err != nil {
-		return nil, fmt.Errorf("error converting credentials to helm spec: %w", err)
-	}
-	ociCreds, err := ocicredsv1.FromTyped(credentials)
-	if err != nil {
-		return nil, fmt.Errorf("error converting credentials to ocicreds spec: %w", err)
+	var helmCreds *helmcredsv1.HelmHTTPCredentials
+	var ociCreds *ocicredsv1.OCICredentials
+	if credentials != nil {
+		helmCreds, err = helmcredsv1.ConvertToHelmHTTPCredentials(credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error converting credentials to helm spec: %w", err)
+		}
+		ociCreds, err = ocicredsv1.ConvertToOCICredentials(credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error converting credentials to ocicreds spec: %w", err)
+		}
 	}
 
 	opts := []helmdownload.Option{

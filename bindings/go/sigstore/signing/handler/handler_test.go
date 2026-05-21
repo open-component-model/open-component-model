@@ -19,14 +19,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
-	oidcv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1"
-	v2 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1"
-	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1"
+	sigcredv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/sigstore/v1alpha1"
 	signerv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1alpha1"
 	verifierv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1alpha1"
 )
@@ -253,7 +250,7 @@ func TestHandler_Sign(t *testing.T) {
 	}{
 		{
 			name:  "builds correct args with signing config",
-			creds: &oidcv1.OIDCIdentityToken{Token: "test-token"},
+			creds: &sigcredv1.SigstoreCredentials{Token: "test-token"},
 			assertArgs: func(t *testing.T, args []string) {
 				r := require.New(t)
 				r.Equal("/etc/sigstore/signing_config.json", argValue(args, "--signing-config"))
@@ -266,7 +263,7 @@ func TestHandler_Sign(t *testing.T) {
 		},
 		{
 			name:    "missing OIDC token fails before executor call",
-			creds:   &oidcv1.OIDCIdentityToken{},
+			creds:   &sigcredv1.SigstoreCredentials{},
 			wantErr: "OIDC identity token required",
 			assertMock: func(t *testing.T, mock *execRecorder) {
 				require.Nil(t, mock.lastSignArgs)
@@ -274,7 +271,7 @@ func TestHandler_Sign(t *testing.T) {
 		},
 		{
 			name:  "invalid hex digest",
-			creds: &oidcv1.OIDCIdentityToken{Token: "test-token"},
+			creds: &sigcredv1.SigstoreCredentials{Token: "test-token"},
 			digest: func() descruntime.Digest {
 				return descruntime.Digest{Value: "not-hex!"}
 			},
@@ -282,7 +279,7 @@ func TestHandler_Sign(t *testing.T) {
 		},
 		{
 			name:  "empty digest value rejected",
-			creds: &oidcv1.OIDCIdentityToken{Token: "test-token"},
+			creds: &sigcredv1.SigstoreCredentials{Token: "test-token"},
 			digest: func() descruntime.Digest {
 				return descruntime.Digest{Value: ""}
 			},
@@ -290,20 +287,20 @@ func TestHandler_Sign(t *testing.T) {
 		},
 		{
 			name:  "OIDC token trimmed of whitespace",
-			creds: &oidcv1.OIDCIdentityToken{Token: "  test-token\n"},
+			creds: &sigcredv1.SigstoreCredentials{Token: "  test-token\n"},
 			assertEnv: func(t *testing.T, env []string) {
 				require.Equal(t, "test-token", envValue(env, "SIGSTORE_ID_TOKEN"))
 			},
 		},
 		{
 			name:    "executor error propagated",
-			creds:   &oidcv1.OIDCIdentityToken{Token: "test-token"},
+			creds:   &sigcredv1.SigstoreCredentials{Token: "test-token"},
 			mockErr: fmt.Errorf("cosign sign-blob failed: exit status 1\nstderr: error signing"),
 			wantErr: "cosign sign",
 		},
 		{
 			name:  "bundle base64-encoded in result",
-			creds: &oidcv1.OIDCIdentityToken{Token: "test-token"},
+			creds: &sigcredv1.SigstoreCredentials{Token: "test-token"},
 			assertResult: func(t *testing.T, result descruntime.SignatureInfo) {
 				r := require.New(t)
 				r.Equal(v1alpha1.AlgorithmSigstore, result.Algorithm)
@@ -315,7 +312,7 @@ func TestHandler_Sign(t *testing.T) {
 		},
 		{
 			name:       "V1 issuer extracted from bundle",
-			creds:      &oidcv1.OIDCIdentityToken{Token: "test-token"},
+			creds:      &sigcredv1.SigstoreCredentials{Token: "test-token"},
 			bundleJSON: func(t *testing.T) []byte { return fakeBundleJSONWithCert(t, "https://accounts.google.com") },
 			assertResult: func(t *testing.T, result descruntime.SignatureInfo) {
 				require.Equal(t, "https://accounts.google.com", result.Issuer)
@@ -323,7 +320,7 @@ func TestHandler_Sign(t *testing.T) {
 		},
 		{
 			name:  "V2 issuer extracted from bundle",
-			creds: &oidcv1.OIDCIdentityToken{Token: "test-token"},
+			creds: &sigcredv1.SigstoreCredentials{Token: "test-token"},
 			bundleJSON: func(t *testing.T) []byte {
 				return fakeBundleJSONWithCertV2(t, "https://token.actions.githubusercontent.com")
 			},
@@ -332,9 +329,20 @@ func TestHandler_Sign(t *testing.T) {
 			},
 		},
 		{
-			name:    "TrustedRoot credential rejected on sign",
-			creds:   &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/trusted_root.json"},
-			wantErr: "OIDC identity token required",
+			name:  "trusted root from credential file passed as flag on sign",
+			creds: &sigcredv1.SigstoreCredentials{Token: "test-token", TrustedRootJSONFile: "/path/to/trusted_root.json"},
+			assertArgs: func(t *testing.T, args []string) {
+				require.Equal(t, "/path/to/trusted_root.json", argValue(args, "--trusted-root"))
+			},
+		},
+		{
+			name:  "trusted root from inline JSON credential passed as flag on sign",
+			creds: &sigcredv1.SigstoreCredentials{Token: "test-token", TrustedRootJSON: `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`},
+			assertArgs: func(t *testing.T, args []string) {
+				r := require.New(t)
+				r.True(hasArg(args, "--trusted-root"))
+				r.NotEmpty(argValue(args, "--trusted-root"))
+			},
 		},
 	}
 
@@ -364,7 +372,7 @@ func TestHandler_Sign(t *testing.T) {
 
 			creds := tc.creds
 			if creds == nil {
-				creds = &oidcv1.OIDCIdentityToken{Token: "test-token"}
+				creds = &sigcredv1.SigstoreCredentials{Token: "test-token"}
 			}
 
 			result, err := h.Sign(t.Context(), digest, cfg, creds)
@@ -440,11 +448,11 @@ func TestSign_TUF_ROOT_DoesNotSuppressTrustedRootFlag(t *testing.T) {
 	mock := newSignMock(t, fakeBundleJSON(t))
 	h := newWithRunner(mock)
 
-	creds := map[string]string{
-		oidcv1.CredentialKeyToken:           "test-token",
-		v2.CredentialKeyTrustedRootJSONFile: "/cred/root.json",
+	creds := &sigcredv1.SigstoreCredentials{
+		Token:               "test-token",
+		TrustedRootJSONFile: "/cred/root.json",
 	}
-	_, err := h.Sign(t.Context(), testDigest(), testSignConfig(), &v1.DirectCredentials{Properties: creds})
+	_, err := h.Sign(t.Context(), testDigest(), testSignConfig(), creds)
 	require.NoError(t, err)
 	require.Equal(t, "/cred/root.json", argValue(mock.lastSignArgs, "--trusted-root"),
 		"TUF_ROOT is for TUF cache, not trusted root — credential should still produce --trusted-root")
@@ -457,7 +465,7 @@ func TestVerify_TUF_ROOT_DoesNotSuppressTrustedRootFlag(t *testing.T) {
 	h := newWithRunner(mock)
 
 	cfg := testVerifyConfig()
-	creds := &v2.TrustedRoot{
+	creds := &sigcredv1.SigstoreCredentials{
 		TrustedRootJSONFile: "/cred/root.json",
 	}
 
@@ -510,7 +518,7 @@ func TestHandler_Verify(t *testing.T) {
 				cfg.CertificateOIDCIssuerRegexp = ".*google.*"
 				cfg.CertificateIdentityRegexp = ".*@example.com"
 			},
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/trusted_root.json"},
+			creds: &sigcredv1.SigstoreCredentials{TrustedRootJSONFile: "/path/to/trusted_root.json"},
 			assertArgs: func(t *testing.T, args []string) {
 				r := require.New(t)
 				r.False(hasArg(args, "--certificate-identity"))
@@ -525,7 +533,7 @@ func TestHandler_Verify(t *testing.T) {
 			cfgSetup: func(cfg *v1alpha1.VerifyConfig) {
 				cfg.PrivateInfrastructure = true
 			},
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/private_trusted_root.json"},
+			creds: &sigcredv1.SigstoreCredentials{TrustedRootJSONFile: "/path/to/private_trusted_root.json"},
 			assertArgs: func(t *testing.T, args []string) {
 				r := require.New(t)
 				r.True(hasArg(args, "--private-infrastructure"))
@@ -534,7 +542,7 @@ func TestHandler_Verify(t *testing.T) {
 		},
 		{
 			name:  "trusted root from inline JSON credential",
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSON: `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`},
+			creds: &sigcredv1.SigstoreCredentials{TrustedRootJSON: `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`},
 			assertArgs: func(t *testing.T, args []string) {
 				r := require.New(t)
 				r.True(hasArg(args, "--trusted-root"))
@@ -543,7 +551,7 @@ func TestHandler_Verify(t *testing.T) {
 		},
 		{
 			name:  "trusted root from file credential",
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/custom/path/trusted_root.json"},
+			creds: &sigcredv1.SigstoreCredentials{TrustedRootJSONFile: "/custom/path/trusted_root.json"},
 			assertArgs: func(t *testing.T, args []string) {
 				require.Equal(t, "/custom/path/trusted_root.json", argValue(args, "--trusted-root"))
 			},
@@ -688,7 +696,7 @@ func TestVerify_PrivateInfrastructureWithTrustedRootCredential(t *testing.T) {
 	cfg := testVerifyConfig()
 	cfg.PrivateInfrastructure = true
 
-	creds := &v2.TrustedRoot{
+	creds := &sigcredv1.SigstoreCredentials{
 		TrustedRootJSON: `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`,
 	}
 
@@ -807,19 +815,19 @@ func TestResolveTrustedRootPath(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		creds   *v2.TrustedRoot
+		creds   *sigcredv1.SigstoreCredentials
 		want    string
 		wantErr string
 		isFile  bool // if true, assert path exists as a file (written from inline JSON)
 	}{
 		{
 			name:   "inline JSON wins over file credential",
-			creds:  &v2.TrustedRoot{TrustedRootJSON: `{"mediaType":"test"}`, TrustedRootJSONFile: "/cred/root.json"},
+			creds:  &sigcredv1.SigstoreCredentials{TrustedRootJSON: `{"mediaType":"test"}`, TrustedRootJSONFile: "/cred/root.json"},
 			isFile: true,
 		},
 		{
 			name:  "file credential used",
-			creds: &v2.TrustedRoot{TrustedRootJSONFile: "/cred/root.json"},
+			creds: &sigcredv1.SigstoreCredentials{TrustedRootJSONFile: "/cred/root.json"},
 			want:  "/cred/root.json",
 		},
 		{
@@ -829,27 +837,27 @@ func TestResolveTrustedRootPath(t *testing.T) {
 		},
 		{
 			name:    "relative path rejected",
-			creds:   &v2.TrustedRoot{TrustedRootJSONFile: "../../etc/passwd"},
+			creds:   &sigcredv1.SigstoreCredentials{TrustedRootJSONFile: "../../etc/passwd"},
 			wantErr: "must be absolute",
 		},
 		{
 			name:    "path traversal rejected",
-			creds:   &v2.TrustedRoot{TrustedRootJSONFile: "/legit/../../../etc/passwd"},
+			creds:   &sigcredv1.SigstoreCredentials{TrustedRootJSONFile: "/legit/../../../etc/passwd"},
 			wantErr: "non-canonical",
 		},
 		{
 			name:  "whitespace-only JSON treated as empty",
-			creds: &v2.TrustedRoot{TrustedRootJSON: "   \n\t  "},
+			creds: &sigcredv1.SigstoreCredentials{TrustedRootJSON: "   \n\t  "},
 			want:  "",
 		},
 		{
 			name:  "whitespace-only file path treated as empty",
-			creds: &v2.TrustedRoot{TrustedRootJSONFile: "   "},
+			creds: &sigcredv1.SigstoreCredentials{TrustedRootJSONFile: "   "},
 			want:  "",
 		},
 		{
 			name:  "valid absolute path accepted",
-			creds: &v2.TrustedRoot{TrustedRootJSONFile: "/opt/sigstore/trusted_root.json"},
+			creds: &sigcredv1.SigstoreCredentials{TrustedRootJSONFile: "/opt/sigstore/trusted_root.json"},
 			want:  "/opt/sigstore/trusted_root.json",
 		},
 	}
@@ -1127,7 +1135,7 @@ func TestWithOperationTimeout_DeadlineExceeded(t *testing.T) {
 		t.Context(),
 		testDigest(),
 		testSignConfig(),
-		&oidcv1.OIDCIdentityToken{Token: "tok"},
+		&sigcredv1.SigstoreCredentials{Token: "tok"},
 	)
 	require.ErrorContains(t, err, "timed out")
 }

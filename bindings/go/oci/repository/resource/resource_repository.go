@@ -225,12 +225,14 @@ func (p *ResourceRepository) resolveOCIImageRepo(resource *descriptor.Resource, 
 	if err != nil {
 		return nil, fmt.Errorf("error creating oci image access: %w", err)
 	}
-
-	ociCredentials, err := ocicredsv1.ConvertToOCICredentials(credentials)
-	if err != nil {
-		return nil, fmt.Errorf("error converting credentials: %w", err)
+	var ociCreds *ocicredsv1.OCICredentials
+	if credentials != nil {
+		ociCreds, err = ocicredsv1.ConvertToOCICredentials(credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error converting credentials: %w", err)
+		}
 	}
-	return p.getRepository(&ociv1.Repository{BaseUrl: baseURL}, ociCredentials)
+	return p.getRepository(&ociv1.Repository{BaseUrl: baseURL}, ociCreds)
 }
 
 func (p *ResourceRepository) DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (ocistream.ResourceStream, error) {
