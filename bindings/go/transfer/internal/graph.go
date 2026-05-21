@@ -331,7 +331,6 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 	return nil, nil
 }
 
-// addDescriptorToEnvironment marshals the v2 descriptor and adds it to the graph environment.
 func addDescriptorToEnvironment(v2desc *descriptorv2.Descriptor, id string, tgd *transformv1alpha1.TransformationGraphDefinition) error {
 	rawV2Desc, err := json.Marshal(v2desc)
 	if err != nil {

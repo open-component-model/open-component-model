@@ -12,42 +12,34 @@ var Scheme = runtime.NewScheme()
 
 func init() {
 	Scheme.MustRegisterWithAlias(&Config{},
-		runtime.NewUnversionedType(ConfigType),
 		runtime.NewVersionedType(ConfigType, Version),
+		runtime.NewUnversionedType(ConfigType),
 	)
 }
 
-// Config defines configuration for a component-version transfer operation.
-//
-// It is the canonical, wire-format representation of the high-level transfer knobs
-// (recursive descent, resource copy mode, upload strategy). The CLI loads it via
-// --transfer-config and the replication controller consumes the same shape, so any
-// new transfer setting belongs here first.
+// Config is the canonical wire format for transfer knobs. Downstream consumers
+// (CLI, controllers) load it from YAML/JSON and pass it into [transfer.FromConfig],
+// so any new transfer setting belongs here first.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Config struct {
-	// Type identifies this configuration object's runtime type.
 	// +ocm:jsonschema-gen:enum=TransferConfiguration/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=TransferConfiguration
 	Type runtime.Type `json:"type"`
 
-	// Recursive enables recursive discovery and transfer of referenced component versions.
-	Recursive bool `json:"recursive,omitempty"`
+	// Pointer-typed so an explicit "false" in the wire format is distinguishable
+	// from "unset", which lets the controller's CRD spec turn recursion off without
+	// ambiguity.
+	Recursive *bool `json:"recursive,omitempty"`
 
-	// CopyMode controls which resources are included in the transfer.
-	// See [CopyModeLocalBlobResources] (default) and [CopyModeAllResources].
 	CopyMode CopyMode `json:"copyMode,omitempty"`
 
-	// UploadType controls how resources are stored in the target repository.
-	// See [UploadAsDefault], [UploadAsLocalBlob], and [UploadAsOciArtifact].
 	UploadType UploadType `json:"uploadType,omitempty"`
 }
 
-// GetCopyMode returns the configured copy mode, falling back to [CopyModeLocalBlobResources]
-// when the field is empty (or the receiver is nil).
 func (cfg *Config) GetCopyMode() CopyMode {
 	if cfg == nil || cfg.CopyMode == "" {
 		return CopyModeLocalBlobResources
@@ -55,8 +47,16 @@ func (cfg *Config) GetCopyMode() CopyMode {
 	return cfg.CopyMode
 }
 
-// GetUploadType returns the configured upload type, falling back to [UploadAsDefault]
-// when the field is empty (or the receiver is nil).
+// GetRecursive collapses the *bool tri-state to a plain bool. Use this rather
+// than reading [Config.Recursive] directly so callers don't have to think about
+// the nil case the wire format needs.
+func (cfg *Config) GetRecursive() bool {
+	if cfg == nil || cfg.Recursive == nil {
+		return false
+	}
+	return *cfg.Recursive
+}
+
 func (cfg *Config) GetUploadType() UploadType {
 	if cfg == nil || cfg.UploadType == "" {
 		return UploadAsDefault
@@ -65,11 +65,10 @@ func (cfg *Config) GetUploadType() UploadType {
 }
 
 // Validate rejects a non-matching [Config.Type] and unknown enum values.
-// Empty fields are allowed; consumers must call [Config.GetCopyMode] /
-// [Config.GetUploadType] (or equivalent) to resolve empties to their
-// canonical defaults before acting on the values. An empty Type is also
-// allowed so callers constructing a Config programmatically (without going
-// through [Scheme.Decode]) do not need to set it explicitly.
+// An empty Type is allowed so callers constructing a Config programmatically
+// (without going through [Scheme.Decode]) do not need to set it explicitly.
+// Empty enum fields are allowed; consumers must call [Config.GetCopyMode] /
+// [Config.GetUploadType] to resolve them.
 func (cfg *Config) Validate() error {
 	if cfg == nil {
 		return nil

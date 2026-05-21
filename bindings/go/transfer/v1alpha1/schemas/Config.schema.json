@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/schemas/Config.schema.json",
   "title": "Config",
   "type": "object",
-  "description": "Config defines configuration for a component-version transfer operation.\n\nIt is the canonical, wire-format representation of the high-level transfer knobs\n(recursive descent, resource copy mode, upload strategy). The CLI loads it via\n--transfer-config and the replication controller consumes the same shape, so any\nnew transfer setting belongs here first.",
+  "description": "Config defines configuration for a component-version transfer operation.\n\nIt is the canonical, wire-format representation of the high-level transfer knobs\n(recursive descent, resource copy mode, upload strategy). Downstream consumers\nsuch as the CLI or controllers load it from YAML/JSON and pass the result into\n[transfer.FromConfig], so any new transfer setting belongs here first.",
   "properties": {
     "copyMode": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.CopyMode",

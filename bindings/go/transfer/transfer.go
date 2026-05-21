@@ -35,17 +35,17 @@ func BuildGraphDefinition(
 
 	copyMode := o.GetCopyMode()
 	uploadType := o.GetUploadType()
+	recursive := o.GetRecursive()
 
 	slog.DebugContext(ctx, "building transfer graph definition",
 		"roots", len(roots),
-		"recursive", o.Recursive,
+		"recursive", recursive,
 		"copyMode", copyMode,
 		"uploadType", uploadType)
 
-	return internal.BuildGraphDefinition(ctx, roots, o.Recursive, copyMode, uploadType)
+	return internal.BuildGraphDefinition(ctx, roots, recursive, copyMode, uploadType)
 }
 
-// collectTransferRoots resolves all transfer mappings into internal TransferRoots.
 func collectTransferRoots(ctx context.Context, o *Options) (map[string]internal.TransferRoot, error) {
 	if len(o.Mappings) == 0 {
 		return nil, fmt.Errorf("no transfer mappings specified: use WithTransfer")
@@ -100,7 +100,6 @@ func collectTransferRoots(ctx context.Context, o *Options) (map[string]internal.
 	return roots, nil
 }
 
-// resolveMapping extracts ComponentIDs from a Mapping.
 func resolveMapping(ctx context.Context, m *Mapping) ([]ComponentID, error) {
 	if m.ComponentLister != nil && len(m.Components) > 0 {
 		return nil, fmt.Errorf("cannot combine Component/FromComponents with FromLister in the same mapping")

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/utils/ptr"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -16,16 +17,12 @@ import (
 
 func TestDefaultOptions(t *testing.T) {
 	var o Options
-	// The Options zero value carries empty strings for the enums (string-typed,
-	// so the language has no way to fold the canonical default into the zero value
-	// the way an int+iota would). The defaulting contract therefore lives on the
-	// embedded Config: BuildGraphDefinition normalises through GetCopyMode /
-	// GetUploadType before handing values to internal.BuildGraphDefinition.
 	assert.Equal(t, transferv1alpha1.CopyMode(""), o.CopyMode)
 	assert.Equal(t, transferv1alpha1.UploadType(""), o.UploadType)
+	assert.Nil(t, o.Recursive)
 	assert.Equal(t, transferv1alpha1.CopyModeLocalBlobResources, o.GetCopyMode())
 	assert.Equal(t, transferv1alpha1.UploadAsDefault, o.GetUploadType())
-	assert.False(t, o.Recursive)
+	assert.False(t, o.GetRecursive())
 }
 
 func TestWithCopyMode(t *testing.T) {
@@ -37,7 +34,12 @@ func TestWithCopyMode(t *testing.T) {
 func TestWithRecursive(t *testing.T) {
 	var o Options
 	WithRecursive(true)(&o)
-	assert.True(t, o.Recursive)
+	require.NotNil(t, o.Recursive)
+	assert.True(t, *o.Recursive)
+
+	WithRecursive(false)(&o)
+	require.NotNil(t, o.Recursive)
+	assert.False(t, *o.Recursive, "WithRecursive(false) must overwrite the previous WithRecursive(true) - that's the override path")
 }
 
 func TestWithUploadType(t *testing.T) {
@@ -149,7 +151,7 @@ func TestFromConfig_Empty(t *testing.T) {
 
 func TestFromConfig_AllFields(t *testing.T) {
 	cfg := &transferv1alpha1.Config{
-		Recursive:  true,
+		Recursive:  ptr.To(true),
 		CopyMode:   transferv1alpha1.CopyModeAllResources,
 		UploadType: transferv1alpha1.UploadAsOciArtifact,
 	}
@@ -157,7 +159,7 @@ func TestFromConfig_AllFields(t *testing.T) {
 	for _, opt := range FromConfig(cfg) {
 		opt(&o)
 	}
-	require.True(t, o.Recursive)
+	require.True(t, o.GetRecursive())
 	require.Equal(t, transferv1alpha1.CopyModeAllResources, o.CopyMode)
 	require.Equal(t, transferv1alpha1.UploadAsOciArtifact, o.UploadType)
 }
@@ -166,11 +168,11 @@ func TestFromConfig_PartialDoesNotClobber(t *testing.T) {
 	// Empty config fields are skipped so prior overrides survive.
 	cfg := &transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}
 
-	o := Options{Config: transferv1alpha1.Config{Recursive: true, UploadType: transferv1alpha1.UploadAsLocalBlob}}
+	o := Options{Config: transferv1alpha1.Config{Recursive: ptr.To(true), UploadType: transferv1alpha1.UploadAsLocalBlob}}
 	for _, opt := range FromConfig(cfg) {
 		opt(&o)
 	}
-	require.True(t, o.Recursive)
+	require.True(t, o.GetRecursive())
 	require.Equal(t, transferv1alpha1.CopyModeAllResources, o.CopyMode)
 	require.Equal(t, transferv1alpha1.UploadAsLocalBlob, o.UploadType)
 }

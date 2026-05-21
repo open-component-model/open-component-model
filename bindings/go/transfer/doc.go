@@ -79,13 +79,13 @@
 // # Driving the Transfer from a Wire-Format Config
 //
 // The transfer knobs (recursive, copy mode, upload type) are also expressed by
-// [transferv1alpha1.Config] - the same wire format the CLI loads via
-// `ocm transfer component-version --transfer-config <file>` and that the
-// replication controller will consume from a CRD spec. Use [FromConfig] to feed
-// a loaded config into [BuildGraphDefinition] alongside the runtime-only mappings:
+// [transferv1alpha1.Config] - a canonical wire format that downstream consumers
+// (CLI, controllers, other tooling) can load from YAML/JSON and feed in directly.
+// Use [FromConfig] to convert a loaded config into [Option]s alongside the
+// runtime-only mappings:
 //
 //	cfg := &transferv1alpha1.Config{
-//	    Recursive:  true,
+//	    Recursive:  ptr.To(true), // *bool, see GetRecursive() for the default
 //	    CopyMode:   transferv1alpha1.CopyModeAllResources,
 //	    UploadType: transferv1alpha1.UploadAsOciArtifact,
 //	}
@@ -104,8 +104,8 @@
 //
 // [FromConfig] skips empty fields - so callers can overlay explicit overrides
 // on top of a partial config without the zero values clobbering them. The
-// resulting [Options] therefore still carries empty enum strings until
-// [BuildGraphDefinition] runs; that's where the empties are resolved to their
-// canonical defaults via [transferv1alpha1.Config.GetCopyMode] and
-// [transferv1alpha1.Config.GetUploadType].
+// resulting [Options] therefore still carries empty enum strings and a nil
+// Recursive pointer until [BuildGraphDefinition] runs; that's where the empties
+// are resolved to their canonical defaults via [transferv1alpha1.Config.GetCopyMode],
+// [transferv1alpha1.Config.GetUploadType], and [transferv1alpha1.Config.GetRecursive].
 package transfer
