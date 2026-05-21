@@ -33,7 +33,7 @@ Justification:
 
 * Follows the exact same pattern as the RSA handler — no new infrastructure needed
 * Passphrase stays in memory; never written to disk in decrypted form
-* Credential graph integration is free: passphrase can come from env, file, or inline config
+* Credential graph integration is free: passphrase can come from file or inline config
 * Option B adds operational complexity (binary distribution, plugin discovery)
 * Option C is the status quo and is what we are trying to fix
 
@@ -148,33 +148,6 @@ configurations:
         publicKeyPGPFile: /path/to/public-key.asc
 ```
 
-Passphrase via environment variable:
-
-The OCM credential graph supports `EnvCredentials/v1` as an alternative to inline values.
-This allows the passphrase to be injected from the environment without appearing in any config file:
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-- type: credentials.config.ocm.software
-  consumers:
-  - identity:
-      type: GPG/v1alpha1
-      signature: default
-    credentials:
-    - type: Credentials/v1
-      properties:
-        privateKeyPGPFile: /path/to/signing-key.asc
-        passphrase: $GPG_PASSPHRASE
-```
-
-Set the environment variable before running the CLI:
-
-```sh
-export GPG_PASSPHRASE=<your-key-passphrase>
-ocm sign componentversion --signer-spec ./gpg.yaml ...
-```
-
 ---
 
 ## Pros and Cons of the Options
@@ -185,7 +158,7 @@ Pros:
 
 * Zero new infrastructure — mirrors RSA handler pattern exactly
 * Passphrase in-memory only, never written to disk
-* Works with all existing credential providers (env, file, inline)
+* Works with all existing credential providers (file, inline)
 * Single binary — no plugin discovery needed
 * `github.com/ProtonMail/go-crypto` already used transitively by the CLI
 
