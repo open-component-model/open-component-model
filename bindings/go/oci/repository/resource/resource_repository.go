@@ -19,6 +19,7 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/ownership"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -156,6 +157,70 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 		return nil, fmt.Errorf("error uploading resource: %w", err)
 	}
 	return b, nil
+}
+
+// LookupResourceOwners implements [repository.ResourceOwnerLookup] for OCI by
+// walking the OCI Distribution Referrers API (ADR 0016) for ownership
+// referrers attached to the resource's subject manifest. The resource's
+// Access must be a [v1.OCIImage]. An empty slice means no ownership referrer
+// is recorded against the subject.
+func (p *ResourceRepository) LookupResourceOwners(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) ([]repository.ResourceOwner, error) {
+	obj, err := ociaccess.Scheme.NewObject(resource.Access.GetType())
+	if err != nil {
+		return nil, fmt.Errorf("error creating new object for type %s: %w", resource.Access.GetType(), err)
+	}
+	if err := ociaccess.Scheme.Convert(resource.Access, obj); err != nil {
+		return nil, fmt.Errorf("error converting access to object of type %s: %w", resource.Access.GetType(), err)
+	}
+	access, ok := obj.(*v1.OCIImage)
+	if !ok {
+		return nil, fmt.Errorf("unsupported access type %s: expected OCI image", resource.Access.GetType())
+	}
+
+	var ociCreds *ocicredsv1.OCICredentials
+	if credentials != nil {
+		ociCreds, err = ocicredsv1.ConvertToOCICredentials(credentials)
+		if err != nil {
+			return nil, fmt.Errorf("converting credentials: %w", err)
+		}
+	}
+
+	ref, err := looseref.ParseReference(access.ImageReference)
+	if err != nil {
+		return nil, fmt.Errorf("parsing image reference %q: %w", access.ImageReference, err)
+	}
+
+	client := &auth.Client{
+		Client:     retry.DefaultClient,
+		Header:     map[string][]string{"User-Agent": {provider.DefaultCreator}},
+		Credential: auth.StaticCredential(ref.Registry, ocicredentials.MapCredentials(ociCreds)),
+	}
+
+	// Use the parsed-ref variant so the reference isn't parsed twice (once
+	// above for ref.Registry, once again inside LookupOwners).
+	owners, err := lookupOwners(ctx, ref, access.ImageReference, client)
+	if err != nil {
+		return nil, err
+	}
+	return toResourceOwners(owners), nil
+}
+
+// toResourceOwners converts the OCI-specific ownership referrer payloads into
+// the backend-neutral [repository.ResourceOwner] shape the capability
+// contract uses.
+func toResourceOwners(owners []ownership.Ownership) []repository.ResourceOwner {
+	out := make([]repository.ResourceOwner, 0, len(owners))
+	for _, o := range owners {
+		out = append(out, repository.ResourceOwner{
+			ComponentName:    o.ComponentName,
+			ComponentVersion: o.ComponentVersion,
+			Artifact: repository.ResourceOwnerArtifact{
+				Identity: o.Artifact.Identity,
+				Kind:     string(o.Artifact.Kind),
+			},
+		})
+	}
+	return out
 }
 
 func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *ocicredsv1.OCICredentials) (*oci.Repository, error) {

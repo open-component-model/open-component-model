@@ -13,6 +13,7 @@ import (
 	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -200,4 +201,28 @@ func (r *ResourceRegistry) DownloadResource(ctx context.Context, res *descriptor
 	}
 
 	return plugin.DownloadResource(ctx, res, credentials)
+}
+
+// LookupResourceOwners dispatches an ownership lookup to the resource plugin
+// registered for the access type of res. Backends that do not implement the
+// [repository.ResourceOwnerLookup] capability cause this call to fail with a
+// clear "not supported" error rather than a silent miss.
+func (r *ResourceRegistry) LookupResourceOwners(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) ([]repository.ResourceOwner, error) {
+	plugin, err := r.GetResourcePlugin(ctx, res.GetAccess())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugin for resource: %w", err)
+	}
+	// OCM-REVIEW-last-commit-3: [blocking] [since 2026-05-27] this type-assert only succeeds for
+	// internal plugins. External plugins are wrapped by resourcePluginConverter
+	// (resource_converter.go:18), which implements only the three Repository contract methods —
+	// LookupResourceOwners is not on the contract, so external backends can never satisfy the
+	// assertion. The ResourceOwnerLookup godoc and the commit message both promise external
+	// opt-in. Add the capability to the plugin contract (or a sibling optional contract) and pipe
+	// it through resourcePluginConverter and ReadWriteResourcePluginContract.
+	// (see tmp/ocm-review-last-commit.md)
+	lookup, ok := plugin.(repository.ResourceOwnerLookup)
+	if !ok {
+		return nil, fmt.Errorf("owner lookup is not supported for access type %q", res.GetAccess().GetType())
+	}
+	return lookup.LookupResourceOwners(ctx, res, credentials)
 }

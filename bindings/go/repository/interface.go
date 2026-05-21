@@ -151,6 +151,41 @@ type HealthCheckable interface {
 	CheckHealth(ctx context.Context) error
 }
 
+// ResourceOwner is the backend-neutral payload returned by [ResourceOwnerLookup]:
+// the component version that owns a stored artifact together with the
+// artifact's identity inside that component version.
+type ResourceOwner struct {
+	// ComponentName is the owning component name (e.g. "ocm.software/ocmcli").
+	ComponentName string `json:"componentName"`
+	// ComponentVersion is the owning component version (e.g. "v1.0.0").
+	ComponentVersion string `json:"componentVersion"`
+	// Artifact records the descriptor entry the artifact corresponds to:
+	// its identity within the component version and whether it is a
+	// resource or a source.
+	Artifact ResourceOwnerArtifact `json:"artifact"`
+}
+
+// ResourceOwnerArtifact is the typed artifact reference carried by a
+// [ResourceOwner]. Identity is the descriptor element identity; Kind is
+// "resource" or "source".
+type ResourceOwnerArtifact struct {
+	Identity runtime.Identity `json:"identity"`
+	Kind     string           `json:"kind"`
+}
+
+// ResourceOwnerLookup is an optional capability for resource backends that
+// can discover the component versions that own a stored artifact. Backends
+// opt in by implementing this interface alongside [ResourceRepository]; the
+// plugin registry's dispatch helper type-asserts before delegating and
+// reports "not supported" for backends without it.
+type ResourceOwnerLookup interface {
+	// LookupResourceOwners returns the component versions that own the
+	// given resource. An empty slice means no ownership information is
+	// recorded for it. credentials supplies the typed credentials used to
+	// authenticate against the backing store.
+	LookupResourceOwners(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) ([]ResourceOwner, error)
+}
+
 // ComponentVersionRepositorySpecProvider defines the interface for resolving repository specifications
 // based on a given component identity.
 type ComponentVersionRepositorySpecProvider interface {

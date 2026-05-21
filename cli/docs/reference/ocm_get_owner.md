@@ -1,24 +1,51 @@
 ---
-title: ocm get
-description: Get anything from OCM.
+title: ocm get owner
+description: Get owning component version(s) of an artifact.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm get
+## ocm get owner
 
-Get anything from OCM
+Get owning component version(s) of an artifact
+
+### Synopsis
+
+Get the owning component version(s) of an artifact.
+
+<!-- OCM-REVIEW-last-commit-2: [blocking] [since 2026-05-27] this synopsis (and the example below at
+     line 35) describes auto-detect dispatch the command does not do. cmd.go:32's Long says
+     "Today only 'oci::' is recognized" and cmd.go:77 rejects everything else. Regenerate the doc
+     against the current Long/Example.
+     (see tmp/ocm-review-last-commit.md) -->
+The artifact's access type is auto-detected from the reference by asking each
+registered resource backend; today that means OCI image references, with Helm
+chart and other backends opt-in as they implement the ownership-lookup
+capability. The matched backend is then queried for ownership referrers and
+the owning component versions are resolved from the OCM repository and
+rendered the same way as 'ocm get component-version'.
+
+'-o json' short-circuits the component-version resolution step and emits the
+raw owner-lookup payload directly.
 
 ```
-ocm get {component-version|component-versions|cv|cvs|owner} [flags]
+ocm get owner {ref} [flags]
+```
+
+### Examples
+
+```
+  ocm get owner ghcr.io/acme/ocm/component-descriptors/ocm.software/app@sha256:abc...
 ```
 
 ### Options
 
 ```
-  -h, --help   help for get
+  -h, --help          help for owner
+  -o, --output enum   output format
+                      (must be one of [json table yaml]) (default table)
 ```
 
 ### Options inherited from parent commands
@@ -64,8 +91,5 @@ ocm get {component-version|component-versions|cv|cvs|owner} [flags]
 
 ### SEE ALSO
 
-* [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
-* [ocm get component-version]({{< relref "ocm_get_component-version.md" >}})	 - Get component version(s) from an OCM repository
-* [ocm get owner]({{< relref "ocm_get_owner.md" >}})	 - Get owning component version(s) of an artifact
-* [ocm get types]({{< relref "ocm_get_types.md" >}})	 - Describe OCM types and their configuration schema
+* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
 
