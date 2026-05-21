@@ -51,27 +51,28 @@
 //
 // # Credentials
 //
-// The handler resolves a single typed credential per operation:
+// Both signing and verification accept a SigstoreCredentials/v1alpha1 credential.
+// The relevant fields per operation:
 //
-// Signing uses an OIDCIdentityToken/v1alpha1 credential
-// (spec/credentials/oidcidentitytoken/v1alpha1.OIDCIdentityToken). Relevant fields:
-//   - Token:     inline OIDC identity token for Fulcio authentication
-//   - TokenFile: path to a file containing the OIDC identity token
+// Signing (SigstoreSigner/v1alpha1):
+//   - token:               OIDC identity token for Fulcio authentication
+//   - tokenFile:           path to a file containing the OIDC identity token
+//   - trustedRootJSON:     inline trusted root JSON (private infrastructure only)
+//   - trustedRootJSONFile: path to trusted root JSON file (private infrastructure only)
 //
-// Verification uses a TrustedRoot/v1alpha1 credential
-// (spec/credentials/trustedroot/v1alpha1.TrustedRoot). Relevant fields:
-//   - TrustedRootJSON:     inline Sigstore trusted root JSON document
-//   - TrustedRootJSONFile: path to a Sigstore trusted root JSON file
+// Verification (SigstoreVerifier/v1alpha1):
+//   - trustedRootJSON:     inline trusted root JSON
+//   - trustedRootJSONFile: path to trusted root JSON file
 //
-// Both credential types also accept Credentials/v1 DirectCredentials with the
-// matching camelCase property keys for backwards compatibility.
+// The deprecated snake_case property names (token_file, trusted_root_json,
+// trusted_root_json_file) are still accepted when credentials are provided as
+// Credentials/v1 DirectCredentials for backwards compatibility.
 //
 // # Trusted Root Resolution
 //
-// Trusted root resolution applies to verification only; the signing path does
-// not pass --trusted-root to cosign. Resolution order on verify (first wins):
-//  1. TrustedRoot.TrustedRootJSON — inline JSON written to a temp file
-//  2. TrustedRoot.TrustedRootJSONFile — path passed as --trusted-root
+// Trusted root resolution order (first wins, applies to both signing and verification):
+//  1. trustedRootJSON credential — inline JSON written to a temp file
+//  2. trustedRootJSONFile credential — path passed as --trusted-root
 //  3. "" — cosign falls back to public-good TUF default
 //
 // Note: TUF_ROOT and SIGSTORE_ROOT_FILE env vars control cosign's TUF cache
@@ -83,9 +84,9 @@
 // OIDC token acquisition for keyless signing happens before cosign is invoked.
 // The token must be resolved through the credential graph (configured as a
 // consumer identity of type SigstoreSigner/v1alpha1 in .ocmconfig with a
-// credential of type OIDCIdentityToken/v1alpha1 providing OIDCIdentityToken.Token
-// or OIDCIdentityToken.TokenFile). The handler forwards the resolved token to
-// cosign via the SIGSTORE_ID_TOKEN environment variable.
+// credential of type SigstoreCredentials/v1alpha1 or Credentials/v1
+// with a "token" property). The handler forwards the resolved token to cosign
+// via the SIGSTORE_ID_TOKEN environment variable.
 //
 // If SIGSTORE_ID_TOKEN or ACTIONS_ID_TOKEN_REQUEST_TOKEN is already set in
 // the process environment, the handler uses the ambient token and skips

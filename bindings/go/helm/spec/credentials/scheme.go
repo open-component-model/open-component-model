@@ -8,5 +8,5 @@ import (
 var Scheme = runtime.NewScheme()
 
 func init() {
-	Scheme.MustRegisterScheme(v1.Scheme)
+	v1.MustRegisterCredentialType(Scheme)
 }
