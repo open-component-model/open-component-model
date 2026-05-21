@@ -9,6 +9,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ResourceStream is a lazy handle to OCI content.
@@ -33,9 +34,9 @@ type ResourceRepository interface {
 
 	// DownloadResourceStream returns a lazy store handle and root descriptor.
 	// No data is downloaded yet — content streams on demand via Fetch calls.
-	DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (ResourceStream, error)
+	DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (ResourceStream, error)
 
 	// UploadResourceStream writes content from a ResourceStream into this repository.
 	// Internally uses oras.CopyGraph for blob-by-blob streaming with deduplication.
-	UploadResourceStream(ctx context.Context, resource *descriptor.Resource, stream ResourceStream, credentials map[string]string) (*descriptor.Resource, error)
+	UploadResourceStream(ctx context.Context, resource *descriptor.Resource, stream ResourceStream, credentials runtime.Typed) (*descriptor.Resource, error)
 }

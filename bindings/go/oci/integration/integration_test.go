@@ -39,6 +39,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -49,6 +50,7 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -312,9 +314,10 @@ func Test_Integration_OCIRepository(t *testing.T) {
 			r.Equal(id[ocmruntime.IdentityAttributePort], url.Port())
 			r.Equal(id[ocmruntime.IdentityAttributeScheme], url.Scheme)
 
-			repo, err := repoProvider.GetComponentVersionRepository(ctx, repoSpec, map[string]string{
-				"username": testUsername,
-				"password": password,
+			repo, err := repoProvider.GetComponentVersionRepository(ctx, repoSpec, &ocicredsv1.OCICredentials{
+				Type:     ocicredsv1.OCICredentialsVersionedType,
+				Username: testUsername,
+				Password: password,
 			})
 			r.NoError(err)
 
@@ -1066,7 +1069,10 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 	creds := credsMap[toIdentity.String()]
 	r.NotNil(creds)
 
-	newRes, err := repo.UploadResource(ctx, &resource, blob, creds)
+	newRes, err := repo.UploadResource(ctx, &resource, blob, &credconfigv1.DirectCredentials{
+		Type:       ocmruntime.NewVersionedType(credconfigv1.DirectCredentialsType, credconfigv1.Version),
+		Properties: creds,
+	})
 	r.NoError(err)
 	resource = *newRes
 

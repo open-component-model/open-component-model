@@ -270,31 +270,64 @@ No downstream breakage — all existing code continues to work.
 Each binding creates its typed credential specs and migrates internal code to use `ResolveTyped` with type
 assertions. Bindings can be migrated independently in separate PRs.
 
-### Phase 3: Plugin interfaces
+### Phase 3: Credential interfaces — final `credentials` cut
 
-Update `CredentialPlugin` and `RepositoryPlugin` interfaces to accept and return `runtime.Typed`. Plugin HTTP transport
-converts at the wire boundary.
+`Resolve(ctx, runtime.Identity) (map[string]string, error)` is **replaced** in `Resolver`, `CredentialPlugin`, and
+`RepositoryPlugin`. The interfaces only expose `Resolve` with `runtime.Typed`. The deprecation period planned in the original Phase 6
+is skipped — downstream bindings break against the new release and migrate when they consume it.
 
-### Phase 4: Repository interfaces
+Plugin HTTP transport in the credential-related registries (`credentialrepository/`, `credentialplugin/`) is flipped to
+`runtime.Typed`. The HTTP wire format is unchanged JSON; only the Go signatures change.
 
-Once all bindings work with typed credentials, update `ResourceRepository`, `ComponentVersionRepositoryProvider`,
-`ResourceDigestProcessor`, `Signer`/`Verifier`, and constructor interfaces to accept `runtime.Typed`.
+Consumers that still hold a `map[string]string` surface (Phase 4 / Phase 5 binding APIs) inline a
+`*DirectCredentials` type assertion against the `Resolve` with `runtime.Typed` result. No generic `runtime.Typed → map[string]string`
+helper ships from `bindings/go/credentials` — the inline assertion is short enough not to warrant one, and it keeps the
+typed-handling-not-yet-plumbed path explicit at each call site. The inline form goes away during Phase 4 / Phase 5 as
+each binding flips its API to `runtime.Typed`.
+
+`FromDirectCredentials` per-binding helpers and the `DirectCredentials/v1` fallback are retained per
+*Backward Compatibility* — they are required to lift legacy `Credentials/v1` configs into typed structs.
+
+**Phase 3 is the final release of `bindings/go/credentials` for this epic.** Phase 4 and later phases do not author
+changes in `bindings/go/credentials`. `bindings/go/plugin`, on the other hand, sees additional cuts during Phase 4 —
+each Phase 4 binding-interface flip cascades into the corresponding plugin registry because the registries hold
+compile-time assertions against `repository.ComponentVersionRepositoryProvider`, `constructor.ResourceInputMethod`,
+`constructor.ResourceDigestProcessor`, and `signing.Handler`. Absorbing those binding flips into Phase 3 would
+collapse Phase 4 into a single mega-PR; that trade-off was rejected to keep Phase 4 PRs reviewable per-binding.
+
+### Phase 4: Repository interfaces (no `credentials` changes)
+
+Update `ResourceRepository`, `ComponentVersionRepositoryProvider`, `ResourceDigestProcessor`, `Signer`/`Verifier`, and
+constructor interfaces to accept `runtime.Typed`. Each affected binding (in `bindings/go/constructor`,
+`bindings/go/repository/*`, `bindings/go/signing/*`, etc.) bumps `bindings/go/credentials` to the Phase 3 release,
+flips its own API, removes its own inline `*DirectCredentials` assertions as part of the flip, and ships a matching
+update to the relevant `bindings/go/plugin/manager/registries/*` package (because the registry's compile-time
+assertion against the binding interface would otherwise break). The plugin module is therefore re-released alongside
+each Phase 4 binding that owns a corresponding registry.
 
 ### Phase 5: Consumer migration
 
-CLI commands, K8s controller, and remaining consumers switch from `Resolve` to `ResolveTyped`.
+CLI commands, K8s controller, and remaining consumers switch to `Resolve` and drop their inline
+`*DirectCredentials` assertions as their downstream APIs flip. No changes to `bindings/go/credentials` or
+`bindings/go/plugin`.
 
-### Phase 6: Cleanup
+### Phase 6: Close-out
 
-Deprecate `Resolve` method. Remove internal map conversion helpers and legacy credential key constants.
+Verify no inline `*DirectCredentials` map-extraction patterns remain after Phases 4 and 5 — that is, every consumer
+has flipped to typed credential handling end-to-end.
 
 ### Key Constraints
 
 - Module publish order matters — each phase must be merged and published before downstream phases.
 - Phase 2 PRs can run in parallel across bindings.
-- Phase 4 blocks on Phase 2 completion.
-- Phase 6 is the only step that removes backward compatibility.
-- Old `.ocmconfig` files work at every stage.
+- `bindings/go/credentials` is cut **once** (at Phase 3) for this epic. Every breaking change to the credential
+  interfaces lands in that release. `bindings/go/plugin` is **not** single-cut: it re-releases alongside each Phase 4
+  binding-interface flip because the registries assert compile-time interface conformance against the consuming
+  bindings.
+- Backward compatibility is broken at Phase 3 (credential interface removal) and at each downstream binding's
+  Phase 4 / Phase 5 PR (its own credential surface flip). There is no deprecation window.
+- Old `.ocmconfig` files work at every stage (via `DirectCredentials/v1` fallback + per-binding `FromDirectCredentials`
+  helpers).
 
 ## Conclusion
 
@@ -303,6 +336,28 @@ binding owns its credential types. The graph stores typed credentials natively. 
 development blocking while transitioning the multi-module monorepo.
 
 ## Changelog
+
+### 2026-05-15 — Phase 6 cleanup absorbed into Phase 3 / Phase 4; `Resolve` removed outright
+
+- **`Resolve` replaced, not deprecated.** Phase 3 replaces `Resolve` with its `runtime.Typed` version in `Resolver`, `CredentialPlugin`, and
+  `RepositoryPlugin`; the planned Phase 6 deprecation period is skipped. The interfaces only expose
+  `Resolve` with `runtime.Typed` instead of `map[string]string`.
+- **`bindings/go/credentials` cut once.** All credential-side interface changes for this epic land in Phase 3.
+  Phase 4 and Phase 5 do not author changes in `bindings/go/credentials`. Each downstream binding bumps once during
+  its own PR.
+- **`bindings/go/plugin` not single-cut.** Phase 3 flips the credential-related registries
+  (`credentialrepository/`, `credentialplugin/`). The other registries (`input/`, `signinghandler/`,
+  `digestprocessor/`, `componentversionrepository/`, `componentlister/`, `blobtransformer/`, `resource/`) hold
+  compile-time assertions against `repository`/`constructor`/`signing` binding interfaces and must re-release whenever
+  those interfaces flip in Phase 4. Absorbing Phase 4 binding flips into Phase 3 was considered and rejected — it
+  would collapse Phase 4 into one mega-PR.
+- **No generic `runtime.Typed → map[string]string` helper ships from `bindings/go/credentials`.** Consumers that still
+  hold a `map[string]string` downstream API inline a `*DirectCredentials` type assertion at the call site. The inline
+  form goes away during Phase 4 / Phase 5 as each binding flips. A generic helper was considered (`TypedToMap`) and
+  rejected — it papered over typed-handling-not-yet-plumbed paths and would have left orphan code in
+  `bindings/go/credentials` after the epic.
+- **`FromDirectCredentials` + `DirectCredentials/v1` retained.** Per-binding helpers (`oci`, `rsa`, etc.) remain the
+  bridge for legacy `Credentials/v1` configs. Rationale recorded in `bindings/go/credentials/doc.go`.
 
 ### 2026-05-11 — Roll back typed identities and IdentityTypeRegistry
 
