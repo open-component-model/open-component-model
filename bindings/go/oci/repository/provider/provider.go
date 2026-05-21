@@ -123,7 +123,7 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 
 // GetComponentVersionRepository implements the repository.ComponentVersionRepositoryProvider interface.
 // It retrieves a component version repository with caching support for the given specification and credentials.
-func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, creds map[string]string) (repository.ComponentVersionRepository, error) {
+func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, creds runtime.Typed) (repository.ComponentVersionRepository, error) {
 	obj, err := getConvertedTypedSpec(b.scheme, repositorySpecification)
 	if err != nil {
 		return nil, err
@@ -134,18 +134,22 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		oci.WithCreator(b.creator),
 	}
 
-	typedCreds := v2.FromDirectCredentials(creds)
-
 	switch obj := obj.(type) {
 	case *ocirepospecv1.Repository:
 		identity, err := v1.OCIRegistryIdentityFromOCIRepository(obj)
 		if err != nil {
 			return nil, err
 		}
+
+		ociCredentials, err := v2.ConvertToOCICredentials(creds)
+		if err != nil {
+			return nil, fmt.Errorf("error converting credentials: %w", err)
+		}
+
 		return ocirepository.NewFromOCIRepoV1(ctx, obj, &auth.Client{
 			Client:     b.httpClient,
 			Cache:      auth.NewCache(),
-			Credential: credentials.CredentialFuncTyped(identity, typedCreds),
+			Credential: credentials.CredentialFunc(identity, ociCredentials),
 			Header: map[string][]string{
 				"User-Agent": {b.creator},
 			},

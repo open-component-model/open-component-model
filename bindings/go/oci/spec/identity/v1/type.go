@@ -8,17 +8,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const (
-	OCIRegistryIdentityType = "OCIRegistry"
-	Version                 = "v1"
-)
-
-// Type is the unversioned Consumer Identity type for any OCI Repository (backward compat).
-var Type = runtime.NewUnversionedType(OCIRegistryIdentityType)
-
-// VersionedType is the versioned consumer identity type.
-var VersionedType = runtime.NewVersionedType(OCIRegistryIdentityType, Version)
-
 func IdentityFromOCIRepository(repository *oci.Repository) (runtime.Identity, error) {
 	identity, err := runtime.ParseURLToIdentity(repository.BaseUrl)
 	if err != nil {

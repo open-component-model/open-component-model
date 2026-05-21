@@ -51,11 +51,11 @@ func (p *pathMatcherResolver) getRepository(ctx context.Context, specification r
 	p.lock.RUnlock()
 
 	// Resolve credentials
-	var credMap map[string]string
+	var creds runtime.Typed
 	consumerIdentity, err := p.repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, specification)
 	if err == nil {
 		if p.graph != nil {
-			if credMap, err = p.graph.Resolve(ctx, consumerIdentity); err != nil { //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
+			if creds, err = p.graph.Resolve(ctx, consumerIdentity); err != nil {
 				if errors.Is(err, credentials.ErrNotFound) {
 					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, err.Error()))
 				} else {
@@ -67,7 +67,7 @@ func (p *pathMatcherResolver) getRepository(ctx context.Context, specification r
 		slog.DebugContext(ctx, "could not get credential consumer identity for component version repository", "repository", specification, "error", err)
 	}
 
-	repo, err := p.repoProvider.GetComponentVersionRepository(ctx, specification, credMap)
+	repo, err := p.repoProvider.GetComponentVersionRepository(ctx, specification, creds)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version repository for %q failed: %w", specification, err)
 	}
