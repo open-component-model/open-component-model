@@ -114,6 +114,37 @@ kubectl wait pod -l app=protected-registry2 --for condition=Ready --timeout 5m |
 
 # Install flux operators
 flux install || exit 1
+# Install argo cd
+kubectl create namespace argocd
+kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml || exit 1
+
+kubectl wait -n argocd deployment \
+    argocd-server \
+    argocd-repo-server \
+    argocd-redis \
+    argocd-dex-server \
+    argocd-applicationset-controller \
+    argocd-notifications-controller \
+    --for=condition=Available --timeout=5m || exit 1
+    
+# Register the local OCI registry with ArgoCD as an insecure (plain HTTP) Helm OCI
+# credential template. Any Application whose repoURL starts with oci://image-registry:5000
+# inherits these settings. insecureOCIForceHttp is required because the local registry
+# serves plain HTTP; ArgoCD otherwise defaults to HTTPS and fails the chart pull.
+kubectl apply -n argocd -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: image-registry-creds
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repo-creds
+stringData:
+  url: oci://${reg_name}:${reg_port}
+  type: helm
+  enableOCI: "true"
+  insecureOCIForceHttp: "true"
+EOF
 
 # Install kro operators
 helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.9.0 || exit 1

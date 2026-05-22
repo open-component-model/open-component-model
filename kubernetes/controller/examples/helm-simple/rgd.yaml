@@ -23,9 +23,11 @@ spec:
               resource:
                 name: helm-resource
           additionalStatusFields:
-            registry: resource.access.toOCI().registry
-            repository: resource.access.toOCI().repository
-            digest: resource.access.toOCI().digest
+            registry: resource.access.imageReference.toOCI().registry
+            repository: resource.access.imageReference.toOCI().repository
+            digest: resource.access.imageReference.toOCI().digest
+            tag: resource.access.imageReference.toOCI().tag
+          interval: 10m
     - id: ocirepository
       template:
         apiVersion: source.toolkit.fluxcd.io/v1
@@ -55,3 +57,29 @@ spec:
             kind: OCIRepository
             name: ${ocirepository.metadata.name}
             namespace: default
+    - id: argocdApplication
+      template:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: "${schema.spec.prefix}"
+          namespace: argocd
+        spec:
+          project: default
+          source:
+            chart: podinfo
+            helm:
+              releaseName: ${ocirepository.metadata.name}
+            path: .
+            repoURL: oci://${resourceChart.status.additional.?registry}/${resourceChart.status.additional.?repository}
+            # working -> oci://image-registry:5000/stefanprodan/charts/podinfo
+            targetRevision: ${resourceChart.status.additional.?tag}
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: default-argocd
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+            syncOptions:
+              - CreateNamespace=true

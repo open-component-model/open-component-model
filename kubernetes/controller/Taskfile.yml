@@ -90,6 +90,20 @@ tasks:
       - task: helm/install
       - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v
 
+  test/e2e/example:
+    desc: "Run e2e for a single example. Usage: task test/e2e/example EXAMPLE=helm-simple"
+    dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
+    requires:
+      vars: [EXAMPLE]
+    cmds:
+      - task: install
+      - task: deploy
+      - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v -ginkgo.focus="should deploy the example {{.EXAMPLE}}"
+      - task: undeploy
+      - task: uninstall
+        vars:
+          IGNORE_NOT_FOUND: "true"
+
   # Build
   build:
     desc: "Build the controller manager binary"
