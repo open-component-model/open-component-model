@@ -33,7 +33,6 @@ jobs:
       run: |
         jsonschema lint $(git ls-files '**/schemas/*.schema.json') \
           --verbose \
-          --exclude oneof_to_anyof_disjoint_types \
           --exclude orphan_definitions \
           --exclude enum_with_type \
           --exclude description_trailing_period \
