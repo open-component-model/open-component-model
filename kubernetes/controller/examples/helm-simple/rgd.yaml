@@ -1,3 +1,5 @@
+# kind delete cluster --name kind && task kubernetes/controller:test/e2e/setup/local && task kubernetes/controller:install && task kubernetes/controller:deploy 
+# ocm add componentversions --create --file ./ctf component-constructor.yaml && ocm transfer ctf --overwrite --enforce --copy-resources --omit-access-types gitHub ./ctf http://image-registry:5000 && k apply -f bootstrap.yaml -f instance.yaml
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
 metadata:
@@ -26,8 +28,7 @@ spec:
             registry: resource.access.toOCI().registry
             repository: resource.access.toOCI().repository
             digest: resource.access.toOCI().digest
-            tag: resource.access.toOCI().tag
-          interval: 10m
+            tag: resource.access.toOCI().tag          
     - id: ocirepository
       template:
         apiVersion: source.toolkit.fluxcd.io/v1

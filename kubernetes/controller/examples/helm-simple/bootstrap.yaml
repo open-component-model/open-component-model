@@ -1,6 +1,3 @@
-# kind delete cluster --name kind && task kubernetes/controller:test/e2e/setup/local && task kubernetes/controller:install && task kubernetes/controller:deploy 
-# ocm add componentversions --create --file ./ctf component-constructor.yaml && ocm transfer ctf --overwrite --enforce --copy-resources --omit-access-types gitHub ./ctf http://image-registry:5000 && k apply -f bootstrap.yaml -f instance.yaml
-
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Repository
 metadata:
@@ -34,7 +31,6 @@ spec:
     byReference:
       resource:
         name: kro-rgd
-  interval: 10m
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Deployer
