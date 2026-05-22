@@ -28,12 +28,12 @@ func (m *TestPlugin) Ping(_ context.Context) error {
 	return nil
 }
 
-func (m *TestPlugin) CheckHealth(ctx context.Context, request repov1.PostCheckHealthRequest[*dummyv1.Repository], credentials map[string]string) error {
+func (m *TestPlugin) CheckHealth(ctx context.Context, request repov1.PostCheckHealthRequest[*dummyv1.Repository], credentials runtime.Typed) error {
 	// Would construct request.BaseURL and try to ping the repository here.
 	return nil
 }
 
-func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.GetComponentVersionRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Descriptor, error) {
+func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.GetComponentVersionRequest[*dummyv1.Repository], credentials runtime.Typed) (*descriptor.Descriptor, error) {
 	return &descriptor.Descriptor{
 		Component: descriptor.Component{
 			ComponentMeta: descriptor.ComponentMeta{
@@ -73,11 +73,11 @@ func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.Get
 	}, nil
 }
 
-func (m *TestPlugin) ListComponentVersions(ctx context.Context, request repov1.ListComponentVersionsRequest[*dummyv1.Repository], credentials map[string]string) ([]string, error) {
+func (m *TestPlugin) ListComponentVersions(ctx context.Context, request repov1.ListComponentVersionsRequest[*dummyv1.Repository], credentials runtime.Typed) ([]string, error) {
 	return []string{"v0.0.1", "v0.0.2"}, nil
 }
 
-func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (repov1.GetLocalResourceResponse, error) {
+func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials runtime.Typed) (repov1.GetLocalResourceResponse, error) {
 	// the plugin decides where things will live.
 	f, err := os.CreateTemp("", "test-resource-file")
 	if err != nil {
@@ -123,7 +123,7 @@ func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLoc
 	}, nil
 }
 
-func (m *TestPlugin) GetLocalSource(ctx context.Context, request repov1.GetLocalSourceRequest[*dummyv1.Repository], credentials map[string]string) (repov1.GetLocalSourceResponse, error) {
+func (m *TestPlugin) GetLocalSource(ctx context.Context, request repov1.GetLocalSourceRequest[*dummyv1.Repository], credentials runtime.Typed) (repov1.GetLocalSourceResponse, error) {
 	// the plugin decides where things will live.
 	f, err := os.CreateTemp("", "test-source-file")
 	if err != nil {
@@ -163,17 +163,17 @@ func (m *TestPlugin) GetLocalSource(ctx context.Context, request repov1.GetLocal
 	}, nil
 }
 
-func (m *TestPlugin) AddLocalResource(ctx context.Context, request repov1.PostLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Resource, error) {
+func (m *TestPlugin) AddLocalResource(ctx context.Context, request repov1.PostLocalResourceRequest[*dummyv1.Repository], credentials runtime.Typed) (*descriptor.Resource, error) {
 	logger.Debug("AddLocalResource", "location", request.ResourceLocation)
 	return nil, nil
 }
 
-func (m *TestPlugin) AddLocalSource(ctx context.Context, request repov1.PostLocalSourceRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Source, error) {
+func (m *TestPlugin) AddLocalSource(ctx context.Context, request repov1.PostLocalSourceRequest[*dummyv1.Repository], credentials runtime.Typed) (*descriptor.Source, error) {
 	logger.Debug("AddLocalSource", "location", request.SourceLocation)
 	return nil, nil
 }
 
-func (m *TestPlugin) AddComponentVersion(ctx context.Context, request repov1.PostComponentVersionRequest[*dummyv1.Repository], credentials map[string]string) error {
+func (m *TestPlugin) AddComponentVersion(ctx context.Context, request repov1.PostComponentVersionRequest[*dummyv1.Repository], credentials runtime.Typed) error {
 	logger.Debug("AddComponentVersion", "name", request.Descriptor.Component.Name)
 	return nil
 }

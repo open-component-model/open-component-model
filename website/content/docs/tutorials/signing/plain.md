@@ -84,8 +84,7 @@ components:
 EOF
 
 # Create component version in a CTF archive located at ./transport-archive
-ocm add cv 
-
+ocm add cv
 ```
 
 You should see that the component version was created successfully.

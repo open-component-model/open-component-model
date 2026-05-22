@@ -33,7 +33,7 @@ type ComponentVersionRepositoryProvider interface {
 	// - Validating the repository specification
 	// - Setting up the repository with appropriate credentials
 	// - Configuring caching and other repository options
-	GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (ComponentVersionRepository, error)
+	GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials runtime.Typed) (ComponentVersionRepository, error)
 
 	// GetJSONSchemaForRepositorySpecification returns the JSON schema for a given repository specification type.
 	GetJSONSchemaForRepositorySpecification(typ runtime.Type) ([]byte, error)
@@ -108,10 +108,10 @@ type ResourceRepository interface {
 	// Returns the updated resource with repository-specific information.
 	// The resource must be referenced in the component descriptor.
 	// The credentials map must contain necessary authentication information to access the resource.
-	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error)
+	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error)
 	// DownloadResource downloads and verifies the integrity of a [descriptor.Resource] from the repository.
 	// The credentials map must contain necessary authentication information to access the resource.
-	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error)
+	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error)
 }
 
 // SourceRepository defines the interface for storing and retrieving OCM sources
@@ -139,7 +139,7 @@ type ResourceDigestProcessor interface {
 	// Under certain circumstances, it can also process the [*descriptor.Resource.Access] of the resource,
 	// e.g. to ensure that the digest is pinned after digest information was appended.
 	// As a result, after processing, the access MUST always reference the content described by the digest and cannot be mutated.
-	ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error)
+	ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error)
 }
 
 // HealthCheckable is an optional interface that can be implemented by a

@@ -197,7 +197,7 @@ func (r *RepositoryRegistry) GetComponentVersionRepositoryCredentialConsumerIden
 // repository specification and credentials.
 // It first checks for internal plugins registered via RegisterInternalComponentVersionRepositoryPlugin,
 // then falls back to external plugins if no internal plugin is found.
-func (r *RepositoryRegistry) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
+func (r *RepositoryRegistry) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials runtime.Typed) (repository.ComponentVersionRepository, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 

@@ -16,12 +16,12 @@ import (
 // the plugin implementor.
 func ListComponentsHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 	request *v1.ListComponentsRequest[T],
-	credentials map[string]string) (*v1.ListComponentsResponse, error), scheme *runtime.Scheme, typ T,
+	credentials runtime.Typed) (*v1.ListComponentsResponse, error), scheme *runtime.Scheme, typ T,
 ) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := map[string]string{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
+		credentials := &runtime.Raw{}
+		if err := json.Unmarshal(rawCredentials, credentials); err != nil {
 			plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
 			return
 		}

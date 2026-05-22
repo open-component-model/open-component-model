@@ -25,7 +25,7 @@ type TestPlugin struct {
 
 var _ listerv1.ComponentListerPluginContract[*dummyv1.Repository] = (*TestPlugin)(nil)
 
-func (m *TestPlugin) ListComponents(ctx context.Context, request *listerv1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) (*listerv1.ListComponentsResponse, error) {
+func (m *TestPlugin) ListComponents(ctx context.Context, request *listerv1.ListComponentsRequest[*dummyv1.Repository], credentials runtime.Typed) (*listerv1.ListComponentsResponse, error) {
 	logger.DebugContext(ctx, "ListComponents", "request", request)
 	page1 := []string{"test-component-1"}
 	page2 := []string{"test-component-2"}

@@ -31,7 +31,7 @@ func TestListComponentsHandlerFunc(t *testing.T) {
 		{
 			name: "ListComponentsHandlerFunc unauthorized error",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ListComponentsHandlerFunc(func(ctx context.Context, request *v1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) (*v1.ListComponentsResponse, error) {
+				handler := ListComponentsHandlerFunc(func(ctx context.Context, request *v1.ListComponentsRequest[*dummyv1.Repository], credentials runtime.Typed) (*v1.ListComponentsResponse, error) {
 					return &v1.ListComponentsResponse{}, nil
 				}, scheme, &dummyv1.Repository{})
 
@@ -54,7 +54,7 @@ func TestListComponentsHandlerFunc(t *testing.T) {
 		{
 			name: "ListComponentsHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ListComponentsHandlerFunc(func(ctx context.Context, request *v1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) (*v1.ListComponentsResponse, error) {
+				handler := ListComponentsHandlerFunc(func(ctx context.Context, request *v1.ListComponentsRequest[*dummyv1.Repository], credentials runtime.Typed) (*v1.ListComponentsResponse, error) {
 					return &v1.ListComponentsResponse{List: []string{"test-component-1", "test-component-2"}}, nil
 				}, scheme, &dummyv1.Repository{})
 

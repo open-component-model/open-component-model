@@ -50,8 +50,7 @@ type SignConfig struct {
 	// +ocm:jsonschema-gen:enum=SigstoreSigningConfiguration/v1alpha1
 	Type runtime.Type `json:"type"`
 
-	// SigningConfig is a filesystem path to a cosign signing configuration file
-	// (conventionally named signing_config.json).
+	// SigningConfig is a filesystem path to a cosign signing configuration file.
 	// When set, cosign discovers all service endpoints (Fulcio, Rekor, TSA) from
 	// this file instead of TUF auto-discovery.
 	// Maps to cosign --signing-config.
@@ -98,8 +97,7 @@ type VerifyConfig struct {
 	// PrivateInfrastructure indicates the signature was made against a privately
 	// deployed Sigstore stack. When set, the verifier skips the public Rekor
 	// transparency-log lookup; signature, certificate chain, identity, and SCT
-	// checks are unchanged. Must be paired with a trusted-root credential
-	// (trusted_root_json or trusted_root_json_file).
+	// checks are unchanged. Must be paired with a trusted-root credential.
 	// Maps to cosign --private-infrastructure.
 	PrivateInfrastructure bool `json:"privateInfrastructure,omitempty"`
 

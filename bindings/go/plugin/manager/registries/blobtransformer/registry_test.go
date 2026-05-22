@@ -254,7 +254,7 @@ func (m *mockBlobTransformerPlugin) GetBlobTransformerCredentialConsumerIdentity
 	return runtime.Identity{}, nil
 }
 
-func (m *mockBlobTransformerPlugin) TransformBlob(ctx context.Context, blob blob.ReadOnlyBlob, spec runtime.Typed, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (m *mockBlobTransformerPlugin) TransformBlob(ctx context.Context, blob blob.ReadOnlyBlob, spec runtime.Typed, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	m.called = true
 	return blob, nil
 }

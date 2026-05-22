@@ -13,97 +13,14 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	remotecredentials "oras.land/oras-go/v2/registry/remote/credentials"
 
-	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Credential key constants re-exported from the typed credential package for backward compatibility.
-const (
-	// CredentialKeyUsername is the key for basic auth username.
-	CredentialKeyUsername = credentialsv1.CredentialKeyUsername
-	// CredentialKeyPassword is the key for basic auth password.
-	CredentialKeyPassword = credentialsv1.CredentialKeyPassword
-	// CredentialKeyAccessToken is the key for OAuth2/bearer access tokens.
-	CredentialKeyAccessToken = credentialsv1.CredentialKeyAccessToken
-	// CredentialKeyRefreshToken is the key for OAuth2 refresh tokens.
-	CredentialKeyRefreshToken = credentialsv1.CredentialKeyRefreshToken
-)
-
-// CredentialFromMap converts a credential map to an auth.Credential.
-//
-// Deprecated: Use CredentialFromTyped instead.
-func CredentialFromMap(credentials map[string]string) auth.Credential {
-	cred := auth.Credential{}
-	if v, ok := credentials[CredentialKeyUsername]; ok {
-		cred.Username = v
-	}
-	if v, ok := credentials[CredentialKeyPassword]; ok {
-		cred.Password = v
-	}
-	if v, ok := credentials[CredentialKeyAccessToken]; ok {
-		cred.AccessToken = v
-	}
-	if v, ok := credentials[CredentialKeyRefreshToken]; ok {
-		cred.RefreshToken = v
-	}
-	return cred
-}
-
-// CredentialFunc creates a function that returns credentials based on host and port matching.
-// It takes an identity map and a credentials map as input and returns a function that can be
-// used with the ORAS client for authentication.
-//
-// The returned function will:
-//   - Return the provided credentials if the host and port match the identity
-//   - Return empty credentials if there's a mismatch
-//   - Return an error if the hostport string is invalid
-//
-// Example:
-//
-//	identity := runtime.Identity{
-//		runtime.IdentityAttributeHostname: "example.com",
-//		runtime.IdentityAttributePort:     "443",
-//	}
-//	credentials := map[string]string{
-//		CredentialKeyUsername: "user",
-//		CredentialKeyPassword: "pass",
-//	}
-//	credFunc := CredentialFunc(identity, credentials)
-//
-// This will create a function that checks if the host and port match "example.com:443",
-// and returns the provided credentials if they do. If the host and port don't match,
-// it will return empty credentials.
-//
-// Deprecated: Use CredentialFuncTyped instead.
-func CredentialFunc(identity runtime.Identity, credentials map[string]string) auth.CredentialFunc {
-	credential := CredentialFromMap(credentials)
-	registeredHostname, hostInIdentity := identity[runtime.IdentityAttributeHostname]
-	registeredPort, portInIdentity := identity[runtime.IdentityAttributePort]
-
-	return func(ctx context.Context, hostport string) (auth.Credential, error) {
-		actualHost, actualPort, err := net.SplitHostPort(hostport)
-		if err != nil {
-			// it can happen that no port is given here
-			err, addrError := errors.AsType[*net.AddrError](err)
-			portIsMissing := addrError && err.Err == "missing port in address"
-			if !portIsMissing {
-				return auth.Credential{}, fmt.Errorf("failed to split host and port: %w", err)
-			}
-			actualHost = hostport
-		}
-		hostMismatch := hostInIdentity && registeredHostname != actualHost
-		portMismatch := portInIdentity && registeredPort != actualPort
-		if hostMismatch || portMismatch {
-			return auth.EmptyCredential, nil
-		}
-		return credential, nil
-	}
-}
-
-// CredentialFromTyped converts a [credentialsv1.OCICredentials] to an auth.Credential.
+// MapCredentials converts a [credentialsv1.OCICredentials] to an auth.Credential.
 // A nil input yields an empty [auth.Credential].
-func CredentialFromTyped(credentials *credentialsv1.OCICredentials) auth.Credential {
+func MapCredentials(credentials *v1.OCICredentials) auth.Credential {
 	if credentials == nil {
 		return auth.Credential{}
 	}
@@ -115,7 +32,7 @@ func CredentialFromTyped(credentials *credentialsv1.OCICredentials) auth.Credent
 	return cred
 }
 
-// CredentialFuncTyped creates a function that returns credentials based on host and port matching.
+// CredentialFunc creates a function that returns credentials based on host and port matching.
 // It takes an identity map and [credentialsv1.OCICredentials] as input and returns a function that can be
 // used with the ORAS client for authentication.
 //
@@ -139,8 +56,8 @@ func CredentialFromTyped(credentials *credentialsv1.OCICredentials) auth.Credent
 // This will create a function that checks if the host and port match "example.com:443",
 // and returns the provided credentials if they do. If the host and port don't match,
 // it will return empty credentials.
-func CredentialFuncTyped(identity *identityv1.OCIRegistryIdentity, credentials *credentialsv1.OCICredentials) auth.CredentialFunc {
-	credential := CredentialFromTyped(credentials)
+func CredentialFunc(identity *identityv1.OCIRegistryIdentity, credentials *v1.OCICredentials) auth.CredentialFunc {
+	credential := MapCredentials(credentials)
 	hasHost := identity != nil && identity.Hostname != ""
 	hasPort := identity != nil && identity.Port != ""
 
@@ -176,8 +93,8 @@ var storeConcurrencyMu sync.Mutex
 // The function will:
 //   - Load credentials from the specified Docker config source
 //   - Match the credentials against the provided identity
-//   - Return a map of credential key-value pairs
-func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credentialsv1.DockerConfig, identity runtime.Identity) (map[string]string, error) {
+//   - Return [v1.OCICredentials] if a match is found, or nil if no credentials are found
+func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig v1.DockerConfig, identity runtime.Identity) (*v1.OCICredentials, error) {
 	credStore, err := getStore(ctx, dockerConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve credentials store: %w", err)
@@ -224,23 +141,15 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 		return nil, nil
 	}
 
-	credentialMap := map[string]string{}
-	if v := cred.Username; v != "" {
-		credentialMap[CredentialKeyUsername] = v
-	}
-	if v := cred.Password; v != "" {
-		credentialMap[CredentialKeyPassword] = v
-	}
-	if v := cred.AccessToken; v != "" {
-		credentialMap[CredentialKeyAccessToken] = v
-	}
-	if v := cred.RefreshToken; v != "" {
-		credentialMap[CredentialKeyRefreshToken] = v
-	}
-
 	logger.DebugContext(ctx, "credentials found", "username", cred.Username)
 
-	return credentialMap, nil
+	return &v1.OCICredentials{
+		Type:         runtime.NewVersionedType(v1.OCICredentialsType, v1.Version),
+		Username:     cred.Username,
+		Password:     cred.Password,
+		AccessToken:  cred.AccessToken,
+		RefreshToken: cred.RefreshToken,
+	}, nil
 }
 
 // getStore creates a credential store based on the provided Docker configuration.
@@ -253,7 +162,7 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 //   - Shell expansion for file paths (e.g., ~ for home directory)
 //   - Temporary file creation for inline configurations
 //   - Integration with the native host credential store
-func getStore(ctx context.Context, dockerConfig credentialsv1.DockerConfig) (remotecredentials.Store, error) {
+func getStore(ctx context.Context, dockerConfig v1.DockerConfig) (remotecredentials.Store, error) {
 	// Determine which store creation strategy to use based on the provided configuration
 	switch {
 	case dockerConfig.DockerConfigFile == "" && dockerConfig.DockerConfig == "":

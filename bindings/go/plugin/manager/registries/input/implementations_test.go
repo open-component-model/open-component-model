@@ -45,6 +45,6 @@ func TestProcessResourceHandler(t *testing.T) {
 				},
 			},
 		},
-	}, map[string]string{})
+	}, nil)
 	require.NoError(t, err)
 }

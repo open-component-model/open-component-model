@@ -69,7 +69,7 @@ func (p *RepositoryPlugin) GetIdentity(ctx context.Context, request *digestproce
 	return &identity, nil
 }
 
-func (p *RepositoryPlugin) ProcessResourceDigest(ctx context.Context, request *digestprocessorv1.ProcessResourceDigestRequest, credentials map[string]string) (*digestprocessorv1.ProcessResourceDigestResponse, error) {
+func (p *RepositoryPlugin) ProcessResourceDigest(ctx context.Context, request *digestprocessorv1.ProcessResourceDigestRequest, credentials runtime.Typed) (*digestprocessorv1.ProcessResourceDigestResponse, error) {
 	// Note: We don't validate the resource here since it doesn't implement runtime.Typed
 	// The validation should be handled by the plugin itself
 
@@ -107,7 +107,10 @@ func (p *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
 	return nil
 }
 
-func toCredentials(credentials map[string]string) (plugins.KV, error) {
+func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
+	if credentials == nil {
+		return plugins.KV{Key: "Authorization", Value: "{}"}, nil
+	}
 	rawCreds, err := json.Marshal(credentials)
 	if err != nil {
 		return plugins.KV{}, err

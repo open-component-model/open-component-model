@@ -25,11 +25,11 @@ type UTF8 struct {
 	Type runtime.Type `json:"type"`
 	// Text is an UTF-8 string, raw encoded.
 	Text string `json:"text,omitempty"`
-	// JSON is a JSON object, raw encoded via UTF-8.
+	// JSON is a JSON value, raw encoded via UTF-8.
 	JSON json.RawMessage `json:"json,omitempty"`
-	// FormattedJSON is a JSON object, raw encoded via UTF-8, with default indentation applied.
+	// FormattedJSON is a JSON value, raw encoded via UTF-8, with default indentation applied.
 	FormattedJSON json.RawMessage `json:"formattedJson,omitempty"`
-	// YAML is a YAML object, raw encoded via UTF-8.
+	// YAML is a YAML value, raw encoded via UTF-8.
 	YAML json.RawMessage `json:"yaml,omitempty"`
 	// Compress indicates whether the file should be compressed with gzip.
 	Compress bool `json:"compress,omitempty"`

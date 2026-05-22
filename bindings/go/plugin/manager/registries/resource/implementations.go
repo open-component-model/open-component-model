@@ -73,7 +73,7 @@ func (p *RepositoryPlugin) GetIdentity(ctx context.Context, request *resourcev1.
 }
 
 // GetGlobalResource retrieves a global resource.
-func (p *RepositoryPlugin) GetGlobalResource(ctx context.Context, req *resourcev1.GetGlobalResourceRequest, credentials map[string]string) (*resourcev1.GetGlobalResourceResponse, error) {
+func (p *RepositoryPlugin) GetGlobalResource(ctx context.Context, req *resourcev1.GetGlobalResourceRequest, credentials runtime.Typed) (*resourcev1.GetGlobalResourceResponse, error) {
 	if err := p.validateEndpoint(req.Resource.Access); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
@@ -91,7 +91,7 @@ func (p *RepositoryPlugin) GetGlobalResource(ctx context.Context, req *resourcev
 }
 
 // AddGlobalResource adds a global resource.
-func (p *RepositoryPlugin) AddGlobalResource(ctx context.Context, req *resourcev1.AddGlobalResourceRequest, credentials map[string]string) (*resourcev1.AddGlobalResourceResponse, error) {
+func (p *RepositoryPlugin) AddGlobalResource(ctx context.Context, req *resourcev1.AddGlobalResourceRequest, credentials runtime.Typed) (*resourcev1.AddGlobalResourceResponse, error) {
 	if err := p.validateEndpoint(req.Resource.Access); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
@@ -129,7 +129,10 @@ func (p *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
 	return nil
 }
 
-func toCredentials(credentials map[string]string) (plugins.KV, error) {
+func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
+	if credentials == nil {
+		return plugins.KV{Key: "Authorization", Value: "{}"}, nil
+	}
 	rawCreds, err := json.Marshal(credentials)
 	if err != nil {
 		return plugins.KV{}, err

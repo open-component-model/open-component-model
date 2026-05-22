@@ -2,11 +2,11 @@ package transformer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -43,21 +43,25 @@ func (t *TransferOCIArtifact) Transform(ctx context.Context, step runtime.Typed)
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.TargetResource)
 
 	// Resolve source credentials
-	var srcCreds map[string]string
+	var srcCreds runtime.Typed
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, srcResource); err == nil {
-			if srcCreds, err = resolveCredentialsMap(ctx, t.CredentialProvider, v1.FromIdentity(consumerId)); err != nil {
-				return nil, fmt.Errorf("failed resolving source credentials: %w", err)
+			if srcCreds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
+				if !errors.Is(err, credentials.ErrNotFound) {
+					return nil, fmt.Errorf("failed resolving source credentials: %w", err)
+				}
 			}
 		}
 	}
 
 	// Resolve target credentials
-	var dstCreds map[string]string
+	var dstCreds runtime.Typed
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
-			if dstCreds, err = resolveCredentialsMap(ctx, t.CredentialProvider, v1.FromIdentity(consumerId)); err != nil {
-				return nil, fmt.Errorf("failed resolving target credentials: %w", err)
+			if dstCreds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
+				if !errors.Is(err, credentials.ErrNotFound) {
+					return nil, fmt.Errorf("failed resolving target credentials: %w", err)
+				}
 			}
 		}
 	}

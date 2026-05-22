@@ -16,7 +16,7 @@
     },
     "signingConfig": {
       "type": "string",
-      "description": "SigningConfig is a filesystem path to a cosign signing configuration file\n(conventionally named signing_config.json).\nWhen set, cosign discovers all service endpoints (Fulcio, Rekor, TSA) from\nthis file instead of TUF auto-discovery.\nMaps to cosign --signing-config."
+      "description": "SigningConfig is a filesystem path to a cosign signing configuration file.\nWhen set, cosign discovers all service endpoints (Fulcio, Rekor, TSA) from\nthis file instead of TUF auto-discovery.\nMaps to cosign --signing-config."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

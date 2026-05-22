@@ -3,7 +3,6 @@ package transformer
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -28,10 +27,10 @@ type mockResourceRepositoryForAddOCI struct {
 	repository.ResourceRepository
 	uploadedResource *descriptor.Resource
 	uploadedBlob     blob.ReadOnlyBlob
-	creds            map[string]string
+	creds            runtime.Typed
 }
 
-func (m *mockResourceRepositoryForAddOCI) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
+func (m *mockResourceRepositoryForAddOCI) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
 	m.uploadedResource = res
 	m.uploadedBlob = content
 	m.creds = credentials
@@ -67,11 +66,7 @@ func (m *mockResourceRepositoryForAddOCI) GetResourceCredentialConsumerIdentity(
 // mockCredentialResolver implements credentials.Resolver for testing
 type mockCredentialResolver struct{}
 
-func (m *mockCredentialResolver) Resolve(_ context.Context, _ runtime.Identity) (map[string]string, error) {
-	return nil, errors.New("unexpected legacy Resolve call")
-}
-
-func (m *mockCredentialResolver) ResolveTyped(_ context.Context, _ runtime.Identity) (runtime.Typed, error) {
+func (m *mockCredentialResolver) Resolve(_ context.Context, _ runtime.Identity) (runtime.Typed, error) {
 	return &ocicredsv1.OCICredentials{
 		Username: "test-user",
 	}, nil
@@ -163,7 +158,9 @@ func TestAddOCIArtifact_Transform(t *testing.T) {
 	assert.Equal(t, testBlobData, data)
 
 	// Verify credentials were resolved and passed
-	assert.Equal(t, "test-user", mockRepo.creds["username"])
+
+	ociCreds := mockRepo.creds.(*ocicredsv1.OCICredentials)
+	assert.Equal(t, "test-user", ociCreds.Username)
 }
 
 func TestAddOCIArtifact_ValidationErrors(t *testing.T) {
