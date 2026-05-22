@@ -2,6 +2,7 @@ package transformation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -113,7 +114,7 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 // resolveCredentials returns credentials for downloading targetResource, or nil if
 // no credential provider is configured or the resource has no consumer identity.
 // An ErrNotFound from the resolver is treated as "no credentials" rather than an error.
-func (t *GetHelmChart) resolveCredentials(ctx context.Context, targetResource *descriptor.Resource) (map[string]string, error) {
+func (t *GetHelmChart) resolveCredentials(ctx context.Context, targetResource *descriptor.Resource) (runtime.Typed, error) {
 	if t.CredentialProvider == nil {
 		return nil, nil
 	}
@@ -124,7 +125,14 @@ func (t *GetHelmChart) resolveCredentials(ctx context.Context, targetResource *d
 	if consumerId == nil {
 		return nil, nil
 	}
-	return resolveCredentialsMap(ctx, t.CredentialProvider, consumerId)
+	typed, err := t.CredentialProvider.Resolve(ctx, consumerId)
+	if err != nil {
+		if errors.Is(err, credentials.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return typed, nil
 }
 
 // writeChartAndProvFiles buffers the chart archive and, if present, the provenance file

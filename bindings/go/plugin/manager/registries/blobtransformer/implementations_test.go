@@ -74,7 +74,7 @@ func TestTransformBlob(t *testing.T) {
 			BaseUrl: "ocm.software",
 		},
 	}
-	resp, err := plugin.TransformBlob(context.Background(), req, runtime.Identity{"token": "abc"})
+	resp, err := plugin.TransformBlob(context.Background(), req, &runtime.Raw{Type: dummyType, Data: []byte(`{}`)})
 	require.NoError(t, err)
 	require.Equal(t, types.LocationTypeLocalFile, resp.Location.LocationType)
 	require.Equal(t, "/dummy/local-file", resp.Location.Value)

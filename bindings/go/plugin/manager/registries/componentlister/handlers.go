@@ -19,10 +19,8 @@ func ListComponentsHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 	credentials runtime.Typed) (*v1.ListComponentsResponse, error), scheme *runtime.Scheme, typ T,
 ) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := &runtime.Raw{}
-		if err := json.Unmarshal(rawCredentials, credentials); err != nil {
-			plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
+		credentials, ok := plugins.CredentialsFromHeader(writer, request.Header)
+		if !ok {
 			return
 		}
 
