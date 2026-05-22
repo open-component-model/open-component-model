@@ -137,3 +137,5 @@ require (
 
 // Replace to test against current local code
 replace ocm.software/open-component-model/bindings/go/transfer => ../
+
+replace ocm.software/open-component-model/bindings/go/oci => github.com/jakobmoellerdev/open-component-model/bindings/go/oci v0.0.11-0.20260522125402-dd37c6709daa
