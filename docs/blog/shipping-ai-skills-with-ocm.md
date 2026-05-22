@@ -123,7 +123,22 @@ ocm skill pull ./my-catalogue//myorg.io/ai-skill-catalogue:1.0.0 \
 
 The skill lands at `~/.claude/skills/ocm-guide/SKILL.md`. Claude Code picks it up in the next session.
 
-To pull every skill in the catalogue at once, omit `--skill`:
+To install for **OpenAI Codex CLI** instead (`~/.agents/skills/`), pass `--target codex`:
+
+```bash
+ocm skill pull ./my-catalogue//myorg.io/ai-skill-catalogue:1.0.0 \
+  --skill ocm-guide \
+  --target codex
+```
+
+To install for **both agents at once**, use `--target all`:
+
+```bash
+ocm skill pull ./my-catalogue//myorg.io/ai-skill-catalogue:1.0.0 \
+  --target all
+```
+
+To pull every skill in the catalogue at once (defaults to `--target claude`), omit `--skill`:
 
 ```bash
 ocm skill pull ./my-catalogue//myorg.io/ai-skill-catalogue:1.0.0

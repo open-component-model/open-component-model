@@ -16,7 +16,14 @@ Pull AI skills from an OCM skill catalogue component
 Pull one or all AI skills from an OCM component version that packages skills as resources with type ai.skill/v1.
 
 When --skill is given, only that resource is downloaded. Without --skill, all ai.skill/v1 resources are downloaded.
-Skills are written to ~/.claude/skills/<skill-name>/SKILL.md by default.
+
+By default skills are installed for Claude Code (--target claude):
+  ~/.claude/skills/<skill-name>/SKILL.md
+
+Use --target codex to install for OpenAI Codex CLI instead:
+  ~/.agents/skills/<skill-name>/SKILL.md
+
+Use --target all to install for both agents simultaneously.
 
 ```
 ocm skill pull <component-ref> [--skill <name>] [--output <path>] [flags]
@@ -25,11 +32,14 @@ ocm skill pull <component-ref> [--skill <name>] [--output <path>] [flags]
 ### Examples
 
 ```
-  # Pull a single skill
+  # Pull a single skill into Claude Code (default)
   ocm skill pull ./catalogue//jakob.io/ai-skill-catalogue:1.0.0 --skill ocm-guide
 
-  # Pull all skills from catalogue to default location
-  ocm skill pull ./catalogue//jakob.io/ai-skill-catalogue:1.0.0
+  # Pull all skills into OpenAI Codex CLI
+  ocm skill pull ./catalogue//jakob.io/ai-skill-catalogue:1.0.0 --target codex
+
+  # Pull all skills into both Claude Code and Codex
+  ocm skill pull ./catalogue//jakob.io/ai-skill-catalogue:1.0.0 --target all
 
   # Pull a skill to a custom path
   ocm skill pull ./catalogue//jakob.io/ai-skill-catalogue:1.0.0 --skill ocm-guide --output /tmp/ocm-guide.md
@@ -41,6 +51,7 @@ ocm skill pull <component-ref> [--skill <name>] [--output <path>] [flags]
   -h, --help            help for pull
       --output string   output path for the skill file (only valid with --skill)
       --skill string    name of skill resource to pull (pulls all ai.skill/v1 resources when omitted)
+      --target string   coding agent to install skills for: "claude" (~/.claude/skills/), "codex" (~/.agents/skills/), or "all" (default "claude")
 ```
 
 ### Options inherited from parent commands

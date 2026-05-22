@@ -279,3 +279,79 @@ func TestPullRejectsPathTraversalInResourceName(t *testing.T) {
 	)
 	require.Error(t, err)
 }
+
+func TestPullTargetCodex(t *testing.T) {
+	archivePath := setupCatalogueWithSkills(t, map[string][]byte{
+		"ocm-guide": testSkillContent,
+	})
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	_, err := test.OCM(t,
+		test.WithArgs("skill", "pull", refString(archivePath), "--skill", "ocm-guide", "--target", "codex"),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+
+	expected := filepath.Join(home, ".agents", "skills", "ocm-guide", "SKILL.md")
+	data, err := os.ReadFile(expected)
+	require.NoError(t, err)
+	require.Equal(t, testSkillContent, data)
+
+	// must NOT be installed for Claude Code
+	claudePath := filepath.Join(home, ".claude", "skills", "ocm-guide", "SKILL.md")
+	_, err = os.Stat(claudePath)
+	require.True(t, os.IsNotExist(err), "skill must not be installed for claude when --target codex")
+}
+
+func TestPullTargetAll(t *testing.T) {
+	archivePath := setupCatalogueWithSkills(t, map[string][]byte{
+		"ocm-guide": testSkillContent,
+	})
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	_, err := test.OCM(t,
+		test.WithArgs("skill", "pull", refString(archivePath), "--skill", "ocm-guide", "--target", "all"),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+
+	for _, path := range []string{
+		filepath.Join(home, ".claude", "skills", "ocm-guide", "SKILL.md"),
+		filepath.Join(home, ".agents", "skills", "ocm-guide", "SKILL.md"),
+	} {
+		data, err := os.ReadFile(path)
+		require.NoError(t, err, "expected skill at %s", path)
+		require.Equal(t, testSkillContent, data, "content mismatch at %s", path)
+	}
+}
+
+func TestPullTargetInvalid(t *testing.T) {
+	archivePath := setupCatalogueWithSkills(t, map[string][]byte{
+		"ocm-guide": testSkillContent,
+	})
+
+	_, err := test.OCM(t,
+		test.WithArgs("skill", "pull", refString(archivePath), "--skill", "ocm-guide", "--target", "vscode"),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown --target")
+}
+
+func TestPullOutputWithTargetFails(t *testing.T) {
+	archivePath := setupCatalogueWithSkills(t, map[string][]byte{
+		"ocm-guide": testSkillContent,
+	})
+
+	_, err := test.OCM(t,
+		test.WithArgs("skill", "pull", refString(archivePath), "--skill", "ocm-guide",
+			"--output", "/tmp/out.md", "--target", "codex"),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "--output cannot be combined with --target")
+}
