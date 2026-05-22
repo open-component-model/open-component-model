@@ -1,46 +1,61 @@
 ---
-title: "Shipping AI Skills with the Open Component Model"
+title: "Shipping AI Agent Skills with the Open Component Model"
 date: 2026-05-22T10:00:00+02:00
 draft: false
-description: "Use OCM to version, sign, and distribute Claude Code and Codex CLI skills from any OCI registry — the same way you ship container images."
-summary: "Package AI coding-assistant skills as OCM component resources and pull them into Claude Code or OpenAI Codex CLI with a single command."
+description: "A vendor-neutral, airgap-capable approach to versioning, signing, and distributing AI agent skills using OCI registries — no lock-in, no proprietary store."
+summary: "AI coding agents need skills to work well with your stack. Today those skills live in dotfiles with no versioning, no provenance, and no shared distribution mechanism. OCM fixes that."
 categories: ["ai", "cli"]
-tags: ["ai", "skills", "claude-code", "codex", "oci"]
+tags: ["ai", "skills", "agent", "oci", "supply-chain"]
 contributors: []
 ---
 
-Imagine installing a Claude Code skill the same way you deploy a container image — versioned, signed, pulled from a registry. That's what we built, and this post walks through how.
+AI coding agents are proliferating fast. Claude Code, OpenAI Codex CLI, Gemini CLI, Cursor, Continue — each has its own way of learning how to work with your stack. They call the configuration different things: skills, rules, context files, prompts. But the underlying problem is the same everywhere.
 
-## The Problem: Skills Live in Dotfiles
+**Nobody has solved distribution.**
 
-Claude Code skills are Markdown files. They teach the AI how to work with your stack — how to write idiomatic Go, how to query ClickHouse, how to structure a Django migration. They're genuinely useful, and they accumulate fast.
+## The Problem is Bigger Than One Agent
 
-The problem is distribution. Right now, skills live in `~/.claude/skills/`. Sharing them means copying files, committing them to a dotfiles repo, or just describing them in a README and hoping someone bothers to recreate them. There's no versioning, no provenance, no way to say "install skill `golang-patterns` version 1.2.0 from my team's registry."
+Wherever you look, agent configuration lives in dotfiles:
 
-We wanted something better. And it turns out the Open Component Model was already built for exactly this kind of problem.
+- Claude Code: `~/.claude/skills/<name>/SKILL.md`
+- OpenAI Codex CLI: `~/.agents/skills/<name>/SKILL.md`
+- Cursor: `.cursorrules`
+- Continue: `.continue/`
 
-## What OCM Gives You
+Sharing this configuration today means copying files by hand, committing them to a personal dotfiles repo, or describing them in a README and hoping a teammate bothers to recreate them. There is no versioning, no provenance, no way to express "install the `golang-patterns` skill at version 1.2.0 from my organisation's internal registry."
 
-The [Open Component Model](https://ocm.software) is an open standard for describing and distributing software artifacts. Its core idea is simple: a *component version* is a named, versioned bundle of *resources*. Resources can be anything — container images, Helm charts, binaries, plain text files. The component descriptor records what's in the bundle, how to get it, and who produced it. Everything lives in a standard OCI registry.
+Every team that builds up a useful library of agent configuration faces the same distribution gap. The files exist. The knowledge exists. But the moment you want to share it reliably across machines, teams, or air-gapped environments — the tooling runs out.
 
-That description fits AI skills perfectly. A skill is a text file with a name and a version. An OCI registry is a fine place to store a catalogue of them.
+## A Vendor-Neutral, Lock-In-Free Answer
+
+The [Open Component Model](https://ocm.software) is an open standard for describing and distributing software artifacts. It is not tied to any cloud provider, any agent vendor, or any proprietary store. Its transport layer is the OCI distribution spec — the same protocol used by every container registry on the planet. GitHub Container Registry, AWS ECR, Google Artifact Registry, your on-premises Zot instance — they all work without modification.
+
+The core abstraction is simple: a *component version* is a named, versioned bundle of *resources*. Resources can be anything — container images, Helm charts, binaries, plain text files. The component descriptor records what is in the bundle, how to retrieve it, and who produced it.
+
+That abstraction fits agent skills exactly. A skill is a text file with a name and a version. An OCI registry is a fine place to store a catalogue of them, and OCM adds the layer that makes it safe:
+
+- **Signing** — component versions can be signed with cosign or GPG. You can verify a skill came from your organisation, not an arbitrary source.
+- **Air-gap transport** — OCM's CTF (Common Transport Format) is a portable local archive. You can carry a skill catalogue on a USB drive, mirror it to an internal registry, or ship it as part of a software delivery pipeline with no internet access required.
+- **Composability** — nothing stops you from placing a skill alongside the container image and Helm chart for the same service, all in one component version. Your deployment unit and your agent configuration travel together.
+
+No proprietary store. No agent-specific distribution format. No cloud dependency. Just OCI.
 
 ## One Component, Many Skills
 
-The key design decision: **one OCM component = one catalogue release**. We don't create a separate component per skill — that would make the registry noisy and installs awkward. Instead, each skill is a *resource* inside a single catalogue component:
+The key design decision: **one OCM component = one catalogue release**. Each skill is a *resource* inside that component, identified by name and the type label `ai.skill/v1`:
 
 ```text
-Component: jakob.io/ai-skill-catalogue   version: 1.0.0
+Component: myorg.io/ai-skill-catalogue   version: 1.0.0
 ├── resource: ocm-guide        type: ai.skill/v1   (SKILL.md)
 ├── resource: golang-patterns   type: ai.skill/v1   (SKILL.md)
 └── resource: backend-patterns  type: ai.skill/v1   (SKILL.md)
 ```
 
-The type `ai.skill/v1` is just a string label — OCM stores unknown resource types as blobs. No plugins, no new code on the registry side.
+`ai.skill/v1` is just a string label — OCM stores unknown resource types as blobs. No plugins, no registry-side changes, no coordination with any vendor required.
 
 ## What a Skill Looks Like
 
-A skill is a Markdown file with a YAML frontmatter header. Claude Code reads the `name` and `description` to decide when to apply it, and follows the body as instructions:
+A skill is a Markdown file with a YAML frontmatter header. The agent reads `name` and `description` to decide when to apply it:
 
 ```markdown
 ---
@@ -55,13 +70,11 @@ tools: ["Read", "Bash"]
 Always wrap errors with context...
 ```
 
-Skills live at `~/.claude/skills/<skill-name>/SKILL.md`. Claude Code picks them up automatically on the next session — no restart needed.
+The format is readable by humans, writable by hand, and parseable by any agent that follows the convention. OCM does not care about the content — it stores and retrieves whatever bytes you put in.
 
 ## Hands-On: Package and Install Skills
 
 ### 1. Organise your skills directory
-
-Your skills directory should have one subdirectory per skill, each containing a `SKILL.md`:
 
 ```text
 my-skills/
@@ -80,7 +93,7 @@ ocm skill push ./my-skills \
   --output constructor.yaml
 ```
 
-This scans `./my-skills` for `SKILL.md` files and writes a `constructor.yaml`:
+This scans `./my-skills` for `SKILL.md` files and writes a `constructor.yaml` that describes the component:
 
 ```yaml
 components:
@@ -105,7 +118,7 @@ components:
 
 ### 3. Package into a local archive
 
-OCM's CTF (Common Transport Format) is a local directory-based archive — no registry required to get started:
+OCM's CTF archive requires no registry to get started:
 
 ```bash
 ocm add component-version \
@@ -121,18 +134,18 @@ Output:
  myorg.io/ai-skill-catalogue  │ 1.0.0   │ myorg.io
 ```
 
-### 4. Install a skill into Claude Code
+### 4. Install skills
 
-Pull a single skill directly into `~/.claude/skills/`:
+Pull a single skill for **Claude Code** (default):
 
 ```bash
 ocm skill pull ./my-catalogue//myorg.io/ai-skill-catalogue:1.0.0 \
   --skill ocm-guide
 ```
 
-The skill lands at `~/.claude/skills/ocm-guide/SKILL.md`. Claude Code picks it up in the next session.
+The skill lands at `~/.claude/skills/ocm-guide/SKILL.md`.
 
-To install for **OpenAI Codex CLI** instead (`~/.agents/skills/`), pass `--target codex`:
+Install for **OpenAI Codex CLI** instead:
 
 ```bash
 ocm skill pull ./my-catalogue//myorg.io/ai-skill-catalogue:1.0.0 \
@@ -140,14 +153,16 @@ ocm skill pull ./my-catalogue//myorg.io/ai-skill-catalogue:1.0.0 \
   --target codex
 ```
 
-To install for **both agents at once**, use `--target all`:
+The skill lands at `~/.agents/skills/ocm-guide/SKILL.md`.
+
+Install for **both agents at once**:
 
 ```bash
 ocm skill pull ./my-catalogue//myorg.io/ai-skill-catalogue:1.0.0 \
   --target all
 ```
 
-To pull every skill in the catalogue at once (defaults to `--target claude`), omit `--skill`:
+Pull every skill in the catalogue in one shot:
 
 ```bash
 ocm skill pull ./my-catalogue//myorg.io/ai-skill-catalogue:1.0.0
@@ -160,19 +175,9 @@ skill installed   skill=ocm-guide       output=~/.claude/skills/ocm-guide/SKILL.
 skill installed   skill=golang-patterns  output=~/.claude/skills/golang-patterns/SKILL.md
 ```
 
-### 5. Verify it's active
-
-List your installed skills:
-
-```bash
-ls ~/.claude/skills/
-```
-
-Or start a Claude Code session and ask: *"What skills do you have available?"* — it will list all installed skills including their descriptions.
-
 ## Using a Real OCI Registry
 
-Once you're ready to share with a team, swap the local archive path for a registry URL. OCM uses the same `//component:version` syntax:
+Swap the local archive path for any OCI registry URL when you are ready to share across machines or teams:
 
 ```bash
 # push to GHCR
@@ -184,22 +189,28 @@ ocm add component-version \
 ocm skill pull ghcr.io/myorg//myorg.io/ai-skill-catalogue:1.0.0
 ```
 
-Authentication follows standard OCI credential helpers — `docker login ghcr.io` is sufficient.
+Authentication uses standard OCI credential helpers — `docker login ghcr.io` is sufficient. For air-gapped environments, mirror the CTF archive to your internal registry with `ocm transfer` and point the pull command there.
 
 ## The Self-Referential Part
 
-The first skill we packaged in this catalogue is `ocm-guide` — a skill that teaches Claude how OCM works: the component descriptor format, resource types, CLI patterns, the plugin system. It's distributed via OCM, and it explains OCM.
+The first skill we packaged in this catalogue is `ocm-guide` — a skill that teaches agents how OCM works: the component descriptor format, resource types, CLI patterns, the plugin system. It is distributed via OCM, and it explains OCM.
 
-Once installed, ask Claude to help you write a component constructor, understand a resource access error, or navigate the plugin system — and it answers from the skill's context rather than general training data.
+Once installed, ask your agent to help write a component constructor, understand a resource access error, or navigate the plugin system — and it answers from the skill's context rather than general training data.
 
-## Why This Matters
+## Why This Approach Matters
 
-OCI registries are infrastructure you already have. GitHub Container Registry, AWS ECR, Google Artifact Registry — they all speak the OCI distribution spec that OCM builds on. A skill catalogue is just another OCI artifact living alongside your container images. You get:
+The skills distribution problem is not unique to one agent or one company. It is a structural gap in the agentic tooling ecosystem: useful configuration accumulates, but there is no standard way to version it, sign it, ship it, or consume it across teams and environments.
+
+OCM provides that standard. It was designed for exactly this pattern — versioned, signed, portable software artifacts distributed over OCI. The fact that it already works for container images and Helm charts means the infrastructure is already in place. A skill catalogue is just another OCI artifact.
+
+The properties you get are the same ones that matter for any supply chain artefact:
 
 - **Versioning** — `1.0.0`, `1.1.0`, semantic versioning, floating tags.
-- **Provenance** — OCM supports signing. You can verify a skill came from your team's registry, not a random source.
-- **Transport** — CTF lets you air-gap the catalogue, carry it on a USB drive, mirror it to an internal registry.
-- **Composability** — nothing stops you from putting a skill alongside the container image and Helm chart for the same service, all in one component version.
+- **Provenance** — signing lets you verify a skill came from your organisation.
+- **Portability** — CTF archives work completely offline.
+- **Vendor neutrality** — the same catalogue works for Claude Code today and whatever agent your team adopts next year.
+
+No lock-in. No proprietary store. Skills travel with your software.
 
 ## Full Command Reference
 
