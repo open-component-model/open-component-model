@@ -1,4 +1,13 @@
-# Shipping AI Skills with the Open Component Model
+---
+title: "Shipping AI Skills with the Open Component Model"
+date: 2026-05-22T10:00:00+02:00
+draft: false
+description: "Use OCM to version, sign, and distribute Claude Code and Codex CLI skills from any OCI registry — the same way you ship container images."
+summary: "Package AI coding-assistant skills as OCM component resources and pull them into Claude Code or OpenAI Codex CLI with a single command."
+categories: ["ai", "cli"]
+tags: ["ai", "skills", "claude-code", "codex", "oci"]
+contributors: []
+---
 
 Imagine installing a Claude Code skill the same way you deploy a container image — versioned, signed, pulled from a registry. That's what we built, and this post walks through how.
 
