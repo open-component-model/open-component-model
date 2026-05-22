@@ -903,3 +903,5 @@ Dotfiles
 dotfiles
 ClickHouse
 OpenAI
+airgap
+ECR
