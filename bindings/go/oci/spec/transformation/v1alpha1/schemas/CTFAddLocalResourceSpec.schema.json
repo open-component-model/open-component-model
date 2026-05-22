@@ -157,9 +157,7 @@
           "description": "Signing describes whether the label should be included into the signature"
         },
         "value": {
-          "type": "object",
-          "description": "Value is the json/yaml data of the label",
-          "additionalProperties": true
+          "description": "Value is the json/yaml data of the label"
         },
         "version": {
           "type": "string",
