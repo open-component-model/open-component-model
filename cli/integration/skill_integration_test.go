@@ -13,7 +13,6 @@ import (
 )
 
 func Test_Integration_SkillPushPull(t *testing.T) {
-	t.Parallel()
 	r := require.New(t)
 
 	registry, err := internal.CreateOCIRegistry(t)
@@ -79,7 +78,6 @@ func Test_Integration_SkillPushPull(t *testing.T) {
 }
 
 func Test_Integration_SkillPullAll(t *testing.T) {
-	t.Parallel()
 	r := require.New(t)
 
 	registry, err := internal.CreateOCIRegistry(t)
@@ -143,7 +141,6 @@ func Test_Integration_SkillPullAll(t *testing.T) {
 }
 
 func Test_Integration_SkillPullIdempotent(t *testing.T) {
-	t.Parallel()
 	r := require.New(t)
 
 	registry, err := internal.CreateOCIRegistry(t)
