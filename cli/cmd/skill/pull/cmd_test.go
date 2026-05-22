@@ -355,3 +355,24 @@ func TestPullOutputWithTargetFails(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "--output cannot be combined with --target")
 }
+
+func TestPullRejectsSymlinkEscapeInSkillsDir(t *testing.T) {
+	archivePath := setupCatalogueWithSkills(t, map[string][]byte{
+		"ocm-guide": testSkillContent,
+	})
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Pre-create the skill subdirectory as a symlink pointing outside the skills base.
+	skillsBase := filepath.Join(home, ".claude", "skills")
+	require.NoError(t, os.MkdirAll(skillsBase, 0o755))
+	outsideDir := t.TempDir()
+	require.NoError(t, os.Symlink(outsideDir, filepath.Join(skillsBase, "ocm-guide")))
+
+	_, err := test.OCM(t,
+		test.WithArgs("skill", "pull", refString(archivePath), "--skill", "ocm-guide"),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.Error(t, err, "pull must reject a skill dir that is a symlink escaping the base")
+}

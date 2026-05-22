@@ -263,3 +263,21 @@ func TestPushRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, skillContent, data)
 }
+
+func TestPushRejectsSymlinkedSkillFile(t *testing.T) {
+	root := t.TempDir()
+	skillDir := filepath.Join(root, "my-skill")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+
+	// Place the real content outside the skills tree and symlink SKILL.md to it.
+	outside := filepath.Join(t.TempDir(), "real.md")
+	require.NoError(t, os.WriteFile(outside, []byte("# content"), 0o644))
+	require.NoError(t, os.Symlink(outside, filepath.Join(skillDir, "SKILL.md")))
+
+	_, err := test.OCM(t,
+		test.WithArgs("skill", "push", root, "--component", "org.io/skills", "--version", "1.0.0"),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.Error(t, err, "push must reject a SKILL.md that is a symlink")
+}

@@ -1,6 +1,7 @@
 package push
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -137,8 +138,22 @@ func pushSkills(cmd *cobra.Command, args []string) error {
 		}
 
 		skillPath := filepath.Join(absSkillsDir, entry.Name(), skillFileName)
-		if _, err := os.Stat(skillPath); err != nil {
+		fi, err := os.Lstat(skillPath)
+		if errors.Is(err, os.ErrNotExist) {
 			continue
+		}
+		if err != nil {
+			return fmt.Errorf("stat of %q failed: %w", skillPath, err)
+		}
+		if fi.Mode()&os.ModeSymlink != 0 || !fi.Mode().IsRegular() {
+			return fmt.Errorf("%q must be a regular non-symlink file", skillPath)
+		}
+		resolvedSkillPath, err := filepath.EvalSymlinks(skillPath)
+		if err != nil {
+			return fmt.Errorf("evaluating symlinks for %q failed: %w", skillPath, err)
+		}
+		if !strings.HasPrefix(resolvedSkillPath, absSkillsDir+string(filepath.Separator)) {
+			return fmt.Errorf("skill file %q resolves outside %q", skillPath, absSkillsDir)
 		}
 
 		resources = append(resources, constructorResource{
@@ -147,7 +162,7 @@ func pushSkills(cmd *cobra.Command, args []string) error {
 			Version: version,
 			Input: fileInput{
 				Type: "file",
-				Path: skillPath,
+				Path: resolvedSkillPath,
 			},
 		})
 	}

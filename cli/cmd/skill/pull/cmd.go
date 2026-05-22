@@ -189,10 +189,29 @@ func pullSkill(cmd *cobra.Command, args []string) error {
 
 		for _, base := range destDirs {
 			dest := filepath.Join(base, res.Name, "SKILL.md")
+			// String-level check catches path traversal sequences.
 			if !strings.HasPrefix(dest, base+string(filepath.Separator)) {
 				return fmt.Errorf("skill resource name %q resolves outside skills directory", res.Name)
 			}
-			if err := writeBytesToFile(content, dest); err != nil {
+			// Create the parent directory before resolving symlinks so
+			// EvalSymlinks can walk the full path.
+			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+				return fmt.Errorf("creating directory for skill %q failed: %w", res.Name, err)
+			}
+			// Resolve symlinks on the parent dir and verify it still lives
+			// inside base — guards against a pre-existing symlink in the tree.
+			resolvedDir, err := filepath.EvalSymlinks(filepath.Dir(dest))
+			if err != nil {
+				return fmt.Errorf("resolving destination directory for skill %q failed: %w", res.Name, err)
+			}
+			resolvedBase, err := filepath.EvalSymlinks(base)
+			if err != nil {
+				return fmt.Errorf("resolving skills base %q failed: %w", base, err)
+			}
+			if !strings.HasPrefix(resolvedDir+string(filepath.Separator), resolvedBase+string(filepath.Separator)) {
+				return fmt.Errorf("skill %q destination resolves outside skills directory via symlink", res.Name)
+			}
+			if err := os.WriteFile(dest, content, 0o600); err != nil {
 				return fmt.Errorf("saving skill %q to %q failed: %w", res.Name, dest, err)
 			}
 			logger.Info("skill installed", slog.String("skill", res.Name), slog.String("output", dest))
