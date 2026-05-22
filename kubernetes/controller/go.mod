@@ -171,4 +171,4 @@ require (
 
 replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.0
 
-replace ocm.software/open-component-model/bindings/go/oci => github.com/jakobmoellerdev/open-component-model/bindings/go/oci v0.0.11-0.20260522125402-dd37c6709daa
+replace ocm.software/open-component-model/bindings/go/oci => github.com/jakobmoellerdev/open-component-model/bindings/go/oci v0.0.11-0.20260522140022-e8ebef673490
