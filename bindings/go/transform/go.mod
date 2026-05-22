@@ -30,3 +30,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.13 // indirect
 )
+
+replace ocm.software/open-component-model/bindings/go/cel => ../cel

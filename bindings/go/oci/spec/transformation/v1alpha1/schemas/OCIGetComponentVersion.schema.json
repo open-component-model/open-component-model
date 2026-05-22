@@ -16,12 +16,8 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.transformation.v1alpha1.OCIGetComponentVersionSpec"
     },
     "type": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "oneOf": [
-        {
-          "const": "OCIGetComponentVersion/v1alpha1"
-        }
-      ]
+      "type": "object",
+      "additionalProperties": true
     }
   },
   "required": [
@@ -47,7 +43,7 @@
         },
         "nestedDigests": {
           "description": "Digest information for nested components",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -61,7 +57,7 @@
         },
         "signatures": {
           "description": "Optional signing information for verifying component validity",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -99,7 +95,7 @@
           "properties": {
             "componentReferences": {
               "description": "References to other component versions",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -114,7 +110,7 @@
             "creationTime": {
               "description": "Creation time of the component version",
               "format": "date-time",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "string"
                 },
@@ -125,7 +121,7 @@
             },
             "labels": {
               "description": "Labels associated with the component",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -147,7 +143,7 @@
             },
             "repositoryContexts": {
               "description": "Previous repositories of the component",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -161,7 +157,7 @@
             },
             "resources": {
               "description": "Resources created by the component or third parties",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -175,7 +171,7 @@
             },
             "sources": {
               "description": "Sources that produced the component",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -278,7 +274,7 @@
             },
             "digest": {
               "description": "Optional digest of the referenced component",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "null"
                 },
@@ -293,7 +289,7 @@
             },
             "labels": {
               "description": "Labels associated with the reference",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -372,7 +368,7 @@
             },
             "value": true,
             "version": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "string",
                   "description": "Version of the label",
@@ -431,7 +427,7 @@
             },
             "resourceDigests": {
               "description": "Digest information for resources in the component",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -529,7 +525,7 @@
             },
             "digest": {
               "description": "Optional digest of the resource",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "null"
                 },
@@ -544,7 +540,7 @@
             },
             "labels": {
               "description": "Labels associated with the resource",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -571,7 +567,7 @@
             },
             "srcRefs": {
               "description": "References to sources that produced this resource",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -669,7 +665,7 @@
             },
             "labels": {
               "description": "Labels associated with the source",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -712,7 +708,7 @@
             },
             "labels": {
               "description": "Labels for further identification of the source",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -760,44 +756,8 @@
           "description": "SubPath is an optional repository prefix path used for the OCM repository.\nThe OCM-based artifacts will use this path as a repository prefix.\nAn OCI registry may host many OCM repositories with different repository prefixes.\n\nAuto-extraction: If not specified and BaseUrl contains a path component,\nthe path will be automatically extracted and used as SubPath.\n\nExamples:\nExplicit separation:\nBaseUrl=\"ghcr.io\" + SubPath=\"open-component-model/ocm\"\n→ Registry: ghcr.io, Repository prefix: open-component-model/ocm\n\nEmbedded path:\nBaseUrl=\"ghcr.io/open-component-model/ocm\" + SubPath=\"\"\n→ Auto-extracts to: BaseUrl=\"ghcr.io\", SubPath=\"open-component-model/ocm\""
         },
         "type": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-          "oneOf": [
-            {
-              "const": "OCIRepository/v1"
-            },
-            {
-              "const": "OCI/v1"
-            },
-            {
-              "const": "oci/v1"
-            },
-            {
-              "const": "OCIRegistry/v1"
-            },
-            {
-              "const": "ociRegistry/v1"
-            },
-            {
-              "deprecated": true,
-              "const": "OCIRepository"
-            },
-            {
-              "deprecated": true,
-              "const": "OCI"
-            },
-            {
-              "deprecated": true,
-              "const": "oci"
-            },
-            {
-              "deprecated": true,
-              "const": "OCIRegistry"
-            },
-            {
-              "deprecated": true,
-              "const": "ociRegistry"
-            }
-          ]
+          "type": "object",
+          "additionalProperties": true
         }
       },
       "required": [
@@ -845,14 +805,6 @@
         "version"
       ],
       "additionalProperties": false
-    },
-    "ocm.software.open-component-model.bindings.go.runtime.Type": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
-      "title": "Type",
-      "type": "string",
-      "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
     }
   }
 }

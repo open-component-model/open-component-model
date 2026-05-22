@@ -19,27 +19,13 @@
       "description": "SigningConfig is a filesystem path to a cosign signing configuration file.\nWhen set, cosign discovers all service endpoints (Fulcio, Rekor, TSA) from\nthis file instead of TUF auto-discovery.\nMaps to cosign --signing-config."
     },
     "type": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
+      "type": "object",
       "description": "Type identifies this configuration object's runtime type.",
-      "oneOf": [
-        {
-          "const": "SigstoreSigningConfiguration/v1alpha1"
-        }
-      ]
+      "additionalProperties": true
     }
   },
   "required": [
     "type"
   ],
-  "additionalProperties": false,
-  "$defs": {
-    "ocm.software.open-component-model.bindings.go.runtime.Type": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
-      "title": "Type",
-      "type": "string",
-      "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
-    }
-  }
+  "additionalProperties": false
 }

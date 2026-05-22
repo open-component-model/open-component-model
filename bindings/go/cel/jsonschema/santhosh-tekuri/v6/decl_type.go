@@ -10,6 +10,41 @@ import (
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl"
 )
 
+func declTypeForStringSchema(s *Schema) *DeclType {
+	switch s.Format() {
+	case "byte":
+		t := decl.NewSimpleTypeWithMinSize("bytes", cel.BytesType, types.Bytes([]byte{}), decl.MinStringSize)
+		if s.MaxLength() != nil {
+			t.MaxElements = *s.MaxLength()
+		} else {
+			t.MaxElements = estimateMaxStringLengthPerRequest(s)
+		}
+		return declTypeForSchema(t, s)
+	case "duration":
+		t := decl.NewSimpleTypeWithMinSize("duration", cel.DurationType, types.Duration{Duration: time.Duration(0)}, uint64(decl.MinDurationSizeJSON))
+		t.MaxElements = estimateMaxStringLengthPerRequest(s)
+		return declTypeForSchema(t, s)
+	case "date":
+		t := decl.NewSimpleTypeWithMinSize("timestamp", cel.TimestampType, types.Timestamp{Time: time.Time{}}, uint64(decl.JSONDateSize))
+		t.MaxElements = estimateMaxStringLengthPerRequest(s)
+		return declTypeForSchema(t, s)
+	case "date-time":
+		t := decl.NewSimpleTypeWithMinSize("timestamp", cel.TimestampType, types.Timestamp{Time: time.Time{}}, uint64(decl.MinDatetimeSizeJSON))
+		t.MaxElements = estimateMaxStringLengthPerRequest(s)
+		return declTypeForSchema(t, s)
+	}
+	str := decl.NewSimpleTypeWithMinSize("string", cel.StringType, types.String(""), decl.MinStringSize)
+	switch {
+	case s.MaxLength() != nil:
+		str.MaxElements = *s.MaxLength()
+	case len(s.Enum()) > 0:
+		str.MaxElements = estimateMaxStringEnumLength(s)
+	default:
+		str.MaxElements = estimateMaxStringLengthPerRequest(s)
+	}
+	return declTypeForSchema(str, s)
+}
+
 // DeclType represents a JSON Schema Declaration Type backed by an actual Schema.
 type DeclType struct {
 	*decl.Type
@@ -155,44 +190,7 @@ func NewDeclType(s *Schema) *DeclType {
 		}
 		return base
 	case StringType:
-		switch s.Format() {
-		case "byte":
-			t := decl.NewSimpleTypeWithMinSize("bytes", cel.BytesType, types.Bytes([]byte{}), decl.MinStringSize)
-			if s.MaxLength() != nil {
-				t.MaxElements = *s.MaxLength()
-			} else {
-				t.MaxElements = estimateMaxStringLengthPerRequest(s)
-			}
-			return declTypeForSchema(t, s)
-
-		case "duration":
-			t := decl.NewSimpleTypeWithMinSize("duration", cel.DurationType, types.Duration{Duration: time.Duration(0)}, uint64(decl.MinDurationSizeJSON))
-			t.MaxElements = estimateMaxStringLengthPerRequest(s)
-			return declTypeForSchema(t, s)
-
-		case "date":
-			t := decl.NewSimpleTypeWithMinSize("timestamp", cel.TimestampType, types.Timestamp{Time: time.Time{}}, uint64(decl.JSONDateSize))
-			t.MaxElements = estimateMaxStringLengthPerRequest(s)
-			return declTypeForSchema(t, s)
-
-		case "date-time":
-			t := decl.NewSimpleTypeWithMinSize("timestamp", cel.TimestampType, types.Timestamp{Time: time.Time{}}, uint64(decl.MinDatetimeSizeJSON))
-			t.MaxElements = estimateMaxStringLengthPerRequest(s)
-			return declTypeForSchema(t, s)
-		}
-
-		str := decl.NewSimpleTypeWithMinSize("string", cel.StringType, types.String(""), decl.MinStringSize)
-
-		switch {
-		case s.MaxLength() != nil:
-			str.MaxElements = *s.MaxLength()
-		case len(s.Enum()) > 0:
-			str.MaxElements = estimateMaxStringEnumLength(s)
-		default:
-			str.MaxElements = estimateMaxStringLengthPerRequest(s)
-		}
-
-		return declTypeForSchema(str, s)
+		return declTypeForStringSchema(s)
 	case BooleanType:
 		return declTypeForSchema(decl.BoolType, s)
 	case NumType:

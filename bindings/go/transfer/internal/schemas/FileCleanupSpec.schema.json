@@ -42,23 +42,8 @@
           "description": "MediaType is the optional media type of the file.\nIf not set, the media type is inferred from the file extension."
         },
         "type": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-          "oneOf": [
-            {
-              "const": "File/v1alpha1"
-            },
-            {
-              "const": "file/v1alpha1"
-            },
-            {
-              "deprecated": true,
-              "const": "File"
-            },
-            {
-              "deprecated": true,
-              "const": "file"
-            }
-          ]
+          "type": "object",
+          "additionalProperties": true
         },
         "uri": {
           "type": "string",
@@ -70,14 +55,6 @@
         "uri"
       ],
       "additionalProperties": false
-    },
-    "ocm.software.open-component-model.bindings.go.runtime.Type": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
-      "title": "Type",
-      "type": "string",
-      "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
     }
   }
 }

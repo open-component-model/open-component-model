@@ -26,23 +26,8 @@
       "maximum": 9223372036854776000
     },
     "type": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "oneOf": [
-        {
-          "const": "OCIImageLayer/v1"
-        },
-        {
-          "const": "ociBlob/v1"
-        },
-        {
-          "deprecated": true,
-          "const": "OCIImageLayer"
-        },
-        {
-          "deprecated": true,
-          "const": "ociBlob"
-        }
-      ]
+      "type": "object",
+      "additionalProperties": true
     }
   },
   "required": [
@@ -51,15 +36,5 @@
     "digest",
     "size"
   ],
-  "additionalProperties": false,
-  "$defs": {
-    "ocm.software.open-component-model.bindings.go.runtime.Type": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
-      "title": "Type",
-      "type": "string",
-      "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
-    }
-  }
+  "additionalProperties": false
 }
