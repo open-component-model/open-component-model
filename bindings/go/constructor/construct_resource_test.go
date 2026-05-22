@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -22,6 +23,7 @@ import (
 type mockInputMethod struct {
 	processedResource *descriptor.Resource
 	processedBlob     blob.ReadOnlyBlob
+	capturedCreds     runtime.Typed
 }
 
 func (m *mockInputMethod) GetInputMethodScheme() *runtime.Scheme {
@@ -35,6 +37,7 @@ func (m *mockInputMethod) GetResourceCredentialConsumerIdentity(ctx context.Cont
 }
 
 func (m *mockInputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, creds runtime.Typed) (*ResourceInputMethodResult, error) {
+	m.capturedCreds = creds
 	if m.processedResource != nil {
 		return &ResourceInputMethodResult{
 			ProcessedResource: m.processedResource,
@@ -162,7 +165,14 @@ func (m *mockCredentialProvider) Resolve(ctx context.Context, identity runtime.I
 	if m.fail {
 		return nil, fmt.Errorf("simulated credential resolution failure")
 	}
-	return runtime.Identity(m.credentials[identity.GetType().String()]), nil
+	creds := m.credentials[identity.GetType().String()]
+	if creds == nil {
+		return nil, nil
+	}
+	return &credconfigv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
+		Properties: creds,
+	}, nil
 }
 
 // setupTestComponent creates a basic component constructor for testing
@@ -821,4 +831,69 @@ components:
 	// Verify the repository was called correctly
 	assert.Len(t, mockRepo.addedLocalResources, 0)
 	assert.Len(t, mockRepo.addedVersions, 1)
+}
+
+// TestConstructCredentialsPassedAsDirectCredentials verifies that credentials resolved by
+// the credential provider are forwarded to ProcessResource as *credconfigv1.DirectCredentials,
+// not as a raw runtime.Identity or any other type.
+func TestConstructCredentialsPassedAsDirectCredentials(t *testing.T) {
+	mockInput := &mockInputMethod{
+		processedResource: &descriptor.Resource{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "test-resource",
+					Version: "v1.0.0",
+				},
+			},
+			Access: &v2.LocalBlob{
+				MediaType: "application/octet-stream",
+			},
+			Relation: descriptor.LocalRelation,
+		},
+	}
+
+	mockProvider := &mockInputMethodProvider{
+		methods: map[runtime.Type]ResourceInputMethod{
+			runtime.NewVersionedType("mock", "v1"): mockInput,
+		},
+	}
+
+	mockCredProvider := &mockCredentialProvider{
+		called: make(map[string]int),
+		credentials: map[string]map[string]string{
+			"mock/v1": {
+				"username": "testuser",
+				"password": "testpass",
+			},
+		},
+	}
+
+	constructor := setupTestComponent(t, `
+      - name: test-resource
+        version: v1.0.0
+        relation: local
+        type: blob
+        input:
+          type: mock/v1
+`)
+
+	mockRepo := newMockTargetRepository()
+
+	opts := Options{
+		ResourceInputMethodProvider: mockProvider,
+		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
+		Resolver:                    mockCredProvider,
+	}
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	err := constructorInstance.Construct(context.Background())
+	require.NoError(t, err)
+
+	// Credentials must arrive as *DirectCredentials so that typed credential
+	// implementations (helm, oci, etc.) can inspect or convert them correctly.
+	require.NotNil(t, mockInput.capturedCreds, "expected credentials to be forwarded to ProcessResource")
+	dc, ok := mockInput.capturedCreds.(*credconfigv1.DirectCredentials)
+	require.True(t, ok, "expected *credconfigv1.DirectCredentials, got %T", mockInput.capturedCreds)
+	assert.Equal(t, "testuser", dc.Properties["username"])
+	assert.Equal(t, "testpass", dc.Properties["password"])
 }
