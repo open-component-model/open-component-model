@@ -45,6 +45,7 @@ output/
 **/.task
 go.work
 go.work.sum
+kubernetes/controller/examples/helm-simple/ctf
 
 # gitguardian
 .cache_ggshield

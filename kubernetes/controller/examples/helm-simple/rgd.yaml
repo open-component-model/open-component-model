@@ -1,5 +1,3 @@
-# kind delete cluster --name kind && task kubernetes/controller:test/e2e/setup/local && task kubernetes/controller:install && task kubernetes/controller:deploy 
-# ocm add componentversions --create --file ./ctf component-constructor.yaml && ocm transfer ctf --overwrite --enforce --copy-resources --omit-access-types gitHub ./ctf http://image-registry:5000 && k apply -f bootstrap.yaml -f instance.yaml
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
 metadata:
@@ -72,9 +70,9 @@ spec:
             helm:
               releaseName: ${ocirepository.metadata.name}
             path: .
-            repoURL: oci://${resourceChart.status.additional.?registry}/${resourceChart.status.additional.?repository}
+            repoURL: oci://${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
             # working -> oci://image-registry:5000/stefanprodan/charts/podinfo
-            targetRevision: ${resourceChart.status.additional.?tag}
+            targetRevision: ${resourceChart.status.additional.tag}
           destination:
             server: https://kubernetes.default.svc
             namespace: default-argocd
