@@ -902,3 +902,4 @@ ANSI's
 Dotfiles
 dotfiles
 ClickHouse
+OpenAI

@@ -206,6 +206,7 @@ ocm skill push <skills-dir> \
 ocm skill pull <repo>//<component>:<version> \
   [--skill <name>]          # omit to pull all ai.skill/v1 resources
   [--output <path>]         # custom output path (requires --skill)
+  [--target <agent>]        # claude (default), codex, or all
 ```
 
 Repository reference formats:
