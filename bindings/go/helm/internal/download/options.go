@@ -10,19 +10,6 @@ import (
 )
 
 const (
-	// CredentialCertFile is the key for storing the location of a client certificate.
-	//
-	// Deprecated: Use helmcredsv1.CredentialKeyCertFile instead.
-	CredentialCertFile = helmcredsv1.CredentialKeyCertFile
-	// CredentialKeyFile is the key for storing the location of a client private key.
-	//
-	// Deprecated: Use helmcredsv1.CredentialKeyKeyFile instead.
-	CredentialKeyFile = helmcredsv1.CredentialKeyKeyFile
-	// CredentialKeyring is the key for storing the keyring name to use.
-	//
-	// Deprecated: Use helmcredsv1.CredentialKeyKeyring instead.
-	CredentialKeyring = helmcredsv1.CredentialKeyKeyring
-
 	// DefaultHTTPTimeout
 	// The cost timeout references curl's default connection timeout.
 	// https://github.com/curl/curl/blob/master/lib/connect.h#L40C21-L40C21

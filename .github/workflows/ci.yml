@@ -68,10 +68,9 @@ jobs:
             const filters = modules.map(module => {
               const lines = [`${module}:`];
               
-              // Add the module's own path
               lines.push(` - "${module}/**"`);
-              
-              // If this is an integration module, add its parent module path
+
+              // If this is an integration module, also trigger on parent module changes
               if (module.includes('/integration')) {
                 const parentModule = module.split('/integration')[0];
                 lines.push(` - "${parentModule}/**"`);
@@ -166,7 +165,7 @@ jobs:
 
             console.log(`Unit test modules: ${JSON.stringify(unitTestModules)}`);
             console.log(`Integration test modules: ${JSON.stringify(integrationTestModules)}`);
-            
+
             core.setOutput('unit_test_modules_json', JSON.stringify(unitTestModules));
             core.setOutput('integration_test_modules_json', JSON.stringify(integrationTestModules));
       - name: Generate Job Summary
@@ -295,18 +294,14 @@ jobs:
   run_integration_tests:
     name: "Integration Tests"
     needs: discover_modules
-    runs-on: ${{ matrix.runner }}
+    # Runner override map — add entries to run specific modules on a different runner.
+    # Modules not listed here use the default: ubuntu-24.04-arm.
+    # Example: '{"some/module/integration":"ubuntu-latest","other":"ubuntu-22.04"}'
+    runs-on: ${{ fromJSON('{"bindings/go/sigstore/integration":"ubuntu-latest"}')[matrix.module] || 'ubuntu-24.04-arm' }}
     if: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json) }}
-        runner: [ubuntu-24.04-arm]
-        exclude:
-          - module: bindings/go/sigstore/integration
-            runner: ubuntu-24.04-arm
-        include:
-          - module: bindings/go/sigstore/integration
-            runner: ubuntu-latest
     env:
       TESTCONTAINER_DOCKER_NETWORK: integration-testcontainers
     steps:
