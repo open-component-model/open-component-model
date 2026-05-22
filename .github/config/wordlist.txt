@@ -899,3 +899,6 @@ oss
 runnable
 GmbH
 ANSI's
+Dotfiles
+dotfiles
+ClickHouse

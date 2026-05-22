@@ -20,7 +20,7 @@ That description fits AI skills perfectly. A skill is a text file with a name an
 
 The key design decision: **one OCM component = one catalogue release**. We don't create a separate component per skill — that would make the registry noisy and installs awkward. Instead, each skill is a *resource* inside a single catalogue component:
 
-```
+```text
 Component: jakob.io/ai-skill-catalogue   version: 1.0.0
 ├── resource: ocm-guide        type: ai.skill/v1   (SKILL.md)
 ├── resource: golang-patterns   type: ai.skill/v1   (SKILL.md)
@@ -54,7 +54,7 @@ Skills live at `~/.claude/skills/<skill-name>/SKILL.md`. Claude Code picks them 
 
 Your skills directory should have one subdirectory per skill, each containing a `SKILL.md`:
 
-```
+```text
 my-skills/
 ├── ocm-guide/
 │   └── SKILL.md
@@ -105,7 +105,8 @@ ocm add component-version \
 ```
 
 Output:
-```
+
+```text
  COMPONENT                    │ VERSION │ PROVIDER
 ─────────────────────────────┼─────────┼──────────
  myorg.io/ai-skill-catalogue  │ 1.0.0   │ myorg.io
@@ -129,7 +130,8 @@ ocm skill pull ./my-catalogue//myorg.io/ai-skill-catalogue:1.0.0
 ```
 
 Output:
-```
+
+```text
 skill installed   skill=ocm-guide       output=~/.claude/skills/ocm-guide/SKILL.md
 skill installed   skill=golang-patterns  output=~/.claude/skills/golang-patterns/SKILL.md
 ```
@@ -192,6 +194,7 @@ ocm skill pull <repo>//<component>:<version> \
 ```
 
 Repository reference formats:
+
 - Local CTF: `./my-catalogue`
 - OCI registry: `ghcr.io/myorg`
 - Explicit type: `CTF::./my-catalogue` or `OCI::ghcr.io/myorg`
