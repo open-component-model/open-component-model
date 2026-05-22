@@ -45,11 +45,7 @@ func fromDirectCredentials(properties map[string]string) *OCICredentials {
 // ConvertToOCICredentials converts runtime.Typed into OCICredentials.
 // Direct conversation as well as converting from v1.DirectCredentials is supported.
 // In every other case, an error will be returned.
-// A nil creds value is treated as no credentials and returns nil, nil.
 func ConvertToOCICredentials(creds runtime.Typed) (*OCICredentials, error) {
-	if creds == nil {
-		return nil, nil
-	}
 	typed, err := convertScheme.NewObject(creds.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("error converting credential type: %w", err)
