@@ -132,6 +132,7 @@ func SignComponent(ctx context.Context, signatureName string, signAlgo signingv1
 	pubKey := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}))
 
 	credentials := &rsacredentialsv1.RSACredentials{
+		Type:          rsacredentialsv1.VersionedType,
 		PublicKeyPEM:  pubKey,
 		PrivateKeyPEM: string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)})),
 	}

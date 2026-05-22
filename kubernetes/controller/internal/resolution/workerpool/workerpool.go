@@ -477,6 +477,7 @@ func verifySignatures(ctx context.Context, desc *descriptor.Descriptor, verifica
 		switch signingv1alpha1.SignatureAlgorithm(descSig.Signature.Algorithm) {
 		case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
 			credentials = &rsacredentialsv1.RSACredentials{
+				Type:         rsacredentialsv1.VersionedType,
 				PublicKeyPEM: string(v.PublicKey),
 			}
 		default:
