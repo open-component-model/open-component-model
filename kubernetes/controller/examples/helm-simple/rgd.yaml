@@ -71,7 +71,6 @@ spec:
               releaseName: ${ocirepository.metadata.name}
             path: .
             repoURL: oci://${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
-            # working -> oci://image-registry:5000/stefanprodan/charts/podinfo
             targetRevision: ${resourceChart.status.additional.tag}
           destination:
             server: https://kubernetes.default.svc
