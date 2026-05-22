@@ -21,8 +21,8 @@ import (
 	ocmconfigv1spec "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	resolversv1alpha1spec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	credentialsv1spec "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
-	"ocm.software/open-component-model/bindings/go/oci/spec/credentials"
-	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
+	ocicredentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
@@ -129,14 +129,14 @@ func createConfigFromDockerConfig(data []byte) (*genericv1.Config, error) {
 		return nil, fmt.Errorf("invalid docker config: %w", err)
 	}
 
-	dockerConfig := &credentialsv1.DockerConfig{}
-	if _, err := credentials.Scheme.DefaultType(dockerConfig); err != nil {
+	dockerConfig := &ocicredentialsv1.DockerConfig{}
+	if _, err := ocicredentials.Scheme.DefaultType(dockerConfig); err != nil {
 		return nil, fmt.Errorf("failed to get default type for docker config type %T: %w", dockerConfig, err)
 	}
 
 	dockerConfig.DockerConfig = string(data)
 	raw := &runtime.Raw{}
-	if err := credentials.Scheme.Convert(dockerConfig, raw); err != nil {
+	if err := ocicredentials.Scheme.Convert(dockerConfig, raw); err != nil {
 		return nil, fmt.Errorf("failed to convert docker config to raw: %w", err)
 	}
 
