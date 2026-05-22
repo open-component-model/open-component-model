@@ -31,7 +31,7 @@ jobs:
       uses: sourcemeta/jsonschema@f327b8202c5d05fd5f9e309bedf38cd8ddf07ef6 # v15.0.0
     - name: Lint JSON Schemas
       run: |
-        jsonschema lint $(git ls-files '**/schemas/*.schema.json') \
+        jsonschema lint $(git ls-files '**/schemas/*.schema.json' | grep -v 'testutils') \
           --verbose \
           --exclude orphan_definitions \
           --exclude enum_with_type \

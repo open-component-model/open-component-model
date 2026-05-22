@@ -14,7 +14,7 @@
     },
     "oneOfStringOrNull": {
       "description": "Used to test optional type behavior",
-      "anyOf": [
+      "oneOf": [
         {
           "type": "string"
         },
@@ -25,7 +25,7 @@
     },
     "oneOfStringNumberOrNull": {
       "description": "Used to test dyn type behavior",
-      "anyOf": [
+      "oneOf": [
         {
           "type": "string"
         },

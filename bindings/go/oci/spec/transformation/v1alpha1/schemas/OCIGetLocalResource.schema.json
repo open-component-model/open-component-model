@@ -16,8 +16,12 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.transformation.v1alpha1.OCIGetLocalResourceSpec"
     },
     "type": {
-      "type": "object",
-      "additionalProperties": true
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
+      "oneOf": [
+        {
+          "const": "OCIGetLocalResource/v1alpha1"
+        }
+      ]
     }
   },
   "required": [
@@ -43,8 +47,23 @@
           "description": "MediaType is the optional media type of the file.\nIf not set, the media type is inferred from the file extension."
         },
         "type": {
-          "type": "object",
-          "additionalProperties": true
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
+          "oneOf": [
+            {
+              "const": "File/v1alpha1"
+            },
+            {
+              "const": "file/v1alpha1"
+            },
+            {
+              "deprecated": true,
+              "const": "File"
+            },
+            {
+              "deprecated": true,
+              "const": "file"
+            }
+          ]
         },
         "uri": {
           "type": "string",
@@ -92,9 +111,8 @@
       "description": "ElementMeta defines an object with name and version containing labels.",
       "properties": {
         "extraIdentity": {
-          "type": "object",
-          "description": "ExtraIdentity is the identity of an object.\nAn additional label with key \"name\" is not allowed",
-          "additionalProperties": true
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",
+          "description": "ExtraIdentity is the identity of an object.\nAn additional label with key \"name\" is not allowed"
         },
         "labels": {
           "type": "array",
@@ -184,18 +202,16 @@
       "description": "A Resource is a delivery artifact, intended for deployment into a runtime environment, or describing additional content,\nrelevant for a deployment mechanism.\nFor example, installation procedures or meta-model descriptions controlling orchestration and/or deployment mechanisms.\nSee https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/02-elements-toplevel.md#resources",
       "properties": {
         "access": {
-          "type": "object",
-          "description": "Access defines the type of access this resource requires.",
-          "additionalProperties": true
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",
+          "description": "Access defines the type of access this resource requires."
         },
         "digest": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Digest",
           "description": "Digest is the optional digest of the referenced resource."
         },
         "extraIdentity": {
-          "type": "object",
-          "description": "ExtraIdentity is the identity of an object.\nAn additional label with key \"name\" is not allowed",
-          "additionalProperties": true
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",
+          "description": "ExtraIdentity is the identity of an object.\nAn additional label with key \"name\" is not allowed"
         },
         "labels": {
           "type": "array",
@@ -294,8 +310,44 @@
           "description": "SubPath is an optional repository prefix path used for the OCM repository.\nThe OCM-based artifacts will use this path as a repository prefix.\nAn OCI registry may host many OCM repositories with different repository prefixes.\n\nAuto-extraction: If not specified and BaseUrl contains a path component,\nthe path will be automatically extracted and used as SubPath.\n\nExamples:\nExplicit separation:\nBaseUrl=\"ghcr.io\" + SubPath=\"open-component-model/ocm\"\n→ Registry: ghcr.io, Repository prefix: open-component-model/ocm\n\nEmbedded path:\nBaseUrl=\"ghcr.io/open-component-model/ocm\" + SubPath=\"\"\n→ Auto-extracts to: BaseUrl=\"ghcr.io\", SubPath=\"open-component-model/ocm\""
         },
         "type": {
-          "type": "object",
-          "additionalProperties": true
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
+          "oneOf": [
+            {
+              "const": "OCIRepository/v1"
+            },
+            {
+              "const": "OCI/v1"
+            },
+            {
+              "const": "oci/v1"
+            },
+            {
+              "const": "OCIRegistry/v1"
+            },
+            {
+              "const": "ociRegistry/v1"
+            },
+            {
+              "deprecated": true,
+              "const": "OCIRepository"
+            },
+            {
+              "deprecated": true,
+              "const": "OCI"
+            },
+            {
+              "deprecated": true,
+              "const": "oci"
+            },
+            {
+              "deprecated": true,
+              "const": "OCIRegistry"
+            },
+            {
+              "deprecated": true,
+              "const": "ociRegistry"
+            }
+          ]
         }
       },
       "required": [
@@ -346,9 +398,8 @@
           "description": "Repository is the OCI repository specification"
         },
         "resourceIdentity": {
-          "type": "object",
-          "description": "ResourceIdentity identifies the resource to retrieve.\nMust match a resource in the component descriptor.",
-          "additionalProperties": true
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",
+          "description": "ResourceIdentity identifies the resource to retrieve.\nMust match a resource in the component descriptor."
         },
         "version": {
           "type": "string",
@@ -362,6 +413,40 @@
         "resourceIdentity"
       ],
       "additionalProperties": false
+    },
+    "ocm.software.open-component-model.bindings.go.runtime.Identity": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$comment": "generated by the ocm schema generation tool",
+      "title": "Identity",
+      "type": "object",
+      "description": "Identity is a map that represents a set of attributes that uniquely identity\narbitrary resources. It is used in various places in Open Component Model to uniquely\nidentity objects such as resources or components.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "ocm.software.open-component-model.bindings.go.runtime.Raw": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
+      "title": "Raw",
+      "type": "object",
+      "description": "Raw is used to hold extensions that dynamically define behavior at runtime",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": true
+    },
+    "ocm.software.open-component-model.bindings.go.runtime.Type": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
+      "title": "Type",
+      "type": "string",
+      "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
     }
   }
 }

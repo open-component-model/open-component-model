@@ -46,7 +46,7 @@
       "properties": {
         "oneOfStringNumberOrNull": {
           "description": "Used to test dyn type behavior",
-          "anyOf": [
+          "oneOf": [
             {
               "type": "string"
             },
@@ -60,7 +60,7 @@
         },
         "oneOfStringOrNull": {
           "description": "Used to test optional type behavior",
-          "anyOf": [
+          "oneOf": [
             {
               "type": "string"
             },

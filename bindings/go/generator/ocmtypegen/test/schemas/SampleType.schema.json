@@ -7,12 +7,21 @@
   "description": "SampleType is a sample struct that includes a field of type runtime.Type.",
   "properties": {
     "type": {
-      "type": "object",
-      "additionalProperties": true
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
     }
   },
   "required": [
     "type"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "ocm.software.open-component-model.bindings.go.runtime.Type": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
+      "title": "Type",
+      "type": "string",
+      "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  }
 }

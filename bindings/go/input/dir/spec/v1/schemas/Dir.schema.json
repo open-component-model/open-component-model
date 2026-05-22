@@ -45,13 +45,38 @@
       "description": "Reproducible defines that the attributes of the included files have to be normalized.\nThis is important if reproducible generation of blobs is required. In this case the blobs\nneed to be comparable on byte level (e.g. for hashing). So, if Reproducible is set to true,\nto get fully byte-equivalent blobs despite different file modification time, permission bits, etc.,\nthese attributes will be set to fixed values while creating the blob."
     },
     "type": {
-      "type": "object",
-      "additionalProperties": true
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
+      "oneOf": [
+        {
+          "const": "dir/v1"
+        },
+        {
+          "const": "Dir/v1"
+        },
+        {
+          "deprecated": true,
+          "const": "dir"
+        },
+        {
+          "deprecated": true,
+          "const": "Dir"
+        }
+      ]
     }
   },
   "required": [
     "type",
     "path"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "ocm.software.open-component-model.bindings.go.runtime.Type": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
+      "title": "Type",
+      "type": "string",
+      "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  }
 }
