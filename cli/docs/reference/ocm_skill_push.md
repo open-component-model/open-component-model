@@ -1,27 +1,53 @@
 ---
-title: ocm
-description: The official Open Component Model (OCM) CLI.
+title: ocm skill push
+description: Generate an OCM component-constructor for a directory of AI skills.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm
+## ocm skill push
 
-The official Open Component Model (OCM) CLI
+Generate an OCM component-constructor for a directory of AI skills
 
 ### Synopsis
 
-The Open Component Model command line client supports the work with OCM
-  artifacts, like Component Archives, Common Transport Archive,
-  Component Repositories, and Component Versions.
+Generate a component-constructor.yaml that packages all SKILL.md files found
+in <skills-dir> as ai.skill/v1 resources inside a single OCM component.
+
+Prints the constructor YAML to stdout by default. Use --output to write to a file.
+
+After generation, run:
+  ocm add component-version --repository <ref> --constructor <output-file>
 
 ```
-ocm [sub-command] [flags]
+ocm skill push <skills-dir> --component <name> --version <v> [flags]
+```
+
+### Examples
+
+```
+  # Print constructor to stdout
+  ocm skill push ~/.claude/skills --component jakob.io/ai-skill-catalogue --version 1.0.0
+
+  # Write constructor to file
+  ocm skill push ~/.claude/skills --component jakob.io/ai-skill-catalogue --version 1.0.0 --output constructor.yaml
+  ocm add component-version --repository ./catalogue --constructor constructor.yaml
 ```
 
 ### Options
+
+```
+      --component string    component name (required, e.g. jakob.io/ai-skill-catalogue)
+  -h, --help                help for push
+      --output string       write constructor YAML to this file instead of stdout
+      --provider string     provider name (defaults to the domain part of the component name)
+      --repository string   target repository reference (printed in usage hint) (default "transport-archive")
+      --version string      component version (default "1.0.0")
+```
+
+### Options inherited from parent commands
 
 ```
       --config string                      supply configuration by a given configuration file.
@@ -42,7 +68,6 @@ ocm [sub-command] [flags]
                                            - $EXE_DIR/.ocmconfig
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Using the option, this configuration file be used instead of the lookup above.
-  -h, --help                               help for ocm
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
@@ -65,16 +90,5 @@ ocm [sub-command] [flags]
 
 ### SEE ALSO
 
-* [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
-* [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
-* [ocm describe]({{< relref "ocm_describe.md" >}})	 - Describe OCM entities or metadata
-* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
-* [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
-* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
-* [ocm plugin]({{< relref "ocm_plugin.md" >}})	 - Manage OCM plugins
-* [ocm sign]({{< relref "ocm_sign.md" >}})	 - create signatures for component versions in OCM
 * [ocm skill]({{< relref "ocm_skill.md" >}})	 - Manage AI skills distributed via OCM component catalogues
-* [ocm transfer]({{< relref "ocm_transfer.md" >}})	 - Transfer anything in OCM
-* [ocm verify]({{< relref "ocm_verify.md" >}})	 - verify digests and signatures of component versions in OCM
-* [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
 

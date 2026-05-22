@@ -1,27 +1,27 @@
 ---
-title: ocm
-description: The official Open Component Model (OCM) CLI.
+title: ocm skill
+description: Manage AI skills distributed via OCM component catalogues.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm
+## ocm skill
 
-The official Open Component Model (OCM) CLI
-
-### Synopsis
-
-The Open Component Model command line client supports the work with OCM
-  artifacts, like Component Archives, Common Transport Archive,
-  Component Repositories, and Component Versions.
+Manage AI skills distributed via OCM component catalogues
 
 ```
-ocm [sub-command] [flags]
+ocm skill {pull|push} [flags]
 ```
 
 ### Options
+
+```
+  -h, --help   help for skill
+```
+
+### Options inherited from parent commands
 
 ```
       --config string                      supply configuration by a given configuration file.
@@ -42,7 +42,6 @@ ocm [sub-command] [flags]
                                            - $EXE_DIR/.ocmconfig
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Using the option, this configuration file be used instead of the lookup above.
-  -h, --help                               help for ocm
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
@@ -65,16 +64,7 @@ ocm [sub-command] [flags]
 
 ### SEE ALSO
 
-* [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
-* [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
-* [ocm describe]({{< relref "ocm_describe.md" >}})	 - Describe OCM entities or metadata
-* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
-* [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
-* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
-* [ocm plugin]({{< relref "ocm_plugin.md" >}})	 - Manage OCM plugins
-* [ocm sign]({{< relref "ocm_sign.md" >}})	 - create signatures for component versions in OCM
-* [ocm skill]({{< relref "ocm_skill.md" >}})	 - Manage AI skills distributed via OCM component catalogues
-* [ocm transfer]({{< relref "ocm_transfer.md" >}})	 - Transfer anything in OCM
-* [ocm verify]({{< relref "ocm_verify.md" >}})	 - verify digests and signatures of component versions in OCM
-* [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
+* [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
+* [ocm skill pull]({{< relref "ocm_skill_pull.md" >}})	 - Pull AI skills from an OCM skill catalogue component
+* [ocm skill push]({{< relref "ocm_skill_push.md" >}})	 - Generate an OCM component-constructor for a directory of AI skills
 
