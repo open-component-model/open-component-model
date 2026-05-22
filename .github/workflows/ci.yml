@@ -14,10 +14,8 @@ env:
   # Runner overrides for integration test modules (used by run_integration_tests).
   # Modules not listed here default to ubuntu-24.04-arm.
   # Add entries here to run specific integration modules on a different runner.
-  INTEGRATION_TEST_RUNNER_MAP: >-
-    {
-      "bindings/go/sigstore/integration": "ubuntu-latest"
-    }
+  # Example: '{"some/module/integration":"ubuntu-latest","other/module/integration":"ubuntu-22.04"}'
+  INTEGRATION_TEST_RUNNER_MAP: '{"bindings/go/sigstore/integration":"ubuntu-latest"}'
 
 permissions:
   contents: read
