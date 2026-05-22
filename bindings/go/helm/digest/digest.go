@@ -44,9 +44,6 @@ func (p *DigestProcessor) GetResourceRepositoryScheme() *ocmruntime.Scheme {
 }
 
 // GetResourceDigestProcessorCredentialConsumerIdentity resolves the credential consumer identity for digest processing.
-//
-// TODO(matthiasbruns): migrate return type to runtime.Typed once the DigestProcessor interface is updated.
-// https://github.com/open-component-model/ocm-project/issues/988
 func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 	ctx context.Context, resource *runtime.Resource,
 ) (ocmruntime.Identity, error) {
@@ -64,11 +61,8 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 }
 
 // ProcessResourceDigest resolves the digest of a Helm chart resource.
-//
-// TODO(matthiasbruns): migrate credentials parameter to runtime.Typed once the DigestProcessor interface is updated.
-// https://github.com/open-component-model/ocm-project/issues/988
 func (p *DigestProcessor) ProcessResourceDigest(
-	ctx context.Context, resource *runtime.Resource, credentials map[string]string,
+	ctx context.Context, resource *runtime.Resource, credentials ocmruntime.Typed,
 ) (*runtime.Resource, error) {
 	helm := helmv1.Helm{}
 	if err := access.Scheme.Convert(resource.Access, &helm); err != nil {
@@ -79,15 +73,25 @@ func (p *DigestProcessor) ProcessResourceDigest(
 		return nil, fmt.Errorf("helm repository URL is required for digest processing")
 	}
 
-	var (
-		resolvedDigest godigest.Digest
-		err            error
-	)
+	var resolvedDigest godigest.Digest
 
+	var err error
 	if strings.HasPrefix(helm.HelmRepository, "oci://") {
-		resolvedDigest, err = p.resolveOCIDigest(ctx, helm, ocicredsv1.FromDirectCredentials(credentials))
+		var ociCreds *ocicredsv1.OCICredentials
+		if credentials != nil {
+			if ociCreds, err = helmcredsv1.ConvertToOCICredentials(credentials); err != nil {
+				return nil, fmt.Errorf("error converting credentials: %w", err)
+			}
+		}
+		resolvedDigest, err = p.resolveOCIDigest(ctx, helm, ociCreds)
 	} else {
-		resolvedDigest, err = p.resolveHTTPDigest(ctx, helm, helmcredsv1.FromDirectCredentials(credentials))
+		var helmCreds *helmcredsv1.HelmHTTPCredentials
+		if credentials != nil {
+			if helmCreds, err = helmcredsv1.ConvertToHelmHTTPCredentials(credentials); err != nil {
+				return nil, fmt.Errorf("error converting credentials: %w", err)
+			}
+		}
+		resolvedDigest, err = p.resolveHTTPDigest(ctx, helm, helmCreds)
 	}
 	if err != nil {
 		return nil, err

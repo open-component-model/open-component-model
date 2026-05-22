@@ -109,7 +109,7 @@ func (p *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
 
 func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
 	if credentials == nil {
-		return plugins.KV{Key: "Authorization", Value: "{}"}, nil
+		return plugins.KV{}, nil
 	}
 	rawCreds, err := json.Marshal(credentials)
 	if err != nil {
