@@ -261,7 +261,7 @@ func (m *mockDigestProcessorPlugin) GetResourceDigestProcessorCredentialConsumer
 	return nil, nil
 }
 
-func (m *mockDigestProcessorPlugin) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
+func (m *mockDigestProcessorPlugin) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
 	m.called = true
 
 	return nil, nil

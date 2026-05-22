@@ -34,7 +34,7 @@ func (r *sourceInputPluginConverter) GetSourceCredentialConsumerIdentity(ctx con
 	return result.Identity, nil
 }
 
-func (r *sourceInputPluginConverter) ProcessSource(ctx context.Context, source *constructorruntime.Source, credentials map[string]string) (*constructor.SourceInputMethodResult, error) {
+func (r *sourceInputPluginConverter) ProcessSource(ctx context.Context, source *constructorruntime.Source, credentials runtime.Typed) (*constructor.SourceInputMethodResult, error) {
 	convert, err := constructorruntime.ConvertToV1Source(source)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert source: %w", err)

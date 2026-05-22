@@ -24,19 +24,19 @@ type mockPlugin struct {
 	contracts.EmptyBasePlugin
 }
 
-func (m *mockPlugin) AddLocalResource(_ context.Context, _ repov1.PostLocalResourceRequest[*dummyv1.Repository], _ map[string]string) (*descriptor.Resource, error) {
+func (m *mockPlugin) AddLocalResource(_ context.Context, _ repov1.PostLocalResourceRequest[*dummyv1.Repository], _ runtime.Typed) (*descriptor.Resource, error) {
 	return &descriptor.Resource{}, nil
 }
 
-func (m *mockPlugin) AddLocalSource(_ context.Context, _ repov1.PostLocalSourceRequest[*dummyv1.Repository], _ map[string]string) (*descriptor.Source, error) {
+func (m *mockPlugin) AddLocalSource(_ context.Context, _ repov1.PostLocalSourceRequest[*dummyv1.Repository], _ runtime.Typed) (*descriptor.Source, error) {
 	return &descriptor.Source{}, nil
 }
 
-func (m *mockPlugin) AddComponentVersion(_ context.Context, _ repov1.PostComponentVersionRequest[*dummyv1.Repository], _ map[string]string) error {
+func (m *mockPlugin) AddComponentVersion(_ context.Context, _ repov1.PostComponentVersionRequest[*dummyv1.Repository], _ runtime.Typed) error {
 	return nil
 }
 
-func (m *mockPlugin) GetComponentVersion(_ context.Context, _ repov1.GetComponentVersionRequest[*dummyv1.Repository], _ map[string]string) (*descriptor.Descriptor, error) {
+func (m *mockPlugin) GetComponentVersion(_ context.Context, _ repov1.GetComponentVersionRequest[*dummyv1.Repository], _ runtime.Typed) (*descriptor.Descriptor, error) {
 	return &descriptor.Descriptor{
 		Meta: descriptor.Meta{
 			Version: "1.0.0",
@@ -52,11 +52,11 @@ func (m *mockPlugin) GetComponentVersion(_ context.Context, _ repov1.GetComponen
 	}, nil
 }
 
-func (m *mockPlugin) ListComponentVersions(_ context.Context, _ repov1.ListComponentVersionsRequest[*dummyv1.Repository], _ map[string]string) ([]string, error) {
+func (m *mockPlugin) ListComponentVersions(_ context.Context, _ repov1.ListComponentVersionsRequest[*dummyv1.Repository], _ runtime.Typed) ([]string, error) {
 	return []string{"v0.0.1", "v0.0.2"}, nil
 }
 
-func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResourceRequest[*dummyv1.Repository], _ map[string]string) (repov1.GetLocalResourceResponse, error) {
+func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResourceRequest[*dummyv1.Repository], _ runtime.Typed) (repov1.GetLocalResourceResponse, error) {
 	return repov1.GetLocalResourceResponse{
 		Location: types.Location{
 			LocationType: types.LocationTypeLocalFile,
@@ -87,7 +87,7 @@ func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResour
 	}, nil
 }
 
-func (m *mockPlugin) GetLocalSource(_ context.Context, _ repov1.GetLocalSourceRequest[*dummyv1.Repository], _ map[string]string) (repov1.GetLocalSourceResponse, error) {
+func (m *mockPlugin) GetLocalSource(_ context.Context, _ repov1.GetLocalSourceRequest[*dummyv1.Repository], _ runtime.Typed) (repov1.GetLocalSourceResponse, error) {
 	return repov1.GetLocalSourceResponse{
 		Location: types.Location{
 			LocationType: types.LocationTypeLocalFile,
@@ -116,7 +116,7 @@ func (m *mockPlugin) GetIdentity(ctx context.Context, typ *repov1.GetIdentityReq
 	return nil, nil
 }
 
-func (m *mockPlugin) CheckHealth(ctx context.Context, typ repov1.PostCheckHealthRequest[*dummyv1.Repository], credentials map[string]string) error {
+func (m *mockPlugin) CheckHealth(ctx context.Context, typ repov1.PostCheckHealthRequest[*dummyv1.Repository], credentials runtime.Typed) error {
 	return nil
 }
 

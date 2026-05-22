@@ -16,25 +16,25 @@ import (
 // ResourceInputProcessorHandlerFunc is a wrapper around calling the interface method ProcessResource for the plugin.
 // This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
 // the plugin implementor.
-func ResourceInputProcessorHandlerFunc(f func(ctx context.Context, r *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceInputResponse, error), scheme *runtime.Scheme, typ runtime.Typed) http.HandlerFunc {
+func ResourceInputProcessorHandlerFunc(f func(ctx context.Context, r *v1.ProcessResourceInputRequest, credentials runtime.Typed) (*v1.ProcessResourceInputResponse, error), scheme *runtime.Scheme, typ runtime.Typed) http.HandlerFunc {
 	return inputProcessorHandlerFunc[v1.ProcessResourceInputRequest, v1.ProcessResourceInputResponse](f)
 }
 
 // SourceInputProcessorHandlerFunc is a wrapper around calling the interface method ProcessSource for the plugin.
 // This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
 // the plugin implementor.
-func SourceInputProcessorHandlerFunc(f func(ctx context.Context, r *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceInputResponse, error), scheme *runtime.Scheme, typ runtime.Typed) http.HandlerFunc {
+func SourceInputProcessorHandlerFunc(f func(ctx context.Context, r *v1.ProcessSourceInputRequest, credentials runtime.Typed) (*v1.ProcessSourceInputResponse, error), scheme *runtime.Scheme, typ runtime.Typed) http.HandlerFunc {
 	return inputProcessorHandlerFunc[v1.ProcessSourceInputRequest, v1.ProcessSourceInputResponse](f)
 }
 
-func inputProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, r *REQ, credentials map[string]string) (*RES, error)) http.HandlerFunc {
+func inputProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, r *REQ, credentials runtime.Typed) (*RES, error)) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		logger.Info("request", "request", request.Method, "url", request.URL.String())
 
 		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := map[string]string{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
+		credentials := &runtime.Raw{}
+		if err := json.Unmarshal(rawCredentials, credentials); err != nil {
 			plugins.NewError(fmt.Errorf("failed to marshal credentials: %w", err), http.StatusUnauthorized).Write(writer)
 			return
 		}

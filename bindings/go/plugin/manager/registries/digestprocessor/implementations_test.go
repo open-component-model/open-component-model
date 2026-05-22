@@ -18,14 +18,14 @@ func TestProcessResourceDigest(t *testing.T) {
 	tests := []struct {
 		name        string
 		request     *v1.ProcessResourceDigestRequest
-		credentials map[string]string
+		credentials runtime.Typed
 		setupMock   func() *httptest.Server
 		expectErr   bool
 	}{
 		{
 			name:        "success",
 			request:     &v1.ProcessResourceDigestRequest{},
-			credentials: map[string]string{"key": "value"},
+			credentials: runtime.Identity{"key": "value"},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == ProcessResourceDigest {
@@ -41,7 +41,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		{
 			name:        "invalid_credentials",
 			request:     &v1.ProcessResourceDigestRequest{},
-			credentials: map[string]string{"invalid_key": "invalid_value"},
+			credentials: runtime.Identity{"invalid_key": "invalid_value"},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusForbidden)
@@ -52,7 +52,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		{
 			name:        "call_failed",
 			request:     &v1.ProcessResourceDigestRequest{},
-			credentials: map[string]string{"key": "value"},
+			credentials: runtime.Identity{"key": "value"},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
@@ -202,11 +202,11 @@ func TestGetIdentity(t *testing.T) {
 func TestToCredentials(t *testing.T) {
 	tests := []struct {
 		name        string
-		credentials map[string]string
+		credentials runtime.Typed
 		expectErr   bool
 	}{
-		{name: "valid", credentials: map[string]string{"key": "value"}, expectErr: false},
-		{name: "empty", credentials: map[string]string{}, expectErr: false},
+		{name: "valid", credentials: runtime.Identity{"key": "value"}, expectErr: false},
+		{name: "empty", credentials: runtime.Identity{}, expectErr: false},
 	}
 
 	for _, tt := range tests {

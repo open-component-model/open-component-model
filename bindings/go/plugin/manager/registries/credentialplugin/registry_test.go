@@ -79,7 +79,7 @@ func TestRegisterInternalCredentialPlugin(t *testing.T) {
 
 			creds, err := got.Resolve(ctx, identity, nil)
 			require.NoError(t, err)
-			require.Equal(t, map[string]string{"token": "resolved"}, creds)
+			require.Equal(t, runtime.Identity{"token": "resolved"}, creds)
 			require.True(t, plugin.resolveCalled)
 
 			plugin.identityCalled = false
@@ -155,7 +155,7 @@ func (m *mockCredentialPlugin) GetConsumerIdentity(_ context.Context, _ runtime.
 	return runtime.Identity{"type": "stub"}, nil
 }
 
-func (m *mockCredentialPlugin) Resolve(_ context.Context, _ runtime.Identity, _ map[string]string) (map[string]string, error) {
+func (m *mockCredentialPlugin) Resolve(_ context.Context, _ runtime.Identity, _ runtime.Typed) (runtime.Typed, error) {
 	m.resolveCalled = true
-	return map[string]string{"token": "resolved"}, nil
+	return runtime.Identity{"token": "resolved"}, nil
 }

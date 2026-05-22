@@ -227,7 +227,7 @@ func (m *mockPluginProvider) GetComponentVersionRepositoryCredentialConsumerIden
 	}, nil
 }
 
-func (m *mockPluginProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
+func (m *mockPluginProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials runtime.Typed) (repository.ComponentVersionRepository, error) {
 	return m.mockPlugin, nil
 }
 
