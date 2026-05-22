@@ -11,11 +11,6 @@ env:
   # If true, only changed modules will be analyzed.
   # If false, all discovered modules will be analyzed.
   check_only_changed: ${{ github.event_name == 'pull_request' }}
-  # Runner overrides for integration test modules (used by run_integration_tests).
-  # Modules not listed here default to ubuntu-24.04-arm.
-  # Add entries here to run specific integration modules on a different runner.
-  # Example: '{"some/module/integration":"ubuntu-latest","other/module/integration":"ubuntu-22.04"}'
-  INTEGRATION_TEST_RUNNER_MAP: '{"bindings/go/sigstore/integration":"ubuntu-latest"}'
 
 permissions:
   contents: read
@@ -299,8 +294,10 @@ jobs:
   run_integration_tests:
     name: "Integration Tests"
     needs: discover_modules
-    # Runner is resolved via INTEGRATION_TEST_RUNNER_MAP; defaults to ubuntu-24.04-arm.
-    runs-on: ${{ fromJSON(env.INTEGRATION_TEST_RUNNER_MAP)[matrix.module] || 'ubuntu-24.04-arm' }}
+    # Runner override map — add entries to run specific modules on a different runner.
+    # Modules not listed here use the default: ubuntu-24.04-arm.
+    # Example: '{"some/module/integration":"ubuntu-latest","other":"ubuntu-22.04"}'
+    runs-on: ${{ fromJSON('{"bindings/go/sigstore/integration":"ubuntu-latest"}')[matrix.module] || 'ubuntu-24.04-arm' }}
     if: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
