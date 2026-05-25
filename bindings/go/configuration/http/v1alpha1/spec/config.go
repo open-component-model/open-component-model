@@ -150,6 +150,12 @@ func MergeTimeoutConfig(dst, src *TimeoutConfig) TimeoutConfig {
 	return out
 }
 
+// HostConfig contains per-host HTTP timeout settings that override global values.
+// All fields are pointers; nil means "inherit from global".
+type HostConfig struct {
+	TimeoutConfig `json:",inline"`
+}
+
 // Config represents the HTTP client configuration.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
@@ -162,11 +168,28 @@ type Config struct {
 	Type runtime.Type `json:"type"`
 
 	TimeoutConfig `json:",inline"`
+
+	// Hosts maps hostname (or hostname:port) to per-host timeout settings.
+	// Fields set here override the corresponding top-level value for that host.
+	Hosts map[string]*HostConfig `json:"hosts,omitempty"`
 }
 
-// Validate checks the embedded TimeoutConfig for non-negative timeout values.
+// Validate checks the embedded TimeoutConfig and each per-host TimeoutConfig
+// for non-negative timeout values. Host errors are wrapped with the host key
+// so the caller knows which entry failed.
 func (c *Config) Validate() error {
-	return c.TimeoutConfig.Validate()
+	if err := c.TimeoutConfig.Validate(); err != nil {
+		return err
+	}
+	for host, hc := range c.Hosts {
+		if hc == nil {
+			continue
+		}
+		if err := hc.TimeoutConfig.Validate(); err != nil {
+			return fmt.Errorf("host %q: %w", host, err)
+		}
+	}
+	return nil
 }
 
 // ResolveHTTPConfig resolves the HTTP configuration from a central generic V1
@@ -224,6 +247,7 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 
 // Merge merges the provided configs into a single config.
 // For pointer fields the last non-nil value wins.
+// Hosts maps are merged entry-by-entry; last value per key wins.
 func Merge(configs ...*Config) *Config {
 	if len(configs) == 0 {
 		return nil
@@ -234,6 +258,15 @@ func Merge(configs ...*Config) *Config {
 
 	for _, c := range configs {
 		merged.TimeoutConfig = MergeTimeoutConfig(&merged.TimeoutConfig, &c.TimeoutConfig)
+
+		if len(c.Hosts) > 0 {
+			if merged.Hosts == nil {
+				merged.Hosts = make(map[string]*HostConfig)
+			}
+			for k, v := range c.Hosts {
+				merged.Hosts[k] = v
+			}
+		}
 	}
 
 	return merged

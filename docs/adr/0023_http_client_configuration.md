@@ -82,25 +82,58 @@ concerns (hooks, metrics, custom transports) can accrete as new options without 
 
 ### Per-host overrides (logic and config shape)
 
-`hosts` is a list. Each entry pairs an identity triple with overrides for any global field. Identity is the
-`{host, port, scheme}` triple — the same shape OCI registry references use. Host alone would be too coarse:
-environments often mix HTTP/HTTPS or non-default ports against the same hostname.
+`hosts` is a `map[string]*HostConfig` keyed by hostname or `hostname:port`. Each entry embeds a `TimeoutConfig` whose
+non-nil fields override the matching global value for requests to that host; unset fields inherit from the global —
+so "same as global but with a longer timeout for this slow mirror" stays concise.
 
-Identity (`hosts[].identity`):
+| Field        | Type                  | Default | Meaning                                                                         |
+|--------------|-----------------------|---------|---------------------------------------------------------------------------------|
+| `hosts`      | map\<string, object\> | `nil`   | Maps a host key to per-host TimeoutConfig overrides.                            |
+| `hosts[*]`   | TimeoutConfig         | inherit | Any field from Timeouts may appear here and overrides the global for that host. |
 
-| Field    | Type   | Default                   | Meaning                                    |
-|----------|--------|---------------------------|--------------------------------------------|
-| `host`   | string | required                  | Hostname to match against the request URL. |
-| `port`   | int    | scheme default (80 / 443) | Port to match.                             |
-| `scheme` | string | matches any scheme        | `http` or `https`.                         |
+Host-key format: a bare hostname (`registry.example.com`) matches any port; `hostname:port` (`localhost:5000`) matches
+that specific port. A flat string key is sufficient for the deployments operators actually run today and keeps the
+YAML flat — a `{host, port, scheme}` triple would add ceremony for no concrete need yet.
 
-Body: any Timeouts or TLS field may appear under a host entry, overriding the global value for matching requests.
-Unset fields inherit from the global config — so "same as global but with a longer timeout for this slow mirror" stays
-concise.
+#### How the http client honours per-host config (custom transport)
 
-Resolution happens per request: the transport picks the first `hosts` entry whose `{host, port, scheme}` matches the
-URL. If no entry matches, the request uses the global config. Per-request lookup keeps the construction surface to a
-single client — a static per-host transport would mean N transports and a routing layer for N hosts.
+Per-host routing lives in an internal `http.RoundTripper` called `hostRouter`. It fronts the rest of the transport
+chain whenever `cfg.Hosts` is non-empty and is omitted entirely when it isn't, so callers that don't use per-host pay
+nothing for it.
+
+**At construction time** (inside `New` / `NewClient`):
+
+1. For every entry in `cfg.Hosts`, `MergeTimeoutConfig(global, hostOverride)` produces the effective `TimeoutConfig`
+   for that host.
+2. A per-host inner chain is built from each merged config — a bare `*http.Transport` for `NewClient`, the same
+   wrapped in `retry.Transport` for `New`.
+3. The router stores `hostKey → innerChain` in a map alongside the global inner chain (used as fallback) and the
+   per-host overall `Timeout` values.
+4. The router is installed as `http.Client.Transport`.
+
+**At request time** (inside `hostRouter.RoundTrip`):
+
+1. Look up the request URL's host. The full `Host` (`host` or `host:port`) is checked first; on miss, the bare
+   hostname is tried in case the URL carried an explicit port that doesn't appear as a key.
+2. Pick the matching host's inner chain, or fall back to the global chain.
+3. If the matched entry has an overall `Timeout`, wrap the request context with
+   `context.WithTimeout(req.Context(), hostTimeout)` and clone the request onto that context.
+4. Call `innerChain.RoundTrip(req)` and return the result.
+
+**Why a context deadline instead of `http.Client.Timeout`**: `http.Client.Timeout` caps the entire request before the
+router runs, which would prevent any per-host timeout from exceeding the global. With `cfg.Hosts` non-empty,
+`http.Client.Timeout` is left zero and the overall timeout (global or per-host) is applied per request inside the
+router. That way a host can be configured with a longer (or shorter) deadline than the global value, and the deadline
+covers the whole request including any retries inside the inner chain.
+
+Transport chain when per-host is active (outermost first):
+
+```text
+http.Client → [userAgentTransport] → hostRouter → retry.Transport (per host) → http.Transport (per host)
+```
+
+When `cfg.Hosts` is empty the chain collapses to the previous shape (no router) and the global `Timeout` is applied
+as `http.Client.Timeout`.
 
 ### Timeouts
 
@@ -131,7 +164,7 @@ are deferred until their shapes are settled.
 | `tls.insecure` | bool | `false` | When `true`, the transport skips TLS cert verification. Dev / self-signed only. |
 
 `insecure` is a `*bool` for the same three-state reason as timeouts — an explicit `false` is distinguishable from
-unset, so a per-host entry can opt back into verification when the global has disabled it.
+unset, which keeps a future per-host TLS override able to opt back into verification when the global has disabled it.
 
 ### Retry (per-protocol, supplied at construction time)
 
@@ -220,24 +253,24 @@ type TLSConfig struct {
     Insecure *bool `json:"insecure,omitempty"`
 }
 
-type HostIdentity struct {
-    Host   string `json:"host"`
-    Port   int    `json:"port,omitempty"`
-    Scheme string `json:"scheme,omitempty"`
-}
-
+// HostConfig is the per-host override entry. It embeds TimeoutConfig so any
+// timeout field may appear under a host key and override the global value.
 type HostConfig struct {
-    Identity      HostIdentity `json:"identity"`
     TimeoutConfig `json:",inline"`
-    TLS           *TLSConfig `json:"tls,omitempty"`
 }
 
 type Config struct {
     Type runtime.Type `json:"type"`
     TimeoutConfig `json:",inline"`
-    TLS           *TLSConfig        `json:"tls,omitempty"`
-    DNSOverrides  map[string]string `json:"dnsOverrides,omitempty"` // exploratory
-    Hosts         []HostConfig      `json:"hosts,omitempty"`
+
+    // Hosts is keyed by hostname or hostname:port. Non-nil entries override
+    // matching global timeout fields for requests to that host.
+    Hosts map[string]*HostConfig `json:"hosts,omitempty"`
+
+    // Planned for later v1alpha1 revisions; documented in the TLS and
+    // DNS overrides sub-sections.
+    // TLS          *TLSConfig        `json:"tls,omitempty"`
+    // DNSOverrides map[string]string `json:"dnsOverrides,omitempty"`
 }
 
 func (c *Config) Validate() error
@@ -255,9 +288,9 @@ func WithConfig(cfg *httpv1alpha1.Config) Option
 func WithUserAgent(userAgent string) Option
 func WithRetryPolicy(policy RetryPolicy) Option
 
-func New(opts ...Option) *http.Client
-func NewClient(cfg *httpv1alpha1.Config) *http.Client
-func NewTransport(timeouts *httpv1alpha1.TimeoutConfig, tls *httpv1alpha1.TLSConfig) *http.Transport
+func New(opts ...Option) *http.Client       // wraps NewTransport in retry; honours cfg.Hosts via hostRouter
+func NewClient(cfg *httpv1alpha1.Config) *http.Client // no retry; also honours cfg.Hosts via hostRouter
+func NewTransport(timeouts *httpv1alpha1.TimeoutConfig) *http.Transport
 ```
 
 ### Example
@@ -272,21 +305,20 @@ configurations:
       maxRetry: 5
 
   - type: http.config.ocm.software/v1alpha1
-    timeout: "0s"
+    timeout: "30s"
     tcpDialTimeout: "30s"
     tcpKeepAlive: "30s"
     tlsHandshakeTimeout: "10s"
     responseHeaderTimeout: "10s"
     idleConnTimeout: "90s"
-    tls:
-      insecure: false
 
     hosts:
-      - identity:
-          host: ghcr.io
-          port: 443
-          scheme: https
+      # bare hostname — matches any port on this host
+      ghcr.io:
         timeout: "60s"
+      # host:port — matches only requests on this exact port
+      localhost:5000:
+        tlsHandshakeTimeout: "2s"
 ```
 
 Putting it together:

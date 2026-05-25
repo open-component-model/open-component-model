@@ -79,24 +79,30 @@ func newDialer(cfg *httpv1alpha1.TimeoutConfig) *net.Dialer {
 	return dialer
 }
 
-// NewClient returns an *http.Client whose Transport is produced by
-// NewTransport and whose Timeout reflects cfg.Timeout. A nil cfg.Timeout
-// leaves the client with no overall deadline (Go's http.Client default).
-// A nil cfg returns an *http.Client with a default Transport and no Timeout.
+// NewClient returns an *http.Client whose Transport is produced by NewTransport
+// and whose Timeout reflects cfg.Timeout. A nil cfg.Timeout leaves the client
+// with no overall deadline (Go's http.Client default). A nil cfg returns an
+// *http.Client with a default Transport and no Timeout.
 //
-// cfg.Timeout is the overall http.Client deadline and is independent of the
-// transport-level timeouts; setting Timeout alone does NOT also configure
-// TCPDialTimeout, TLSHandshakeTimeout, etc.
+// When cfg carries per-host entries, the transport is fronted by a routing
+// layer that dispatches each request to a transport built from the host's
+// merged TimeoutConfig and applies the host's overall Timeout via a context
+// deadline. http.Client.Timeout is left zero in that case so a per-host
+// timeout can exceed the global.
+//
+// cfg.Timeout (when set without per-host entries) is the overall http.Client
+// deadline and is independent of the transport-level timeouts; setting
+// Timeout alone does NOT also configure TCPDialTimeout, TLSHandshakeTimeout,
+// etc.
 //
 // NewClient produces a plain client with no retry behaviour. For the
 // retry-enabled client used for OCI registry traffic, use New.
 func NewClient(cfg *httpv1alpha1.Config) *http.Client {
-	if cfg == nil {
-		return &http.Client{Transport: NewTransport(nil)}
+	build := func(tc *httpv1alpha1.TimeoutConfig) http.RoundTripper {
+		return NewTransport(tc)
 	}
-	client := &http.Client{Transport: NewTransport(&cfg.TimeoutConfig)}
-	if cfg.Timeout != nil {
-		client.Timeout = time.Duration(*cfg.Timeout)
+	return &http.Client{
+		Transport: buildRoutingTransport(cfg, build),
+		Timeout:   clientLevelTimeout(cfg),
 	}
-	return client
 }

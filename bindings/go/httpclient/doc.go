@@ -44,4 +44,22 @@
 // The configuration distinguishes nil ("use the default") from a zero
 // duration ("no timeout"), matching net/http semantics, so leaving a field
 // unset preserves http.DefaultTransport's behaviour for it.
+//
+// # Per-host overrides
+//
+// When cfg.Hosts is non-empty, both New and NewClient front the transport
+// with a routing layer. Each request is dispatched to a transport built from
+// the host's merged TimeoutConfig (global + per-host overrides) when the
+// request URL's host matches an entry in cfg.Hosts; otherwise it goes to the
+// transport built from the global config.
+//
+// Map keys may be either "host" or "host:port". The full Host is matched
+// first, falling back to the bare hostname when the URL carries an explicit
+// port that does not appear as a key.
+//
+// The overall Timeout is applied per request via a context deadline so that
+// a per-host timeout can exceed the global value — setting http.Client.Timeout
+// would cap every request at the global before the host override could take
+// effect. http.Client.Timeout is therefore left zero whenever cfg.Hosts is
+// non-empty.
 package httpclient

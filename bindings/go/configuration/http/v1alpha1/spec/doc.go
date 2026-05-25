@@ -2,8 +2,9 @@
 // http.config.ocm.software/v1alpha1.
 //
 // It lets OCM tune how outbound HTTP requests behave — primarily their
-// timeouts. The configuration is a regular OCM config object, so it can
-// live in any central .ocmconfig file alongside other configuration types.
+// timeouts — both globally and per host. The configuration is a regular
+// OCM config object, so it can live in any central .ocmconfig file
+// alongside other configuration types.
 //
 // # Configuration type
 //
@@ -54,14 +55,32 @@
 // When no config is supplied at all, LookupConfig falls back to
 // DefaultTimeout (30s) for the overall timeout and leaves the rest unset.
 //
+// # Per-host overrides
+//
+// The hosts map keys per-host TimeoutConfig overrides by hostname or
+// hostname:port. Any field set under a host replaces the corresponding
+// global value for requests to that host; unset fields are inherited.
+//
+//	type: http.config.ocm.software/v1alpha1
+//	timeout: 1m
+//	tlsHandshakeTimeout: 10s
+//	hosts:
+//	  registry.example.com:
+//	    timeout: 5m            # allow large pulls from this registry
+//	  localhost:5000:
+//	    tlsHandshakeTimeout: 2s
+//
 // # Merging
 //
 // Multiple http configs may appear across config sources. Merge combines
-// them with last-non-nil-wins semantics per timeout field. LookupConfig
+// them with last-non-nil-wins semantics per timeout field, and merges the
+// hosts map entry-by-entry (last value per host key wins). LookupConfig
 // performs this merge and then applies the default timeout.
 //
 // # Validation
 //
 // Config.Validate — and the convenience wrapper ResolveHTTPConfig —
-// rejects negative durations on every timeout field except tcpKeepAlive.
+// rejects negative durations on every timeout field except tcpKeepAlive,
+// both globally and for each host entry. Host errors are wrapped with the
+// offending host key so the caller knows which entry failed.
 package spec

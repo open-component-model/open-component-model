@@ -44,18 +44,30 @@ func (t *userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error
 	return t.base.RoundTrip(req)
 }
 
-// New builds an *http.Client on top of the oras-go retry client,
-// applying the transport-level timeouts from the supplied HTTP configuration.
-// It is the factory counterpart to httpv1alpha1.ResolveHTTPConfig: resolve the
-// config once, then hand it here to obtain a ready-to-use client.
+// New builds an *http.Client on top of the oras-go retry client, applying the
+// transport-level timeouts from the supplied HTTP configuration. It is the
+// factory counterpart to httpv1alpha1.ResolveHTTPConfig: resolve the config
+// once, then hand it here to obtain a ready-to-use client.
 //
 // Transport chain (outermost first):
 //
-//		http.Client → [userAgentTransport] → retry.Transport → http.Transport
+//		http.Client → [userAgentTransport] → [hostRouter] → retry.Transport → http.Transport
 //
-//	 1. userAgentTransport sets the User-Agent header (only when WithUserAgent is given).
-//	 2. retry.Transport retries transient failures using oras-go's default policy.
-//	 3. http.Transport carries the configured TCP/TLS/idle timeouts.
+//	 1. userAgentTransport sets the User-Agent header (only when WithUserAgent
+//	    is given).
+//	 2. hostRouter dispatches each request to a per-host inner chain when the
+//	    URL host matches an entry in cfg.Hosts; otherwise it falls back to the
+//	    global chain. Omitted entirely when cfg has no per-host entries.
+//	 3. retry.Transport retries transient failures using oras-go's default
+//	    policy. One instance exists per host (plus one for the global fallback)
+//	    so retry attempts share the per-host context deadline.
+//	 4. http.Transport carries the configured TCP/TLS/idle timeouts, merged
+//	    from the global config and the matching per-host overrides.
+//
+// Without per-host entries, the overall Timeout is applied as
+// http.Client.Timeout. With per-host entries it is applied per request inside
+// hostRouter via a context deadline, so a per-host timeout may exceed the
+// global one.
 //
 // A nil config (WithConfig omitted, or omitted entirely) yields a plain
 // oras-go retry client with default transport timeouts.
@@ -65,25 +77,75 @@ func New(opts ...Option) *http.Client {
 		opt(options)
 	}
 
-	// Build the retry transport directly so we never depend on the concrete
-	// type of retry.NewClient().Transport, and so the global retry.DefaultClient
-	// is never mutated.
-	retryTransport := retry.NewTransport(nil)
-	httpClient := &http.Client{Transport: retryTransport}
-
-	if options.config != nil {
-		retryTransport.Base = NewTransport(&options.config.TimeoutConfig)
-		if options.config.Timeout != nil {
-			httpClient.Timeout = time.Duration(*options.config.Timeout)
-		}
+	build := func(tc *httpv1alpha1.TimeoutConfig) http.RoundTripper {
+		return retry.NewTransport(NewTransport(tc))
 	}
+
+	httpClient := &http.Client{Transport: buildRoutingTransport(options.config, build)}
+	httpClient.Timeout = clientLevelTimeout(options.config)
 
 	if options.userAgent != "" {
 		httpClient.Transport = &userAgentTransport{
-			base:      retryTransport,
+			base:      httpClient.Transport,
 			userAgent: options.userAgent,
 		}
 	}
 
 	return httpClient
+}
+
+// buildRoutingTransport builds the transport chain that fronts every request
+// from a client built out of cfg. inner is invoked for each TimeoutConfig
+// (global, then once per host entry) to produce the innermost RoundTripper —
+// callers use that to layer retry, instrumentation, etc.
+//
+// When cfg has no per-host entries the result is whatever inner returned for
+// the global config. With per-host entries the result is a hostRouter that
+// dispatches to a per-host inner chain, applying the per-host overall
+// Timeout via a context deadline so a per-host timeout can exceed the global.
+func buildRoutingTransport(cfg *httpv1alpha1.Config, inner func(*httpv1alpha1.TimeoutConfig) http.RoundTripper) http.RoundTripper {
+	if cfg == nil {
+		return inner(nil)
+	}
+
+	globalChain := inner(&cfg.TimeoutConfig)
+	if len(cfg.Hosts) == 0 {
+		return globalChain
+	}
+
+	var globalTimeout time.Duration
+	if cfg.Timeout != nil {
+		globalTimeout = time.Duration(*cfg.Timeout)
+	}
+
+	hosts := make(map[string]http.RoundTripper, len(cfg.Hosts))
+	hostTimeouts := make(map[string]time.Duration, len(cfg.Hosts))
+	for host, hc := range cfg.Hosts {
+		if hc == nil {
+			continue
+		}
+		merged := httpv1alpha1.MergeTimeoutConfig(&cfg.TimeoutConfig, &hc.TimeoutConfig)
+		hosts[host] = inner(&merged)
+		if merged.Timeout != nil {
+			hostTimeouts[host] = time.Duration(*merged.Timeout)
+		}
+	}
+
+	return &hostRouter{
+		globalRT:      globalChain,
+		globalTimeout: globalTimeout,
+		hosts:         hosts,
+		hostTimeouts:  hostTimeouts,
+	}
+}
+
+// clientLevelTimeout returns the value to set on http.Client.Timeout. With
+// per-host entries, the overall timeout is applied per request inside
+// hostRouter — setting http.Client.Timeout would cap every request at the
+// global value before the host override could take effect.
+func clientLevelTimeout(cfg *httpv1alpha1.Config) time.Duration {
+	if cfg == nil || cfg.Timeout == nil || len(cfg.Hosts) > 0 {
+		return 0
+	}
+	return time.Duration(*cfg.Timeout)
 }

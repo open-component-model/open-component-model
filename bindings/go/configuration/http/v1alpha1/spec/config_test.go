@@ -125,6 +125,36 @@ configurations:
 		assert.Nil(t, cfg.IdleConnTimeout)
 	})
 
+	t.Run("per-host overrides", func(t *testing.T) {
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    timeout: 30s
+    hosts:
+      "ghcr.io:443":
+        timeout: 60s
+        tlsHandshakeTimeout: 5s
+`
+		var generic genericv1.Config
+		err := genericv1.Scheme.Decode(strings.NewReader(yaml), &generic)
+		require.NoError(t, err)
+
+		var cfg httpspec.Config
+		err = httpspec.Scheme.Convert(generic.Configurations[0], &cfg)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.Timeout)
+		assert.Equal(t, httpspec.Timeout(30*time.Second), *cfg.Timeout)
+		require.Contains(t, cfg.Hosts, "ghcr.io:443")
+
+		host := cfg.Hosts["ghcr.io:443"]
+		require.NotNil(t, host.Timeout)
+		assert.Equal(t, httpspec.Timeout(60*time.Second), *host.Timeout)
+		require.NotNil(t, host.TLSHandshakeTimeout)
+		assert.Equal(t, httpspec.Timeout(5*time.Second), *host.TLSHandshakeTimeout)
+	})
+
 	t.Run("invalid", func(t *testing.T) {
 		tests := []struct {
 			name      string
@@ -195,6 +225,9 @@ configurations:
   - type: http.config.ocm.software/v1alpha1
     timeout: 1m
     tcpDialTimeout: 5s
+    hosts:
+      "ghcr.io:443":
+        timeout: 2m
 `
 		var generic genericv1.Config
 		err := genericv1.Scheme.Decode(strings.NewReader(yaml), &generic)
@@ -206,6 +239,7 @@ configurations:
 		assert.Equal(t, httpspec.Timeout(1*time.Minute), *cfg.Timeout)
 		require.NotNil(t, cfg.TCPDialTimeout)
 		assert.Equal(t, httpspec.Timeout(5*time.Second), *cfg.TCPDialTimeout)
+		require.Contains(t, cfg.Hosts, "ghcr.io:443")
 	})
 
 	t.Run("invalid config (negative timeout) returns error", func(t *testing.T) {
@@ -224,6 +258,25 @@ configurations:
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid http configuration")
 		assert.Contains(t, err.Error(), "timeout")
+	})
+
+	t.Run("invalid per-host timeout returns error wrapped with host key", func(t *testing.T) {
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    hosts:
+      "ghcr.io:443":
+        timeout: -5s
+`
+		var generic genericv1.Config
+		err := genericv1.Scheme.Decode(strings.NewReader(yaml), &generic)
+		require.NoError(t, err)
+
+		cfg, err := httpspec.ResolveHTTPConfig(&generic)
+		assert.Nil(t, cfg)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `host "ghcr.io:443"`)
 	})
 }
 
@@ -276,6 +329,27 @@ func TestMerge(t *testing.T) {
 		assert.Equal(t, httpspec.Timeout(30*time.Second), *merged.Timeout)
 		require.NotNil(t, merged.IdleConnTimeout)
 		assert.Equal(t, httpspec.Timeout(90*time.Second), *merged.IdleConnTimeout)
+	})
+
+	t.Run("hosts merge maps", func(t *testing.T) {
+		a := &httpspec.Config{
+			Hosts: map[string]*httpspec.HostConfig{
+				"a.com": {TimeoutConfig: httpspec.TimeoutConfig{Timeout: httpspec.NewTimeout(10 * time.Second)}},
+			},
+		}
+		b := &httpspec.Config{
+			Hosts: map[string]*httpspec.HostConfig{
+				"b.com": {TimeoutConfig: httpspec.TimeoutConfig{IdleConnTimeout: httpspec.NewTimeout(60 * time.Second)}},
+			},
+		}
+
+		merged := httpspec.Merge(a, b)
+
+		require.Len(t, merged.Hosts, 2)
+		require.NotNil(t, merged.Hosts["a.com"].Timeout)
+		assert.Equal(t, httpspec.Timeout(10*time.Second), *merged.Hosts["a.com"].Timeout)
+		require.NotNil(t, merged.Hosts["b.com"].IdleConnTimeout)
+		assert.Equal(t, httpspec.Timeout(60*time.Second), *merged.Hosts["b.com"].IdleConnTimeout)
 	})
 
 	t.Run("empty returns nil", func(t *testing.T) {
@@ -359,11 +433,14 @@ func TestTimeoutConfig_Validate(t *testing.T) {
 }
 
 func TestConfig_Validate(t *testing.T) {
-	t.Run("valid global", func(t *testing.T) {
+	t.Run("valid global with valid hosts", func(t *testing.T) {
 		cfg := &httpspec.Config{
 			TimeoutConfig: httpspec.TimeoutConfig{
 				Timeout:         httpspec.NewTimeout(30 * time.Second),
 				IdleConnTimeout: httpspec.NewTimeout(90 * time.Second),
+			},
+			Hosts: map[string]*httpspec.HostConfig{
+				"ghcr.io:443": {TimeoutConfig: httpspec.TimeoutConfig{Timeout: httpspec.NewTimeout(60 * time.Second)}},
 			},
 		}
 		assert.NoError(t, cfg.Validate())
@@ -378,5 +455,26 @@ func TestConfig_Validate(t *testing.T) {
 		err := cfg.Validate()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "timeout")
+	})
+
+	t.Run("wraps host error with host key", func(t *testing.T) {
+		cfg := &httpspec.Config{
+			Hosts: map[string]*httpspec.HostConfig{
+				"ghcr.io:443": {TimeoutConfig: httpspec.TimeoutConfig{Timeout: httpspec.NewTimeout(-5 * time.Second)}},
+			},
+		}
+		err := cfg.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `host "ghcr.io:443"`)
+		assert.Contains(t, err.Error(), "timeout")
+	})
+
+	t.Run("nil host entry is skipped", func(t *testing.T) {
+		cfg := &httpspec.Config{
+			Hosts: map[string]*httpspec.HostConfig{
+				"ghcr.io:443": nil,
+			},
+		}
+		assert.NoError(t, cfg.Validate())
 	})
 }
