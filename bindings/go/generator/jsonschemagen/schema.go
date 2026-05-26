@@ -49,6 +49,7 @@ type JSONSchemaDraft202012 struct {
 	AdditionalProperties *SchemaOrBool `json:"additionalProperties,omitempty"`
 
 	OneOf []*JSONSchemaDraft202012          `json:"oneOf,omitempty"`
+	AnyOf []*JSONSchemaDraft202012          `json:"anyOf,omitempty"`
 	Defs  map[string]*JSONSchemaDraft202012 `json:"$defs,omitempty"`
 
 	Items    *JSONSchemaDraft202012 `json:"items,omitempty"`
@@ -180,7 +181,7 @@ func (g *generation) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo, field 
 		// Pointer element types (e.g. []*File) allow null items in JSON.
 		if _, isPtr := t.Elt.(*ast.StarExpr); isPtr {
 			itemSchema = &JSONSchemaDraft202012{
-				OneOf: []*JSONSchemaDraft202012{
+				AnyOf: []*JSONSchemaDraft202012{
 					itemSchema,
 					{Type: "null"},
 				},
