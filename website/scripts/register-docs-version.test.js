@@ -4,7 +4,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags } = require('./register-docs-version');
+const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, cliDerivedModules, MODULE_BASE } = require('./register-docs-version');
 
 // --- parseArguments ---
 
@@ -507,4 +507,21 @@ test('updateImportTags: returns false when already up to date', () => {
 test('updateImportTags: returns false on null/empty parsed', () => {
     assert.equal(updateImportTags(null, '0.3', '0.3.1'), false);
     assert.equal(updateImportTags({}, '0.3', '0.3.1'), false);
+});
+
+// --- cliDerivedModules ---
+
+test('cliDerivedModules: returns paths with canonical module base', () => {
+    const mods = cliDerivedModules();
+    assert.deepEqual(mods, [
+        'ocm.software/open-component-model/bindings/go/constructor',
+        'ocm.software/open-component-model/bindings/go/descriptor/v2',
+    ]);
+});
+
+test('buildModuleBlocks: uses canonical module base', () => {
+    const { imports } = buildModuleBlocks('0.3', '0.3.0');
+    for (const imp of imports) {
+        assert.ok(imp.path.startsWith(MODULE_BASE), `expected ${imp.path} to start with ${MODULE_BASE}`);
+    }
 });
