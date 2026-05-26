@@ -6,9 +6,41 @@ import (
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+func TestProcessResourceDigest_RawAccessType(t *testing.T) {
+	// v2.Resource.Access is always *runtime.Raw when deserialized from a component
+	// descriptor, so this path is exercised on every real resource coming from an OCI
+	// registry.
+	raw := &runtime.Raw{}
+	require.NoError(t, ociaccess.Scheme.Convert(&v1.OCIImage{
+		Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
+		ImageReference: "nonexistent.invalid/test:v1.0.0",
+	}, raw))
+
+	res := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "test", Version: "1.0.0"},
+		},
+		Type:   "ociArtifact",
+		Access: raw,
+	}
+
+	repo := NewResourceRepository(nil)
+	_, err := repo.ProcessResourceDigest(t.Context(), res, nil)
+
+	// Without the fix: error is "unsupported resource access type: *runtime.Raw"
+	// With the fix:    error is a network/DNS failure reaching nonexistent.invalid
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "unsupported resource access type",
+		"ProcessResourceDigest must convert *runtime.Raw access to typed before passing to the inner repository")
+}
 
 func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 	r := require.New(t)

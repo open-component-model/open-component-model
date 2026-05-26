@@ -33,7 +33,7 @@ func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *de
 		return resource, errors.Join(ErrPluginNotFound, err)
 	}
 
-	var creds map[string]string
+	var creds runtime.Typed
 	if cfg != nil {
 		id, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, resource)
 		if err != nil {
@@ -48,7 +48,7 @@ func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *de
 			return nil, fmt.Errorf("failed creating credential graph: %w", err)
 		}
 
-		creds, err = credGraph.Resolve(ctx, id) //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
+		creds, err = credGraph.Resolve(ctx, id)
 		if err != nil && !errors.Is(err, credentials.ErrNotFound) {
 			return nil, fmt.Errorf("failed resolving credentials for digest processor: %w", err)
 		}
