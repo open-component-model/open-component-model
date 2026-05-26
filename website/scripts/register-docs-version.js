@@ -7,8 +7,8 @@
  *
  * Behavior:
  * - Accepts SemVer version X.Y.Z, derives minor identifier X.Y
- * - If Z == 0 (minor release): adds version to hugo.yaml, adds import blocks to module.yaml
- * - If Z > 0 (patch release): updates existing import tags for version X.Y (no hugo.yaml changes)
+ * - Ensures hugo.yaml has the version entry (idempotent, creates if missing)
+ * - Ensures module.yaml has import blocks (creates if missing, updates tags if present)
  * - Retires oldest minor version when >10 minor versions exist
  *
  * Fork support:
@@ -147,12 +147,11 @@ function parseArguments(args) {
         throw new Error(`Invalid version '${fullVersion}'. Expected X.Y.Z, without "v" or suffixes, e.g. 1.2.3`);
     }
 
-    // Derive X.Y from X.Y.Z and determine patch from Z > 0
+    // Derive X.Y from X.Y.Z
     const parts = fullVersion.split('.');
     const version = `${parts[0]}.${parts[1]}`;
-    const patch = Number(parts[2]) > 0;
 
-    return { version, fullVersion, patch, cliGomod: flags.cliGomod };
+    return { version, fullVersion, cliGomod: flags.cliGomod };
 }
 
 // True if at least one import references this version in its site matrix.
@@ -408,24 +407,14 @@ async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersi
 
 // Main
 async function main() {
-    const { version, fullVersion, patch, cliGomod } = parseArguments(process.argv.slice(2));
+    const { version, fullVersion, cliGomod } = parseArguments(process.argv.slice(2));
 
     if (!cliGomod) {
         fail('--cli-gomod <path> is required. Provide the path to the CLI go.mod for the release being versioned.');
     }
 
-    if (patch) {
-        // Patch release (Z > 0): ensure hugo.yaml has the version, then update module imports/tags.
-        const content = await fsp.readFile(HUGO_CONFIG, 'utf-8').catch(e => fail(`Read hugo.yaml: ${e.message}`));
-        const parsed = yaml.load(content) || {};
-        if (!parsed.versions || !parsed.versions[version]) {
-            fail(`Version '${version}' does not exist in hugo.yaml. Cannot patch a version that hasn't been created yet.`);
-        }
-        await updateModuleConfig(version, fullVersion, cliGomod);
-    } else {
-        const retired = await updateHugoConfig(version);
-        await updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion: retired });
-    }
+    const retired = await updateHugoConfig(version);
+    await updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion: retired });
 
     console.log('Docs version registered.');
 }

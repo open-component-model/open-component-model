@@ -12,18 +12,13 @@ test('parseArguments: valid version derives X.Y', () => {
     const result = parseArguments(['1.2.0']);
     assert.equal(result.version, '1.2');
     assert.equal(result.fullVersion, '1.2.0');
-    assert.equal(result.patch, false);
     assert.equal(result.cliGomod, undefined);
 });
 
-test('parseArguments: patch is deduced when Z > 0', () => {
+test('parseArguments: Z > 0 still derives X.Y correctly', () => {
     const result = parseArguments(['1.2.3']);
     assert.equal(result.version, '1.2');
     assert.equal(result.fullVersion, '1.2.3');
-    assert.equal(result.patch, true);
-
-    const result2 = parseArguments(['0.3.0']);
-    assert.equal(result2.patch, false);
 });
 
 test('parseArguments: --cli-gomod is parsed', () => {
