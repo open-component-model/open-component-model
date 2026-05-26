@@ -171,8 +171,6 @@ github.com/ianlancetaylor/demangle v0.0.0-20251118225945-96ee0021ea0f h1:Fnl4pzx
 github.com/ianlancetaylor/demangle v0.0.0-20251118225945-96ee0021ea0f/go.mod h1:gx7rwoVhcfuVKG5uya9Hs3Sxj7EIvldVofAWIUtGouw=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
-github.com/jakobmoellerdev/open-component-model/bindings/go/oci v0.0.11-0.20260522125402-dd37c6709daa h1:/gkvLjZbdMwPVrPaYvbJHHdDdCovcr3OrxdNDF3mj4c=
-github.com/jakobmoellerdev/open-component-model/bindings/go/oci v0.0.11-0.20260522125402-dd37c6709daa/go.mod h1:71rWEKjpFaD0QY7aiPIgUjMkejF/05vBg1ZilRhakUI=
 github.com/jakobmoellerdev/open-component-model/bindings/go/oci v0.0.11-0.20260522140022-e8ebef673490 h1:/TFBIwkXlGwK6xEQnyybkgmcXtXpokDT5lGHTf4lJbY=
 github.com/jakobmoellerdev/open-component-model/bindings/go/oci v0.0.11-0.20260522140022-e8ebef673490/go.mod h1:71rWEKjpFaD0QY7aiPIgUjMkejF/05vBg1ZilRhakUI=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=

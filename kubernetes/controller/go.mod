@@ -37,7 +37,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260521121644-2be2fc986501
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260522105049-e4d3ffbaf1f3
-	ocm.software/open-component-model/bindings/go/oci v0.0.43
+	ocm.software/open-component-model/bindings/go/oci v0.0.45
 	ocm.software/open-component-model/bindings/go/plugin v0.0.16
 	ocm.software/open-component-model/bindings/go/repository v0.0.9
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260522110833-67a18b816b78
@@ -170,5 +170,3 @@ require (
 )
 
 replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.0
-
-replace ocm.software/open-component-model/bindings/go/oci => github.com/jakobmoellerdev/open-component-model/bindings/go/oci v0.0.11-0.20260522140022-e8ebef673490
