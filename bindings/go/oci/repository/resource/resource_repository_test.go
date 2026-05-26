@@ -15,12 +15,6 @@ import (
 )
 
 func TestProcessResourceDigest_RawAccessType(t *testing.T) {
-	// Regression test for edb26701b: the ResourceStream refactoring extracted
-	// resolveOCIImageRepo as a helper but stopped writing resource.Access = typedAccess
-	// back onto the resource before calling the inner repo's ProcessResourceDigest.
-	// The inner oci.Repository.ProcessResourceDigest uses a direct type-switch, so it
-	// fails with "unsupported resource access type: *runtime.Raw" when it receives Raw.
-	//
 	// v2.Resource.Access is always *runtime.Raw when deserialized from a component
 	// descriptor, so this path is exercised on every real resource coming from an OCI
 	// registry.

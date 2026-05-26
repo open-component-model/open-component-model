@@ -99,10 +99,7 @@ func (p *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		return nil, err
 	}
 	resource = resource.DeepCopy()
-	// Convert resource.Access from *runtime.Raw to the typed access spec so the inner
-	// repository's type-switch can match it. v2.Resource.Access is always *runtime.Raw
-	// when deserialized from a component descriptor; without this step the inner
-	// oci.Repository.ProcessResourceDigest hits the default branch.
+	// Convert resource.Access from *runtime.Raw to the typed access spec so the inner repository's type-switch can match it.
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
