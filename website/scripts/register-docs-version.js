@@ -367,20 +367,26 @@ async function updateHugoConfig(version) {
     return retired;
 }
 
-// Update module.yaml: add import blocks for a new version
-async function updateModuleConfig(version, fullVersion, retiredVersion, cliGomod) {
+// Update module.yaml: ensure imports exist for a version, update tags, optionally retire old version
+async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion } = {}) {
     const content = await fsp.readFile(MODULE_CONFIG, 'utf-8').catch(e => fail(`Read module.yaml: ${e.message}`));
     const parsed = yaml.load(content) || {};
 
     const hasAllImports = hasAllImportsForVersion(parsed, version);
     const hasAnyImport = hasAnyImportForVersion(parsed, version);
 
+    const deps = resolveGoModVersions(cliGomod, cliDerivedModules());
+
     if (hasAllImports) {
-        console.log(`module.yaml: version ${version} exists, skipping.`);
+        const changed = updateImportTags(parsed, version, fullVersion, deps);
+        if (changed) {
+            console.log(`module.yaml: updated import tags for version ${version} to ${fullVersion}.`);
+        } else {
+            console.log(`module.yaml: version ${version} already up to date.`);
+        }
     } else if (hasAnyImport) {
         fail(`module.yaml: incomplete block for ${version}. Fix manually.`);
     } else {
-        const deps = resolveGoModVersions(cliGomod, cliDerivedModules());
         const { imports } = buildModuleBlocks(version, fullVersion, deps);
         parsed.imports = parsed.imports || [];
         for (const imp of imports) {
@@ -389,32 +395,12 @@ async function updateModuleConfig(version, fullVersion, retiredVersion, cliGomod
         console.log(`module.yaml: added imports for version ${version}.`);
     }
 
-    // Remove imports for retired version
     if (retiredVersion) {
         removeImportsForVersion(parsed, retiredVersion);
         console.log(`module.yaml: removed imports for retired version '${retiredVersion}'.`);
     }
 
     await fsp.writeFile(MODULE_CONFIG, MODULE_HEADER + dumpYaml(parsed), 'utf-8');
-}
-
-// Update module.yaml in patch mode: update tags for existing version
-async function updateModuleConfigPatch(version, fullVersion, cliGomod) {
-    const content = await fsp.readFile(MODULE_CONFIG, 'utf-8').catch(e => fail(`Read module.yaml: ${e.message}`));
-    const parsed = yaml.load(content) || {};
-
-    if (!hasAnyImportForVersion(parsed, version)) {
-        fail(`module.yaml: no imports found for version '${version}'. Cannot patch.`);
-    }
-
-    const deps = resolveGoModVersions(cliGomod, cliDerivedModules());
-    const changed = updateImportTags(parsed, version, fullVersion, deps);
-    if (changed) {
-        await fsp.writeFile(MODULE_CONFIG, MODULE_HEADER + dumpYaml(parsed), 'utf-8');
-        console.log(`module.yaml: updated import tags for version ${version} to ${fullVersion}.`);
-    } else {
-        console.log(`module.yaml: import tags for version ${version} already up to date.`);
-    }
 }
 
 // Main
@@ -426,25 +412,16 @@ async function main() {
     }
 
     if (patch) {
-        // Patch release (Z > 0): ensure hugo.yaml has the version, then update tags.
-        // If module imports are missing (e.g. botched prior release), create them first.
+        // Patch release (Z > 0): ensure hugo.yaml has the version, then update module imports/tags.
         const content = await fsp.readFile(HUGO_CONFIG, 'utf-8').catch(e => fail(`Read hugo.yaml: ${e.message}`));
         const parsed = yaml.load(content) || {};
         if (!parsed.versions || !parsed.versions[version]) {
             fail(`Version '${version}' does not exist in hugo.yaml. Cannot patch a version that hasn't been created yet.`);
         }
-
-        const moduleContent = await fsp.readFile(MODULE_CONFIG, 'utf-8').catch(e => fail(`Read module.yaml: ${e.message}`));
-        const moduleParsed = yaml.load(moduleContent) || {};
-        if (!hasAnyImportForVersion(moduleParsed, version)) {
-            console.log(`module.yaml: no imports for version '${version}' — creating them before patching.`);
-            await updateModuleConfig(version, fullVersion, null, cliGomod);
-        } else {
-            await updateModuleConfigPatch(version, fullVersion, cliGomod);
-        }
+        await updateModuleConfig(version, fullVersion, cliGomod);
     } else {
         const retired = await updateHugoConfig(version);
-        await updateModuleConfig(version, fullVersion, retired, cliGomod);
+        await updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion: retired });
     }
 
     console.log('Docs version registered.');
