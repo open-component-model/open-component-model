@@ -32,7 +32,7 @@
         },
         "nestedDigests": {
           "description": "Digest information for nested components",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -46,7 +46,7 @@
         },
         "signatures": {
           "description": "Optional signing information for verifying component validity",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -84,7 +84,7 @@
           "properties": {
             "componentReferences": {
               "description": "References to other component versions",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -99,7 +99,7 @@
             "creationTime": {
               "description": "Creation time of the component version",
               "format": "date-time",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "string"
                 },
@@ -110,7 +110,7 @@
             },
             "labels": {
               "description": "Labels associated with the component",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -132,7 +132,7 @@
             },
             "repositoryContexts": {
               "description": "Previous repositories of the component",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -146,7 +146,7 @@
             },
             "resources": {
               "description": "Resources created by the component or third parties",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -160,7 +160,7 @@
             },
             "sources": {
               "description": "Sources that produced the component",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -263,7 +263,7 @@
             },
             "digest": {
               "description": "Optional digest of the referenced component",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "null"
                 },
@@ -278,7 +278,7 @@
             },
             "labels": {
               "description": "Labels associated with the reference",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -357,7 +357,7 @@
             },
             "value": true,
             "version": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "string",
                   "description": "Version of the label",
@@ -416,7 +416,7 @@
             },
             "resourceDigests": {
               "description": "Digest information for resources in the component",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -514,7 +514,7 @@
             },
             "digest": {
               "description": "Optional digest of the resource",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "null"
                 },
@@ -529,7 +529,7 @@
             },
             "labels": {
               "description": "Labels associated with the resource",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -556,7 +556,7 @@
             },
             "srcRefs": {
               "description": "References to sources that produced this resource",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -654,7 +654,7 @@
             },
             "labels": {
               "description": "Labels associated with the source",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
@@ -697,7 +697,7 @@
             },
             "labels": {
               "description": "Labels for further identification of the source",
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "array",
                   "items": {
