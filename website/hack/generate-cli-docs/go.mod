@@ -12,7 +12,7 @@ require (
 	cloud.google.com/go/auth v0.20.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
-	connectrpc.com/connect v1.19.1 // indirect
+	connectrpc.com/connect v1.19.2 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/AliyunContainerService/ack-ram-tool/pkg/credentials/provider v0.20.0 // indirect
 	github.com/AliyunContainerService/ack-ram-tool/pkg/ecsmetadata v0.0.10 // indirect
@@ -31,7 +31,7 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
-	github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29 // indirect
+	github.com/Microsoft/go-winio v0.6.3-0.20260107145400-75610162e7da // indirect
 	github.com/ProtonMail/go-crypto v1.4.1 // indirect
 	github.com/ThalesIgnite/crypto11 v1.6.0 // indirect
 	github.com/a8m/envsubst v1.4.3 // indirect
@@ -106,9 +106,9 @@ require (
 	github.com/digitorus/timestamp v0.0.0-20250524132541-c45532741eea // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
-	github.com/docker/cli v29.4.2+incompatible // indirect
+	github.com/docker/cli v29.4.3+incompatible // indirect
 	github.com/docker/docker v28.5.2+incompatible // indirect
-	github.com/docker/docker-credential-helpers v0.9.5 // indirect
+	github.com/docker/docker-credential-helpers v0.9.6 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/drone/envsubst v1.0.3 // indirect

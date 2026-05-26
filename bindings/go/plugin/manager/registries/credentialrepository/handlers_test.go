@@ -121,7 +121,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 			name: "ResolveHandlerFunc unauthorized error",
 			handlerFunc: func() http.HandlerFunc {
 				handler := ResolveHandlerFunc(func(ctx context.Context, cfg v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
-					return runtime.Identity{"resolved": "credentials"}, nil
+					return &runtime.Raw{Data: []byte(`{"resolved":"credentials"}`)}, nil
 				}, scheme, dummyRepo)
 
 				return handler
@@ -133,6 +133,8 @@ func TestResolveHandlerFunc(t *testing.T) {
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
+				header := http.Header{}
+				header.Add("Authorization", "not-json")
 				parse, _ := url.Parse(base)
 				body := &bytes.Buffer{}
 				body.Write([]byte(`{
@@ -148,6 +150,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				return &http.Request{
 					Method: "POST",
 					URL:    parse,
+					Header: header,
 					Body:   io.NopCloser(body),
 				}
 			},
@@ -156,7 +159,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 			name: "ResolveHandlerFunc missing body error",
 			handlerFunc: func() http.HandlerFunc {
 				handler := ResolveHandlerFunc(func(ctx context.Context, cfg v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
-					return runtime.Identity{"resolved": "credentials"}, nil
+					return &runtime.Raw{Data: []byte(`{"resolved":"credentials"}`)}, nil
 				}, scheme, dummyRepo)
 
 				return handler
@@ -184,7 +187,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 			name: "ResolveHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
 				handler := ResolveHandlerFunc(func(ctx context.Context, cfg v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
-					return runtime.Identity{"resolved": "credentials", "token": "abc123"}, nil
+					return &runtime.Raw{Data: []byte(`{"resolved":"credentials","token":"abc123"}`)}, nil
 				}, scheme, dummyRepo)
 
 				return handler

@@ -32,10 +32,8 @@ func inputProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, r *REQ,
 		logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		logger.Info("request", "request", request.Method, "url", request.URL.String())
 
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := &runtime.Raw{}
-		if err := json.Unmarshal(rawCredentials, credentials); err != nil {
-			plugins.NewError(fmt.Errorf("failed to marshal credentials: %w", err), http.StatusUnauthorized).Write(writer)
+		credentials, ok := plugins.CredentialsFromHeader(writer, request.Header)
+		if !ok {
 			return
 		}
 
