@@ -21,9 +21,9 @@ func init() {
 	)
 }
 
-// Policy decides whether uploading a resource also writes an ownership
-// referrer. An ownership referrer is a small OCI artifact that records which
-// component version owns the uploaded blob (ADR 0016).
+// Policy decides whether a resource upload also records the owning
+// component version, so a consumer can trace a stored blob back to its
+// component (ADR 0016).
 type Policy string
 
 const (
