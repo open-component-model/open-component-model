@@ -96,13 +96,9 @@ tasks:
     requires:
       vars: [EXAMPLE]
     cmds:
-      - task: install
-      - task: deploy
-      - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v -ginkgo.focus="should deploy the example {{.EXAMPLE}}"
-      - task: undeploy
-      - task: uninstall
-        vars:
-          IGNORE_NOT_FOUND: "true"
+      - task: helm/install
+      - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v -ginkgo.focus="should deploy the example {{.EXAMPLE}}$"
+      - task: helm/uninstall
 
   # Build
   build:
