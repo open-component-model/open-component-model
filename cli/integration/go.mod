@@ -16,8 +16,8 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.13
 	ocm.software/open-component-model/bindings/go/credentials v0.0.12
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260526095519-205f32fafd8a
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260526095519-205f32fafd8a
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260526121250-aae701a4aa9b
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260526121250-aae701a4aa9b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260526121250-aae701a4aa9b
 	ocm.software/open-component-model/bindings/go/oci v0.0.45
@@ -181,7 +181,7 @@ require (
 	ocm.software/open-component-model/bindings/go/plugin v0.0.16 // indirect
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260526121250-aae701a4aa9b // indirect
 	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260526121250-aae701a4aa9b // indirect
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260526095519-205f32fafd8a // indirect
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260526121250-aae701a4aa9b // indirect
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260526121250-aae701a4aa9b // indirect
 	sigs.k8s.io/controller-runtime v0.23.3 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
