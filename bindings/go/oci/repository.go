@@ -270,16 +270,6 @@ func (repo *Repository) ProcessResourceDigest(ctx context.Context, res *descript
 	}()
 	res = res.DeepCopy()
 	switch typed := res.Access.(type) {
-	case *runtime.Raw:
-		converted, err := repo.scheme.NewObject(typed.GetType())
-		if err != nil {
-			return nil, fmt.Errorf("error creating typed access for raw type %s: %w", typed.GetType(), err)
-		}
-		if err := repo.scheme.Convert(typed, converted); err != nil {
-			return nil, fmt.Errorf("error converting raw access to typed: %w", err)
-		}
-		res.Access = converted
-		return repo.ProcessResourceDigest(ctx, res)
 	case *v2.LocalBlob:
 		if typed.GlobalAccess == nil {
 			return nil, fmt.Errorf("local blob access does not have a global access and cannot be used")

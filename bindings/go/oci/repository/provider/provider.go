@@ -141,9 +141,12 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 			return nil, err
 		}
 
-		ociCredentials, err := v2.ConvertToOCICredentials(creds)
-		if err != nil {
-			return nil, fmt.Errorf("error converting credentials: %w", err)
+		var ociCredentials *v2.OCICredentials
+		if creds != nil {
+			ociCredentials, err = v2.ConvertToOCICredentials(creds)
+			if err != nil {
+				return nil, fmt.Errorf("error converting credentials: %w", err)
+			}
 		}
 
 		return ocirepository.NewFromOCIRepoV1(ctx, obj, &auth.Client{
