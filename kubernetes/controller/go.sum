@@ -172,6 +172,8 @@ github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/invopop/jsonschema v0.14.0 h1:MHQqLhvpNUZfw+hM3AZDYK7jxO8FZoQeQM77g8iyZjg=
 github.com/invopop/jsonschema v0.14.0/go.mod h1:ygm6C2EaVNMBDPpaPlnOA2pFAxBnxGjFlMZABxm9n2I=
+github.com/jakobmoellerdev/open-component-model/bindings/go/oci v0.0.11-0.20260522140022-e8ebef673490 h1:/TFBIwkXlGwK6xEQnyybkgmcXtXpokDT5lGHTf4lJbY=
+github.com/jakobmoellerdev/open-component-model/bindings/go/oci v0.0.11-0.20260522140022-e8ebef673490/go.mod h1:71rWEKjpFaD0QY7aiPIgUjMkejF/05vBg1ZilRhakUI=
 github.com/joshdk/go-junit v1.0.0 h1:S86cUKIdwBHWwA6xCmFlf3RTLfVXYQfvanM5Uh+K6GE=
 github.com/joshdk/go-junit v1.0.0/go.mod h1:TiiV0PqkaNfFXjEiyjWM3XXrhVyCa1K4Zfga6W52ung=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
@@ -427,8 +429,6 @@ ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 h1:bTb
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3/go.mod h1:miNDxmNWsrYI9f3QNZIOBrK6jVmWnyFj0Z/ZGFjR5Qk=
 ocm.software/open-component-model/bindings/go/helm v0.0.0-20260522105049-e4d3ffbaf1f3 h1:IOt+Zk5gRnDCRHe8EsImiMPJKdZFUOCMAOWWC8PVF5M=
 ocm.software/open-component-model/bindings/go/helm v0.0.0-20260522105049-e4d3ffbaf1f3/go.mod h1:eIoVt9pzuPsFZRc+cLD2FP928p9+pfMrcf6UndyjEx0=
-ocm.software/open-component-model/bindings/go/oci v0.0.45 h1:9cENui1vjxOCUI1nelsy8F8ItOyryV35ePJT0OwXLi8=
-ocm.software/open-component-model/bindings/go/oci v0.0.45/go.mod h1:71rWEKjpFaD0QY7aiPIgUjMkejF/05vBg1ZilRhakUI=
 ocm.software/open-component-model/bindings/go/plugin v0.0.16 h1:waSsSFvXRcKzaawZU089Bx1oIopUZSsKBUirFnow2zc=
 ocm.software/open-component-model/bindings/go/plugin v0.0.16/go.mod h1:qjYYqqFBb9IuwGwVA8okcPUE9YEbC32mtKENyJXVVcM=
 ocm.software/open-component-model/bindings/go/repository v0.0.9 h1:j6WmumbeN+m19oQ1ViZ8cWSjbpIAv+9kJhIyUSmsHL0=
