@@ -351,8 +351,12 @@ async function updateHugoConfig(version) {
         console.log(`hugo.yaml: version ${version} already exists, skipping.`);
     } else {
         const oldDefault = parsed.defaultContentVersion;
-        parsed.defaultContentVersion = version;
-        console.log(`hugo.yaml: defaultContentVersion changed from '${oldDefault}' to '${version}'.`);
+        if (!oldDefault || compareSemver(version, oldDefault) > 0) {
+            parsed.defaultContentVersion = version;
+            console.log(`hugo.yaml: defaultContentVersion changed from '${oldDefault}' to '${version}'.`);
+        } else {
+            console.log(`hugo.yaml: added version ${version} but keeping defaultContentVersion '${oldDefault}' (newer).`);
+        }
     }
 
     // Retire oldest if over limit
