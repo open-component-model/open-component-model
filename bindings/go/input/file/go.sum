@@ -53,12 +53,8 @@ ocm.software/open-component-model/bindings/go/blob v0.0.12 h1:5YOFDxERzF6w+rPWYu
 ocm.software/open-component-model/bindings/go/blob v0.0.12/go.mod h1:YswKfR/kxhdHHK7bN98S2O73ZZlPLsHfHO2Bjsr6Zww=
 ocm.software/open-component-model/bindings/go/configuration v0.0.13 h1:fARaCEkyBvuZ8/3nUDMb0LZF3YuohBbJXCTkOqqUmkw=
 ocm.software/open-component-model/bindings/go/configuration v0.0.13/go.mod h1:B8rEZoPPL4bAYhsi5I4IZJ8EJSOwMupd95Lw/N0TBRA=
-ocm.software/open-component-model/bindings/go/constructor v0.0.8 h1:9Yyyuw0eikqfZr1cbtelFmztRUXsZLe50+CkNjLaM28=
-ocm.software/open-component-model/bindings/go/constructor v0.0.8/go.mod h1:tX7qqSPXYvmLkCpTEC90K4Qr7tI1mFr8/qGUrd/PMrs=
 ocm.software/open-component-model/bindings/go/constructor v0.0.9 h1:F4fSyU+suyGy07YMetAXzTedmfbq2bzjn51wbo3sGQ8=
 ocm.software/open-component-model/bindings/go/constructor v0.0.9/go.mod h1:ZacxY0vQj5pjcuNcJtKUa5Jmsei4Yjt9aMzYOPPE6Z4=
-ocm.software/open-component-model/bindings/go/credentials v0.0.11 h1:qMx5/NquYo3orpBkMimynJldQzSrE/p419Rqt4rxP6I=
-ocm.software/open-component-model/bindings/go/credentials v0.0.11/go.mod h1:RJ/pYi7SwCjzuTDvlMksRjJgRwaUwuziIv+ApxqCv0U=
 ocm.software/open-component-model/bindings/go/credentials v0.0.12 h1:GMedcclw/Nu7G8EJREIdXmAk/78j9xAQAIlRpd8QQO4=
 ocm.software/open-component-model/bindings/go/credentials v0.0.12/go.mod h1:XH9GR0kG2p5iaqBAAxTE1rX0fBE86Q2hCD7QodWRTpc=
 ocm.software/open-component-model/bindings/go/ctf v0.4.0 h1:E2kDGJk/ZR2wMK6fk3yFr2Uv6AhfLdMmvdvQ7Y64/2s=
