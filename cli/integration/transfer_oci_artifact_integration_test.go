@@ -482,6 +482,7 @@ configurations:
 
 	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
 	newRes, err := resourceRepo.UploadResource(ctx, &resource, inmemory.New(bytes.NewReader(data)), &ocicredsv1.OCICredentials{
+		Type:     ocicredsv1.OCICredentialsVersionedType,
 		Username: sourceRegistry.User,
 		Password: sourceRegistry.Password,
 	})
