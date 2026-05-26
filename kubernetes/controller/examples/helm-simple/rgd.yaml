@@ -63,12 +63,14 @@ spec:
         metadata:
           name: "${schema.spec.prefix}"
           namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
         spec:
           project: default
           source:
             chart: podinfo
             helm:
-              releaseName: ${ocirepository.metadata.name}
+              releaseName: helm-simple-argocd
             path: .
             repoURL: oci://${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
             targetRevision: ${resourceChart.status.additional.tag}

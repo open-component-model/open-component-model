@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -35,6 +36,7 @@ var _ = Describe("controller", func() {
 			}
 
 			utils.DumpLogs("kro", "rgd")
+			utils.DumpLogs("argocd", "applications.argoproj.io")
 		})
 
 		for _, example := range examples {
@@ -113,6 +115,30 @@ var _ = Describe("controller", func() {
 					timeout,
 					"pod", "-l", "app.kubernetes.io/name="+example.Name()+"-podinfo",
 				)).To(Succeed())
+
+				if slices.Contains(files, Rgd) {
+					By("checking for ArgoCD Applications on the cluster")
+					out, err := utils.Run(exec.CommandContext(ctx, "kubectl", "get",
+						"applications.argoproj.io", "-A",
+						"-o", "jsonpath={.items[*].metadata.name}"))
+					if err == nil && len(strings.TrimSpace(string(out))) > 0 {
+						By("validating ArgoCD Applications are Synced and Healthy")
+						Expect(utils.WaitForResource(ctx, "jsonpath={.status.sync.status}=Synced", timeout, "applications.argoproj.io/"+example.Name(), "-n", "argocd")).To(Succeed())
+						Expect(utils.WaitForResource(ctx, "jsonpath={.status.health.status}=Healthy", timeout, "applications.argoproj.io/"+example.Name(), "-n", "argocd")).To(Succeed())
+
+						name = "deployment.apps/" + example.Name() + "-argocd-podinfo"
+
+						By("validating the ArgoCD-managed deployment in default-argocd")
+
+						Expect(utils.WaitForResource(ctx, "create", timeout, name, "-n", "default-argocd")).To(Succeed())
+						Expect(utils.WaitForResource(ctx, "condition=Available", timeout, name, "-n", "default-argocd")).To(Succeed())
+						Expect(utils.WaitForResource(
+							ctx, "condition=Ready=true",
+							timeout,
+							"pod", "-l", "app.kubernetes.io/name="+example.Name()+"-argocd-podinfo", "-n", "default-argocd",
+						)).To(Succeed())
+					}
+				}
 
 				// Check for configuration and localization
 				if strings.HasSuffix(example.Name(), "-configuration-localization") {
