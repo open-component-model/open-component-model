@@ -44,10 +44,13 @@ func TestResourceDigestProcessorHandlerFunc(t *testing.T) {
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
+				header := http.Header{}
+				header.Add("Authorization", "not-json")
 				parse, _ := url.Parse(base)
 				return &http.Request{
 					Method: "POST",
 					URL:    parse,
+					Header: header,
 				}
 			},
 		},

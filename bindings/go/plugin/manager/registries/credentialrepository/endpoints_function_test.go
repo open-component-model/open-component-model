@@ -24,7 +24,7 @@ func (m *mockCredentialPlugin[T]) ConsumerIdentityForConfig(ctx context.Context,
 }
 
 func (m *mockCredentialPlugin[T]) Resolve(ctx context.Context, cfg v1.ResolveRequest[T], credentials runtime.Typed) (runtime.Typed, error) {
-	return runtime.Identity{"resolved": "mock-credentials"}, nil
+	return &runtime.Raw{Data: []byte(`{"resolved":"mock-credentials"}`)}, nil
 }
 
 var _ v1.CredentialRepositoryPluginContract[*dummyv1.Repository] = &mockCredentialPlugin[*dummyv1.Repository]{}

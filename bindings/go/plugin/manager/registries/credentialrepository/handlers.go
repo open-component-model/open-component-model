@@ -40,10 +40,8 @@ func ConsumerIdentityForConfigHandlerFunc[T runtime.Typed](f func(ctx context.Co
 // the plugin implementor.
 func ResolveHandlerFunc[T runtime.Typed](f func(ctx context.Context, cfg v1.ResolveRequest[T], credentials runtime.Typed) (runtime.Typed, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := &runtime.Raw{}
-		if err := json.Unmarshal(rawCredentials, credentials); err != nil {
-			plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
+		credentials, ok := plugins.CredentialsFromHeader(writer, request.Header)
+		if !ok {
 			return
 		}
 

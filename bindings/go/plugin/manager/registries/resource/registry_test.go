@@ -178,3 +178,7 @@ func (m *mockResourcePlugin) GetResourceRepositoryScheme() *runtime.Scheme {
 func (m *mockResourcePlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	return inmemory.New(strings.NewReader("test-resource")), nil
 }
+
+func (m *mockResourcePlugin) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
+	return res, nil
+}
