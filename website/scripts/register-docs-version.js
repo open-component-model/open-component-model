@@ -155,10 +155,13 @@ function parseArguments(args) {
     return { version, fullVersion, patch, cliGomod: flags.cliGomod };
 }
 
+// True if at least one import references this version in its site matrix.
 function hasAnyImportForVersion(parsed, version) {
     return parsed?.imports?.some(i => i?.mounts?.some(m => m?.sites?.matrix?.versions?.includes(version))) ?? false;
 }
 
+// True if every module path returned by buildModuleBlocks has a matching import.
+// A mismatch (hasAny=true, hasAll=false) indicates a corrupted partial state.
 function hasAllImportsForVersion(parsed, version) {
     const { imports: expected } = buildModuleBlocks(version, `${version}.0`);
     const expectedPaths = expected.map(i => i.path);
