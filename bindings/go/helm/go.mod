@@ -15,6 +15,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.43
 	ocm.software/open-component-model/bindings/go/plugin v0.0.16
+	ocm.software/open-component-model/bindings/go/repository v0.0.9
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	oras.land/oras-go/v2 v2.6.0
 )
@@ -85,7 +86,6 @@ require (
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/tetratelabs/wabin v0.0.0-20230304001439-f6f874872834 // indirect
 	github.com/tetratelabs/wazero v1.11.0 // indirect
-	github.com/veqryn/slog-context v0.9.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
@@ -95,7 +95,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
+	go.yaml.in/yaml/v4 v4.0.0-rc.4 // indirect
 	golang.org/x/crypto v0.50.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
@@ -123,7 +123,6 @@ require (
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260505072254-1c17fcd5c971 // indirect
-	ocm.software/open-component-model/bindings/go/repository v0.0.9 // indirect
 	sigs.k8s.io/controller-runtime v0.23.3 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
