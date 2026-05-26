@@ -426,13 +426,22 @@ async function main() {
     }
 
     if (patch) {
-        // Patch release (Z > 0): verify version exists in hugo.yaml, update tags only
+        // Patch release (Z > 0): ensure hugo.yaml has the version, then update tags.
+        // If module imports are missing (e.g. botched prior release), create them first.
         const content = await fsp.readFile(HUGO_CONFIG, 'utf-8').catch(e => fail(`Read hugo.yaml: ${e.message}`));
         const parsed = yaml.load(content) || {};
         if (!parsed.versions || !parsed.versions[version]) {
             fail(`Version '${version}' does not exist in hugo.yaml. Cannot patch a version that hasn't been created yet.`);
         }
-        await updateModuleConfigPatch(version, fullVersion, cliGomod);
+
+        const moduleContent = await fsp.readFile(MODULE_CONFIG, 'utf-8').catch(e => fail(`Read module.yaml: ${e.message}`));
+        const moduleParsed = yaml.load(moduleContent) || {};
+        if (!hasAnyImportForVersion(moduleParsed, version)) {
+            console.log(`module.yaml: no imports for version '${version}' — creating them before patching.`);
+            await updateModuleConfig(version, fullVersion, null, cliGomod);
+        } else {
+            await updateModuleConfigPatch(version, fullVersion, cliGomod);
+        }
     } else {
         const retired = await updateHugoConfig(version);
         await updateModuleConfig(version, fullVersion, retired, cliGomod);

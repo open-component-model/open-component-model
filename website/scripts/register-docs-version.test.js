@@ -509,6 +509,32 @@ test('updateImportTags: returns false on null/empty parsed', () => {
     assert.equal(updateImportTags({}, '0.3', '0.3.1'), false);
 });
 
+// --- patch recovery: missing imports yields same result as fresh creation ---
+
+test('updateImportTags: patching freshly-built blocks equals building directly with patch version', () => {
+    // Simulate the recovery path: buildModuleBlocks creates imports at X.Y.0,
+    // then updateImportTags bumps them to X.Y.Z. This must equal building
+    // directly at X.Y.Z (the non-patch path for a patch version).
+    const deps = {
+        'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.8',
+        'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.4',
+    };
+    const depsInitial = {
+        'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.7',
+        'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.3',
+    };
+
+    // Path A: build at 0.3.0 with old deps, then patch to 0.3.1 with new deps
+    const { imports: recoveryImports } = buildModuleBlocks('0.3', '0.3.0', depsInitial);
+    const parsed = { imports: recoveryImports };
+    updateImportTags(parsed, '0.3', '0.3.1', deps);
+
+    // Path B: build directly at 0.3.1 with new deps
+    const { imports: directImports } = buildModuleBlocks('0.3', '0.3.1', deps);
+
+    assert.deepEqual(parsed.imports, directImports);
+});
+
 // --- cliDerivedModules ---
 
 test('cliDerivedModules: returns paths with canonical module base', () => {
