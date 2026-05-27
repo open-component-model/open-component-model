@@ -1,0 +1,49 @@
+name: Validate PR Title
+# Validates that the PR title follows the Conventional Commit specification.
+# Uses pull_request (not pull_request_target) because title validation is read-only
+# and requires no write permissions.
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+
+jobs:
+  validate-title:
+    name: Validate PR Title (Conventional Commit)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          ALLOWED_TYPES: |
+            feat
+            fix
+            chore
+            docs
+            test
+            perf
+          ALLOWED_SCOPES: |
+            deps
+        with:
+          script: |
+            const allowedTypes = process.env.ALLOWED_TYPES.trim().split('\n').join('|');
+            const prTitle = context.payload.pull_request.title;
+            console.log(`PR Title: ${prTitle}`);
+
+            const regex = new RegExp(
+              `^(((Initial commit)|(Merge [^\\r\\n]+(\\s)[^\\r\\n]+((\\s)((\\s)[^\\r\\n]+)+)*(\\s)?)|^((?<type>${allowedTypes})(\\((?<scope>[\\w\\-]+)\\))?(?<breaking>!?): (?<subject>[^\\r\\n]+((\\s)((\\s)[^\\r\\n]+)+)*))(\\s)?)$)`
+            );
+
+            if (!prTitle.match(regex)) {
+              core.setFailed(
+                `PR title "${prTitle}" does not follow the Conventional Commit format. ` +
+                `Expected: <type>[(<scope>)][!]: <subject> — see https://www.conventionalcommits.org/en/v1.0.0/`
+              );
+            } else {
+              console.log('PR title is valid.');
+            }
