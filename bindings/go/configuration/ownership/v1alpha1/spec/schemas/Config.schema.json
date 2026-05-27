@@ -8,7 +8,7 @@
   "properties": {
     "policy": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.ownership.v1alpha1.spec.Policy",
-      "description": "Policy is the default used for any repository without a matching entry\nin Repositories. When omitted, it behaves as Never.",
+      "description": "Policy is the default used for any repository without a matching entry\nin Repositories. When omitted, it behaves as Never.\n\nExperimental: ownership referrers are a new feature (ADR 0016) and the\npolicy shape may change or be deprecated in the future.",
       "oneOf": [
         {
           "const": "AddIfSupported"
