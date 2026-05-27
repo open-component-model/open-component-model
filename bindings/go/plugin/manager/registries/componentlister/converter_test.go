@@ -138,7 +138,7 @@ type mockConverterPlugin struct {
 
 var _ v1.ComponentListerPluginContract[runtime.Typed] = &mockConverterPlugin{}
 
-func (m *mockConverterPlugin) ListComponents(ctx context.Context, request *v1.ListComponentsRequest[runtime.Typed], credentials map[string]string) (*v1.ListComponentsResponse, error) {
+func (m *mockConverterPlugin) ListComponents(ctx context.Context, request *v1.ListComponentsRequest[runtime.Typed], credentials runtime.Typed) (*v1.ListComponentsResponse, error) {
 	m.requests = append(m.requests, *request)
 
 	if m.err != nil {

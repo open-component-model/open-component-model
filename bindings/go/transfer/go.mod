@@ -5,14 +5,14 @@ go 1.26.3
 require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.11.1
-	ocm.software/open-component-model/bindings/go/blob v0.0.12
-	ocm.software/open-component-model/bindings/go/credentials v0.0.10
+	ocm.software/open-component-model/bindings/go/blob v0.0.13
+	ocm.software/open-component-model/bindings/go/credentials v0.0.12
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260505072254-1c17fcd5c971
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260521121644-2be2fc986501
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260505072254-1c17fcd5c971
-	ocm.software/open-component-model/bindings/go/oci v0.0.40
-	ocm.software/open-component-model/bindings/go/repository v0.0.8
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260522105049-e4d3ffbaf1f3
+	ocm.software/open-component-model/bindings/go/oci v0.0.45
+	ocm.software/open-component-model/bindings/go/repository v0.0.9
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260505072254-1c17fcd5c971
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260505072254-1c17fcd5c971
@@ -64,13 +64,12 @@ require (
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/term v0.42.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260504160031-60b97b32f348 // indirect
-	google.golang.org/grpc v1.81.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
@@ -83,7 +82,7 @@ require (
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260505072254-1c17fcd5c971 // indirect
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260526091718-cfe4d0a3cfcc // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.13 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260505072254-1c17fcd5c971 // indirect

@@ -49,6 +49,7 @@ type JSONSchemaDraft202012 struct {
 	AdditionalProperties *SchemaOrBool `json:"additionalProperties,omitempty"`
 
 	OneOf []*JSONSchemaDraft202012          `json:"oneOf,omitempty"`
+	AnyOf []*JSONSchemaDraft202012          `json:"anyOf,omitempty"`
 	Defs  map[string]*JSONSchemaDraft202012 `json:"$defs,omitempty"`
 
 	Items    *JSONSchemaDraft202012 `json:"items,omitempty"`
@@ -164,6 +165,14 @@ func (g *generation) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo, field 
 		return sch
 	}
 
+	// Types not registered in the universe (e.g. encoding/json.RawMessage) need direct
+	// resolution via types.Info to detect well-known external types.
+	if key, ok := universe.ResolveExprToTypeKey(ctx.Pkg.TypesInfo, expr); ok {
+		if universe.IsJSONRawMessageKey(key) {
+			return anySchema()
+		}
+	}
+
 	switch t := expr.(type) {
 	case *ast.StarExpr:
 		return g.schemaForExpr(t.X, ctx, field)
@@ -172,7 +181,7 @@ func (g *generation) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo, field 
 		// Pointer element types (e.g. []*File) allow null items in JSON.
 		if _, isPtr := t.Elt.(*ast.StarExpr); isPtr {
 			itemSchema = &JSONSchemaDraft202012{
-				OneOf: []*JSONSchemaDraft202012{
+				AnyOf: []*JSONSchemaDraft202012{
 					itemSchema,
 					{Type: "null"},
 				},
@@ -425,6 +434,10 @@ func anyObjectSchema() *JSONSchemaDraft202012 {
 		Type:                 "object",
 		AdditionalProperties: &SchemaOrBool{Bool: Ptr(true)},
 	}
+}
+
+func anySchema() *JSONSchemaDraft202012 {
+	return &JSONSchemaDraft202012{}
 }
 
 func Ptr[T any](v T) *T { return &v }

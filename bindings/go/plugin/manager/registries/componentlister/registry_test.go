@@ -182,7 +182,7 @@ func (m *mockInternalPlugin) GetComponentListerCredentialConsumerIdentity(ctx co
 	panic("not implemented")
 }
 
-func (m *mockInternalPlugin) GetComponentLister(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentLister, error) {
+func (m *mockInternalPlugin) GetComponentLister(ctx context.Context, repositorySpecification runtime.Typed, credentials runtime.Typed) (repository.ComponentLister, error) {
 	return &mockInternalLister{}, nil
 }
 

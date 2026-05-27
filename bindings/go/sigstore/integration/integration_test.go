@@ -17,15 +17,10 @@ import (
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
-
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
-)
-
-//nolint:gosec // these are not secrets
-const (
-	credOIDCToken           = handler.CredentialKeyOIDCToken
-	credTrustedRootJSONFile = handler.CredentialKeyTrustedRootJSONFile
+	oidcv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1alpha1"
+	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1"
 )
 
 // sigstoreEnv holds the environment configuration for the sigstore integration
@@ -115,8 +110,8 @@ func defaultSignConfig() *v1alpha1.SignConfig {
 
 func signDigest(t *testing.T, h *handler.Handler, digest descruntime.Digest) descruntime.SignatureInfo {
 	t.Helper()
-	sigInfo, err := h.Sign(t.Context(), digest, defaultSignConfig(), map[string]string{
-		credOIDCToken: stack.OIDCToken,
+	sigInfo, err := h.Sign(t.Context(), digest, defaultSignConfig(), &oidcv1.OIDCIdentityToken{
+		Token: stack.OIDCToken,
 	})
 	require.NoError(t, err, "signing should succeed")
 	return sigInfo
@@ -351,58 +346,14 @@ func Test_Integration_SignAndVerify(t *testing.T) {
 	})
 }
 
-func Test_Integration_SignWithTrustedRoot(t *testing.T) {
-	h := newHandler(t)
-	digest := uniqueDigest(t, "sign-with-trusted-root")
-	r := require.New(t)
-
-	signCfg := &v1alpha1.SignConfig{
-		SigningConfig: stack.SigningConfigPath,
-	}
-	signCfg.SetType(runtime.NewVersionedType(v1alpha1.SignConfigType, v1alpha1.Version))
-
-	sigInfo, err := h.Sign(t.Context(), digest, signCfg, map[string]string{
-		credOIDCToken:           stack.OIDCToken,
-		credTrustedRootJSONFile: stack.TrustedRootPath,
-	})
-	r.NoError(err)
-
-	bundle := decodeBundle(t, sigInfo)
-	r.NotNil(bundle.VerificationMaterial.Certificate)
-	r.NotEmpty(bundle.VerificationMaterial.TlogEntries)
-	r.NotNil(bundle.MessageSignature)
-	r.Equal(v1alpha1.AlgorithmSigstore, sigInfo.Algorithm)
-	r.Equal(v1alpha1.MediaTypeSigstoreBundle, sigInfo.MediaType)
-	r.NotEmpty(sigInfo.Issuer)
-
-	signed := descruntime.Signature{
-		Name:      "sign-with-trusted-root-test",
-		Digest:    digest,
-		Signature: sigInfo,
-	}
-
-	t.Run("verify with TUF-cached trust succeeds", func(t *testing.T) {
-		r := require.New(t)
-		r.NoError(h.Verify(t.Context(), signed, verifyConfig(), nil))
-	})
-
-	t.Run("verify with explicit trusted root succeeds", func(t *testing.T) {
-		r := require.New(t)
-		err := h.Verify(t.Context(), signed, verifyConfig(), map[string]string{
-			credTrustedRootJSONFile: stack.TrustedRootPath,
-		})
-		r.NoError(err)
-	})
-}
-
 func Test_Integration_VerifyWithExplicitTrustedRoot(t *testing.T) {
 	h := newHandler(t)
 	signed := testSignature(t, h, "verify-explicit-trusted-root-test", "verify-explicit-trusted-root")
 
 	t.Run("trusted root via credential file path", func(t *testing.T) {
 		r := require.New(t)
-		r.NoError(h.Verify(t.Context(), signed, verifyConfig(), map[string]string{
-			credTrustedRootJSONFile: stack.TrustedRootPath,
+		r.NoError(h.Verify(t.Context(), signed, verifyConfig(), &trustedrootv1.TrustedRoot{
+			TrustedRootJSONFile: stack.TrustedRootPath,
 		}))
 	})
 
@@ -411,8 +362,8 @@ func Test_Integration_VerifyWithExplicitTrustedRoot(t *testing.T) {
 		trustedRootJSON, err := os.ReadFile(stack.TrustedRootPath)
 		r.NoError(err)
 
-		err = h.Verify(t.Context(), signed, verifyConfig(), map[string]string{
-			handler.CredentialKeyTrustedRootJSON: string(trustedRootJSON),
+		err = h.Verify(t.Context(), signed, verifyConfig(), &trustedrootv1.TrustedRoot{
+			TrustedRootJSON: string(trustedRootJSON),
 		})
 		r.NoError(err)
 	})
@@ -422,8 +373,8 @@ func Test_Integration_VerifyWithExplicitTrustedRoot(t *testing.T) {
 		cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
 			c.CertificateOIDCIssuer = "https://wrong-issuer.example.com"
 		})
-		err := h.Verify(t.Context(), signed, cfg, map[string]string{
-			credTrustedRootJSONFile: stack.TrustedRootPath,
+		err := h.Verify(t.Context(), signed, cfg, &trustedrootv1.TrustedRoot{
+			TrustedRootJSONFile: stack.TrustedRootPath,
 		})
 		r.Error(err)
 		r.ErrorContains(err, "issuer")
@@ -439,8 +390,8 @@ func Test_Integration_PrivateInfrastructure(t *testing.T) {
 	})
 
 	r := require.New(t)
-	err := h.Verify(t.Context(), signed, cfg, map[string]string{
-		credTrustedRootJSONFile: stack.TrustedRootPath,
+	err := h.Verify(t.Context(), signed, cfg, &trustedrootv1.TrustedRoot{
+		TrustedRootJSONFile: stack.TrustedRootPath,
 	})
 	r.NoError(err)
 }
@@ -451,7 +402,7 @@ func Test_Integration_AmbientSIGSTORE_ID_TOKEN(t *testing.T) {
 	h := newHandler(t)
 	digest := uniqueDigest(t, "ambient-sigstore-id-token")
 
-	sigInfo, err := h.Sign(t.Context(), digest, defaultSignConfig(), map[string]string{})
+	sigInfo, err := h.Sign(t.Context(), digest, defaultSignConfig(), nil)
 	require.NoError(t, err, "signing with ambient SIGSTORE_ID_TOKEN should succeed without credential")
 	require.Equal(t, v1alpha1.AlgorithmSigstore, sigInfo.Algorithm)
 	require.NotEmpty(t, sigInfo.Value)

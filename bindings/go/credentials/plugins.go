@@ -31,6 +31,15 @@ type RepositoryPlugin interface {
 // resolution logic. These plugins are responsible for:
 // - Mapping credentials to consumer identities
 // - Resolving credentials for specific identities
+//
+// TODO(cred-graph-vs-cred-plugin): the contract was originally shaped around plugins
+// like HashiCorpVault that carry their parameters on the credential body (so
+// GetConsumerIdentity can derive a meaningful per-instance leaf identity). Plugins
+// whose configuration lives on the consumer identity (e.g. OIDCIdentityTokenProvider)
+// end up returning a type-only leaf identity and rely on Resolve receiving the
+// consumer identity (see PR #2511). The OIDC plugin in
+// cli/internal/plugin/builtin/oidc is the first concrete case; the contract may
+// need to evolve once a second such plugin appears.
 type CredentialPlugin interface {
 	// GetConsumerIdentity maps a credential to a consumer identity.
 	// This identity is used to look up credentials in the credential graph.

@@ -29,7 +29,7 @@ func (r *resourceDigestProcessorPluginConverter) GetResourceDigestProcessorCrede
 	return result.Identity, nil
 }
 
-func (r *resourceDigestProcessorPluginConverter) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
+func (r *resourceDigestProcessorPluginConverter) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
 	resources, err := descriptor.ConvertToV2Resources(r.scheme, []descriptor.Resource{*resource})
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert resource: %w", err)

@@ -1804,7 +1804,7 @@ data:
 				Name:      "prune-secret",
 			}, &corev1.Secret{})
 			return errors.IsNotFound(err)
-		}).WithContext(ctx).WithTimeout(30 * time.Second).Should(BeTrue(),
+		}).WithContext(ctx).WithTimeout(30*time.Second).Should(BeTrue(),
 			"Secret should have been pruned after being removed from the YAML stream, "+
 				"but it still exists. This indicates the prune scope is too narrow (batch-only instead of projected).")
 	})

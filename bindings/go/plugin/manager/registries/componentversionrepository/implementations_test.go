@@ -71,7 +71,7 @@ func TestAddComponentVersion(t *testing.T) {
 	err := plugin.AddComponentVersion(ctx, repov1.PostComponentVersionRequest[runtime.Typed]{
 		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{"baseUrl":"ocm.software"}`)},
 		Descriptor: defaultDescriptor(),
-	}, map[string]string{})
+	}, nil)
 	assert.NoError(t, err)
 }
 
@@ -105,7 +105,7 @@ func TestAddComponentVersionValidationFail(t *testing.T) {
 	err = plugin.AddComponentVersion(ctx, repov1.PostComponentVersionRequest[runtime.Typed]{
 		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{"baseUrl":"ocm.software"}`)},
 		Descriptor: defaultDescriptor(),
-	}, map[string]string{})
+	}, nil)
 	assert.ErrorContains(t, err, "jsonschema validation failed")
 }
 
@@ -135,7 +135,7 @@ func TestGetComponentVersion(t *testing.T) {
 		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
-	}, map[string]string{})
+	}, nil)
 	require.NoError(t, err)
 
 	require.Equal(t, response.String(), desc.String())
@@ -165,7 +165,7 @@ func TestListComponentVersions(t *testing.T) {
 	list, err := plugin.ListComponentVersions(ctx, repov1.ListComponentVersionsRequest[runtime.Typed]{
 		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Name:       "test-plugin",
-	}, map[string]string{})
+	}, nil)
 	require.NoError(t, err)
 
 	require.Equal(t, []string{"v0.0.1", "v0.0.2"}, list)
@@ -199,7 +199,7 @@ func TestAddLocalResource(t *testing.T) {
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
 		Resource:   &resource,
-	}, map[string]string{})
+	}, nil)
 	require.NoError(t, err)
 
 	require.Equal(t, resource.String(), gotResource.String())
@@ -265,7 +265,7 @@ func TestGetLocalResource(t *testing.T) {
 		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
-	}, map[string]string{})
+	}, nil)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(f.Name())
@@ -330,7 +330,7 @@ func TestGetLocalSource(t *testing.T) {
 		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
-	}, map[string]string{})
+	}, nil)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(f.Name())

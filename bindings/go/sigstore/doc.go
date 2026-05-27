@@ -49,22 +49,29 @@
 // the handler emits them into the consumer identity so that .ocmconfig entries
 // can distinguish between different Sigstore deployments.
 //
-// # Credential Keys
+// # Credentials
 //
-// Signing credentials (resolved via SigstoreSigner/v1alpha1 identity):
-//   - token: OIDC identity token for Fulcio authentication
-//   - trusted_root_json: inline trusted root JSON (for private infrastructure signing)
-//   - trusted_root_json_file: path to trusted root JSON file (for private infrastructure signing)
+// The handler resolves a single typed credential per operation:
 //
-// Verification credentials (resolved via SigstoreVerifier/v1alpha1 identity):
-//   - trusted_root_json: inline trusted root JSON
-//   - trusted_root_json_file: path to trusted root JSON file
+// Signing uses an OIDCIdentityToken/v1alpha1 credential
+// (spec/credentials/oidcidentitytoken/v1alpha1.OIDCIdentityToken). Relevant fields:
+//   - Token:     inline OIDC identity token for Fulcio authentication
+//   - TokenFile: path to a file containing the OIDC identity token
+//
+// Verification uses a TrustedRoot/v1alpha1 credential
+// (spec/credentials/trustedroot/v1alpha1.TrustedRoot). Relevant fields:
+//   - TrustedRootJSON:     inline Sigstore trusted root JSON document
+//   - TrustedRootJSONFile: path to a Sigstore trusted root JSON file
+//
+// Both credential types also accept Credentials/v1 DirectCredentials with the
+// matching camelCase property keys for backwards compatibility.
 //
 // # Trusted Root Resolution
 //
-// Trusted root resolution order (first wins, applies to both signing and verification):
-//  1. trusted_root_json credential — inline JSON written to a temp file
-//  2. trusted_root_json_file credential — path passed as --trusted-root
+// Trusted root resolution applies to verification only; the signing path does
+// not pass --trusted-root to cosign. Resolution order on verify (first wins):
+//  1. TrustedRoot.TrustedRootJSON — inline JSON written to a temp file
+//  2. TrustedRoot.TrustedRootJSONFile — path passed as --trusted-root
 //  3. "" — cosign falls back to public-good TUF default
 //
 // Note: TUF_ROOT and SIGSTORE_ROOT_FILE env vars control cosign's TUF cache
@@ -76,9 +83,9 @@
 // OIDC token acquisition for keyless signing happens before cosign is invoked.
 // The token must be resolved through the credential graph (configured as a
 // consumer identity of type SigstoreSigner/v1alpha1 in .ocmconfig with a
-// credential of type OIDCIdentityTokenProvider/v1alpha1 or Credentials/v1
-// with a "token" property). The handler forwards the resolved token to cosign
-// via the SIGSTORE_ID_TOKEN environment variable.
+// credential of type OIDCIdentityToken/v1alpha1 providing OIDCIdentityToken.Token
+// or OIDCIdentityToken.TokenFile). The handler forwards the resolved token to
+// cosign via the SIGSTORE_ID_TOKEN environment variable.
 //
 // If SIGSTORE_ID_TOKEN or ACTIONS_ID_TOKEN_REQUEST_TOKEN is already set in
 // the process environment, the handler uses the ambient token and skips
