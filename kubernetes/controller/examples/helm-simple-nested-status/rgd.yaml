@@ -53,3 +53,30 @@ spec:
             kind: OCIRepository
             name: ${ocirepository.metadata.name}
             namespace: default
+    - id: argocdApplication
+      template:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: "${schema.spec.prefix}"
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: default
+          source:
+            chart: podinfo
+            helm:
+              releaseName: ${schema.spec.prefix}-argocd
+            path: .
+            repoURL: oci://${resourceChart.status.additional.oci.registry}/${resourceChart.status.additional.oci.repository}
+            targetRevision: ${resourceChart.status.additional.oci.tag}
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: default-argocd
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+            syncOptions:
+              - CreateNamespace=true
