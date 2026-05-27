@@ -49,6 +49,8 @@ jobs:
             const prTitle = context.payload.pull_request.title;
             console.log(`PR Title: ${prTitle}`);
 
+            // NOTE: this regex is intentionally duplicated in validate-pr-title.yaml.
+            // If you change the format rules here, update that workflow's regex too.
             const regex = new RegExp(
               `^(((Initial commit)|(Merge [^\\r\\n]+(\\s)[^\\r\\n]+((\\s)((\\s)[^\\r\\n]+)+)*(\\s)?)|^((?<type>${allowedTypes})(\\((?<scope>[\\w\\-]+)\\))?(?<breaking>!?): (?<subject>[^\\r\\n]+((\\s)((\\s)[^\\r\\n]+)+)*))(\\s)?)$)`
             );
