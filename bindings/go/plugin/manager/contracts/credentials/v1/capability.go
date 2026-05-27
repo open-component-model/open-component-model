@@ -22,6 +22,9 @@ func init() {
 type CapabilitySpec struct {
 	Type                           runtime.Type `json:"type"`
 	SupportedConsumerIdentityTypes []types.Type `json:"supportedConsumerIdentityTypes"`
+	// TODO(fabianburth): customize / optimize for credentials
+	//  currently, it uses the general types.Type, but we might want to tailor this
+	//  to credentials specifically.
 	SupportedCredentialRepositorySpecTypes []types.Type `json:"supportedCredentialRepositorySpecTypes"`
 	// SupportedCredentialTypes declares the typed consumer credential structs this plugin
 	// can return from Resolve. The PluginManager registers these into the CredentialTypeRegistry
