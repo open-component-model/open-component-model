@@ -45,8 +45,8 @@ gitGraph TB:
 Two things to notice. First, **promotion does not create a new commit.** The 
 canonical final tag (`v0.7.0`) lands on the same commit as the most recent 
 RC tag (`v0.7.0-rc.2`). The workflow just stamps additional tags on the RC 
-commit. Second, **each tagged release commit carries multiple tags, not one.
-** The same commit also receives `cli/v0.7.0-rc.2` + `cli/v0.7.0`, 
+commit. Second, **each tagged release commit carries multiple tags, not one.**
+The same commit also receives `cli/v0.7.0-rc.2` + `cli/v0.7.0`, 
 `kubernetes/controller/v0.7.0-rc.2` + `kubernetes/controller/v0.7.0` and `website/v0.7.0`. 
 The side tags exist so the website install script, Go module consumers, and 
 Hugo docs imports can address each component directly.
@@ -100,6 +100,9 @@ The website integrates into the same workflow run, after `promote_and_release_fi
 
 * The `website/v0.X.Y` tag is created at the same commit as the canonical tag — same `ADDITIONAL_TAGS` step that emits `cli/` and `kubernetes/controller/` tags.
 * A separate `create_website_update_pr` job then opens a PR to `main` updating `website/config/_default/{hugo.yaml,module.yaml}` to pin the new minor's Hugo module imports to the just-created `website/v0.X.Y` tag. The PR uses the OCMBot app token, signed commits, and `add-paths: website/config/`.
+
+> [!WARNING]
+> The website update PR **must be merged before the next release**. If it isn't, the next release will overwrite the version config without the previous release's entries, causing the older version's docs to disappear from the site.
 * Binding versions (constructor, descriptor, controller chart) referenced by the docs are resolved from the released `cli/v0.X.Y` go.mod, not from `main`. This guarantees the docs site for `v0.X.Y` matches what the released CLI was built against.
 * On a **minor release** (`Z=0`) the script adds a new version entry under `versions` in `hugo.yaml` and a new set of import blocks in `module.yaml`.
 * On a **patch release** (`Z>0`) the script updates the existing minor's import tags in `module.yaml` in place; `hugo.yaml` is unchanged.
