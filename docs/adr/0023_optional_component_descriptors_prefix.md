@@ -19,13 +19,13 @@ while preserving full backward compatibility.
 
 Every OCM component version stored in an OCI registry today lives at a path of the form:
 
-```
+```text
 <registry>[/<subPath>]/component-descriptors/<component-name>:<version>
 ```
 
 Example:
 
-```
+```text
 ghcr.io/my-org/platform/component-descriptors/ocm.software/myapp:v1.2.0
 ```
 
@@ -150,6 +150,7 @@ defensively.
 | `bindings/go/oci/ctf/lister_test.go` | Test listing entries written without prefix |
 
 No changes to:
+
 - `bindings/go/oci/spec/repository/path/path.go` (constant stays for compat)
 - `bindings/go/oci/compref/compref.go` (parser already handles both)
 - `bindings/go/oci/internal/validate/validate.go` (already strips defensively)
@@ -211,10 +212,12 @@ Deprecate `component-descriptors` with a sunset notice in the spec, flip the def
 to empty in a future major version of the Go bindings, and require migration tooling.
 
 Pros:
+
 * Cleaner long-term path; removes the legacy suffix from all new component versions
 * Reduces confusion for new adopters
 
 Cons:
+
 * Breaking: existing tooling (old CLI versions, third-party implementations) cannot
   read new components without an update
 * Requires migration tooling and a coordinated ecosystem release
@@ -229,9 +232,11 @@ documenting a registry-level path rewrite pattern (e.g. Nginx proxy, Harbor repl
 rules) that strips or rewrites the prefix for end-user display.
 
 Pros:
+
 * Zero code change; zero compatibility risk
 
 Cons:
+
 * Does not solve the underlying friction; just hides it
 * Requires each user to operate additional infrastructure
 * Puts the burden on non-OCM tooling
@@ -243,12 +248,14 @@ Cons:
 ### Option A — Configurable opt-in prefix
 
 Pros:
+
 * Zero breaking change; all existing paths continue to work
 * Parser already handles both forms — smallest possible delta
 * Gives advanced users the ability to use natural OCI paths today
 * Sets up a clean migration path toward Option B in a future major version
 
 Cons:
+
 * Two parallel conventions exist in the ecosystem simultaneously
 * The `//` double-slash serialisation is awkward for human-readable references
 * Requires a spec PR before the feature can be used in a spec-compliant way
@@ -256,18 +263,22 @@ Cons:
 ### Option B — Deprecate and flip default
 
 Pros:
+
 * Single, clean long-term convention
 
 Cons:
+
 * Breaking; requires coordinated spec + tooling + migration release
 * Premature before spec consensus
 
 ### Option C — Keep mandatory
 
 Pros:
+
 * No change required
 
 Cons:
+
 * Does not address the root friction
 * Inconsistent with standard OCI path conventions
 
