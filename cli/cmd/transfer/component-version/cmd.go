@@ -31,12 +31,14 @@ import (
 )
 
 const (
-	FlagDryRun        = "dry-run"
-	FlagOutput        = "output"
-	FlagRecursive     = "recursive"
-	FlagCopyResources = "copy-resources"
-	FlagUploadAs      = "upload-as"
-	FlagTransferSpec  = "transfer-spec"
+	FlagDryRun           = "dry-run"
+	FlagOutput           = "output"
+	FlagRecursive        = "recursive"
+	FlagCopyResources    = "copy-resources"
+	FlagUploadAs         = "upload-as"
+	FlagTransferSpec     = "transfer-spec"
+	FlagSemverConstraint = "semver-constraint"
+	FlagLatest           = "latest"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the tracker consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -48,9 +50,14 @@ func New() *cobra.Command {
 		Use:        "component-version {reference} {target}",
 		Aliases:    []string{"cv", "component-versions", "cvs", "componentversion", "componentversions", "component", "components", "comp", "comps", "c"},
 		SuggestFor: []string{"version", "versions"},
-		Short:      "Transfer a component version between OCM repositories",
-		Long: `Transfer a single component version from a source repository to
+		Short:      "Transfer one or more component versions between OCM repositories",
+		Long: `Transfer component version(s) from a source repository to
 a target repository using an internally generated transformation graph.
+
+When a version is included in the source reference, exactly that version is transferred.
+When the version is omitted, all versions of the component are discovered and transferred.
+Use --semver-constraint to restrict which versions are selected, and --latest to transfer
+only the newest matching version.
 
 OCI, CTF, and Helm repositories are supported as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
@@ -89,6 +96,15 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghc
 
 # Transfer from one OCI registry to another
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
+
+# Transfer all versions of a component (omit version from reference)
+transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm
+
+# Transfer all versions matching a semver constraint
+transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --semver-constraint ">= 1.0.0, < 2.0.0"
+
+# Transfer only the latest version
+transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --latest
 
 # Transfer from one OCI to another using localBlobs
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as localBlob
@@ -137,6 +153,8 @@ transfer component-version --transfer-spec spec.yaml
 	enum.VarP(cmd.Flags(), FlagUploadAs, "u", uploadAsValues,
 		"Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.")
 	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin)")
+	cmd.Flags().String(FlagSemverConstraint, "", "semantic version constraint restricting which versions to transfer (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
+	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
 
 	return cmd
 }
@@ -314,7 +332,7 @@ func buildGraphDefinitionFromArgs(
 		return nil, fmt.Errorf("source component reference and target repository spec are required as positional arguments")
 	}
 
-	fromSpec, compErr := compref.Parse(args[0])
+	fromSpec, compErr := compref.Parse(args[0], compref.IgnoreSemverCompatibility())
 	if compErr != nil {
 		return nil, fmt.Errorf("invalid source component reference: %w", compErr)
 	}
@@ -373,9 +391,48 @@ func buildGraphDefinitionFromArgs(
 		transferCfg.UploadType = transferv1alpha1.UploadType(uploadAs)
 	}
 
+	constraint, err := cmd.Flags().GetString(FlagSemverConstraint)
+	if err != nil {
+		return nil, fmt.Errorf("getting semver-constraint flag failed: %w", err)
+	}
+	latestOnly, err := cmd.Flags().GetBool(FlagLatest)
+	if err != nil {
+		return nil, fmt.Errorf("getting latest flag failed: %w", err)
+	}
+
+	var componentIDs []transfer.ComponentID
+	if fromSpec.Version != "" {
+		if cmd.Flags().Changed(FlagSemverConstraint) {
+			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagSemverConstraint))
+		}
+		if cmd.Flags().Changed(FlagLatest) {
+			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagLatest))
+		}
+		componentIDs = []transfer.ComponentID{{Component: fromSpec.Component, Version: fromSpec.Version}}
+	} else {
+		repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, fromSpec.Component, "")
+		if err != nil {
+			return nil, fmt.Errorf("could not access ocm repository: %w", err)
+		}
+		versions, err := ocm.VersionsWithFiltering(ctx, fromSpec.Component, repo, ocm.VersionOptions{
+			SemverConstraint: constraint,
+			LatestOnly:       latestOnly,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("listing component versions failed: %w", err)
+		}
+		if len(versions) == 0 {
+			return nil, fmt.Errorf("no versions found for component %q matching constraint %q", fromSpec.Component, constraint)
+		}
+		componentIDs = make([]transfer.ComponentID, len(versions))
+		for i, v := range versions {
+			componentIDs[i] = transfer.ComponentID{Component: fromSpec.Component, Version: v}
+		}
+	}
+
 	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg,
 		transfer.Mapping{
-			Components: []transfer.ComponentID{{Component: fromSpec.Component, Version: fromSpec.Version}},
+			Components: componentIDs,
 			Target:     toSpec,
 			Resolver:   repoProvider,
 		},
