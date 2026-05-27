@@ -72,27 +72,8 @@ jobs:
           go run "sigs.k8s.io/controller-tools/cmd/controller-gen@${CONTROLLER_TOOLS_VERSION}" \
             crd paths="./..." output:crd:artifacts:config=bin/gen/crd
 
-      # Enables isolated testing of website related workflows on forks
-      # https://gohugo.io/configuration/module/#replacements
-      - name: Compute Hugo module replacements for forks
-        id: fork_replacements
-        if: github.repository != 'open-component-model/open-component-model'
-        run: |
-          CANONICAL="ocm.software/open-component-model"
-          FORK="github.com/${{ github.repository }}"
-          REPLACEMENTS="${CANONICAL}/website -> ${FORK}/website"
-          REPLACEMENTS="${REPLACEMENTS},${CANONICAL}/cli -> ${FORK}/cli"
-          REPLACEMENTS="${REPLACEMENTS},${CANONICAL}/bindings/go/constructor -> ${FORK}/bindings/go/constructor"
-          REPLACEMENTS="${REPLACEMENTS},${CANONICAL}/bindings/go/descriptor/v2 -> ${FORK}/bindings/go/descriptor/v2"
-          REPLACEMENTS="${REPLACEMENTS},${CANONICAL}/kubernetes/controller -> ${FORK}/kubernetes/controller"
-          echo "replacements=${REPLACEMENTS}" >> "$GITHUB_OUTPUT"
-
       - name: Install deps and Build
         working-directory: website
-        env:
-          # Enables isolated testing of website related workflows on forks
-          # https://gohugo.io/configuration/module/#replacements
-          HUGO_MODULE_REPLACEMENTS: ${{ steps.fork_replacements.outputs.replacements }}
         run: |
           npm ci
           npm run build

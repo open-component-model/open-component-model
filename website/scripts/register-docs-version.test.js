@@ -4,7 +4,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, cliDerivedModules, MODULE_BASE } = require('./register-docs-version');
+const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags } = require('./register-docs-version');
 
 // --- parseArguments ---
 
@@ -507,9 +507,6 @@ test('updateImportTags: returns false on null/empty parsed', () => {
 // --- patch recovery: missing imports yields same result as fresh creation ---
 
 test('updateImportTags: patching freshly-built blocks equals building directly with patch version', () => {
-    // Simulate the recovery path: buildModuleBlocks creates imports at X.Y.0,
-    // then updateImportTags bumps them to X.Y.Z. This must equal building
-    // directly at X.Y.Z (the non-patch path for a patch version).
     const deps = {
         'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.8',
         'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.4',
@@ -528,21 +525,4 @@ test('updateImportTags: patching freshly-built blocks equals building directly w
     const { imports: directImports } = buildModuleBlocks('0.3', '0.3.1', deps);
 
     assert.deepEqual(parsed.imports, directImports);
-});
-
-// --- cliDerivedModules ---
-
-test('cliDerivedModules: returns paths with canonical module base', () => {
-    const mods = cliDerivedModules();
-    assert.deepEqual(mods, [
-        'ocm.software/open-component-model/bindings/go/constructor',
-        'ocm.software/open-component-model/bindings/go/descriptor/v2',
-    ]);
-});
-
-test('buildModuleBlocks: uses canonical module base', () => {
-    const { imports } = buildModuleBlocks('0.3', '0.3.0');
-    for (const imp of imports) {
-        assert.ok(imp.path.startsWith(MODULE_BASE), `expected ${imp.path} to start with ${MODULE_BASE}`);
-    }
 });

@@ -10,12 +10,6 @@
  * - Ensures hugo.yaml has the version entry (idempotent, creates if missing)
  * - Ensures module.yaml has import blocks (creates if missing, updates tags if present)
  * - Retires oldest minor version when >10 minor versions exist
- *
- * Fork support:
- * - Module imports always use the canonical module base (ocm.software/open-component-model).
- * - Forks set the HUGO_MODULE_REPLACEMENTS env var at build time to redirect Hugo's
- *   module fetching to their fork (Hugo resolves this natively, no script changes needed).
- * - The CI workflow auto-generates HUGO_MODULE_REPLACEMENTS for forks.
  */
 
 const fsp = require('node:fs/promises');
@@ -50,11 +44,6 @@ function dumpYaml(parsed) {
 
 // Maximum number of minor versions (excluding special versions like main/legacy)
 const MAX_MINOR_VERSIONS = 10;
-
-// Canonical module path prefix. Forks use HUGO_MODULE_REPLACEMENTS at build
-// time to redirect Hugo's module fetching — the generated config always uses
-// canonical paths.
-const MODULE_BASE = 'ocm.software/open-component-model';
 
 // Compare two SemVer strings (X.Y or X.Y.Z). Returns <0 if a<b, >0 if a>b, 0 if equal.
 function compareSemver(a, b) {
@@ -201,24 +190,20 @@ function resolveGoModVersions(goModPath, modulePaths) {
     return result;
 }
 
-// Modules whose versions are derived from the CLI's go.mod.
-function cliDerivedModules() {
-    return [
-        `${MODULE_BASE}/bindings/go/constructor`,
-        `${MODULE_BASE}/bindings/go/descriptor/v2`,
-    ];
-}
+// Modules whose versions are derived from the CLI's go.mod
+const CLI_DERIVED_MODULES = [
+    'ocm.software/open-component-model/bindings/go/constructor',
+    'ocm.software/open-component-model/bindings/go/descriptor/v2',
+];
 
 // Build import blocks for a given version (pure when deps are passed, testable)
 function buildModuleBlocks(version, fullVersion, deps) {
-    const constructorPath = `${MODULE_BASE}/bindings/go/constructor`;
-    const descriptorPath = `${MODULE_BASE}/bindings/go/descriptor/v2`;
-    const constructorVersion = deps?.[constructorPath] || 'latest';
-    const descriptorVersion = deps?.[descriptorPath] || 'latest';
+    const constructorVersion = deps?.['ocm.software/open-component-model/bindings/go/constructor'] || 'latest';
+    const descriptorVersion = deps?.['ocm.software/open-component-model/bindings/go/descriptor/v2'] || 'latest';
 
     const imports = [
         {
-            path: `${MODULE_BASE}/website`,
+            path: 'ocm.software/open-component-model/website',
             version: `website/v${fullVersion}`,
             mounts: [{
                 files: ['**', '!blog/**'],
@@ -228,7 +213,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: `${MODULE_BASE}/cli`,
+            path: 'ocm.software/open-component-model/cli',
             version: `cli/v${fullVersion}`,
             mounts: [{
                 source: 'docs/reference',
@@ -237,7 +222,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: constructorPath,
+            path: 'ocm.software/open-component-model/bindings/go/constructor',
             version: `bindings/go/constructor/${constructorVersion}`,
             mounts: [{
                 source: 'spec/v1/resources',
@@ -246,7 +231,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: descriptorPath,
+            path: 'ocm.software/open-component-model/bindings/go/descriptor/v2',
             version: `bindings/go/descriptor/v2/${descriptorVersion}`,
             mounts: [{
                 source: 'resources',
@@ -255,7 +240,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: `${MODULE_BASE}/kubernetes/controller`,
+            path: 'ocm.software/open-component-model/kubernetes/controller',
             version: `kubernetes/controller/v${fullVersion}`,
             mounts: [{
                 source: 'config/crd/bases',
@@ -293,14 +278,10 @@ function retireOldestVersion(versions) {
  * @param {Object} parsed - parsed module.yaml
  * @param {string} version - minor version (X.Y)
  * @param {string} fullVersion - full version (X.Y.Z)
- * @param {Object<string,string>} [deps] - resolved go.mod versions for bindings (keyed by full module path)
  * @returns {boolean} true if any tags were updated
  */
 function updateImportTags(parsed, version, fullVersion, deps) {
     if (!parsed?.imports) return false;
-
-    const constructorPath = `${MODULE_BASE}/bindings/go/constructor`;
-    const descriptorPath = `${MODULE_BASE}/bindings/go/descriptor/v2`;
 
     let changed = false;
 
@@ -315,10 +296,10 @@ function updateImportTags(parsed, version, fullVersion, deps) {
             newTag = `cli/v${fullVersion}`;
         } else if (imp.path.endsWith('/kubernetes/controller')) {
             newTag = `kubernetes/controller/v${fullVersion}`;
-        } else if (deps && imp.path === constructorPath) {
-            newTag = `bindings/go/constructor/${deps[constructorPath]}`;
-        } else if (deps && imp.path === descriptorPath) {
-            newTag = `bindings/go/descriptor/v2/${deps[descriptorPath]}`;
+        } else if (deps && imp.path.endsWith('/bindings/go/constructor')) {
+            newTag = `bindings/go/constructor/${deps['ocm.software/open-component-model/bindings/go/constructor']}`;
+        } else if (deps && imp.path.endsWith('/bindings/go/descriptor/v2')) {
+            newTag = `bindings/go/descriptor/v2/${deps['ocm.software/open-component-model/bindings/go/descriptor/v2']}`;
         }
 
         if (newTag && imp.version !== newTag) {
@@ -381,7 +362,7 @@ async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersi
     const hasAllImports = hasAllImportsForVersion(parsed, version);
     const hasAnyImport = hasAnyImportForVersion(parsed, version);
 
-    const deps = resolveGoModVersions(cliGomod, cliDerivedModules());
+    const deps = resolveGoModVersions(cliGomod, CLI_DERIVED_MODULES);
 
     if (hasAllImports) {
         const changed = updateImportTags(parsed, version, fullVersion, deps);
@@ -430,4 +411,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, resolveGoModVersions, cliDerivedModules, MODULE_BASE };
+module.exports = { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, resolveGoModVersions, CLI_DERIVED_MODULES };
