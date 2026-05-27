@@ -138,7 +138,7 @@ func TestGPGHandler_CredentialIdentities(t *testing.T) {
 
 	sigIdentity, err := h.GetSigningCredentialConsumerIdentity(context.Background(), "mysig", digest, &v1alpha1.Config{})
 	require.NoError(t, err)
-	require.Equal(t, "mysig", sigIdentity[IdentityAttributeSignature])
+	require.Equal(t, "mysig", sigIdentity[identityv1.IdentityAttributeSignature])
 	require.Equal(t, identityv1.V1Alpha1Type, sigIdentity.GetType())
 
 	signed := descruntime.Signature{
@@ -151,7 +151,7 @@ func TestGPGHandler_CredentialIdentities(t *testing.T) {
 	}
 	verIdentity, err := h.GetVerifyingCredentialConsumerIdentity(context.Background(), signed, &v1alpha1.Config{})
 	require.NoError(t, err)
-	require.Equal(t, "mysig", verIdentity[IdentityAttributeSignature])
+	require.Equal(t, "mysig", verIdentity[identityv1.IdentityAttributeSignature])
 }
 
 func TestGPGHandler_HashAlgorithm_SHA512(t *testing.T) {

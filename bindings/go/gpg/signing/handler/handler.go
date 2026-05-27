@@ -22,11 +22,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// IdentityAttributeSignature will be removed in the future.
-//
-// Deprecated: Use typed identity [identityv1.GPGIdentity] instead.
-const IdentityAttributeSignature = identityv1.IdentityAttributeSignature
-
 // Common errors for callers to test.
 var (
 	ErrMissingPrivateKey = errors.New("private key not found in credentials")

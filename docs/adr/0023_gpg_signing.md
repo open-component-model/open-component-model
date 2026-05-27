@@ -148,6 +148,19 @@ configurations:
         publicKeyPGPFile: /path/to/public-key.asc
 ```
 
+#### Passing Credentials via Environment Variables
+
+The OCM credential system supports environment-based credential providers. The passphrase (and any other credential key) can be injected without a config file by using the `OCM_CREDENTIALS` environment variable or a credential provider that reads from the environment.
+
+For example, to pass the passphrase via the environment:
+
+```bash
+OCM_CREDENTIALS='{"consumers":[{"identity":{"type":"GPG/v1alpha1","signature":"default"},"credentials":[{"type":"Credentials/v1","properties":{"privateKeyPGPFile":"/path/to/signing-key.asc","passphrase":"my-passphrase"}}]}]}' \
+  ocm sign component-version ...
+```
+
+This avoids writing the passphrase to disk entirely. The exact mechanism follows the same credential resolution path used by all other credential types in OCM.
+
 ---
 
 ## Pros and Cons of the Options
