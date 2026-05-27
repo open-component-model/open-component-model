@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -321,11 +320,11 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// credentials
-	credMap := map[string]string{}
+	var foundCreds runtime.Typed
 	if consumerID, err := handler.GetSigningCredentialConsumerIdentity(ctx, signatureName, *unsignedDigest, signerSpec); err == nil {
-		if creds, err := credentialGraph.Resolve(ctx, consumerID); err == nil { //nolint:staticcheck // SA1019: tracked migration to ResolveTyped in ocm-project#702
-			credMap = creds
-			logger.DebugContext(ctx, "using discovered credentials", "attributes", slices.Collect(maps.Keys(credMap)))
+		if creds, err := credentialGraph.Resolve(ctx, consumerID); err == nil {
+			foundCreds = creds
+			logger.DebugContext(ctx, "using discovered credentials", "type", foundCreds.GetType())
 		} else {
 			if errors.Is(err, credentials.ErrNotFound) {
 				logger.DebugContext(ctx, "could not resolve credentials", "error", err.Error())
@@ -336,7 +335,7 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// sign
-	sigBytes, err := handler.Sign(ctx, *unsignedDigest, signerSpec, credMap)
+	sigBytes, err := handler.Sign(ctx, *unsignedDigest, signerSpec, foundCreds)
 	if err != nil {
 		return fmt.Errorf("signing failed: %w", err)
 	}
