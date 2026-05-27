@@ -1,20 +1,25 @@
 name: Conformance
 
+# Reusable conformance run. Always invoked by pipeline.yml with both CLI
+# and controller artifacts, so we exercise a coherent pair end-to-end.
+# Standalone push/PR triggers were removed: changes to conformance/** are
+# picked up via pipeline.yml's paths filter.
+
 on:
   workflow_call:
     inputs:
       cli_image:
-        description: "CLI Docker image reference"
+        description: "Fallback. Published CLI image ref pulled from a registry. Prefer cli_artifact to test pre publish builds."
         type: string
         required: false
         default: ""
       toolkit_image:
-        description: "OCI reference to the controller Helm chart (with optional version tag)"
+        description: "Fallback. Published controller Helm chart OCI ref pulled from a registry. Prefer toolkit_chart_artifact to test pre publish builds."
         type: string
         required: false
         default: ""
       cli_artifact:
-        description: "Artifact name containing the CLI OCI layout (PR mode)"
+        description: "Artifact name containing the CLI OCI layout"
         type: string
         required: false
         default: ""
@@ -24,12 +29,12 @@ on:
         required: false
         default: ""
       toolkit_chart_artifact:
-        description: "Artifact name containing the packaged Helm chart .tgz (PR mode)"
+        description: "Artifact name containing the packaged Helm chart .tgz"
         type: string
         required: false
         default: ""
       toolkit_image_artifact:
-        description: "Artifact name containing the controller OCI layout (PR mode)"
+        description: "Artifact name containing the controller OCI layout"
         type: string
         required: false
         default: ""
@@ -38,29 +43,20 @@ on:
         type: string
         required: false
         default: ""
-  push:
-    branches:
-      - main
-    paths:
-      - conformance/**
-      - .github/workflows/conformance.yml
-  pull_request:
-    branches:
-      - main
-    paths:
-      - conformance/**
-      - .github/workflows/conformance.yml
 
 permissions:
   contents: read
 
-concurrency:
-  group: conformance-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+# No concurrency block: this workflow is workflow_call-only. The caller
+# (pipeline.yml, "monorepo shared build & publish") controls concurrency for
+# the whole chain. Declaring our own would collide with siblings because
+# github.workflow inherits the caller's name in workflow_call context.
+# Same pattern as kubernetes-controller.yml.
 
 env:
   REGISTRY: ghcr.io
-  CONTROLLER_IMAGE_NAME: ${{ github.repository_owner }}/kubernetes/controller
+  # CLI_IMAGE_NAME and CONTROLLER_IMAGE_NAME are computed because
+  # GHCR does not like uppercased owner names.
 
 jobs:
   conformance:
@@ -73,6 +69,16 @@ jobs:
       matrix:
         arch: [arm64]
     steps:
+      - name: Compute image refs
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          OWNER="${OWNER,,}"
+          {
+            echo "CLI_IMAGE_NAME=${REGISTRY}/$OWNER/cli"
+            echo "CONTROLLER_IMAGE_NAME=${REGISTRY}/$OWNER/kubernetes/controller"
+          } >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -116,7 +122,6 @@ jobs:
         if: ${{ inputs.cli_artifact != '' }}
         env:
           CLI_VERSION: ${{ inputs.cli_version }}
-          CLI_IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cli
         run: |
           mkdir -p tmp/cli-oci-dir
           tar -xf tmp/cli-artifact/oci/cli.tar -C tmp/cli-oci-dir
@@ -139,13 +144,12 @@ jobs:
         if: ${{ inputs.toolkit_image_artifact != '' }}
         env:
           TOOLKIT_VERSION: ${{ inputs.toolkit_version }}
-          IMAGE_NAME: ${{ env.REGISTRY }}/${{ env.CONTROLLER_IMAGE_NAME }}
         run: |
           mkdir -p tmp/controller-oci-dir
           tar -xf tmp/controller-artifact/controller.tar -C tmp/controller-oci-dir
           skopeo --override-arch ${{ matrix.arch }} --override-os linux copy \
             oci:tmp/controller-oci-dir:${TOOLKIT_VERSION} \
-            docker-archive:tmp/controller-docker.tar:${IMAGE_NAME}:${TOOLKIT_VERSION}
+            docker-archive:tmp/controller-docker.tar:${CONTROLLER_IMAGE_NAME}:${TOOLKIT_VERSION}
           echo "PRELOAD_IMAGES=${{ github.workspace }}/tmp/controller-docker.tar" >> "$GITHUB_ENV"
 
       - name: Download chart artifact
@@ -176,10 +180,9 @@ jobs:
           INPUT_TOOLKIT_IMAGE: ${{ inputs.toolkit_image }}
 
       - name: Validate required image references
-        if: ${{ github.event_name == 'workflow_call' }}
         run: |
-          if [ -z "$CLI_IMAGE" ] && [ -z "$TOOLKIT_IMAGE" ]; then
-            echo "::error::Neither CLI_IMAGE nor TOOLKIT_IMAGE is set. At least one must be provided via inputs or artifacts."
+          if [ -z "$CLI_IMAGE" ] || [ -z "$TOOLKIT_IMAGE" ]; then
+            echo "::error::Both CLI_IMAGE and TOOLKIT_IMAGE must be set via inputs or artifacts."
             exit 1
           fi
           echo "CLI_IMAGE=${CLI_IMAGE:-(using Taskfile default)}"
