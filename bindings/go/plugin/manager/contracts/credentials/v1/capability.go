@@ -22,8 +22,11 @@ func init() {
 type CapabilitySpec struct {
 	Type                           runtime.Type `json:"type"`
 	SupportedConsumerIdentityTypes []types.Type `json:"supportedConsumerIdentityTypes"`
-	// TODO(fabianburth): customize / optimize for credentials
-	//  currently, it uses the general types.Type, but we might want to tailor this
-	//  to credentials specifically.
 	SupportedCredentialRepositorySpecTypes []types.Type `json:"supportedCredentialRepositorySpecTypes"`
+	// SupportedCredentialTypes declares the typed consumer credential structs this plugin
+	// can return from Resolve. The PluginManager registers these into the CredentialTypeRegistry
+	// during plugin discovery so the credential graph can deserialize them at ingestion time
+	// (ADR 0021 §Type Registries). External plugin types are registered as *runtime.Raw since
+	// their Go structs are not compiled into the host process.
+	SupportedCredentialTypes []types.Type `json:"supportedCredentialTypes,omitempty"`
 }

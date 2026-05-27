@@ -8,6 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
+	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -40,4 +43,48 @@ func TestCredentialTypeSchemePopulatedByBuiltinRegister(t *testing.T) {
 
 	r.True(scheme.IsRegistered(rsacredsv1.VersionedType),
 		"RSACredentials/v1 must be registered in the credential type scheme")
+}
+
+// TestCredentialGraphResolvesTypedCredentials is an end-to-end test verifying that a
+// credential graph built with PluginManager.CredentialTypeRegistry as the scheme provider
+// resolves an inline OCICredentials/v1 entry to *OCICredentials instead of *DirectCredentials.
+func TestCredentialGraphResolvesTypedCredentials(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	pm := manager.NewPluginManager(ctx)
+	r.NoError(builtin.Register(pm, &filesystemv1alpha1.Config{}, slog.Default()))
+
+	// Build a credential config with an inline OCICredentials/v1 entry.
+	identity := runtime.Identity{
+		"type":     credidentityv1.Type.String(),
+		"hostname": "ghcr.io",
+	}
+	cred := &ocicredsv1.OCICredentials{
+		Type:     runtime.NewVersionedType(ocicredsv1.OCICredentialsType, ocicredsv1.Version),
+		Username: "myuser",
+		Password: "mypass",
+	}
+	cfg := &credconfigruntime.Config{
+		Consumers: []credconfigruntime.Consumer{
+			{
+				Identities:  []runtime.Identity{identity},
+				Credentials: []runtime.Typed{cred},
+			},
+		},
+	}
+
+	graph, err := credentials.ToGraph(ctx, cfg, credentials.Options{
+		CredentialTypeSchemeProvider: pm.CredentialTypeRegistry,
+	})
+	r.NoError(err)
+
+	resolved, err := graph.Resolve(ctx, identity)
+	r.NoError(err)
+	r.NotNil(resolved)
+
+	ociCreds, ok := resolved.(*ocicredsv1.OCICredentials)
+	r.True(ok, "expected *OCICredentials, got %T — CredentialTypeSchemeProvider is not wired correctly", resolved)
+	r.Equal("myuser", ociCreds.Username)
+	r.Equal("mypass", ociCreds.Password)
 }
