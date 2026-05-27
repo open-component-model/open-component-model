@@ -480,6 +480,7 @@ ocm.software/open-component-model/bindings/go/oci v0.0.46-0.20260529072923-cafbb
 ocm.software/open-component-model/bindings/go/oci v0.0.46-0.20260529072923-cafbb05b3c4f/go.mod h1:fdzDRrG/arNKxbFreq2RfgvyleMkTNZkawpeC8DJimM=
 ocm.software/open-component-model/bindings/go/plugin v0.0.16 h1:waSsSFvXRcKzaawZU089Bx1oIopUZSsKBUirFnow2zc=
 ocm.software/open-component-model/bindings/go/plugin v0.0.16/go.mod h1:qjYYqqFBb9IuwGwVA8okcPUE9YEbC32mtKENyJXVVcM=
+ocm.software/open-component-model/bindings/go/plugin v0.0.17-0.20260526162446-a990c9c471aa/go.mod h1:dvY3yTnA/6aEGz/vSerrA4CWboXiiXOXQI+Gr/D1Dlk=
 ocm.software/open-component-model/bindings/go/repository v0.0.9 h1:j6WmumbeN+m19oQ1ViZ8cWSjbpIAv+9kJhIyUSmsHL0=
 ocm.software/open-component-model/bindings/go/repository v0.0.9/go.mod h1:JI1KAOCG020KJe1C0gESAsOUuwp+Obg4UCQyUg2ncAo=
 ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260526121250-aae701a4aa9b h1:+Svzg+D8Qg0+7LvZTTgudD+H3tvE24awqfMnBHOhqP4=

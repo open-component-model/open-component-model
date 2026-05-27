@@ -177,7 +177,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260526121250-aae701a4aa9b // indirect
-	ocm.software/open-component-model/bindings/go/plugin v0.0.16 // indirect
+	ocm.software/open-component-model/bindings/go/plugin v0.0.17-0.20260526162446-a990c9c471aa // indirect
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260526121250-aae701a4aa9b // indirect
 	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260526121250-aae701a4aa9b // indirect
 	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260526121250-aae701a4aa9b // indirect
