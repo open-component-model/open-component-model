@@ -212,7 +212,7 @@ test('compareSemver: mixed lengths (X.Y vs X.Y.Z) treated as missing=0', () => {
 
 // --- assignVersionWeights ---
 
-test('assignVersionWeights: first cutoff (main + legacy -> add version)', () => {
+test('assignVersionWeights: first registration (main + legacy -> add version)', () => {
     const existing = {
         main: { weight: 1 },
         legacy: { weight: 2 }
@@ -225,7 +225,7 @@ test('assignVersionWeights: first cutoff (main + legacy -> add version)', () => 
     });
 });
 
-test('assignVersionWeights: second cutoff adds newer version before older', () => {
+test('assignVersionWeights: second registration adds newer version before older', () => {
     const existing = {
         main: { weight: 1 },
         '0.21': { weight: 2 },
