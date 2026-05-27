@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	identityv1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/gpg/spec/signing/v1alpha1"
 )
@@ -108,7 +109,7 @@ func TestGPGHandler_MissingPrivateKey(t *testing.T) {
 	h := mustHandler(t)
 	digest := makeDigest(t, crypto.SHA256, []byte("hello world"))
 
-	_, err := h.Sign(context.Background(), digest, &v1alpha1.Config{}, map[string]string{})
+	_, err := h.Sign(context.Background(), digest, &v1alpha1.Config{}, &gpgcredentialsv1.GPGCredentials{})
 	require.ErrorIs(t, err, ErrMissingPrivateKey)
 }
 
@@ -127,7 +128,7 @@ func TestGPGHandler_MissingPublicKey(t *testing.T) {
 		Signature: sig,
 	}
 
-	err = h.Verify(context.Background(), signed, &v1alpha1.Config{}, map[string]string{})
+	err = h.Verify(context.Background(), signed, &v1alpha1.Config{}, &gpgcredentialsv1.GPGCredentials{})
 	require.ErrorIs(t, err, ErrMissingPublicKey)
 }
 
@@ -244,35 +245,32 @@ func makeDigest(t *testing.T, h crypto.Hash, data []byte) descruntime.Digest {
 	}
 }
 
-func armoredPrivKey(t *testing.T, entity *openpgp.Entity) map[string]string {
+func armoredPrivKey(t *testing.T, entity *openpgp.Entity) *gpgcredentialsv1.GPGCredentials {
 	t.Helper()
 	return armoredPrivKeyWithPassphrase(t, entity, "")
 }
 
-func armoredPrivKeyWithPassphrase(t *testing.T, entity *openpgp.Entity, passphrase string) map[string]string {
+func armoredPrivKeyWithPassphrase(t *testing.T, entity *openpgp.Entity, passphrase string) *gpgcredentialsv1.GPGCredentials {
 	t.Helper()
 	var buf bytes.Buffer
 	w, err := armor.Encode(&buf, openpgp.PrivateKeyType, nil)
 	require.NoError(t, err)
 	require.NoError(t, entity.SerializePrivateWithoutSigning(w, nil))
 	require.NoError(t, w.Close())
-	creds := map[string]string{
-		"privateKeyPGP": buf.String(),
+	return &gpgcredentialsv1.GPGCredentials{
+		PrivateKeyPGP: buf.String(),
+		Passphrase:    passphrase,
 	}
-	if passphrase != "" {
-		creds["passphrase"] = passphrase
-	}
-	return creds
 }
 
-func armoredPubKey(t *testing.T, entity *openpgp.Entity) map[string]string {
+func armoredPubKey(t *testing.T, entity *openpgp.Entity) *gpgcredentialsv1.GPGCredentials {
 	t.Helper()
 	var buf bytes.Buffer
 	w, err := armor.Encode(&buf, openpgp.PublicKeyType, nil)
 	require.NoError(t, err)
 	require.NoError(t, entity.Serialize(w))
 	require.NoError(t, w.Close())
-	return map[string]string{
-		"publicKeyPGP": buf.String(),
+	return &gpgcredentialsv1.GPGCredentials{
+		PublicKeyPGP: buf.String(),
 	}
 }

@@ -48,10 +48,18 @@ func (h *Handler) Sign(
 	_ context.Context,
 	unsigned descruntime.Digest,
 	cfg runtime.Typed,
-	creds map[string]string,
+	creds runtime.Typed,
 ) (descruntime.SignatureInfo, error) {
 	sigCfg := configFrom(cfg)
-	typedCreds := gpgcredentialsv1.FromDirectCredentials(creds)
+
+	var typedCreds *gpgcredentialsv1.GPGCredentials
+	if creds != nil {
+		var err error
+		typedCreds, err = gpgcredentialsv1.ConvertToGPGCredentials(creds)
+		if err != nil {
+			return descruntime.SignatureInfo{}, fmt.Errorf("parse GPG credentials: %w", err)
+		}
+	}
 
 	keyring, err := gpgcredentials.PrivateKeyRingFromCredentials(typedCreds)
 	if err != nil {
@@ -95,14 +103,22 @@ func (h *Handler) Verify(
 	_ context.Context,
 	signed descruntime.Signature,
 	cfg runtime.Typed,
-	creds map[string]string,
+	creds runtime.Typed,
 ) error {
 	if signed.Signature.MediaType != v1alpha1.MediaTypeGPG {
 		return fmt.Errorf("unsupported media type %q for GPG verification", signed.Signature.MediaType)
 	}
 
 	sigCfg := configFrom(cfg)
-	typedCreds := gpgcredentialsv1.FromDirectCredentials(creds)
+
+	var typedCreds *gpgcredentialsv1.GPGCredentials
+	if creds != nil {
+		var err error
+		typedCreds, err = gpgcredentialsv1.ConvertToGPGCredentials(creds)
+		if err != nil {
+			return fmt.Errorf("parse GPG credentials: %w", err)
+		}
+	}
 
 	keyring, err := gpgcredentials.PublicKeyRingFromCredentials(typedCreds)
 	if err != nil {
