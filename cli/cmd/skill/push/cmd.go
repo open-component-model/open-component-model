@@ -162,7 +162,7 @@ func pushSkills(cmd *cobra.Command, args []string) error {
 			Version: version,
 			Input: fileInput{
 				Type: "file",
-				Path: resolvedSkillPath,
+				Path: skillPath,
 			},
 		})
 	}
