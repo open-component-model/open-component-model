@@ -36,7 +36,6 @@
     "@thulite/images": "^3.3.4",
     "@thulite/inline-svg": "^1.2.2",
     "@thulite/seo": "^2.4.3",
-    "js-yaml": "^4.1.1",
     "preact": "^10.29.0",
     "thulite": "^2.6.5"
   },
@@ -48,6 +47,7 @@
     "globals": "17.6.0",
     "hugo-extended": "0.161.1",
     "jiti": "2.7.0",
+    "js-yaml": "^4.1.1",
     "sass-embedded": "1.100.0",
     "shx": "0.4.0",
     "typescript": "6.0.3",
