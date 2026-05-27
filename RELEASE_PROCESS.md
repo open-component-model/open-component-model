@@ -102,7 +102,7 @@ The website integrates into the same workflow run, after `promote_and_release_fi
 * A separate `create_website_update_pr` job then opens a PR to `main` updating `website/config/_default/{hugo.yaml,module.yaml}` to pin the new minor's Hugo module imports to the just-created `website/v0.X.Y` tag. The PR uses the OCMBot app token, signed commits, and `add-paths: website/config/`.
 
 > [!WARNING]
-> The website update PR **must be merged before the next release**. If it isn't, the next release will overwrite the version config without the previous release's entries, causing the older version's docs to disappear from the site.
+> The website update PR **must be merged before the next release**. The `create_website_update_pr` job checks out `main` and registers the new version into whatever config state `main` has. If the previous release's PR hasn't landed yet, the new PR will be generated without that version's entries — merging it would leave the previous version missing from the site.
 * Binding versions (constructor, descriptor, controller chart) referenced by the docs are resolved from the released `cli/v0.X.Y` go.mod, not from `main`. This guarantees the docs site for `v0.X.Y` matches what the released CLI was built against.
 * On a **minor release** (`Z=0`) the script adds a new version entry under `versions` in `hugo.yaml` and a new set of import blocks in `module.yaml`.
 * On a **patch release** (`Z>0`) the script updates the existing minor's import tags in `module.yaml` in place; `hugo.yaml` is unchanged.
