@@ -20,11 +20,11 @@ func TestFromDirectCredentials(t *testing.T) {
 		{
 			name: "all fields populated",
 			properties: map[string]string{
-				CredentialKeyPrivateKeyPGP:     "test-private-key",
-				CredentialKeyPrivateKeyPGPFile: "/path/to/private.asc",
-				CredentialKeyPublicKeyPGP:      "test-public-key",
-				CredentialKeyPublicKeyPGPFile:  "/path/to/public.asc",
-				CredentialKeyPassphrase:        "test-passphrase-value",
+				"privateKeyPGP":     "test-private-key",
+				"privateKeyPGPFile": "/path/to/private.asc",
+				"publicKeyPGP":      "test-public-key",
+				"publicKeyPGPFile":  "/path/to/public.asc",
+				"passphrase":        "test-passphrase-value",
 			},
 			expected: &GPGCredentials{
 				Type:              typ,
@@ -43,15 +43,15 @@ func TestFromDirectCredentials(t *testing.T) {
 		{
 			name: "partial fields",
 			properties: map[string]string{
-				CredentialKeyPrivateKeyPGP: "only-private-key",
+				"privateKeyPGP": "only-private-key",
 			},
 			expected: &GPGCredentials{Type: typ, PrivateKeyPGP: "only-private-key"},
 		},
 		{
 			name: "ignores unknown properties",
 			properties: map[string]string{
-				CredentialKeyPrivateKeyPGP: "my-key",
-				"unknownField":            "ignored",
+				"privateKeyPGP": "my-key",
+				"unknownField":  "ignored",
 			},
 			expected: &GPGCredentials{Type: typ, PrivateKeyPGP: "my-key"},
 		},

@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	identityv1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/gpg/spec/signing/v1alpha1"
 )
@@ -258,10 +257,10 @@ func armoredPrivKeyWithPassphrase(t *testing.T, entity *openpgp.Entity, passphra
 	require.NoError(t, entity.SerializePrivateWithoutSigning(w, nil))
 	require.NoError(t, w.Close())
 	creds := map[string]string{
-		gpgcredentialsv1.CredentialKeyPrivateKeyPGP: buf.String(),
+		"privateKeyPGP": buf.String(),
 	}
 	if passphrase != "" {
-		creds[gpgcredentialsv1.CredentialKeyPassphrase] = passphrase
+		creds["passphrase"] = passphrase
 	}
 	return creds
 }
@@ -274,6 +273,6 @@ func armoredPubKey(t *testing.T, entity *openpgp.Entity) map[string]string {
 	require.NoError(t, entity.Serialize(w))
 	require.NoError(t, w.Close())
 	return map[string]string{
-		gpgcredentialsv1.CredentialKeyPublicKeyPGP: buf.String(),
+		"publicKeyPGP": buf.String(),
 	}
 }
