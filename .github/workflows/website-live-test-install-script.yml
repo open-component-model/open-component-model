@@ -21,10 +21,9 @@ permissions:
 jobs:
   resolve:
     runs-on: ubuntu-latest
-    name: Resolve latest stable CLI release
+    name: Resolve latest stable release
     outputs:
       version: ${{ steps.find.outputs.version }}
-      tag: ${{ steps.find.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -52,7 +51,6 @@ jobs:
             }
 
             core.setOutput('version', version);
-            core.setOutput('tag', `${tagPrefix}${version}`);
             core.info(`Resolved latest stable CLI release: ${tagPrefix}${version}`);
 
   install:
