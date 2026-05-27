@@ -159,8 +159,7 @@ Hugo-based documentation site published at <https://ocm.software>. Read `website
 5. **Interactive git** — Don't use `-i` flags in scripts
 6. **Context** — Always pass `context.Context` through APIs
 7. **APIs are WIP** — Expect changes, especially in bindings
-8. **Editing versioned website content** — Files under `website/content_versioned/` are snapshots. Edit `website/content/` and cut a new version via `npm run cutoff`.
-9. **Hand-editing Hugo version configs** — `config/_default/hugo.yaml` and `module.yaml` version stanzas are managed by the cutoff script.
+8. **Hand-editing Hugo version configs** — `config/_default/hugo.yaml` and `module.yaml` version stanzas are managed by `npm run register-docs-version`. Never edit them by hand.
 
 ## Dependency Management
 
