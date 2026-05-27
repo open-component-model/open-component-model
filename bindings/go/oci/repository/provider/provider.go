@@ -196,10 +196,8 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 // for the target repository, derived from the ownership configuration.
 // Lookup order:
 //
-//  1. The most specific repository entry whose identity is a subset of the
-//     target's wins — specificity is the number of identity attributes
-//     pinned, so an exact match outranks any partial one (see
-//     matchOwnershipPolicy).
+//  1. The first repository entry whose identity is a subset of the target's
+//     wins (see matchOwnershipPolicy).
 //  2. Otherwise the top-level cfg.Policy applies, defaulting to
 //     [oci.OwnershipReferrerPolicyNever].
 //
@@ -244,8 +242,8 @@ func ociOwnershipReferrerPolicy(policy ownershipv1alpha1.Policy) (oci.OwnershipR
 	}
 }
 
-// matchOwnershipPolicy returns the repository policy that applies to target,
-// or nil if none apply. The most specific match wins.
+// matchOwnershipPolicy returns the first repository policy whose identity is
+// a subset of target's, or nil if none apply.
 func matchOwnershipPolicy(scheme *runtime.Scheme, target runtime.Typed, repos []*ownershipv1alpha1.RepositoryPolicy) (*ownershipv1alpha1.RepositoryPolicy, error) {
 	targetRepo, err := convertToOCIRepository(scheme, target)
 	if err != nil {
@@ -256,8 +254,6 @@ func matchOwnershipPolicy(scheme *runtime.Scheme, target runtime.Typed, repos []
 		return nil, fmt.Errorf("invalid target repository spec: %w", err)
 	}
 
-	var match *ownershipv1alpha1.RepositoryPolicy
-	bestScore := -1
 	for _, rp := range repos {
 		if rp == nil || rp.Repository == nil {
 			continue
@@ -274,12 +270,9 @@ func matchOwnershipPolicy(scheme *runtime.Scheme, target runtime.Typed, repos []
 		if !runtime.IdentitySubset(identity, targetRepoIdentity) {
 			continue
 		}
-		// More attributes means more specific; if two are equally specific, the later one wins.
-		if score := len(identity); score >= bestScore {
-			bestScore, match = score, rp
-		}
+		return rp, nil
 	}
-	return match, nil
+	return nil, nil
 }
 
 func convertToOCIRepository(scheme *runtime.Scheme, spec runtime.Typed) (*ocirepospecv1.Repository, error) {
