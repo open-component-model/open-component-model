@@ -63,6 +63,9 @@ type Config struct {
 	// Policy is the default used for any repository without a matching entry
 	// in Repositories. When omitted, it behaves as Never.
 	//
+	// Experimental: ownership referrers are a new feature (ADR 0016) and the
+	// policy shape may change or be deprecated in the future.
+	//
 	// +ocm:jsonschema-gen:enum=AddIfSupported
 	// +ocm:jsonschema-gen:enum=Never
 	Policy Policy `json:"policy,omitempty"`
