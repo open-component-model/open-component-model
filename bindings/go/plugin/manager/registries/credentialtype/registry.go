@@ -2,6 +2,7 @@ package credentialtype
 
 import (
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credentialrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -36,4 +37,16 @@ func (r *Registry) GetCredentialTypeScheme() *runtime.Scheme {
 // plugin type registries.
 func (r *Registry) Register(fn func(*runtime.Scheme)) {
 	fn(r.scheme)
+}
+
+// RegisterFromPlugin registers credential types declared in an external plugin's CapabilitySpec.
+// External plugin types are registered as *runtime.Raw (since their Go structs are not compiled
+// into the host process). The credential graph will resolve them as *runtime.Raw instead of
+// falling back to *DirectCredentials — consumers use scheme.Convert to get typed structs.
+func (r *Registry) RegisterFromPlugin(capSpec *credentialrepositoryv1.CapabilitySpec) {
+	for _, t := range capSpec.SupportedCredentialTypes {
+		// Register the type with *runtime.Raw as the prototype. If already registered
+		// (e.g. built-in type declared again by an external plugin), skip silently.
+		_ = r.scheme.RegisterWithAlias(&runtime.Raw{}, t.Type)
+	}
 }
