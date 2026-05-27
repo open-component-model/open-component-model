@@ -8,5 +8,10 @@ import (
 var Scheme = runtime.NewScheme()
 
 func init() {
-	v1.MustRegisterCredentialType(Scheme)
+	MustRegisterCredentialType(Scheme)
+}
+
+// MustRegisterCredentialType registers HelmHTTPCredentials/v1 in the given scheme.
+func MustRegisterCredentialType(scheme *runtime.Scheme) {
+	v1.MustRegisterCredentialType(scheme)
 }

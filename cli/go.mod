@@ -33,7 +33,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260526121250-aae701a4aa9b
 	ocm.software/open-component-model/bindings/go/oci v0.0.45
-	ocm.software/open-component-model/bindings/go/plugin v0.0.16
+	ocm.software/open-component-model/bindings/go/plugin v0.0.17-0.20260526162446-a990c9c471aa
 	ocm.software/open-component-model/bindings/go/repository v0.0.9
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260526121250-aae701a4aa9b
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
@@ -153,4 +153,9 @@ require (
 	sigs.k8s.io/kustomize/kyaml v0.21.1 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
+)
+
+replace (
+	ocm.software/open-component-model/bindings/go/helm => ../bindings/go/helm
+	ocm.software/open-component-model/bindings/go/plugin => ../bindings/go/plugin
 )

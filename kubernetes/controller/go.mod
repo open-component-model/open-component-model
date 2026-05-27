@@ -42,7 +42,7 @@ require (
 	ocm.software/open-component-model/bindings/go/repository v0.0.9
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260522110833-67a18b816b78
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260521152541-2f5bcd0f1f44
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260522052408-27c822cc5dca
 	sigs.k8s.io/release-utils v0.12.4
 )
 
@@ -134,7 +134,7 @@ require (
 	go.uber.org/zap v1.27.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
+	go.yaml.in/yaml/v4 v4.0.0-rc.4 // indirect
 	golang.org/x/crypto v0.50.0 // indirect
 	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa // indirect
 	golang.org/x/mod v0.35.0 // indirect
@@ -169,3 +169,5 @@ require (
 )
 
 replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.0
+
+replace ocm.software/open-component-model/bindings/go/plugin => ../../bindings/go/plugin
