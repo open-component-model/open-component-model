@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/configuration/ownership/v1alpha1/spec/schemas/Config.schema.json",
   "title": "Config",
   "type": "object",
-  "description": "Config enables ownership referrers for resource uploads. The top-level\nPolicy sets the default, and Repositories can override it for individual\nrepositories.\n\ntype: ownership.config.ocm.software/v1alpha1\npolicy: AddIfSupported\nrepositories:\n- repository:\ntype: OCIRepository/v1\npolicy: Never\n- repository:\ntype: OCIRepository/v1\nbaseUrl: ghcr.io\nsubPath: my-org/components\npolicy: AddIfSupported",
+  "description": "Config enables ownership referrers for resource uploads. The top-level\nPolicy sets the default, and Repositories can override it for individual\nrepositories. Entries are evaluated top-down and the first match wins.\n\ntype: ownership.config.ocm.software/v1alpha1\npolicy: AddIfSupported\nrepositories:\n- repository:\ntype: OCIRepository/v1\nbaseUrl: ghcr.io\nsubPath: my-org/components\npolicy: AddIfSupported\n- repository:\ntype: OCIRepository/v1\npolicy: Never",
   "properties": {
     "policy": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.ownership.v1alpha1.spec.Policy",
