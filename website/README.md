@@ -13,7 +13,7 @@ This repository contains the sources used to build the Open Component Model webs
     - [Internal Links](#internal-links)
   - [Section Overview Pages](#section-overview-pages)
 - [Run Site Locally](#run-site-locally)
-- [Cut-off New Versions](#cut-off-new-versions)
+- [Versioning](#versioning)
 - [Contributing](#contributing)
 - [Licensing](#licensing)
 <!-- /TOC -->
