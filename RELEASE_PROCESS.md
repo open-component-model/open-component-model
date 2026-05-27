@@ -29,20 +29,27 @@ gitGraph TB:
     commit id: "fix: hotfix" type: HIGHLIGHT
     checkout "releases/v0.7"
     cherry-pick id: "fix: hotfix"
-    commit tag: "v0.7.0-rc.2, v0.7.0, website/v0.7.0" type: REVERSE
+    commit tag: "v0.7.0-rc.2, v0.7.0" type: REVERSE
     checkout main
     commit id: "feat: baz"
     commit id: "fix: critical" type: HIGHLIGHT
     checkout "releases/v0.7"
     cherry-pick id: "fix: critical"
-    commit tag: "v0.7.1-rc.1, v0.7.1, website/v0.7.1" type: REVERSE
+    commit tag: "v0.7.1-rc.1, v0.7.1" type: REVERSE
     checkout main
     commit id: "feat: qux"
     branch "releases/v0.8"
     commit tag: "v0.8.0-rc.1" type: REVERSE
 ```
 
-Two things to notice. First, **promotion does not create a new commit.** The canonical final tag (`v0.7.0`) lands on the same commit as the most recent RC tag (`v0.7.0-rc.2`). The workflow just stamps additional tags on the RC commit. Second, **each tagged release commit carries multiple tags, not one.** The diagram shows the canonical tag plus the website tag for legibility; the same commit also receives `cli/v0.7.0-rc.2` + `cli/v0.7.0` and `kubernetes/controller/v0.7.0-rc.2` + `kubernetes/controller/v0.7.0`. The side tags exist so the website install script, Go module consumers, and Hugo docs imports can address each component directly.
+Two things to notice. First, **promotion does not create a new commit.** The 
+canonical final tag (`v0.7.0`) lands on the same commit as the most recent 
+RC tag (`v0.7.0-rc.2`). The workflow just stamps additional tags on the RC 
+commit. Second, **each tagged release commit carries multiple tags, not one.
+** The same commit also receives `cli/v0.7.0-rc.2` + `cli/v0.7.0`, 
+`kubernetes/controller/v0.7.0-rc.2` + `kubernetes/controller/v0.7.0` and `website/v0.7.0`. 
+The side tags exist so the website install script, Go module consumers, and 
+Hugo docs imports can address each component directly.
 
 The `website/v0.X.Y` tag is asymmetric: only the final form is created, no `website/v0.X.Y-rc.N` counterpart. The website ships docs, not artifacts that need RC validation, so an RC tag would have no consumer. If you go looking and don't find a `website/v0.7.0-rc.2`, that's by design — it isn't missing.
 
