@@ -25,6 +25,7 @@ import (
 	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	signinghandlerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtype"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialplugin"
@@ -50,6 +51,12 @@ type PluginManager struct {
 	ComponentListerRegistry            *componentlister.ComponentListerRegistry
 	CredentialPluginRegistry           *credentialplugin.Registry
 	CredentialRepositoryRegistry       *credentialrepository.RepositoryRegistry
+	// CredentialTypeRegistry holds typed consumer credential structs (e.g. OCICredentials/v1,
+	// HelmHTTPCredentials/v1, RSACredentials/v1). Built-in bindings register their types here
+	// via builtin.Register; external plugins register via plugin discovery from their capability
+	// spec. The credential graph reads it as a CredentialTypeSchemeProvider to deserialize typed
+	// credentials from .ocmconfig at ingestion time (ADR 0021 §Type Registries).
+	CredentialTypeRegistry             *credentialtype.Registry
 	InputRegistry                      *input.RepositoryRegistry
 	DigestProcessorRegistry            *digestprocessor.RepositoryRegistry
 	ResourcePluginRegistry             *resource.ResourceRegistry
@@ -73,6 +80,7 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 		ComponentListerRegistry:            componentlister.NewComponentListerRegistry(ctx),
 		CredentialPluginRegistry:           credentialplugin.NewRegistry(ctx),
 		CredentialRepositoryRegistry:       credentialrepository.NewCredentialRepositoryRegistry(ctx),
+		CredentialTypeRegistry:             credentialtype.NewRegistry(),
 		InputRegistry:                      input.NewInputRepositoryRegistry(ctx),
 		DigestProcessorRegistry:            digestprocessor.NewDigestProcessorRegistry(ctx),
 		ResourcePluginRegistry:             resource.NewResourceRegistry(ctx),
