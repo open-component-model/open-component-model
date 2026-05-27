@@ -1,0 +1,33 @@
+name: Pull Request Title
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  conventional-commit-title:
+    name: Validate PR title
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          ALLOWED_TYPES: feat|fix|chore|docs|test|perf
+        with:
+          script: |
+            const allowedTypes = process.env.ALLOWED_TYPES;
+            const prTitle = context.payload.pull_request.title;
+            const regex = new RegExp(
+              `^(((Initial commit)|(Merge [^\\r\\n]+(\\s)[^\\r\\n]+((\\s)((\\s)[^\\r\\n]+)+)*(\\s)?)|^((?<type>${allowedTypes})(\\((?<scope>[\\w\\-]+)\\))?(?<breaking>!?): (?<subject>[^\\r\\n]+((\\s)((\\s)[^\\r\\n]+)+)*))(\\s)?)$)`
+            );
+
+            if (!regex.test(prTitle)) {
+              core.setFailed('Invalid PR title format. Use Conventional Commit format, for example: feat(cli): add command');
+            }
