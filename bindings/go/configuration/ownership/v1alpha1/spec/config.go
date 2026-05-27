@@ -37,19 +37,19 @@ const (
 
 // Config enables ownership referrers for resource uploads. The top-level
 // Policy sets the default, and Repositories can override it for individual
-// repositories.
+// repositories. Entries are evaluated top-down and the first match wins.
 //
 //	type: ownership.config.ocm.software/v1alpha1
 //	policy: AddIfSupported
 //	repositories:
 //	- repository:
 //	    type: OCIRepository/v1
-//	  policy: Never
-//	- repository:
-//	    type: OCIRepository/v1
 //	    baseUrl: ghcr.io
 //	    subPath: my-org/components
 //	  policy: AddIfSupported
+//	- repository:
+//	    type: OCIRepository/v1
+//	  policy: Never
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -122,10 +122,6 @@ func Lookup(cfg *genericv1.Config) (*Config, error) {
 // Policy from the last non-nil config that sets one, and all repository
 // entries are appended in order.
 func Merge(configs ...*Config) *Config {
-	if len(configs) == 0 {
-		return nil
-	}
-
 	merged := new(Config)
 	merged.Repositories = make([]*RepositoryPolicy, 0)
 

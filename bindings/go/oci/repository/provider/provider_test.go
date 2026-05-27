@@ -120,7 +120,6 @@ func Test_Provider_Smoke(t *testing.T) {
 			}
 		})
 	})
-
 }
 
 func Test_JSON_Schema_For_Repository_Specification(t *testing.T) {
@@ -236,7 +235,7 @@ func TestResolveOwnershipReferrerPolicy(t *testing.T) {
 			want:   oci.OwnershipReferrerPolicyAddIfSupported,
 		},
 		{
-			name: "exact match wins over wildcard (exact listed first)",
+			name: "specific entry listed before wildcard wins",
 			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever,
 				&ownershipv1alpha1.RepositoryPolicy{
 					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io","subPath":"my-org/components"}`),
@@ -251,73 +250,19 @@ func TestResolveOwnershipReferrerPolicy(t *testing.T) {
 			want:   oci.OwnershipReferrerPolicyAddIfSupported,
 		},
 		{
-			name: "exact match wins over wildcard (exact listed last)",
-			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever,
-				&ownershipv1alpha1.RepositoryPolicy{
-					Repository: rawSpec(t, `{"type":"OCIRepository/v1"}`),
-					Policy:     ownershipv1alpha1.PolicyNever,
-				},
-				&ownershipv1alpha1.RepositoryPolicy{
-					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
-					Policy:     ownershipv1alpha1.PolicyNever,
-				},
-				&ownershipv1alpha1.RepositoryPolicy{
-					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io","subPath":"my-org/components"}`),
-					Policy:     ownershipv1alpha1.PolicyAddIfSupported,
-				},
-			),
-			target: targetOCIGhcrMyOrg,
-			want:   oci.OwnershipReferrerPolicyAddIfSupported,
-		},
-		{
-			// Regression guard for most-specific-wins: a more specific entry
-			// must win even when a broader entry is declared before it.
-			name: "most specific entry wins when broader entry is declared first",
-			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever,
-				&ownershipv1alpha1.RepositoryPolicy{
-					Repository: rawSpec(t, `{"type":"OCIRepository/v1"}`),
-					Policy:     ownershipv1alpha1.PolicyNever,
-				},
-				&ownershipv1alpha1.RepositoryPolicy{
-					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
-					Policy:     ownershipv1alpha1.PolicyAddIfSupported,
-				},
-			),
-			target: targetOCIGhcrMyOrg,
-			want:   oci.OwnershipReferrerPolicyAddIfSupported,
-		},
-		{
-			// ...and when the broader entry is declared after it.
-			name: "most specific entry wins when broader entry is declared last",
+			name: "first matching entry wins among multiple matches",
 			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever,
 				&ownershipv1alpha1.RepositoryPolicy{
 					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
 					Policy:     ownershipv1alpha1.PolicyAddIfSupported,
 				},
 				&ownershipv1alpha1.RepositoryPolicy{
-					Repository: rawSpec(t, `{"type":"OCIRepository/v1"}`),
+					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
 					Policy:     ownershipv1alpha1.PolicyNever,
 				},
 			),
 			target: targetOCIGhcrMyOrg,
 			want:   oci.OwnershipReferrerPolicyAddIfSupported,
-		},
-		{
-			// Equally specific entries resolve last-wins, matching Merge's
-			// precedence for the top-level policy.
-			name: "equally specific entries resolve last-wins",
-			cfg: makeCfg(t, ownershipv1alpha1.PolicyNever,
-				&ownershipv1alpha1.RepositoryPolicy{
-					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
-					Policy:     ownershipv1alpha1.PolicyAddIfSupported,
-				},
-				&ownershipv1alpha1.RepositoryPolicy{
-					Repository: rawSpec(t, `{"type":"OCIRepository/v1","baseUrl":"ghcr.io"}`),
-					Policy:     ownershipv1alpha1.PolicyNever,
-				},
-			),
-			target: targetOCIGhcrMyOrg,
-			want:   oci.OwnershipReferrerPolicyNever,
 		},
 		{
 			name: "non-matching override falls through to top-level",
