@@ -103,6 +103,7 @@ The website integrates into the same workflow run, after `promote_and_release_fi
 
 > [!WARNING]
 > The website update PR **must be merged before the next release**. The `create_website_update_pr` job checks out `main` and registers the new version into whatever config state `main` has. If the previous release's PR hasn't landed yet, the new PR will be generated without that version's entries — merging it would leave the previous version missing from the site.
+
 * Binding versions (constructor, descriptor, controller chart) referenced by the docs are resolved from the released `cli/v0.X.Y` go.mod, not from `main`. This guarantees the docs site for `v0.X.Y` matches what the released CLI was built against.
 * On a **minor release** (`Z=0`) the script adds a new version entry under `versions` in `hugo.yaml` and a new set of import blocks in `module.yaml`.
 * On a **patch release** (`Z>0`) the script updates the existing minor's import tags in `module.yaml` in place; `hugo.yaml` is unchanged.

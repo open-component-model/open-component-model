@@ -3,5 +3,5 @@ en:
   contentDir: content
   weight: 10
   params:
-    languageISO: EN
+    languageISO: en
     languageTag: en-US
