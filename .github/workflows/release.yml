@@ -634,14 +634,11 @@ jobs:
           ref: main
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          node-version: '22'
-
-      - name: Install dependencies
-        working-directory: website
-        run: npm ci
+          go-version-file: cli/go.mod
+          cache: false
 
       - name: Fetch CLI go.mod at release tag
         env:
@@ -651,11 +648,20 @@ jobs:
           git fetch origin "refs/tags/cli/v${VERSION}:refs/tags/cli/v${VERSION}" --no-tags
           git show "cli/v${VERSION}:cli/go.mod" > "${{ runner.temp }}/cli-go.mod"
 
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
       - name: Release docs version
         working-directory: website
         env:
           VERSION: ${{ needs.prepare.outputs.base_version }}
-        run: node scripts/register-docs-version.js "$VERSION" --cli-gomod "${{ runner.temp }}/cli-go.mod"
+        run: |
+          # --no-save prevents editing the package-lock.json. If we did, that
+          # changed would be contained in the PR.
+          npm install js-yaml --no-save
+          node scripts/register-docs-version.js "$VERSION" --cli-gomod "${{ runner.temp }}/cli-go.mod"
 
       - name: Generate App Token
         id: get_token
