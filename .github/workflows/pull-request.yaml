@@ -11,8 +11,7 @@ on:
       - synchronize
       - reopened
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   conventional-commit-labeler:
