@@ -166,35 +166,32 @@ func processOCIArtifactStreaming(resource descriptorv2.Resource, id string, tgd 
 	}
 	targetImageReference := staticReferenceName(referenceName)(targetRepoBaseURL)
 
-	labels := resource.Labels
-	if labels == nil {
-		labels = []descriptorv2.Label{}
+	targetResource := map[string]any{
+		"name":     resource.Name,
+		"version":  resource.Version,
+		"type":     resource.Type,
+		"relation": resource.Relation,
+		"access": map[string]any{
+			"type":           runtime.NewVersionedType(ociv1.LegacyType, ociv1.LegacyTypeVersion).String(),
+			"imageReference": targetImageReference,
+		},
 	}
-	extraIdentity := resource.ExtraIdentity
-	if extraIdentity == nil {
-		extraIdentity = runtime.Identity{}
+	if resource.Digest != nil {
+		targetResource["digest"] = resource.Digest
 	}
-	srcRefs := resource.SourceRefs
-	if srcRefs == nil {
-		srcRefs = []descriptorv2.SourceRef{}
+	if len(resource.Labels) > 0 {
+		targetResource["labels"] = resource.Labels
+	}
+	if len(resource.ExtraIdentity) > 0 {
+		targetResource["extraIdentity"] = resource.ExtraIdentity
+	}
+	if len(resource.SourceRefs) > 0 {
+		targetResource["srcRefs"] = resource.SourceRefs
 	}
 
 	unstructured, err := runtime.UnstructuredFromMixedData(map[string]any{
-		"resource": resource,
-		"targetResource": map[string]any{
-			"name":          resource.Name,
-			"version":       resource.Version,
-			"type":          resource.Type,
-			"relation":      resource.Relation,
-			"digest":        resource.Digest,
-			"labels":        labels,
-			"extraIdentity": extraIdentity,
-			"srcRefs":       srcRefs,
-			"access": map[string]any{
-				"type":           runtime.NewVersionedType(ociv1.LegacyType, ociv1.LegacyTypeVersion).String(),
-				"imageReference": targetImageReference,
-			},
-		},
+		"resource":       resource,
+		"targetResource": targetResource,
 	})
 	if err != nil {
 		return fmt.Errorf("cannot create unstructured spec for TransferOCIArtifact transformation: %w", err)
